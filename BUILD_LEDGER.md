@@ -1,3 +1,10 @@
+## Current handoff scope — October 20, 2026
+The active product is the private catalog/community website in storefront-mockup/.
+Earlier commerce objectives below are historical. Start with README.txt and
+HERMES_HANDOFF.txt for the current scope, Agent Orange paths and operating rules.
+Private repository: https://github.com/Grahammmm/avocado-shack.
+Migration passed. Completion report and evidence: reports/hermes-handoff/.
+
 # Avocado Shack build ledger
 
 ## Objective and scope
@@ -432,3 +439,10 @@ Completed read-only local/Agent Orange inventory and saved reports/hermes-handof
 
 ## Private repository and Hermes migration — in progress, October 20
 User authorized private GitHub setup, Agent Orange project/data copy and Hermes preparation while preserving the Mac backup. Created Grahammmm/avocado-shack, verified PRIVATE. Prepared root ignore rules separating source/optimized images from private runtime, raw image caches and archived evidence. Candidate source scan: 556 files, about90MB, no matches to inspected private config credentials or credential-token/private-key patterns. Hermes instructions define current catalog/community scope, private loopback service, separate private data and historical Medusa limitations. Transfer, source commit and runtime verification still pending at this entry.
+
+
+## Hermes migration — verified complete, October 20, 2026
+Private GitHub repository Grahammmm/avocado-shack is populated on main. Agent Orange clone /home/user/repos/avocado-shack uses a repo-scoped SSH write deploy key with pinned GitHub host keys; read and dry-run push passed. No account-wide token copied. Private data is in /home/user/.local/share/avocado-shack, permissions700 directory/600 DB and key; Git-ignored community-data symlink points there.
+User service avocado-shack-sandbox.service enabled/active, loopback127.0.0.1:3101; restart and SQLite backup verified. Mac viewing via private SSH localhost3101 forward; no public routing changes. Current catalog/community API check passed170imageURLs, DBintegrity, consentmerge, validation and concurrentRSVPcapacity using isolatedfixtures. Full catalog/community desktop/mobile QA reran via private tunnel:320/375/390/768/1440, nooverflow/errors,170items/no duplicates. Screenshots inspected. No tests inserted fixture people into the actual communityDB.
+Local dated handoff-backups/2026-10-20 preserves original source/private data. Full gzip integrity passed. Remote deduplicated archive649778953bytes restored43828regular-filepaths (3090252080logicalbytes), everySHA256 matched manifest. Historical extracted snapshot is read-only; temporary incomplete first archive removed only after verified replacement. Reproducible dependencies/runtime/model downloads and disposable restore environments excluded and recorded. Historical Mac PostgreSQL files were not claimed to be a verified Linux commerce runtime.
+HERMES_HANDOFF.txt, AGENTS.md, owner/product brief, service file, backup helper and verification scripts prepared. Current source and older prototype clearly distinguished. Final report Avocado_Shack_Hermes_Handoff_Ready.html and migration-verification.json record actual checks. Preserve Mac original and backups. No global Hermes settings changed, autonomous messaging task launched, outbound mail connected, or public site deployed. Existing Namecheap shutdown/cancellation automation remains separate and pending its scheduled window.

@@ -1,0 +1,136 @@
+{
+  "status": "verified",
+  "date": "2026-10-20",
+  "repository": "https://github.com/Grahammmm/avocado-shack",
+  "visibility": "PRIVATE",
+  "checkedSourceCommit": "c8585ad7098a727a5529336ee0f7136dc7456514",
+  "agentOrangeSource": "/home/user/repos/avocado-shack",
+  "agentOrangePrivateData": "/home/user/.local/share/avocado-shack",
+  "service": "avocado-shack-sandbox.service",
+  "binding": "127.0.0.1:3101",
+  "macOriginalPreserved": "/Users/owner/Documents/ChatGPT/Avo_Shack",
+  "macBackup": "/Users/owner/Documents/ChatGPT/Avo_Shack/handoff-backups/2026-10-20",
+  "githubAuth": "Repository-scoped SSH write deploy key; account-wide token not copied",
+  "archive": {
+    "passed": true,
+    "archiveSha256": "31794cdcdb0aa3fb6e92e358324ac2e8e2386335952b5eebdd73873f0a749ff3",
+    "archiveBytes": 649778953,
+    "verifiedFiles": 43828,
+    "logicalBytes": 3090252080,
+    "uniqueInodesHashed": 5453,
+    "excludedReproduciblePaths": [
+      ".git",
+      "handoff-backups",
+      "commerce/node_modules",
+      "commerce/backend/node_modules",
+      "commerce/storefront/node_modules",
+      "commerce/storefront/.next",
+      "commerce/backend/.medusa",
+      "commerce/.runtime/npm-cache",
+      "commerce/.runtime/restore-tests",
+      "commerce/.runtime/install-check",
+      "commerce/.runtime/first-run-check",
+      "commerce/.runtime/node",
+      "commerce/.runtime/ollama",
+      "commerce/.runtime/ollama-models",
+      "commerce/.runtime/ollama-darwin.tgz"
+    ],
+    "sourceSnapshot": "Mac pre-migration source/data; active Git worktree is separately maintained"
+  },
+  "api": {
+    "activeCalendarUndatedOnly": true,
+    "catalogImagesServed": 170,
+    "communityDatabaseIntegrity": "ok",
+    "subscriptionCount": 0,
+    "rsvpCount": 0,
+    "isolatedSignupPersistence": true,
+    "consentMerge": true,
+    "invalidEmailRejected": true,
+    "crossOriginRejected": true,
+    "concurrentCapacitySafe": true,
+    "publicApiNoPersonalData": true,
+    "isolatedSqliteBackupRestore": true,
+    "passed": true
+  },
+  "catalog": {
+    "all": 170,
+    "duplicates": 0,
+    "townSearch": 12,
+    "localCount": "90 selections \u00b7 12 shown",
+    "organicCount": "18 selections \u00b7 12 shown",
+    "commerceRemoved": true,
+    "makerDetails": true,
+    "viewports": [
+      {
+        "width": 320,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 375,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 390,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 768,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 1440,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      }
+    ],
+    "errors": []
+  },
+  "community": {
+    "rsvpForm": true,
+    "newsletterForm": true,
+    "hikingUpdates": true,
+    "pastHikes": true,
+    "noInventedProductionEvents": true,
+    "layouts": [
+      {
+        "width": 320,
+        "overflow": false
+      },
+      {
+        "width": 375,
+        "overflow": false
+      },
+      {
+        "width": 390,
+        "overflow": false
+      },
+      {
+        "width": 768,
+        "overflow": false
+      },
+      {
+        "width": 1440,
+        "overflow": false
+      }
+    ],
+    "errors": []
+  },
+  "checks": {
+    "remoteGitReadAndDryRunPush": true,
+    "cleanRemoteWorktreeBeforeReport": true,
+    "serviceRestartPassed": true,
+    "sqliteBackupPassed": true,
+    "desktopAndMobileCheckedThroughPrivateTunnel": true
+  },
+  "remaining": [
+    "No external email delivery or configured owner@example.com mailbox",
+    "No confirmed hike dates or past club outings",
+    "Historical Medusa prototype archived; Linux commerce restore not performed; Shopify not connected",
+    "Existing public Namecheap preview shutdown/cancellation remains separate from this sandbox",
+    "Hermes brief prepared; no global Hermes settings changed or autonomous task started"
+  ]
+}

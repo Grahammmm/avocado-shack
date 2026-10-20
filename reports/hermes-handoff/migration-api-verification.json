@@ -1,0 +1,15 @@
+{
+  "activeCalendarUndatedOnly": true,
+  "catalogImagesServed": 170,
+  "communityDatabaseIntegrity": "ok",
+  "subscriptionCount": 0,
+  "rsvpCount": 0,
+  "isolatedSignupPersistence": true,
+  "consentMerge": true,
+  "invalidEmailRejected": true,
+  "crossOriginRejected": true,
+  "concurrentCapacitySafe": true,
+  "publicApiNoPersonalData": true,
+  "isolatedSqliteBackupRestore": true,
+  "passed": true
+}

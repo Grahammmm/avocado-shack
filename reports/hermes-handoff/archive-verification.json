@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "archiveSha256": "31794cdcdb0aa3fb6e92e358324ac2e8e2386335952b5eebdd73873f0a749ff3",
+  "archiveBytes": 649778953,
+  "verifiedFiles": 43828,
+  "logicalBytes": 3090252080,
+  "uniqueInodesHashed": 5453,
+  "excludedReproduciblePaths": [
+    ".git",
+    "handoff-backups",
+    "commerce/node_modules",
+    "commerce/backend/node_modules",
+    "commerce/storefront/node_modules",
+    "commerce/storefront/.next",
+    "commerce/backend/.medusa",
+    "commerce/.runtime/npm-cache",
+    "commerce/.runtime/restore-tests",
+    "commerce/.runtime/install-check",
+    "commerce/.runtime/first-run-check",
+    "commerce/.runtime/node",
+    "commerce/.runtime/ollama",
+    "commerce/.runtime/ollama-models",
+    "commerce/.runtime/ollama-darwin.tgz"
+  ],
+  "sourceSnapshot": "Mac pre-migration source/data; active Git worktree is separately maintained"
+}
