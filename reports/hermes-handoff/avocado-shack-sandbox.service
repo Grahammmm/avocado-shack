@@ -1,0 +1,17 @@
+[Unit]
+Description=Avocado Shack private catalog and community sandbox
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/user/repos/avocado-shack
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/home/user/.local/share/avocado-shack/sandbox.env
+ExecStart=/usr/bin/python3 /home/user/repos/avocado-shack/storefront-mockup/community-server.py --port 3101
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
