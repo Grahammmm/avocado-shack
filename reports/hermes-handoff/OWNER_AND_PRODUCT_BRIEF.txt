@@ -1,0 +1,36 @@
+AVOCADO SHACK — CURRENT BUSINESS CONTEXT FOR HERMES
+
+Michael Wolfe owns Avocado Shack, a produce and specialty food market in Morro Bay.
+The store brand centers on healthy food, seasonal produce, independent makers,
+local connections, hospitality, community and gratitude. His newsletters are warm,
+conversational and specific about food and the people who grow or make it.
+
+The active phase invites people to browse what they may find in person. Product
+availability is not synchronized to stock. There are no prices or online orders.
+Show the food well, explain taste and use, identify known makers and their bases,
+and help visitors understand why independent producers matter. Preserve source
+links and distinguish known product facts from unknown growers or exact varieties.
+Some product images were generated from photographed evidence. Preserve logs and
+source photos; do not represent generated packaging as independently verified.
+
+Community belongs in the store experience: Michael's newsletter and the North
+Coast Hiking Club. No actual next hike or past outings were supplied. Route ideas
+are examples around SLO County, not scheduled events. michael/mike email accounts
+are not configured by this project; owner@example.com is only a proposed sender.
+
+Future direction discussed with the user: Shopify backend/POS and a custom store
+assistant called Hass. The owner wants to manage the store through text, voice
+notes and photos. Desired future capabilities include intake, costs/margins,
+pricing recommendations, stock/POS sync, supplier messages, morning reports,
+spoilage discounts, social content and accounting/invoicing integration. Begin
+with owner approval and only grant bounded autonomy as comfort and evidence grow.
+These are ambitions, not capabilities connected to the current website.
+
+Weekly boxes, merchandise, payment and fulfillment experiments were explicitly
+removed from the active site. Do not bring them back merely because old proposal
+or prototype files describe them. The campaign website and political outreach
+are a separate project; keep their contacts and messaging separate from the store.
+
+Use the project documents and latest owner directions as evidence. The local
+folder is not a complete export of every chat, email, Instagram letter or account.
+Request specific missing business facts when needed instead of guessing them.
