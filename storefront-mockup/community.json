@@ -1,0 +1,48 @@
+{
+  "clubName": "North Coast Hiking Club",
+  "organizer": "Michael Wolfe",
+  "intendedSender": "owner@example.com",
+  "emailConnected": false,
+  "events": [],
+  "routeIdeas": [
+    {
+      "id": "idea-fiscalini-bluff",
+      "title": "Fiscalini Ranch Bluff Trail",
+      "place": "Cambria",
+      "character": "Coastline & conversation",
+      "distance": "0.9-mile trail; outing length to be chosen",
+      "terrain": "Boardwalk and gravel paths",
+      "description": "Ocean air, handcrafted benches, and room to slow down. A coastal walk that leaves plenty of space for a conversation with your neighbors.",
+      "sourceUrl": "https://www.cambriacsd.org/trails",
+      "sourceName": "Cambria Community Services District",
+      "status": "idea",
+      "rsvpEnabled": false
+    },
+    {
+      "id": "idea-montana-bluff",
+      "title": "Montaña de Oro Bluff Trail",
+      "place": "Los Osos",
+      "character": "Open coast & sea views",
+      "distance": "Route length to be chosen",
+      "terrain": "Coastal bluff trail",
+      "description": "A little salt in the air and the Pacific beside the path. A chance to take in the coast, stretch your legs, and enjoy being outside together.",
+      "sourceUrl": "https://www.parks.ca.gov/?page_id=592",
+      "sourceName": "California State Parks",
+      "status": "idea",
+      "rsvpEnabled": false
+    },
+    {
+      "id": "idea-bob-jones",
+      "title": "Bob Jones Pathway",
+      "place": "Avila Beach",
+      "character": "An easy-going walk toward the coast",
+      "distance": "2.5-mile pathway; outing length to be chosen",
+      "terrain": "Easy walking; shared-use path",
+      "description": "A meandering path toward Avila Beach, with time for a good conversation along the way. An easy-going option for a community outing.",
+      "sourceUrl": "https://slocountyparks.com/trails-r1/",
+      "sourceName": "San Luis Obispo County Parks",
+      "status": "idea",
+      "rsvpEnabled": false
+    }
+  ]
+}

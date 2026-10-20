@@ -1,0 +1,16 @@
+import fs from 'node:fs/promises';import assert from 'node:assert/strict';
+const cfg=JSON.parse(await fs.readFile(new URL('../.runtime/config.json',import.meta.url),'utf8'));
+const login=await fetch('http://127.0.0.1:3200/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:'owner',password:cfg.ownerPassword})});assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
+async function call(url,body){const r=await fetch('http://127.0.0.1:3200/api'+url,{method:body?'POST':'GET',headers:{cookie,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}}
+const original=(await call('/bootstrap')).data.products.find(p=>p.title==='Hass avocado');assert.equal(original.metadata.price_minor,200);let attempt,changed=false;
+try{
+ const checkout=await call('/checkout',{nonce:crypto.randomUUID(),items:[{product_id:original.id,quantity:1}],email:'internal-special@example.invalid',slot_id:(await call('/bootstrap')).data.slots[0].id});assert.equal(checkout.status,200);attempt=checkout.data.attempt_id;const accepted=(await call('/orders/'+attempt)).data;
+ assert.equal((await call('/drafts',{event_id:crypto.randomUUID(),message:'Special: Hass avocado 20% off tomorrow'})).status,422);
+ const event_id=crypto.randomUUID(),message='Special: Hass avocado, each, '+(process.env.AVO_TEST_PERCENT?'25% off':'$1.50')+', 4 available for online pickup';const proposed=await call('/drafts',{event_id,message});assert.equal(proposed.status,200);const d=proposed.data.draft;assert.equal(d.fields.price_minor,150);assert.equal(d.fields.quantity,4);if(process.env.AVO_TEST_PERCENT)assert.equal(d.fields._special_source.discount_rule.basis_points,2500);assert.match(d.observation,/No end date/);assert.equal((await call('/drafts',{event_id,message})).data.draft.id,d.id);assert.equal((await call('/bootstrap')).data.products.find(p=>p.id===original.id).metadata.price_minor,200);
+ const competing=(await call('/drafts',{event_id:crypto.randomUUID(),message})).data.draft;const approved=await call('/drafts/'+d.id+'/approve',{version:d.version});assert.equal(approved.status,200);changed=true;assert.equal((await call('/drafts/'+competing.id+'/approve',{version:competing.version})).status,409);const current=(await call('/bootstrap')).data.products.find(p=>p.id===original.id);assert.equal(current.metadata.price_minor,150);assert.equal(current.thumbnail,original.thumbnail);assert.deepEqual((await call('/orders/'+attempt)).data,accepted);assert.equal((await call('/drafts/'+d.id+'/approve',{version:d.version})).status,200);
+ console.log('Explicit special remained private until approval; original photo retained, server price changed, accepted checkout unchanged, source and approval replay safe.');
+}finally{
+ if(attempt)assert.equal((await call('/checkout/'+attempt+'/cancel',{})).status,200);
+ if(changed){const d=(await call('/drafts',{event_id:crypto.randomUUID(),message:'Hass avocado, each, $2, 12 available for online pickup'})).data.draft;assert.equal((await call('/drafts/'+d.id+'/approve',{version:d.version})).status,200);}
+ console.log('Internal demonstration discount removed; confirmed $2 price and 12-unit online allocation restored.');
+}

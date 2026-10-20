@@ -1,0 +1,6 @@
+'use client';
+import {useState} from 'react';
+export default function SafetyBufferControls({products,buffers,busy,onSave}:any){
+ const [productId,setProductId]=useState('');const individual=products.filter((p:any)=>p.metadata.kind!=='box');const selected=productId||individual[0]?.id;const current=buffers.find((b:any)=>b.product_id===selected)||{units:0,version:0};
+ return <details className="stock-controls"><summary>Online inventory safety buffer</summary><p>Keep this many units out of new online checkouts. This changes availability, not the physical count. Existing paid or reserved orders remain protected.</p><form key={selected+'_'+current.version} onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);onSave(selected,{units:Number(f.get('units')),version:current.version,reason:f.get('reason')})}}><div className="form-grid"><label>Product<select value={selected||''} onChange={e=>setProductId(e.target.value)}>{individual.map((p:any)=><option key={p.id} value={p.id}>{p.title} / {p.metadata.unit}</option>)}</select></label><label>Units held back<input name="units" type="number" min="0" max="1000000" step="1" required defaultValue={current.units}/></label><label>Reason<input name="reason" required maxLength={500}/></label></div><button disabled={busy||!selected}>Save safety buffer</button></form></details>;
+}

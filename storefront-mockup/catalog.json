@@ -1,0 +1,1715 @@
+[
+  {
+    "name": "Hass avocado",
+    "brand": "Avocado Shack",
+    "category": "produce",
+    "photo": "IMG_9714.jpg",
+    "notes": "Variety and selling terms confirmed by owner; photograph shows a mixed fruit display, not proof of variety.",
+    "unit": "each",
+    "price": 2,
+    "onlineQuantity": 12,
+    "status": "Owner-confirmed sample allocation",
+    "evidence": "Owner message: Hass avocado, each, $2, 12 available for online pickup",
+    "sellable": true,
+    "photos": [
+      "IMG_9714.jpg"
+    ],
+    "id": "photo-product-001",
+    "image": "assets/catalog/IMG_9714.jpg"
+  },
+  {
+    "name": "Linn's triple berry preserves",
+    "brand": "Linn's",
+    "category": "pantry",
+    "photo": "IMG_9707.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "id": "photo-product-002",
+    "image": "assets/catalog/IMG_9707.jpg"
+  },
+  {
+    "name": "Linn's blueberry preserves",
+    "brand": "Linn's",
+    "category": "pantry",
+    "photo": "IMG_9707.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "id": "photo-product-003",
+    "image": "assets/catalog/IMG_9707.jpg"
+  },
+  {
+    "name": "Linn's boysenberry preserves",
+    "brand": "Linn's",
+    "category": "pantry",
+    "photo": "IMG_9707.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "id": "photo-product-004",
+    "image": "assets/catalog/IMG_9707.jpg"
+  },
+  {
+    "name": "Linn's orange marmalade",
+    "brand": "Linn's",
+    "category": "pantry",
+    "photo": "IMG_9707.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "id": "photo-product-005",
+    "image": "assets/catalog/IMG_9707.jpg"
+  },
+  {
+    "name": "Mixed flower bouquet",
+    "brand": "Producer not identified",
+    "category": "flowers",
+    "photo": "IMG_9708.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9708.jpg"
+    ],
+    "id": "photo-product-006",
+    "image": "assets/catalog/IMG_9708.jpg"
+  },
+  {
+    "name": "Fair Hills Farm apple juice",
+    "brand": "Fair Hills Farm",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-007",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Cal Poly strawberry jam",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "photo": "IMG_9710.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "id": "photo-product-008",
+    "image": "assets/catalog/IMG_9710.jpg"
+  },
+  {
+    "name": "Cal Poly raspberry jam",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "photo": "IMG_9710.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "id": "photo-product-009",
+    "image": "assets/catalog/IMG_9710.jpg"
+  },
+  {
+    "name": "Cal Poly blackberry jam",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "photo": "IMG_9710.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "id": "photo-product-010",
+    "image": "assets/catalog/IMG_9710.jpg"
+  },
+  {
+    "name": "Cal Poly barbecue sauce",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "photo": "IMG_9710.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "id": "photo-product-011",
+    "image": "assets/catalog/IMG_9710.jpg"
+  },
+  {
+    "name": "Cal Poly chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "photo": "IMG_9710.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "id": "photo-product-012",
+    "image": "assets/catalog/IMG_9710.jpg"
+  },
+  {
+    "name": "Cayucos hot sauce",
+    "brand": "Cayucos",
+    "category": "pantry",
+    "photo": "IMG_9711.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9711.jpg"
+    ],
+    "id": "photo-product-013",
+    "image": "assets/catalog/IMG_9711.jpg"
+  },
+  {
+    "name": "SLO cider",
+    "brand": "SLO",
+    "category": "pantry",
+    "photo": "IMG_9712.jpg",
+    "notes": "variety and alcohol content to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9712.jpg"
+    ],
+    "id": "photo-product-014",
+    "image": "assets/catalog/IMG_9712.jpg"
+  },
+  {
+    "name": "Brian's sourdough bread",
+    "brand": "Brian's",
+    "category": "bread",
+    "photo": "IMG_9713.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9713.jpg"
+    ],
+    "id": "photo-product-015",
+    "image": "assets/catalog/IMG_9713.jpg"
+  },
+  {
+    "name": "Oranges",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9714.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9714.jpg",
+      "IMG_9736.jpg"
+    ],
+    "id": "photo-product-016",
+    "image": "assets/catalog/IMG_9714.jpg"
+  },
+  {
+    "name": "Citrus",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9715.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9715.jpg"
+    ],
+    "id": "photo-product-017",
+    "image": "assets/catalog/IMG_9715.jpg"
+  },
+  {
+    "name": "Taco Works chips",
+    "brand": "Taco Works",
+    "category": "produce",
+    "photo": "IMG_9715.jpg",
+    "notes": "package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9715.jpg"
+    ],
+    "id": "photo-product-018",
+    "image": "assets/catalog/IMG_9715.jpg"
+  },
+  {
+    "name": "Fair Hills Farm beet juice",
+    "brand": "Fair Hills Farm",
+    "category": "chilled",
+    "photo": "IMG_9716.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9716.jpg"
+    ],
+    "id": "photo-product-019",
+    "image": "assets/catalog/IMG_9716.jpg"
+  },
+  {
+    "name": "Bottled juice",
+    "brand": "Producer not identified",
+    "category": "chilled",
+    "photo": "IMG_9716.jpg",
+    "notes": "flavor and package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9716.jpg"
+    ],
+    "id": "photo-product-020",
+    "image": "assets/catalog/IMG_9716.jpg"
+  },
+  {
+    "name": "Alle-Pia Calabrese salamini",
+    "brand": "Alle-Pia",
+    "category": "chilled",
+    "photo": "IMG_9717.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9717.jpg"
+    ],
+    "id": "photo-product-021",
+    "image": "assets/catalog/IMG_9717.jpg"
+  },
+  {
+    "name": "Alle-Pia guanciale",
+    "brand": "Alle-Pia",
+    "category": "chilled",
+    "photo": "IMG_9717.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9717.jpg"
+    ],
+    "id": "photo-product-022",
+    "image": "assets/catalog/IMG_9717.jpg"
+  },
+  {
+    "name": "Alle-Pia mortadella",
+    "brand": "Alle-Pia",
+    "category": "chilled",
+    "photo": "IMG_9717.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9717.jpg"
+    ],
+    "id": "photo-product-023",
+    "image": "assets/catalog/IMG_9717.jpg"
+  },
+  {
+    "name": "Cal Poly eggs",
+    "brand": "Cal Poly",
+    "category": "chilled",
+    "photo": "IMG_9717.jpg",
+    "notes": "carton size to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9717.jpg",
+      "IMG_9718.jpg"
+    ],
+    "id": "photo-product-024",
+    "image": "assets/catalog/IMG_9717.jpg"
+  },
+  {
+    "name": "Straus half-and-half",
+    "brand": "Straus",
+    "category": "chilled",
+    "photo": "IMG_9719.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9719.jpg"
+    ],
+    "id": "photo-product-025",
+    "image": "assets/catalog/IMG_9719.jpg"
+  },
+  {
+    "name": "Straus heavy whipping cream",
+    "brand": "Straus",
+    "category": "chilled",
+    "photo": "IMG_9719.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9719.jpg"
+    ],
+    "id": "photo-product-026",
+    "image": "assets/catalog/IMG_9719.jpg"
+  },
+  {
+    "name": "Straus milk",
+    "brand": "Straus",
+    "category": "chilled",
+    "photo": "IMG_9719.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9719.jpg"
+    ],
+    "id": "photo-product-027",
+    "image": "assets/catalog/IMG_9719.jpg"
+  },
+  {
+    "name": "Straus butter",
+    "brand": "Straus",
+    "category": "chilled",
+    "photo": "IMG_9719.jpg",
+    "notes": "package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9719.jpg"
+    ],
+    "id": "photo-product-028",
+    "image": "assets/catalog/IMG_9719.jpg"
+  },
+  {
+    "name": "Stepladder cheese",
+    "brand": "Stepladder",
+    "category": "chilled",
+    "photo": "IMG_9720.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9720.jpg"
+    ],
+    "id": "photo-product-029",
+    "image": "assets/catalog/IMG_9720.jpg"
+  },
+  {
+    "name": "Stepladder cultured butter",
+    "brand": "Stepladder",
+    "category": "chilled",
+    "photo": "IMG_9720.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9720.jpg"
+    ],
+    "id": "photo-product-030",
+    "image": "assets/catalog/IMG_9720.jpg"
+  },
+  {
+    "name": "Guacamole",
+    "brand": "Producer not identified",
+    "category": "chilled",
+    "photo": "IMG_9720.jpg",
+    "notes": "producer and package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9720.jpg"
+    ],
+    "id": "photo-product-031",
+    "image": "assets/catalog/IMG_9720.jpg"
+  },
+  {
+    "name": "Pesto",
+    "brand": "Producer not identified",
+    "category": "chilled",
+    "photo": "IMG_9720.jpg",
+    "notes": "producer and package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9720.jpg"
+    ],
+    "id": "photo-product-032",
+    "image": "assets/catalog/IMG_9720.jpg"
+  },
+  {
+    "name": "Stepladder Rocky Butte cheese",
+    "brand": "Stepladder",
+    "category": "chilled",
+    "photo": "IMG_9721.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9721.jpg"
+    ],
+    "id": "photo-product-033",
+    "image": "assets/catalog/IMG_9721.jpg"
+  },
+  {
+    "name": "Stepladder Bixby cheese",
+    "brand": "Stepladder",
+    "category": "chilled",
+    "photo": "IMG_9721.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9721.jpg"
+    ],
+    "id": "photo-product-034",
+    "image": "assets/catalog/IMG_9721.jpg"
+  },
+  {
+    "name": "Stepladder ch\u00e8vre",
+    "brand": "Stepladder",
+    "category": "chilled",
+    "photo": "IMG_9721.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9721.jpg"
+    ],
+    "id": "photo-product-035",
+    "image": "assets/catalog/IMG_9721.jpg"
+  },
+  {
+    "name": "Eggs",
+    "brand": "Producer not identified",
+    "category": "chilled",
+    "photo": "IMG_9721.jpg",
+    "notes": "carton and producer to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9721.jpg"
+    ],
+    "id": "photo-product-036",
+    "image": "assets/catalog/IMG_9721.jpg"
+  },
+  {
+    "name": "Cal Poly chipotle cheddar",
+    "brand": "Cal Poly",
+    "category": "chilled",
+    "photo": "IMG_9722.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "id": "photo-product-037",
+    "image": "assets/catalog/IMG_9722.jpg"
+  },
+  {
+    "name": "Cal Poly white cheddar",
+    "brand": "Cal Poly",
+    "category": "chilled",
+    "photo": "IMG_9722.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "id": "photo-product-038",
+    "image": "assets/catalog/IMG_9722.jpg"
+  },
+  {
+    "name": "Cal Poly Highland cheddar",
+    "brand": "Cal Poly",
+    "category": "chilled",
+    "photo": "IMG_9722.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "id": "photo-product-039",
+    "image": "assets/catalog/IMG_9722.jpg"
+  },
+  {
+    "name": "Sierra Nevada cheese",
+    "brand": "Sierra Nevada",
+    "category": "chilled",
+    "photo": "IMG_9722.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "id": "photo-product-040",
+    "image": "assets/catalog/IMG_9722.jpg"
+  },
+  {
+    "name": "Stepladder avocado blossom honey",
+    "brand": "Stepladder",
+    "category": "pantry",
+    "photo": "IMG_9723.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9723.jpg"
+    ],
+    "id": "photo-product-041",
+    "image": "assets/catalog/IMG_9723.jpg"
+  },
+  {
+    "name": "Big Sur Honey Company honey",
+    "brand": "Big Sur Honey Company",
+    "category": "pantry",
+    "photo": "IMG_9723.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9723.jpg"
+    ],
+    "id": "photo-product-042",
+    "image": "assets/catalog/IMG_9723.jpg"
+  },
+  {
+    "name": "Sunshine Olive oil",
+    "brand": "Sunshine Olive",
+    "category": "pantry",
+    "photo": "IMG_9724.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9724.jpg"
+    ],
+    "id": "photo-product-043",
+    "image": "assets/catalog/IMG_9724.jpg"
+  },
+  {
+    "name": "Dried mushrooms",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "photo": "IMG_9724.jpg",
+    "notes": "species and package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9724.jpg"
+    ],
+    "id": "photo-product-044",
+    "image": "assets/catalog/IMG_9724.jpg"
+  },
+  {
+    "name": "Sunshine Olive Spanish Oaks Picual olive oil",
+    "brand": "Sunshine Olive",
+    "category": "pantry",
+    "photo": "IMG_9725.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9725.jpg"
+    ],
+    "id": "photo-product-045",
+    "image": "assets/catalog/IMG_9725.jpg"
+  },
+  {
+    "name": "Dried lion\u2019s mane mushrooms",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "photo": "IMG_9725.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9725.jpg"
+    ],
+    "id": "photo-product-046",
+    "image": "assets/catalog/IMG_9725.jpg"
+  },
+  {
+    "name": "Dried maitake mushrooms",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "photo": "IMG_9725.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9725.jpg"
+    ],
+    "id": "photo-product-047",
+    "image": "assets/catalog/IMG_9725.jpg"
+  },
+  {
+    "name": "Fair Hills Farm chamomile tea",
+    "brand": "Fair Hills Farm",
+    "category": "pantry",
+    "photo": "IMG_9726.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9726.jpg"
+    ],
+    "id": "photo-product-048",
+    "image": "assets/catalog/IMG_9726.jpg"
+  },
+  {
+    "name": "Fair Hills Farm black tea",
+    "brand": "Fair Hills Farm",
+    "category": "pantry",
+    "photo": "IMG_9726.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9726.jpg"
+    ],
+    "id": "photo-product-049",
+    "image": "assets/catalog/IMG_9726.jpg"
+  },
+  {
+    "name": "Fair Hills Farm cinnamon black tea",
+    "brand": "Fair Hills Farm",
+    "category": "pantry",
+    "photo": "IMG_9726.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9726.jpg"
+    ],
+    "id": "photo-product-050",
+    "image": "assets/catalog/IMG_9726.jpg"
+  },
+  {
+    "name": "Fair Hills Farm ginger black tea",
+    "brand": "Fair Hills Farm",
+    "category": "pantry",
+    "photo": "IMG_9726.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9726.jpg"
+    ],
+    "id": "photo-product-051",
+    "image": "assets/catalog/IMG_9726.jpg"
+  },
+  {
+    "name": "Maple Valley dark and robust maple syrup",
+    "brand": "Maple Valley",
+    "category": "pantry",
+    "photo": "IMG_9727.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9727.jpg"
+    ],
+    "id": "photo-product-052",
+    "image": "assets/catalog/IMG_9727.jpg"
+  },
+  {
+    "name": "Sean's muesli munch",
+    "brand": "Sean's",
+    "category": "pantry",
+    "photo": "IMG_9727.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9727.jpg"
+    ],
+    "id": "photo-product-053",
+    "image": "assets/catalog/IMG_9727.jpg"
+  },
+  {
+    "name": "Massa Organics brown rice",
+    "brand": "Massa Organics",
+    "category": "pantry",
+    "photo": "IMG_9728.jpg",
+    "notes": "package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "id": "photo-product-054",
+    "image": "assets/catalog/IMG_9728.jpg"
+  },
+  {
+    "name": "Packaged nuts",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "photo": "IMG_9728.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "id": "photo-product-055",
+    "image": "assets/catalog/IMG_9728.jpg"
+  },
+  {
+    "name": "Strawberries",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9729.jpg",
+    "notes": "selling package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9729.jpg"
+    ],
+    "id": "photo-product-056",
+    "image": "assets/catalog/IMG_9729.jpg"
+  },
+  {
+    "name": "Raspberries",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9729.jpg",
+    "notes": "selling package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9729.jpg"
+    ],
+    "id": "photo-product-057",
+    "image": "assets/catalog/IMG_9729.jpg"
+  },
+  {
+    "name": "Blueberries",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9729.jpg",
+    "notes": "selling package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9729.jpg"
+    ],
+    "id": "photo-product-058",
+    "image": "assets/catalog/IMG_9729.jpg"
+  },
+  {
+    "name": "Golden berries",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9729.jpg",
+    "notes": "identity to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9729.jpg"
+    ],
+    "id": "photo-product-059",
+    "image": "assets/catalog/IMG_9729.jpg"
+  },
+  {
+    "name": "Fennel",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9730.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "id": "photo-product-060",
+    "image": "assets/catalog/IMG_9730.jpg"
+  },
+  {
+    "name": "Broccoli",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9730.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "id": "photo-product-061",
+    "image": "assets/catalog/IMG_9730.jpg"
+  },
+  {
+    "name": "Romaine lettuce",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9730.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "id": "photo-product-062",
+    "image": "assets/catalog/IMG_9730.jpg"
+  },
+  {
+    "name": "Bok choy",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9730.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "id": "photo-product-063",
+    "image": "assets/catalog/IMG_9730.jpg"
+  },
+  {
+    "name": "Leeks",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9730.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "id": "photo-product-064",
+    "image": "assets/catalog/IMG_9730.jpg"
+  },
+  {
+    "name": "Celery",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9730.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "id": "photo-product-065",
+    "image": "assets/catalog/IMG_9730.jpg"
+  },
+  {
+    "name": "Bunched carrots",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9731.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "id": "photo-product-066",
+    "image": "assets/catalog/IMG_9731.jpg"
+  },
+  {
+    "name": "Potatoes",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9731.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "id": "photo-product-067",
+    "image": "assets/catalog/IMG_9731.jpg"
+  },
+  {
+    "name": "Lettuce",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9731.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "id": "photo-product-068",
+    "image": "assets/catalog/IMG_9731.jpg"
+  },
+  {
+    "name": "Packaged spring greens",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9732.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "id": "photo-product-069",
+    "image": "assets/catalog/IMG_9732.jpg"
+  },
+  {
+    "name": "Packaged arugula",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9732.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "id": "photo-product-070",
+    "image": "assets/catalog/IMG_9732.jpg"
+  },
+  {
+    "name": "Mushrooms",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9732.jpg",
+    "notes": "species to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "id": "photo-product-071",
+    "image": "assets/catalog/IMG_9732.jpg"
+  },
+  {
+    "name": "Green Gold microgreens",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9733.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "id": "photo-product-072",
+    "image": "assets/catalog/IMG_9733.jpg"
+  },
+  {
+    "name": "Ginger",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9733.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "id": "photo-product-073",
+    "image": "assets/catalog/IMG_9733.jpg"
+  },
+  {
+    "name": "Turmeric",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9733.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "id": "photo-product-074",
+    "image": "assets/catalog/IMG_9733.jpg"
+  },
+  {
+    "name": "Eggplant",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9733.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "id": "photo-product-075",
+    "image": "assets/catalog/IMG_9733.jpg"
+  },
+  {
+    "name": "Peppers",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9733.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "id": "photo-product-076",
+    "image": "assets/catalog/IMG_9733.jpg"
+  },
+  {
+    "name": "Tomatoes",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9734.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9734.jpg"
+    ],
+    "id": "photo-product-077",
+    "image": "assets/catalog/IMG_9734.jpg"
+  },
+  {
+    "name": "Watermelon",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9734.jpg",
+    "notes": "selling unit to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9734.jpg",
+      "IMG_9735.jpg"
+    ],
+    "id": "photo-product-078",
+    "image": "assets/catalog/IMG_9734.jpg"
+  },
+  {
+    "name": "Cantaloupe",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9735.jpg",
+    "notes": "selling unit to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9735.jpg"
+    ],
+    "id": "photo-product-079",
+    "image": "assets/catalog/IMG_9735.jpg"
+  },
+  {
+    "name": "Melon",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9735.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9735.jpg"
+    ],
+    "id": "photo-product-080",
+    "image": "assets/catalog/IMG_9735.jpg"
+  },
+  {
+    "name": "Mangoes",
+    "brand": "Producer not identified",
+    "category": "produce",
+    "photo": "IMG_9736.jpg",
+    "notes": "variety to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9736.jpg"
+    ],
+    "id": "photo-product-081",
+    "image": "assets/catalog/IMG_9736.jpg"
+  },
+  {
+    "name": "Etto pasta",
+    "brand": "Etto",
+    "category": "pantry",
+    "photo": "IMG_9738.jpg",
+    "notes": "shape and package to confirm",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived candidate; confirm exact variant and selling details",
+    "evidence": "Supplied store photograph; prior manual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9738.jpg"
+    ],
+    "id": "photo-product-082",
+    "image": "assets/catalog/IMG_9738.jpg"
+  },
+  {
+    "name": "Albino Coast Redwood Blend",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": "12 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-083",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Cone Peak Blend",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": "12 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-084",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Dream Girl Decaf",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": "12 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-085",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Peace Be With You Blend",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": "12 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-086",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Packer\u2019s Blend coffee bags",
+    "brand": "Corberosa",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-087",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Cranberry Orange granola",
+    "brand": "Ocean Ranch",
+    "category": "pantry",
+    "photo": "IMG_9723.jpg",
+    "notes": "",
+    "unit": "10 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9723.jpg"
+    ],
+    "id": "photo-product-088",
+    "image": "assets/catalog/IMG_9723.jpg"
+  },
+  {
+    "name": "Oaxacan Chocolate granola",
+    "brand": "Ocean Ranch",
+    "category": "pantry",
+    "photo": "IMG_9723.jpg",
+    "notes": "",
+    "unit": "10 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9723.jpg"
+    ],
+    "id": "photo-product-089",
+    "image": "assets/catalog/IMG_9723.jpg"
+  },
+  {
+    "name": "Lemon Blueberry granola",
+    "brand": "Ocean Ranch",
+    "category": "pantry",
+    "photo": "IMG_9723.jpg",
+    "notes": "",
+    "unit": "10 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9723.jpg"
+    ],
+    "id": "photo-product-090",
+    "image": "assets/catalog/IMG_9723.jpg"
+  },
+  {
+    "name": "Turmeric Goji Berry granola",
+    "brand": "Ocean Ranch",
+    "category": "pantry",
+    "photo": "IMG_9723.jpg",
+    "notes": "",
+    "unit": "10 oz bag",
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Label read from supplied photo; selling details pending",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9723.jpg"
+    ],
+    "id": "photo-product-091",
+    "image": "assets/catalog/IMG_9723.jpg"
+  },
+  {
+    "name": "Avocado Shack Blend (Hut)",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Listed on photographed coffee menu; packaged availability unconfirmed",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-092",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Avocado Shack (Hands)",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Listed on photographed coffee menu; packaged availability unconfirmed",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-093",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Cass Hill Blend",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Listed on photographed coffee menu; packaged availability unconfirmed",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-094",
+    "image": "assets/catalog/IMG_9709.jpg"
+  },
+  {
+    "name": "Cambria Blend",
+    "brand": "Joebella / Avocado Shack",
+    "category": "pantry",
+    "photo": "IMG_9709.jpg",
+    "notes": "",
+    "unit": null,
+    "price": null,
+    "onlineQuantity": null,
+    "status": "Listed on photographed coffee menu; packaged availability unconfirmed",
+    "evidence": "Direct visual label review",
+    "sellable": false,
+    "photos": [
+      "IMG_9709.jpg"
+    ],
+    "id": "photo-product-095",
+    "image": "assets/catalog/IMG_9709.jpg"
+  }
+]

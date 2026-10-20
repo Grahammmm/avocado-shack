@@ -1,0 +1,1 @@
+export default { async rewrites(){return [{source:'/api/:path*',destination:'http://127.0.0.1:3200/api/:path*'},{source:'/media/:path*',destination:'http://127.0.0.1:3200/media/:path*'}]}, agentRules:false,poweredByHeader:false,devIndicators:false };

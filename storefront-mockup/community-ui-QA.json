@@ -1,0 +1,30 @@
+{
+  "rsvpForm": true,
+  "newsletterForm": true,
+  "hikingUpdates": true,
+  "pastHikes": true,
+  "noInventedProductionEvents": true,
+  "layouts": [
+    {
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "width": 375,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "overflow": false
+    }
+  ],
+  "errors": []
+}

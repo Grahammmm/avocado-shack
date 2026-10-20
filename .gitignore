@@ -1,0 +1,30 @@
+# Private runtime and customer data
+/community-data/
+/handoff-backups/
+.env
+.env.*
+!.env.example
+*.sqlite3
+*.sqlite3-*
+*.db
+**/.runtime/
+
+# Reproducible dependencies and caches
+**/node_modules/
+**/.next/
+**/.medusa/
+**/__pycache__/
+.DS_Store
+
+# Historical/private evidence and original artwork are preserved in the handoff archive
+/commerce/evidence/
+/deployment/
+/inventory-intake/photos/
+/inventory-intake/previews/
+/inventory-intake/contact-sheet-*.jpg
+/storefront-mockup/assets/catalog/
+/storefront-mockup/assets/products/*.png
+
+# Local backup and migration output
+/reports/hermes-handoff/transfer-*.log
+/reports/hermes-handoff/private-*

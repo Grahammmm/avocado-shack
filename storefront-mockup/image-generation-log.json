@@ -1,0 +1,699 @@
+{
+  "mode": "built-in imagegen",
+  "products": [
+    {
+      "id": "photo-product-001",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c1b7e605-9927-4b48-ad15-ae9fb97f0308.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Hass avocado, producer Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-005",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-5a0919c1-53c8-4b59-aabd-8feec4925eb8.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Linn's orange marmalade, producer Linn's. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-002",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-79156eb5-0436-47af-974b-cd9f6acb25d0.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Linn's triple berry preserves, producer Linn's. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-003",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-36ce5886-a593-4499-9a84-2833f2a1ea98.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Linn's blueberry preserves, producer Linn's. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-006",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-029d044b-c636-4f1b-9580-b4bdf59264cf.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Mixed flower bouquet, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-004",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0fa434a5-8fa6-429f-a34f-45fa17115776.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Linn's boysenberry preserves, producer Linn's. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-008",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2fd6b40c-9843-417e-b920-a4b2d0187f65.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly strawberry jam, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-007",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-7cd797a0-0ebd-4c54-8ee4-c4d9c2e89616.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Fair Hills Farm apple juice, producer Fair Hills Farm. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-010",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2bc2d3a0-e78f-4b28-a48f-b8615f20e99f.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly blackberry jam, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-011",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-a7f527b1-0683-4847-a199-887737ae8b18.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly barbecue sauce, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-012",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-9ff0854a-0400-47d7-aa34-c64706f8f7fc.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly chocolate, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-009",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c04caa48-6fcc-48b8-8a1a-d5748cd4fd36.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly raspberry jam, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-014",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2e08d470-be09-4a68-8004-a7aa9aabde20.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Zero non-alcoholic cider, producer SLO. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-013",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-8ec15314-052d-4aef-a646-dab1fc669ccb.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cayucos hot sauce, producer Cayucos. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-015",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-21cbd18b-5a80-4c76-9a88-0dbfc07eb1c0.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Brian's sourdough bread, producer Brian's. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-018",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-3d6da2b1-2028-495f-9a9d-68d81dbd2314.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Taco Works chips, producer Taco Works. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-016",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-03c91d74-8945-4e07-b3b2-97ddff498ccc.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Oranges, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-017",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c03f32cf-2219-401f-ab6e-8a1a785f1c48.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Citrus, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-019",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-64bc8f23-9840-4b7f-a4c1-a1ab5ac0eefd.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Organic beet juice, producer Love Beets. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-020",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-75b7eff7-733f-4e83-9fd1-411545a7199e.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Bottled juice, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-021",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-8b03abd7-8b3e-4496-9b25-6ffe921003d2.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Alle-Pia Calabrese salamini, producer Alle-Pia. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-023",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-9d3678e9-c1e9-4cd8-99e3-e141e8f61a30.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Alle-Pia mortadella, producer Alle-Pia. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-024",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d78e06ea-6095-4138-9b6d-724b030d56c0.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly eggs, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-022",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e6e35914-2274-48c1-9149-a7d3ab47dfbc.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Alle-Pia guanciale, producer Alle-Pia. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-025",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c58ef09d-18d2-4be7-ad4b-14b9863b44c5.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Straus half-and-half, producer Straus. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-028",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-911f6e1a-7383-454c-b71e-a9bdf1fa7524.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Straus butter, producer Straus. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-029",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2e1ce891-fd19-4db6-a1af-3c2949c19459.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Stepladder cheese, producer Stepladder. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-030",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-6cdcdf16-d270-41b3-8137-ec13693b36e2.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Stepladder cultured butter, producer Stepladder. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-027",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-5064356c-f9ac-4a5b-9156-576488be9994.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Straus milk, producer Straus. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-032",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c32eafba-ad96-488f-83c1-b783ed120a64.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Pesto, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-026",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-93904814-317d-4bba-89e6-147070bef51a.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Straus heavy whipping cream, producer Straus. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-033",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-7c934622-0525-49db-8a2a-368f1090c9b1.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Stepladder Rocky Butte cheese, producer Stepladder. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-036",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-9dc25ef2-4e90-4f6d-9685-cc56df123d9d.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Eggs, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-031",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-cdfca26b-c41b-4e25-a734-d6b33e69de84.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Guacamole, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-035",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-8617a32c-0538-40b0-a34f-9b8ce61192ae.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Stepladder chèvre, producer Stepladder. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-034",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-fde622fa-9c44-4d5e-838f-0c031c92b041.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Stepladder Bixby cheese, producer Stepladder. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-037",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-bee9077e-1b30-4d92-b01a-f5f73d966c6a.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly chipotle cheddar, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-039",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-9940fe7c-e8da-4418-b77f-dd1d86cc2282.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly Highland cheddar, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-038",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-17f47aa9-bbc3-4f34-8261-4687f24df750.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cal Poly white cheddar, producer Cal Poly. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-041",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d3420a1e-9439-4ce7-9140-7a35bea8f8ad.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Stepladder avocado blossom honey, producer Stepladder. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-040",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-3e2258fc-953c-4e99-829d-6db579cb893d.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Sierra Nevada cheese, producer Sierra Nevada. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-042",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-42ce978d-b859-4ec8-b417-932ef3640754.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Big Sur Honey Company honey, producer Big Sur Honey Company. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-043",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-164ebb32-77d0-4439-b8d0-24204ab68119.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Sunshine Olive oil, producer Sunshine Olive. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-046",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-546b12d6-41d9-4f2c-badc-448459e5c531.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Dried lion’s mane mushrooms, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-047",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-743734ee-49b9-4411-ac36-0473558931ab.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Dried maitake mushrooms, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-044",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c7910e67-21a0-45a8-bab5-ce6cd06e4b75.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Dried mushrooms, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-049",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-531ddc33-2040-47b8-bfe8-13ed8128188d.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Fair Hills Farm black tea, producer Fair Hills Farm. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-045",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-568aac48-0909-4697-8790-06b626713419.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Sunshine Olive Spanish Oaks Picual olive oil, producer Sunshine Olive. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-048",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-83c112de-aacd-45d0-92b3-a877d5cd2f85.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Fair Hills Farm chamomile tea, producer Fair Hills Farm. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-050",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-8c7c66ea-10ec-4db1-a905-0e18e4239b5a.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Fair Hills Farm cinnamon black tea, producer Fair Hills Farm. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-051",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-43226f50-0bb8-461b-8f4d-b74e34316c85.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Fair Hills Farm ginger black tea, producer Fair Hills Farm. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-052",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-b40d970d-059c-4808-abdd-e4895911f2c8.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Maple Valley dark and robust maple syrup, producer Maple Valley. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-055",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-7ca3bcc4-ec5e-4d0f-8883-1e6e42614f9f.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Packaged nuts, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-053",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-91662245-c72f-4e15-9d57-8918ac4340fb.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Sean's muesli munch, producer Sean's. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-056",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-39086515-7506-444f-9624-43bcb01f69a0.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Strawberries, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-058",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-43c3cbd0-2c27-432c-8385-1d21c69a7221.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Blueberries, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-057",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-cf52a17b-f8be-4d2f-ba5e-c4a399ba5416.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Raspberries, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-059",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d1995319-413a-4567-88ae-ed243c927259.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Golden berries, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-061",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-7dc14b0e-0e02-4e46-81cf-19beca1e2777.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Broccoli, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-054",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-542fb583-6076-4a17-a1f5-6e6d202cf167.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Massa Organics brown rice, producer Massa Organics. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-060",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2cc715bb-7bf9-46d2-b073-45e62fe15643.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Fennel, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-063",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-f3be8b53-01ad-49d2-9be5-6275dfdd9082.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Bok choy, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-062",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-73766963-15e0-471a-8d44-807e66a57a22.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Romaine lettuce, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-064",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-cb1cf5ab-4ba5-46fc-b80f-48f1b8c32eac.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Leeks, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-067",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0621ccc2-9f40-41da-bad5-2f283c315d1a.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Potatoes, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-069",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ce8b985a-e624-4ad3-94b9-27a55d617a84.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Packaged spring greens, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-065",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-9b4897a8-4ed5-404b-a8ed-99552222d070.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Celery, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-066",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-31a09804-413e-4e56-b84c-b7e2a6bc8ca2.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Bunched carrots, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-068",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-3cfe9600-8d1b-449f-bf40-dc04bcdaf2e3.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Lettuce, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-070",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-53cf8495-e3e4-4e91-b784-cf927efed13a.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Packaged arugula, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-071",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ec38b97d-5b4b-4e22-8c11-13a510ca301c.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Mushrooms, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-073",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0eeb2174-b451-4b6a-9d8b-e16f9615fe00.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Ginger, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-074",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-4481437f-c2b2-46f0-8541-114a91f6e15c.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Turmeric, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-075",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-4b552e96-9884-4c80-ad71-a38b584a4320.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Eggplant, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-076",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0fc55440-f6d2-4eec-81ef-fa9299e8004b.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Peppers, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-072",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-02831528-d9ca-4401-9417-c81aba0f1e75.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Green Gold microgreens, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-077",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-9020e59e-1e27-482d-bbb6-c621d71b6bd2.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Tomatoes, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-079",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-3c492a04-5da0-4d55-8936-33ff2bfebc1c.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cantaloupe, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-078",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-f4399d9d-77a8-4763-900a-1baac2b275f7.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Watermelon, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-081",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e96c271d-5a1b-4f95-b899-dfcfbf8f4df6.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Mangoes, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-080",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e6681b97-9266-4acd-9737-f25625353fde.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Melon, producer Producer not identified. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-082",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-59014888-06a8-47e1-b1ba-3ee14ffa3f03.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Etto pasta, producer Etto. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-083",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-cf318c41-6c98-4fb9-bc82-968d46bf6d31.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Albino Coast Redwood Blend, producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-085",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2f2aa9df-e20e-4daa-9dce-c142193333f5.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Dream Girl Decaf, producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-084",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-4bd5c972-717d-474f-bb7e-4b7cf0b974a9.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cone Peak Blend, producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-086",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-6a1dfcb3-d104-48b0-b4b1-ba3ab29c425c.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Peace Be With You Blend, producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-087",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-81eebd89-c734-4547-8911-efab5962b7b5.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Packer’s Blend coffee bags, producer Corberosa. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-090",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-62db391d-b35e-4a3d-813e-a6fd81d4f2b5.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Lemon Blueberry granola, producer Ocean Ranch. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-093",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-1011b27d-3cd4-4ab2-b65d-a97d1ce1da64.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Avocado Shack (Hands), producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-089",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d65088e3-49d1-4cbe-8613-78190ea214f3.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Oaxacan Chocolate granola, producer Ocean Ranch. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-091",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-5caea232-76d1-4883-afb2-5d4532556f0b.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Turmeric Goji Berry granola, producer Ocean Ranch. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-094",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-dd8a9710-e7b5-4fff-bd98-041075673eae.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cass Hill Blend, producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-092",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-278ae6bb-c2ad-4bcb-abbe-271b36d6deaf.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Avocado Shack Blend (Hut), producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    },
+    {
+      "id": "photo-product-095",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-59ff29d9-cde6-47c7-9e78-168c39e6a3e8.png",
+      "prompt": "Use case: background-extraction. Edit target: the supplied Avocado Shack shelf photograph. Extract only the individual product Cambria Blend, producer Joebella / Avocado Shack. One square professional online store product photograph on warm ivory seamless background, soft natural studio light, realistic contact shadow, fully visible and centered, generous margins. Remove all shelf clutter, price signs, unrelated objects and other products. Preserve the visible real packaging, label, logo, color and product identity as closely as possible; never invent certification or ingredients. If name specifies an unclear variant, use a representative visible unit of that product and retain its real label. For loose produce, display a few of that same produce type only. This is an AI visualization derived from a store photo, not proof of a specific SKU or package size. No captions or pricing in image.",
+      "ok": true
+    }
+  ],
+  "merchAndBoxes": [
+    {
+      "id": "merch-tee",
+      "prompt": "Use case: product-mockup. Create one photorealistic square e-commerce product photo for an Avocado Shack Morro Bay merchandise concept: The Original Shack Tee. Cream tee with the classic Avocado Shack illustration and Morro Bay lettering. Design must be tasteful, wearable, distinctive and readable, inspired by the supplied authentic Avocado Shack logo. Preserve exact text AVOCADO SHACK and MORRO BAY, CALIFORNIA where applicable. Coastal California local produce market identity, cream/forest green/terracotta palette. One product only fully visible centered on warm ivory studio backdrop with soft contact shadows, no person, no extra caption, no prices. Graphic printed realistically on fabric or ceramic with excellent detail. This is a proposed design, not an existing product.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-8a6714d2-b8d3-45e1-8f0d-d3082c9deab3.png",
+      "ok": true
+    },
+    {
+      "id": "merch-mug",
+      "prompt": "Use case: product-mockup. Create one photorealistic square e-commerce product photo for an Avocado Shack Morro Bay merchandise concept: Morning at the Shack Mug. Cream ceramic mug, green rim and a cheerful avocado coastal graphic. Design must be tasteful, wearable, distinctive and readable, inspired by the supplied authentic Avocado Shack logo. Preserve exact text AVOCADO SHACK and MORRO BAY, CALIFORNIA where applicable. Coastal California local produce market identity, cream/forest green/terracotta palette. One product only fully visible centered on warm ivory studio backdrop with soft contact shadows, no person, no extra caption, no prices. Graphic printed realistically on fabric or ceramic with excellent detail. This is a proposed design, not an existing product.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-54eb3171-6461-44d9-b784-3d3c5976e951.png",
+      "ok": true
+    },
+    {
+      "id": "merch-sweat",
+      "prompt": "Use case: product-mockup. Create one photorealistic square e-commerce product photo for an Avocado Shack Morro Bay merchandise concept: Fog Morning Crewneck. Forest green sweatshirt with a cream coastal market graphic. Design must be tasteful, wearable, distinctive and readable, inspired by the supplied authentic Avocado Shack logo. Preserve exact text AVOCADO SHACK and MORRO BAY, CALIFORNIA where applicable. Coastal California local produce market identity, cream/forest green/terracotta palette. One product only fully visible centered on warm ivory studio backdrop with soft contact shadows, no person, no extra caption, no prices. Graphic printed realistically on fabric or ceramic with excellent detail. This is a proposed design, not an existing product.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ee1fc1a3-ffbe-42a9-84e9-0d303c3e9ff8.png",
+      "ok": true
+    },
+    {
+      "id": "merch-coast",
+      "prompt": "Use case: product-mockup. Create one photorealistic square e-commerce product photo for an Avocado Shack Morro Bay merchandise concept: Morro Bay Coast Tee. Terracotta tee with a woodcut avocado, coastal waves and Morro Rock. Design must be tasteful, wearable, distinctive and readable, inspired by the supplied authentic Avocado Shack logo. Preserve exact text AVOCADO SHACK and MORRO BAY, CALIFORNIA where applicable. Coastal California local produce market identity, cream/forest green/terracotta palette. One product only fully visible centered on warm ivory studio backdrop with soft contact shadows, no person, no extra caption, no prices. Graphic printed realistically on fabric or ceramic with excellent detail. This is a proposed design, not an existing product.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ff41d094-a0f5-401e-b063-2c6c278f9e46.png",
+      "ok": true
+    },
+    {
+      "id": "merch-tote",
+      "prompt": "Use case: product-mockup. Create one photorealistic square e-commerce product photo for an Avocado Shack Morro Bay merchandise concept: Market Day Tote. Natural canvas tote with a large illustrated Avocado Shack market print. Design must be tasteful, wearable, distinctive and readable, inspired by the supplied authentic Avocado Shack logo. Preserve exact text AVOCADO SHACK and MORRO BAY, CALIFORNIA where applicable. Coastal California local produce market identity, cream/forest green/terracotta palette. One product only fully visible centered on warm ivory studio backdrop with soft contact shadows, no person, no extra caption, no prices. Graphic printed realistically on fabric or ceramic with excellent detail. This is a proposed design, not an existing product.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-04a87883-6be1-4c02-ac3f-4a51fa7e9856.png",
+      "ok": true
+    },
+    {
+      "id": "merch-cap",
+      "prompt": "Use case: product-mockup. Create one photorealistic square e-commerce product photo for an Avocado Shack Morro Bay merchandise concept: Shack Cap. Forest green cap with an embroidered avocado and Morro Bay wordmark. Design must be tasteful, wearable, distinctive and readable, inspired by the supplied authentic Avocado Shack logo. Preserve exact text AVOCADO SHACK and MORRO BAY, CALIFORNIA where applicable. Coastal California local produce market identity, cream/forest green/terracotta palette. One product only fully visible centered on warm ivory studio backdrop with soft contact shadows, no person, no extra caption, no prices. Graphic printed realistically on fabric or ceramic with excellent detail. This is a proposed design, not an existing product.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-6b5266dd-d4ca-4e61-bf43-ea705aec32af.png",
+      "ok": true
+    },
+    {
+      "id": "box-small",
+      "prompt": "Use case: product-mockup. Reference photographs show real produce at Avocado Shack. Create one square professional catalog photograph of the Small Weekly Box, a natural kraft cardboard produce box with a small AVOCADO SHACK wordmark. Arrange precisely these contents beautifully in and immediately around the open box: 2 avocados, 2 oranges, 1 strawberry basket, 1 carrot bunch, 1 romaine head. No other food, no pantry additions. Whole box fully visible, warm ivory seamless backdrop, natural soft light, true textures, three-quarter view. This is a sample box design based on photographed produce, not a currently available offer. No prices or additional text.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9714.jpg",
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9729.jpg",
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-4ec66962-e955-4102-b531-3d2d2bb85553.png",
+      "ok": true
+    },
+    {
+      "id": "box-medium",
+      "prompt": "Use case: product-mockup. Reference photographs show real produce at Avocado Shack. Create one square professional catalog photograph of the Medium Weekly Box, a natural kraft cardboard produce box with a small AVOCADO SHACK wordmark. Arrange precisely these contents beautifully in and immediately around the open box: 4 avocados, 4 oranges, 1 strawberry basket, 1 raspberry basket, 1 carrot bunch, 1 romaine head, 1 lb potatoes, 1 broccoli head. No other food, no pantry additions. Whole box fully visible, warm ivory seamless backdrop, natural soft light, true textures, three-quarter view. This is a sample box design based on photographed produce, not a currently available offer. No prices or additional text.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9714.jpg",
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9729.jpg",
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d78623ce-885a-4deb-b4b8-547828d6aea4.png",
+      "ok": true
+    },
+    {
+      "id": "merch-stickers",
+      "prompt": "Use case: product-mockup. Create one photorealistic square e-commerce product photo for an Avocado Shack Morro Bay merchandise concept: Coastal Sticker Pack. Three illustrated stickers: the Shack, Morro Rock and a surfing avocado. Design must be tasteful, wearable, distinctive and readable, inspired by the supplied authentic Avocado Shack logo. Preserve exact text AVOCADO SHACK and MORRO BAY, CALIFORNIA where applicable. Coastal California local produce market identity, cream/forest green/terracotta palette. One product only fully visible centered on warm ivory studio backdrop with soft contact shadows, no person, no extra caption, no prices. Graphic printed realistically on fabric or ceramic with excellent detail. This is a proposed design, not an existing product.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ad4d15ba-cd58-4a27-ad37-2a915c4bc6be.png",
+      "ok": true
+    },
+    {
+      "id": "box-large",
+      "prompt": "Use case: product-mockup. Reference photographs show real produce at Avocado Shack. Create one square professional catalog photograph of the Large Weekly Box, a natural kraft cardboard produce box with a small AVOCADO SHACK wordmark. Arrange precisely these contents beautifully in and immediately around the open box: 6 avocados, 6 oranges, 2 strawberry baskets, 1 raspberry basket, 2 carrot bunches, 2 romaine heads, 2 lb potatoes, 2 broccoli heads, 1 lb tomatoes, 2 mangoes. No other food, no pantry additions. Whole box fully visible, warm ivory seamless backdrop, natural soft light, true textures, three-quarter view. This is a sample box design based on photographed produce, not a currently available offer. No prices or additional text.",
+      "refs": [
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9714.jpg",
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9729.jpg",
+        "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+      ],
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-690052c7-52bc-463b-8fb2-a10e1bd6b55d.png",
+      "ok": true
+    }
+  ],
+  "corrections": [
+    {
+      "prompt": "Use case: background-extraction. Extract ONLY the Stepladder Creamery Cultured Butter glass jar from the left side of the reference photo. It is a clear cylindrical glass jar with silver screw lid, yellow butter and black circular lid label reading STEPLADDER CREAMERY Cultured Butter. Do NOT extract the white paper-wrapped Ragged Point cheese, that is a different product. One square professional product photograph, single whole butter jar upright slightly from above so black lid label is visible, warm ivory seamless background, soft contact shadow, no other product or text. Preserve the actual visible jar and label; do not substitute cheese or invent new packaging.",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ef1b6083-6c77-425c-9f75-11b814b01089.png"
+    },
+    {
+      "id": "photo-product-035",
+      "photo": "IMG_9721.jpg",
+      "target": "Stepladder chèvre: ONLY the clear rectangular plastic tub of soft white goat cheese in the middle of the photograph. NOT the vacuum-packed Rocky Butte wedge on the left and NOT the Bixby cheese on the right. Preserve the visible tub and label; no invented label.",
+      "prompt": "Use case: background-extraction. Edit target supplied actual shop photograph. Extract Stepladder chèvre: ONLY the clear rectangular plastic tub of soft white goat cheese in the middle of the photograph. NOT the vacuum-packed Rocky Butte wedge on the left and NOT the Bixby cheese on the right. Preserve the visible tub and label; no invented label. Create one square professional product photograph, whole single selling unit centered on ivory seamless backdrop, soft light/contact shadow, no other products or captions. Preserve identity; this is an AI display visualization.",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-94688584-9440-4971-b931-821204074cf1.png"
+    },
+    {
+      "id": "photo-product-040",
+      "photo": "IMG_9722.jpg",
+      "target": "Sierra Nevada raw milk white cheddar: ONLY the rectangular vacuum-packed white cheese at the bottom RIGHT with a black label reading Sierra Nevada Raw Milk WHITE CHEDDAR GRASS FED. Do NOT use Cal Poly branding or the three cheeses at the top. Preserve the actual black package label.",
+      "prompt": "Use case: background-extraction. Edit target supplied actual shop photograph. Extract Sierra Nevada raw milk white cheddar: ONLY the rectangular vacuum-packed white cheese at the bottom RIGHT with a black label reading Sierra Nevada Raw Milk WHITE CHEDDAR GRASS FED. Do NOT use Cal Poly branding or the three cheeses at the top. Preserve the actual black package label. Create one square professional product photograph, whole single selling unit centered on ivory seamless backdrop, soft light/contact shadow, no other products or captions. Preserve identity; this is an AI display visualization.",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-38cd6ee5-d880-41dc-bcb4-74d7565c8ed0.png"
+    },
+    {
+      "id": "photo-product-056",
+      "photo": "IMG_9729.jpg",
+      "target": "ONLY one small green strawberry basket containing red strawberries from the top produce shelf. Not a whole wholesale box, no outer California Grown case. Single retail basket with berries, no added fruit or text.",
+      "prompt": "Use case: background-extraction. Edit target supplied actual shop photograph. Extract ONLY one small green strawberry basket containing red strawberries from the top produce shelf. Not a whole wholesale box, no outer California Grown case. Single retail basket with berries, no added fruit or text. Create one square professional product photograph, whole single selling unit centered on ivory seamless backdrop, soft light/contact shadow, no other products or captions. Preserve identity; this is an AI display visualization.",
+      "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-00db5a70-2098-48e1-93d3-f9530a9529dc.png"
+    }
+  ],
+  "firstProduct": {
+    "id": "photo-product-088",
+    "source": "IMG_9723.jpg",
+    "prompt": "Extract only the Ocean Ranch Cranberry Orange granola bag into a square ivory-background product photograph. Preserve label and packaging."
+  }
+}

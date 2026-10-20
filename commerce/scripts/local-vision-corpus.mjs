@@ -1,0 +1,4 @@
+import fs from 'node:fs/promises';import {photoInterpretation,modelHealth} from '../astra/photo-model.mjs';
+if(!await modelHealth())throw new Error('Local vision model is not ready');
+const results=[];
+for(let n=9707;n<=9739;n++){const photo=`IMG_${n}.jpg`,t=Date.now();try{results.push({photo,elapsed_ms:Date.now()-t,proposal:await photoInterpretation([new URL('../../inventory-intake/previews/'+photo,import.meta.url).pathname])});results.at(-1).elapsed_ms=Date.now()-t;}catch(e){results.push({photo,elapsed_ms:Date.now()-t,error:e.message})}await fs.writeFile(new URL('../evidence/local-vision-corpus.json',import.meta.url),JSON.stringify({source:'33 real supplied cached photos',private_analysis_only:true,no_catalog_changes:true,results},null,2));console.log(photo,results.at(-1).proposal?.kind||'unavailable',Date.now()-t+'ms')}

@@ -1,0 +1,20 @@
+import {photoProposal} from './photo-proposal.mjs';
+import {productDetails} from './product-details.mjs';
+import {interpret} from './interpret.mjs';
+export function labelProposal(input){
+ if(!input||typeof input!=='object'||Array.isArray(input))return undefined;
+ const line=(value)=>{
+  if(!value||typeof value.text!=='string'||!Number.isFinite(value.confidence)||value.confidence<0||value.confidence>1)return null;
+  const result={text:value.text.slice(0,512),confidence:value.confidence};
+  if(Array.isArray(value.box)&&value.box.length===4&&value.box.every(n=>Number.isFinite(n)&&n>=0&&n<=1))result.box=[...value.box];
+  if(Number.isInteger(value.photo_index)&&value.photo_index>=0&&value.photo_index<6)result.photo_index=value.photo_index;
+  return result;
+ };
+ const lines=(values)=>Array.isArray(values)?values.slice(0,480).map(line).filter(Boolean):[];
+ const photos=Array.isArray(input.photos)?input.photos.slice(0,6).filter(p=>p&&typeof p.photo==='string'&&/^\/media\/[a-f0-9-]+\.jpg$/.test(p.photo)).map(p=>({photo:p.photo,engine:typeof p.engine==='string'?p.engine.slice(0,80):'unknown',lines:lines(p.lines).slice(0,80)})):[];
+ return {engine:typeof input.engine==='string'?input.engine.slice(0,80):'unknown',automatic_identity:false,photos,lines:lines(input.lines),note:'Readable label text is evidence only. Review identity, quantity and claims before approval.'};
+}
+
+export function proposalFields(input){const fields={};if(!input||typeof input!=='object'||Array.isArray(input))return fields;if(typeof input.name==='string'&&input.name.trim().length<=200)fields.name=input.name.trim();if(['each','jar','bottle','bag','loaf','bunch','box','lb','pound'].includes(input.unit))fields.unit=input.unit;for(const key of ['price_minor','quantity'])if(Number.isSafeInteger(input[key])&&input[key]>=0&&input[key]<=(key==='price_minor'?100000000:1000000))fields[key]=input[key];if(input.stock_pool==='online')fields.stock_pool='online';if(['receipt','recount'].includes(input.stock_action))fields.stock_action=input.stock_action;if(input.restricted===true)fields.restricted=true;Object.assign(fields,productDetails(input));if(typeof input.category==='string'&&input.category.trim()&&input.category.trim().length<=80)fields.category=input.category.trim();const visual=photoProposal(input._photo_review);if(visual)fields._photo_review=visual;const labels=labelProposal(input.label_evidence);if(labels)fields.label_evidence=labels;return fields}
+export function groundedProposal(input,message){const fields=proposalFields(input),explicit=interpret(message).fields;for(const key of ['price_minor','quantity','stock_action','stock_pool']){delete fields[key];if(explicit[key]!==undefined)fields[key]=explicit[key]}for(const [key,value] of Object.entries(explicit))fields[key]=value;return fields}
+export async function propose({message,photos,secret}){try{const r=await fetch('http://127.0.0.1:3400/interpret',{method:'POST',headers:{'Content-Type':'application/json','x-avo-worker':secret},body:JSON.stringify({message,photos:photos.map(p=>p.photo.split('/').pop())}),signal:AbortSignal.timeout(120000)});if(!r.ok)throw new Error('Worker unavailable');const reader=r.body.getReader();const chunks=[];let bytes=0;while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.length;if(bytes>262144){await reader.cancel();throw new Error('Interpreter reply too large');}chunks.push(part.value);}const proposed=JSON.parse(Buffer.concat(chunks).toString('utf8')),fields=groundedProposal(proposed.fields,message);return {fields,note:'Astra proposed these details from explicit text and local photo evidence. Review unknowns before approval.',interpreter:'local-worker'};}catch{const fallback=interpret(message);if(photos.length)fallback.fields.label_evidence={engine:'unavailable',photos:photos.map(p=>({photo:p.photo,engine:'unavailable',lines:[]})),lines:[],automatic_identity:false,note:'Astra is unavailable. Photos are saved; confirm product details manually.'};return {...fallback,note:'Astra is unavailable. Explicit text fields are preserved; photo identity and labels need review.',interpreter:'local-fallback'}}}

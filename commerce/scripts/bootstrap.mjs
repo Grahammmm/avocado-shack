@@ -1,0 +1,17 @@
+import {utcFromLocal} from '../gateway/pickup-time.mjs';
+import {Pool} from 'pg';import fs from 'node:fs/promises';import path from 'node:path';import crypto from 'node:crypto';import {questions} from '../gateway/interpret.mjs';
+const root=path.resolve(import.meta.dirname,'..'),port=Number(process.env.AVO_DATABASE_PORT||55432),cfg=JSON.parse(await fs.readFile(path.join(root,'.runtime/config.json'),'utf8'));
+const db=new Pool({connectionString:`postgres://avoshack:${cfg.databasePassword}@127.0.0.1:${port}/avoshack`});
+await db.query(await fs.readFile(path.join(root,'gateway/schema.sql'),'utf8'));
+const manifest=JSON.parse(await fs.readFile(path.resolve(process.env.AVO_INTAKE_PATH||path.resolve(root,'../inventory-intake'),'manifest.json'),'utf8'));
+for(const item of manifest){if(!item.photo||item.duplicate_of)continue;const base=path.basename(item.photo),id='photo_'+base.replace('.jpg','');const fields={observed_category:item.observed_category,stock_pool:null,stock_action:null,category:item.observed_category?.match(/produce|fruit|avocado|berries|melon|vegetable/i)?'Produce':'Pantry'};
+await db.query('INSERT INTO avo.evidence(id,event_id,actor,photo,original_photo,sha256,observation) VALUES($1,$1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',[id,'owner-import','/media/'+base,item.source_file,item.sha256,item.visual_observation]);
+await db.query('INSERT INTO avo.drafts(id,evidence_id,fields,questions) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',['draft_'+base.replace('.jpg',''),id,JSON.stringify(fields),JSON.stringify(questions(fields))]);}
+const confirmed=JSON.parse(await fs.readFile(path.join(root,'evidence/owner-confirmed-inputs.json'),'utf8')).product;
+await db.query('INSERT INTO avo.evidence(id,event_id,actor,photo,message,observation) VALUES($1,$1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',['owner_confirmed_hass','owner-confirmation','/media/IMG_9736.jpg','Hass avocado, each, $2, 12 available for online pickup.','Owner-confirmed product; photograph includes avocados and other fruit. No quantity inferred from the photo.']);
+await db.query('INSERT INTO avo.drafts(id,evidence_id,fields,questions) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',['confirmed_hass','owner_confirmed_hass',JSON.stringify(confirmed),'[]']);
+await db.query('INSERT INTO avo.settings(key,value) VALUES($1,$2) ON CONFLICT DO NOTHING',['pickup_defaults',JSON.stringify({timezone:'America/Los_Angeles',lead_minutes:30,cutoff_minutes:30,capacity:12,note:'Initial internal operating defaults; confirm capacity and lead time before a trial.'})]);
+// Explicit LA offset from Intl, rather than assuming DST is always -07:00.
+
+for(let i=0;i<8;i++){const day=new Date(Date.now()+i*864e5).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'}),weekday=new Date(day+'T12:00:00Z').getUTCDay();if(weekday===0)continue;for(let h=9;h<(weekday===6?17:18);h++){const start=utcFromLocal(day,h),end=utcFromLocal(day,h+1),id='pickup_'+day+'_'+h,label=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',weekday:'short',month:'short',day:'numeric',hour:'numeric'}).format(start)+' – '+new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric'}).format(end);await db.query('INSERT INTO avo.slots(id,label,starts_at,ends_at,cutoff,capacity) VALUES($1,$2,$3,$4,$5,12) ON CONFLICT DO NOTHING',[id,label,start,end,new Date(start.getTime()-1800000)]);}}
+await db.end();console.log('Imported real photo drafts and owner-confirmed avocado; pickup windows follow published hours.');

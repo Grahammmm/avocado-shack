@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {productDetails} from './product-details.mjs';
+test('product details accept only bounded owner-provided plain strings',()=>{assert.deepEqual(productDetails({package_size:' 1 avocado ',handling:'Pickup only',allergens:''}),{package_size:'1 avocado',handling:'Pickup only',allergens:''});assert.throws(()=>productDetails({ingredients:{approved:true}}),/plain text/);assert.throws(()=>productDetails({description:'x'.repeat(2001)}),/plain text/);assert.deepEqual(productDetails({quantity:12}),{});});

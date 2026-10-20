@@ -1,0 +1,13 @@
+PHOTO-BASED OWNER WORKFLOW
+Decision: Replace all synthetic product seeds with private drafts based on supplied real photos. Prices, inventory and box offers remain unset until approved. Do not substitute fictional quantities to make checkout work.
+1. Capture original image/message with actor and event ID; link exact duplicates rather than adding stock again.
+2. Classify single product versus multi-product shelf versus store context. A shelf image can produce several drafts, never one generic sellable SKU.
+3. Suggest product identity and readable label evidence. Keep uncertain size, variant, price and claims unresolved. Shelf signs, reused cartons and packaging are evidence to review, not proof of certification or eligibility.
+4. Ask: arrival, transfer, or total count? How many, in what unit? What is the selling price per unit? How many go into marked online bins?
+5. For new products collect name/variant, size/unit, price, ingredients/allergens where relevant, handling needs and pickup eligibility. Parcel eligibility requires separate approval. Alcohol-related products are held for review.
+6. Show exact before/after for product and online-bin stock; approve once in authenticated owner session. Changes invalidate approval.
+7. Apply through supported commerce interfaces; read back and record the result. Replay does not add stock twice. Exceptions remain visible.
+8. Only approved catalog and allocated online stock become purchasable. Real checkout testing requires confirmed values and real box recipes; an empty/unavailable cart is preferable to invented inventory.
+PoC seed policy: Real photographed products with owner-approved values only. Simulated payment/carrier events remain explicitly simulated. No real payment, public publication or messaging setup during intake.
+Current evidence: 36 supplied files, 33 unique SHA256 hashes, 3 exact duplicate links. All unique images locally converted and visually reviewed; source files unchanged. Product-level labels still require close-up review.
+Next: Integrate intake into owner draft/approval interface and established commerce engine. No complete commerce app has been implemented yet.

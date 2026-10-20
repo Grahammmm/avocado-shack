@@ -1,0 +1,1332 @@
+[
+  {
+    "id": "photo-product-105",
+    "name": "Sunshine Peach preserves",
+    "brand": "Linn's",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "10 oz jar",
+    "photo": "IMG_9707.jpg",
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "image": "assets/products/photo-product-105.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9707.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-106",
+    "name": "Strawberry preserves",
+    "brand": "Linn's",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "10 oz jar",
+    "photo": "IMG_9707.jpg",
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "image": "assets/products/photo-product-106.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9707.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-107",
+    "name": "California Apricot preserves",
+    "brand": "Linn's",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "10 oz jar",
+    "photo": "IMG_9707.jpg",
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "image": "assets/products/photo-product-107.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9707.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-108",
+    "name": "Blood Orange marmalade",
+    "brand": "Linn's",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "10 oz jar",
+    "photo": "IMG_9707.jpg",
+    "photos": [
+      "IMG_9707.jpg"
+    ],
+    "image": "assets/products/photo-product-108.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9707.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-109",
+    "name": "Peppermint Crunch chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-109.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-110",
+    "name": "Cookies and Cream chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-110.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-111",
+    "name": "Zesty Orange chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-111.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-112",
+    "name": "Dark chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-112.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-113",
+    "name": "Milk chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-113.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-114",
+    "name": "Lemon Bar white chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-114.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-115",
+    "name": "Habanero chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-115.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-116",
+    "name": "S\u2019mores chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-116.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-117",
+    "name": "Lemon Lavender white chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-117.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-118",
+    "name": "Birthday Cake chocolate",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-118.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-119",
+    "name": "Mustang Kick BBQ sauce",
+    "brand": "Cal Poly",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "one bar",
+    "photo": "IMG_9710.jpg",
+    "photos": [
+      "IMG_9710.jpg"
+    ],
+    "image": "assets/products/photo-product-119.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9710.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-120",
+    "name": "Carrot Habanero hot sauce",
+    "brand": "Cayucos",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 11.99,
+    "sampleUnit": "8 fl oz bottle",
+    "photo": "IMG_9711.jpg",
+    "photos": [
+      "IMG_9711.jpg"
+    ],
+    "image": "assets/products/photo-product-120.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9711.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-121",
+    "name": "Green hot sauce",
+    "brand": "Cayucos",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 11.99,
+    "sampleUnit": "8 fl oz bottle",
+    "photo": "IMG_9711.jpg",
+    "photos": [
+      "IMG_9711.jpg"
+    ],
+    "image": "assets/products/photo-product-121.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9711.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-122",
+    "name": "Rye bread",
+    "brand": "Brian's",
+    "category": "bread",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one loaf",
+    "photo": "IMG_9713.jpg",
+    "photos": [
+      "IMG_9713.jpg"
+    ],
+    "image": "assets/products/photo-product-122.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9713.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-123",
+    "name": "Rosemary Sourdough with Olive Oil",
+    "brand": "Brian's",
+    "category": "bread",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one loaf",
+    "photo": "IMG_9713.jpg",
+    "photos": [
+      "IMG_9713.jpg"
+    ],
+    "image": "assets/products/photo-product-123.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9713.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-124",
+    "name": "Cracked Wheat Sourdough",
+    "brand": "Brian's",
+    "category": "bread",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one loaf",
+    "photo": "IMG_9713.jpg",
+    "photos": [
+      "IMG_9713.jpg"
+    ],
+    "image": "assets/products/photo-product-124.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9713.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-125",
+    "name": "Whole Milk Plain European Style yogurt",
+    "brand": "Straus",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one tub",
+    "photo": "IMG_9719.jpg",
+    "photos": [
+      "IMG_9719.jpg"
+    ],
+    "image": "assets/products/photo-product-125.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9719.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-126",
+    "name": "Greek Whole Milk Plain yogurt",
+    "brand": "Straus",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one tub",
+    "photo": "IMG_9719.jpg",
+    "photos": [
+      "IMG_9719.jpg"
+    ],
+    "image": "assets/products/photo-product-126.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9719.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-127",
+    "name": "Sour cream",
+    "brand": "Straus",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one tub",
+    "photo": "IMG_9719.jpg",
+    "photos": [
+      "IMG_9719.jpg"
+    ],
+    "image": "assets/products/photo-product-127.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9719.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-128",
+    "name": "Big Sur cheese",
+    "brand": "Stepladder",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 14,
+    "sampleUnit": "one package",
+    "photo": "IMG_9720.jpg",
+    "photos": [
+      "IMG_9720.jpg"
+    ],
+    "image": "assets/products/photo-product-128.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9720.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-129",
+    "name": "Marinated Fromage Blanc",
+    "brand": "Stepladder",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 14,
+    "sampleUnit": "one package",
+    "photo": "IMG_9720.jpg",
+    "photos": [
+      "IMG_9720.jpg"
+    ],
+    "image": "assets/products/photo-product-129.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9720.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-130",
+    "name": "Gouda",
+    "brand": "Cal Poly",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one package",
+    "photo": "IMG_9722.jpg",
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "image": "assets/products/photo-product-130.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9722.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-131",
+    "name": "Hatch Chile Sierra Jack",
+    "brand": "Sierra Nevada",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9722.jpg",
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "image": "assets/products/photo-product-131.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9722.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-132",
+    "name": "Habanero Sierra Jack",
+    "brand": "Sierra Nevada",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9722.jpg",
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "image": "assets/products/photo-product-132.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9722.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-133",
+    "name": "Raw Milk Goat Cheddar",
+    "brand": "Sierra Nevada",
+    "category": "dairy",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9722.jpg",
+    "photos": [
+      "IMG_9722.jpg"
+    ],
+    "image": "assets/products/photo-product-133.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9722.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-134",
+    "name": "Dried morels",
+    "brand": "Mighty Cap Mushrooms",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "one pouch",
+    "photo": "IMG_9724.jpg",
+    "photos": [
+      "IMG_9724.jpg"
+    ],
+    "image": "assets/products/photo-product-134.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9724.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-135",
+    "name": "Dried shiitake",
+    "brand": "Mighty Cap Mushrooms",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "one pouch",
+    "photo": "IMG_9724.jpg",
+    "photos": [
+      "IMG_9724.jpg"
+    ],
+    "image": "assets/products/photo-product-135.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9724.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-136",
+    "name": "Dried king oyster mushrooms",
+    "brand": "Mighty Cap Mushrooms",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "one pouch",
+    "photo": "IMG_9724.jpg",
+    "photos": [
+      "IMG_9724.jpg"
+    ],
+    "image": "assets/products/photo-product-136.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9724.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-137",
+    "name": "Mushroom Umami Sauce",
+    "brand": "Mighty Cap Mushrooms",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 9.99,
+    "sampleUnit": "one pouch",
+    "photo": "IMG_9724.jpg",
+    "photos": [
+      "IMG_9724.jpg"
+    ],
+    "image": "assets/products/photo-product-137.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9724.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-138",
+    "name": "Crimson lentils",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9728.jpg",
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "image": "assets/products/photo-product-138.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9728.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-139",
+    "name": "Red beans",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9728.jpg",
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "image": "assets/products/photo-product-139.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9728.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-140",
+    "name": "Black beans",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9728.jpg",
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "image": "assets/products/photo-product-140.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9728.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-141",
+    "name": "Chickpeas",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9728.jpg",
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "image": "assets/products/photo-product-141.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9728.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-142",
+    "name": "Almonds",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9728.jpg",
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "image": "assets/products/photo-product-142.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9728.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-143",
+    "name": "Pistachios",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9728.jpg",
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "image": "assets/products/photo-product-143.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9728.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-144",
+    "name": "Trail mix",
+    "brand": "Producer not identified",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 8.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9728.jpg",
+    "photos": [
+      "IMG_9728.jpg"
+    ],
+    "image": "assets/products/photo-product-144.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9728.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-145",
+    "name": "Gold potatoes",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 3.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9731.jpg",
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "image": "assets/products/photo-product-145.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9731.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-146",
+    "name": "Red potatoes",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 3.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9731.jpg",
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "image": "assets/products/photo-product-146.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9731.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-147",
+    "name": "Purple potatoes",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 3.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9731.jpg",
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "image": "assets/products/photo-product-147.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9731.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-148",
+    "name": "Loose carrots",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 3.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9731.jpg",
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "image": "assets/products/photo-product-148.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9731.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-149",
+    "name": "Green cabbage",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 3.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9731.jpg",
+    "photos": [
+      "IMG_9731.jpg"
+    ],
+    "image": "assets/products/photo-product-149.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9731.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-150",
+    "name": "Lion\u2019s mane mushrooms",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one basket",
+    "photo": "IMG_9732.jpg",
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "image": "assets/products/photo-product-150.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9732.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-151",
+    "name": "King oyster mushrooms",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one basket",
+    "photo": "IMG_9732.jpg",
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "image": "assets/products/photo-product-151.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9732.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-152",
+    "name": "Shiitake mushrooms",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one basket",
+    "photo": "IMG_9732.jpg",
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "image": "assets/products/photo-product-152.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9732.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-153",
+    "name": "Maitake mushrooms",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one basket",
+    "photo": "IMG_9732.jpg",
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "image": "assets/products/photo-product-153.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9732.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-154",
+    "name": "Chanterelle mushrooms",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one basket",
+    "photo": "IMG_9732.jpg",
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "image": "assets/products/photo-product-154.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9732.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-155",
+    "name": "Lobster mushrooms",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one basket",
+    "photo": "IMG_9732.jpg",
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "image": "assets/products/photo-product-155.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9732.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-156",
+    "name": "Crimini mushrooms",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 12,
+    "sampleUnit": "one basket",
+    "photo": "IMG_9732.jpg",
+    "photos": [
+      "IMG_9732.jpg"
+    ],
+    "image": "assets/products/photo-product-156.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9732.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-157",
+    "name": "Cilantro microgreens",
+    "brand": "Green Gold",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-157.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-158",
+    "name": "Radish Mix microgreens",
+    "brand": "Green Gold",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-158.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-159",
+    "name": "Arugula microgreens",
+    "brand": "Green Gold",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-159.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-160",
+    "name": "Broccoli microgreens",
+    "brand": "Green Gold",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-160.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-161",
+    "name": "Horseradish",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-161.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-162",
+    "name": "Jalape\u00f1os",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-162.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-163",
+    "name": "Sweet peppers",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-163.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-164",
+    "name": "Red bell peppers",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-164.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-165",
+    "name": "Poblano peppers",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-165.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-166",
+    "name": "Zucchini",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9733.jpg",
+    "photos": [
+      "IMG_9733.jpg"
+    ],
+    "image": "assets/products/photo-product-166.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9733.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-167",
+    "name": "Green onions",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 1.99,
+    "sampleUnit": "one bunch",
+    "photo": "IMG_9730.jpg",
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "image": "assets/products/photo-product-167.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9730.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-168",
+    "name": "San Marzano tomatoes",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 5.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9734.jpg",
+    "photos": [
+      "IMG_9734.jpg"
+    ],
+    "image": "assets/products/photo-product-168.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9734.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-169",
+    "name": "Cherry tomatoes",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 5.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9734.jpg",
+    "photos": [
+      "IMG_9734.jpg"
+    ],
+    "image": "assets/products/photo-product-169.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9734.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-170",
+    "name": "Sun Gold tomatoes",
+    "brand": "Producer not identified",
+    "category": "vegetables",
+    "section": "shop",
+    "samplePrice": 5.99,
+    "sampleUnit": "1 lb",
+    "photo": "IMG_9734.jpg",
+    "photos": [
+      "IMG_9734.jpg"
+    ],
+    "image": "assets/products/photo-product-170.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9734.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-171",
+    "name": "Radiatori pasta",
+    "brand": "Etto",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 7.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9738.jpg",
+    "photos": [
+      "IMG_9738.jpg"
+    ],
+    "image": "assets/products/photo-product-171.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9738.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-172",
+    "name": "Rigatoni pasta",
+    "brand": "Etto",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 7.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9738.jpg",
+    "photos": [
+      "IMG_9738.jpg"
+    ],
+    "image": "assets/products/photo-product-172.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9738.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-173",
+    "name": "Casarecce pasta",
+    "brand": "Etto",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 7.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9738.jpg",
+    "photos": [
+      "IMG_9738.jpg"
+    ],
+    "image": "assets/products/photo-product-173.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9738.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  },
+  {
+    "id": "photo-product-174",
+    "name": "Conchiglie pasta",
+    "brand": "Etto",
+    "category": "pantry",
+    "section": "shop",
+    "samplePrice": 7.99,
+    "sampleUnit": "one package",
+    "photo": "IMG_9738.jpg",
+    "photos": [
+      "IMG_9738.jpg"
+    ],
+    "image": "assets/products/photo-product-174.webp",
+    "imageKind": "AI product visualization",
+    "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+    "evidence": "Original photograph IMG_9738.jpg",
+    "notes": "Selling units, price and availability remain development assumptions.",
+    "price": null
+  }
+]

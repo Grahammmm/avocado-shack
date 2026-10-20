@@ -1,0 +1,96 @@
+id,name,brand,category,photo,unit,price,onlineQuantity,status,evidence
+photo-product-001,Hass avocado,Avocado Shack,produce,IMG_9714.jpg,each,2,12,Owner-confirmed sample allocation,"Owner message: Hass avocado, each, $2, 12 available for online pickup"
+photo-product-002,Linn's triple berry preserves,Linn's,pantry,IMG_9707.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-003,Linn's blueberry preserves,Linn's,pantry,IMG_9707.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-004,Linn's boysenberry preserves,Linn's,pantry,IMG_9707.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-005,Linn's orange marmalade,Linn's,pantry,IMG_9707.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-006,Mixed flower bouquet,Producer not identified,flowers,IMG_9708.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-007,Fair Hills Farm apple juice,Fair Hills Farm,pantry,IMG_9709.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-008,Cal Poly strawberry jam,Cal Poly,pantry,IMG_9710.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-009,Cal Poly raspberry jam,Cal Poly,pantry,IMG_9710.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-010,Cal Poly blackberry jam,Cal Poly,pantry,IMG_9710.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-011,Cal Poly barbecue sauce,Cal Poly,pantry,IMG_9710.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-012,Cal Poly chocolate,Cal Poly,pantry,IMG_9710.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-013,Cayucos hot sauce,Cayucos,pantry,IMG_9711.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-014,SLO cider,SLO,pantry,IMG_9712.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-015,Brian's sourdough bread,Brian's,bread,IMG_9713.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-016,Oranges,Producer not identified,produce,IMG_9714.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-017,Citrus,Producer not identified,produce,IMG_9715.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-018,Taco Works chips,Taco Works,produce,IMG_9715.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-019,Fair Hills Farm beet juice,Fair Hills Farm,chilled,IMG_9716.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-020,Bottled juice,Producer not identified,chilled,IMG_9716.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-021,Alle-Pia Calabrese salamini,Alle-Pia,chilled,IMG_9717.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-022,Alle-Pia guanciale,Alle-Pia,chilled,IMG_9717.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-023,Alle-Pia mortadella,Alle-Pia,chilled,IMG_9717.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-024,Cal Poly eggs,Cal Poly,chilled,IMG_9717.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-025,Straus half-and-half,Straus,chilled,IMG_9719.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-026,Straus heavy whipping cream,Straus,chilled,IMG_9719.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-027,Straus milk,Straus,chilled,IMG_9719.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-028,Straus butter,Straus,chilled,IMG_9719.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-029,Stepladder cheese,Stepladder,chilled,IMG_9720.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-030,Stepladder cultured butter,Stepladder,chilled,IMG_9720.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-031,Guacamole,Producer not identified,chilled,IMG_9720.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-032,Pesto,Producer not identified,chilled,IMG_9720.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-033,Stepladder Rocky Butte cheese,Stepladder,chilled,IMG_9721.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-034,Stepladder Bixby cheese,Stepladder,chilled,IMG_9721.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-035,Stepladder chèvre,Stepladder,chilled,IMG_9721.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-036,Eggs,Producer not identified,chilled,IMG_9721.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-037,Cal Poly chipotle cheddar,Cal Poly,chilled,IMG_9722.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-038,Cal Poly white cheddar,Cal Poly,chilled,IMG_9722.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-039,Cal Poly Highland cheddar,Cal Poly,chilled,IMG_9722.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-040,Sierra Nevada cheese,Sierra Nevada,chilled,IMG_9722.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-041,Stepladder avocado blossom honey,Stepladder,pantry,IMG_9723.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-042,Big Sur Honey Company honey,Big Sur Honey Company,pantry,IMG_9723.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-043,Sunshine Olive oil,Sunshine Olive,pantry,IMG_9724.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-044,Dried mushrooms,Producer not identified,pantry,IMG_9724.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-045,Sunshine Olive Spanish Oaks Picual olive oil,Sunshine Olive,pantry,IMG_9725.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-046,Dried lion’s mane mushrooms,Producer not identified,pantry,IMG_9725.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-047,Dried maitake mushrooms,Producer not identified,pantry,IMG_9725.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-048,Fair Hills Farm chamomile tea,Fair Hills Farm,pantry,IMG_9726.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-049,Fair Hills Farm black tea,Fair Hills Farm,pantry,IMG_9726.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-050,Fair Hills Farm cinnamon black tea,Fair Hills Farm,pantry,IMG_9726.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-051,Fair Hills Farm ginger black tea,Fair Hills Farm,pantry,IMG_9726.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-052,Maple Valley dark and robust maple syrup,Maple Valley,pantry,IMG_9727.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-053,Sean's muesli munch,Sean's,pantry,IMG_9727.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-054,Massa Organics brown rice,Massa Organics,pantry,IMG_9728.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-055,Packaged nuts,Producer not identified,pantry,IMG_9728.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-056,Strawberries,Producer not identified,produce,IMG_9729.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-057,Raspberries,Producer not identified,produce,IMG_9729.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-058,Blueberries,Producer not identified,produce,IMG_9729.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-059,Golden berries,Producer not identified,produce,IMG_9729.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-060,Fennel,Producer not identified,produce,IMG_9730.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-061,Broccoli,Producer not identified,produce,IMG_9730.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-062,Romaine lettuce,Producer not identified,produce,IMG_9730.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-063,Bok choy,Producer not identified,produce,IMG_9730.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-064,Leeks,Producer not identified,produce,IMG_9730.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-065,Celery,Producer not identified,produce,IMG_9730.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-066,Bunched carrots,Producer not identified,produce,IMG_9731.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-067,Potatoes,Producer not identified,produce,IMG_9731.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-068,Lettuce,Producer not identified,produce,IMG_9731.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-069,Packaged spring greens,Producer not identified,produce,IMG_9732.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-070,Packaged arugula,Producer not identified,produce,IMG_9732.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-071,Mushrooms,Producer not identified,produce,IMG_9732.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-072,Green Gold microgreens,Producer not identified,produce,IMG_9733.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-073,Ginger,Producer not identified,produce,IMG_9733.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-074,Turmeric,Producer not identified,produce,IMG_9733.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-075,Eggplant,Producer not identified,produce,IMG_9733.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-076,Peppers,Producer not identified,produce,IMG_9733.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-077,Tomatoes,Producer not identified,produce,IMG_9734.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-078,Watermelon,Producer not identified,produce,IMG_9734.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-079,Cantaloupe,Producer not identified,produce,IMG_9735.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-080,Melon,Producer not identified,produce,IMG_9735.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-081,Mangoes,Producer not identified,produce,IMG_9736.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-082,Etto pasta,Etto,pantry,IMG_9738.jpg,,,,Photo-derived candidate; confirm exact variant and selling details,Supplied store photograph; prior manual label review
+photo-product-083,Albino Coast Redwood Blend,Joebella / Avocado Shack,pantry,IMG_9709.jpg,12 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-084,Cone Peak Blend,Joebella / Avocado Shack,pantry,IMG_9709.jpg,12 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-085,Dream Girl Decaf,Joebella / Avocado Shack,pantry,IMG_9709.jpg,12 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-086,Peace Be With You Blend,Joebella / Avocado Shack,pantry,IMG_9709.jpg,12 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-087,Packer’s Blend coffee bags,Corberosa,pantry,IMG_9709.jpg,,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-088,Cranberry Orange granola,Ocean Ranch,pantry,IMG_9723.jpg,10 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-089,Oaxacan Chocolate granola,Ocean Ranch,pantry,IMG_9723.jpg,10 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-090,Lemon Blueberry granola,Ocean Ranch,pantry,IMG_9723.jpg,10 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-091,Turmeric Goji Berry granola,Ocean Ranch,pantry,IMG_9723.jpg,10 oz bag,,,Label read from supplied photo; selling details pending,Direct visual label review
+photo-product-092,Avocado Shack Blend (Hut),Joebella / Avocado Shack,pantry,IMG_9709.jpg,,,,Listed on photographed coffee menu; packaged availability unconfirmed,Direct visual label review
+photo-product-093,Avocado Shack (Hands),Joebella / Avocado Shack,pantry,IMG_9709.jpg,,,,Listed on photographed coffee menu; packaged availability unconfirmed,Direct visual label review
+photo-product-094,Cass Hill Blend,Joebella / Avocado Shack,pantry,IMG_9709.jpg,,,,Listed on photographed coffee menu; packaged availability unconfirmed,Direct visual label review
+photo-product-095,Cambria Blend,Joebella / Avocado Shack,pantry,IMG_9709.jpg,,,,Listed on photographed coffee menu; packaged availability unconfirmed,Direct visual label review

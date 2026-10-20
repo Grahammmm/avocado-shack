@@ -1,0 +1,31 @@
+{
+  "checked_date": "2026-10-20",
+  "workspace": "/Users/owner/Documents/ChatGPT/Avo_Shack",
+  "git": {
+    "tracked_files": 0,
+    "main_has_commits": false,
+    "remotes": [],
+    "internal_codex_refs_present": true
+  },
+  "agent_orange": {
+    "ssh_succeeded": true,
+    "hostname": "AgentOrange",
+    "project_copy_found": false,
+    "search_scope": "Bounded maxdepth 6 project-name search of /home/user, /srv, /opt; pruned dependencies, .git, .cache, .local, .hermes"
+  },
+  "runtime": {
+    "local_3101_responded": false,
+    "public_preview_http": 200,
+    "public_preview_ended_message": false
+  },
+  "community_data": {
+    "subscriptions": 0,
+    "rsvps": 0
+  },
+  "intake": {
+    "manifest_entries": 36,
+    "cached_photos": 33,
+    "cached_previews": 33
+  },
+  "checks": "Inventory and existing test evidence reviewed; test suites not rerun; no migration performed"
+}

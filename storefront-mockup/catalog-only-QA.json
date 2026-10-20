@@ -1,0 +1,37 @@
+{
+  "all": 170,
+  "duplicates": 0,
+  "townSearch": 12,
+  "localCount": "90 selections · 12 shown",
+  "organicCount": "18 selections · 12 shown",
+  "commerceRemoved": true,
+  "makerDetails": true,
+  "viewports": [
+    {
+      "width": 320,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)"
+    },
+    {
+      "width": 375,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)"
+    },
+    {
+      "width": 390,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)"
+    },
+    {
+      "width": 768,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)"
+    },
+    {
+      "width": 1440,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)"
+    }
+  ],
+  "errors": []
+}

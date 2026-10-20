@@ -1,0 +1,48 @@
+{
+  "reason": "Manufacturer site displays Graziers raw-milk cheese recall; hold pending exact product/lot verification",
+  "source": "https://sierranevadacheese.com/",
+  "products": [
+    {
+      "name": "Raw milk white cheddar",
+      "brand": "Sierra Nevada",
+      "category": "dairy",
+      "photo": "IMG_9722.jpg",
+      "notes": "variety to confirm",
+      "unit": null,
+      "price": null,
+      "onlineQuantity": null,
+      "status": "Photo-derived candidate; confirm exact variant and selling details",
+      "evidence": "Supplied store photograph; prior manual label review",
+      "sellable": false,
+      "photos": [
+        "IMG_9722.jpg"
+      ],
+      "id": "photo-product-040",
+      "image": "assets/products/photo-product-040.webp",
+      "samplePrice": 12,
+      "sampleUnit": "8 oz package",
+      "imageKind": "AI product visualization",
+      "section": "shop",
+      "legacyCategory": "chilled"
+    },
+    {
+      "id": "photo-product-133",
+      "name": "Raw Milk Goat Cheddar",
+      "brand": "Sierra Nevada",
+      "category": "dairy",
+      "section": "shop",
+      "samplePrice": 9.99,
+      "sampleUnit": "one package",
+      "photo": "IMG_9722.jpg",
+      "photos": [
+        "IMG_9722.jpg"
+      ],
+      "image": "assets/products/photo-product-133.webp",
+      "imageKind": "AI product visualization",
+      "status": "Distinct label or product visible in original photograph; owner confirmation remains in research file",
+      "evidence": "Original photograph IMG_9722.jpg",
+      "notes": "Selling units, price and availability remain development assumptions.",
+      "price": null
+    }
+  ]
+}

@@ -1,0 +1,677 @@
+[
+  {
+    "id": "photo-product-108",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9707.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Blood Orange marmalade, brand Linn's, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-1c7443d3-0e86-4ae4-823a-364ec1f231e5.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-109",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Peppermint Crunch chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d80c0200-d981-4a52-8722-ca38f8b9904a.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-105",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9707.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Sunshine Peach preserves, brand Linn's, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-bb8167d5-3649-464f-8028-df3c3a4838cb.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-110",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Cookies and Cream chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-fd42213a-d5f4-48b6-afe2-1a448024414b.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-106",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9707.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Strawberry preserves, brand Linn's, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e9c33499-06b9-41b7-a77b-bb798c94a882.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-113",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Milk chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-9f04cc6e-dcaa-4fd9-b5a1-bb15f98519a0.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-107",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9707.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only California Apricot preserves, brand Linn's, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-1308baa8-b3c1-4a83-9986-de4e236264c6.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-111",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Zesty Orange chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-047316b9-b3a8-4ebb-8b42-b65570eb5eda.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-112",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Dark chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-6717f16e-10c1-41eb-a409-be94dc45dcb1.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-114",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Lemon Bar white chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-4bcdc5e2-3112-4aee-ab22-245732433104.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-116",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only S’mores chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-281e520a-b212-44c3-a782-7aeffd9310c0.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-117",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Lemon Lavender white chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-866678bd-8f11-4079-9bcb-5c9a02410773.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-119",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Mustang Kick BBQ sauce, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-26ca4f67-d519-4fbd-ab73-86b17a79113f.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-115",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Habanero chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0e401751-fd00-482d-9075-5be157a87134.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-118",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9710.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Birthday Cake chocolate, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-08650fa7-dba9-4daf-b51e-746dcc838c5e.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-121",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9711.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Green hot sauce, brand Cayucos, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-70137bc7-b999-4a1e-ade4-f8efecadcce9.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-120",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9711.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Carrot Habanero hot sauce, brand Cayucos, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2c5ab1a3-de04-4ae2-a9ab-6437fe092e95.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-122",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9713.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Rye bread, brand Brian's, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-16dcfb26-f5a0-4ba3-a4bd-6e876b9baf86.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-123",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9713.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Rosemary Sourdough with Olive Oil, brand Brian's, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-7fcdba3e-77e6-4c14-b06d-e7407b904e15.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-125",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9719.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Whole Milk Plain European Style yogurt, brand Straus, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-00f14de3-0ebe-497b-8f31-03d1baf192e5.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-124",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9713.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Cracked Wheat Sourdough, brand Brian's, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-020f95ec-7ed1-45ff-9d73-8cd2dc68a130.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-126",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9719.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Greek Whole Milk Plain yogurt, brand Straus, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d2d3ba6c-5aa6-477c-8bab-50ec4987d790.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-127",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9719.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Sour cream, brand Straus, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2b277729-12cc-4167-8509-78207ae1a90b.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-128",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9720.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Big Sur cheese, brand Stepladder, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-2d77e937-9443-4116-8782-225a769fbf62.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-129",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9720.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Marinated Fromage Blanc, brand Stepladder, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-8a40e224-48cc-49f1-b542-0e3ea5885c68.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-130",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9722.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Gouda, brand Cal Poly, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-a66d9bd2-5921-4045-8cf5-6158e49ba51e.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-131",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9722.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Hatch Chile Sierra Jack, brand Sierra Nevada, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-48420920-cccf-4847-b109-36200124b784.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-132",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9722.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Habanero Sierra Jack, brand Sierra Nevada, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-bc212038-f0a0-4645-a728-f036e67b37b6.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-134",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9724.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Dried morels, brand Mighty Cap Mushrooms, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-5585d3b8-42b3-4960-bf56-69bb718b3bc4.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-137",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9724.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Mushroom Umami Sauce, brand Mighty Cap Mushrooms, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-1d4286ac-9375-471d-b5a8-4ac2e003f282.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-135",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9724.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Dried shiitake, brand Mighty Cap Mushrooms, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-1ba73ffc-fd8f-4303-ae9d-98c0a801cd3c.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-138",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9728.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Crimson lentils, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d9e73f21-46ba-47ab-bc0d-93544cbb49a3.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-133",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9722.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Raw Milk Goat Cheddar, brand Sierra Nevada, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-07f3892b-88e7-4f81-9646-e684d08b0db2.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-136",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9724.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Dried king oyster mushrooms, brand Mighty Cap Mushrooms, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-14dc869e-1158-4307-96e6-3dfb6e9c4726.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-139",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9728.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Red beans, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e1f9d211-867c-40ce-b800-3ae1b01d37a3.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-140",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9728.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Black beans, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-a02bb8c0-04d9-441f-a67e-190b838348f4.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-141",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9728.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Chickpeas, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-cfc888c1-5435-479f-a510-9119f4c26053.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-144",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9728.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Trail mix, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-772142b9-35ec-4f2f-b54a-0b51231db0c2.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-142",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9728.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Almonds, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-09704f73-7795-4816-840b-9aa0efcb5db2.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-143",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9728.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Pistachios, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0005104a-302b-4756-9579-470ba3bee52b.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-145",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Gold potatoes, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-fe97e3ef-97de-4d92-83f8-e952fe8853a8.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-146",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Red potatoes, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-295591e9-2b92-4030-9a6c-a65b5af5463d.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-147",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Purple potatoes, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c4dc9bc7-4759-4366-826f-0865a1387991.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-149",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Green cabbage, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-d33f1ecd-13a3-4913-a0a5-92809b7a1403.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-150",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9732.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Lion’s mane mushrooms, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e3fbdb11-4e1b-4f16-9608-1dd6f95cb6ac.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-152",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9732.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Shiitake mushrooms, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ee6009e8-39cb-4763-94df-7fa8ce015ec3.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-154",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9732.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Chanterelle mushrooms, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-a4d8531c-c140-493a-8c7a-a3ed9d8f352d.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-148",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Loose carrots, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-7d2481e9-5272-4d48-a6e7-f0ce218e41d3.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-151",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9732.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only King oyster mushrooms, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-3a375593-9edb-437a-b320-4405fda6f067.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-153",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9732.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Maitake mushrooms, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e9bf191c-e021-40c8-9d1e-2f8396f0e20a.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-156",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9732.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Crimini mushrooms, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-7d743133-b634-45b0-b89a-4a157bf2a351.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-155",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9732.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Lobster mushrooms, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-4f429877-62d4-4be3-a777-12e17708fcb8.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-157",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Cilantro microgreens, brand Green Gold, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-3cbac061-4a7c-453a-953e-68d1b95f9e26.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-159",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Arugula microgreens, brand Green Gold, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-6797c7aa-2c43-4ac1-b655-48d0e38953ed.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-158",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Radish Mix microgreens, brand Green Gold, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c23549db-e4fc-47b5-943a-02ed7ae855da.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-162",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Jalapeños, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0f65ed55-d3bd-4ac5-b794-ea5abe8806f7.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-161",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Horseradish, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-786d35e6-d624-4cbf-a7c3-c4b9b1b22abe.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-160",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Broccoli microgreens, brand Green Gold, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-58fdf8c4-22fe-42e7-be44-ba7f46ea6d89.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-163",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Sweet peppers, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-56b88b6a-90ec-4d61-b35e-a13621fa35b5.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-166",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Zucchini, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-0c798782-0888-4f89-8470-e8fcf80c57ba.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-164",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Red bell peppers, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-86e2ed02-9b2f-4db0-82ec-d8e5b01af0d8.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-165",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9733.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Poblano peppers, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-260de783-2f85-436a-9551-e0a34126ad88.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-167",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9730.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Green onions, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-f9d64a7c-6d2c-4d31-8196-d73c56a1f477.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-169",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9734.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Cherry tomatoes, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-c150d55a-679b-4ed3-b5ff-5dcfcf072ce7.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-170",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9734.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Sun Gold tomatoes, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-ab59dc18-2239-49be-8233-e389b3d15236.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-172",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9738.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Rigatoni pasta, brand Etto, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-f2b650d4-33fa-418f-8166-9ab3f51826d6.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-168",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9734.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only San Marzano tomatoes, brand not determined, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-3f399a63-bd3e-45d4-b640-960ae95e3810.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-171",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9738.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Radiatori pasta, brand Etto, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-02449a6c-666c-48f2-9fd2-43d370a490eb.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-173",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9738.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Casarecce pasta, brand Etto, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-157c0e1a-2808-416f-8648-d6d3e27c75d2.png",
+    "ok": true
+  },
+  {
+    "id": "merch-bottle",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/storefront-mockup/assets/logo.png"
+    ],
+    "prompt": "Use case: product-mockup. One forest green insulated stainless steel reusable water bottle with a screw cap, realistic square studio product photograph on warm ivory background, centered fully visible with contact shadow. Tasteful original cream-and-terracotta coastal print combining an avocado, Morro Rock and waves, inspired by supplied Avocado Shack logo. Exact readable text AVOCADO SHACK and MORRO BAY, CALIFORNIA. One bottle only, no captions, no person.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-e70e709e-180d-4797-8a87-ebb554bda5ef.png",
+    "ok": true
+  },
+  {
+    "id": "photo-product-174",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9738.jpg"
+    ],
+    "prompt": "Use case: background-extraction. Extract only Conchiglie pasta, brand Etto, from supplied actual Avocado Shack photograph. One square professional e-commerce product display on warm ivory background, natural soft lighting and contact shadow. Single retail unit or small display of this produce only; no unrelated food, other products, signs or captions. Preserve the visible actual packaging, brand and variety. If packaging or variant isn't clear, use the visible unit without inventing a logo, certification, label facts or ingredients. Never fabricate product claims. Match this actual item rather than substituting another visible product.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-10dd3d96-e661-4e92-80cc-4fbc6bfd72b1.png",
+    "ok": true
+  },
+  {
+    "id": "box-small",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9715.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9730.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9734.jpg"
+    ],
+    "prompt": "Use case: product-mockup. Rebuild a square photorealistic Small Vegetable Box online-store photograph using vegetables visible in these actual shop reference photos. A natural open kraft produce box with AVOCADO SHACK wordmark. Contents ONLY: 1 × Bunched carrots (1 lb); 1 × Romaine lettuce (1 lb); 1 × Broccoli (1 lb); 1 × Gold potatoes (1 lb); 1 × Red onions (1 lb). Arrange beautifully in and around the box on warm ivory backdrop, soft natural studio light, three-quarter view. Do NOT add fruit, avocados, citrus, berries, mangoes or pantry items. Whole box fully visible. Realistic vegetables matching references. No extra caption or price.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-a1e70c73-a8d9-465d-abd7-f0345d31ed2f.png",
+    "ok": true
+  },
+  {
+    "id": "box-medium",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9715.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9730.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9734.jpg"
+    ],
+    "prompt": "Use case: product-mockup. Rebuild a square photorealistic Medium Vegetable Box online-store photograph using vegetables visible in these actual shop reference photos. A natural open kraft produce box with AVOCADO SHACK wordmark. Contents ONLY: 1 × Bunched carrots (1 lb); 1 × Romaine lettuce (1 lb); 1 × Broccoli (1 lb); 2 × Gold potatoes (1 lb); 1 × Red onions (1 lb); 1 × San Marzano tomatoes (1 lb); 1 × Zucchini (1 lb); 1 × Garlic (one bulb). Arrange beautifully in and around the box on warm ivory backdrop, soft natural studio light, three-quarter view. Do NOT add fruit, avocados, citrus, berries, mangoes or pantry items. Whole box fully visible. Realistic vegetables matching references. No extra caption or price.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-47497f80-d5d6-4fb0-9b9d-0cfb3fbfc420.png",
+    "ok": true
+  },
+  {
+    "id": "box-large",
+    "refs": [
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9715.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9730.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9731.jpg",
+      "/Users/owner/Documents/ChatGPT/Avo_Shack/inventory-intake/photos/IMG_9734.jpg"
+    ],
+    "prompt": "Use case: product-mockup. Rebuild a square photorealistic Large Vegetable Box online-store photograph using vegetables visible in these actual shop reference photos. A natural open kraft produce box with AVOCADO SHACK wordmark. Contents ONLY: 2 × Bunched carrots (1 lb); 2 × Romaine lettuce (1 lb); 2 × Broccoli (1 lb); 3 × Gold potatoes (1 lb); 2 × Red onions (1 lb); 2 × San Marzano tomatoes (1 lb); 2 × Zucchini (1 lb); 2 × Garlic (one bulb); 1 × Sweet peppers (1 lb); 1 × Cilantro microgreens (one package). Arrange beautifully in and around the box on warm ivory backdrop, soft natural studio light, three-quarter view. Do NOT add fruit, avocados, citrus, berries, mangoes or pantry items. Whole box fully visible. Realistic vegetables matching references. No extra caption or price.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-00e17d70-b36a-4935-96bf-d00815cb0225.png",
+    "ok": true
+  }
+]

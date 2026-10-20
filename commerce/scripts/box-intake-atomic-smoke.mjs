@@ -1,0 +1,18 @@
+import fs from 'node:fs/promises';import assert from 'node:assert/strict';import {Pool} from 'pg';
+const cfg=JSON.parse(await fs.readFile(new URL('../.runtime/config.json',import.meta.url),'utf8')),db=new Pool({connectionString:`postgres://avoshack:${cfg.databasePassword}@127.0.0.1:55432/avoshack`});
+async function login(role){const r=await fetch('http://127.0.0.1:3200/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,password:cfg[role+'Password']})});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0]}
+const owner=await login('owner'),visitor=await login('visitor'),packer=await login('packer');async function call(url,body,cookie=owner){const r=await fetch('http://127.0.0.1:3200/api'+url,{method:body?'POST':'GET',headers:{cookie,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}}
+const event_id=crypto.randomUUID(),name='Internal atomic intake '+event_id,message='Box: '+name+'; contents: 1 Hass avocado';
+try{
+ await db.query(`CREATE OR REPLACE FUNCTION avo.test_box_intake_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.name='${name}' THEN RAISE EXCEPTION 'Internal box intake fault'; END IF; RETURN NEW; END $$`);
+ await db.query('CREATE TRIGGER test_box_intake_failure BEFORE INSERT ON avo.boxes FOR EACH ROW EXECUTE FUNCTION avo.test_box_intake_failure()');
+ assert.equal((await call('/drafts',{event_id,message})).status,500);
+ assert.equal((await db.query('SELECT count(*)::int AS n FROM avo.evidence WHERE event_id=$1',[event_id])).rows[0].n,0);
+ console.log('Forced box-insert failure rolled back its evidence row.');
+}finally{await db.query('DROP TRIGGER IF EXISTS test_box_intake_failure ON avo.boxes');await db.query('DROP FUNCTION IF EXISTS avo.test_box_intake_failure()');}
+async function submit(){const form=new FormData();form.append('event_id',event_id);form.append('message',message);for(const photo of ['IMG_9736.jpg','IMG_9734.jpg','IMG_9736.jpg'])form.append('photo',new Blob([await fs.readFile(new URL('../../inventory-intake/previews/'+photo,import.meta.url))],{type:'image/jpeg'}),photo);const r=await fetch('http://127.0.0.1:3200/api/drafts',{method:'POST',headers:{cookie:owner},body:form});assert.equal(r.status,200);return (await r.json()).draft;}
+const draft=await submit();assert.equal(draft.state,'draft');assert.equal(draft.fields.price_minor,null);assert.equal(draft.photos.length,3);assert.equal(draft.photos[2].duplicate_photo_index,0);
+const stored=(await db.query('SELECT * FROM avo.evidence WHERE event_id=$1',[event_id])).rows[0];assert.equal(stored.photos.length,3);assert.ok(stored.original_photo&&stored.sha256);for(const photo of stored.photos)await fs.access(new URL('../.runtime/media/'+photo.original_photo,import.meta.url));
+assert.equal((await submit()).id,draft.id);assert.equal((await db.query('SELECT count(*)::int AS n FROM avo.boxes WHERE evidence_id=$1',[stored.id])).rows[0].n,1);
+assert.equal((await call('/boxes/'+draft.id+'/approve',{version:draft.version})).status,422);
+const visible=(await call('/bootstrap')).data.boxes.find(b=>b.id===draft.id);assert.equal(visible.photos.length,3);assert.deepEqual((await call('/bootstrap',undefined,visitor)).data.boxes,[]);assert.deepEqual((await call('/bootstrap',undefined,packer)).data.boxes,[]);await db.end();console.log('Retry retained three real supplied photos, original references and duplicate link. Event replay returns one box/evidence pair. Unknown price and cost block publication; no synthetic catalog offer created.');

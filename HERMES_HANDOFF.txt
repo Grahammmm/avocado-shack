@@ -1,0 +1,107 @@
+AVOCADO SHACK — HERMES HANDOFF
+Prepared October 20, 2026. Read this before changing the project.
+
+OWNER AND REPOSITORY
+Store owner: Michael Wolfe. Assistant product name: Hass.
+Private GitHub: https://github.com/Grahammmm/avocado-shack
+GitHub account owner: Grahammmm. Do not transfer account ownership without direction.
+Mac original: /Users/owner/Documents/ChatGPT/Avo_Shack
+Agent Orange working copy: /home/user/repos/avocado-shack
+Private runtime data: /home/user/.local/share/avocado-shack
+Historical Mac archive: private runtime data /mac-archive
+
+CURRENT SCOPE / SOURCE OF TRUTH
+The active site is storefront-mockup/, a catalog for in-person shopping with
+170 food listings, 26 maker profiles, search, source filters and product stories.
+It includes the North Coast Hiking Club, hiking updates and Michael's newsletter.
+There are no prices, basket, checkout, boxes, merchandise or pickup/delivery slots.
+The three route ideas are undated; no real scheduled or past club hikes are known.
+Newsletter and RSVP forms save locally; no email is sent. owner@example.com is a
+proposed sender, not a configured mailbox. Do not imply email is connected.
+
+The commerce/ folder is a HISTORICAL Medusa/Next.js prototype, not the active
+site and not Shopify. Do not start it during ordinary catalog work. Its Mac-only
+binaries and local model would need Linux replacements if reactivated. Historical
+runtime data/config/media/backups are preserved privately, not in GitHub.
+Shopify/POS and the full Hass messaging assistant are future work.
+Older plans and ledger entries are historical, not authorization to restore them.
+
+BRAND AND CONTENT
+Healthy food, local growers, independent makers, hospitality, community, gratitude.
+Cream / forest green / terracotta. Keep product photos, original prose and sourced
+maker bios. Known maker location does not prove every ingredient is local.
+Unknown origins remain unknown. The catalog is not live stock. Exact product
+availability and packaging still need Michael's confirmation before launch.
+Two cheese candidates remain excluded pending manufacturer recall review.
+Selected logo direction is not yet final; preserve the saved alternatives.
+
+PRIVATE SANDBOX
+Only bind to 127.0.0.1. No public proxy, tunnel URL, DNS change or publication.
+Service: avocado-shack-sandbox.service (user service).
+  systemctl --user status avocado-shack-sandbox.service
+  systemctl --user restart avocado-shack-sandbox.service
+  journalctl --user -u avocado-shack-sandbox.service -n 50 --no-pager
+Environment file: private runtime data /sandbox.env (contains DB path, no mail keys).
+Database: private runtime data /community.sqlite3
+The Git-ignored repo path community-data points to the private data directory.
+
+To start manually (stop the service first to avoid a port conflict):
+  AVOSHACK_COMMUNITY_DB=/home/user/.local/share/avocado-shack/community.sqlite3 \
+    python3 /home/user/repos/avocado-shack/storefront-mockup/community-server.py --port 3101
+
+From the Mac, when local port 3101 is free:
+  ssh -N -L 127.0.0.1:3101:127.0.0.1:3101 agentorange
+Then view http://127.0.0.1:3101/ on the Mac. This uses private SSH access.
+Do not change the local port without adjusting server Host/Origin validation.
+
+FILES TO EDIT
+index.html: page structure/copy; style.css: design/mobile.
+shop.js: catalog interactions; catalog-products.js: active food records.
+producers.json and producers.js: keep both maker datasets in sync.
+community.json: actual events and separately undated routeIdeas.
+community.js: forms/calendar; community-server.py: local data API.
+script.js: shared UI/privacy modal. All above are under storefront-mockup/.
+Read storefront-mockup/README.md for event schema and run/check details.
+
+GIT AND DATA
+Commit reviewed source/content and optimized WebP assets. Private repository does
+not authorize committing passwords, participant data or full historical backups.
+.gitignore excludes databases, .runtime, dependencies, historical evidence,
+intake photo caches and full-size product PNGs. These are in the private archive.
+Use Git history for source, and separate backups for SQLite and private assets.
+Do not delete the Mac original or its dated handoff backup.
+Before modifying the database, make a consistent SQLite backup using Python's
+sqlite3 backup API; do not copy an actively written database blindly.
+The old PostgreSQL archive was copied while no commerce database process ran.
+It is an archival Mac snapshot, not a verified Linux migration.
+
+CHECKS
+Previously saved QA: catalog-only-QA.json, community-api-QA.json,
+community-ui-QA.json. They cover 170 records, filters, details, duplicate-free
+scrolling, consent/RSVP persistence and capacity, mobile widths 320–1440.
+Do not call historical checks a new run. Migration checks are in
+reports/hermes-handoff/migration-verification.json and the private manifest.
+Use isolated fixtures for real RSVP tests; do not add fake club history or people.
+Browser QA scripts need Playwright. Some older scripts hardcode the Mac's bundled
+runtime; adapt test-only paths or install approved Linux test tooling before reuse.
+
+NEXT WORK
+1. Read migration-verification.json and check service/repository health.
+2. Confirm actual next hike details with Michael before enabling its RSVP.
+3. Confirm sender mailbox/domain access before connecting mail delivery and
+   unsubscribe handling. Preserve separate newsletter/hiking consent.
+4. Keep work private until the user explicitly requests public deployment.
+5. If commerce resumes, agree the Shopify migration scope first.
+
+PUBLIC TRIAL SUNSET
+Older slofishreport.com hosting is separate from this sandbox. It was scheduled
+for removal October 20 at 19:10 America/Los_Angeles. Hosting cancellation must be
+verified separately. Removing content alone does not cancel billing. Preserve the
+domain and unrelated email/services. Check BUILD_LEDGER.md for hosting evidence;
+do not treat old account status as a fresh verification.
+
+HANDOFF LIMITS
+No full production commerce or automatic social/farmer/accounting assistant is
+connected. No email sending, public launch, domain transfer or account purchase
+is part of this handoff. This file prepares Hermes to operate the private project;
+it does not alter Hermes global settings or start an autonomous messaging task.

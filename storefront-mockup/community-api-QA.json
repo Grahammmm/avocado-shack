@@ -1,0 +1,13 @@
+{
+  "subscriptionsPersisted": true,
+  "consentMerge": true,
+  "invalidEmailRejected": true,
+  "crossOriginRejected": true,
+  "duplicateRSVPPrevented": true,
+  "capacityEnforced": true,
+  "concurrentCapacitySafe": true,
+  "pastRSVPRejected": true,
+  "noPersonalDataInPublicAPI": true,
+  "noExternalEmailSent": true,
+  "fixtureDataIsolated": true
+}

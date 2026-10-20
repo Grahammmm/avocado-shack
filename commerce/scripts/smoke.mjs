@@ -1,0 +1,7 @@
+import fs from 'node:fs/promises';
+const config=JSON.parse(await fs.readFile(new URL('../.runtime/config.json',import.meta.url),'utf8'));
+const login=await fetch('http://127.0.0.1:3200/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:'owner',password:config.ownerPassword})});if(!login.ok)throw new Error('Local owner login failed');const cookie=login.headers.get('set-cookie').split(';')[0];
+async function call(url,body,method){const r=await fetch('http://127.0.0.1:3200/api'+url,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json',cookie},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw new Error(url+': '+JSON.stringify(d));return d;}
+const boot=await call('/bootstrap');console.log('Authenticated bootstrap:',boot.products.length,'published;',boot.drafts.length,'private drafts;',boot.slots.length,'pickup windows');
+const d=boot.confirmed_draft;if(d.state!=='applied'){const r=await call('/drafts/'+d.id+'/approve',{version:d.version});console.log('Owner-confirmed avocado applied:',r.draft.state)}
+const after=await call('/bootstrap');console.log('Engine catalog:',after.products.map(p=>({title:p.title,price_minor:p.metadata.price_minor,unit:p.metadata.unit})));await fs.writeFile(new URL('../evidence/smoke-summary.json',import.meta.url),JSON.stringify({published:after.products.length,drafts:after.drafts.length,slots:after.slots.length},null,2));

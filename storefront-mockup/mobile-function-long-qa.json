@@ -1,0 +1,65 @@
+[
+  {
+    "width": 320,
+    "before": {
+      "height": 616,
+      "scrollHeight": 827,
+      "label": "dialog-title"
+    },
+    "after": {
+      "scrollTop": 211,
+      "closeTop": 66,
+      "closeBottom": 110,
+      "dialogTop": 42,
+      "dialogBottom": 658,
+      "heading": "Small Vegetable Box"
+    },
+    "tab": {
+      "focused": "<button class=\"action\" id=\"detail-add\">Add to basket +</button>",
+      "dialogContainsFocus": true
+    },
+    "count": "170 products · 170 shown"
+  },
+  {
+    "width": 390,
+    "before": {
+      "height": 616,
+      "scrollHeight": 792,
+      "label": "dialog-title"
+    },
+    "after": {
+      "scrollTop": 176,
+      "closeTop": 66,
+      "closeBottom": 110,
+      "dialogTop": 42,
+      "dialogBottom": 658,
+      "heading": "Small Vegetable Box"
+    },
+    "tab": {
+      "focused": "<button class=\"action\" id=\"detail-add\">Add to basket +</button>",
+      "dialogContainsFocus": true
+    },
+    "count": "170 products · 170 shown"
+  },
+  {
+    "width": 430,
+    "before": {
+      "height": 616,
+      "scrollHeight": 792,
+      "label": "dialog-title"
+    },
+    "after": {
+      "scrollTop": 176,
+      "closeTop": 66,
+      "closeBottom": 110,
+      "dialogTop": 42,
+      "dialogBottom": 658,
+      "heading": "Small Vegetable Box"
+    },
+    "tab": {
+      "focused": "<button class=\"action\" id=\"detail-add\">Add to basket +</button>",
+      "dialogContainsFocus": true
+    },
+    "count": "170 products · 170 shown"
+  }
+]

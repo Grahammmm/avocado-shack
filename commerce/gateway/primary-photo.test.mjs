@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {primaryPhoto} from './primary-photo.mjs';
+test('primary photo is selected only from retained evidence',()=>{const d={photo:'/media/aaa.jpg',photos:[{photo:'/media/aaa.jpg'},{photo:'/media/bbb.jpg'}],fields:{}};assert.equal(primaryPhoto(d,1),'/media/bbb.jpg');assert.equal(primaryPhoto(d),d.photo);for(const value of [-1,2,1.2,'1','/media/other.jpg'])assert.throws(()=>primaryPhoto(d,value));assert.throws(()=>primaryPhoto({...d,photos:[{photo:'https://outside.invalid/photo.jpg'}]},0))});

@@ -1,0 +1,3 @@
+import {execFile} from 'node:child_process';import {promisify} from 'node:util';import path from 'node:path';
+const exec=promisify(execFile),root=path.resolve(import.meta.dirname,'..');
+export async function labelEvidence(file){try{const {stdout}=await exec(path.join(root,'.runtime/ocr'),[file],{timeout:25000,maxBuffer:128000});const parsed=JSON.parse(stdout);return {engine:parsed.engine,lines:parsed.lines.filter(l=>l.confidence>=0.4).slice(0,80),automatic_identity:false,note:'Readable label text is evidence only. Multiple products, ambiguous labels and quantities still need owner review.'}}catch{return {engine:'unavailable',lines:[],automatic_identity:false,note:'The photo is saved. Label reading is unavailable; ask the owner for its name and unit.'}}}

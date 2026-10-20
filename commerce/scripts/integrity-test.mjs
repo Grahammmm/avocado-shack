@@ -1,0 +1,20 @@
+import fs from 'node:fs/promises';import assert from 'node:assert/strict';import {Pool} from 'pg';
+const root=new URL('../',import.meta.url),cfg=JSON.parse(await fs.readFile(new URL('.runtime/config.json',root),'utf8')),db=new Pool({connectionString:`postgres://avoshack:${cfg.databasePassword}@127.0.0.1:55432/avoshack`});
+async function login(role){const r=await fetch('http://127.0.0.1:3200/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,password:cfg[role+'Password']})});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0]}
+const owner=await login('owner'),visitor=await login('visitor'),other=await login('visitor');
+async function call(url,body,method='POST',cookie=owner){const r=await fetch('http://127.0.0.1:3200/api'+url,{method:body?method:'GET',headers:{'Content-Type':'application/json',cookie},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()};}
+const boot=(await call('/bootstrap')).data,p=boot.products[0],slot=boot.slots[0];assert.ok(p&&slot);const unauth=await fetch('http://127.0.0.1:3200/api/bootstrap');assert.equal(unauth.status,401);console.log('Unauthenticated catalog denied: 401');
+// Create a new exact-facts draft. No fictional product or inventory enters the catalog.
+const source=await call('/drafts',{message:'Hass avocado, each, $2, 12 available for online pickup.',event_id:crypto.randomUUID()});assert.equal(source.status,200);const d=source.data.draft;
+const edited=await call('/drafts/'+d.id,{version:d.version,fields:{...d.fields,tax_class:'exempt_unprepared_food',category:'Produce'}},'PATCH');assert.equal(edited.status,200);const stale=await call('/drafts/'+d.id+'/approve',{version:d.version});assert.equal(stale.status,409);console.log('Edited draft rejects stale approval: 409');
+// Competing baskets reserve real remaining stock; the third must fail without overdraw.
+const outcomes=await Promise.all([1,2,3].map(()=>call('/checkout',{nonce:crypto.randomUUID(),items:[{product_id:p.id,quantity:5}],email:'internal-race@example.invalid',slot_id:slot.id},'POST',visitor)));const successful=outcomes.filter(r=>r.status===200);assert.equal(successful.length,2);assert.ok(outcomes.some(r=>r.status!==200));console.log('Last-stock race: two 5-unit baskets accepted; third rejected');
+const stranger=await call('/simulate-payment',{attempt_id:successful[0].data.attempt_id},'POST',other);assert.equal(stranger.status,403);console.log('Another customer cannot pay a known checkout: 403');
+const internal=await fetch('http://127.0.0.1:9000/internal/catalog');assert.equal(internal.status,403);console.log('Backend command surface requires its internal credential: 403');
+// Expire test attempts only in application-owned data; worker reconciles through supported engine APIs.
+for(const r of successful)await db.query("UPDATE avo.attempts SET expires_at=now()-interval '1 second' WHERE id=$1",[r.data.attempt_id]);
+for(let i=0;i<40;i++){const q=await db.query('SELECT state FROM avo.attempts WHERE id=ANY($1)',[successful.map(r=>r.data.attempt_id)]);if(q.rows.every(r=>r.state==='expired'))break;await new Promise(r=>setTimeout(r,500));}
+const result=await db.query('SELECT state FROM avo.attempts WHERE id=ANY($1)',[successful.map(r=>r.data.attempt_id)]);assert.ok(result.rows.every(r=>r.state==='expired'));console.log('Expired simulator attempts reconciled and released');
+// New draft identity at version 1 must update/read back metadata even when earlier product version was 1.
+const applied=await call('/drafts/'+d.id+'/approve',{version:edited.data.draft.version});assert.equal(applied.status,200);const repeated=await call('/drafts/'+d.id+'/approve',{version:edited.data.draft.version});assert.equal(repeated.status,200);assert.equal(applied.data.draft.product_id,repeated.data.draft.product_id);console.log('Exact-version approval and replay use the same verified product');
+await db.end();console.log('Integrity checks passed. Test inventory was recounted only to the owner-confirmed 12 after releasing test holds.');

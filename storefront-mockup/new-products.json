@@ -1,0 +1,200 @@
+[
+  {
+    "id": "photo-product-096",
+    "name": "Passion fruit",
+    "category": "fruit",
+    "brand": "Producer not identified",
+    "photo": "IMG_9714.jpg",
+    "photos": [
+      "IMG_9714.jpg"
+    ],
+    "image": "assets/products/photo-product-096.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 3.5,
+    "sampleUnit": "each",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Purple round fruit with smooth and wrinkled shells visible beside avocados; variety not determined.",
+    "notes": "Purple round fruit with smooth and wrinkled shells visible beside avocados; variety not determined.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-097",
+    "name": "Figs",
+    "category": "fruit",
+    "brand": "Producer not identified",
+    "photo": "IMG_9729.jpg",
+    "photos": [
+      "IMG_9729.jpg"
+    ],
+    "image": "assets/products/photo-product-097.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 6.99,
+    "sampleUnit": "one basket",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "FIGS shelf sign and green/purple fruit behind strawberry display; variety not determined.",
+    "notes": "FIGS shelf sign and green/purple fruit behind strawberry display; variety not determined.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-098",
+    "name": "Blackberries",
+    "category": "fruit",
+    "brand": "Producer not identified",
+    "photo": "IMG_9729.jpg",
+    "photos": [
+      "IMG_9729.jpg"
+    ],
+    "image": "assets/products/photo-product-098.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 7.99,
+    "sampleUnit": "one basket",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Blackberries shelf sign and baskets visible.",
+    "notes": "Blackberries shelf sign and baskets visible.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-099",
+    "name": "Garlic",
+    "category": "vegetables",
+    "brand": "Christopher Ranch (carton)",
+    "photo": "IMG_9715.jpg",
+    "photos": [
+      "IMG_9715.jpg"
+    ],
+    "image": "assets/products/photo-product-099.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 1.99,
+    "sampleUnit": "one bulb",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Garlic displayed in Christopher Ranch carton; carton does not conclusively establish grower.",
+    "notes": "Garlic displayed in Christopher Ranch carton; carton does not conclusively establish grower.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-100",
+    "name": "Shallots",
+    "category": "vegetables",
+    "brand": "Hummingbird (bag label)",
+    "photo": "IMG_9715.jpg",
+    "photos": [
+      "IMG_9715.jpg"
+    ],
+    "image": "assets/products/photo-product-100.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 4.99,
+    "sampleUnit": "1 lb",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Hummingbird shallots bag among loose shallots; attribution needs confirmation.",
+    "notes": "Hummingbird shallots bag among loose shallots; attribution needs confirmation.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-101",
+    "name": "Yellow onions",
+    "category": "vegetables",
+    "brand": "Producer not identified",
+    "photo": "IMG_9715.jpg",
+    "photos": [
+      "IMG_9715.jpg"
+    ],
+    "image": "assets/products/photo-product-101.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 1.99,
+    "sampleUnit": "1 lb",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Brown-skinned onions visible; exact cultivar not established.",
+    "notes": "Brown-skinned onions visible; exact cultivar not established.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-102",
+    "name": "Red onions",
+    "category": "vegetables",
+    "brand": "Producer not identified",
+    "photo": "IMG_9715.jpg",
+    "photos": [
+      "IMG_9715.jpg"
+    ],
+    "image": "assets/products/photo-product-102.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 2.49,
+    "sampleUnit": "1 lb",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Purple/red-skinned onions visible.",
+    "notes": "Purple/red-skinned onions visible.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-103",
+    "name": "Radicchio",
+    "category": "vegetables",
+    "brand": "Producer not identified",
+    "photo": "IMG_9730.jpg",
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "image": "assets/products/photo-product-103.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 5.99,
+    "sampleUnit": "one head",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Radicchio shelf label and purple heads visible.",
+    "notes": "Radicchio shelf label and purple heads visible.",
+    "sellable": false
+  },
+  {
+    "id": "photo-product-104",
+    "name": "Purple daikon",
+    "category": "vegetables",
+    "brand": "Producer not identified",
+    "photo": "IMG_9730.jpg",
+    "photos": [
+      "IMG_9730.jpg"
+    ],
+    "image": "assets/products/photo-product-104.webp",
+    "imageKind": "AI product visualization",
+    "section": "shop",
+    "samplePrice": 3.99,
+    "sampleUnit": "1 lb",
+    "price": null,
+    "unit": null,
+    "onlineQuantity": null,
+    "status": "Photo-derived identification; current selling terms unconfirmed",
+    "evidence": "Purple Daikon shelf label and purple roots visible.",
+    "notes": "Purple Daikon shelf label and purple roots visible.",
+    "sellable": false
+  }
+]

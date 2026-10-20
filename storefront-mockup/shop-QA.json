@@ -1,0 +1,26 @@
+{
+  "errors": [],
+  "checks": [
+    {
+      "width": 375,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "overflow": false
+    }
+  ],
+  "mixedBasket": true,
+  "clothingSize": true,
+  "deliveryTime": true,
+  "sampleTotal": 64,
+  "search": true
+}

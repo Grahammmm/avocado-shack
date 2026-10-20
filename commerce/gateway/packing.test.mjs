@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {packSheet,verifyPacked} from './packing.mjs';
+const snapshot={items:[{variant_id:'v',title:'Confirmed item',unit:'each',quantity:2},{variant_id:'boxv',title:'Test recipe',quantity:2,recipe:[{inventory_id:'i',title:'Component',unit:'each',quantity:3}]}]};
+test('packing expands accepted box recipe without changing its snapshot',()=>{const original=JSON.stringify(snapshot),lines=packSheet(snapshot);assert.equal(lines[1].quantity,6);assert.equal(JSON.stringify(snapshot),original)});
+test('ready requires explicit actual-content confirmation and rejects substitutions',()=>{const lines=packSheet(snapshot);assert.deepEqual(verifyPacked(snapshot,lines,true),lines);assert.throws(()=>verifyPacked(snapshot,lines,false),/Confirm/);assert.throws(()=>verifyPacked(snapshot,[{...lines[0],quantity:1},lines[1]],true),/shortage/);assert.throws(()=>verifyPacked(snapshot,[lines[0],lines[0]],true),/differ/)});

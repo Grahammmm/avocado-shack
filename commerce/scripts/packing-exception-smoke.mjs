@@ -1,0 +1,17 @@
+import fs from 'node:fs/promises';import assert from 'node:assert/strict';import {packSheet} from '../gateway/packing.mjs';
+await import('./checkout-smoke.mjs');
+const summary=JSON.parse(await fs.readFile(new URL('../evidence/checkout-summary.json',import.meta.url),'utf8')),cfg=JSON.parse(await fs.readFile(new URL('../.runtime/config.json',import.meta.url),'utf8'));
+async function login(role){const r=await fetch('http://127.0.0.1:3200/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,password:cfg[role+'Password']})});return r.headers.get('set-cookie').split(';')[0]}
+const packer=await login('packer'),owner=await login('owner');async function call(url,body,cookie=packer,method='PATCH'){const r=await fetch('http://127.0.0.1:3200/api'+url,{method:body?method:'GET',headers:{cookie,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json()}}
+const start=(await call('/bootstrap')).data.tasks.find(t=>t.id===summary.task_id),snapshot=JSON.stringify(start.snapshot),url='/tasks/'+start.id;
+assert.equal((await call(url,{assignee:'Internal test packer'})).status,200);assert.equal((await call(url,{state:'preparing'})).status,200);
+assert.equal((await call(url,{exception:'Internal shortage check: promised item not yet packed'})).status,200);assert.equal((await call(url,{state:'ready',confirmed:true,actual_contents:packSheet(start.snapshot)})).status,409);
+assert.equal((await call(url+'/resolve',{reason:'Original promised Hass avocados verified in allocated online bin'},packer,'POST')).status,200);
+assert.equal((await call(url,{state:'ready'})).status,409);assert.equal((await call(url,{state:'collected'})).status,409);
+assert.equal((await call(url,{state:'picked'})).status,200);assert.equal((await call(url,{state:'picked'})).status,200);
+assert.equal((await call(url,{state:'packed'})).status,422);const incorrect=packSheet(start.snapshot).map(i=>({...i,quantity:i.quantity-1}));assert.equal((await call(url,{state:'packed',confirmed:true,actual_contents:incorrect})).status,422);
+assert.equal((await call(url,{state:'packed',confirmed:true,actual_contents:packSheet(start.snapshot)})).status,200);assert.equal((await call(url,{state:'packed'})).status,200);
+assert.equal((await call(url,{state:'ready'})).status,200);assert.equal((await call(url,{state:'ready'})).status,200);assert.equal((await call(url,{state:'collected'})).status,200);
+const after=(await call('/bootstrap')).data.tasks.find(t=>t.id===start.id);assert.equal(JSON.stringify(after.snapshot),snapshot);assert.deepEqual(after.actual_contents,packSheet(start.snapshot));assert.equal(after.assignee,'Internal test packer');assert.equal(after.state,'collected');
+console.log('Assignment, shortage block, resolution, skipped-step rejection, picked/packed records, explicit actual-contents validation, state replay and collection passed. Accepted snapshot unchanged.');
+assert.equal((await call(url+'/refund',{reason:'Internal completed-order test refund'},owner,'POST')).status,200);const boot=(await call('/bootstrap',undefined,owner)).data,p=boot.products.find(p=>p.title==='Hass avocado');assert.equal((await call('/stock-movements',{product_id:p.id,action:'recount',quantity:12,reason:'Restore confirmed allocation after packing test',event_id:crypto.randomUUID()},owner,'POST')).status,200);console.log('Test order refunded in simulator; online allocation restored to owner-confirmed 12.');

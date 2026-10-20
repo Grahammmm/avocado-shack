@@ -1,0 +1,86 @@
+[
+  {
+    "width": 320,
+    "dialogClientWidth": 282,
+    "dialogScrollWidth": 282,
+    "title": "Your basket",
+    "quantity": [
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      }
+    ],
+    "close": {
+      "width": 44,
+      "height": 44
+    }
+  },
+  {
+    "width": 390,
+    "dialogClientWidth": 352,
+    "dialogScrollWidth": 352,
+    "title": "Your basket",
+    "quantity": [
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      }
+    ],
+    "close": {
+      "width": 44,
+      "height": 44
+    }
+  },
+  {
+    "width": 430,
+    "dialogClientWidth": 392,
+    "dialogScrollWidth": 392,
+    "title": "Your basket",
+    "quantity": [
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      },
+      {
+        "width": 44,
+        "height": 44
+      }
+    ],
+    "close": {
+      "width": 44,
+      "height": 44
+    }
+  }
+]

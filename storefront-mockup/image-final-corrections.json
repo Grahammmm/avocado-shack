@@ -1,0 +1,23 @@
+[
+  {
+    "id": "photo-product-080",
+    "photo": "IMG_9735.jpg",
+    "target": "one pale smooth-skinned honeydew-type melon from the BOTTOM shelf. It is pale cream/green and smooth, not the netted brown cantaloupes on the top shelf. Single whole melon only, no cut fruit.",
+    "prompt": "Use case: background-extraction. Extract ONLY one pale smooth-skinned honeydew-type melon from the BOTTOM shelf. It is pale cream/green and smooth, not the netted brown cantaloupes on the top shelf. Single whole melon only, no cut fruit. from the actual source photograph. One square professional product photo, ivory seamless backdrop, soft contact shadow, keep the real product identity, no extra caption, invented text or unrelated items.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-33ed1477-5856-4b3e-84c9-57649b0157ce.png"
+  },
+  {
+    "id": "photo-product-069",
+    "photo": "IMG_9732.jpg",
+    "target": "one clear rectangular retail clamshell of Spring Greens on the TOP LEFT. Preserve actual visible white/yellow Spring Greens label distributed by Jayleaf. Do NOT add Avocado Shack branding or create a new label.",
+    "prompt": "Use case: background-extraction. Extract ONLY one clear rectangular retail clamshell of Spring Greens on the TOP LEFT. Preserve actual visible white/yellow Spring Greens label distributed by Jayleaf. Do NOT add Avocado Shack branding or create a new label. from the actual source photograph. One square professional product photo, ivory seamless backdrop, soft contact shadow, keep the real product identity, no extra caption, invented text or unrelated items.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-b268c93f-adb6-4d17-a349-e655b959df94.png"
+  },
+  {
+    "id": "photo-product-081",
+    "photo": "IMG_9736.jpg",
+    "target": "one individual green/yellow mango from the foreground. Single mango only, remove all wholesale cases, other mangoes and labels, no other fruit.",
+    "prompt": "Use case: background-extraction. Extract ONLY one individual green/yellow mango from the foreground. Single mango only, remove all wholesale cases, other mangoes and labels, no other fruit. from the actual source photograph. One square professional product photo, ivory seamless backdrop, soft contact shadow, keep the real product identity, no extra caption, invented text or unrelated items.",
+    "path": "/Users/owner/.codex/generated_images/01a0ca0f-f619-7e40-97ab-f592c27385c9/exec-6f716a1e-cfe3-4047-8e51-1b8917b98c37.png"
+  }
+]

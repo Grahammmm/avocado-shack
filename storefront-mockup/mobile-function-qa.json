@@ -1,0 +1,242 @@
+[
+  {
+    "width": 320,
+    "base": {
+      "overflow": 0,
+      "filters": {
+        "client": 288,
+        "scroll": 288,
+        "height": 214
+      },
+      "targets": [
+        {
+          "text": "Michael’s store desk ↗",
+          "w": 125.515625,
+          "h": 44
+        },
+        {
+          "text": "Merch",
+          "w": 33.34375,
+          "h": 44
+        },
+        {
+          "text": "Weekly boxes",
+          "w": 74.484375,
+          "h": 44
+        },
+        {
+          "text": "Online shop",
+          "w": 64.046875,
+          "h": 44
+        },
+        {
+          "text": "Basket 0",
+          "w": 78.71875,
+          "h": 44
+        },
+        {
+          "text": "Hours & location",
+          "w": 88.046875,
+          "h": 44
+        },
+        {
+          "text": "Privacy & ordering",
+          "w": 98.046875,
+          "h": 44
+        }
+      ]
+    },
+    "fruit": "13 products · 12 shown",
+    "selected": "true",
+    "producer": "1 products · 1 shown",
+    "detail": {
+      "dialogName": "dialog-title",
+      "focused": "<button class=\"close\" aria-label=\"Close dialog\">×</button>",
+      "scrollHeight": 676,
+      "clientHeight": 676,
+      "close": {
+        "w": 44,
+        "h": 44,
+        "top": 107.8125
+      },
+      "documentScrollY": 5932
+    },
+    "bottom": {
+      "scrollTop": 0,
+      "closeTop": 107.8125,
+      "dialogTop": 83.8125,
+      "dialogBottom": 760.1875
+    },
+    "restore": "<button class=\"product-image\" data-product=\"photo-product-001\" aria-label=\"View Hass avocado\"><img loading=\"lazy\" src=\"assets/products/photo-product-001.webp\" alt=\"Hass avocado\"></button>",
+    "quantity": {
+      "x": 164,
+      "y": 182.4375,
+      "width": 44,
+      "height": 44
+    },
+    "qty": "2",
+    "total": "$10.00",
+    "review": "YOUR BASKETReady for the table.Local delivery to 125 Example Street, Morro Bay CA 93442Wed, Oct 7 · 10:00 AM–11:00 AM2 × Hass avocadoTotal $10.00Checkout will be available soon.Keep shopping",
+    "errors": []
+  },
+  {
+    "width": 390,
+    "base": {
+      "overflow": 0,
+      "filters": {
+        "client": 351,
+        "scroll": 351,
+        "height": 162
+      },
+      "targets": [
+        {
+          "text": "Michael’s store desk ↗",
+          "w": 125.515625,
+          "h": 44
+        },
+        {
+          "text": "Merch",
+          "w": 33.34375,
+          "h": 44
+        },
+        {
+          "text": "Weekly boxes",
+          "w": 74.484375,
+          "h": 44
+        },
+        {
+          "text": "Online shop",
+          "w": 64.046875,
+          "h": 44
+        },
+        {
+          "text": "Basket 0",
+          "w": 78.71875,
+          "h": 44
+        },
+        {
+          "text": "Hours & location",
+          "w": 88.046875,
+          "h": 44
+        },
+        {
+          "text": "Privacy & ordering",
+          "w": 98.046875,
+          "h": 44
+        }
+      ]
+    },
+    "fruit": "13 products · 12 shown",
+    "selected": "true",
+    "producer": "1 products · 1 shown",
+    "detail": {
+      "dialogName": "dialog-title",
+      "focused": "<button class=\"close\" aria-label=\"Close dialog\">×</button>",
+      "scrollHeight": 650,
+      "clientHeight": 650,
+      "close": {
+        "w": 44,
+        "h": 44,
+        "top": 121
+      },
+      "documentScrollY": 5741
+    },
+    "bottom": {
+      "scrollTop": 0,
+      "closeTop": 121,
+      "dialogTop": 97,
+      "dialogBottom": 746.984375
+    },
+    "restore": "<button class=\"product-image\" data-product=\"photo-product-001\" aria-label=\"View Hass avocado\"><img loading=\"lazy\" src=\"assets/products/photo-product-001.webp\" alt=\"Hass avocado\"></button>",
+    "quantity": {
+      "x": 234,
+      "y": 195.234375,
+      "width": 44,
+      "height": 44
+    },
+    "qty": "2",
+    "total": "$10.00",
+    "review": "YOUR BASKETReady for the table.Local delivery to 125 Example Street, Morro Bay CA 93442Wed, Oct 7 · 10:00 AM–11:00 AM2 × Hass avocadoTotal $10.00Checkout will be available soon.Keep shopping",
+    "errors": []
+  },
+  {
+    "width": 430,
+    "base": {
+      "overflow": 0,
+      "filters": {
+        "client": 387,
+        "scroll": 387,
+        "height": 162
+      },
+      "targets": [
+        {
+          "text": "Michael’s store desk ↗",
+          "w": 125.515625,
+          "h": 44
+        },
+        {
+          "text": "Merch",
+          "w": 33.34375,
+          "h": 44
+        },
+        {
+          "text": "Weekly boxes",
+          "w": 74.484375,
+          "h": 44
+        },
+        {
+          "text": "Online shop",
+          "w": 64.046875,
+          "h": 44
+        },
+        {
+          "text": "Basket 0",
+          "w": 78.71875,
+          "h": 44
+        },
+        {
+          "text": "Hours & location",
+          "w": 88.046875,
+          "h": 44
+        },
+        {
+          "text": "Privacy & ordering",
+          "w": 98.046875,
+          "h": 44
+        }
+      ]
+    },
+    "fruit": "13 products · 12 shown",
+    "selected": "true",
+    "producer": "1 products · 1 shown",
+    "detail": {
+      "dialogName": "dialog-title",
+      "focused": "<button class=\"close\" aria-label=\"Close dialog\">×</button>",
+      "scrollHeight": 650,
+      "clientHeight": 650,
+      "close": {
+        "w": 44,
+        "h": 44,
+        "top": 121
+      },
+      "documentScrollY": 5788
+    },
+    "bottom": {
+      "scrollTop": 0,
+      "closeTop": 121,
+      "dialogTop": 97,
+      "dialogBottom": 746.984375
+    },
+    "restore": "<button class=\"product-image\" data-product=\"photo-product-001\" aria-label=\"View Hass avocado\"><img loading=\"lazy\" src=\"assets/products/photo-product-001.webp\" alt=\"Hass avocado\"></button>",
+    "quantity": {
+      "x": 274,
+      "y": 195.234375,
+      "width": 44,
+      "height": 44
+    },
+    "qty": "2",
+    "total": "$10.00",
+    "review": "YOUR BASKETReady for the table.Local delivery to 125 Example Street, Morro Bay CA 93442Wed, Oct 7 · 10:00 AM–11:00 AM2 × Hass avocadoTotal $10.00Checkout will be available soon.Keep shopping",
+    "errors": []
+  }
+]

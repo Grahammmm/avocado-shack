@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {productAnnouncement} from './marketing.mjs';
+test('announcement contains approved facts and cannot send',()=>{const result=productAnnouncement({id:'test',title:'Approved test item',status:'published',thumbnail:'/media/real.jpg',metadata:{source_draft:'d',applied_version:2,price_minor:200,unit:'each'}});assert.match(result.email.body,/\$2.00 each/);assert.equal(result.sending_enabled,false);assert.equal(result.source_version,2);assert.equal(result.photo,'/media/real.jpg');assert.doesNotMatch(result.social.body,/organic|limited|freshly|local-grown/i)});
+test('unapproved products cannot become marketing drafts',()=>{assert.throws(()=>productAnnouncement({status:'draft',metadata:{}}),/approved/)});

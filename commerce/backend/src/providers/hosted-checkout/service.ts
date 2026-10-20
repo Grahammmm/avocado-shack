@@ -1,0 +1,34 @@
+import {AbstractPaymentProvider,PaymentSessionStatus,BigNumber} from '@medusajs/framework/utils'
+import type {InitiatePaymentInput,InitiatePaymentOutput,AuthorizePaymentInput,AuthorizePaymentOutput,GetPaymentStatusInput,GetPaymentStatusOutput,UpdatePaymentInput,UpdatePaymentOutput,ProviderWebhookPayload,WebhookActionResult} from '@medusajs/framework/types'
+import Stripe from 'stripe'
+import {Pool} from 'pg'
+type Options={mode:string,apiKey?:string,webhookSecret?:string,storeUrl:string}
+export default class HostedCheckoutProvider extends AbstractPaymentProvider<Options>{
+ static identifier='hosted-checkout';private stripe?:Stripe;private db:Pool
+ constructor(container:any,options:Options){super(container,options);if(options.mode==='stripe'){if(!options.apiKey?.startsWith('sk_test_'))throw new Error('Only authorized Stripe test keys are supported');this.stripe=new Stripe(options.apiKey)}this.db=new Pool({connectionString:process.env.DATABASE_URL})}
+ async initiatePayment(input:InitiatePaymentInput):Promise<InitiatePaymentOutput>{
+  const d=input.data||{},amount=Math.round(Number(input.amount)*100);if(input.currency_code!=='usd'||!Number.isSafeInteger(amount)||amount<=0)throw new Error('Invalid server-priced payment');const base={...d,amount_minor:amount,currency:'usd',mode:this.config.mode};
+  if(d.recover_provider_session){if(!String(d.recover_provider_session).startsWith('sim_'))throw new Error('Only an original simulator reference can be recovered here');if(this.stripe)throw new Error('Legacy provider-session recovery requires verified Stripe integration');const a=(await this.db.query('SELECT * FROM avo.attempts WHERE id=$1',[d.attempt_id])).rows[0];if(!a||a.state!=='late_refund_pending'||a.provider_session!==d.recover_provider_session||a.snapshot.total_minor!==amount)throw new Error('Recovered simulator session does not match the late-payment reference');return {id:String(d.recover_provider_session),status:PaymentSessionStatus.PENDING,data:{...base,provider_session:d.recover_provider_session,url:this.config.storeUrl+'/?order='+d.attempt_id,recovered_for_refund:true}};}
+  if(!this.stripe)return {id:'sim_'+d.session_id,status:PaymentSessionStatus.PENDING,data:{...base,provider_session:'sim_'+d.session_id,url:this.config.storeUrl+'/?checkout=simulator'}};
+  const session=await this.stripe.checkout.sessions.create({mode:'payment',allowed_payment_method_types:['card'],line_items:[{price_data:{currency:'usd',unit_amount:amount,product_data:{name:'Avocado Shack pickup order'}},quantity:1}],customer_email:typeof d.email==='string'?d.email:undefined,success_url:this.config.storeUrl+'/?order='+d.attempt_id,cancel_url:this.config.storeUrl+'/?checkout=canceled',expires_at:Math.floor(Date.now()/1000)+1800,metadata:{medusa_session_id:String(d.session_id),attempt_id:String(d.attempt_id)},payment_intent_data:{metadata:{medusa_session_id:String(d.session_id),attempt_id:String(d.attempt_id)}}},{idempotencyKey:input.context?.idempotency_key});return {id:session.id,status:PaymentSessionStatus.PENDING,data:{...base,provider_session:session.id,url:session.url}};
+ }
+ async getPaymentStatus(input:GetPaymentStatusInput):Promise<GetPaymentStatusOutput>{const d=input.data||{};if(!this.stripe){const r=await this.db.query("SELECT 1 FROM avo.events WHERE id=$1 AND provider='simulator' AND payload->>'status'='paid'",['sim_paid_'+d.attempt_id]);return {status:r.rowCount?PaymentSessionStatus.CAPTURED:PaymentSessionStatus.PENDING,data:d}}const s=await this.stripe.checkout.sessions.retrieve(String(d.provider_session));if(s.livemode)throw new Error('Live payment rejected');if(s.amount_total!==d.amount_minor||s.currency!==d.currency)throw new Error('Provider total mismatch');return {status:s.payment_status==='paid'?PaymentSessionStatus.CAPTURED:s.status==='expired'?PaymentSessionStatus.CANCELED:PaymentSessionStatus.PENDING,data:{...d,payment_intent:s.payment_intent}}}
+ async authorizePayment(input:AuthorizePaymentInput):Promise<AuthorizePaymentOutput>{const r=await this.getPaymentStatus(input);if(r.status!==PaymentSessionStatus.CAPTURED)throw new Error('Payment has not succeeded');return {status:r.status,data:r.data}}
+ async capturePayment(input:any){const r=await this.getPaymentStatus(input);if(r.status!==PaymentSessionStatus.CAPTURED)throw new Error('Cannot capture unpaid checkout');return {data:r.data}}
+ async retrievePayment(input:any){return {data:(await this.getPaymentStatus(input)).data}}
+ async updatePayment(input:UpdatePaymentInput):Promise<UpdatePaymentOutput>{if(Math.round(Number(input.amount)*100)!==input.data?.amount_minor)throw new Error('Frozen checkout cannot change. Cancel and create a new revision.');if(input.data?.close_requested){const closed=await this.cancelPayment(input);return {data:closed.data,status:PaymentSessionStatus.CANCELED}}return {data:input.data,status:(await this.getPaymentStatus(input)).status}}
+ async cancelPayment(input:any){if(this.stripe){const s=await this.stripe.checkout.sessions.retrieve(String(input.data?.provider_session));if(s.payment_status==='paid')throw new Error('Paid sessions must be refunded');if(s.status==='open')await this.stripe.checkout.sessions.expire(s.id)}return {data:{...input.data,canceled:true}}}
+ async deletePayment(input:any){return this.cancelPayment(input)}
+ async refundPayment(input:any){if(this.stripe){const s=await this.stripe.checkout.sessions.retrieve(String(input.data?.provider_session));if(s.payment_status!=='paid'||typeof s.payment_intent!=='string')throw new Error('No paid PaymentIntent to refund');const r=await this.stripe.refunds.create({payment_intent:s.payment_intent,amount:Math.round(Number(input.amount)*100)},{idempotencyKey:input.context?.idempotency_key});return {data:{...input.data,refund_id:r.id}}}return {data:{...input.data,simulated_refund:true}}}
+ async getWebhookActionAndData(payload:ProviderWebhookPayload['payload']):Promise<WebhookActionResult>{
+  if(!this.stripe||!this.config.webhookSecret)return {action:'not_supported'};
+  const event=this.stripe.webhooks.constructEvent(payload.rawData as any,payload.headers['stripe-signature'] as string,this.config.webhookSecret);if(event.livemode)throw new Error('Live webhook rejected');
+  if(['checkout.session.completed','checkout.session.expired','checkout.session.async_payment_failed'].includes(event.type)){
+   const session=event.data.object as Stripe.Checkout.Session;
+   await this.db.query("INSERT INTO avo.events(id,provider,payload) VALUES($1,'stripe',$2) ON CONFLICT DO NOTHING",[event.id,JSON.stringify({type:event.type,attempt_id:session.metadata?.attempt_id,session_id:session.id,payment_status:session.payment_status})]);
+  }
+  // One durable gateway reconciler owns completion and converts temporary holds to engine order reservations.
+  // Native webhook auto-completion would bypass that boundary and leave duplicate holds.
+  return {action:'not_supported'};
+ }
+}

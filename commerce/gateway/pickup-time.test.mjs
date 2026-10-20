@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {utcFromLocal} from './pickup-time.mjs';
+test('LA opening hours retain local time across spring daylight saving',()=>{assert.equal(utcFromLocal('2026-03-07',9).toISOString(),'2026-03-07T17:00:00.000Z');assert.equal(utcFromLocal('2026-03-09',9).toISOString(),'2026-03-09T16:00:00.000Z')});
+test('LA opening hours retain local time across autumn daylight saving',()=>{assert.equal(utcFromLocal('2026-10-31',9).toISOString(),'2026-10-31T16:00:00.000Z');assert.equal(utcFromLocal('2026-11-02',9).toISOString(),'2026-11-02T17:00:00.000Z')});
