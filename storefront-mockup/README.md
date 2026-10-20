@@ -24,6 +24,14 @@ python3 storefront-mockup/community-server.py --port 3101
 ## Checks
 catalog-only-qa.cjs checks all 170 food listings, no commerce UI/copy, town search, sourcing filters, empty search, maker dialogs, duplicate-free scrolling, and overflow/color consistency at 320, 375, 390, 768, and 1440 pixels. Results: catalog-only-QA.json. Phone and desktop screenshots are catalog-only-*.png. Earlier commerce tests apply to the archived experience, not this revision.
 
+Running checks on Agent Orange (Linux): the active scripts (`catalog-only-qa.cjs`, `community-qa.py`, `community-ui-qa.cjs`) take optional environment overrides. `PLAYWRIGHT_MODULE` points at a Playwright package (default `require('playwright')`), `CHROMIUM_PATH` at a matching Chromium binary, `NODE` at the Node executable (default `node` on PATH), and `QA_OUT_DIR` at the folder for JSON/screenshots (default `storefront-mockup`, which overwrites committed evidence). Run from the repository root with the service up on 3101; the catalog check only reads the live page, and the community check uses its own temporary database on port 3102. Example:
+
+    PLAYWRIGHT_MODULE=/path/to/node_modules/playwright CHROMIUM_PATH=/path/to/chrome-headless-shell \
+      QA_OUT_DIR=/tmp/avoshack-qa node storefront-mockup/catalog-only-qa.cjs
+    PLAYWRIGHT_MODULE=... CHROMIUM_PATH=... QA_OUT_DIR=/tmp/avoshack-qa python3 storefront-mockup/community-qa.py
+
+Older commerce-era QA scripts still hardcode the Mac runtime and are left as historical.
+
 
 ## Hiking club and newsletter
 `community.json` holds club information and real upcoming/completed hikes. Its events list is empty until Michael supplies confirmed details. No invented hike is shown in the normal sandbox. `community.js` renders the calendar, history, RSVP form, and signup states.

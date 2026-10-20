@@ -34,8 +34,8 @@ with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
    results=list(pool.map(lambda i:request('/api/community/rsvps',{**payload,'eventId':'qa-race','partySize':1,'email':f'race{i}@example.invalid'})[0],range(2)))
   assert sorted(results)==[200,409]
   public=json.dumps(request('/api/community')[1]);assert 'example.invalid' not in public
-  node='/Users/owner/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node'
+  node=os.environ.get('NODE','node')
   subprocess.run([node,str(root/'community-ui-qa.cjs')],env={**os.environ,'COMMUNITY_TEST_URL':base},check=True)
   result={'subscriptionsPersisted':True,'consentMerge':True,'invalidEmailRejected':True,'crossOriginRejected':True,'duplicateRSVPPrevented':True,'capacityEnforced':True,'concurrentCapacitySafe':True,'pastRSVPRejected':True,'noPersonalDataInPublicAPI':True,'noExternalEmailSent':True,'fixtureDataIsolated':True}
-  (root/'community-api-QA.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
+  (Path(os.environ.get('QA_OUT_DIR',root))/'community-api-QA.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
  finally:proc.terminate();proc.wait(timeout=5)
