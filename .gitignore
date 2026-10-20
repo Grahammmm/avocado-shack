@@ -1,5 +1,5 @@
 # Private runtime and customer data
-/community-data/
+/community-data
 /handoff-backups/
 .env
 .env.*
