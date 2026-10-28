@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "purpose": "Owner-requested visual mockup. These are sample invitations and archive entries, not scheduled or completed club outings. RSVP never submits data.",
+  "upcoming": {
+    "id": "preview-point-buchon",
+    "trailId": "idea-point-buchon",
+    "startsAt": "2026-11-08T09:00:00-08:00",
+    "meetTime": "8:45 am",
+    "walkTime": "9:00 am",
+    "returnTime": "Around 12:30 pm",
+    "meetingPoint": "Coon Creek parking lot",
+    "meetingAddress": "End of Pecho Valley Road, Montaña de Oro State Park, Los Osos",
+    "invitation": "Let’s spend a morning with the Pacific beside us. We’ll follow the bluffs past sea stacks and open grassland, with time to look out, catch our breath, and talk. Bring something good for a snack. A piece of fruit always tastes better with a little salt air.",
+    "bring": "Water, a wind layer, comfortable walking shoes, sun protection, and a snack.",
+    "accessNote": "Point Buchon requires check-in with the trail attendant. No pets. We’ll check trail access and weather before setting a real date."
+  },
+  "past": [
+    {"trailId": "idea-cass-hill", "dateLabel": "October 2026"},
+    {"trailId": "idea-fiscalini-bluff", "dateLabel": "September 2026"}
+  ]
+}
