@@ -1,0 +1,58 @@
+{
+  "commit": "aece2211633fa6f9eadab7a205a4afceff86d31b",
+  "files": [
+    {
+      "file": "index.html",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "file": "community.js",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "file": "trail-explorer.js",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "file": "trail-explorer.css",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "file": "assets/trails/point-buchon.json",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "file": "assets/trails/point-buchon-aerial.webp",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "file": "assets/trails/point-buchon-topo.webp",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "file": "assets/trails/point-buchon-coast.webp",
+      "status": 200,
+      "matchesSource": true
+    }
+  ],
+  "realEventCount": 0,
+  "emailConnected": false,
+  "databaseSHA256": "3e907bc745e6e0506bfbf24be1874a86c93c5e7554c0744551262e40c1fe6184",
+  "listen": "State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\nLISTEN 0      5          127.0.0.1:3101      0.0.0.0:*",
+  "browser": {
+    "checkedAt": "2026-10-28T05:18:46.742Z",
+    "ready": "complete",
+    "mapReady": "true",
+    "layer": "topo",
+    "overflow": false,
+    "errors": []
+  },
+  "backup": "Original Mac project and dated handoff backup not modified"
+}
