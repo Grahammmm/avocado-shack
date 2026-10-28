@@ -57,8 +57,9 @@ To start manually (stop the service first to avoid a port conflict):
 From the Mac, when local port 3101 is free:
   ssh -N -L 127.0.0.1:3101:127.0.0.1:3101 agentorange
 Then view http://127.0.0.1:3101/ on the Mac. This uses private SSH access.
-If a forwarding-only (-N) connection stalls, a session-backed connection worked
-on October 27 (stop the old local forward before trying this one):
+If a forwarding-only (-N) connection stalls, this session-backed connection
+returned HTML on October 27; full browser loading is still being checked.
+Stop the old local forward before trying this one:
   ssh -T -L 127.0.0.1:3101:127.0.0.1:3101 agentorange 'sleep 3600'
 This alternate preview connection lasts one hour; the private service stays on.
 Do not change the local port without adjusting server Host/Origin validation.
