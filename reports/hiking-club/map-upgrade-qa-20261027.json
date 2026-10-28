@@ -1,0 +1,155 @@
+{
+  "map": {
+    "checkedAt": "2026-10-28T05:12:01.042Z",
+    "base": "http://127.0.0.1:3103",
+    "viewports": [
+      {
+        "width": 320,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 256,
+        "mapHeight": 400
+      },
+      {
+        "width": 375,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 298,
+        "mapHeight": 430
+      },
+      {
+        "width": 390,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 311,
+        "mapHeight": 430
+      },
+      {
+        "width": 430,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 347,
+        "mapHeight": 430
+      },
+      {
+        "width": 768,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 651,
+        "mapHeight": 430
+      },
+      {
+        "width": 1024,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 821,
+        "mapHeight": 462
+      },
+      {
+        "width": 1440,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 1138,
+        "mapHeight": 640
+      },
+      {
+        "width": 1920,
+        "overflow": false,
+        "shortControls": 0,
+        "mapWidth": 1188,
+        "mapHeight": 668
+      }
+    ],
+    "interactions": [
+      "Aerial/topo switch; zoom; drag; fit; keyboard zoom/pan/reset",
+      "Elevation scrub tracks mapped position; turnaround; matching return endpoint; keyboard slider",
+      "Expanded map; Escape closes; focus restored",
+      "Dummy RSVP: no POST, no storage",
+      "Phone touch: scroll page normally; zoom then pan map"
+    ],
+    "errors": [],
+    "externalRequests": [],
+    "webkit": "Not installed; no Safari engine check performed",
+    "passed": true
+  },
+  "catalog": {
+    "all": 170,
+    "duplicates": 0,
+    "townSearch": 12,
+    "localCount": "90 selections \u00b7 12 shown",
+    "organicCount": "18 selections \u00b7 12 shown",
+    "commerceRemoved": true,
+    "makerDetails": true,
+    "viewports": [
+      {
+        "width": 320,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 375,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 390,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 768,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 1440,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      }
+    ],
+    "errors": []
+  },
+  "navigation": {
+    "checkedAt": "2026-10-28T05:10:45.241Z",
+    "results": [
+      {
+        "width": 390,
+        "direct": false,
+        "top": 50,
+        "productsShown": 12
+      },
+      {
+        "width": 390,
+        "direct": true,
+        "top": 50,
+        "productsShown": 12
+      },
+      {
+        "width": 1440,
+        "direct": false,
+        "top": 49.65625,
+        "productsShown": 12
+      },
+      {
+        "width": 1440,
+        "direct": true,
+        "top": 49.65625,
+        "productsShown": 12
+      }
+    ]
+  },
+  "visualReview": {
+    "inspected": [
+      "desktop aerial map and elevation profile",
+      "mobile aerial/topo maps and elevation profile",
+      "mobile invitation/photo/RSVP"
+    ],
+    "notes": "Removed blank map sidebars by fitting map proportions; moved phone start label clear of map controls. All screenshots were inspected locally."
+  },
+  "limits": [
+    "Chromium desktop and phone emulation only; no physical handset.",
+    "WebKit/Safari executable was not installed.",
+    "No real event was created; RSVP remains a non-saving sample.",
+    "Elevation comes from sampled terrain, not a GPS recording."
+  ]
+}

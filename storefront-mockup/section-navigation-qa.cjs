@@ -1,5 +1,6 @@
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('fs');
+const base=process.env.PREVIEW_URL||'http://127.0.0.1:3101';
 const out=process.env.QA_OUT_DIR||'storefront-mockup';
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
@@ -7,7 +8,7 @@ const out=process.env.QA_OUT_DIR||'storefront-mockup';
  for(const width of [390,1440]){
   await page.setViewportSize({width,height:900});
   for(const direct of [false,true]){
-   await page.goto('http://127.0.0.1:3101/'+(direct?'#hikes':''));
+   await page.goto(base+'/'+(direct?'#hikes':''));
    await page.locator('#preview-hike-rsvp').waitFor();
    if(!direct)await page.locator('header nav a[href="#hikes"]').click();
    await page.waitForTimeout(1500);

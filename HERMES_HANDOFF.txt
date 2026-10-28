@@ -70,6 +70,9 @@ shop.js: catalog interactions; catalog-products.js: active food records.
 producers.json and producers.js: keep both maker datasets in sync.
 community.json: actual events and separately undated routeIdeas.
 community.js: forms/calendar; community-server.py: local data API.
+trail-explorer.js / trail-explorer.css: cached aerial/topo route map and linked
+elevation chart. assets/trails/ holds optimized imagery and derived route data.
+Read reports/hiking-club/TRAIL_MAP_SOURCES.txt before changing geographic data.
 script.js: shared UI/privacy modal. All above are under storefront-mockup/.
 Read storefront-mockup/README.md for event schema and run/check details.
 Read reports/hermes-handoff/OWNER_AND_PRODUCT_BRIEF.txt for business context.
