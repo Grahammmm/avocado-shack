@@ -15,6 +15,9 @@ CURRENT SCOPE
 RSVP support and newsletter signup stored locally. No email delivery connected.
 No prices, baskets, weekly boxes, merch, checkout or pickup/delivery booking.
 Three undated hike ideas; no confirmed upcoming or past club outings.
+Owner-requested hiking mockup: a labeled Point Buchon sample invitation with a
+browser-only RSVP and Cass Hill / Fiscalini Ranch example archive. See the
+storefront README for changing or disabling these samples.
 
 commerce/ is the earlier Medusa prototype, retained for reference. Shopify is a
 future direction, not an existing integration. Hass is the assistant name;

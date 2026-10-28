@@ -1,0 +1,142 @@
+{
+  "communityUI": {
+    "checkedAt": "2026-10-28T03:54:14.894Z",
+    "rsvpForm": true,
+    "newsletterForm": true,
+    "hikingUpdates": true,
+    "pastHikes": true,
+    "confirmedEventTakesPrecedence": true,
+    "realCalendarEmpty": true,
+    "demoPosts": 0,
+    "demoBrowserStorage": false,
+    "demoValidation": true,
+    "demoSuccessFocus": true,
+    "layouts": [
+      {
+        "width": 320,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 375,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 390,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 430,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 768,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 1024,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 1440,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      }
+    ],
+    "errors": []
+  },
+  "communityAPI": {
+    "subscriptionsPersisted": true,
+    "consentMerge": true,
+    "invalidEmailRejected": true,
+    "crossOriginRejected": true,
+    "duplicateRSVPPrevented": true,
+    "capacityEnforced": true,
+    "concurrentCapacitySafe": true,
+    "pastRSVPRejected": true,
+    "noPersonalDataInPublicAPI": true,
+    "noExternalEmailSent": true,
+    "fixtureDataIsolated": true
+  },
+  "catalog": {
+    "all": 170,
+    "duplicates": 0,
+    "townSearch": 12,
+    "localCount": "90 selections \u00b7 12 shown",
+    "organicCount": "18 selections \u00b7 12 shown",
+    "commerceRemoved": true,
+    "makerDetails": true,
+    "viewports": [
+      {
+        "width": 320,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 375,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 390,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 768,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      },
+      {
+        "width": 1440,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)"
+      }
+    ],
+    "errors": []
+  },
+  "sectionNavigation": {
+    "checkedAt": "2026-10-28T04:01:05.336Z",
+    "results": [
+      {
+        "width": 390,
+        "direct": false,
+        "top": 50,
+        "productsShown": 12
+      },
+      {
+        "width": 390,
+        "direct": true,
+        "top": 50,
+        "productsShown": 12
+      },
+      {
+        "width": 1440,
+        "direct": false,
+        "top": 49.65625,
+        "productsShown": 12
+      },
+      {
+        "width": 1440,
+        "direct": true,
+        "top": 49.65625,
+        "productsShown": 12
+      }
+    ]
+  },
+  "reviewedAt": "2026-10-28T04:02:36.884804+00:00",
+  "visualReview": "Desktop 1440 and mobile 390 screenshots inspected; final copy checked at 320/390/768/1440.",
+  "limits": "Private preview only. No actual club events, no email sending and no public deployment. All real form writes tested with a temporary fixture database."
+}

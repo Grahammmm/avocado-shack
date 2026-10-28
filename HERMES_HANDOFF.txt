@@ -18,6 +18,9 @@ The active site is storefront-mockup/, a catalog for in-person shopping with
 It includes the North Coast Hiking Club, hiking updates and Michael's newsletter.
 There are no prices, basket, checkout, boxes, merchandise or pickup/delivery slots.
 The three route ideas are undated; no real scheduled or past club hikes are known.
+October 27: an owner-requested mockup in hiking-preview.json displays clearly
+labeled sample invitation/history. Its RSVP does not send or save data. Confirmed
+events in community.json take precedence. See storefront-mockup/README.md.
 Newsletter and RSVP forms save locally; no email is sent. owner@example.com is a
 proposed sender, not a configured mailbox. Do not imply email is connected.
 

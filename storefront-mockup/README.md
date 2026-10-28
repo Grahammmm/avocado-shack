@@ -34,7 +34,7 @@ Older commerce-era QA scripts still hardcode the Mac runtime and are left as his
 
 
 ## Hiking club and newsletter
-`community.json` holds club information and real upcoming/completed hikes. Its events list is empty until Michael supplies confirmed details. No invented hike is shown in the normal sandbox. `community.js` renders the calendar, history, RSVP form, and signup states.
+`community.json` holds club information, sourced trail ideas, and real upcoming/completed hikes. Its events list remains empty until Michael supplies confirmed details. The owner-requested mockup is separate: `hiking-preview.json` enables a sample Point Buchon invitation and Cass Hill / Fiscalini Ranch archive entries. Labels distinguish them from confirmed events. The sample RSVP validates in the browser, clears its fields, and sends or stores nothing. Set `enabled` to false to remove these samples. A real scheduled event takes precedence over the sample invitation; completed events take precedence over the sample archive. `community.js` renders these states; `hiking.css` scopes the new field-guide design. The coastal SVG is an original illustration, not survey data or a navigable map.
 
 The local Python server saves subscriptions and RSVPs in `../community-data/community.sqlite3`, outside the served website and ignored by Git. It binds only to 127.0.0.1. Separate opt-ins are stored for the community newsletter and hiking updates. Repeat signups merge choices without duplicating the email. RSVP capacity is checked in a database transaction; duplicate RSVPs do not claim more places. There is no email delivery, active sender mailbox, or public subscriber list.
 
@@ -46,4 +46,7 @@ Checks: `community-qa.py` uses a temporary database, separate fixture config and
 
 
 ### Placeholder routes
-Owner requested sample SLO County routes before dates are available. `community.json.routeIdeas` now holds three explicitly undated ideas: Fiscalini Ranch Bluff Trail (Cambria), Montaña de Oro Bluff Trail (Los Osos), and Bob Jones Pathway (Avila Beach). These are not events, do not appear in past-hike history, and cannot accept RSVPs. Official source links live with each entry. Distances describe named trail segments where verified; actual outing lengths and meeting points are still undecided. Current access and any group-use requirements must be checked when a real outing is planned.
+Owner requested three specific sample routes: Point Buchon (Los Osos), Cass Hill (Cayucos), and Fiscalini Ranch Bluff Trail (Cambria). These are undated route records in `community.json.routeIdeas`, with source links. `hiking-preview.json` separately supplies the illustrative invitation/archive dates. These samples cannot accept real RSVPs. Current access, chosen route and any group-use requirements must be checked when a real outing is planned.
+
+## Hiking mockup — October 27, 2026
+The sample November 8 invitation and archive months are illustrative only. No real club outing has been confirmed. The trail statistics are sourced in `reports/hiking-club/trail-research.txt`; walking durations, group pace, meeting time and difficulty labels are planning estimates. Confirm route access and all event details with Michael before creating a real event. The existing real RSVP and separate newsletter/hiking signup infrastructure remains available; email delivery remains disconnected.

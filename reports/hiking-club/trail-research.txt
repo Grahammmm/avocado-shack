@@ -1,0 +1,34 @@
+NORTH COAST HIKING CLUB — TRAIL FACTS AND SAMPLE BOUNDARIES
+Checked October 27, 2026. No actual outing or attendance was supplied.
+
+POINT BUCHON — LOS OSOS
+https://www.pge.com/en/about/in-your-community/recreational-areas.html
+PG&E: 6.6-mile round trip; 300-foot elevation change (not stated as cumulative
+ascent). Coon Creek parking lot / Pecho Valley Road, Montaña de Oro State Park.
+Trail attendant check-in required; no pets. Check current access before an event.
+Moderate difficulty and 3–4 hours are our group-planning estimates, not a PG&E
+rating. November 8, 8:45 meeting, 9:00 start and 12:30 return are sample plans.
+The original SVG is a stylized illustration. It is not traced trail geometry,
+surveyed topography, an elevation profile or a navigation aid.
+
+CASS HILL — CAYUCOS
+https://highway1roadtrip.com/things-to-do/cayucos-hiking/
+Local tourism guide: 3 miles out and back, 692 feet gain, moderate difficulty.
+The mockup rounds ascent to about 690 feet. About 2 hours is a planning estimate.
+Other route descriptions give different lengths/gains; confirm the chosen route
+and access with Michael before scheduling it. October 2026 is a sample archive
+month, not a claim that the club hiked this route.
+
+FISCALINI RANCH BLUFF TRAIL — CAMBRIA
+https://www.cambriacsd.org/trails
+Cambria CSD: Bluff Trail is 0.9 mile, with boardwalk/gravel and handcrafted benches.
+An out-and-back example is therefore 1.8 miles. Easy / mostly level is descriptive;
+no unsupported numeric ascent is used. 1–1.5 hours allows stops and conversation.
+September 2026 is a sample archive month, not a confirmed club outing.
+
+COPY AND PRIVACY
+Club prose is original, shaped by Michael’s conversational food/community themes.
+It is not presented as a quotation from Michael or Anthony Bourdain.
+The sample RSVP validates and resets entirely in the browser; no API request,
+localStorage or sessionStorage. Normal signup forms still save locally, with
+separate hiking and newsletter choices. No email sending is configured.
