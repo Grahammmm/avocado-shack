@@ -45,7 +45,30 @@ function resetCatalog(){limit=12;renderCatalog();scheduleScroll()}
 function loadMore(){if(visibleCount>=filteredProducts().length)return;limit+=12;renderCatalog(true)}
 $('#product-search').oninput=resetCatalog;$('#brand-filter').onchange=resetCatalog;$('#more-products').onclick=loadMore;
 for(const [attr,set] of [['filter',v=>activeCategory=v],['source',v=>activeSource=v]])document.querySelectorAll(`[data-${attr}]`).forEach(b=>b.onclick=()=>{set(b.dataset[attr]);document.querySelectorAll(`[data-${attr}]`).forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))});resetCatalog()});
-let scrollFrame=0;function checkScroll(){scrollFrame=0;if(visibleCount<filteredProducts().length&&$('#catalog-sentinel').getBoundingClientRect().top<innerHeight+600){loadMore();scrollFrame=requestAnimationFrame(checkScroll)}}function scheduleScroll(){if(!scrollFrame)scrollFrame=requestAnimationFrame(checkScroll)}
-renderCatalog();if('IntersectionObserver' in window){const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))scheduleScroll()},{rootMargin:'600px 0px'});observer.observe($('#catalog-sentinel'));window.addEventListener('scroll',scheduleScroll,{passive:true});window.addEventListener('resize',scheduleScroll)}
+let scrollFrame=0, sectionNavigation=false, sectionTimer;
+function checkScroll(){
+ scrollFrame=0;
+ const edge=$('#catalog-sentinel').getBoundingClientRect();
+ // Loading products above a visitor who has moved on would shift their section.
+ if(!sectionNavigation&&visibleCount<filteredProducts().length&&edge.bottom>=0&&edge.top<innerHeight+600){loadMore();scrollFrame=requestAnimationFrame(checkScroll)}
+}
+function scheduleScroll(){if(!scrollFrame)scrollFrame=requestAnimationFrame(checkScroll)}
+function resumeCatalog(){clearTimeout(sectionTimer);sectionNavigation=false;scheduleScroll()}
+function waitForSectionScroll(){clearTimeout(sectionTimer);sectionTimer=setTimeout(resumeCatalog,250)}
+function followSection(hash){
+ const target=document.getElementById(hash.slice(1));
+ if(target&&target!==$('#market')&&!$('#market').contains(target)){sectionNavigation=true;waitForSectionScroll()}
+}
+// Pause during anchor scrolling through the catalog, including direct hash links.
+followSection(location.hash);
+document.addEventListener('click',event=>{const link=event.target.closest('a[href^="#"]');if(link)followSection(link.getAttribute('href'))},true);
+window.addEventListener('hashchange',()=>followSection(location.hash));
+renderCatalog();
+if('IntersectionObserver' in window){
+ const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))scheduleScroll()},{rootMargin:'600px 0px'});
+ observer.observe($('#catalog-sentinel'));
+ window.addEventListener('scroll',()=>{if(sectionNavigation)waitForSectionScroll();else scheduleScroll()},{passive:true});
+ window.addEventListener('resize',scheduleScroll);
+}
 function detail(p){const m=maker(p);show(`${photo(p)}<p class="label">${esc(brand(p))}</p><h2>${esc(p.name)}</h2><p class="origin-label">${esc(origin(p))}</p>${badges(p)}<p class="product-story">${esc(p.description||'A good thing to bring to the table.')}</p>${m?`<section class="maker-story"><p class="label">MEET THE MAKER</p><h3>${esc(m.name)}</h3><p class="maker-place">${esc(m.place)}</p><p>${esc(m.story)}</p><a class="text-link" href="${esc(m.url)}" target="_blank" rel="noopener">More from ${esc(m.name)} ↗</a></section>`:''}<p class="detail-visit">Come find your next favorite at the Shack.<br><a href="#visit" class="text-link" data-visit>Visit us in Morro Bay ↗</a></p>`);$('[data-visit]').onclick=()=>dialog.close()}
 $('#catalog-grid').onclick=e=>{const b=e.target.closest('[data-product]');if(!b)return;const p=catalog.find(p=>p.id===b.dataset.product);if(p)detail(p)};
