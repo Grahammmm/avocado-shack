@@ -1,0 +1,95 @@
+POINT BUCHON MAP — SOURCES AND METHOD
+Prepared October 27, 2026, Pacific time (October 28 UTC).
+
+RESULT
+The sample hiking invitation uses a real coastal photograph, cached USGS aerial
+and topographic maps, OpenStreetMap trail geometry, and an estimated USGS terrain
+profile. No map provider is contacted by a visitor's browser. No location
+permission, map account, tracking script or paid map service is needed.
+
+PHOTOGRAPH
+File: storefront-mockup/assets/trails/point-buchon-coast.webp
+Author: “Mike” Michael L. Baird (MikeBaird), NOT Michael Wolfe.
+Original date: March 18, 2010.
+Title: Waterscape with massive arches and stone outcroppings of Miguelito shale,
+Point Buchon.
+Source and author attribution:
+https://commons.wikimedia.org/wiki/File:Waterscape_with_massive_arches_and_stone_outcroppings_of_Miguelito_shale,_Point_Buchon.jpg
+License: Creative Commons Attribution 2.0
+https://creativecommons.org/licenses/by/2.0/
+Changes: reduced to 1600 pixels wide and converted to WebP; the page crops the
+display to a 4:3 frame. No generated scenery or content changes. The visible
+caption credits the photographer and links to the source and license.
+
+BASEMAPS
+Files: point-buchon-aerial.webp and point-buchon-topo.webp, each 3200 × 1800.
+USGS The National Map, public-domain CONUS basemap data.
+Aerial source includes USDA NAIP imagery; it is not live satellite imagery.
+Services:
+https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer
+https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer
+Use each service's /export operation with these parameters:
+  bbox=-13461490.77675882,4194330.99746993,-13452261.396229066,4199522.524017917
+  bboxSR=3857, imageSR=3857, size=3200,1800, format=jpg, f=json
+The returned extent and export metadata are retained in map-sources/*.json.
+WebP versions retain the exact georeferenced frame. Aerial acquisition dates
+vary within the national service; do not claim these images depict current
+conditions. Source credit and links are visible below the map.
+
+ROUTE
+Source: © OpenStreetMap contributors, Open Database License 1.0.
+https://www.openstreetmap.org/copyright
+Bounded source request:
+https://api.openstreetmap.org/api/0.6/map?bbox=-120.925,35.215,-120.875,35.265
+Relevant public nodes and ways are retained in osm-trail-subset.json; the wider
+raw map response is not needed in Git. The output GeoJSON keeps source/license
+information. The displayed JSON also credits and links OpenStreetMap.
+
+The route starts at Coon Creek parking (node 4431152000), follows the mapped
+walking approach, then the shortest connected named Point Buchon Trail to node
+2063972669, the trail terminus beyond Windy Point. Optional northern loop/spurs
+are excluded. It returns on the same path. The official PG&E map was visually
+compared with the selected route; endpoints and broad coastal alignment match.
+https://www.pge.com/assets/pge/images/about/point-buchon-trail-map.jpg
+https://www.pge.com/en/about/in-your-community/recreational-areas.html
+The official map is linked, not copied into the site's assets.
+
+Distance uses the haversine sum of the source coordinates: 6.6608 miles round
+trip, displayed as about 6.7 miles. PG&E publishes 6.6 miles. The source/method
+note makes the difference explicit instead of silently mixing distance bases.
+This is a route overview, not a verified GPS track or turn-by-turn navigation.
+
+ELEVATION
+Source: USGS 3D Elevation Program (3DEP), public terrain data.
+https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer
+https://data.usgs.gov/datacatalog/data/USGS%3A77ae0551-c61e-4979-aedd-d797abdcde0e
+USGS bare-earth elevation is in metres; CONUS reference is NAVD88. The display
+converts to feet and describes height as above sea level for a general audience.
+
+Request: /getSamples, geometryType=esriGeometryMultipoint,
+  geometry={points: route-sampling.json coordinates, spatialReference:{wkid:4326}},
+  returnFirstValueOnly=true, interpolation=RSP_BilinearInterpolation, f=json.
+109 positions along the outbound route, at 50 m intervals plus the exact end.
+The response is retained in point-buchon-elevation.json. Location IDs and returned
+coordinates are checked against the requested positions before the data is used.
+
+A three-sample median filter reduces small terrain-model fluctuations; endpoints
+are unchanged. The return retraces these samples in reverse, making 217 total
+profile points. Cumulative ascent/descent is approximately 577 ft each, displayed
+as ~600 ft. Highest sampled terrain is about 220 ft. These are estimates that
+depend on source resolution, route alignment, sampling and smoothing. They are
+not the same measure as PG&E's published 300-foot “elevation change.” No invented
+peaks or decorative elevation data are used.
+
+REBUILD
+Run python3 reports/hiking-club/build-trail-data.py from the repository root.
+It uses the retained trail subset and elevation response, with no network call.
+It regenerates the GeoJSON, sampling positions and assets/trails/point-buchon.json.
+Update both cached basemaps if changing the geographic extent.
+
+SCOPE AND LIMITS
+Only the featured Point Buchon invitation has this detailed map and profile.
+Cass Hill and Fiscalini Ranch retain their sourced route summaries and links.
+The invitation and archive are still labeled samples; no real events were
+created. The sample RSVP does not submit or persist data. Actual club access,
+chosen route, group arrangements and date still need Michael's confirmation.
