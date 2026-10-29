@@ -97,5 +97,23 @@
     "desktopAndPhoneInspected": true,
     "screenshots": "../catalog-simplify-review",
     "limits": "Chromium viewport emulation; no physical phone or Safari check."
+  },
+  "privateInstallation": {
+    "codeCommit": "a660a153845f5fd5612d706986f90be8f0ce1d13",
+    "agentOrangeAndGitHubUpdated": true,
+    "servedSourceMatches": [
+      "index.html",
+      "shop.js",
+      "style.css"
+    ],
+    "loopbackServiceActive": true,
+    "realDatabaseUnchanged": true,
+    "databaseSha256": "3e907bc745e6e0506bfbf24be1874a86c93c5e7554c0744551262e40c1fe6184",
+    "browserDiagnostic": {
+      "documentReadyState": "complete",
+      "loadedCards": 12,
+      "scriptsReturned200": true
+    },
+    "verificationLimit": "Some installed-browser navigation waits timed out. One fresh diagnostic loaded the catalog and scripts; expanded-card visual checks passed on the isolated local preview. No physical phone or Safari test."
   }
 }
