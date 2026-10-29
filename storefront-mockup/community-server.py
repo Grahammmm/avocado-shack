@@ -45,6 +45,11 @@ def scheduled(event):
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self,*args,**kwargs): super().__init__(*args,directory=str(ROOT),**kwargs)
+    def translate_path(self,path):
+        # Serve the same page with or without a trailing slash, including HEAD.
+        if urlsplit(path).path in ('/hike','/hike/'):
+            return str(ROOT / 'hike' / 'index.html')
+        return super().translate_path(path)
     def log_message(self,fmt,*args):
         # Avoid recording submitted personal details in access logs.
         pass
@@ -61,6 +66,7 @@ class Handler(SimpleHTTPRequestHandler):
         events=[]
         for item in data.get('events',[]):
             e=dict(item); capacity=e.get('capacity')
+            e['confirmedGuests']=int(counts.get(e['id'],0))
             e['remaining']=max(0,capacity-counts.get(e['id'],0)) if isinstance(capacity,int) and capacity>0 else None
             e['rsvpOpen']=scheduled(e) and bool(e.get('meetingPoint')) and e.get('rsvpEnabled',False)
             events.append(e)

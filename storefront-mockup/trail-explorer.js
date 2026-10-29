@@ -12,13 +12,13 @@ async function mount(host){
  if(!host||host.dataset.mounted)return;
  host.dataset.mounted='true';
  try{
-  const response=await fetch('assets/trails/point-buchon.json');if(!response.ok)throw Error('Trail data unavailable');
+  const response=await fetch('/assets/trails/point-buchon.json');if(!response.ok)throw Error('Trail data unavailable');
   const d=await response.json();if(!host.isConnected)return;
   const miles=mi(d.distanceMeters).toFixed(1),gain=roundedGain(d.gainMeters),loss=roundedGain(d.lossMeters);
   const wrapper=document.createElement('section');wrapper.className='trail-explorer';wrapper.setAttribute('aria-labelledby','trail-explorer-heading');wrapper.setAttribute('aria-live','off');
   wrapper.innerHTML=`<div class="trail-explorer-heading"><div><p class="trail-eyebrow">A CLOSER LOOK</p><h4 id="trail-explorer-heading">Follow the coastline.</h4><p>${miles} miles out &amp; back · from Coon Creek parking</p></div><div class="trail-layer-switch" role="group" aria-label="Map view"><button type="button" data-map-layer="aerial" aria-pressed="true">Aerial</button><button type="button" data-map-layer="topo" aria-pressed="false">Topo</button></div></div>
   <div class="trail-map-stage" tabindex="0" role="region" aria-label="Interactive Point Buchon route map" aria-describedby="trail-map-help" data-layer="aerial">
-   <svg class="trail-map-canvas" aria-hidden="true" preserveAspectRatio="xMidYMid meet"><image class="trail-basemap" href="assets/trails/point-buchon-aerial.webp" x="0" y="0" width="1000" height="562.5"/><path class="trail-route-halo"/><path class="trail-route-line"/><g class="trail-route-markers"></g><circle class="trail-position-halo"/><circle class="trail-position-dot"/></svg>
+   <svg class="trail-map-canvas" aria-hidden="true" preserveAspectRatio="xMidYMid meet"><image class="trail-basemap" href="/assets/trails/point-buchon-aerial.webp" x="0" y="0" width="1000" height="562.5"/><path class="trail-route-halo"/><path class="trail-route-line"/><g class="trail-route-markers"></g><circle class="trail-position-halo"/><circle class="trail-position-dot"/></svg>
    <div class="trail-compass" aria-hidden="true"><span>N</span><svg viewBox="0 0 22 30"><path d="M11 2 20 27 11 21 2 27Z" fill="currentColor"/><path d="M11 2v19l9 6Z" fill="#f8f5ec"/></svg></div>
    <div class="trail-map-tools" role="group" aria-label="Map controls">${control('in','Zoom in','plus')}${control('out','Zoom out','minus')}${control('fit','Show full route','fit')}${control('expand','Enlarge map','expand')}</div>
    <div class="trail-map-scale" aria-hidden="true"><span>500 m</span><i></i></div><div class="trail-map-route-key"><i></i> Out &amp; back route</div>
@@ -96,7 +96,7 @@ async function mount(host){
   q('.trail-profile-svg').addEventListener('pointermove',e=>{if(e.pointerType==='mouse')selectFromPointer(e);});
   q('.trail-profile-svg').addEventListener('pointerdown',selectFromPointer);
   wrapper.addEventListener('click',e=>{
-   const layer=e.target.closest('[data-map-layer]');if(layer){stage.dataset.layer=layer.dataset.mapLayer;photo.setAttribute('href',`assets/trails/point-buchon-${layer.dataset.mapLayer}.webp`);wrapper.querySelectorAll('[data-map-layer]').forEach(b=>b.setAttribute('aria-pressed',String(b===layer)));return;}
+   const layer=e.target.closest('[data-map-layer]');if(layer){stage.dataset.layer=layer.dataset.mapLayer;photo.setAttribute('href',`/assets/trails/point-buchon-${layer.dataset.mapLayer}.webp`);wrapper.querySelectorAll('[data-map-layer]').forEach(b=>b.setAttribute('aria-pressed',String(b===layer)));return;}
    const action=e.target.closest('[data-map-action]')?.dataset.mapAction;if(!action)return;
    if(action==='in')changeZoom(1.6);if(action==='out')changeZoom(1/1.6);if(action==='fit')fit();
    if(action==='expand'){
