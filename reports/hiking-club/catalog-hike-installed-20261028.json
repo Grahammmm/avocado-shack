@@ -1,0 +1,64 @@
+{
+  "commit": "6d4f2527c89b176dd05ce9ca9cb7000ebd505f75",
+  "files": [
+    {
+      "path": "/",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "path": "/hike",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "path": "/hike/",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "path": "/shop.js",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "path": "/script.js",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "path": "/community.js",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "path": "/style.css",
+      "status": 200,
+      "matchesSource": true
+    },
+    {
+      "path": "/trail-explorer.js",
+      "status": 200,
+      "matchesSource": true
+    }
+  ],
+  "realEventCount": 0,
+  "emailConnected": false,
+  "databaseSHA256": "3e907bc745e6e0506bfbf24be1874a86c93c5e7554c0744551262e40c1fe6184",
+  "listen": "State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess\nLISTEN 0      5          127.0.0.1:3101      0.0.0.0:*",
+  "browser": {
+    "checkedAt": "2026-10-29T01:09:27.671Z",
+    "catalog": {
+      "columns": 4,
+      "productLinks": 0,
+      "hikingOnLanding": false
+    },
+    "hike": {
+      "title": "North Coast Hiking Club \u00b7 Avocado Shack",
+      "confirmedGuests": "0",
+      "mapReady": "true",
+      "overflow": false
+    },
+    "errors": []
+  }
+}
