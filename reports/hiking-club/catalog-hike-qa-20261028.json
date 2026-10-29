@@ -1,0 +1,214 @@
+{
+  "catalog": {
+    "checkedAt": "2026-10-29T00:57:12.837Z",
+    "all": 170,
+    "duplicates": 0,
+    "townSearch": 12,
+    "localCount": "90 selections \u00b7 12 shown",
+    "organicCount": "18 selections \u00b7 12 shown",
+    "commerceRemoved": true,
+    "fullFoodAndMakerStoriesInline": true,
+    "producerLinksPreserved": true,
+    "productDialogRemoved": true,
+    "privacyDialogPreserved": true,
+    "viewports": [
+      {
+        "width": 320,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 1
+      },
+      {
+        "width": 375,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 1
+      },
+      {
+        "width": 390,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 1
+      },
+      {
+        "width": 520,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 2
+      },
+      {
+        "width": 768,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 2
+      },
+      {
+        "width": 1024,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 3
+      },
+      {
+        "width": 1280,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 4
+      },
+      {
+        "width": 1440,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 4
+      },
+      {
+        "width": 1920,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "columns": 4
+      }
+    ],
+    "errors": []
+  },
+  "navigation": {
+    "checkedAt": "2026-10-29T01:04:17.926Z",
+    "results": [
+      {
+        "width": 390,
+        "path": "/hike",
+        "landedAt": "/hike",
+        "map": true,
+        "guestCount": 0,
+        "anchorTop": 30.4375
+      },
+      {
+        "width": 390,
+        "path": "/hike/",
+        "landedAt": "/hike/",
+        "map": true,
+        "guestCount": 0,
+        "anchorTop": 30.4375
+      },
+      {
+        "width": 390,
+        "path": "/#hikes",
+        "landedAt": "/hike",
+        "map": true,
+        "guestCount": 0,
+        "anchorTop": 30.4375
+      },
+      {
+        "width": 1440,
+        "path": "/hike",
+        "landedAt": "/hike",
+        "map": true,
+        "guestCount": 0,
+        "anchorTop": 30.203125
+      },
+      {
+        "width": 1440,
+        "path": "/hike/",
+        "landedAt": "/hike/",
+        "map": true,
+        "guestCount": 0,
+        "anchorTop": 30.203125
+      },
+      {
+        "width": 1440,
+        "path": "/#hikes",
+        "landedAt": "/hike",
+        "map": true,
+        "guestCount": 0,
+        "anchorTop": 30.203125
+      }
+    ],
+    "errors": []
+  },
+  "communityApi": {
+    "subscriptionsPersisted": true,
+    "consentMerge": true,
+    "invalidEmailRejected": true,
+    "crossOriginRejected": true,
+    "duplicateRSVPPrevented": true,
+    "capacityEnforced": true,
+    "concurrentCapacitySafe": true,
+    "pastRSVPRejected": true,
+    "noPersonalDataInPublicAPI": true,
+    "noExternalEmailSent": true,
+    "fixtureDataIsolated": true,
+    "guestCountIncludesPartySize": true,
+    "duplicateGuestCountStable": true,
+    "uncappedGuestCount": true,
+    "configuredCountCannotOverrideDatabase": true
+  },
+  "communityUi": {
+    "guestCountUpdatedAfterRSVP": true,
+    "demoGuestCountUnchanged": true,
+    "checkedAt": "2026-10-29T00:57:06.056Z",
+    "rsvpForm": true,
+    "newsletterForm": true,
+    "hikingUpdates": true,
+    "pastHikes": true,
+    "confirmedEventTakesPrecedence": true,
+    "realCalendarEmpty": true,
+    "demoPosts": 0,
+    "demoBrowserStorage": false,
+    "demoValidation": true,
+    "demoSuccessFocus": true,
+    "layouts": [
+      {
+        "width": 320,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 375,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 390,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 430,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 768,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 1024,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      },
+      {
+        "width": 1440,
+        "overflow": false,
+        "background": "rgb(250, 247, 239)",
+        "smallTargets": 0
+      }
+    ],
+    "errors": []
+  },
+  "visualReview": [
+    "1440px unfiltered four-column catalog",
+    "390px compact photo/text catalog rows",
+    "1440/390px complete maker stories inline",
+    "390px RSVP confirmed-guest display"
+  ],
+  "limits": [
+    "Browser checks use Chromium desktop/phone viewport emulation, not a physical handset.",
+    "Sample invitation has 0 confirmed guests and does not save RSVPs. No actual event was created.",
+    "Email delivery remains disconnected; separate local newsletter/hiking consent remains intact."
+  ]
+}

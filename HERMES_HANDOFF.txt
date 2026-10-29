@@ -15,7 +15,10 @@ Historical Mac archive: private runtime data /mac-archive
 CURRENT SCOPE / SOURCE OF TRUTH
 The active site is storefront-mockup/, a catalog for in-person shopping with
 170 food listings, 26 maker profiles, search, source filters and product stories.
-It includes the North Coast Hiking Club, hiking updates and Michael's newsletter.
+The catalog has inline food/maker stories and a four-column desktop grid.
+The North Coast Hiking Club, hiking updates and RSVP live at /hike. Michael’s
+newsletter stays on the home page. Old home-page #hikes links redirect to /hike.
+Real event guest counts sum RSVP party sizes; the sample invitation stays at 0.
 There are no prices, basket, checkout, boxes, merchandise or pickup/delivery slots.
 The three route ideas are undated; no real scheduled or past club hikes are known.
 October 27: an owner-requested mockup in hiking-preview.json displays clearly
@@ -65,7 +68,8 @@ This alternate preview connection lasts one hour; the private service stays on.
 Do not change the local port without adjusting server Host/Origin validation.
 
 FILES TO EDIT
-index.html: page structure/copy; style.css: design/mobile.
+index.html: catalog and newsletter; hike/index.html: club page.
+style.css: shared design/catalog; hiking.css: club design.
 shop.js: catalog interactions; catalog-products.js: active food records.
 producers.json and producers.js: keep both maker datasets in sync.
 community.json: actual events and separately undated routeIdeas.

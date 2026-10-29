@@ -3,7 +3,9 @@ AVOCADO SHACK — START HERE
 Current project: storefront-mockup/ — local food catalog and community website.
 Run from this folder:
   python3 storefront-mockup/community-server.py --port 3101
-Open http://127.0.0.1:3101/ on the server machine, or use the private SSH tunnel
+Catalog: http://127.0.0.1:3101/
+Hiking club: http://127.0.0.1:3101/hike
+Open these on the server machine, or use the private SSH tunnel
 in HERMES_HANDOFF.txt from another computer.
 
 Read HERMES_HANDOFF.txt for ownership, paths, operation, checks and remaining work.
