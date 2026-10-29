@@ -1,0 +1,101 @@
+{
+  "checkedAt": "2026-10-29T03:11:46.465Z",
+  "all": 170,
+  "duplicates": 0,
+  "townSearch": 12,
+  "sourceFiltersRemoved": true,
+  "introductionUpdated": true,
+  "productFacts": {
+    "knownLocations": true,
+    "organicLabels": [
+      "photo-product-072",
+      "photo-product-157",
+      "photo-product-158",
+      "photo-product-159",
+      "photo-product-160",
+      "photo-product-025",
+      "photo-product-026",
+      "photo-product-027",
+      "photo-product-028",
+      "photo-product-125",
+      "photo-product-126",
+      "photo-product-127",
+      "photo-product-054",
+      "photo-product-088",
+      "photo-product-089",
+      "photo-product-090",
+      "photo-product-091",
+      "photo-product-019"
+    ],
+    "allStoriesCollapsed": true
+  },
+  "commerceRemoved": true,
+  "fullFoodAndMakerStoriesInline": true,
+  "makerStoriesCollapsed": true,
+  "disclosureKeyboardAndClick": true,
+  "producerLinksPreserved": true,
+  "productDialogRemoved": true,
+  "privacyDialogPreserved": true,
+  "viewports": [
+    {
+      "width": 320,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 1
+    },
+    {
+      "width": 375,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 1
+    },
+    {
+      "width": 390,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 1
+    },
+    {
+      "width": 520,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 2
+    },
+    {
+      "width": 768,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 2
+    },
+    {
+      "width": 1024,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 3
+    },
+    {
+      "width": 1280,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 4
+    },
+    {
+      "width": 1440,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 4
+    },
+    {
+      "width": 1920,
+      "overflow": false,
+      "background": "rgb(250, 247, 239)",
+      "columns": 4
+    }
+  ],
+  "errors": [],
+  "visualReview": {
+    "desktopAndPhoneInspected": true,
+    "screenshots": "../catalog-simplify-review",
+    "limits": "Chromium viewport emulation; no physical phone or Safari check."
+  }
+}

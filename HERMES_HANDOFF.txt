@@ -14,8 +14,10 @@ Historical Mac archive: private runtime data /mac-archive
 
 CURRENT SCOPE / SOURCE OF TRUTH
 The active site is storefront-mockup/, a catalog for in-person shopping with
-170 food listings, 26 maker profiles, search, source filters and product stories.
-The catalog has inline food/maker stories and a four-column desktop grid.
+170 food listings, 26 maker profiles, category/producer filters and town search.
+The catalog has a four-column desktop grid, visible location/organic labels and
+full product descriptions. Maker stories expand within each card; source filters
+were removed. Keep documented organic/origin rules; do not infer new claims.
 The North Coast Hiking Club, hiking updates and RSVP live at /hike. Michael’s
 newsletter stays on the home page. Old home-page #hikes links redirect to /hike.
 Real event guest counts sum RSVP party sizes; the sample invitation stays at 0.
