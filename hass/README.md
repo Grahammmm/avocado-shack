@@ -47,3 +47,14 @@ python3 hass/editor.py show CHANGE_ID | recover | ops   # --state DIR or HASS_ST
 ```
 
 The state dir must be owned by the current user, mode 0700 and outside the repository and the writer worktree; otherwise every command exits 2. Exit codes: 0 `ok`/`applied`/`already-applied`, 1 any other result, 2 usage or unsafe state dir.
+
+## H03: product and maker ops
+
+`hass/ops/catalog.py` adds eight typed ops to the registry: `product.add|edit|hide|restore` and `maker.add|edit|hide|restore`, plus a read-only `lookup(content, "product"|"maker", query)`. Ops take exact ids/keys only; an ambiguous name is resolved with `lookup` first (`{"match": id}` for one hit, `{"candidates": [...]}` for none or several, at most 10).
+
+- "Remove" means hide. No op deletes a product or maker; hidden products keep their record and image and `product.restore` brings them back.
+- Held products (`photo-product-040`, `-133`) are refused by every op with the recorded reason and source. Releasing a hold is not an op.
+- `product.add` takes the next id above the highest (never reuses a gap), status `active`, `producerKey` `null` unless given. `product.edit` changes only the named fields; `clearProducer` sets `producerKey` to `null`.
+- A maker may carry an optional `"hidden": true`. `maker.hide` is refused while an active product names the maker (the reason lists the ids); hidden makers are left out of `producers.js` and `producers.json`, and an active product may not name one.
+- An add or edit that makes a product newly match the shop's organic rule (name contains "organic", or maker Ocean Ranch, Straus, Green Gold or Massa Organics) gets the draft warning `adds Organic badge to <id>`; the owner decides at approval.
+- Facts (names, places, stories, links, organic status) come only from the arguments; there are no price, stock or basket fields.

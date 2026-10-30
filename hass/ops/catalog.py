@@ -1,0 +1,203 @@
+"""Hass product and maker ops (H03): add, edit, hide, restore, plus a read-only name lookup.
+
+"Remove" means hide: no record is ever deleted. Held products are refused by every op (no op changes ``held`` or
+``hold``). Ops take only exact ids/keys; resolving a name is always ``lookup`` first. Facts come from arguments only.
+"""
+
+from __future__ import annotations
+
+import copy
+import re
+
+from hass.content_model import CATEGORIES
+from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
+
+PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
+# storefront-mockup/shop.js organic(): name matches /\borganic\b/i or the maker is one of these.
+ORGANIC_NAME_RE = re.compile(r"\borganic\b", re.IGNORECASE | re.ASCII)
+ORGANIC_MAKERS = ("Ocean Ranch", "Straus", "Green Gold", "Massa Organics")
+PRODUCT_EDITABLE = ("name", "brand", "category", "image", "description", "displayBrand")
+MAKER_EDITABLE = ("name", "place", "story", "url")
+MAX_KEY, MAX_CANDIDATES = 64, 10
+
+
+def _organic(product) -> bool:
+    return bool(ORGANIC_NAME_RE.search(product["name"])) or product.get("producerKey") in ORGANIC_MAKERS
+
+
+def _product(content, pid):
+    """The product dict, or NotFound / Refused (held products are blocked for every op)."""
+    product = next((p for p in content.products if p["id"] == pid), None)
+    if product is None:
+        return NotFound(pid)
+    if product.get("status") == "held":
+        hold = product.get("hold") or {}
+        return Refused(f"held: {hold.get('reason')} (source {hold.get('source')}); "
+                       "needs review of the recorded concern")
+    return product
+
+
+def _maker_problem(content, key):
+    """Refused when a product may not point at this maker (hidden makers cannot be referenced)."""
+    if key is not None and content.makers.get(key, {}).get("hidden") is True:
+        return Refused(f"maker {key} is hidden; restore the maker first")
+    return None
+
+
+def _maker(content, key):
+    return content.makers[key] if key in content.makers else NotFound(key)
+
+
+def _touch(collection, key, before, after):
+    return [Touched(collection, key, before, copy.deepcopy(after))]
+
+
+def _product_add(content, args, ctx):
+    key = args.get("producerKey")
+    if refused := _maker_problem(content, key):
+        return refused
+    numbers = [int(m.group(1)) for p in content.products if (m := PRODUCT_ID_RE.fullmatch(p["id"]))]
+    record = {"id": "photo-product-%03d" % (max(numbers, default=0) + 1)}
+    for field in ("name", "brand", "category", "image", "description"):
+        record[field] = args[field]
+    record.update(producerKey=key, displayBrand=args["displayBrand"], status="active")
+    content.products.append(record)
+    if _organic(record):
+        ctx.warnings.append(f"adds Organic badge to {record['id']}")
+    return _touch("products", record["id"], None, record)
+
+
+def _product_edit(content, args, ctx):
+    product = _product(content, args["id"])
+    if not isinstance(product, dict):
+        return product
+    changes = {field: args[field] for field in PRODUCT_EDITABLE if field in args}
+    if "producerKey" in args and args.get("clearProducer"):
+        return Refused("producerKey and clearProducer cannot be combined")
+    if "producerKey" in args:
+        changes["producerKey"] = args["producerKey"]
+    elif args.get("clearProducer"):
+        changes["producerKey"] = None
+    if not changes:
+        fields = list(PRODUCT_EDITABLE) + ["producerKey", "clearProducer"]
+        return NeedsDetails(fields, f"What should change on {args['id']}? Give at least one of: " + ", ".join(fields))
+    if refused := _maker_problem(content, changes.get("producerKey")):
+        return refused
+    before = copy.deepcopy(product)
+    product.update(changes)
+    if _organic(product) and not _organic(before):
+        ctx.warnings.append(f"adds Organic badge to {product['id']}")
+    return _touch("products", product["id"], before, product)
+
+
+def _set_status(content, args, ctx, *, expect, new, state_error):
+    product = _product(content, args["id"])
+    if not isinstance(product, dict):
+        return product
+    if product["status"] != expect:
+        return Refused(f"{product['id']} {state_error(product['status'])}")
+    if new == "active":
+        if refused := _maker_problem(content, product.get("producerKey")):
+            return refused
+        if not (ctx.site_dir / product["image"]).is_file():
+            return Refused(f"{product['id']} cannot be restored: image file {product['image']} is missing")
+    before = copy.deepcopy(product)
+    product["status"] = new
+    return _touch("products", product["id"], before, product)
+
+
+def _product_hide(content, args, ctx):
+    return _set_status(content, args, ctx, expect="active", new="hidden", state_error=lambda s: f"is already {s}")
+
+
+def _product_restore(content, args, ctx):
+    return _set_status(content, args, ctx, expect="hidden", new="active", state_error=lambda s: f"is {s}, not hidden")
+
+
+def _maker_add(content, args, ctx):
+    key = args["key"]
+    if len(key) > MAX_KEY:
+        return Refused(f"maker key is longer than {MAX_KEY} characters")
+    if key in content.makers:
+        return Refused(f"maker {key} already exists")
+    content.makers[key] = {field: args[field] for field in MAKER_EDITABLE}
+    return _touch("makers", key, None, content.makers[key])
+
+
+def _maker_edit(content, args, ctx):
+    maker = _maker(content, args["key"])
+    if not isinstance(maker, dict):
+        return maker
+    changes = {field: args[field] for field in MAKER_EDITABLE if field in args}
+    if not changes:
+        return NeedsDetails(list(MAKER_EDITABLE), f"What should change on maker {args['key']}? "
+                            "Give at least one of: " + ", ".join(MAKER_EDITABLE))
+    before = copy.deepcopy(maker)
+    maker.update(changes)
+    return _touch("makers", args["key"], before, maker)
+
+
+def _maker_hide(content, args, ctx):
+    maker = _maker(content, args["key"])
+    if not isinstance(maker, dict):
+        return maker
+    if maker.get("hidden") is True:
+        return Refused(f"maker {args['key']} is already hidden")
+    ids = [p["id"] for p in content.active_products() if p.get("producerKey") == args["key"]]
+    if ids:
+        return Refused(f"maker {args['key']} still has active products: " + ", ".join(ids))
+    before = copy.deepcopy(maker)
+    maker["hidden"] = True
+    return _touch("makers", args["key"], before, maker)
+
+
+def _maker_restore(content, args, ctx):
+    maker = _maker(content, args["key"])
+    if not isinstance(maker, dict):
+        return maker
+    if maker.get("hidden") is not True:
+        return Refused(f"maker {args['key']} is visible, not hidden")
+    before = copy.deepcopy(maker)
+    del maker["hidden"]
+    return _touch("makers", args["key"], before, maker)
+
+
+def lookup(content, kind, query):
+    """Read-only name lookup: {"match": id} for one hit, {"candidates": [...]} (<=10, by id) otherwise."""
+    if kind not in ("product", "maker"):
+        raise ValueError("kind must be 'product' or 'maker'")
+    needle = query.casefold().strip() if isinstance(query, str) else ""
+    hits = []
+    if needle and kind == "product":
+        hits = [(p["id"], {"id": p["id"], "name": p["name"], "brand": p["brand"], "status": p["status"]})
+                for p in content.products
+                if any(needle in str(p.get(f, "")).casefold() for f in ("name", "brand", "displayBrand"))]
+    elif needle:
+        hits = [(k, {"id": k, "name": m["name"], "status": "hidden" if m.get("hidden") else "visible"})
+                for k, m in content.makers.items() if needle in k.casefold() or needle in m["name"].casefold()]
+    hits.sort(key=lambda hit: hit[0])
+    if len(hits) == 1:
+        return {"match": hits[0][0]}
+    return {"candidates": [item for _id, item in hits[:MAX_CANDIDATES]]}
+
+
+_PRODUCT_FIELDS = {"name": Arg("text"), "brand": Arg("text"), "category": Arg("enum", choices=CATEGORIES),
+                   "image": Arg("image"), "description": Arg("text"), "displayBrand": Arg("text")}
+_OPTIONAL = {"producerKey": Arg("maker_key", required=False)}
+# The maker target is plain text, not "maker_key": membership is checked by _maker() so an unknown key is NotFound.
+# (product producerKey references stay "maker_key", so an unknown maker there is still invalid.)
+_ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
+
+OPS = (
+    Op("product.add", {**_PRODUCT_FIELDS, **_OPTIONAL}, _product_add),
+    Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
+                        **_OPTIONAL, "clearProducer": Arg("bool", required=False)}, _product_edit),
+    Op("product.hide", _ID, _product_hide),
+    Op("product.restore", _ID, _product_restore),
+    Op("maker.add", {"key": Arg("text"), **{k: Arg("url" if k == "url" else "text") for k in MAKER_EDITABLE}},
+       _maker_add),
+    Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE}},
+       _maker_edit),
+    Op("maker.hide", _KEY, _maker_hide),
+    Op("maker.restore", _KEY, _maker_restore),
+)

@@ -193,6 +193,9 @@ def validate_products(problems, products, makers, site_dir: Path | None):
         key = rec.get("producerKey")
         if key is not None and (not isinstance(key, str) or key not in makers):
             problems.append(f"{where}: producerKey {key!r} is not a maker in makers.json")
+        elif status == "active" and key is not None and isinstance(makers[key], dict) \
+                and makers[key].get("hidden") is True:
+            problems.append(f"{where}: active product names hidden maker {key!r}")
         if status == "active" and site_dir is not None and isinstance(image, str) and IMAGE_RE.fullmatch(image):
             if not (Path(site_dir) / image).is_file():
                 problems.append(f"{where}: image file {image} does not exist")
@@ -205,8 +208,10 @@ def validate_makers(problems, makers):
     for key, rec in makers.items():
         where = f"maker {key!r}"
         _text(problems, f"{where} key", key)
-        if not _closed_keys(problems, where, rec, MAKER_FIELDS, MAKER_FIELDS):
+        if not _closed_keys(problems, where, rec, MAKER_FIELDS + ("hidden",), MAKER_FIELDS):
             continue
+        if "hidden" in rec and rec["hidden"] is not True:
+            problems.append(f"{where}.hidden: must be true when present")
         for field in ("name", "place", "story"):
             _text(problems, f"{where}.{field}", rec.get(field))
         _https(problems, f"{where}.url", rec.get("url"))
