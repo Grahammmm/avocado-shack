@@ -46,12 +46,16 @@ def _catalog_js(content: Content) -> bytes:
     return ("const catalog=" + json.dumps(records, ensure_ascii=False) + ";\n").encode("utf-8")
 
 
+def _visible_makers(content: Content) -> dict:
+    return {k: m for k, m in content.makers.items() if "hidden" not in m}
+
+
 def _producers_js(content: Content) -> bytes:
-    return ("const producers=" + json.dumps(content.makers) + ";").encode("utf-8")
+    return ("const producers=" + json.dumps(_visible_makers(content)) + ";").encode("utf-8")
 
 
 def _producers_json(content: Content) -> bytes:
-    return json.dumps(content.makers, indent=2).encode("utf-8")
+    return json.dumps(_visible_makers(content), indent=2).encode("utf-8")
 
 
 def _community_json(content: Content) -> bytes:
