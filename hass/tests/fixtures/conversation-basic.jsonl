@@ -1,0 +1,8 @@
+{"id": "fx-1", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "Change the Saturday hours", "fromMe": false, "kind": "new", "at": "2026-11-02T09:00:00-08:00"}
+{"id": "fx-2", "chat": "chat-fixture-owner", "sender": "stranger@example.invalid", "text": "yes", "fromMe": false, "kind": "new", "at": "2026-11-02T09:01:00-08:00"}
+{"id": "fx-3", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "yes", "fromMe": true, "kind": "new", "at": "2026-11-02T09:02:00-08:00"}
+{"id": "fx-4", "chat": "chat-fixture-group", "sender": "owner@example.invalid", "text": "yes", "fromMe": false, "kind": "new", "at": "2026-11-02T09:03:00-08:00"}
+{"id": "fx-5", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "yes", "fromMe": false, "kind": "edited", "at": "2026-11-02T09:04:00-08:00"}
+{"id": "fx-1", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "Change the Saturday hours", "fromMe": false, "kind": "new", "at": "2026-11-02T09:05:00-08:00"}
+{"id": "fx-6", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "Yes.", "fromMe": false, "kind": "new", "at": "2026-11-02T09:06:00-08:00"}
+{"id": "fx-7", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "Post a sale on social media", "fromMe": false, "kind": "new", "at": "2026-11-02T09:07:00-08:00"}
