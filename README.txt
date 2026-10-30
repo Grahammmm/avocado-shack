@@ -1,5 +1,9 @@
 AVOCADO SHACK — START HERE
 
+GitHub front page: README.md. New Hass messaging plan: docs/hass/README.md.
+Hermes next assignment: docs/hass/HERMES_START.md.
+Feature list: docs/hass/FEATURES.md. Track work in GitHub Issues.
+
 Current project: storefront-mockup/ — local food catalog and community website.
 Run from this folder:
   python3 storefront-mockup/community-server.py --port 3101

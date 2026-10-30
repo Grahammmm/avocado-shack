@@ -2,7 +2,7 @@
 
 Open http://127.0.0.1:3101/ while the local server is running.
 
-This version is for browsing the food and planning an in-person visit. It has 170 food listings, category/producer/town search, local-maker and organic-selection filters, progressive scrolling, and 26 sourced producer profiles. Cards show food descriptions, producer introductions, and verified producer locations where known. Full food descriptions, maker stories, verified producer locations and producer links are shown inline. There is no separate product-detail dialog. Desktop uses four columns at 1180px and wider, three at 801–1179px, two at 520–800px, and compact photo/text rows on smaller phones.
+This version is for browsing the food and planning an in-person visit. It has 170 food listings, category/producer filters, text search including towns, progressive scrolling, and 26 sourced producer profiles. Product descriptions and documented location/organic labels remain visible on each card. Longer maker stories and source links expand in a closed-by-default “Meet the maker” disclosure. There is no separate product-detail dialog or origin/local/organic filter row. Desktop uses four columns at 1180px and wider, three at 801–1179px, two at 520–800px, and compact photo/text rows on smaller phones.
 
 There are no prices, baskets, checkout, pickup/delivery selection, weekly boxes, merchandise, or owner assistant interface in the current page. The newsletter stays on the home page. The hiking club, maps, RSVP and hiking-only signup live at `/hike` (also `/hike/`). Old home-page `#hikes` links redirect there. Email delivery is not connected. The previous commerce interface is preserved under archive/commerce-preview. No changes from this revision were deployed to the public domain. Its previously authorized shutdown remains in place.
 
@@ -15,7 +15,7 @@ There are no prices, baskets, checkout, pickup/delivery selection, weekly boxes,
 - assets/products: optimized product images. Earlier merch/box assets remain saved for possible later use but are not referenced by this catalog.
 
 ## Sourcing boundaries
-A producer’s base is labeled “Based in”; this is not an assertion that every ingredient was grown in that town. Unidentified growers are not assigned invented locations. The Central Coast filter uses the researched producer places. Organic badges use explicit product names or documented organic product lines (Ocean Ranch granola, Straus dairy, Green Gold microgreens, Massa Organics). Manufacturer/farm business summaries are factual, rather than automatically labeling every producer a small local business.
+A producer’s base is labeled “Based in”; this is not an assertion that every ingredient was grown in that town. Unidentified growers are not assigned invented locations. Organic badges use explicit product names or documented organic product lines (Ocean Ranch granola, Straus dairy, Green Gold microgreens, Massa Organics). Manufacturer/farm business summaries are factual, rather than automatically labeling every producer a small local business.
 
 The catalog is derived from photographed products. It is not live inventory. Availability changes; no real-time stock quantities are shown. Original photos, generated-image logs, sources, and held-product evidence remain in the project. Exact packaging/variety and availability still need owner confirmation before future launch. Two photographed raw-milk cheese candidates remain held outside the catalog pending manufacturer recall review.
 
@@ -23,7 +23,7 @@ The catalog is derived from photographed products. It is not live inventory. Ava
 python3 storefront-mockup/community-server.py --port 3101
 
 ## Checks
-catalog-only-qa.cjs checks all 170 food listings, no commerce UI/copy, town search, sourcing filters, empty search, inline maker stories, duplicate-free scrolling, and overflow/color consistency at 320, 375, 390, 768, and 1440 pixels. Results: catalog-only-QA.json. Phone and desktop screenshots are catalog-only-*.png. Earlier commerce tests apply to the archived experience, not this revision.
+catalog-only-qa.cjs checks all 170 food listings, no commerce UI/copy, town search, category/producer filters, empty search, expandable maker stories, duplicate-free scrolling, and overflow/color consistency at 320, 375, 390, 768, and 1440 pixels. Results: catalog-only-QA.json. Phone and desktop screenshots are catalog-only-*.png. Earlier commerce tests apply to the archived experience, not this revision.
 
 Running checks on Agent Orange (Linux): the active scripts (`catalog-only-qa.cjs`, `community-qa.py`, `community-ui-qa.cjs`) take optional environment overrides. `PLAYWRIGHT_MODULE` points at a Playwright package (default `require('playwright')`), `CHROMIUM_PATH` at a matching Chromium binary, `NODE` at the Node executable (default `node` on PATH), and `QA_OUT_DIR` at the folder for JSON/screenshots (default `storefront-mockup`, which overwrites committed evidence). Run from the repository root with the service up on 3101; the catalog check only reads the live page, and the community check uses its own temporary database on port 3102. Example:
 
@@ -62,3 +62,7 @@ Fresh checks are recorded in `reports/hiking-club/catalog-hike-qa-20261028.json`
 
 ## Simplified catalog cards — October 28, 2026
 The requested community-focused introduction is in place. The origin/local/organic filter row is removed; category, producer and town search remain. Documented location and organic labels stay visible. Full maker stories and their source links expand in place with a native keyboard-accessible disclosure, closed initially. All 170 products and the four-column desktop / compact phone layout are preserved. Fresh checks: `reports/catalog-card-update-20261028.json`. No form/backend/data changes.
+
+## Planned Hass owner interface — October 30, 2026
+
+The [Hass plan](../docs/hass/README.md) and [feature backlog](../docs/hass/FEATURES.md) describe the next messaging interface. It is not connected yet. Routine edits will use validated content tools and owner approval in the same conversation; the current site and form behavior remain unchanged.

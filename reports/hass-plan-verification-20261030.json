@@ -1,0 +1,49 @@
+{
+  "checkedAt": "2026-10-30T17:25:34.931778+00:00",
+  "baselineCommit": "0d29ba0e5d108b3513e1a9b92ca37bc592371c3b",
+  "scope": "Documentation and GitHub work queue only",
+  "checks": {
+    "relativeLinks": {
+      "passed": true,
+      "count": 25
+    },
+    "featureIds": {
+      "passed": true,
+      "currentMilestoneFeatures": 25,
+      "futureFeatures": 12
+    },
+    "sourceInventory": {
+      "products": 170,
+      "uniqueIds": 170,
+      "makers": 26,
+      "realEvents": 0,
+      "missingProductAssets": 0
+    },
+    "documentationOnly": true,
+    "credentialPatternScan": "No matches to listed private-key, GitHub-token, AWS-key or Stripe-key patterns; not a full historical secret audit",
+    "gitDiffCheck": "passed"
+  },
+  "github": {
+    "repository": "Grahammmm/avocado-shack",
+    "visibility": "private",
+    "visibilityEvidence": "GitHub get_repo, October 30, 2026",
+    "issuesEnabled": true,
+    "issueUrls": [
+      "https://github.com/Grahammmm/avocado-shack/issues/1",
+      "https://github.com/Grahammmm/avocado-shack/issues/2",
+      "https://github.com/Grahammmm/avocado-shack/issues/3",
+      "https://github.com/Grahammmm/avocado-shack/issues/4"
+    ],
+    "issueEvidence": "Each create_issue call returned the corresponding open issue"
+  },
+  "notPerformed": [
+    "iMessage or Mac account connection",
+    "bridge installation",
+    "live message processing",
+    "browser regression (no runtime changes)",
+    "public launch",
+    "community database writes",
+    "changes to original Mac project or backup"
+  ],
+  "pending": "Commit, push and verify GitHub/Agent Orange synchronization"
+}

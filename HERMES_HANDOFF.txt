@@ -1,5 +1,6 @@
 AVOCADO SHACK — HERMES HANDOFF
-Prepared October 20, 2026. Read this before changing the project.
+Prepared October 20, 2026; messaging-plan links updated October 30.
+Read this before changing the project.
 
 OWNER AND REPOSITORY
 Store owner: Michael Wolfe. Assistant product name: Hass.
@@ -110,6 +111,14 @@ Browser QA scripts need Playwright. Some older scripts hardcode the Mac's bundle
 runtime; adapt test-only paths or install approved Linux test tooling before reuse.
 
 NEXT WORK
+New priority: implement the Hass messaging plan in docs/hass/README.md.
+Read docs/hass/HERMES_START.md and its feature/technical references. GitHub
+Issues hold the milestone work queue. A spare Mac is available; its exact
+identity, business Apple account and bridge setup remain pending. The owner
+can review changes within the same Messages conversation; no second dashboard
+is required. No bridge or Hass editing service is connected by this handoff.
+
+Existing site operations still apply:
 1. Read migration-verification.json and check service/repository health.
 2. Confirm actual next hike details with Michael before enabling its RSVP.
 3. Confirm sender mailbox/domain access before connecting mail delivery and
