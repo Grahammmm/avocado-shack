@@ -1,0 +1,96 @@
+name: check
+
+# Offline checks only: no secrets, no deploy, no network beyond installing the
+# pinned Playwright test tool. All servers bind 127.0.0.1 with a temporary
+# community database; the private runtime data directory is never used.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLAYWRIGHT_VERSION: "1.64.1"
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Playwright is a test-only tool (not a repo dependency); cache the npm
+      # install and the downloaded Chromium, keyed by the pinned version.
+      - name: Cache Playwright package and browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/pw-tools
+            ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+
+      - name: Install Playwright test tool
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/pw-tools
+          npm install --prefix ~/pw-tools --no-save --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}"
+          ~/pw-tools/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Install Chromium system libraries (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: ~/pw-tools/node_modules/.bin/playwright install-deps chromium
+
+      - name: Python syntax check
+        run: python3 -m compileall -q storefront-mockup reports/hermes-handoff
+
+      - name: Commerce gateway unit tests (pure logic, no dependencies)
+        # owner-photo needs the sharp image library; the commerce prototype is
+        # historical, so only dependency-free tests run here.
+        run: |
+          tests=$(ls commerce/gateway/*.test.mjs | grep -v '/owner-photo\.test\.mjs$')
+          node --test $tests
+
+      # community-ui-qa.cjs also reads the normal site on port 3101 (read-only;
+      # it asserts the sample RSVP makes no POST), so one temp-DB server on 3101
+      # backs both the catalog check and that part of the community check.
+      - name: Catalog + community checks (loopback servers, temporary databases)
+        run: |
+          export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
+          export QA_OUT_DIR="$RUNNER_TEMP/qa"
+          mkdir -p "$QA_OUT_DIR"
+          AVOSHACK_COMMUNITY_DB="$RUNNER_TEMP/site.sqlite3" \
+            python3 storefront-mockup/community-server.py --port 3101 >"$RUNNER_TEMP/server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 50); do
+            curl -fsS http://127.0.0.1:3101/ >/dev/null 2>&1 && break
+            sleep 0.2
+          done
+          node storefront-mockup/catalog-only-qa.cjs
+          python3 storefront-mockup/community-qa.py
+
+      - name: Hass tests (placeholder until hass/tests exists)
+        run: |
+          if [ -d hass/tests ]; then
+            python3 -m unittest discover -s hass/tests -t . -v
+          else
+            echo "hass/tests not present yet; nothing to run."
+          fi
