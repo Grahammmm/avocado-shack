@@ -29,3 +29,21 @@ python3 -m unittest discover -s hass/tests -t . -v
 `content/migration-baseline.json` is the frozen record of the site at the migration commit: 170 listing ids, 26 maker keys, 30 source links and the 2 held ids, plus the SHA-256 of the pre-migration site files. The migration check fails if a baseline listing is deleted (hiding is allowed), a maker or source link disappears, a held product leaves `held` or appears in the catalog, or a committed site file differs from the generated output. It also reports whether the output is still identical to the pre-migration files.
 
 Tests write only to temporary directories; they never touch the checkout, the live service or the community database.
+
+## H02: private typed editing service
+
+`hass/editor.py` turns typed operations into a validated draft and applies one approved draft as a single writer. There is no HTTP or socket listener; the only callers are the Python API and the CLI, run as the same OS user. The production op registry (`hass/ops/`) is empty until later units add modules exporting `OPS`.
+
+- Request: JSON `{"ops": [{"op": "<name>", "args": {...}}]}`, at most 64 KiB and 1–20 ops, no other keys. Argument kinds are closed: `id`, `maker_key`, `text`, `text_list`, `url` (https), `enum`, `bool`, `int`, `date`, `time`, `image`. Unknown ops/args, wrong kinds, markup or `$` in text and control characters give `invalid`; a missing required argument gives `needs-details`. No paths, commands, SQL or free-form values.
+- `prepare` validates the edited content, renders the site and stores `<state>/drafts/<change_id>.json` (0600) bound to `content_revision` (SHA-256 over the four content files and two templates). Same ops on the same revision give the same `change_id`/`draft_hash`. The worktree is not written.
+- `apply` takes `<state>/writer.lock` (held → `busy`), refuses the main checkout, branch `main`, a detached HEAD, a dirty worktree or a missing Git identity, and returns `stale` when the revision moved. It writes only `hass/content/{products,makers,community,store}.json` and the 6 generated files, runs `sitegen --check` and the migration check, and commits `hass content: <change_id>` with a sign-off. No push. A second apply returns `already-applied`; a failed check restores the owned files from HEAD and records `failed`.
+- `recover` (also run before every apply) settles journals left by an interrupted write: committed → `applied`, HEAD still at base → files restored and `failed` (needs a new approval). It never re-applies.
+
+```sh
+python3 hass/editor.py init --state DIR --worktree WT    # WT: linked worktree on its own branch
+python3 hass/editor.py prepare REQUEST.json --state DIR
+python3 hass/editor.py apply CHANGE_ID --hash DRAFT_HASH --state DIR
+python3 hass/editor.py show CHANGE_ID | recover | ops   # --state DIR or HASS_STATE_DIR
+```
+
+The state dir must be owned by the current user, mode 0700 and outside the repository and the writer worktree; otherwise every command exits 2. Exit codes: 0 `ok`/`applied`/`already-applied`, 1 any other result, 2 usage or unsafe state dir.
