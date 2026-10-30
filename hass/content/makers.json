@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "makers": {
+    "Etto": {
+      "name": "Etto",
+      "place": "Paso Robles, California",
+      "story": "Pasta is not just a vehicle for sauce. Etto makes it in Paso Robles from organic American-grown durum wheat, pushing the dough through bronze dies and drying it slowly. The rough surface holds onto what matters: the sauce you took the trouble to cook.",
+      "url": "https://ettopastificio.com/pages/about-us"
+    },
+    "Stepladder": {
+      "name": "Stepladder",
+      "place": "Cambria, California",
+      "story": "There is a real ranch behind this cheese. Stepladder makes its cheeses in a restored barn in the hills of Cambria, with LaMancha goats grazing on the property. Place, milk and the patient work of cheesemaking meet here. Slice it, share it, and let it come to the table.",
+      "url": "https://stepladdercreamery.com/pages/farm"
+    },
+    "Fair Hills Farm": {
+      "name": "Fair Hills Farm",
+      "place": "San Miguel, California",
+      "story": "An organic orchard in San Miguel, turning a harvest into more than a pretty piece of fruit. Fair Hills presses apples into unfiltered juice and uses orchard apple juice to gently sweeten its teas. The point is the fruit: grown with care, carried through into the bottle.",
+      "url": "https://www.fairhillsfarmorganic.com/thefarm"
+    },
+    "Ocean Ranch": {
+      "name": "Ocean Ranch",
+      "place": "Carpinteria, California",
+      "story": "Ocean Ranch is a woman-owned food company in Carpinteria, making granola by hand in small batches. Organic ingredients and flavors with a little ambition—citrus, chocolate, berries, spice. Something worth putting in the bowl, rather than breakfast you eat because the clock says so.",
+      "url": "https://oceanranchorganics.com/about/"
+    },
+    "Linn's": {
+      "name": "Linn's",
+      "place": "Cambria, California",
+      "story": "Linn’s story starts with a family and a Central Coast farm. They have been growing crops and making food since 1979, with the next generation still working the land. These preserves belong on real bread, with real butter. A modest breakfast can be a very good meal.",
+      "url": "https://www.linnseats.com/our-farm"
+    },
+    "Straus": {
+      "name": "Straus",
+      "place": "Northern California",
+      "story": "Straus helped change the conversation about American dairy when its family farm became certified organic in 1994. The creamery carries that commitment into its milk, cream and cultured products. Good dairy earns its place in coffee, a sauce, or simply a cold glass.",
+      "url": "https://www.strausfamilycreamery.com/about/our-story/"
+    },
+    "Cal Poly": {
+      "name": "Cal Poly",
+      "place": "San Luis Obispo, California",
+      "story": "At Cal Poly, food is something you learn by making. Students work on products from cheese and chocolate to jam and barbecue sauce. This is San Luis Obispo’s hands-on food tradition: practical skills, real ingredients, and something you can actually bring home for dinner.",
+      "url": "https://fsn.calpoly.edu/our-products"
+    },
+    "Alle-Pia": {
+      "name": "Alle-Pia",
+      "place": "California’s Central Coast",
+      "story": "Alle-Pia brings old-world Italian family recipes to the Central Coast, making small batches of cured meat under chef Antonio Varia’s direction. Cut a few thin slices. Add bread, cheese, maybe a tomato. You have the beginnings of a meal that needs very little explaining.",
+      "url": "https://www.allepiasalumi.com/flavor-of-italy"
+    },
+    "Joebella / Avocado Shack": {
+      "name": "Joebella / Avocado Shack",
+      "place": "Atascadero, California",
+      "story": "Joseph and Isabel built Joebella around a shared devotion to coffee. They roast small batches of organic beans in Atascadero, where the café and roasting facility are certified organic. The Shack’s coffee selection puts that nearby craft within reach of your own morning routine.",
+      "url": "https://www.joebellacoffee.com/our-story"
+    },
+    "Corberosa": {
+      "name": "Corberosa",
+      "place": "California’s Central Coast",
+      "story": "Corberosa roasts coffee on a moving bed of hot air, a method chosen to keep the bean’s character in the cup. Its story began with growing coffee in Hawaii; today it roasts on the Central Coast. An interesting morning starts with something worth paying attention to.",
+      "url": "https://www.corberosa.com/"
+    },
+    "Sunshine Olive": {
+      "name": "Sunshine Olive",
+      "place": "Templeton, California",
+      "story": "Sunshine makes extra virgin olive oil in California, with its home in Templeton. The photographed bottles name the estate and olive variety—a useful reminder that olive oil has an origin and a character. Give it warm bread, a ripe tomato, or vegetables straight from the pan.",
+      "url": "https://sunshineoliveoil.com/"
+    },
+    "Big Sur Honey Company": {
+      "name": "Big Sur Honey Company",
+      "place": "Big Sur, California",
+      "story": "Dylan and Jessie’s small family apiary works along Big Sur’s wild south coast. Their bees forage among native plants; the honey is raw and unfiltered. This is a landscape you can put on toast. Or into yogurt. Or taste, quietly, from the end of a spoon.",
+      "url": "https://www.bigsurhoneycompany.com/about"
+    },
+    "Massa Organics": {
+      "name": "Massa Organics",
+      "place": "Near Chico, California",
+      "story": "Greg Massa and Raquel Krach farm near Chico in the Sacramento Valley, growing organic rice and almonds while working to build healthier soil. Their medium-grain brown rice is the sort of staple worth getting right: something steady underneath vegetables, beans, or the last good spoonful of sauce.",
+      "url": "https://massaorganics.com/get-to-know-us/"
+    },
+    "Mighty Cap Mushrooms": {
+      "name": "Mighty Cap Mushrooms",
+      "place": "Paso Robles, California",
+      "story": "Mighty Cap began as Chris Batlle’s garage project and grew into a gourmet mushroom farm in Paso Robles. Small-batch cultivation and close relationships with chefs are at the heart of the business. Mushrooms deserve a hot pan, a little space, and enough patience to let them brown.",
+      "url": "https://mightycapmushrooms.com/pages/about-us"
+    },
+    "AG Berries": {
+      "name": "AG Berries",
+      "place": "Arroyo Grande, California",
+      "story": "Maria “Trini” Iñiguez founded Arroyo Grande Berry Farm in 2016, carrying forward her brother’s dream of organic farming. The work is personal. So is the pleasure of a good berry: ripe fruit, a little acidity, and no great need to turn it into anything else.",
+      "url": "https://agberryfarm.com/"
+    },
+    "Green Gold": {
+      "name": "Green Gold",
+      "place": "Arroyo Grande, California",
+      "story": "Green Gold Organic Farms grows microgreens in Arroyo Grande and is listed as certified organic by CCOF. Small leaves, useful character. Put them on eggs, tuck them into a sandwich, or scatter them over a finished plate where a little fresh bite makes the whole thing better.",
+      "url": "https://ccof.org/directory-member/green-gold-organic-farms-llc/"
+    },
+    "Stardust Grove": {
+      "name": "Stardust Grove",
+      "place": "Cambria, California",
+      "story": "Stardust Grove is a family farm in Cambria with a regenerative approach to caring for its orchard. The tubs on the Shack’s shelves bring that farm name into everyday cooking. Start with something simple: chips and guacamole, or a spoonful of pesto through a pot of pasta.",
+      "url": "https://thestardustgrove.com/"
+    },
+    "Taco Works": {
+      "name": "Taco Works",
+      "place": "San Luis Obispo, California",
+      "story": "Taco Works started as a San Luis Obispo restaurant in 1976. Its tortilla chips became popular enough to outgrow the restaurant and become a business of their own. The Montaña de Oro line keeps things straightforward: white corn and salt. Give them a good bowl of guacamole.",
+      "url": "https://www.tacoworks.net/pages/about-us"
+    },
+    "Maple Valley": {
+      "name": "Maple Valley",
+      "place": "Cashton, Wisconsin",
+      "story": "Not everything good has to come from down the road. Maple Valley is a cooperative with its bottling operation in Wisconsin, bringing organic maple syrup from its producers to the table. Dark and robust means a proper maple presence—on breakfast, in baking, or alongside something savory.",
+      "url": "https://www.maplevalleysyrup.coop/about-maple-valley-cooperative/"
+    },
+    "Sierra Nevada": {
+      "name": "Sierra Nevada",
+      "place": "Glenn County, California",
+      "story": "Sierra Nevada Cheese Company began in 1997 with Ben Gregersen and John Dundon’s shared interest in traditional dairy craft. Its creamery store is in Glenn County. The Sierra Jack varieties bring another side of California’s cheese-making culture to a sandwich or a generous snack plate.",
+      "url": "https://sierranevadacheese.com/pages/about-us"
+    },
+    "Cayucos": {
+      "name": "Cayucos",
+      "place": "Cayucos, California",
+      "story": "Cayucos Hot Sauce was born in a little shack across from the beach on Highway 1. A Central Coast sauce with an obvious place at the table: eggs, tacos, seafood, or whatever needs a little more life. Heat should make you want the next bite.",
+      "url": "https://cayucoshotsauce.com/pages/about-us"
+    },
+    "Brian's": {
+      "name": "Brian's",
+      "place": "Atascadero, California",
+      "story": "Brian’s Artisan Bread makes old-world-style loaves in Atascadero, using a sourdough starter kept alive with flour and water. The dough gets time; the loaves are scored by hand. Bread like this asks for butter, a bowl of soup, or a tomato at its best.",
+      "url": "https://briansartisanbread.com/about"
+    },
+    "Jayleaf": {
+      "name": "Jayleaf",
+      "place": "Hollister, California",
+      "story": "Jayleaf is a family greens business with roots in Hollister. Its work centers on leafy greens, individual varieties and carefully composed mixes. Fresh leaves are not decoration: they are the meal’s sharp, green counterpoint to warm bread, rich cheese, or something just off the grill.",
+      "url": "https://www.jayleaf.com/our-story"
+    },
+    "Sean's": {
+      "name": "Sean's",
+      "place": "San Luis Obispo, California",
+      "story": "Sean’s Muesli Munch began with years of kitchen experiments and launched in 2013. Its story grew from an organic family farm to a processing plant in San Luis Obispo. Whole grains, fruit, nuts and seeds, with no added sugar: breakfast with a reason to get out of bed.",
+      "url": "https://mueslimunch.com/pages/about-us"
+    },
+    "Love Beets": {
+      "name": "Love Beets",
+      "place": "Rochester, New York",
+      "story": "Love Beets grew out of Guy and Katherine Shropshire’s family interest in making beets easier to enjoy. The company put down production roots in Rochester, New York, in 2016. A reminder that a familiar ingredient can still surprise you when someone gives it a little attention.",
+      "url": "https://lovebeets.com/our-story/"
+    },
+    "Ava’s": {
+      "name": "Ava’s",
+      "place": "Coachella Valley, California",
+      "story": "Ava’s Keitt mangoes are identified by its distributor as California fruit grown in the Coachella Valley. Keitts can stay green when ripe; a gentle give is a better clue than color. Cut into one and let the smooth golden flesh do the convincing.",
+      "url": "https://static1.squarespace.com/static/61d88f5cc75725423dd78068/t/6300fad4761f1941541aedaf/1661008598041/Earls_KeittMangosPOS.pdf"
+    }
+  }
+}

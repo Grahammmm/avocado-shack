@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "name": "Avocado Shack",
+  "streetAddress": "2190 Main Street",
+  "town": "Morro Bay",
+  "hours": [
+    "Monday–Friday 9am–6pm",
+    "Saturday 9am–5pm · Closed Sunday"
+  ]
+}

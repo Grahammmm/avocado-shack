@@ -7,6 +7,8 @@ This version is for browsing the food and planning an in-person visit. It has 17
 There are no prices, baskets, checkout, pickup/delivery selection, weekly boxes, merchandise, or owner assistant interface in the current page. The newsletter stays on the home page. The hiking club, maps, RSVP and hiking-only signup live at `/hike` (also `/hike/`). Old home-page `#hikes` links redirect there. Email delivery is not connected. The previous commerce interface is preserved under archive/commerce-preview. No changes from this revision were deployed to the public domain. Its previously authorized shutdown remains in place.
 
 ## Files
+Generated (since H01): catalog-products.js, producers.js, producers.json, community.json, index.html and hike/index.html are written by `python3 hass/sitegen.py --write` from `hass/content/` and `hass/templates/`. Edit the source there; a hand edit here fails the check. See [hass/README.md](../hass/README.md).
+
 - index.html, style.css, script.js, shop.js: current catalog interface.
 - hike/index.html: dedicated hiking page. All its shared scripts and map assets use root-relative paths.
 - catalog-products.js: display-only food data; no prices or commerce collections.
@@ -41,7 +43,7 @@ The local Python server saves subscriptions and RSVPs in `../community-data/comm
 
 `owner@example.com` is the proposed sender in config, not an active mail link or configured mailbox. Before launch: confirm the address and mailbox/domain access, connect email delivery and unsubscribe handling, and replace local-setup privacy text with the actual deployed data/delivery details. All work in this revision remains local.
 
-To add a hike, put a real record in `community.json` events. Required: stable `id`, `title`, `startsAt` including UTC offset, `timezone` (normally America/Los_Angeles), and `status` (`scheduled`, `completed`, or `cancelled`). For RSVPs add `meetingPoint`, `rsvpEnabled:true`, and an optional positive integer `capacity`. Add `distance`, `difficulty`, `duration`, and `description` for useful participant details. Mark past outings `completed` and add `recap` to display history. A past date alone does not assert that a hike occurred. No example record is published.
+To add a hike, put a real record in the `events` list of `hass/content/community.json` and run `python3 hass/sitegen.py --write` (it regenerates `community.json` here). Required: stable `id`, `title`, `startsAt` including UTC offset, `timezone` (normally America/Los_Angeles), and `status` (`scheduled`, `completed`, or `cancelled`). For RSVPs add `meetingPoint`, `rsvpEnabled:true`, and an optional positive integer `capacity`. Add `distance`, `difficulty`, `duration`, and `description` for useful participant details. Mark past outings `completed` and add `recap` to display history. A past date alone does not assert that a hike occurred. No example record is published.
 
 Checks: `community-qa.py` uses a temporary database, separate fixture config and port3102. It tests persisted signups, consent choices, input validation, duplicate registration, concurrent capacity limits, past-hike rejection, no personal-data leakage, and mobile UI at320/375/390/768/1440. Test entries never enter the normal calendar or database. Evidence: community-api-QA.json, community-ui-QA.json, community-*-mobile.png.
 

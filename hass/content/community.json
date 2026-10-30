@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "club": {
+    "clubName": "North Coast Hiking Club",
+    "organizer": "Michael Wolfe",
+    "intendedSender": "owner@example.com",
+    "emailConnected": false
+  },
+  "events": [],
+  "routeIdeas": [
+    {
+      "id": "idea-point-buchon",
+      "title": "Point Buchon",
+      "place": "Los Osos",
+      "character": "Sea stacks, salt air & a good long walk",
+      "distance": "6.6 miles",
+      "difficulty": "Moderate",
+      "elevation": "300 ft",
+      "elevationLabel": "Elevation change",
+      "duration": "3–4 hours",
+      "routeType": "Out & back",
+      "terrain": "Coastal dirt trail, uneven ground and exposed bluffs",
+      "description": "The coast opens up here. Sea stacks offshore, grassland beside the trail, and the Pacific keeping us company all the way. A longer walk for those happy on uneven ground.",
+      "sourceUrl": "https://www.pge.com/en/about/in-your-community/recreational-areas.html",
+      "sourceName": "PG&E trail information",
+      "status": "idea",
+      "rsvpEnabled": false
+    },
+    {
+      "id": "idea-cass-hill",
+      "title": "Cass Hill",
+      "place": "Cayucos",
+      "character": "A little climb. A whole lot of coast.",
+      "distance": "3 miles",
+      "difficulty": "Moderate",
+      "elevation": "About 690 ft",
+      "elevationLabel": "Elevation gain",
+      "duration": "About 2 hours",
+      "routeType": "Out & back",
+      "terrain": "Exposed hillside; some steep sections",
+      "description": "A bit of uphill earns a fine view: Cayucos below, Whale Rock Reservoir behind, and Morro Rock out along the coast. Take your time on the climb. There’s plenty to stop and look at.",
+      "sourceUrl": "https://highway1roadtrip.com/things-to-do/cayucos-hiking/",
+      "sourceName": "Highway 1 Road Trip trail guide",
+      "status": "idea",
+      "rsvpEnabled": false
+    },
+    {
+      "id": "idea-fiscalini-bluff",
+      "title": "Fiscalini Ranch",
+      "place": "Cambria",
+      "character": "An unhurried morning by the water",
+      "distance": "1.8 miles",
+      "difficulty": "Easy",
+      "elevation": "Mostly level",
+      "elevationLabel": "Terrain",
+      "duration": "1–1½ hours",
+      "routeType": "Bluff Trail · out & back",
+      "terrain": "Boardwalk and gravel with gentle grades",
+      "description": "Follow the Bluff Trail with the ocean at your shoulder. There are handmade benches for a pause and a view worth lingering over. A gentler outing with room for a proper conversation.",
+      "sourceUrl": "https://www.cambriacsd.org/trails",
+      "sourceName": "Cambria CSD trail guide",
+      "status": "idea",
+      "rsvpEnabled": false
+    }
+  ]
+}
