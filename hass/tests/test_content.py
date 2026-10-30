@@ -190,6 +190,64 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual([e["id"] for e in community["events"]], ["hike-2026-12-05"])
 
 
+class RejectedSourceWritesNothingTests(unittest.TestCase):
+    """Malformed source documents fail as content-invalid (exit 2) and write no output."""
+
+    EVENT = {"id": "hike-2026-12-05", "title": "Morning walk", "startsAt": "2026-12-05T09:00:00-08:00",
+             "timezone": "America/Los_Angeles", "status": "scheduled"}
+
+    def assertGeneratorRejects(self, name, mutate, expect):
+        repo = IsolatedRepo()
+        self.addCleanup(repo.cleanup)
+        repo.edit(name, mutate)
+        with self.assertRaises(ContentError) as ctx:
+            load_and_validate(repo.root / "hass" / "content", repo.root / "storefront-mockup")
+        self.assertTrue(any(expect in p for p in ctx.exception.problems), ctx.exception.problems)
+        site_before = {rel: _sha(repo.root / rel) for rel in GENERATED}
+        with tempfile.TemporaryDirectory(prefix="hass-h01-reject-") as tmp:
+            out = Path(tmp) / "out"
+            code, text = _quiet(sitegen.main, ["--out", str(out), "--repo", str(repo.root)])
+            self.assertEqual(code, 2, text)
+            self.assertIn("content invalid:", text)
+            self.assertFalse(out.exists(), "rejected content must not write output")
+        code, text = _quiet(sitegen.main, ["--write", "--repo", str(repo.root)])
+        self.assertEqual(code, 2, text)
+        self.assertEqual(site_before, {rel: _sha(repo.root / rel) for rel in GENERATED})
+
+    def test_unknown_root_fields_are_rejected(self):
+        cases = {
+            "products price": ("products.json", lambda d: d.update(price=4.5), "products.json: unknown field 'price'"),
+            "products private note": ("products.json", lambda d: d.update(privateNote="fixture-only"),
+                                      "products.json: unknown field 'privateNote'"),
+            "makers price": ("makers.json", lambda d: d.update(price=4.5), "makers.json: unknown field 'price'"),
+            "makers private note": ("makers.json", lambda d: d.update(privateNote="fixture-only"),
+                                    "makers.json: unknown field 'privateNote'"),
+            "products payload missing": ("products.json", lambda d: d.pop("products"),
+                                         "products.json: missing field 'products'"),
+        }
+        for case, (name, mutate, expect) in cases.items():
+            with self.subTest(case=case):
+                self.assertGeneratorRejects(name, mutate, expect)
+
+    def test_non_string_event_and_route_idea_ids_are_rejected(self):
+        def idea_id(value):
+            return lambda d: d["routeIdeas"][0].update(id=value)
+
+        def event(**changes):
+            return lambda d: d["events"].append({**self.EVENT, **changes})
+
+        cases = {
+            "route idea array id": (idea_id([]), "routeIdeas[0]: invalid or duplicate id []"),
+            "route idea object id": (idea_id({}), "routeIdeas[0]: invalid or duplicate id {}"),
+            "event array id": (event(id=[]), "events[0]: invalid or duplicate id []"),
+            "event object id": (event(id={"a": 1}), "events[0]: invalid or duplicate id {'a': 1}"),
+            "event array trailId": (event(trailId=[]), "trailId [] is not a route idea"),
+        }
+        for case, (mutate, expect) in cases.items():
+            with self.subTest(case=case):
+                self.assertGeneratorRejects("community.json", mutate, expect)
+
+
 class MigrationCheckTests(unittest.TestCase):
     def test_checkout_preserves_baseline(self):
         failures, report = migration_check.run_checks(REPO_ROOT)

@@ -92,6 +92,12 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
                       ("community.json", community), ("store.json", store)):
         if not isinstance(doc, dict) or doc.get("schemaVersion") != SCHEMA_VERSION:
             problems.append(f"{name}: schemaVersion must be {SCHEMA_VERSION}")
+    # products.json and makers.json have closed root envelopes: only the schema
+    # version and the payload. Anything else (a stray price or private note) is
+    # rejected here rather than silently dropped on extraction.
+    for name, doc, payload in (("products.json", products, "products"), ("makers.json", makers, "makers")):
+        if isinstance(doc, dict):
+            _closed_keys(problems, name, doc, ("schemaVersion", payload), ("schemaVersion", payload))
     if problems:
         raise ContentError(problems)
     return Content(
@@ -234,7 +240,8 @@ def validate_community(problems, community):
         rid = idea.get("id")
         if not isinstance(rid, str) or not ID_RE.match(rid) or rid in idea_ids:
             problems.append(f"{where}: invalid or duplicate id {rid!r}")
-        idea_ids.add(rid)
+        else:
+            idea_ids.add(rid)
         for field in ROUTE_IDEA_FIELDS:
             if field not in ("sourceUrl", "status", "rsvpEnabled", "id"):
                 _text(problems, f"{where}.{field}", idea.get(field))
@@ -256,9 +263,10 @@ def validate_community(problems, community):
         eid = ev.get("id")
         if not isinstance(eid, str) or not ID_RE.match(eid) or eid in event_ids or eid in idea_ids:
             problems.append(f"{where}: invalid or duplicate id {eid!r}")
+        else:
+            event_ids.add(eid)
         if isinstance(eid, str) and eid.startswith(("preview-", "idea-")):
             problems.append(f"{where}: sample/route-idea ids cannot become real events")
-        event_ids.add(eid)
         _text(problems, f"{where}.title", ev.get("title"))
         _offset_datetime(problems, f"{where}.startsAt", ev.get("startsAt"))
         if ev.get("timezone") != "America/Los_Angeles":
@@ -273,7 +281,7 @@ def validate_community(problems, community):
             cap = ev["capacity"]
             if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
                 problems.append(f"{where}: capacity must be a positive integer")
-        if "trailId" in ev and ev["trailId"] not in idea_ids:
+        if "trailId" in ev and (not isinstance(ev["trailId"], str) or ev["trailId"] not in idea_ids):
             problems.append(f"{where}: trailId {ev['trailId']!r} is not a route idea")
         for field in EVENT_TEXT_FIELDS:
             if field in ev:
