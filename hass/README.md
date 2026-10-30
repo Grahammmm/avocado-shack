@@ -47,3 +47,19 @@ python3 hass/editor.py show CHANGE_ID | recover | ops   # --state DIR or HASS_ST
 ```
 
 The state dir must be owned by the current user, mode 0700 and outside the repository and the writer worktree; otherwise every command exits 2. Exit codes: 0 `ok`/`applied`/`already-applied`, 1 any other result, 2 usage or unsafe state dir.
+
+## H05: approval state machine and fixture conversation
+
+`hass/conversation.py` turns owner messages into H02 drafts and applies a draft only after an approval bound to sender, chat, change id, draft hash, base revision and expiry. The interpreter (replaceable; only `FixtureInterpreter` exists) returns typed ops, a question or "unsupported"; it never sees approvals and never calls the editor. A fixture is not iMessage: no messaging integration exists yet.
+
+- Settings in `<state>/config.json` `settings`: `ownerSenders` (non-empty list), `ownerChat`, `approvalTtlSeconds` (int ≥ 60). Missing or invalid → `ConfigError`; there are no defaults. Real addresses are configuration, never committed.
+- Store `<state>/conversation.sqlite3` (0600): `messages`, `drafts`, `approvals`, `outbox`. Duplicates, `fromMe` echoes, edited messages and anything not from an owner sender in the owner chat get no reply and no state change; for those only the message id and disposition are stored, never the text.
+- `yes|approve|approved` / `no|cancel|reject` (optionally `+ code`) act only on one `proposed` draft; several → the reply lists the codes. Expired, replaced or cancelled codes are named and nothing is written. Stale base → `rejected` (`stale`) and a new proposal that needs its own `yes`.
+- Draft states: `needs-details → proposed | rejected`, `proposed → approved | rejected | expired`, `approved → applied | failed | rejected (stale)`, `applied → verified | reverted`; anything else raises.
+- Each result and its reply are committed before `flush(adapter)` sends; a failed send leaves the reply queued. On start `recover()` settles drafts left `approved` from the H02 change record (`applied` or `failed`) and never applies again.
+
+```sh
+python3 hass/fixture_chat.py --state DIR --fixture hass/tests/fixtures/conversation-basic.jsonl --interpreter MAP.json
+```
+
+Prints the outbox as JSON lines (sends nothing anywhere); exit 2 for an unsafe state dir or missing settings.
