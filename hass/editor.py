@@ -2,20 +2,16 @@
 
     python3 hass/editor.py init --state DIR --worktree WT | prepare REQUEST.json
     python3 hass/editor.py apply CHANGE_ID --hash DRAFT_HASH | show CHANGE_ID | recover | ops
-prepare turns typed ops into a draft bound to the content revision; apply (internal caller only) takes the writer
-lock, re-checks worktree and revision, writes only hass/content and generated site files, runs the H01 checks and
-commits with a sign-off. No listener, no push. State: --state DIR or HASS_STATE_DIR. Output: one JSON object.
+prepare binds typed ops to the content revision; apply (internal caller only) locks, re-checks worktree and revision,
+writes only owned paths, runs the H01 checks and commits signed off. No listener, no push. One JSON object out.
 """
-from __future__ import annotations
-
 import argparse, contextlib, copy, fcntl, hashlib, json, os, re, subprocess, sys  # noqa: E401
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import migration_check, sitegen  # noqa: E402
 from hass.content_model import REPO_ROOT, ContentError, load_and_validate, validate  # noqa: E402
@@ -31,8 +27,7 @@ COLLECTION_FILE = dict(products="products", makers="makers", events="community",
 MAX_REQUEST, MAX_OPS = 64 * 1024, 20
 CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
 
-class UnsafeState(Exception):
-    """The state dir is missing, shared, foreign-owned or inside a checkout (CLI exit 2)."""
+class UnsafeState(Exception): """The state dir is missing, shared, foreign-owned or inside a checkout (CLI exit 2)."""
 
 def content_revision(root) -> str:
     digest = hashlib.sha256()
@@ -85,9 +80,8 @@ def _load(state):
     open_state(str(sdir), cfg["worktree"])
     return sdir, cfg, Path(cfg["worktree"])
 
-def worktree_problems(wt: Path) -> list[str]:
-    """Fail-closed writer preconditions: linked worktree, named non-main branch, clean, identity configured."""
-    wt = Path(wt)
+def worktree_problems(wt: Path, recovering=False) -> list[str]:
+    """Fail-closed writer preconditions: linked worktree, named non-main branch (enough to recover), clean, identity."""
     top = _git(wt, "rev-parse", "--show-toplevel")
     if top.returncode or Path(top.stdout.strip()).resolve() != wt.resolve() or not (wt / "hass/content").is_dir():
         return ["writer worktree is not the top of a Hass Git checkout"]
@@ -96,6 +90,7 @@ def worktree_problems(wt: Path) -> list[str]:
     branch = _git(wt, "symbolic-ref", "-q", "--short", "HEAD")
     problems = ["detached HEAD is refused"] if branch.returncode else \
         ["branch main is refused"] if branch.stdout.strip() == "main" else []
+    if recovering: return problems
     if _out(wt, "status", "--porcelain"): problems.append("writer worktree has uncommitted changes")
     problems += [f"git {key} is not configured" for key in ("user.name", "user.email") if not _out(wt, "config", key)]
     return problems
@@ -103,19 +98,20 @@ def worktree_problems(wt: Path) -> list[str]:
 def init(state, worktree) -> dict:
     wt = Path(worktree).resolve()
     sdir = open_state(state, wt)
-    problems = worktree_problems(wt)
-    if problems: return {"result": "refused", "problems": problems}
+    if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
     _write_json(sdir / "config.json", {"worktree": str(wt), "settings": {}})
     return {"result": "ok", "worktree": str(wt)}
 
 def _parse_request(request):
-    raw = request if isinstance(request, (bytes, str)) else json.dumps(request, ensure_ascii=False)
-    raw = raw.encode("utf-8") if isinstance(raw, str) else raw
-    if len(raw) > MAX_REQUEST: return None, ["request is larger than 64 KiB"]
     try:
-        doc = json.loads(raw.decode("utf-8"))
-    except ValueError:
-        return None, ["request is not valid JSON"]
+        raw = request if isinstance(request, (bytes, str)) else json.dumps(request, ensure_ascii=False)
+        raw = raw.encode("utf-8") if isinstance(raw, str) else raw
+        doc = json.loads(raw.decode("utf-8")) if len(raw) <= MAX_REQUEST else None
+        json.dumps(doc, ensure_ascii=False).encode("utf-8")  # escaped lone surrogates cannot be stored or rendered
+    except ValueError as exc:
+        return None, ["request has unpaired surrogate characters" if isinstance(exc, UnicodeEncodeError)
+                      else "request is not valid JSON"]
+    if len(raw) > MAX_REQUEST: return None, ["request is larger than 64 KiB"]
     if not isinstance(doc, dict) or set(doc) != {"ops"}: return None, ['request must be {"ops": [...]} only']
     ops = doc["ops"]
     if not isinstance(ops, list) or not 1 <= len(ops) <= MAX_OPS:
@@ -174,9 +170,12 @@ def prepare(request, *, state=None, registry=None, now=None) -> dict:
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok": return out
-    core = json.dumps({"base": out["base"], "ops": ops}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    draft_hash = "sha256:" + hashlib.sha256(core.encode("utf-8")).hexdigest()
-    change_id = "chg-" + draft_hash[7:19]
+    seed, attempt, change_id, draft_hash = {"base": out["base"], "ops": ops}, 0, "", ""
+    while not change_id or (sdir / "changes" / f"{change_id}.json").is_file():  # a recorded change id is never reused
+        core = json.dumps(dict(seed, attempt=attempt) if attempt else seed, sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=False)
+        draft_hash = "sha256:" + hashlib.sha256(core.encode("utf-8")).hexdigest()
+        change_id, attempt = "chg-" + draft_hash[7:19], attempt + 1
     path = sdir / "drafts" / f"{change_id}.json"
     if path.is_file() and _read(path).get("draft_hash") == draft_hash: return {"result": "ok", "draft": _read(path)}
     draft = {"change_id": change_id, "draft_hash": draft_hash, "base": out["base"], "ops": ops,
@@ -198,8 +197,9 @@ def _writer_lock(sdir: Path):
     finally:
         os.close(fd)
 
-def _recover_locked(sdir: Path, wt: Path, now) -> list[dict]:
+def _recover_locked(sdir: Path, wt: Path, now) -> dict:
     """Resolve every journal: committed -> applied; HEAD still at base -> restore and failed. Never re-apply."""
+    if problems := worktree_problems(wt, recovering=True): return {"result": "refused", "problems": problems}
     done = []
     for jpath in sorted((sdir / "journal").glob("chg-*.json")):
         cid, journal, head = jpath.stem, _read(jpath), _out(wt, "rev-parse", "HEAD")
@@ -217,12 +217,12 @@ def _recover_locked(sdir: Path, wt: Path, now) -> list[dict]:
         _write_json(sdir / "changes" / f"{cid}.json", rec)
         jpath.unlink()
         done.append({"change_id": cid, "state": rec["state"]})
-    return done
+    return {"result": "ok", "recovered": done}
 
 def recover(*, state=None, now=None) -> dict:
     sdir, _cfg, wt = _load(state)
     with _writer_lock(sdir) as held:
-        return {"result": "ok", "recovered": _recover_locked(sdir, wt, now)} if held else {"result": "busy"}
+        return _recover_locked(sdir, wt, now) if held else {"result": "busy"}
 
 def _post_checks(wt: Path) -> list[str]:
     try:
@@ -237,7 +237,8 @@ def apply(change_id, draft_hash, *, state=None, registry=None, now=None) -> dict
     if not CHANGE_ID_RE.fullmatch(str(change_id)): return {"result": "invalid", "problems": ["malformed change id"]}
     with _writer_lock(sdir) as held:
         if not held: return {"result": "busy"}
-        if any(r["state"] == "unresolved" for r in _recover_locked(sdir, wt, now)):
+        if (recovered := _recover_locked(sdir, wt, now))["result"] != "ok": return recovered
+        if any(r["state"] == "unresolved" for r in recovered["recovered"]):
             return {"result": "refused", "problems": ["an interrupted change needs reconciliation"]}
         return _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now)
 
@@ -247,12 +248,11 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
     draft = _read(draft_path)
     if draft.get("draft_hash") != draft_hash:
         return {"result": "invalid", "problems": ["draft hash does not match the stored draft"]}
-    if rec_path.is_file() and _read(rec_path).get("state") == "applied":
-        return {"result": "already-applied", "change_id": change_id, "commit": _read(rec_path)["commit"]}
-    problems = worktree_problems(wt)
-    if problems: return {"result": "refused", "problems": problems}
-    if content_revision(wt) != draft["base"]:
-        return {"result": "stale", "base": draft["base"], "current": content_revision(wt)}
+    rec = _read(rec_path) if rec_path.is_file() else {}
+    if rec.get("state") == "applied": return {"result": "already-applied", **rec}
+    if rec: return {**rec, "result": "failed", "problems": rec["problems"] + ["prepare again and get a new approval"]}
+    if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
+    if (rev := content_revision(wt)) != draft["base"]: return {"result": "stale", "base": draft["base"], "current": rev}
     try:
         out = _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now)
     except ContentError as exc:
@@ -304,7 +304,7 @@ def main(argv=None) -> int:
         for param in params:
             cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
     args = parser.parse_args(argv)
-    commands = {"ops": lambda: list_ops(), "init": lambda: init(args.state, args.worktree),
+    commands = {"ops": lambda: _load(args.state) and list_ops(), "init": lambda: init(args.state, args.worktree),
                 "prepare": lambda: prepare(Path(args.request).read_bytes(), state=args.state),
                 "apply": lambda: apply(args.change_id, args.hash, state=args.state),
                 "show": lambda: show(args.change_id, state=args.state), "recover": lambda: recover(state=args.state)}

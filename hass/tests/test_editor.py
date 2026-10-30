@@ -39,6 +39,12 @@ def git(cwd, *args):
     return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
+def _journal(repo, change_id, base_commit):
+    """An interrupted apply: a `writing` journal at base_commit, as left by a crash before the commit."""
+    editor._write_json(repo.state / "journal" / f"{change_id}.json", {
+        "phase": "writing", "change_id": change_id, "base_commit": base_commit, "paths": ["hass/content/store.json"]})
+
+
 class WriterRepo:
     """Temp repo on main plus a linked writer worktree and an initialised 0700 state dir."""
 
@@ -102,6 +108,9 @@ class TypedInputTests(EditorTestCase):
             "over 64 KiB": _req((HOURS, {"hours": ["9am " * 17000]})),
             "extra top-level key": {"ops": [good], "sql": "select 1"},
             "NUL character": _req((HOURS, {"hours": ["9am\x00"]})),
+            "escaped lone surrogate value":
+                b'{"ops": [{"op": "test.set_store_hours", "args": {"hours": ["\\ud800"]}}]}',
+            "lone surrogate key": _req((HOURS, {"hours\ud800": NEW_HOURS})),
         }
         for name, request in cases.items():
             with self.subTest(case=name):
@@ -209,9 +218,12 @@ class FailClosedTests(EditorTestCase):
                 draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
                 setup(repo)
                 target = repo.main if name == "main checkout" else repo.wt
+                if name != "dirty":  # a journal at HEAD must not make recovery write an unsafe target either
+                    _journal(repo, draft["change_id"], git(target, "rev-parse", "HEAD"))
+                    (target / "hass" / "content" / "store.json").write_text("{}\n", encoding="utf-8")
                 head, status = git(target, "rev-parse", "HEAD"), git(target, "status", "--porcelain")
-                result = repo.apply(draft)
-                self.assertEqual(result["result"], "refused", result)
+                results = [repo.apply(draft)["result"], editor.recover(state=str(repo.state))["result"]]
+                self.assertEqual(results, ["refused", "ok" if name == "dirty" else "refused"])
                 self.assertEqual((git(target, "rev-parse", "HEAD"), git(target, "status", "--porcelain")),
                                  (head, status))
                 self.assertFalse((repo.state / "changes").exists())
@@ -220,8 +232,11 @@ class FailClosedTests(EditorTestCase):
         repo = self.repo()
         draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
         head = repo.head()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(editor.main(["ops", "--state", str(repo.state)]), 0)
         os.chmod(repo.state, 0o755)
-        for argv in (["show", draft["change_id"]], ["apply", draft["change_id"], "--hash", draft["draft_hash"]]):
+        for argv in (["show", draft["change_id"]], ["ops"],
+                     ["apply", draft["change_id"], "--hash", draft["draft_hash"]]):
             with self.subTest(argv=argv[0]):
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out):
@@ -232,16 +247,11 @@ class FailClosedTests(EditorTestCase):
 
 
 class RecoveryTests(EditorTestCase):
-    def journal(self, repo, draft, base_commit):
-        editor._write_json(repo.state / "journal" / f"{draft['change_id']}.json",
-                           {"phase": "writing", "change_id": draft["change_id"], "base_commit": base_commit,
-                            "paths": ["hass/content/store.json"]})
-
     def test_interrupted_write_is_restored_and_failed(self):
         repo = self.repo()
         draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
         head = repo.head()
-        self.journal(repo, draft, head)
+        _journal(repo, draft["change_id"], head)
         (repo.wt / "hass" / "content" / "store.json").write_text("{}\n", encoding="utf-8")
         result = editor.recover(state=str(repo.state))
         self.assertEqual(result["recovered"], [{"change_id": draft["change_id"], "state": "failed"}])
@@ -250,12 +260,25 @@ class RecoveryTests(EditorTestCase):
         self.assertEqual(change["state"], "failed")
         self.assertEqual(list((repo.state / "journal").iterdir()), [])
 
+    def test_interrupted_draft_is_never_reapplied_without_a_new_draft(self):
+        repo = self.repo()
+        draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
+        head = repo.head()
+        _journal(repo, draft["change_id"], head)
+        (repo.wt / "hass" / "content" / "store.json").write_text("{}\n", encoding="utf-8")
+        for _attempt in ("the apply that recovers it", "a later retry"):
+            self.assertEqual(repo.apply(draft)["result"], "failed")
+            self.assertEqual((repo.head(), repo.status()), (head, ""))
+        renewed = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
+        self.assertNotEqual(renewed["draft_hash"], draft["draft_hash"])
+        self.assertEqual(repo.apply(renewed)["result"], "applied")
+
     def test_committed_change_is_recorded_applied(self):
         repo = self.repo()
         draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
         commit = repo.apply(draft)["commit"]
         (repo.state / "changes" / f"{draft['change_id']}.json").unlink()
-        self.journal(repo, draft, git(repo.wt, "rev-parse", "HEAD~1"))
+        _journal(repo, draft["change_id"], git(repo.wt, "rev-parse", "HEAD~1"))
         result = editor.recover(state=str(repo.state))
         self.assertEqual(result["recovered"], [{"change_id": draft["change_id"], "state": "applied"}])
         change = editor.show(draft["change_id"], state=str(repo.state))["change"]
