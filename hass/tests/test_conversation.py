@@ -137,6 +137,31 @@ class FlowTests(ConversationTestCase):
         self.assertIn("expired", self.replies()[0])
         self.assertEqual(self.commits(), 0)
 
+    def assert_late_approvals_refused(self, old, closed_text):
+        """After `old` closed, the same request repeats it: neither `yes <old code>` nor a bare `yes` applies it."""
+        new, reply = self.propose("hours")
+        self.assertEqual(new["draft_hash"], old["draft_hash"])  # same ops on the same base: the A2 draft repeats
+        self.assertNotEqual(new["code"], old["code"])
+        self.assertIn(f"Reply yes {new['code']} to apply", reply)
+        self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
+        self.assertEqual(self.replies(), [closed_text])
+        self.assertEqual(self.say("yes"), "no-target")
+        self.assertEqual(self.replies(), [f"{new['code']} repeats a draft that was closed; reply yes {new['code']} to apply it."])
+        self.assertEqual((self.drafts()[-1]["state"], self.commits(), self.editor.applies), ("proposed", 0, 0))
+        self.assertEqual(self.say(f"yes {new['code']}"), "approved")
+        self.assertEqual((self.drafts()[-1]["state"], self.commits(), self.editor.applies), ("applied", 1, 1))
+
+    def test_cancelled_code_is_never_reused_by_a_repeat(self):
+        old, _reply = self.propose("hours")
+        self.assertEqual(self.say("no"), "rejected")
+        self.replies()
+        self.assert_late_approvals_refused(old, f"{old['code']} was cancelled (owner); nothing changed.")
+
+    def test_expired_code_is_never_reused_by_a_repeat(self):
+        old, _reply = self.propose("hours")
+        self.now = T0 + timedelta(seconds=601)
+        self.assert_late_approvals_refused(old, f"{old['code']} expired at 2026-11-02 09:10 PST; nothing changed.")
+
     def test_ambiguous_yes_and_revision(self):
         one, _r = self.propose("hours")
         two, _r = self.propose("desc")
@@ -170,7 +195,8 @@ class FlowTests(ConversationTestCase):
         self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
         self.assertEqual(self.replies(), [f"{old['code']} was replaced by {pending['code']}."])
         self.assertEqual((self.commits(), self.editor.applies), (0, 0))
-        self.interp.mapping["done"] = {**_ops((HOURS, {"hours": NEW_HOURS})), "revises": pending["code"]}
+        # A different value from the superseded draft (an identical one is a repeat that needs `yes <code>`).
+        self.interp.mapping["done"] = {**_ops((HOURS, {"hours": ["Daily 8am–7pm"]})), "revises": pending["code"]}
         self.assertEqual(self.say("done"), "proposed")
         self.replies()
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "proposed"])

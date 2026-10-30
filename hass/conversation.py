@@ -17,7 +17,6 @@ from hass import editor as editor_mod  # noqa: E402
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
-OPEN = ("needs-details", "proposed", "approved")
 TRANSITIONS = {"needs-details": {"proposed", "rejected"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"}}
 INTERRUPTED = "interrupted; not applied; approve a new draft"
@@ -169,12 +168,13 @@ def _summary(draft: dict) -> str:
     return _value(text or "no records")
 
 
-def proposal_text(code: str, draft: dict, expires_at: str) -> str:
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False) -> str:
     lines = [f"Draft {code}:"]
     lines += [f"{r['collection']} {r['key']}: {f} {_value(b)} → {_value(a)}"
               for r in draft["records"] for f, b, a in _changes(r)]
     lines += [f"Warning: {w}" for w in draft.get("warnings") or []]
-    lines += [f"Expires {_local(expires_at)}.", "Reply yes to apply, no to cancel, or send a correction."]
+    yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
+    lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
     return "\n".join(lines)
 
 
@@ -228,10 +228,18 @@ class Conversation:
         self.db.execute(f"UPDATE drafts SET {assignments} WHERE row_id = ?", (*cols.values(), row["row_id"]))
 
     def _code(self, hexdigest: str) -> str:
-        taken = {r["code"] for r in self._drafts("state IN (?, ?, ?)", *OPEN)}
-        size = 4
-        while hexdigest[:size] in taken: size += 2
-        return hexdigest[:size]
+        """A code is never reissued, not even a cancelled/expired draft's: a late `yes <old code>` names only that draft.
+        A repeat of the same hash has no unused prefix left, so it takes the next code from a derived digest."""
+        taken = {r["code"] for r in self._drafts("1")}
+        while True:
+            for size in range(4, 13, 2):
+                if hexdigest[:size] not in taken: return hexdigest[:size]
+            hexdigest = hashlib.sha256(f"{hexdigest}:repeat".encode()).hexdigest()
+
+    def _repeat(self, row) -> bool:
+        """True when an earlier draft had this exact hash (it was cancelled, expired, replaced or failed)."""
+        if not row["draft_hash"]: return False
+        return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
     def _reply(self, text):
         self.outbox.add(self.settings["ownerChat"], text)
@@ -295,6 +303,10 @@ class Conversation:
             self._reply(f"Cancelled {target['code']}; nothing changed.")
             self._record(msg, "rejected")
             return "rejected", None
+        if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
+            self._reply(f"{target['code']} repeats a draft that was closed; reply yes {target['code']} to apply it.")
+            self._record(msg, "no-target")
+            return "no-target", None
         self.db.execute(
             "INSERT INTO approvals(sender, chat, provider_id, change_id, draft_hash, base, expires_at, approved_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (msg.sender, msg.chat, msg.provider_id, target["change_id"],
@@ -354,7 +366,7 @@ class Conversation:
         else:
             row = self._propose(draft, msg.sender, now)
             if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
-        self._reply(proposal_text(row["code"], draft, row["expires_at"]))
+        self._reply(proposal_text(row["code"], draft, row["expires_at"], self._repeat(row)))
         return "proposed"
 
     def _outcome(self, row, out, now):
@@ -369,7 +381,7 @@ class Conversation:
                 new = self._propose(again["draft"], row["sender"], now)
                 self._move(row, "rejected", reason="stale", replaced_by=new["code"])
                 self._reply(f"The site changed since {row['code']}; please approve {new['code']}.\n"
-                            + proposal_text(new["code"], again["draft"], new["expires_at"]))
+                            + proposal_text(new["code"], again["draft"], new["expires_at"], self._repeat(new)))
             else:
                 self._move(row, "rejected", reason="stale")
                 self._reply(f"The site changed since {row['code']}; not applied: {_reason(again)}")
