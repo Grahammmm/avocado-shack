@@ -52,7 +52,8 @@ STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 IMAGE_RE = re.compile(r"^assets/products/[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(webp|jpg|jpeg|png)$")
-OFFSET_RE = re.compile(r"(Z|[+-]\d{2}:\d{2})$")
+# Exact start time with seconds optional and a mandatory offset (matched in full).
+STARTS_AT_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})")
 # Characters never allowed in short display text: markup and currency.
 FORBIDDEN_TEXT = ("<", ">", "$", "{{", "}}")
 
@@ -78,7 +79,10 @@ class Content:
 
 def _read_json(path: Path):
     with path.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
+        try:
+            return json.load(fh)
+        except json.JSONDecodeError as exc:
+            raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
 
 
 def load_content(content_dir: Path = CONTENT_DIR) -> Content:
@@ -152,7 +156,7 @@ def validate_products(problems, products, makers, site_dir: Path | None):
                             ("id", "name", "brand", "category", "image", "status")):
             continue
         pid = rec.get("id")
-        if not isinstance(pid, str) or not ID_RE.match(pid):
+        if not isinstance(pid, str) or not ID_RE.fullmatch(pid):
             problems.append(f"{where}: invalid id {pid!r}")
         elif pid in seen:
             problems.append(f"{where}: duplicate id {pid}")
@@ -167,7 +171,7 @@ def validate_products(problems, products, makers, site_dir: Path | None):
         if rec.get("category") not in CATEGORIES:
             problems.append(f"{where}: category {rec.get('category')!r} not in {CATEGORIES}")
         image = rec.get("image")
-        if not isinstance(image, str) or not IMAGE_RE.match(image):
+        if not isinstance(image, str) or not IMAGE_RE.fullmatch(image):
             problems.append(f"{where}: image must be assets/products/<file> ({image!r})")
         if status == "held":
             hold = rec.get("hold")
@@ -189,7 +193,7 @@ def validate_products(problems, products, makers, site_dir: Path | None):
         key = rec.get("producerKey")
         if key is not None and (not isinstance(key, str) or key not in makers):
             problems.append(f"{where}: producerKey {key!r} is not a maker in makers.json")
-        if status == "active" and site_dir is not None and isinstance(image, str) and IMAGE_RE.match(image):
+        if status == "active" and site_dir is not None and isinstance(image, str) and IMAGE_RE.fullmatch(image):
             if not (Path(site_dir) / image).is_file():
                 problems.append(f"{where}: image file {image} does not exist")
 
@@ -209,12 +213,14 @@ def validate_makers(problems, makers):
 
 
 def _offset_datetime(problems, where, value):
-    if not isinstance(value, str) or not OFFSET_RE.search(value):
+    if not isinstance(value, str) or not STARTS_AT_RE.fullmatch(value):
         problems.append(f"{where}: must be an ISO date-time with a UTC offset")
         return
     try:
-        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
+        parsed = None
+    if parsed is None or parsed.tzinfo is None:
         problems.append(f"{where}: not a valid ISO date-time")
 
 
@@ -238,7 +244,7 @@ def validate_community(problems, community):
         if not _closed_keys(problems, where, idea, ROUTE_IDEA_FIELDS, ROUTE_IDEA_FIELDS):
             continue
         rid = idea.get("id")
-        if not isinstance(rid, str) or not ID_RE.match(rid) or rid in idea_ids:
+        if not isinstance(rid, str) or not ID_RE.fullmatch(rid) or rid in idea_ids:
             problems.append(f"{where}: invalid or duplicate id {rid!r}")
         else:
             idea_ids.add(rid)
@@ -261,7 +267,7 @@ def validate_community(problems, community):
         if not _closed_keys(problems, where, ev, EVENT_REQUIRED + EVENT_OPTIONAL, EVENT_REQUIRED):
             continue
         eid = ev.get("id")
-        if not isinstance(eid, str) or not ID_RE.match(eid) or eid in event_ids or eid in idea_ids:
+        if not isinstance(eid, str) or not ID_RE.fullmatch(eid) or eid in event_ids or eid in idea_ids:
             problems.append(f"{where}: invalid or duplicate id {eid!r}")
         else:
             event_ids.add(eid)

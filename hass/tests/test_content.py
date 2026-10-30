@@ -174,6 +174,10 @@ class ValidationTests(unittest.TestCase):
             "sample promoted": (add_event(id="preview-point-buchon"), "cannot become real events"),
             "unknown trail": (add_event(trailId="idea-nowhere"), "not a route idea"),
             "event unknown field": (add_event(attendees=["someone"]), "unknown field 'attendees'"),
+            "event date-only with offset": (add_event(startsAt="2026-12-05-08:00"), "UTC offset"),
+            "event naive minutes": (add_event(startsAt="2026-12-05T08:00"), "UTC offset"),
+            "id trailing newline": (product(0, id="photo-product-001\n"), "invalid id"),
+            "image trailing newline": (product(0, image="assets/products/photo-product-001.webp\n"), "image must be"),
         }
         for name, (mutate, expect) in cases.items():
             with self.subTest(case=name):
