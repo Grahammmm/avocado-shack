@@ -333,11 +333,13 @@ class Conversation:
                 self.db.execute("UPDATE drafts SET ops_json = ?, summary = ? WHERE row_id = ?",
                                 (ops_json, out["question"], revised["row_id"]))
             else:
+                code = self._code(hashlib.sha256(msg.provider_id.encode()).hexdigest())
                 self.db.execute(
                     "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at)"
                     " VALUES (?, 'needs-details', ?, ?, ?, ?, ?)",
-                    (self._code(hashlib.sha256(msg.provider_id.encode()).hexdigest()), ops_json, out["question"],
-                     msg.sender, msg.chat, _iso(now)))
+                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now)))
+                # An incomplete correction still supersedes the proposal it names: it can no longer be approved.
+                if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
             return "needs-details"
         if out["result"] != "ok":

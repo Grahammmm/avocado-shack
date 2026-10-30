@@ -157,6 +157,27 @@ class FlowTests(ConversationTestCase):
         self.assertEqual(self.replies(), [f"{one['code']} was replaced by {three['code']}."])
         self.assertEqual(self.commits(), 1)
 
+    def test_incomplete_correction_supersedes_proposal(self):
+        old, _r = self.propose("hours")
+        self.interp.mapping["fix"] = {"ops": _req((HOURS, {}))["ops"], "revises": old["code"]}
+        self.assertEqual(self.say("fix"), "needs-details")
+        self.replies()
+        first, pending = self.drafts()
+        self.assertEqual((first["state"], first["reason"], first["replaced_by"]), ("rejected", "revised", pending["code"]))
+        self.assertEqual(pending["state"], "needs-details")
+        self.assertEqual(self.say("yes"), "no-target")
+        self.assertEqual(self.replies(), [conversation.NOTHING])
+        self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
+        self.assertEqual(self.replies(), [f"{old['code']} was replaced by {pending['code']}."])
+        self.assertEqual((self.commits(), self.editor.applies), (0, 0))
+        self.interp.mapping["done"] = {**_ops((HOURS, {"hours": NEW_HOURS})), "revises": pending["code"]}
+        self.assertEqual(self.say("done"), "proposed")
+        self.replies()
+        self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "proposed"])
+        self.assertEqual(self.say("yes"), "approved")
+        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours"])
+        self.assertEqual((self.commits(), self.drafts()[1]["state"]), (1, "applied"))
+
     def test_stale_approval_redrafts_and_never_writes_old_draft(self):
         old, _r = self.propose("hours")
         other = self.repo.prepare(_req((DESC, {"id": "photo-product-001", "description": "Picked this week."})))
