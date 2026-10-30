@@ -59,6 +59,15 @@ The state dir must be owned by the current user, mode 0700 and outside the repos
 - An add or edit that makes a product newly match the shop's organic rule (name contains "organic", or maker Ocean Ranch, Straus, Green Gold or Massa Organics) gets the draft warning `adds Organic badge to <id>`; the owner decides at approval.
 - Facts (names, places, stories, links, organic status) come only from the arguments; there are no price, stock or basket fields.
 
+## H04: real-hike ops
+
+`hass/ops/hikes.py` adds `hike.create|update|cancel|complete`. Every event field comes from the arguments: nothing is copied from a route idea or `hiking-preview.json`, and there is no `id` argument, so a sample or route-idea id can never become an event. `trailId` only links to a route idea.
+
+- The start is the local `date` + `time` in `America/Los_Angeles`, written with its offset (`2026-12-05T09:00:00-08:00`). A time that happens twice (DST ends) or not at all (DST starts) gives `needs-details` on `time`; a start in the past is `refused`. A new `date` keeps the local time, a new `time` keeps the local date.
+- With `rsvpEnabled` true, `hike.create` needs exactly one of `capacity` or `noCapacityLimit: true`. `hike.update` with `capacity` reads `guest_counts(settings["guestCountsDb"])` (read-only SQLite, seat totals only, no names or emails) and refuses a capacity below the confirmed guests; an unset or unreadable database is refused (`guest count unavailable`). Existing RSVPs are never changed.
+- `hike.cancel` and `hike.complete` (only once the start has passed; optional `recap`) work on `scheduled` events; a cancelled or completed event refuses every later op.
+- No op sends, queues or drafts a message, and `club.emailConnected` stays `false`. Real hikes need the owner's confirmed details; the committed events list stays empty.
+
 ## H05: approval state machine and fixture conversation
 
 `hass/conversation.py` turns owner messages into H02 drafts and applies a draft only after an approval bound to sender, chat, change id, draft hash, base revision and expiry. The interpreter (replaceable; only `FixtureInterpreter` exists) returns typed ops, a question or "unsupported"; it never sees approvals and never calls the editor. A fixture is not iMessage: no messaging integration exists yet.
