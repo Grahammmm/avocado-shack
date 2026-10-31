@@ -24,6 +24,23 @@ from hass.inbox import Inbox  # noqa: E402
 from hass.preview import Previewer  # noqa: E402
 
 
+def _row(n, line) -> Inbound:  # every check names line n and the field, never the value
+    def bad(what): raise ValueError(f"fixture line {n}: {what}")
+    try: r = json.loads(line)
+    except ValueError: bad("not JSON")
+    if not isinstance(r, dict): bad("row must be a JSON object")
+    if type(r.get("id")) not in (int, str) or r.get("id") == "": bad("id must be a non-empty string or an integer")
+    for field in ("chat", "sender", "text"):
+        if not isinstance(r.get(field), str): bad(f"{field} must be a string")
+    if not isinstance(r.get("fromMe", False), bool): bad("fromMe must be true or false")
+    if not (isinstance(kind := r.get("kind", "new"), str) and kind): bad("kind must be a non-empty string")
+    try: at = datetime.fromisoformat(r.get("at"))
+    except (TypeError, ValueError): at = None
+    if at is None or at.utcoffset() is None: bad("at must be an ISO time with a UTC offset")
+    return Inbound(provider_id=str(r["id"]), chat=r["chat"], sender=r["sender"], text=r["text"],
+                   from_me=r.get("fromMe", False), kind=kind, received_at=r["at"])
+
+
 class FixtureAdapter:
     """Reads inbound JSONL (`id, chat, sender, text, fromMe, kind, at`); records sends; `fail_sends=N` raises N times."""
 
@@ -31,10 +48,8 @@ class FixtureAdapter:
         self.path, self.fail_sends, self.sent = path, fail_sends, []
 
     def inbound(self) -> list:
-        rows = [json.loads(line) for line in Path(self.path).read_text("utf-8").splitlines() if line.strip()]
-        return [Inbound(provider_id=str(r["id"]), chat=r["chat"], sender=r["sender"], text=r["text"],
-                        from_me=bool(r.get("fromMe", False)), kind=r.get("kind", "new"), received_at=r["at"])
-                for r in rows]
+        lines = Path(self.path).read_text("utf-8").splitlines()
+        return [_row(n, s) for n, s in enumerate(lines, 1) if s.strip()]  # n counts physical lines, blanks included
 
     def send(self, chat, text, attachments):
         if self.fail_sends > 0:
@@ -68,7 +83,8 @@ def main(argv=None) -> int:
             print("fixture_chat: " + " ".join(f"{k}={v}" for k, v in counts.items()), file=sys.stderr)
         conversation.flush(adapter)
     except (ConfigError, UnsafeState, OSError, ValueError, KeyError, TypeError) as exc:
-        print(f"fixture_chat: {type(exc).__name__}: {exc}", file=sys.stderr)
+        detail = str(exc) if str(exc).startswith("fixture line ") else f"{type(exc).__name__}: {exc}"
+        print(f"fixture_chat: {detail}", file=sys.stderr)
         return 2
     for row in adapter.sent: print(json.dumps(row, ensure_ascii=False, sort_keys=True))
     return 0

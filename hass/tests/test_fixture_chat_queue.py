@@ -101,11 +101,11 @@ class FixtureChatQueueTests(unittest.TestCase):
         bad = [PAIR[0], line("q-2", "yes", "2026-11-02T09:01:00"), line("q-3", "history", "2026-11-02T09:02:00-08:00")]
         run = self.run_cli(repo, bad, "--queue", START)
         self.assertEqual((run.returncode, run.stdout), (2, ""))
-        self.assertIn("ValueError: received_at must be a timezone-aware", run.stderr)
+        self.assertEqual(run.stderr, "fixture_chat: fixture line 2: at must be an ISO time with a UTC offset\n")
         self.assertEqual(self.query(repo, "conversation", "SELECT code FROM drafts"), [])
-        self.assertEqual(self.query(repo, "inbox", "SELECT provider_id, state FROM inbound"), [("q-1", "pending")])
+        self.assertEqual(self.query(repo, "inbox", "SELECT provider_id, state FROM inbound"), [])  # nothing enqueued
         fixed = self.run_cli(repo, [*PAIR, bad[2]], "--queue", START)
-        self.assertEqual((fixed.returncode, self.summary(fixed)), (0, "queued=2 duplicate=1 history=0 handled=3"))
+        self.assertEqual((fixed.returncode, self.summary(fixed)), (0, "queued=3 duplicate=0 history=0 handled=3"))
         texts = [json.loads(r)["text"] for r in fixed.stdout.splitlines()]
         self.assertEqual([t.split(" ")[0] for t in texts[:2]], ["Draft", "Applied"])
         self.assertEqual(len(self.query(repo, "conversation", "SELECT code FROM drafts")), 1)
