@@ -10,7 +10,7 @@ from __future__ import annotations
 import copy
 from datetime import datetime
 
-from hass.ops import Arg, Op, Refused, Touched
+from hass.ops import COLLECTIONS, Arg, Op, Refused, Touched
 from hass.ops.hikes import _seats
 
 # What "undo an addition" means per collection: hide or cancel, never delete.
@@ -41,11 +41,28 @@ def _put(content, collection, key, value):
         items[next(i for i, item in enumerate(items) if item.get("id") == key)] = value
 
 
+def _well_formed(change):
+    """Shape check before any use: a dict whose ``records`` (if any) are dicts naming a known collection and str key."""
+    if not isinstance(change, dict):
+        return False
+    records = change.get("records")
+    if records is None:
+        return True
+    return isinstance(records, list) and all(
+        isinstance(r, dict) and r.get("collection") in COLLECTIONS and isinstance(r.get("key"), str)
+        and "before" in r and "after" in r for r in records)
+
+
 def _revert(content, args, ctx):
     change_id = args["changeId"]
-    change = ctx.change(change_id)
+    try:
+        change = ctx.change(change_id)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return Refused(f"{change_id} record is unreadable")
     if change is None:
         return Refused(f"unknown change {change_id}")
+    if not _well_formed(change):
+        return Refused(f"{change_id} record is malformed")
     if change.get("state") != "applied":
         return Refused(f"{change_id} is not an applied change")
     if change.get("revertedBy"):
