@@ -1,6 +1,6 @@
-"""Hass private screenshot preview (H06): an isolated loopback copy of the site, one phone-width Playwright capture.
+"""Hass private screenshot preview (H06): an isolated loopback copy of the site, phone + desktop captures.
 
-    Previewer(worktree).capture(files, target, out_png) -> {"ok", "png", "checks", "error"}
+    Previewer(worktree).capture(files, target, out_png) -> {"ok", "png", "checks", "error", "desktopPng"}
 
 The copy holds the worktree's tracked ``storefront-mockup`` files (assets symlinked, not copied) with ``files``
 (generated path -> bytes) laid over them. Its own ``community-server.py`` serves it on a free 127.0.0.1 port with a
@@ -12,6 +12,7 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
+VIEWPORTS = ("phone", "desktop")
 PASS_THROUGH = ("PLAYWRIGHT_MODULE", "CHROMIUM_PATH")
 START_TIMEOUT, CAPTURE_TIMEOUT = 10.0, 90
 
@@ -61,7 +62,8 @@ def _last_line(text: str) -> str:
 
 
 class Previewer:
-    def __init__(self, worktree, env=None):
+    def __init__(self, worktree, env=None, viewports=VIEWPORTS):
+        self.viewports = tuple(viewports)
         self.worktree = Path(worktree).resolve()
         self.env = dict(os.environ if env is None else env)
         self.last_server = None  # {"pid", "port"} of the most recent preview server (for checks)
@@ -91,6 +93,8 @@ class Previewer:
         return site
 
     def _capture(self, files: dict, target: dict, out_png: Path) -> dict:
+        if self.viewports not in (("phone",), VIEWPORTS):
+            raise ValueError(f"unsupported viewports {self.viewports!r}"[:80])
         with tempfile.TemporaryDirectory(prefix="hass-preview-") as raw:
             tmp = Path(raw)
             site = self._copy_site(tmp, files)
@@ -101,17 +105,25 @@ class Previewer:
                                       cwd=tmp, env=server_env, stdin=subprocess.DEVNULL,
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.last_server = {"pid": server.pid, "port": port}
+            runs = []  # (viewport, process, shot, checks or None when the process failed); phone first
             try:
                 deadline = time.monotonic() + START_TIMEOUT
                 while not _get_ok(port):
                     if server.poll() is not None or time.monotonic() > deadline:
                         return {"ok": False, "png": None, "checks": {}, "error": "preview server did not start"}
                     time.sleep(0.1)
-                shot = tmp / "shot.png"
-                node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps(target),
-                            "OUT": str(shot), **{k: self.env[k] for k in PASS_THROUGH if self.env.get(k)}}
-                proc = subprocess.run(["node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
-                                      text=True, timeout=CAPTURE_TIMEOUT)
+                for name in self.viewports:
+                    shot = tmp / ("shot.png" if name == "phone" else f"shot-{name}.png")
+                    node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps(target),
+                                "OUT": str(shot), "VIEWPORT": name,
+                                **{k: self.env[k] for k in PASS_THROUGH if self.env.get(k)}}
+                    proc = subprocess.run(["node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
+                                          text=True, timeout=CAPTURE_TIMEOUT)
+                    ran = not proc.returncode and shot.is_file()
+                    checks = json.loads(proc.stdout.strip().splitlines()[-1]).get("checks", {}) if ran else None
+                    runs.append((name, proc, shot, checks))
+                    if not ran or any(passed is not True for passed in checks.values()):
+                        break  # a failed phone run is reported as before; desktop is not run
             finally:
                 server.terminate()
                 try:
@@ -119,10 +131,18 @@ class Previewer:
                 except subprocess.TimeoutExpired:
                     server.kill()
                     server.wait()
-            if proc.returncode or not shot.is_file():
+            _name, proc, shot, checks = runs[0]
+            if checks is None:
                 return {"ok": False, "png": None, "checks": {}, "error": _last_line(proc.stderr or proc.stdout)}
-            checks = json.loads(proc.stdout.strip().splitlines()[-1]).get("checks", {})
             _write_private(out_png, shot.read_bytes())
+            error, extra = None, ({"desktopPng": None} if "desktop" in self.viewports else {})
+            for _name, proc, shot, more in runs[1:]:
+                if more is None:
+                    error = "desktop: " + _last_line(proc.stderr or proc.stdout)
+                    continue
+                extra["desktopPng"] = str(out_png.with_name(out_png.stem + "-desktop.png"))
+                _write_private(Path(extra["desktopPng"]), shot.read_bytes())
+                checks = {**checks, **{f"desktop:{key}": passed for key, passed in more.items()}}
         failed = sorted(name for name, passed in checks.items() if passed is not True)
-        return {"ok": not failed, "png": str(out_png), "checks": checks,
-                "error": ("check failed: " + ", ".join(failed)) if failed else None}
+        error = error or (("check failed: " + ", ".join(failed)) if failed else None)
+        return {"ok": error is None, "png": str(out_png), "checks": checks, "error": error, **extra}
