@@ -1,0 +1,14 @@
+{
+  "Make the avocado description shorter": {
+    "ops": [
+      {
+        "op": "product.edit",
+        "args": {
+          "id": "photo-product-001",
+          "description": "Creamy flesh, a little lime, enough salt."
+        }
+      }
+    ],
+    "revises": null
+  }
+}
