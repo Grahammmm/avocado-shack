@@ -42,7 +42,7 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Means:** with `--backups`: no complete `hass-state-*` backup within `--backup-hours`, no complete backup at all, or the backup dir is unreadable.
 - **Check first:** `ls -l BACKUPS`; `python3 hass/statebackup.py verify BACKUP` on the newest one.
 - **Next step:** `python3 hass/statebackup.py create --state DIR --out BACKUPS` (OUT mode 0700). It reads state only; `busy` means retry later, `unsettled` means `recover` first (after `pause changes`).
-- **Stop and ask:** `create` answers `refused` (a state dir holding `inbox.sqlite3` is refused as an unknown entry: backups do not cover the inbox yet) or `verify` answers `corrupt`, the disk is full, or a backup timer needs installing (attended).
+- **Stop and ask:** `create` answers `refused` (backups include `inbox.sqlite3`; a leftover `inbox.sqlite3-journal` is refused as an unknown entry) or `verify` answers `corrupt`, the disk is full, or a backup timer needs installing (attended).
 
 ### `seen`
 - **Means:** `--seen FILE` is a symlink, lies inside the repository or the state dir, or its folder is missing. Exit 2; no other check ran.
