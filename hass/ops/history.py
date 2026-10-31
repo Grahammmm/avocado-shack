@@ -8,8 +8,10 @@ sets ``revertedBy`` on the original change record once the revert is committed.
 from __future__ import annotations
 
 import copy
+from datetime import datetime
 
 from hass.ops import Arg, Op, Refused, Touched
+from hass.ops.hikes import _seats
 
 # What "undo an addition" means per collection: hide or cancel, never delete.
 UNDO_ADDITION = {"products": ("status", "hidden"), "events": ("status", "cancelled"), "makers": ("hidden", True)}
@@ -63,6 +65,16 @@ def _revert(content, args, ctx):
         current = copy.deepcopy(_current(content, collection, key))
         if before is not None:
             value = copy.deepcopy(before)
+            if collection == "events":
+                if "capacity" in value:
+                    seats = _seats(ctx, key)
+                    if isinstance(seats, Refused):
+                        return seats
+                    if value["capacity"] < seats:
+                        return Refused(f"capacity {value['capacity']} is below {seats} confirmed guests")
+                if (value["status"] == "scheduled"
+                        and datetime.fromisoformat(value["startsAt"].replace("Z", "+00:00")) <= ctx.now):
+                    return Refused("start is in the past")
         elif collection in UNDO_ADDITION:
             field, hidden = UNDO_ADDITION[collection]
             value = {**(current or {}), field: hidden}

@@ -7,6 +7,7 @@ Run: python3 -m unittest discover -s hass/tests -t . -v
 
 import json
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from hass import conversation, editor, migration_check, preview
@@ -16,6 +17,7 @@ from hass.ops import load_registry
 from hass.tests import fixture_ops
 from hass.tests.test_conversation import ConversationTestCase, _ops
 from hass.tests.test_editor import DESC, NEW_HOURS
+from hass.tests.test_hike_ops import HIKE, HIKE_ID, HikeTestCase
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
 ORIGINAL = next(p for p in json.loads((REPO_ROOT / "hass/content/products.json").read_text("utf-8"))["products"]
@@ -136,6 +138,55 @@ class UndoTests(H06TestCase):
         self.assertNotIn(record["key"], catalog)
         self.assertEqual(migration_check.run_checks(self.repo.wt)[0], [])
         self.assertEqual((self.drafts()[0]["state"], self.commits()), ("reverted", 2))
+
+
+class EventUndoTests(HikeTestCase):
+    def test_restored_scheduled_event_must_start_in_future(self):
+        for op in ("hike.cancel", "hike.complete", "hike.update"):
+            for delay in (timedelta(), timedelta(days=24)):
+                with self.subTest(op=op, delay=delay):
+                    repo = self.repo()
+                    repo.run(("hike.create", HIKE))
+                    repo.make_db([])
+                    start = datetime.fromisoformat(repo.event()["startsAt"])
+                    if op == "hike.complete":
+                        repo.now = start
+                    args = {"id": HIKE_ID}
+                    if op == "hike.update":
+                        args["date"] = "2027-01-05"
+                    changed = repo.run((op, args))
+                    before = repo.event()
+                    repo.now = start + delay
+                    result = self.assertRejected(repo, "refused",
+                                                 ("history.revert", {"changeId": changed["change_id"]}))
+                    self.assertEqual(result["reason"], "start is in the past")
+                    self.assertEqual(repo.event(), before)
+
+    def test_restored_capacity_respects_confirmed_seats(self):
+        for counts in ("over-capacity", "missing", "unreadable", "at-capacity"):
+            with self.subTest(counts=counts):
+                repo = self.repo()
+                repo.run(("hike.create", HIKE))
+                repo.make_db([])
+                raised = repo.run(("hike.update", {"id": HIKE_ID, "capacity": 20}))
+                repo.db.unlink()
+                seats = 15 if counts == "over-capacity" else 12
+                repo.make_db([(HIKE_ID, 6), (HIKE_ID, 3), (HIKE_ID, seats - 9), ("other-event", 6)])
+                if counts == "missing":
+                    repo.use_db("")
+                elif counts == "unreadable":
+                    repo.use_db(str(repo.state.parent / "missing.sqlite3"))
+                before = repo.db.read_bytes()
+                if counts == "at-capacity":
+                    repo.run(("history.revert", {"changeId": raised["change_id"]}))
+                    self.assertEqual(repo.event()["capacity"], 12)
+                else:
+                    result = self.assertRejected(repo, "refused",
+                                                 ("history.revert", {"changeId": raised["change_id"]}))
+                    self.assertEqual(result["reason"], "capacity 12 is below 15 confirmed guests"
+                                     if counts == "over-capacity" else "guest count unavailable")
+                    self.assertEqual(repo.event()["capacity"], 20)
+                self.assertEqual(repo.db.read_bytes(), before)
 
 
 if __name__ == "__main__":
