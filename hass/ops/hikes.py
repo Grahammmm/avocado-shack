@@ -46,6 +46,17 @@ def _seats(ctx, event_id):
         return Refused("guest count unavailable")
 
 
+def _guest_warning(ctx, event):
+    """Draft warning (never a refusal) when a cancel or RSVPs off leaves confirmed guests untold."""
+    if not event.get("rsvpEnabled"):
+        return
+    seats, eid = _seats(ctx, event["id"]), event["id"]
+    if isinstance(seats, Refused):
+        ctx.warnings.append(f"{eid} guest count unavailable; check RSVPs before approving")
+    elif seats > 0:
+        ctx.warnings.append(f"{eid} has {seats} confirmed guest{'s' * (seats != 1)}; nobody is notified automatically")
+
+
 def _fmt(offset) -> str:
     minutes = int(offset.total_seconds() // 60)
     sign, minutes = ("-" if minutes < 0 else "+"), abs(minutes)
@@ -156,6 +167,8 @@ def _hike_update(content, args, ctx):
             return seats
         if given["capacity"] < seats:
             return Refused(f"capacity {given['capacity']} is below {seats} confirmed guests")
+    if given.get("rsvpEnabled") is False:
+        _guest_warning(ctx, event)
     before = copy.deepcopy(event)
     event.update(changes)
     if "noCapacityLimit" in given:
@@ -167,6 +180,7 @@ def _hike_cancel(content, args, ctx):
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
+    _guest_warning(ctx, event)
     before = copy.deepcopy(event)
     event["status"] = "cancelled"
     return _touch(before, event)
