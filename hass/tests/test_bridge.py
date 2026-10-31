@@ -1,13 +1,8 @@
 """BL-AV-3 (H08 prep) tests: BlueBubbles event -> Inbound, sealed envelope, loopback-only redacting sender.
-No network (fake transport); synthetic fixtures. Run: python3 -m unittest discover -s hass/tests -t . -v
-"""
+No network (fake transport); synthetic fixtures. Run: python3 -m unittest discover -s hass/tests -t . -v"""
 
-import copy
-import json
-import os
-import tempfile
-import unittest
-import uuid
+import copy, json, os, tempfile, unittest, uuid  # noqa: E401
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
@@ -56,7 +51,7 @@ class NormalizeTests(unittest.TestCase):
             provider_id="FAKE-0000-0000-0000-000000000001", chat=OWNER_CHAT, sender=OWNER, text="desc",
             from_me=False, kind="new", received_at="2026-11-02T17:00:00+00:00"))
         echo = normalize(event("from-me"))
-        self.assertEqual((echo.from_me, echo.sender, echo.kind), (True, "", "new"))
+        self.assertEqual((echo.from_me, echo.sender, echo.kind), (True, OWNER, "new"))
         self.assertEqual(normalize(event("updated-message")).kind, "edited")
         stranger = normalize(event("stranger"))
         self.assertEqual((stranger.sender, stranger.from_me), (STRANGER, False))
@@ -79,6 +74,10 @@ class NormalizeTests(unittest.TestCase):
             "huge dateCreated": (variant(lambda e, d: d.update(dateCreated=10 ** 30)), "malformed"),
             "string isFromMe": (variant(lambda e, d: d.update(isFromMe="false")), "malformed"),
             "inbound without handle": (variant(lambda e, d: d.update(handle=None)), "malformed"),
+            "from-me null handle": (variant(lambda e, d: d.update(isFromMe=True, handle=None)), "malformed"),
+            "from-me absent handle": (variant(lambda e, d: (d.update(isFromMe=True), d.pop("handle"))), "malformed"),
+            "from-me blank": (variant(lambda e, d: d.update(isFromMe=True, handle={"address": ""})), "malformed"),
+            "lone surrogate text": (variant(lambda e, d: d.update(text=json.loads('"desc\\ud800"'))), "malformed"),
             "null text": (variant(lambda e, d: d.update(text=None)), "malformed"),
             "missing attachments": (variant(lambda e, d: d.pop("attachments")), "malformed"),
             "no data": (variant(lambda e, d: e.pop("data")), "malformed"),
@@ -120,17 +119,18 @@ class EnvelopeTests(unittest.TestCase):
         for name, (env, code) in cases.items():
             with self.subTest(name):
                 self.assertEqual(self.refused(env), code)
-        for now in (NOW + 301, NOW - 301):
-            with self.subTest(now=now):
-                seen = set()
-                self.assertEqual(self.refused(self.env, now=now, seen=seen), "stale")
-                self.assertEqual(seen, set())  # a refused envelope does not burn its nonce
+        for now in (NOW + 301, NOW - 301):  # a refused envelope does not burn its nonce
+            self.assertEqual((self.refused(self.env, now=now, seen=(seen := set())), seen), ("stale", set()), now)
 
     def test_short_key_is_refused(self):
-        with self.assertRaises(ValueError):
-            seal(self.msg, b"k" * 31, nonce=NONCE, now=NOW)
-        with self.assertRaises(ValueError):
-            unseal(self.env, b"k" * 31, now=NOW, seen=set())
+        self.assertRaises(ValueError, seal, self.msg, b"k" * 31, nonce=NONCE, now=NOW)
+        self.assertRaises(ValueError, unseal, self.env, b"k" * 31, now=NOW, seen=set())
+
+    def test_unicode_round_trips_and_a_lone_surrogate_is_shape_not_a_crash(self):
+        msg, bad, seen = replace(self.msg, text="aguacate \U0001f951 ñ"), copy.deepcopy(self.env), set()
+        self.assertEqual(unseal(seal(msg, KEY, nonce=NONCE, now=NOW), KEY, now=NOW, seen=set()), msg)
+        bad["body"]["text"] = json.loads('"desc\\ud800"')  # original MAC kept, as an attacker would
+        self.assertEqual((self.refused(bad, seen=seen), seen), ("shape", set()))
 
 
 class SenderTests(unittest.TestCase):

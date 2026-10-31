@@ -18,6 +18,7 @@ from hass.conversation import Inbound  # noqa: E402
 EVENT_KINDS = {"new-message": "new", "updated-message": "edited"}
 DIRECT_CHAT_RE = re.compile(r"[^;]+;-;[^;]+")  # one-to-one `iMessage;-;<address>`; groups are `iMessage;+;chat...`
 NONCE_RE, MAC_RE = re.compile(r"(?:[0-9a-f]{2}){16,}"), re.compile(r"[0-9a-f]{64}")
+SURROGATE_RE = re.compile(r"[\ud800-\udfff]")  # a JSON-escaped lone surrogate: str that cannot be UTF-8 encoded
 ENVELOPE_KEYS = {"v", "ts", "nonce", "body", "mac"}
 BODY_TYPES = {f.name: (bool if f.name == "from_me" else str) for f in fields(Inbound)}
 MAX_SKEW, MIN_KEY = 300, 32
@@ -57,23 +58,20 @@ def normalize(event):
     if not (isinstance(guid, str) and guid and type(created) is int and created >= 0 and type(from_me) is bool
             and isinstance(chats, list) and isinstance(attachments, list)):
         return Drop("malformed")
-    if isinstance(handle, dict) and isinstance(handle.get("address"), str) and handle["address"]:
-        sender = handle["address"]
-    elif handle is None and from_me:
-        sender = ""  # a message the business account sent may carry no handle; Conversation records it as `echo`
-    else:
-        return Drop("malformed")
+    if not (isinstance(handle, dict) and isinstance(handle.get("address"), str) and handle["address"]):
+        return Drop("malformed")  # required for echoes (isFromMe) too: no sender is ever invented
     if len(chats) != 1 or not isinstance(chats[0], dict) or not isinstance(chats[0].get("guid"), str) \
             or not DIRECT_CHAT_RE.fullmatch(chats[0]["guid"]):
         return Drop("group-or-unknown-chat")
     if attachments: return Drop("attachments-not-supported")
     text = msg.get("text")
-    if not isinstance(text, str): return Drop("malformed")
+    if not isinstance(text, str) or any(map(SURROGATE_RE.search, (guid, handle["address"], chats[0]["guid"], text))):
+        return Drop("malformed")
     try:
         received = datetime.fromtimestamp(created / 1000, tz=timezone.utc).isoformat(timespec="seconds")
     except (OverflowError, OSError, ValueError):
         return Drop("malformed")
-    return Inbound(provider_id=guid, chat=chats[0]["guid"], sender=sender, text=text, from_me=from_me,
+    return Inbound(provider_id=guid, chat=chats[0]["guid"], sender=handle["address"], text=text, from_me=from_me,
                    kind=kind, received_at=received)
 
 
@@ -110,8 +108,9 @@ def unseal(envelope, key, *, now, seen) -> Inbound:
     body, ts, nonce, mac = envelope["body"], envelope["ts"], envelope["nonce"], envelope["mac"]
     if not (type(ts) is int and isinstance(nonce, str) and NONCE_RE.fullmatch(nonce) and isinstance(mac, str)
             and MAC_RE.fullmatch(mac) and isinstance(body, dict) and set(body) == set(BODY_TYPES)
-            and all(type(body[k]) is t for k, t in BODY_TYPES.items())):
-        raise EnvelopeError("shape")
+            and all(type(body[k]) is t for k, t in BODY_TYPES.items())
+            and not any(type(v) is str and SURROGATE_RE.search(v) for v in body.values())):
+        raise EnvelopeError("shape")  # checked before the MAC, so unencodable text never reaches canonicalization
     if not hmac.compare_digest(_mac(key, envelope), mac): raise EnvelopeError("mac")
     if abs(_seconds(now) - ts) > MAX_SKEW: raise EnvelopeError("stale")
     if nonce in seen: raise EnvelopeError("replay")
