@@ -83,3 +83,18 @@ python3 hass/fixture_chat.py --state DIR --fixture hass/tests/fixtures/conversat
 ```
 
 Prints the outbox as JSON lines (sends nothing anywhere); exit 2 for an unsafe state dir or missing settings.
+
+## H06: preview, history and undo
+
+`hass/preview.py` copies the writer worktree's tracked `storefront-mockup` files to a temp dir (assets symlinked), lays the rendered files over them, starts that copy's `community-server.py` on a free `127.0.0.1` port with a fresh empty temp database and only `PATH`/`HOME`, and runs `hass/screenshot.cjs` (Chromium, 390×844). The browser may only GET from the preview origin; any POST or other host is aborted. The server is always stopped and the copy removed; PNGs are written 0600 to `<state>/screenshots/`, never into Git.
+
+- Given a `previewer` (`Conversation(..., previewer=Previewer(worktree))`), every proposal carries `<change_id>-proposal.png` (a failed capture adds `Preview unavailable: <error>` and still proposes). After an apply, `verify()` needs current generated files, `migration_check` passing and the result screenshot's checks passing (the product card and its description, a scheduled hike's title, every hours line, no page error): then `verified` and `Applied and checked <code>` + PNG; otherwise the draft stays `applied` with `not verified: <error>` and the reply says the preview check failed. Nothing is re-applied. Without a previewer the H05 behaviour is unchanged (`fixture_chat.py` has none yet).
+- `history` replies the last 5 drafts (code, state, summary, short commit); `python3 hass/editor.py history --state DIR [--limit N]` prints change records newest first as JSON lines (ops, commit, `revertedBy`).
+- `undo` (newest applied draft) or `undo <code>` proposes `history.revert`, which needs its own `yes`. It sets back only that change's records, and only while each still holds the value the change wrote (else `conflict: <collection> <key> changed after <change_id>`, no draft). An added product/maker/hike is hidden/cancelled, never deleted. The editor then sets `revertedBy` and the original draft becomes `reverted`. No repository reset, no `git revert`, no community-DB restore.
+
+Browser tests (`hass/tests/test_preview.py`) skip only when `PLAYWRIGHT_MODULE` is unset. On Agent Orange:
+
+```sh
+export PLAYWRIGHT_MODULE=/home/user/.hermes/hermes-agent/node_modules/playwright
+export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell
+```

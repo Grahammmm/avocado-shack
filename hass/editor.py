@@ -1,7 +1,7 @@
 """Hass private typed editing service (H02): drafts, revision hash, single writer.
 
     python3 hass/editor.py init --state DIR --worktree WT | prepare REQUEST.json
-    python3 hass/editor.py apply CHANGE_ID --hash DRAFT_HASH | show CHANGE_ID | recover | ops
+    python3 hass/editor.py apply CHANGE_ID --hash DRAFT_HASH | show CHANGE_ID | recover | ops | history [--limit N]
 prepare binds typed ops to the content revision; apply (internal caller only) locks, re-checks worktree and revision,
 writes only owned paths, runs the H01 checks and commits signed off. No listener, no push. One JSON object out.
 """
@@ -127,7 +127,7 @@ def _serialize(content, name: str) -> bytes:
            "community": {"schemaVersion": 1, **content.community}, "store": content.store}[name]
     return (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
-def _compute(ops, wt: Path, settings, registry, now) -> dict:
+def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
     site, registry = wt / "storefront-mockup", load_registry() if registry is None else registry
     content = load_and_validate(wt / "hass" / "content", site)
     problems, missing = [], []
@@ -140,7 +140,7 @@ def _compute(ops, wt: Path, settings, registry, now) -> dict:
     if missing:
         return {"result": "needs-details", "missing": missing, "question": "Please provide: " + ", ".join(missing)}
     base, new = content_revision(wt), copy.deepcopy(content)
-    ctx = OpContext(now or datetime.now(timezone.utc), site, MappingProxyType(dict(settings)))
+    ctx = OpContext(now or datetime.now(timezone.utc), site, MappingProxyType(dict(settings)), state_dir=sdir)
     records, summary = [], []
     for call in ops:
         out = registry[call["op"]].apply(new, copy.deepcopy(call["args"]), ctx)
@@ -159,14 +159,14 @@ def _compute(ops, wt: Path, settings, registry, now) -> dict:
     writes.update({p: files[p] for p in generated})
     if not writes: return {"result": "refused", "reason": "the operations change nothing"}
     return {"result": "ok", "base": base, "records": records, "generated": generated,
-            "warnings": list(ctx.warnings), "summary": summary, "writes": writes}
+            "warnings": list(ctx.warnings), "summary": summary, "writes": writes, "files": files}
 
 def prepare(request, *, state=None, registry=None, now=None) -> dict:
     sdir, cfg, wt = _load(state)
     ops, problems = _parse_request(request)
     if problems: return {"result": "invalid", "problems": problems}
     try:
-        out = _compute(ops, wt, cfg.get("settings", {}), registry, now)
+        out = _compute(ops, wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok": return out
@@ -215,6 +215,7 @@ def _recover_locked(sdir: Path, wt: Path, now) -> dict:
             done.append({"change_id": cid, "state": "unresolved"})
             continue
         _write_json(sdir / "changes" / f"{cid}.json", rec)
+        if rec["state"] == "applied": _mark_reverted(sdir, draft, cid)
         jpath.unlink()
         done.append({"change_id": cid, "state": rec["state"]})
     return {"result": "ok", "recovered": done}
@@ -254,7 +255,7 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
     if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
     if (rev := content_revision(wt)) != draft["base"]: return {"result": "stale", "base": draft["base"], "current": rev}
     try:
-        out = _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now)
+        out = _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok" or out["records"] != draft["records"] or out["generated"] != draft["generated"]:
@@ -276,8 +277,41 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
     rec = {"state": "applied", "change_id": change_id, "commit": _out(wt, "rev-parse", "HEAD"), "applied_at": _now(now),
            "revision": content_revision(wt), **{k: draft[k] for k in ("base", "records", "generated")}}
     _write_json(rec_path, rec)
+    _mark_reverted(sdir, draft, change_id)
     journal.unlink()
     return {"result": "applied", **rec}
+
+def _mark_reverted(sdir: Path, draft: dict, change_id: str) -> None:
+    """After a revert change is committed, record ``revertedBy`` on each change it undid (before returning)."""
+    for call in draft.get("ops") or []:
+        orig = sdir / "changes" / f"{(call.get('args') or {}).get('changeId')}.json"
+        if call.get("op") == "history.revert" and orig.is_file():
+            _write_json(orig, {**_read(orig), "revertedBy": change_id})
+
+def render_draft(change_id, *, state=None, registry=None, now=None) -> dict:
+    """Re-run a stored draft's ops on the current worktree content; return the rendered site files. Writes nothing."""
+    sdir, cfg, wt = _load(state)
+    path = sdir / "drafts" / f"{change_id}.json"
+    if not CHANGE_ID_RE.fullmatch(str(change_id)) or not path.is_file(): return {"result": "not-found", "key": change_id}
+    try:
+        out = _compute(_read(path)["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
+    except ContentError as exc:
+        return {"result": "invalid", "problems": exc.problems}
+    return {"result": "ok", "files": out["files"], "records": out["records"]} if out["result"] == "ok" else out
+
+def history(limit=20, *, state=None) -> dict:
+    """Change records newest first: id, state, applied_at, commit, one line per op, revertedBy."""
+    sdir, _cfg, _wt = _load(state)
+    entries = []
+    for path in (sdir / "changes").glob("chg-*.json") if (sdir / "changes").is_dir() else ():
+        rec, draft = _read(path), sdir / "drafts" / path.name
+        ops = _read(draft).get("ops", []) if draft.is_file() else []
+        entries.append(((rec.get("applied_at") or rec.get("failed_at") or "", path.stat().st_mtime_ns), {
+            "change_id": path.stem, "state": rec.get("state"), "applied_at": rec.get("applied_at"),
+            "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"),
+            "ops": [f"{c['op']} {json.dumps(c['args'], ensure_ascii=False, sort_keys=True)}"[:160] for c in ops]}))
+    entries.sort(key=lambda e: e[0], reverse=True)
+    return {"result": "ok", "history": [e for _key, e in entries[:max(0, int(limit))]]}
 
 def show(change_id, *, state=None) -> dict:
     sdir, _cfg, _wt = _load(state)
@@ -299,21 +333,24 @@ def main(argv=None) -> int:
     common.add_argument("--state", help="private state dir (default: HASS_STATE_DIR)")
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, params in (("init", ["--worktree"]), ("prepare", ["request"]), ("apply", ["change_id", "--hash"]),
-                         ("show", ["change_id"]), ("recover", []), ("ops", [])):
+                         ("show", ["change_id"]), ("recover", []), ("ops", []), ("history", [])):
         cmd = sub.add_parser(name, parents=[common])
         for param in params:
             cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
+        if name == "history": cmd.add_argument("--limit", type=int, default=20)
     args = parser.parse_args(argv)
     commands = {"ops": lambda: _load(args.state) and list_ops(), "init": lambda: init(args.state, args.worktree),
                 "prepare": lambda: prepare(Path(args.request).read_bytes(), state=args.state),
                 "apply": lambda: apply(args.change_id, args.hash, state=args.state),
-                "show": lambda: show(args.change_id, state=args.state), "recover": lambda: recover(state=args.state)}
+                "show": lambda: show(args.change_id, state=args.state), "recover": lambda: recover(state=args.state),
+                "history": lambda: history(args.limit, state=args.state)}
     try:
         out = commands[args.cmd]()
     except UnsafeState as exc:
         print(json.dumps({"result": "unsafe-state", "problems": [str(exc)]}))
         return 2
-    print(json.dumps(out, ensure_ascii=False, sort_keys=True))
+    for line in out["history"] if args.cmd == "history" else [out]:  # history: one JSON line per change
+        print(json.dumps(line, ensure_ascii=False, sort_keys=True))
     return 0 if out["result"] in ("ok", "applied", "already-applied") else 1
 
 if __name__ == "__main__":
