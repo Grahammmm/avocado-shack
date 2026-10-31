@@ -14,11 +14,17 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass.content_model import ContentError, load_and_validate  # noqa: E402
+from hass.ops import hikes  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
-COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?")  # H06, same normalisation as KEYWORD_RE
+COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
+                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?")  # H17
+PAUSED_LINE = "Changes are paused; send resume changes before yes."
+# H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
+CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
+  provider_id TEXT NOT NULL)"""
 TRANSITIONS = {"needs-details": {"proposed", "rejected"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
@@ -133,7 +139,8 @@ def load_settings(sdir) -> dict:
     if not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
     if problems: raise ConfigError("; ".join(problems))
-    return {"ownerSenders": tuple(senders), "ownerChat": chat, "approvalTtlSeconds": ttl}
+    return {"ownerSenders": tuple(senders), "ownerChat": chat, "approvalTtlSeconds": ttl,
+            "guestCountsDb": settings.get("guestCountsDb")}  # H17 status only; not validated, not required
 
 
 def parse_keyword(text: str):
@@ -144,9 +151,11 @@ def parse_keyword(text: str):
 
 
 def parse_command(text: str):
-    """("history", None) or ("undo", code or None) when the whole message is that command; otherwise None."""
+    """("undo", code or None) or (history|status|pause|resume, None) when the whole message is that command;
+    otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
-    return None if not match else ("history", None) if match[1] else ("undo", match[3])
+    if not match: return None
+    return ("undo", match[3]) if match[2] else (next(v for v in (match[1], match[4], match[5], match[6]) if v), None)
 
 
 def _checked(result) -> dict:
@@ -273,6 +282,7 @@ class Conversation:
                 if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
             shots = [shot["png"]] if shot.get("png") else []
             if not shot["ok"]: text += f"\nPreview unavailable: {shot['error']}"
+        if self._paused(): text += "\n" + PAUSED_LINE
         self._reply(text, shots)
 
     def _record(self, msg, disposition, owner=True):
@@ -315,10 +325,11 @@ class Conversation:
         if ignored:
             self._record(msg, ignored, owner=False)
             return ignored, None
-        now = self._now()
+        now, command = self._now(), parse_command(msg.text)
         expired = [r for r in self._drafts("state = 'proposed'") if datetime.fromisoformat(r["expires_at"]) <= now]
+        if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
         for row in expired: self._move(row, "expired")
-        if command := parse_command(msg.text):
+        if command:
             disposition = self._command(msg, now, *command)
             self._record(msg, disposition)
             return disposition, None
@@ -339,6 +350,11 @@ class Conversation:
             self._reply(f"Cancelled {target['code']}; nothing changed.")
             self._record(msg, "rejected")
             return "rejected", None
+        if self._paused():  # H17: no approval row, no state move; the draft keeps its expiry
+            self._reply(f"Changes are paused; {target['code']} was not applied. "
+                        f"Send resume changes, then yes {target['code']}.")
+            self._record(msg, "paused")
+            return "paused", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
             self._reply(f"{target['code']} repeats a draft that was closed; reply yes {target['code']} to apply it.")
             self._record(msg, "no-target")
@@ -481,6 +497,7 @@ class Conversation:
                     self._reply(f"Applied {row['code']}, but the preview check failed: {error}")
 
     def _command(self, msg, now, verb, code) -> str:
+        if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "history":
             rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT 5").fetchall()
             self._reply("\n".join(["Recent changes:"] + [
@@ -500,3 +517,74 @@ class Conversation:
         row = same[0] if same else self._propose(out["draft"], msg.sender, now)
         self._proposal_reply(row, out["draft"], f"Undo {done[-1]['code']}:\n")
         return "proposed"
+
+    # -- H17: status, pause changes, resume changes ----------------------------------------------------------------
+    def _paused(self):
+        """When changes were paused (ISO time), or None. No control table yet means never paused."""
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
+            return None
+        row = self.db.execute("SELECT set_at FROM control WHERE name = 'paused'").fetchone()
+        return row["set_at"] if row else None
+
+    def _control(self, msg, now, verb) -> str:
+        since = self._paused()
+        if verb == "status":
+            self._reply(self._status(now, since))
+        elif verb == "pause" and since:
+            self._reply(f"Changes are already paused (since {_local(since)}).")
+        elif verb == "pause":
+            self.db.execute(CONTROL)
+            self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('paused', '1', ?, ?)",
+                            (_iso(now), msg.provider_id))
+            self._reply("Changes paused. Drafts can still be prepared; nothing is applied until you send resume changes.")
+        elif not since:
+            self._reply("Changes are not paused.")
+        else:  # resume never applies anything by itself
+            self.db.execute("DELETE FROM control WHERE name = 'paused'")
+            codes = [r["code"] for r in self._drafts("state = 'proposed'")]
+            self._reply("Changes resumed." + (f"\nWaiting for approval: {', '.join(codes)}; reply yes <code> to apply."
+                                              if codes else ""))
+        return verb
+
+    def _status(self, now, since) -> str:
+        """Read-only: pause state, waiting drafts, the last apply result and confirmed guests of upcoming hikes."""
+        lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
+        lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
+                  else f"{r['code']} needs details: {r['summary']}"
+                  for r in self._drafts("state IN ('proposed', 'needs-details')")
+                  if r["state"] != "proposed" or datetime.fromisoformat(r["expires_at"]) > now] or [NOTHING]
+        last = self.db.execute(  # the most recently approved change that has a result
+            "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
+            " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
+        if last:
+            text = f"Last change: {last['code']} {last['state']}: {last['summary']}"
+            text += f" ({last['commit'][:7]})" if last["commit"] else ""
+            if last["reason"] and (last["state"] == "failed" or last["state"] == "applied"
+                                   and last["reason"].startswith("not verified: ")):
+                text += f" - {last['reason']}"
+            lines.append(text)
+        return "\n".join(lines + self._hike_lines(now))
+
+    def _hike_lines(self, now) -> list:
+        """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
+            upcoming = sorted(((datetime.fromisoformat(e["startsAt"]), e) for e in events
+                               if e.get("status") == "scheduled"), key=lambda pair: pair[0])
+            upcoming = [e for start, e in upcoming if start > now]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            return ["Hikes: unavailable"]
+        path, counts = self.settings.get("guestCountsDb"), None
+        if upcoming and isinstance(path, str) and path:
+            try:
+                counts = hikes.guest_counts(path)
+            except (sqlite3.Error, OSError, ValueError, TypeError):
+                counts = None
+        lines = []
+        for e in upcoming:
+            head = f"Hike {e.get('title')} {_local(e['startsAt'])}: "
+            limit = e.get("capacity") if e.get("capacity") is not None else "no limit"
+            lines.append(head + ("guest count unavailable" if counts is None
+                                 else f"{counts.get(e.get('id'), 0)} confirmed of {limit}"))
+        return lines
