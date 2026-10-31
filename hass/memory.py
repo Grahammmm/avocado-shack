@@ -55,6 +55,14 @@ class Memory:
         self.db.execute("PRAGMA secure_delete = ON")  # forgotten text is zeroed in the file, not left in free space
         self.db.execute(TABLE)
 
+    @classmethod
+    def on_connection(cls, db, clock):
+        """Share an open connection (the H05 Conversation's, sqlite3.Row rows): no second writer on the file."""
+        self = cls.__new__(cls)
+        self.db, self.clock = db, clock
+        for sql in ("PRAGMA secure_delete = ON", TABLE): db.execute(sql)
+        return self
+
     def close(self) -> None:
         self.db.close()
 
@@ -63,13 +71,14 @@ class Memory:
 
     @contextlib.contextmanager
     def _tx(self):
-        self.db.execute("BEGIN IMMEDIATE")
+        nested = self.db.in_transaction  # inside the caller's transaction a failure undoes only this op's savepoint
+        self.db.execute("SAVEPOINT memory_op" if nested else "BEGIN IMMEDIATE")
         try:
             yield
         except BaseException:
-            self.db.execute("ROLLBACK")
+            for sql in ("ROLLBACK TO memory_op", "RELEASE memory_op") if nested else ("ROLLBACK",): self.db.execute(sql)
             raise
-        self.db.execute("COMMIT")
+        self.db.execute("RELEASE memory_op" if nested else "COMMIT")
 
     def _active(self, key):
         return self.db.execute(f"SELECT * FROM memory WHERE key = ? AND {ACTIVE}", (key,)).fetchone()
