@@ -292,8 +292,12 @@ def validate_community(problems, community):
         if ev.get("timezone") != "America/Los_Angeles":
             problems.append(f"{where}: timezone must be America/Los_Angeles")
         elif starts is not None:
-            local = starts.astimezone(ZoneInfo("America/Los_Angeles"))
-            if starts.utcoffset() != local.utcoffset():  # %:z shows Z as +00:00
+            try:
+                local = starts.astimezone(ZoneInfo("America/Los_Angeles"))
+            except OverflowError:  # e.g. year 1 or 9999 near the datetime range limit
+                local = None
+                problems.append(f"{where}.startsAt: {ev.get('startsAt')!r} is outside the supported date range")
+            if local is not None and starts.utcoffset() != local.utcoffset():  # %:z shows Z as +00:00
                 problems.append(f"{where}.startsAt: offset {starts.strftime('%:z')} is not Pacific time on "
                                 f"{local.date().isoformat()} (expected {local.strftime('%:z')})")
         if ev.get("status") not in EVENT_STATUSES:

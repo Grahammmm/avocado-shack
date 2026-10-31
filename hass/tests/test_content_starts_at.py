@@ -92,6 +92,13 @@ class StartsAtOffsetTests(unittest.TestCase):
         problems = self.problems("2026-13-45T09:00:00-08:00")
         self.assertEqual(problems, ["events[0].startsAt: not a valid ISO date-time"])
 
+    def test_datetime_range_edge_is_a_problem_not_a_crash(self):
+        # Year 1 UTC underflows when shifted to Pacific; year 9999 at -12:00 overflows the UTC conversion.
+        for value in ("0001-01-01T00:00:00Z", "0001-01-01T00:00:00+05:00", "9999-12-31T23:00:00-12:00"):
+            with self.subTest(startsAt=value):
+                self.assertEqual(self.problems(value),
+                                 [f"events[0].startsAt: {value!r} is outside the supported date range"])
+
     def test_one_problem_per_bad_event(self):
         ok = {**EVENT, "id": "hike-test-ok", "startsAt": "2026-07-04T09:00:00-07:00"}
         problems = self.problems("2026-07-04T09:00:00-08:00", extra=[ok])
