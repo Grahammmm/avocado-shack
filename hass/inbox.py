@@ -140,17 +140,14 @@ class Inbox:
         handle (or the mark) propagates and leaves that message and every later one pending for the next drain."""
         handled = []
         while (row := self._next()) is not None:
-            pid = row["provider_id"]
             try:
                 msg = Inbound(**json.loads(row["payload"]))
-                if msg.provider_id != pid: raise ValueError("payload names another message")
+                if msg.provider_id != row["provider_id"]: raise ValueError("payload names another message")
             except (TypeError, ValueError):  # a poison payload must not block every later message
-                self._mark(pid, "unreadable")
-                handled.append((pid, "unreadable"))
-                continue
-            disposition = conversation.handle(msg)
-            self._mark(pid, disposition)
-            handled.append((pid, disposition))
+                msg = None
+            disposition = "unreadable" if msg is None else conversation.handle(msg)
+            self._mark(row["provider_id"], disposition)
+            handled.append((row["provider_id"], disposition))
         return handled
 
     def state(self, provider_id: str):
