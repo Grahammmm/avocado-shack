@@ -168,8 +168,9 @@ def parse_memory(text: str):
     if match and match[1]:
         key, colon, value = (match[2] or "").partition(":")
         return "remember", key.strip().lower(), value.strip() if colon else ""
-    match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
+    match = MEMORY_RE.fullmatch(re.sub(r"!+$", "", text.strip()))  # a key may end in "." (KEY_RE), never "!"
     if match and match[3]: return "forget", match[4].lower(), None
+    match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
     return ("memory", None, None) if match and match[5] else None
 
 

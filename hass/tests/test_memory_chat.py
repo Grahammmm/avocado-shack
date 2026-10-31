@@ -51,6 +51,16 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         self.assertEqual([r["source"] for r in self.rows()], ["owner-stated:s1", "owner-stated:s2"])
         self.assertEqual([self.disposition(p) for p in ("s1", "s2")], ["memory-saved", "memory-saved"])
 
+    def test_forget_keeps_trailing_period_in_key(self):
+        """`hours` and `hours.` are distinct valid keys; `forget hours.` removes only `hours.`."""
+        self.chat("remember hours: plain", "memory-saved")
+        self.chat("remember hours.: dotted", "memory-saved", "Saved hours.: dotted. Send forget hours. to remove it.")
+        self.chat("forget hours.", "memory-forgot", "Forgot hours..")
+        self.chat("memory", "memory-list", "Saved (1):\nhours: plain (fact, since 2026-11-02)")
+        self.chat("forget hours.", "memory-none", "Nothing saved as hours..")
+        self.chat("forget hours!", "memory-forgot", "Forgot hours.")
+        self.chat("memory", "memory-list", "Nothing saved.")
+
     def test_correct_and_case(self):
         self.chat("remember hours: 9-5", "memory-saved", pid="c1")
         self.chat("remember hours: 10-6", "memory-updated", "Updated hours (was: 9-5). Send forget hours to remove it.",
