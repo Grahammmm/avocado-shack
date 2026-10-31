@@ -183,16 +183,18 @@ class SenderTests(unittest.TestCase):
                 BlueBubblesSender(BASE, path)
         self.assertIsInstance(BlueBubblesSender("https://localhost:1234/", self.pw), BlueBubblesSender)
 
-    def test_attachments_and_lost_password_are_refused_without_a_request(self):
+    def test_attachments_are_sent_as_a_note_and_lost_password_is_refused_without_a_request(self):
         fake = FakeTransport()
         sender = BlueBubblesSender(BASE, self.pw, fake)
-        with self.assertRaises(BridgeError) as ctx:
-            sender.send(OWNER_CHAT, "photo", ["/tmp/fixture.png"])
-        self.assertEqual(ctx.exception.code, "attachments-not-supported")
+        sender.send(OWNER_CHAT, "photo", ["/tmp/fixture.png"])
+        [call] = fake.calls
+        self.assertEqual(call["body"]["message"], "photo\n" + bridge.PICTURE_NOTE)
+        self.assertNotIn("fixture.png", json.dumps(call))
         self.pw.chmod(0o644)
-        with self.assertRaises(BridgeError) as ctx:
-            sender.send(OWNER_CHAT, "hi", [])
-        self.assertEqual((ctx.exception.code, fake.calls), ("password-unreadable", []))
+        for attachments in ([], ["/tmp/fixture.png"]):
+            with self.subTest(attachments=attachments), self.assertRaises(BridgeError) as ctx:
+                sender.send(OWNER_CHAT, "hi", attachments)
+            self.assertEqual((ctx.exception.code, len(fake.calls)), ("password-unreadable", 1))
 
 
 class ConversationBridgeTests(ConversationTestCase):

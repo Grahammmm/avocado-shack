@@ -24,6 +24,7 @@ BODY_TYPES = {f.name: (bool if f.name == "from_me" else str) for f in fields(Inb
 MAX_SKEW, MIN_KEY = 300, 32
 SEND_PATH, SEND_TIMEOUT = "/api/v1/message/text", 10
 LOOPBACK = ("127.0.0.1", "localhost")
+PICTURE_NOTE = "(Preview picture not sent: this chat link sends text only. It is saved with the draft.)"
 
 
 @dataclass(frozen=True)
@@ -167,7 +168,8 @@ class BlueBubblesSender:
         return f"BlueBubblesSender({self._base!r})"
 
     def send(self, chat, text, attachments=()):
-        if attachments: raise BridgeError("attachments-not-supported")
+        # text only: attachments add one fixed note; their paths are never opened, stat'ed, logged or sent
+        message = text + "\n" + PICTURE_NOTE if attachments else text
         code, status = None, None
         try:
             password = Path(_private_file(self._password_file)).read_text("utf-8").strip()
@@ -176,7 +178,7 @@ class BlueBubblesSender:
         if not password:
             code = "password-unreadable"
         else:
-            body = json.dumps({"chatGuid": chat, "tempGuid": str(uuid.uuid4()), "message": text,
+            body = json.dumps({"chatGuid": chat, "tempGuid": str(uuid.uuid4()), "message": message,
                                "method": "apple-script"}).encode("utf-8")
             url = f"{self._base}{SEND_PATH}?{urllib.parse.urlencode({'password': password})}"
             try:
