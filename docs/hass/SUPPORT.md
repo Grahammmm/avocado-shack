@@ -63,6 +63,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** none in the repo: there is no drain command. Leave the queue as it is; pending messages are handed on in order once the drain runs.
 - **Stop and ask:** before any service restart (attended), queue edit or deletion; when the count persists across two checks.
 
+### `inbox-unreadable`
+- **Means:** inbound messages in `inbox.sqlite3` could not be read and were skipped within `--inbox-unreadable-hours` (default 24); the detail is the count. No message text is kept; the problem clears by itself after the window.
+- **Check first:** re-run the check once; `inbox-integrity` alongside it means the queue file itself is damaged.
+- **Next step:** ask the owner to resend their last message(s); leave the queue as it is.
+- **Stop and ask:** before any queue edit or deletion; when the count keeps rising across checks.
+
 ### `inbox-integrity`
 - **Means:** `inbox.sqlite3` fails its quick check (`<n> issue(s)`) or cannot be opened (`database unreadable`).
 - **Check first:** re-run the check once.

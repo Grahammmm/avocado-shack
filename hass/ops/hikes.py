@@ -58,6 +58,19 @@ def _guest_warning(ctx, event):
         ctx.warnings.append(f"{eid} has {seats} confirmed guest{'s' * (seats != 1)}; nobody is notified automatically")
 
 
+def _move_warning(ctx, event, starts_at):
+    """Draft warning (never a refusal) when a new start leaves confirmed guests expecting the old one."""
+    day, clock = _local_parts(starts_at)
+    if (day, clock) == _local_parts(event["startsAt"]):
+        return
+    seats, eid = _seats(ctx, event["id"]), event["id"]
+    if isinstance(seats, Refused):
+        ctx.warnings.append(f"{eid} guest count unavailable; check RSVPs before approving")
+    elif seats > 0:
+        ctx.warnings.append(f"{eid} moves to {day} {clock} Pacific; {seats} confirmed guest{'s' * (seats != 1)} "
+                            f"{'are' if seats != 1 else 'is'} not told automatically")
+
+
 def _fmt(offset) -> str:
     minutes = int(offset.total_seconds() // 60)
     sign, minutes = ("-" if minutes < 0 else "+"), abs(minutes)
@@ -171,6 +184,8 @@ def _hike_update(content, args, ctx):
             return Refused(f"capacity {given['capacity']} is below {seats} confirmed guests")
     if given.get("rsvpEnabled") is False:
         _guest_warning(ctx, event)
+    elif "startsAt" in changes and event.get("rsvpEnabled"):
+        _move_warning(ctx, event, changes["startsAt"])
     before = copy.deepcopy(event)
     event.update(changes)
     if "noCapacityLimit" in given:
