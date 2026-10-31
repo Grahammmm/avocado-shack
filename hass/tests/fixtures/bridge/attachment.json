@@ -1,0 +1,12 @@
+{
+  "type": "new-message",
+  "data": {
+    "guid": "FAKE-0000-0000-0000-000000000006",
+    "text": "",
+    "handle": {"address": "owner@example.invalid"},
+    "chats": [{"guid": "iMessage;-;owner@example.invalid"}],
+    "attachments": [{"guid": "FAKE-ATTACHMENT-0001", "mimeType": "image/jpeg", "transferName": "fixture.jpg"}],
+    "dateCreated": 1793638860000,
+    "isFromMe": false
+  }
+}

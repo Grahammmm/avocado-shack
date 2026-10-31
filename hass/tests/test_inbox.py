@@ -13,6 +13,7 @@ from datetime import timedelta
 from unittest import mock
 
 from hass import inbox as inbox_mod
+from hass.bridge import EnvelopeError, seal, unseal
 from hass.conversation import Inbound
 from hass.tests.test_conversation import CHAT, OWNER, T0, ConversationTestCase, _ops
 from hass.tests.test_editor import DESC
@@ -156,6 +157,20 @@ class NonceTests(InboxTestCase):
         seen.add("ab" * 16)
         seen.add("ab" * 16)  # idempotent
         self.assertIn("ab" * 16, self.open_inbox().seen())
+
+    def test_replayed_envelope_is_refused_after_reopen(self):
+        key, nonce, now = b"k" * 32, "cd" * 16, T0.timestamp()
+        msg = self.msg("e1", "hours", T0)
+        envelope = seal(msg, key, nonce=nonce, now=now)
+        self.assertEqual(unseal(envelope, key, now=now, seen=self.inbox.seen()), msg)
+        self.inbox.close()
+        reopened = self.open_inbox()  # a restart: only the recorded nonce remembers the envelope
+        with self.assertRaises(EnvelopeError) as caught:
+            unseal(envelope, key, now=now + 1, seen=reopened.seen())
+        self.assertEqual(caught.exception.code, "replay")
+        other = seal(msg, b"x" * 32, nonce="ef" * 16, now=now)  # a refused envelope records no nonce
+        self.assertRaises(EnvelopeError, unseal, other, key, now=now, seen=reopened.seen())
+        self.assertNotIn("ef" * 16, reopened.seen())
 
 
 if __name__ == "__main__":
