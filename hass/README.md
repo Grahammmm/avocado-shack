@@ -132,6 +132,7 @@ Limits: H17 and H14 are partial. The support path for each health problem is `do
 
 ```sh
 python3 hass/statebackup.py create --state DIR --out DIR      # OUT: existing dir of yours, mode exactly 0700
+python3 hass/statebackup.py list --out DIR                    # read-only, before verify/restore: each hass-state-* entry, newest first
 python3 hass/statebackup.py verify BACKUP
 python3 hass/statebackup.py restore BACKUP --into DIR --worktree WT   # WT: a separate drill worktree
 ```

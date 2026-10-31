@@ -85,6 +85,7 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 
 ## Restore
 
+First pick the backup: `python3 hass/statebackup.py list --out BACKUPS` (read-only) names every `hass-state-*` entry, newest first; use one with `complete: true` (`no manifest (interrupted)` is an unfinished backup).
 1. `python3 hass/statebackup.py verify BACKUP` must answer `ok`.
 2. Drill only: `python3 hass/statebackup.py restore BACKUP --into NEWDIR --worktree DRILLWT --paused` builds a new state dir that
    starts with changes paused; DRILLWT is a separate drill worktree, never the writer worktree.
