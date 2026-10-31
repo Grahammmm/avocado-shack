@@ -25,6 +25,8 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX = 20
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
+ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
+                    "Please send the change as text.")
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
@@ -64,6 +66,7 @@ class Inbound:
     from_me: bool = False
     kind: str = "new"  # new | edited
     received_at: str = ""
+    attachments: int = 0  # H12: count only; nothing about the files is kept or downloaded
 
 
 class Editor:
@@ -342,6 +345,10 @@ class Conversation:
         if ignored:
             self._record(msg, ignored, owner=False)
             return ignored, None
+        if msg.attachments > 0:  # H12 part 1: the caption is never interpreted; no draft, keyword or approval
+            self._reply(ATTACHMENT_REPLY)
+            self._record(msg, "attachment-unsupported")
+            return "attachment-unsupported", None
         now, command = self._now(), parse_command(msg.text)
         expired = [r for r in self._drafts("state = 'proposed'") if datetime.fromisoformat(r["expires_at"]) <= now]
         if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts

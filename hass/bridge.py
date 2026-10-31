@@ -20,7 +20,7 @@ DIRECT_CHAT_RE = re.compile(r"[^;]+;-;[^;]+")  # one-to-one `iMessage;-;<address
 NONCE_RE, MAC_RE = re.compile(r"(?:[0-9a-f]{2}){16,}"), re.compile(r"[0-9a-f]{64}")
 SURROGATE_RE = re.compile(r"[\ud800-\udfff]")  # a JSON-escaped lone surrogate: str that cannot be UTF-8 encoded
 ENVELOPE_KEYS = {"v", "ts", "nonce", "body", "mac"}
-BODY_TYPES = {f.name: (bool if f.name == "from_me" else str) for f in fields(Inbound)}
+BODY_TYPES = {f.name: {"from_me": bool, "attachments": int}.get(f.name, str) for f in fields(Inbound)}
 MAX_SKEW, MIN_KEY = 300, 32
 SEND_PATH, SEND_TIMEOUT = "/api/v1/message/text", 10
 LOOPBACK = ("127.0.0.1", "localhost")
@@ -48,7 +48,8 @@ class BridgeError(Exception):
 
 
 def normalize(event):
-    """Inbound for a one-to-one text message event; otherwise Drop(<reason>). Pure: no I/O, no owner check."""
+    """Inbound for a one-to-one message event (attachments as a count only); otherwise Drop(<reason>). Pure: no I/O,
+    no owner check."""
     if not isinstance(event, dict) or not isinstance(event.get("type"), str): return Drop("malformed")
     kind = EVENT_KINDS.get(event["type"])
     if kind is None: return Drop("unsupported-event")
@@ -64,8 +65,9 @@ def normalize(event):
     if len(chats) != 1 or not isinstance(chats[0], dict) or not isinstance(chats[0].get("guid"), str) \
             or not DIRECT_CHAT_RE.fullmatch(chats[0]["guid"]):
         return Drop("group-or-unknown-chat")
-    if attachments: return Drop("attachments-not-supported")
     text = msg.get("text")
+    if attachments:  # attachment-only events carry empty, null or U+FFFC (object replacement) text
+        text = text.replace("\ufffc", "") if isinstance(text, str) else ""
     if not isinstance(text, str) or any(map(SURROGATE_RE.search, (guid, handle["address"], chats[0]["guid"], text))):
         return Drop("malformed")
     try:
@@ -73,7 +75,7 @@ def normalize(event):
     except (OverflowError, OSError, ValueError):
         return Drop("malformed")
     return Inbound(provider_id=guid, chat=chats[0]["guid"], sender=handle["address"], text=text, from_me=from_me,
-                   kind=kind, received_at=received)
+                   kind=kind, received_at=received, attachments=len(attachments))
 
 
 def _check_key(key) -> bytes:
@@ -109,7 +111,7 @@ def unseal(envelope, key, *, now, seen) -> Inbound:
     body, ts, nonce, mac = envelope["body"], envelope["ts"], envelope["nonce"], envelope["mac"]
     if not (type(ts) is int and isinstance(nonce, str) and NONCE_RE.fullmatch(nonce) and isinstance(mac, str)
             and MAC_RE.fullmatch(mac) and isinstance(body, dict) and set(body) == set(BODY_TYPES)
-            and all(type(body[k]) is t for k, t in BODY_TYPES.items())
+            and all(type(body[k]) is t for k, t in BODY_TYPES.items()) and body["attachments"] >= 0
             and not any(type(v) is str and SURROGATE_RE.search(v) for v in body.values())):
         raise EnvelopeError("shape")  # checked before the MAC, so unencodable text never reaches canonicalization
     if not hmac.compare_digest(_mac(key, envelope), mac): raise EnvelopeError("mac")

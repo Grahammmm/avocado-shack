@@ -81,11 +81,13 @@ class NormalizeTests(unittest.TestCase):
             "null text": (variant(lambda e, d: d.update(text=None)), "malformed"),
             "missing attachments": (variant(lambda e, d: d.pop("attachments")), "malformed"),
             "no data": (variant(lambda e, d: e.pop("data")), "malformed"),
-            "attachments": (event("attachment"), "attachments-not-supported"),
         }
         for name, (ev, reason) in cases.items():
             with self.subTest(name):
                 self.assertEqual(normalize(ev), Drop(reason))
+        self.assertEqual(normalize(event("attachment")), Inbound(  # H12 part 1: no longer a drop; Conversation replies
+            provider_id="FAKE-0000-0000-0000-000000000006", chat=OWNER_CHAT, sender=OWNER, text="",
+            received_at="2026-11-02T17:01:00+00:00", attachments=1))
         for junk in (None, [], {"type": 1}):
             self.assertEqual(normalize(junk), Drop("malformed"))
 
