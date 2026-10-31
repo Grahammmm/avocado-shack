@@ -3,6 +3,7 @@
 "Remove" means hide: no record is ever deleted. Held products are refused by every op (no op changes ``held`` or
 ``hold``). Ops take only exact ids/keys; resolving a name is always ``lookup`` first. Facts come from arguments only.
 Add and rename refuse a name+brand (product) or name (maker) another record has, case and spacing ignored, naming it.
+Edits drop fields that already have the asked value (exact equality); an edit left with nothing is refused, naming them.
 """
 
 from __future__ import annotations
@@ -63,6 +64,20 @@ def _maker_twin(content, name, key=None):
     return next((k for k, m in content.makers.items() if k != key and _same(m.get("name", ""), name)), None)
 
 
+def _shown(value) -> str:
+    text = "none" if value is None else str(value)
+    return text if len(text) <= 40 else text[:40] + "…"
+
+
+def _drop_unchanged(changes, record, label, more=False):
+    """Keys whose value differs from the record's (exact equality); Refused when all were unchanged and not ``more``."""
+    left = {k: v for k, v in changes.items() if record.get(k) != v}
+    if changes and not left and not more:
+        return Refused(f"{label} already has " + ", ".join(f"{k}={_shown(v)}" for k, v in changes.items())
+                       + "; nothing to change")
+    return left
+
+
 def _touch(collection, key, before, after):
     return [Touched(collection, key, before, copy.deepcopy(after))]
 
@@ -105,6 +120,9 @@ def _product_edit(content, args, ctx):
     if not changes and not clear_alt:
         fields = list(PRODUCT_EDITABLE) + ["producerKey", "clearProducer", "clearImageAlt"]
         return NeedsDetails(fields, f"What should change on {args['id']}? Give at least one of: " + ", ".join(fields))
+    changes = _drop_unchanged(changes, product, args["id"], more=clear_alt)
+    if isinstance(changes, Refused):
+        return changes
     if refused := _maker_problem(content, changes.get("producerKey")):
         return refused
     if ("name" in changes or "brand" in changes) and (twin := _twin(
@@ -166,6 +184,9 @@ def _maker_edit(content, args, ctx):
     if not changes:
         return NeedsDetails(list(MAKER_EDITABLE), f"What should change on maker {args['key']}? "
                             "Give at least one of: " + ", ".join(MAKER_EDITABLE))
+    changes = _drop_unchanged(changes, maker, f"maker {args['key']}")
+    if isinstance(changes, Refused):
+        return changes
     if "name" in changes and (twin := _maker_twin(content, changes["name"], args["key"])):
         return Refused(f"maker {twin} already has this name")
     before = copy.deepcopy(maker)
