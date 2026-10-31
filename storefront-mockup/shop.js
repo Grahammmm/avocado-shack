@@ -1,7 +1,7 @@
 let activeCategory='all',limit=12,visibleCount=0;
 function maker(p){return producers[p.producerKey]}
 function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus','Green Gold','Massa Organics'].includes(p.producerKey)}
-function photo(p){return `<img loading="lazy" width="800" height="800" src="${esc(p.image)}" alt="${esc(p.name)}">`}
+function photo(p){return `<img loading="lazy" width="800" height="800" src="${esc(p.image)}" alt="${esc(p.imageAlt||p.name)}">`}
 function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
 function badges(p){return organic(p)?'<div class="food-badges"><span>Organic</span></div>':''}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}

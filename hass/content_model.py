@@ -29,6 +29,7 @@ CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks"
 # key order (the migrated records use three historical orders; the generator
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
+PRODUCT_OPTIONAL_PUBLIC = ("imageAlt",)  # public when present; never required (any status)
 PRODUCT_INTERNAL_FIELDS = ("status", "hold")
 PRODUCT_STATUSES = ("active", "hidden", "held")
 HOLD_FIELDS = ("reason", "source", "evidence", "record")
@@ -152,7 +153,7 @@ def validate_products(problems, products, makers, site_dir: Path | None):
     seen = set()
     for i, rec in enumerate(products):
         where = f"products[{i}]"
-        if not _closed_keys(problems, where, rec, PRODUCT_PUBLIC_FIELDS + PRODUCT_INTERNAL_FIELDS,
+        if not _closed_keys(problems, where, rec, PRODUCT_PUBLIC_FIELDS + PRODUCT_OPTIONAL_PUBLIC + PRODUCT_INTERNAL_FIELDS,
                             ("id", "name", "brand", "category", "image", "status")):
             continue
         pid = rec.get("id")
@@ -173,6 +174,10 @@ def validate_products(problems, products, makers, site_dir: Path | None):
         image = rec.get("image")
         if not isinstance(image, str) or not IMAGE_RE.fullmatch(image):
             problems.append(f"{where}: image must be assets/products/<file> ({image!r})")
+        if "imageAlt" in rec:
+            _text(problems, f"{where}.imageAlt", rec["imageAlt"])
+            if isinstance(rec["imageAlt"], str) and len(rec["imageAlt"]) > 200:
+                problems.append(f"{where}.imageAlt: longer than 200 characters")
         if status == "held":
             hold = rec.get("hold")
             if _closed_keys(problems, f"{where}.hold", hold, HOLD_FIELDS, ("reason", "source")):
