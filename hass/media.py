@@ -5,8 +5,12 @@ root/originals/<sha[:2]>/<sha>.<ext> (0600 files, 0700 dirs) with a <sha>.json s
 bytes only; a sender's mimeType or file name is never trusted. The caller passes a media root that is NOT the Hass
 state dir (statebackup refuses unknown state entries) and lies outside the repository. Stdlib only; no network,
 no CLI, no wiring into the bridge. Refusals carry a fixed short owner reply with no path or hash in it.
+
+web_copy(root, sha256) (H10 part 2) writes root/web/<sha[:2]>/<sha>.<ext>: the stored original with every metadata
+block that can carry location, device or time removed by JPEG segment / PNG chunk filtering (pixels byte-identical,
+no image library). A photo that would show sideways without its EXIF Orientation is refused, never rotated.
 """
-import hashlib, json, os, re, stat, tempfile  # noqa: E401
+import hashlib, json, os, re, stat, tempfile, zlib  # noqa: E401
 from pathlib import Path
 
 from hass import editor
@@ -23,7 +27,14 @@ REPLIES = {
                         "Most Compatible, or send a screenshot of the photo.",
     "truncated": "That photo arrived incomplete. Please send it again.",
     "corrupt-store": "I could not save that photo safely, so nothing was changed. The operator needs to check the photo store.",
+    "not-found": "I could not find that photo any more, so nothing was changed. Please send it again.",
+    "unreadable": "I could not read that photo safely, so nothing was changed. Please send it again as a screenshot.",
+    "needs-rotation": "This photo is stored sideways. Please send it again as a screenshot so it shows the right way up.",
 }
+SHA_RE = re.compile(r"[0-9a-f]{64}")
+JPEG_KEEP = {*range(0xC0, 0xD0), 0xDB, 0xDD}  # SOFn plus DHT C4, JPG C8, DAC CC; DQT; DRI
+JPEG_TAGGED = {0xE0: b"JFIF\0", 0xE2: b"ICC_PROFILE\0", 0xEE: b"Adobe"}  # colour/format only, no location
+PNG_KEEP = {b"IHDR", b"PLTE", b"IDAT", b"IEND", b"tRNS", b"gAMA", b"cHRM", b"sRGB", b"iCCP", b"sBIT", b"pHYs", b"bKGD"}
 
 class Refused(Exception):
     """A photo we will not store; .code is one of REPLIES and .reply is the fixed owner text for it."""
@@ -106,3 +117,124 @@ def store_original(root, data: bytes, *, received_at: str, source: str) -> dict:
         meta = {"sha256": sha, "kind": kind, "bytes": len(data), "received_at": received_at, "source": source}
         _write_new(sidecar, json.dumps(meta, indent=2, sort_keys=True).encode("utf-8") + b"\n")
     return {"sha256": sha, "kind": kind, "bytes": len(data), "path": str(final), "duplicate": duplicate}
+
+def _check_orientation(tiff: bytes) -> None:
+    """EXIF IFD0 Orientation (0x0112): absent or 1 passes; 2-8 -> needs-rotation; malformed EXIF -> unreadable."""
+    order = {b"II*\0": "little", b"MM\0*": "big"}.get(bytes(tiff[:4]))
+    if order is None: raise Refused("unreadable")
+    def num(at, size):
+        if at + size > len(tiff): raise Refused("unreadable")
+        return int.from_bytes(tiff[at:at + size], order)
+    ifd = num(4, 4)
+    for entry in range(ifd + 2, ifd + 2 + 12 * num(ifd, 2), 12):
+        if num(entry, 2) != 0x0112: continue
+        value = num(entry + 8, 2)  # a SHORT sits left-justified in the 4-byte value field for both byte orders
+        if num(entry + 2, 2) != 3 or num(entry + 4, 4) != 1 or not 1 <= value <= 8: raise Refused("unreadable")
+        if value != 1: raise Refused("needs-rotation")
+
+def _jpeg_kept(marker: int, seg: bytes) -> bool:
+    return marker in JPEG_KEEP or (marker in JPEG_TAGGED and seg[4:].startswith(JPEG_TAGGED[marker]))
+
+def _jpeg_name(marker: int) -> str:
+    return "COM" if marker == 0xFE else f"APP{marker - 0xE0}" if 0xE0 <= marker <= 0xEF else f"FF{marker:02X}"
+
+def _jpeg_fill(data: bytes, i: int) -> int:
+    """Index of the marker's own FF: any marker may be preceded by fill bytes (repeated FF), which are skipped."""
+    while data[i:i + 2] == b"\xff\xff": i += 1
+    return i
+
+def _jpeg_segment(data: bytes, i: int):
+    """(start, marker, end) of the length-prefixed segment at i after any fill; unreadable if there is none."""
+    i = _jpeg_fill(data, i)
+    if i + 4 > len(data) or data[i] != 0xFF: raise Refused("unreadable")
+    marker, end = data[i + 1], i + 2 + int.from_bytes(data[i + 2:i + 4], "big")
+    if marker in (0x00, 0x01, 0xD8, 0xD9, 0xFF) or 0xD0 <= marker <= 0xD7 or end < i + 4 or end > len(data):
+        raise Refused("unreadable")
+    return i, marker, end
+
+def _jpeg_split(data: bytes):
+    """Header segments [(marker, bytes)] before the first SOS (header fill dropped), and the SOS..end tail
+    (copied byte-for-byte, including any fill in front of the SOS marker)."""
+    if not data.startswith(b"\xff\xd8"): raise Refused("unreadable")
+    segs, i = [], 2
+    while True:
+        start, marker, end = _jpeg_segment(data, i)
+        if marker == 0xDA: return segs, data[i:]
+        segs.append((marker, data[start:end]))
+        i = end
+
+def _jpeg_check_tail(tail: bytes) -> None:
+    """The tail is copied unchanged, so it may hold only scans and kept tables up to one EOI, then NUL padding:
+    a COM/APPn between progressive scans or a second image appended after EOI (which can carry its own EXIF)
+    is refused as unreadable rather than published. Fill bytes before any marker (EOI and RSTn too) are legal."""
+    i = 0
+    while tail[(i := _jpeg_fill(tail, i)):i + 2] != b"\xff\xd9":
+        start, marker, end = _jpeg_segment(tail, i)
+        if marker not in (0xDA, 0xDC) and not _jpeg_kept(marker, tail[start:end]): raise Refused("unreadable")
+        i = end
+        while marker == 0xDA and (i := tail.find(b"\xff", i)) >= 0:
+            j = _jpeg_fill(tail, i)  # entropy-coded data: FF00 is a stuffed byte, FFD0-FFD7 a restart marker
+            if j == i and tail[i + 1:i + 2] == b"\0": i += 2
+            elif b"\xd0" <= tail[j + 1:j + 2] <= b"\xd7": i = j + 2
+            else: break
+        if i < 0: raise Refused("unreadable")
+    if tail[i + 2:].strip(b"\0"): raise Refused("unreadable")
+
+def _jpeg_copy(data: bytes):
+    segs, tail = _jpeg_split(data)
+    _jpeg_check_tail(tail)
+    for marker, seg in segs:
+        if marker == 0xE1 and seg[4:].startswith(b"Exif\0\0"): _check_orientation(seg[10:])
+    out = b"\xff\xd8" + b"".join(seg for marker, seg in segs if _jpeg_kept(marker, seg)) + tail
+    again, again_tail = _jpeg_split(out)  # invariant self-check before anything is written
+    if again_tail != tail or not all(_jpeg_kept(marker, seg) for marker, seg in again): raise Refused("unreadable")
+    return out, {_jpeg_name(marker) for marker, seg in segs if not _jpeg_kept(marker, seg)}
+
+def _png_chunks(data: bytes):
+    """[(type, chunk bytes)] up to the first IEND; unreadable on a bad length or CRC, or anything but NULs after IEND."""
+    if not data.startswith(KINDS["png"]): raise Refused("unreadable")
+    chunks, i = [], len(KINDS["png"])
+    while not chunks or chunks[-1][0] != b"IEND":
+        end = i + 12 + int.from_bytes(data[i:i + 4], "big")
+        if i + 12 > len(data) or end > len(data) or zlib.crc32(data[i + 4:end - 4]) != int.from_bytes(data[end - 4:end], "big"):
+            raise Refused("unreadable")
+        chunks.append((data[i + 4:i + 8], data[i:end]))
+        i = end
+    if data[i:].strip(b"\0"): raise Refused("unreadable")
+    return chunks
+
+def _png_idat(chunks) -> bytes:
+    return b"".join(chunk[8:-4] for kind, chunk in chunks if kind == b"IDAT")
+
+def _png_copy(data: bytes):
+    chunks = _png_chunks(data)
+    for kind, chunk in chunks:
+        if kind == b"eXIf": _check_orientation(chunk[8:-4])
+    out = KINDS["png"] + b"".join(chunk for kind, chunk in chunks if kind in PNG_KEEP)
+    again = _png_chunks(out)  # invariant self-check before anything is written
+    if any(kind not in PNG_KEEP for kind, _ in again) or _png_idat(again) != _png_idat(chunks): raise Refused("unreadable")
+    return out, {kind.decode("latin-1") for kind, _ in chunks if kind not in PNG_KEEP}
+
+def web_copy(root, sha256: str) -> dict:
+    """Write the metadata-free copy of a stored original once; a repeat returns it with duplicate=True."""
+    if not isinstance(sha256, str) or not SHA_RE.fullmatch(sha256): raise ValueError("sha256 must be 64 lowercase hex")
+    base = _open_root(root)
+    folder = base / "originals" / sha256[:2]
+    for d in (folder.parent, folder):
+        try:
+            if not stat.S_ISDIR(os.lstat(d).st_mode): raise Refused("corrupt-store")
+        except FileNotFoundError: raise Refused("not-found") from None
+    found = [d for d in (_existing(folder / f"{sha256}.{ext}") for ext in ("jpg", "png")) if d is not None]
+    if not found: raise Refused("not-found")
+    if len(found) > 1 or hashlib.sha256(found[0]).hexdigest() != sha256: raise Refused("corrupt-store")
+    data, kind = found[0], sniff(found[0])
+    if kind is None: raise Refused("unreadable")
+    out, removed = (_jpeg_copy if kind == "jpeg" else _png_copy)(data)
+    _private_dir(base / "web")
+    _private_dir(base / "web" / sha256[:2])
+    final = base / "web" / sha256[:2] / f"{sha256}.{EXT[kind]}"
+    have = _existing(final)
+    if have is not None and have != out: raise Refused("corrupt-store")
+    if have is None: _write_new(final, out)
+    return {"sha256": sha256, "web_sha256": hashlib.sha256(out).hexdigest(), "kind": kind, "bytes": len(out),
+            "removed": sorted(removed), "path": str(final), "duplicate": have is not None}
