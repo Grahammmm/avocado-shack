@@ -142,7 +142,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--repo", type=Path, default=REPO_ROOT)
     args = parser.parse_args(argv)
-    failures, report = run_checks(args.repo.resolve())
+    try:
+        failures, report = run_checks(args.repo.resolve())
+    except (OSError, ValueError) as exc:
+        print(f"migration_check: io error: {type(exc).__name__}", file=sys.stderr)
+        return 2
     for key, value in report.items():
         print(f"{key}: {value}")
     if failures:
