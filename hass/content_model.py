@@ -50,6 +50,7 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
+MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 IMAGE_RE = re.compile(r"^assets/products/[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(webp|jpg|jpeg|png)$")
@@ -309,12 +310,21 @@ def validate_store(problems, store):
         return
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
+    for field in ("streetAddress", "town"):
+        if isinstance(store.get(field), str) and len(store[field]) > MAX_ADDRESS_PART:
+            problems.append(f"store.{field}: longer than {MAX_ADDRESS_PART} characters")
     hours = store.get("hours")
     if not isinstance(hours, list) or not hours:
         problems.append("store.hours: must be a non-empty list of lines")
         return
+    if len(hours) > MAX_HOURS_LINES:
+        problems.append(f"store.hours: at most {MAX_HOURS_LINES} lines")
     for i, line in enumerate(hours):
         _text(problems, f"store.hours[{i}]", line)
+        if isinstance(line, str) and len(line) > MAX_HOURS_LINE:
+            problems.append(f"store.hours[{i}]: longer than {MAX_HOURS_LINE} characters")
+        if isinstance(line, str) and line in hours[:i]:
+            problems.append(f"store.hours[{i}]: repeats an earlier line")
 
 
 def validate(content: Content, site_dir: Path | None = SITE_DIR) -> None:
