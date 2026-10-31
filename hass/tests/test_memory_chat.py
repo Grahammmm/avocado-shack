@@ -1,0 +1,145 @@
+"""H15 part 2 tests: `remember <key>: <text>`, `forget <key>` and `memory` in the owner chat.
+
+Same setup as H05/H17 (temp Git repo, private 0700 state dir, injected clock, fixture interpreter); placeholder
+example.invalid senders only. Run: python3 -m unittest discover -s hass/tests -t . -v
+"""
+
+import unittest
+from datetime import timedelta
+from unittest import mock
+
+from hass import conversation, memory
+from hass.tests.test_conversation import GROUP, STRANGER, T0, ConversationTestCase
+from hass.tests.test_status_pause import PAUSED, StoreMixin
+
+KEY_BAD = "Not saved: key must be 1–64 of a-z 0-9 . -."
+TEXT_BAD = "Not saved: text must be 1–500 plain characters."
+
+
+class MemoryChatTests(StoreMixin, ConversationTestCase):
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        for obj, name in ((self.interp, "interpret"), (self.editor, "prepare"), (self.editor, "apply")):
+            real = getattr(obj, name)
+            setattr(obj, name, lambda *a, _r=real, _n=name: (self.calls.append(_n), _r(*a))[1])
+
+    def rows(self):
+        return [dict(r) for r in self.conv.db.execute("SELECT * FROM memory ORDER BY id")]
+
+    def chat(self, text, disposition, reply=None, **kw):
+        self.assertEqual(self.say(text, **kw), disposition)
+        replies = self.replies()
+        if reply is not None: self.assertEqual(replies, [reply])
+        return replies
+
+    def test_save_list_forget_list(self):
+        self.chat("memory", "memory-list", "Nothing saved.")
+        self.chat("remember hours: 9-5", "memory-saved", "Saved hours: 9-5. Send forget hours to remove it.", pid="s1")
+        self.now = T0 + timedelta(hours=8)  # 01:00 UTC on Nov 3 is still Nov 2 in Los Angeles
+        self.chat("remember parking: Behind the barn", "memory-saved", pid="s2")
+        self.chat("Memory.", "memory-list", "Saved (2):\nhours: 9-5 (fact, since 2026-11-02)\n"
+                                            "parking: Behind the barn (fact, since 2026-11-02)")
+        self.chat("forget hours", "memory-forgot", "Forgot hours.")
+        self.chat("Forget hours!", "memory-none", "Nothing saved as hours.")
+        self.chat("forget no_such", "memory-none", "Nothing saved as no_such.")
+        self.chat("forget parking", "memory-forgot")
+        self.chat("memory", "memory-list", "Nothing saved.")
+        for row in self.rows():  # store behaviour: text blanked, dates kept
+            self.assertEqual(row["value"], "")
+            self.assertTrue(row["created_at"] and row["forgotten_at"])
+        self.assertEqual([r["source"] for r in self.rows()], ["owner-stated:s1", "owner-stated:s2"])
+        self.assertEqual([self.disposition(p) for p in ("s1", "s2")], ["memory-saved", "memory-saved"])
+
+    def test_correct_and_case(self):
+        self.chat("remember hours: 9-5", "memory-saved", pid="c1")
+        self.chat("remember hours: 10-6", "memory-updated", "Updated hours (was: 9-5). Send forget hours to remove it.",
+                  pid="c2")
+        self.chat("Remember Hours: Closed Mondays", "memory-updated", pid="c3")
+        self.chat("memory", "memory-list", "Saved (1):\nhours: Closed Mondays (fact, since 2026-11-02)")
+        self.assertEqual(memory.Memory.on_connection(self.conv.db, self.conv.clock).get("hours"), "Closed Mondays")
+        self.assertEqual([(r["value"], r["source"], r["superseded_at"] is None) for r in self.rows()],
+                         [("9-5", "owner-stated:c1", False), ("10-6", "owner-stated:c2", False),
+                          ("Closed Mondays", "owner-stated:c3", True)])
+
+    def test_invalid_is_not_saved(self):
+        for text, reply in (("remember no spaces!: x", KEY_BAD), ("remember hours:", TEXT_BAD),
+                            ("remember hours:   ", TEXT_BAD), ("remember hours: " + "x" * 501, TEXT_BAD),
+                            ("remember hours: ring \x07 bell", TEXT_BAD), ("remember hours: two\nlines", TEXT_BAD),
+                            ("remember to restock avocados", KEY_BAD), ("remember hours", TEXT_BAD),
+                            ("REMEMBER", KEY_BAD), ("remember " + "k" * 65 + ": x", KEY_BAD)):
+            with self.subTest(text=text):
+                self.chat(text, "memory-invalid", reply, pid=f"bad{len(self.out.sent)}")
+        self.assertEqual(self.rows(), [])
+        self.chat("remember hours: " + "x" * 500, "memory-saved")  # the limit itself is allowed
+
+    def test_owner_gate_and_duplicate(self):
+        for kw, disposition in ((dict(sender=STRANGER), "ignored"), (dict(chat=GROUP), "ignored"),
+                                (dict(from_me=True), "echo"), (dict(kind="edited"), "edited-ignored")):
+            with self.subTest(**kw):
+                self.chat("remember hours: 9-5", disposition, **kw)
+                self.assertEqual(self.out.sent, [])
+        self.assertNotIn("memory", self.tables())
+        self.chat("remember hours: 9-5", "memory-saved", pid="d1")
+        self.chat("remember hours: 9-5", "duplicate", pid="d1")
+        self.assertEqual(self.replies(), [])
+        self.assertEqual((len(self.rows()), self.disposition("d1")), (1, "memory-saved"))
+
+    def test_no_site_effect_and_open_draft_kept(self):
+        draft, _reply = self.propose("hours")
+        self.calls.clear()
+        for text in ("remember hours: 9-5", "remember hours: 10-6", "memory", "forget hours", "remember x y"):
+            self.say(text)
+        self.replies()
+        self.assertEqual((self.calls, self.commits(), self.drafts()), ([], 0, [draft]))
+        self.assertEqual(self.say(f"yes {draft['code']}"), "approved")
+        self.assertEqual((self.commits(), self.drafts()[0]["state"]), (1, "applied"))
+
+    def test_paused_still_saves(self):
+        self.chat("pause changes", "pause", PAUSED)
+        self.chat("remember hours: 9-5", "memory-saved", "Saved hours: 9-5. Send forget hours to remove it.")
+        self.assertEqual(self.status()[0], "Changes: paused since 2026-11-02 09:00 PST")
+        self.assertEqual(self.calls, [])
+
+    def test_look_alikes_go_to_interpreter(self):
+        for text in ("please remember to restock avocados", "Remembering the hike", "forget it all",
+                     "memory of the hike", "Remember."):
+            with self.subTest(text=text):
+                self.assertIsNone(conversation.parse_memory(text))
+                self.calls.clear()
+                self.chat(text, "unsupported", "Sorry, I can't do that yet.")
+                self.assertEqual(self.calls, ["interpret"])
+        self.assertNotIn("memory", self.tables())
+
+    def test_one_connection_and_failed_op_rolls_back_only_itself(self):
+        self.chat("remember hours: 9-5", "memory-saved")
+        self.assertIs(self.conv.memory.db, self.conv.db)
+        partial = []
+
+        def half(store, *args):  # correct() has already superseded the old row when this raises
+            partial.append(store._active("hours"))
+            raise ValueError("simulated failure")
+
+        with mock.patch.object(memory.Memory, "_insert", half):
+            self.chat("remember hours: 10-6", "memory-invalid", "Not saved: simulated failure.", pid="f1")
+        self.assertEqual((partial, self.disposition("f1")), ([None], "memory-invalid"))
+        self.assertEqual([(r["value"], r["superseded_at"]) for r in self.rows()], [("9-5", None)])
+        self.assertFalse(self.conv.db.in_transaction)
+        self.chat("remember hours: 10-6", "memory-updated")  # the connection is usable; nothing is locked
+        self.conv = self.open()  # restart: rows persist, a fresh connection reads them
+        self.chat("memory", "memory-list", "Saved (1):\nhours: 10-6 (fact, since 2026-11-02)")
+
+    def test_list_truncates_at_twenty(self):
+        for i in range(23):
+            self.say(f"remember k{i:02d}: v{i}")
+        [reply] = self.replies()[-1:]
+        self.say("memory")
+        lines = self.replies()[0].splitlines()
+        self.assertEqual((lines[0], lines[1], lines[20], lines[-1], len(lines)),
+                         ("Saved (23):", "k00: v0 (fact, since 2026-11-02)", "k19: v19 (fact, since 2026-11-02)",
+                          "… and 3 more.", 22))
+        self.assertEqual(reply, "Saved k22: v22. Send forget k22 to remove it.")
+
+
+if __name__ == "__main__":
+    unittest.main()

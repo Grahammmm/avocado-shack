@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import editor as editor_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
+from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass.content_model import ContentError, load_and_validate  # noqa: E402
 from hass.ops import hikes  # noqa: E402
 
@@ -21,6 +21,9 @@ APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
                         r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?")  # H17
+# H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
+MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)", re.IGNORECASE | re.DOTALL)
+MEMORY_LIST_MAX = 20
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
@@ -158,6 +161,18 @@ def parse_command(text: str):
     return ("undo", match[3]) if match[2] else (next(v for v in (match[1], match[4], match[5], match[6]) if v), None)
 
 
+def parse_memory(text: str):
+    """("remember", key, text), ("forget", key, None) or ("memory", None, None) when the whole message is an H15
+    memory command; otherwise None. `remember …` without `key:` still parses (as an empty text) so it is refused."""
+    match = MEMORY_RE.fullmatch(text.strip())
+    if match and match[1]:
+        key, colon, value = (match[2] or "").partition(":")
+        return "remember", key.strip().lower(), value.strip() if colon else ""
+    match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
+    if match and match[3]: return "forget", match[4].lower(), None
+    return ("memory", None, None) if match and match[5] else None
+
+
 def _checked(result) -> dict:
     if isinstance(result, dict):
         if set(result) == {"ops", "revises"} and isinstance(result["ops"], list) \
@@ -217,6 +232,7 @@ class Conversation:
         for column in ("screenshot", "checked_at"):  # an H05 database gains the H06 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
         self.outbox = Outbox(self.db, self._now)
+        self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.recover()
 
     def _now(self) -> datetime:
@@ -331,6 +347,11 @@ class Conversation:
         for row in expired: self._move(row, "expired")
         if command:
             disposition = self._command(msg, now, *command)
+            self._record(msg, disposition)
+            return disposition, None
+        memory = parse_memory(msg.text)
+        if memory:  # not a site change: never the interpreter or editor, and pause does not apply
+            disposition = self._memory(msg, *memory)
             self._record(msg, disposition)
             return disposition, None
         keyword = parse_keyword(msg.text)
@@ -517,6 +538,43 @@ class Conversation:
         row = same[0] if same else self._propose(out["draft"], msg.sender, now)
         self._proposal_reply(row, out["draft"], f"Undo {done[-1]['code']}:\n")
         return "proposed"
+
+    # -- H15: remember, forget, memory ---------------------------------------------------------------------------
+    def _memory(self, msg, verb, key, value) -> str:
+        """Owner-stated facts on this connection inside the message's transaction; a store ValueError undoes only
+        that op's savepoint and the message is still recorded. The interpreter never reads memory."""
+        if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
+        if verb == "memory":
+            rows = self.memory.list()
+            lines = [f"{r['key']}: {r['value']} ({r['kind']}, since "
+                     f"{datetime.fromisoformat(r['created_at']).astimezone(LOCAL_TZ):%Y-%m-%d})"
+                     for r in rows[:MEMORY_LIST_MAX]]
+            more = [f"… and {len(rows) - MEMORY_LIST_MAX} more."] if len(rows) > MEMORY_LIST_MAX else []
+            self._reply("\n".join([f"Saved ({len(rows)}):"] + lines + more) if rows else "Nothing saved.")
+            return "memory-list"
+        valid = memory_mod.KEY_RE.fullmatch(key) is not None
+        if verb == "forget":
+            if not valid or self.memory.get(key) is None:
+                self._reply(f"Nothing saved as {key}.")
+                return "memory-none"
+            self.memory.forget(key)
+            self._reply(f"Forgot {key}.")
+            return "memory-forgot"
+        problem = "key must be 1–64 of a-z 0-9 . -" if not valid else None
+        if valid and (not memory_mod._clean(value) or len(value) > memory_mod.MAX_VALUE):
+            problem = f"text must be 1–{memory_mod.MAX_VALUE} plain characters"
+        old, source = (self.memory.get(key) if valid else None), f"owner-stated:{msg.provider_id}"
+        try:
+            if problem is None and old is None: self.memory.remember(key, value, "fact", source)
+            elif problem is None: self.memory.correct(key, value, source)
+        except ValueError as exc:
+            problem = str(exc)
+        if problem:
+            self._reply(f"Not saved: {problem}.")
+            return "memory-invalid"
+        self._reply((f"Saved {key}: {value}." if old is None else f"Updated {key} (was: {old}).")
+                    + f" Send forget {key} to remove it.")
+        return "memory-saved" if old is None else "memory-updated"
 
     # -- H17: status, pause changes, resume changes ----------------------------------------------------------------
     def _paused(self):
