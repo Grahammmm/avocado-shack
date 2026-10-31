@@ -73,8 +73,7 @@ def _write_overlay(tmp: Path, files: dict) -> None:
         plan.append((path, data))
     for path, data in plan:
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, "wb") as handle:
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600), "wb") as handle:
             os.fchmod(handle.fileno(), 0o600)
             handle.write(data)
 

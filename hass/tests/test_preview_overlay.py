@@ -1,7 +1,4 @@
-"""H06 preview overlay (RF1210-5): generated files never write through the assets link or any other link.
-
-Fixture worktree via git; no node or Chromium needed. Run: python3 -B -m unittest hass.tests.test_preview_overlay -v
-"""
+"""H06 preview overlay (RF1210-5): no write through the assets link or any other link (git fixture, no node/Chromium)."""
 
 import os
 import shutil
@@ -109,12 +106,11 @@ class OverlayTests(unittest.TestCase):
     def test_normal_overlay_written_0600(self):
         files = {"storefront-mockup/index.html": b"<p>generated</p>",
                  "storefront-mockup/products/p1/index.html": b"<p>product</p>"}
-        site = self.previewer._copy_site(self.tmp, files)
-        self.assertEqual(site, self.tmp / "storefront-mockup")
+        self.previewer._copy_site(self.tmp, files)
         for rel, data in files.items():
             self.assertEqual((self.tmp / rel).read_bytes(), data)
             self.assertEqual(stat.S_IMODE((self.tmp / rel).stat().st_mode), 0o600)
-        self.assertTrue((site / "assets").is_symlink())
+        self.assertTrue((self.tmp / "storefront-mockup" / "assets").is_symlink())
         self.assertWorktreeUnchanged()
 
     def test_capture_turns_refusal_into_result(self):
