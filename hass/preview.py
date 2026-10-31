@@ -8,7 +8,7 @@ fresh empty temp database and a minimal environment; ``hass/screenshot.cjs`` cap
 The server is always stopped and the copy removed. Screenshots are written 0600; nothing is published or sent.
 """
 import http.client, json, os, shutil, socket, subprocess, sys, tempfile, time  # noqa: E401
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
@@ -56,6 +56,29 @@ def _write_private(path: Path, data: bytes) -> None:
     os.chmod(path, 0o600)
 
 
+def _write_overlay(tmp: Path, files: dict) -> None:
+    """Lay ``files`` over the copy: every key is checked before any is written, and no link is ever written through."""
+    root, plan = tmp.resolve(), []
+    for rel, data in files.items():
+        parts = PurePosixPath(rel).parts
+        if len(parts) < 2 or parts[0] != SITE or ".." in parts:
+            raise ValueError(f"preview file outside the site: {rel}")
+        if parts[:2] == (SITE, "assets"):
+            raise ValueError(f"preview file inside the linked assets folder: {rel}")
+        path = ancestor = tmp.joinpath(*parts)
+        while not os.path.lexists(ancestor):
+            ancestor = ancestor.parent
+        if not ancestor.resolve().is_relative_to(root):
+            raise ValueError(f"preview file resolves outside the copy: {rel}")
+        plan.append((path, data))
+    for path, data in plan:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "wb") as handle:
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(data)
+
+
 def _last_line(text: str) -> str:
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     return (lines[-1] if lines else "no output")[:200]
@@ -85,11 +108,7 @@ class Previewer:
         site = tmp / SITE
         site.mkdir(exist_ok=True)
         (site / "assets").symlink_to((self.worktree / ASSETS).resolve(), target_is_directory=True)
-        for rel, data in files.items():
-            if not rel.startswith(SITE + "/") or ".." in Path(rel).parts:
-                raise ValueError(f"preview file outside the site: {rel}")
-            (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
-            (tmp / rel).write_bytes(data)
+        _write_overlay(tmp, files)
         return site
 
     def _capture(self, files: dict, target: dict, out_png: Path) -> dict:
