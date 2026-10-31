@@ -105,7 +105,7 @@ class Previewer:
                                       cwd=tmp, env=server_env, stdin=subprocess.DEVNULL,
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.last_server = {"pid": server.pid, "port": port}
-            runs = []  # (viewport, process, shot, checks or None when the process failed); phone first
+            runs = []  # (viewport, shot, checks or None when the run failed, failure text); phone first
             try:
                 deadline = time.monotonic() + START_TIMEOUT
                 while not _get_ok(port):
@@ -117,12 +117,18 @@ class Previewer:
                     node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps(target),
                                 "OUT": str(shot), "VIEWPORT": name,
                                 **{k: self.env[k] for k in PASS_THROUGH if self.env.get(k)}}
-                    proc = subprocess.run(["node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
-                                          text=True, timeout=CAPTURE_TIMEOUT)
-                    ran = not proc.returncode and shot.is_file()
-                    checks = json.loads(proc.stdout.strip().splitlines()[-1]).get("checks", {}) if ran else None
-                    runs.append((name, proc, shot, checks))
-                    if not ran or any(passed is not True for passed in checks.values()):
+                    try:
+                        proc = subprocess.run(["node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
+                                              text=True, timeout=CAPTURE_TIMEOUT)
+                        ran = not proc.returncode and shot.is_file()
+                        checks = json.loads(proc.stdout.strip().splitlines()[-1]).get("checks", {}) if ran else None
+                        failure = None if ran else _last_line(proc.stderr or proc.stdout)
+                    except Exception as exc:  # noqa: BLE001 - a desktop timeout/crash keeps the phone result
+                        if name == "phone":
+                            raise
+                        checks, failure = None, f"{type(exc).__name__}: {exc}"[:200]
+                    runs.append((name, shot, checks, failure))
+                    if checks is None or any(passed is not True for passed in checks.values()):
                         break  # a failed phone run is reported as before; desktop is not run
             finally:
                 server.terminate()
@@ -131,14 +137,14 @@ class Previewer:
                 except subprocess.TimeoutExpired:
                     server.kill()
                     server.wait()
-            _name, proc, shot, checks = runs[0]
+            _name, shot, checks, failure = runs[0]
             if checks is None:
-                return {"ok": False, "png": None, "checks": {}, "error": _last_line(proc.stderr or proc.stdout)}
+                return {"ok": False, "png": None, "checks": {}, "error": failure}
             _write_private(out_png, shot.read_bytes())
             error, extra = None, ({"desktopPng": None} if "desktop" in self.viewports else {})
-            for _name, proc, shot, more in runs[1:]:
+            for _name, shot, more, failure in runs[1:]:
                 if more is None:
-                    error = "desktop: " + _last_line(proc.stderr or proc.stdout)
+                    error = "desktop: " + failure
                     continue
                 extra["desktopPng"] = str(out_png.with_name(out_png.stem + "-desktop.png"))
                 _write_private(Path(extra["desktopPng"]), shot.read_bytes())

@@ -1,16 +1,10 @@
 """RF1058-10 tests: the private preview checks phone then desktop width against one loopback preview server.
 
 A fake ``node`` first on the PATH given in ``env`` (no Chromium) records each call (VIEWPORT, PREVIEW_URL, a GET of the
-live server), writes a tiny PNG to OUT and prints the checks a per-viewport plan file chooses; the real
-community-server.py serves a temp writer repo. The real-Chromium case is skipped unless PLAYWRIGHT_MODULE is set.
-"""
+live server), optionally sleeps, writes a tiny PNG to OUT and prints the checks a per-viewport plan file chooses; the
+real community-server.py serves a temp writer repo. The real-Chromium case is skipped unless PLAYWRIGHT_MODULE is set."""
 
-import json
-import os
-import stat
-import sys
-import tempfile
-import unittest
+import json, os, stat, sys, tempfile, unittest  # noqa: E401
 from pathlib import Path
 from unittest import mock
 
@@ -22,12 +16,13 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
 PASS = {"productShown": True, "description": True, "noPageErrors": True, "noPosts": True}
 TARGET = {"kind": "product", "id": "photo-product-001", "name": "x", "status": "active", "description": "d"}
 FAKE_NODE = """#!{python}
-import json, os, sys, urllib.request
+import json, os, sys, time, urllib.request
 url = os.environ["PREVIEW_URL"]
 with open({log!r}, "a") as log:
     log.write(json.dumps({{"viewport": os.environ.get("VIEWPORT"), "url": url,
                           "status": urllib.request.urlopen(url + "/", timeout=5).status}}) + "\\n")
 plan = json.load(open({plan!r}))[os.environ["VIEWPORT"]]
+time.sleep(plan.get("sleep", 0))
 if plan.get("exit"):
     print("render broke", file=sys.stderr)
     sys.exit(plan["exit"])
@@ -97,13 +92,18 @@ class ViewportTests(EditorTestCase):
                                                 "desktop": {"checks": {**PASS, "noPosts": "yes"}}})
         self.assertEqual((result["ok"], result["error"]), (False, "check failed: desktop:noPosts"))
 
-    def test_desktop_process_failure_keeps_the_phone_png(self):
-        result, calls, _server = self.capture({"phone": {"checks": PASS}, "desktop": {"exit": 1}})
-        self.assertEqual(result, {"ok": False, "png": str(self.out), "checks": PASS,
-                                  "error": "desktop: render broke", "desktopPng": None})
-        self.assertPrivatePng(self.out)
-        self.assertFalse(self.desktop_png.exists())
-        self.assertEqual([c["viewport"] for c in calls], ["phone", "desktop"])
+    def test_desktop_process_failure_or_timeout_keeps_the_phone_png(self):
+        timeout = f"TimeoutExpired: Command '['node', '{preview.SCRIPT}']' timed out after 4 seconds"
+        for plan, error in (({"exit": 1}, "render broke"), ({"sleep": 60}, timeout)):
+            with self.subTest(plan=plan), mock.patch.object(preview, "CAPTURE_TIMEOUT", 4):
+                for leftover in (self.log, self.out):
+                    leftover.unlink(missing_ok=True)
+                result, calls, _server = self.capture({"phone": {"checks": PASS}, "desktop": plan})
+                self.assertEqual(result, {"ok": False, "png": str(self.out), "checks": PASS,
+                                          "error": "desktop: " + error, "desktopPng": None})
+                self.assertPrivatePng(self.out)
+                self.assertFalse(self.desktop_png.exists())
+                self.assertEqual([c["viewport"] for c in calls], ["phone", "desktop"])
 
     def test_phone_process_failure_skips_desktop(self):
         result, calls, _server = self.capture({"phone": {"exit": 1}, "desktop": {"checks": PASS}})
