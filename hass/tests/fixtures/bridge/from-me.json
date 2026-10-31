@@ -1,0 +1,12 @@
+{
+  "type": "new-message",
+  "data": {
+    "guid": "FAKE-0000-0000-0000-000000000003",
+    "text": "yes",
+    "handle": null,
+    "chats": [{"guid": "iMessage;-;owner@example.invalid"}],
+    "attachments": [],
+    "dateCreated": 1793638860000,
+    "isFromMe": true
+  }
+}
