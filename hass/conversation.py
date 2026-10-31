@@ -642,7 +642,7 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return ["Hikes: unavailable"]
         path, counts = self.settings.get("guestCountsDb"), None
-        if upcoming and isinstance(path, str) and path:
+        if any(e.get("rsvpEnabled") for e in upcoming) and isinstance(path, str) and path:  # RSVP-off only: never opened
             try:
                 counts = hikes.guest_counts(path)
             except (sqlite3.Error, OSError, ValueError, TypeError):
@@ -651,6 +651,6 @@ class Conversation:
         for e in upcoming:
             head = f"Hike {e.get('title')} {_local(e['startsAt'])}: "
             limit = e.get("capacity") if e.get("capacity") is not None else "no limit"
-            lines.append(head + ("guest count unavailable" if counts is None
+            lines.append(head + ("RSVPs off" if not e.get("rsvpEnabled") else "guest count unavailable" if counts is None
                                  else f"{counts.get(e.get('id'), 0)} confirmed of {limit}"))
         return lines
