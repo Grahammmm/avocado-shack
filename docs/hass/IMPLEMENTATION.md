@@ -74,6 +74,7 @@ The Mac must remain powered, connected and signed in appropriately. Record what 
 
 - Accept only supported file types with size limits; inspect actual content, not just filename extensions. Reject unexpected documents/executables and path traversal.
 - Keep originals privately with source IDs. Create optimized display copies, remove GPS metadata and avoid unnecessary faces, receipts or identifying details in the public image.
+- `product.set_photo {id, photo: <stored original sha256>, imageAlt}` (H10) installs the stored photo's metadata-free web copy as `storefront-mockup/assets/products/photo-<sha[:16]>.<jpg|png>` (settings `mediaRoot`, outside the repo) and commits it with the product change; `imageAlt` is required. A failed or interrupted apply removes the new file again. Undo restores the old `image`/`imageAlt`; the committed photo file stays, unreferenced.
 - Treat photo cleanup as presentation, not license to invent packaging, certifications, weights, farm names or ingredients. Ask when text is unreadable.
 - Send only necessary owner content to the selected model service, under a business-approved account/budget and retention settings. No model provider is assumed provisioned.
 - Store verified owner preferences/facts separately from raw chat. Record source and date, support correction/deletion, and do not treat repetition or model memory as proof.
