@@ -85,6 +85,18 @@ class CommandsDocTest(unittest.TestCase):
         undo = {conv.parse_command(ex) for ex in self.examples if verb(ex) == "undo"}
         self.assertEqual(undo, {("undo", None), ("undo", "a1b2")})
 
+    def test_note_command_punctuation_exceptions(self):
+        """The intro's remember/forget exceptions match parse_memory (t_527e1533 RETURN item 1)."""
+        doc = " ".join(DOC.read_text("utf-8").split())
+        self.assertIn("except `remember` and `forget`", doc)
+        self.assertIn("`Memory.`", doc)
+        self.assertEqual(conv.parse_memory("Memory."), ("memory", None, None))
+        self.assertIn("`forget parking.` looks for a note called `parking.`", doc)
+        self.assertEqual(conv.parse_memory("forget parking."), ("forget", "parking.", None))
+        self.assertEqual(conv.parse_memory("forget parking!"), ("forget", "parking", None))
+        self.assertEqual(conv.parse_memory("remember Parking: Use the back lot!"),
+                         ("remember", "parking", "Use the back lot!"))
+
 
 if __name__ == "__main__":
     unittest.main()

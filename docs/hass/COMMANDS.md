@@ -1,8 +1,15 @@
 # Hass commands (owner card)
 
-These are the only messages Hass treats as commands. Send each one as the whole message. Capital letters do not matter
-(`YES A1B2` is the same as `yes a1b2`), and a trailing `.` or `!` is ignored (`Status.` works). Codes are the short
-codes Hass puts in its replies; `A1B2` below is only a placeholder.
+These are the only messages Hass treats as commands. Send each one as the whole message. Capital letters in the command
+do not matter (`YES A1B2` is the same as `yes a1b2`). Codes are the short codes Hass puts in its replies; `A1B2` below
+is only a placeholder.
+
+A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work).
+The two note commands are stricter:
+
+- `remember <key>: <text>` saves the text exactly as sent, so its capitals and any final `.` or `!` are kept.
+- `forget <key>` ignores a trailing `!` but not a `.`, because a key may contain `.`: `forget parking.` looks for a
+  note called `parking.` and leaves the `parking` note alone. Send `forget parking` with no full stop.
 
 | Send | What happens | Example |
 | --- | --- | --- |
