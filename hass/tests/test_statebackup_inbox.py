@@ -39,12 +39,6 @@ class InboxBackupTestCase(BackupTestCase):
         ed = conversation.Editor(new, {**fixture_ops.registry(), **load_registry()})
         return conversation.Conversation(str(new), ed, self.interp, lambda: self.now, self.previewer)
 
-    def rehash(self, backup, data):
-        (backup / INBOX).write_bytes(data)
-        doc = json.loads((backup / statebackup.MANIFEST).read_text("utf-8"))
-        doc["files"][INBOX] = hashlib.sha256(data).hexdigest()
-        (backup / statebackup.MANIFEST).write_text(json.dumps(doc), "utf-8")
-
 class RoundTripTests(InboxBackupTestCase):
     def test_restore_keeps_start_point_and_pending_rows(self):
         self.fill()
@@ -56,8 +50,7 @@ class RoundTripTests(InboxBackupTestCase):
         self.assertEqual((new / INBOX).stat().st_mode & 0o777, 0o600)
         rows = self.rows(new / INBOX)
         self.assertEqual({pid: row[0] for pid, row in rows.items()}, {"h1": "history", "d1": "done", "p1": "pending"})
-        self.assertEqual((rows["h1"][1], rows["d1"][1]), (None, None))
-        self.assertEqual(json.loads(rows["p1"][1])["provider_id"], "p1")
+        self.assertEqual((rows["h1"][1], rows["d1"][1], json.loads(rows["p1"][1])["provider_id"]), (None, None, "p1"))
         box = self.open_inbox(new)  # start_at=None reuses the restored start point
         self.assertEqual(box.start_at, T0)
         self.assertEqual(box.drain(self.restored(new)), [("p1", "history")])
@@ -108,7 +101,9 @@ class DamageTests(InboxBackupTestCase):
     def test_corrupt_inbox_fails_verify_and_restore(self):
         self.fill()
         backup = self.backup()
-        self.rehash(backup, random.Random(0).randbytes(4096))
+        (backup / INBOX).write_bytes(data := random.Random(0).randbytes(4096))  # random bytes, manifest hash fixed
+        doc = json.loads((manifest := backup / statebackup.MANIFEST).read_text("utf-8"))
+        manifest.write_text(json.dumps({**doc, "files": {**doc["files"], INBOX: hashlib.sha256(data).hexdigest()}}))
         got = statebackup.verify(str(backup))
         self.assertEqual(got, {"result": "corrupt", "problems": [f"integrity check failed: {INBOX}"]})
         into, before = self.tmp / "restored", sorted(os.listdir(self.tmp))
@@ -140,8 +135,7 @@ class CreateRefusalTests(InboxBackupTestCase):
     def test_symlinked_inbox_is_refused_and_target_untouched(self):
         self.fill()
         self.box.close()
-        aside = self.tmp / "inbox-aside.sqlite3"
-        (self.repo.state / INBOX).rename(aside)
+        (self.repo.state / INBOX).rename(aside := self.tmp / "inbox-aside.sqlite3")
         (self.repo.state / INBOX).symlink_to(aside)
         before = aside.read_bytes()
         got = statebackup.create(str(self.repo.state), str(self.bk))
