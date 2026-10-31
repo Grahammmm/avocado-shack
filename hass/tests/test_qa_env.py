@@ -23,8 +23,7 @@ def tree():
 class QaEnvTest(unittest.TestCase):
     def setUp(self):
         self.tmp, self.other = tempfile.mkdtemp(), tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmp)
-        self.addCleanup(shutil.rmtree, self.other)
+        self.addCleanup(shutil.rmtree, self.tmp), self.addCleanup(shutil.rmtree, self.other)
         self.before = tree()
 
     def run_env(self, cmd, **extra):
@@ -88,7 +87,3 @@ class QaEnvTest(unittest.TestCase):
             with socket.socket() as s:
                 s.settimeout(1)
                 self.assertNotEqual(s.connect_ex(("127.0.0.1", 3102)), 0)  # nothing listens on 3102
-
-
-if __name__ == "__main__":
-    unittest.main()
