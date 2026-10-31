@@ -13,8 +13,7 @@ then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
 repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
-exit 0 ok, 1 any other result, 2 unsafe dir or usage. list --out DIR is read-only: one JSON line per hass-state-* entry,
-newest first, with complete true or its problem (an entry without MANIFEST.json is an interrupted backup).
+exit 0 ok, 1 any other result, 2 unsafe dir or usage. list (read-only): a line per hass-state-* entry, complete or not.
 """
 import argparse, contextlib, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timezone
@@ -286,25 +285,22 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
     return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]), **extra}
 
 NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
-
 def _listed(entry):  # (manifest doc or None, problem or None); a symlink is never followed
     if entry.is_symlink(): return None, "symlink"
     if not entry.is_dir(follow_symlinks=False): return None, "not a folder"
     try: os.lstat(Path(entry.path, MANIFEST))
     except FileNotFoundError: return None, "no manifest (interrupted)"  # create() writes MANIFEST.json last
     except OSError: return None, "manifest invalid"
-    doc = _manifest(Path(entry.path))
-    return (doc, None) if doc else (None, "manifest invalid")
+    return (doc := _manifest(Path(entry.path))), None if doc else "manifest invalid"
 
 def list_backups(out):
     """list: one dict per hass-state-* entry, newest first. Read-only; no content hashing (that is verify)."""
     if not out or os.path.islink(out) or not os.path.isdir(out):
         return {"result": "refused", "problems": ["--out must be a folder, not a link"]}
     rows = []
-    for entry in sorted(os.scandir(out), key=lambda e: e.name, reverse=True):
-        if not NAME_RE.fullmatch(entry.name): continue
+    for entry in sorted((e for e in os.scandir(out) if NAME_RE.fullmatch(e.name)), key=lambda e: e.name, reverse=True):
         doc, problem = _listed(entry)
-        created = doc.get("createdAt") if doc else None
+        created = (doc or {}).get("createdAt")
         rows.append({"backup": entry.name, "createdAt": created if isinstance(created, str) else None,
                      "files": len(doc["files"]) if doc else None, "complete": doc is not None, "problem": problem})
     return rows

@@ -1,6 +1,6 @@
 """H20 tests: `statebackup.py list --out DIR` names every hass-state-* entry, complete or not, and writes nothing.
 
-Complete backups come from the real create() on the test_statebackup fixture state; every dir is under the test's temp dir.
+Complete backups come from the real create() on the test_statebackup fixture state; all dirs are under the temp dir.
 """
 
 import json, os, shutil, subprocess, sys, unittest  # noqa: E401
@@ -40,7 +40,7 @@ class ListTests(BackupTestCase):
         old, new = self.make(STAMP), self.make(later := STAMP + timedelta(hours=1))
         def done(path, when):
             count = len(json.loads((path / statebackup.MANIFEST).read_text("utf-8"))["files"])
-            return {"backup": path.name, "createdAt": when.isoformat(), "files": count, "complete": True, "problem": None}
+            return dict(zip(KEYS, (path.name, when.isoformat(), count, True, None)))
         code, rows, _ = self.cli(self.bk)
         self.assertEqual((code, rows), (0, [done(new, later), done(old, STAMP)]))
         self.assertEqual([list(r) for r in rows], [KEYS, KEYS])
@@ -61,7 +61,8 @@ class ListTests(BackupTestCase):
         os.chmod(shut, 0)
         self.addCleanup(os.chmod, shut, 0o700)
         (self.bk / "hass-state-20261108T000000Z").write_bytes(b"not a backup")
-        for name in ("notes.txt", "hass-state-latest", "hass-state-20261109T000000Z.tmp", "xhass-state-20261109T000000Z",
+        (self.bk / "notes.txt").write_text("unrelated", "utf-8")
+        for name in ("hass-state-latest", "hass-state-20261109T000000Z.tmp", "xhass-state-20261109T000000Z",
                      "hass-state-20261109T000000", "hass-state-2026110T000000Z"):
             (self.bk / name).mkdir()
         code, rows, _ = self.cli(self.bk)
