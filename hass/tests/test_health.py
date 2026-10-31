@@ -6,6 +6,7 @@ Never the real private state. Run: python3 -m unittest discover -s hass/tests -t
 import contextlib, io, json, os, shutil, sqlite3, tempfile, unittest  # noqa: E401
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from hass import conversation, health
 from hass.content_model import REPO_ROOT
@@ -102,7 +103,8 @@ class HealthTest(unittest.TestCase):
         code, doc = self.run_health()
         self.assertEqual((code, self.ids(doc)), (1, ["db-integrity"]))
 
-    def test_backups(self):
+    @mock.patch.object(health.statebackup, "verify", return_value={"result": "ok", "files": 1})  # placeholder {}
+    def test_backups(self, _verify):
         backups = self.tmp / "backups"
         backups.mkdir()
         self.assertEqual(self.run_health("--backups", str(backups))[1]["problems"],
