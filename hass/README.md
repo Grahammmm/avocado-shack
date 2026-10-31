@@ -128,6 +128,7 @@ Limits: H13 is partial; home-page copy and image slots are not built.
 - `resume changes` removes the row and lists the codes still waiting; it never applies anything. When not paused it answers `Changes are not paused.`
 - `status` is read-only (even a lapsed proposal is only hidden, not expired): `Changes: on` or `Changes: paused since …`, each waiting or needs-details draft (or `Nothing is waiting for approval.`), `Last change: <code> <state>: <summary> (<commit7>)` with the failed or `not verified: …` reason, and for every upcoming scheduled hike `Hike <title> <local start>: <n> confirmed of <capacity|no limit>` (`RSVPs off` for a hike without RSVPs).
 - Guest totals come from `hikes.guest_counts(settings["guestCountsDb"])`, an optional setting in `<state>/config.json` (seat totals only, no names or emails). Unset, missing or wrong-schema database → `guest count unavailable`, never 0; unreadable worktree content → `Hikes: unavailable`.
+- `hass/health.py --seen FILE` still prints its one JSON line when that file cannot be written (full disk, read-only folder): `notify` is true and `info` holds `seen file not updated`, with no path.
 
 Limits: H17 and H14 are partial. The support path for each health problem is `docs/hass/SUPPORT.md`.
 
@@ -143,6 +144,7 @@ python3 hass/statebackup.py restore BACKUP --into DIR --worktree WT   # WT: a se
 ```
 
 - `create` writes `<out>/hass-state-<UTC stamp>/`: `config.json`, `drafts/`, `changes/`, `screenshots/` (0600/0700), SQLite online-backup snapshots of `inbox.sqlite3` (the H16 queue, when present; taken first) and then `conversation.sqlite3`, and `MANIFEST.json` (SHA-256 per file) last; `writer.lock` is never copied. Refused: `out` missing, not 0700, or inside the state dir, the repository or the writer worktree (exit 2); a symlinked or odd `config.json`/`writer.lock` before either is opened, any symlink or unknown entry (`refused`, each named); a held writer lock (`busy`); a pending journal (`unsettled`, run `editor.py recover` first); an existing backup dir of the same stamp (`exists`).
+- `create` builds in a dot-named `.hass-state-<stamp>.partial-<pid>` folder and renames it to `hass-state-<stamp>` only after `MANIFEST.json` is written, so a failed run leaves no `hass-state-*` folder and the stamp stays free.
 - `verify` checks the manifest layout, every hash and mode, unlisted files and symlinks and `PRAGMA integrity_check`; damage gives `corrupt` naming the file.
 - `restore` verifies first, refuses an existing `--into` (left untouched), the recorded writer worktree (an attended operation) and a worktree that fails the editor checks, builds the new state dir beside `--into` and renames it into place. Only `config.json` `worktree` is rewritten.
 

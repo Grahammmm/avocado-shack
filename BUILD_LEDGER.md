@@ -736,3 +736,51 @@ Branch rb/rf1120-7 from origin/main fc494c3 (RF1120-7, PR #53: commits e5bccc0, 
 Checks at PR head 84bf930 (recorded in PR #53): `python3 -m unittest discover -s hass/tests -p 'test_statebackup*.py' -v` ran 35 tests, OK. CI `check` passed at 84bf930.
 
 Limits: H20 stays partial: deleting or pruning backups, `verify`/`restore` changes, `health.py` and timers are not built.
+
+## H04 turning RSVPs on asks for a capacity or no limit (RF1130-5) — October 31, 2026
+
+Branch rb/rf1130-5 from origin/main 4c80014 (RF1130-5, PR #39: commit 9fef871, merged as 49e9d901ed58de803ac344fe48ca5e03a1c2fa3d). `hike.update` that leaves `rsvpEnabled` true on an event with no `capacity`, without `capacity` or `noCapacityLimit: true` in the request, returns `needs-details` (`capacity`, `noCapacityLimit`) with the same question as `hike.create`. Nothing is drafted. One `hass/README.md` H04 line. Added `hass/tests/test_hike_rsvp_on.py`.
+
+Checks at PR head 9fef871 (recorded in PR #39): `python3 -m unittest hass.tests.test_hike_rsvp_on hass.tests.test_hike_ops hass.tests.test_status_pause -v` ran 29 tests, OK. CI `check` passed at 9fef871.
+
+Limits: existing RSVPs, guest notification, the RSVP database, `hike.create` and content-model validation are unchanged.
+
+## H08 picture replies send their text with a fixed note (RF1140-7) — October 31, 2026
+
+Branch rb/rf1140-7 from origin/main 4c80014 (RF1140-7, PR #40: commit 20a38761, merged as 2b86dd5c277e4019fb43c77f8755de5d93d6d89b). `BlueBubblesSender.send` with attachments no longer raises `attachments-not-supported`; it sends the text plus one fixed `PICTURE_NOTE` line, so the outbox moves on. The picture is never opened, sent or named in the request and stays in the state dir. A text-only send is byte-identical. One `hass/README.md` bridge line; the attachments test in `hass/tests/test_bridge.py` now expects text plus note. Added `hass/tests/test_bridge_pictures.py`.
+
+Checks at PR head 20a38761 (recorded in PR #40): `python3 -m unittest hass.tests.test_bridge_pictures hass.tests.test_bridge hass.tests.test_conversation -v` ran 30 tests, OK. CI `check` passed at 20a38761.
+
+Limits: sending pictures (needs A9/H07 measurements), inbound attachments, `Outbox` retry or skip rules and any live bridge or Mac are not built.
+
+## H04 cancel or RSVPs off warns about confirmed guests (RF1130-6) — October 31, 2026
+
+Branch rb/rf1130-6 from origin/main a987a09 (RF1130-6, PR #43: commit 58e0018, merged as dd296b879369ea05f8a294aa649bce5a853656ed). `hike.cancel` on an RSVP event, and `hike.update` turning RSVPs off, still draft normally and add the warning `<id> has N confirmed guests; nobody is notified automatically`, or `<id> guest count unavailable; check RSVPs before approving`. It is never a refusal. Confirmed guests are warned about in the draft, never messaged: no outbound message exists. RSVPs are not changed. One `hass/README.md` H04 line. Added `hass/tests/test_hike_guest_warning.py`.
+
+Checks at PR head 58e0018 (recorded in PR #43): `python3 -m unittest hass.tests.test_hike_guest_warning hass.tests.test_hike_rsvp_on hass.tests.test_hike_ops -v` ran 24 tests, OK. CI `check` passed at 58e0018.
+
+Limits: notifying guests (outbound, needs G), changing or deleting RSVPs, refusing a cancel and status lines are not built.
+
+## H19 health prints its JSON line when --seen cannot be written (RF1105-11) — October 31, 2026
+
+Branch rb/rf1105-11 from origin/main 5072a83 (RF1105-11, PR #47: commit 99590a0, merged as 4bda5fac7f24eaf8da851e23e024a74fc4f1dbc9). `hass/health.py` `main()` catches an `OSError` from recording the `--seen` file (full disk, read-only or changed-permission folder). The JSON line is still printed with `notify` true and the value-free info entry `seen file not updated` (no path). `ok`, `problems`, `fingerprint` and the exit code stay those of the real checks. One `docs/hass/SUPPORT.md` bullet. Added `hass/tests/test_health_seen.py`.
+
+Checks at PR head 99590a0 (recorded in PR #47): `python3 -m unittest hass.tests.test_health_seen hass.tests.test_health hass.tests.test_health_inbox hass.tests.test_support_doc -v` ran 33 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 307 tests, OK (skipped=4). CI `check` passed at 99590a0.
+
+Limits: new checks, alert delivery, timers (attended operator work), `statebackup.py` and the backup-verify check are not built.
+
+## H17 status says RSVPs off for a hike without RSVPs (RF1130-7) — October 31, 2026
+
+Branch rb/rf1130-7 from origin/main 85223ca (RF1130-7, PR #51: commit d87cb89, merged as 2c1aaf4537c91d7c490f73ce10ae2c1184cb2c1d). In `status`, an upcoming scheduled hike with `rsvpEnabled` false reads `Hike <title> <local start>: RSVPs off` instead of `0 confirmed of no limit`. The RSVP database is opened only when a listed hike has RSVPs on. Hikes with RSVPs on are unchanged. One `hass/README.md` H17 line. Added `hass/tests/test_status_rsvp_off.py`.
+
+Checks at PR head d87cb89 (recorded in PR #51): `python3 -m unittest hass.tests.test_status_rsvp_off hass.tests.test_status_pause -v` ran 18 tests, OK. CI `check` passed at d87cb89.
+
+Limits: other status lines, pause/resume, memory commands and hike ops are unchanged.
+
+## H20 statebackup create builds aside and renames in (RF1105-13) — October 31, 2026
+
+Branch rb/rf1105-13 from origin/main f2576fee25 (RF1105-13, PR #58: commits 56011b6, 3fef4d2, d39d71f, merged as 4baeaaa8f110ff80e22dc4340a6f6925c36cdb8f). `hass/statebackup.py create` builds the backup in a dot-named `.hass-state-<stamp>.partial-<pid>` folder and renames it to `hass-state-<stamp>` after `MANIFEST.json` is written. A failed run leaves no `hass-state-*` folder, so the stamp stays free; a good backup is byte-identical to before. Added `hass/tests/test_statebackup_atomic.py`.
+
+Checks at PR head d39d71f (recorded in PR #58): a targeted statebackup/health set ran 70 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 397 tests, OK (skipped=5). CI `check` passed at d39d71f. Re-run on main 4baeaaa for this ledger: `python3 -B -m unittest hass.tests.test_health_seen hass.tests.test_statebackup_atomic hass.tests.test_hike_rsvp_on hass.tests.test_hike_guest_warning hass.tests.test_status_rsvp_off hass.tests.test_bridge_pictures` ran 46 tests, OK.
+
+Limits: `verify`/`restore`, the manifest schema, cleaning up partial folders left by a killed process, retention/pruning and timers are not built.
