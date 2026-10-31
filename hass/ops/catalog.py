@@ -116,6 +116,8 @@ def _product_edit(content, args, ctx):
         del product["imageAlt"]
     if _organic(product) and not _organic(before):
         ctx.warnings.append(f"adds Organic badge to {product['id']}")
+    elif _organic(before) and not _organic(product):
+        ctx.warnings.append(f"removes Organic badge from {product['id']}")
     return _touch("products", product["id"], before, product)
 
 
