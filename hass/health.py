@@ -158,7 +158,12 @@ def main(argv=None, now=None) -> int:
         return 2
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
                                    args.inbox_minutes)
-    _emit(problems, info, _remember(seen, fingerprint(problems)) if seen else bool(problems))
+    try:
+        notify = _remember(seen, fingerprint(problems)) if seen else bool(problems)
+    except OSError:  # fail open: an unrecorded fingerprint must not silence an alert; the detail names no path
+        notify = True
+        info.append(_problem("seen", "seen file not updated"))
+    _emit(problems, info, notify)
     return 2 if unsafe else 1 if problems else 0
 
 if __name__ == "__main__":
