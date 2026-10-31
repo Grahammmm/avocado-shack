@@ -27,11 +27,13 @@ python3 storefront-mockup/community-server.py --port 3101
 ## Checks
 catalog-only-qa.cjs checks all 170 food listings, no commerce UI/copy, town search, category/producer filters, empty search, expandable maker stories, duplicate-free scrolling, and overflow/color consistency at 320, 375, 390, 768, and 1440 pixels. Results: catalog-only-QA.json. Phone and desktop screenshots are catalog-only-*.png. Earlier commerce tests apply to the archived experience, not this revision.
 
-Running checks on Agent Orange (Linux): the active scripts (`catalog-only-qa.cjs`, `community-qa.py`, `community-ui-qa.cjs`) take optional environment overrides. `PLAYWRIGHT_MODULE` points at a Playwright package (default `require('playwright')`), `CHROMIUM_PATH` at a matching Chromium binary, `NODE` at the Node executable (default `node` on PATH), and `QA_OUT_DIR` at the folder for JSON/screenshots (default `storefront-mockup`, which overwrites committed evidence). Run from the repository root with the service up on 3101; the catalog check only reads the live page, and the community check uses its own temporary database on port 3102. Example:
+Running checks on Agent Orange (Linux): the active scripts (`catalog-only-qa.cjs`, `community-qa.py`, `community-ui-qa.cjs`) take optional environment overrides. `PLAYWRIGHT_MODULE` points at a Playwright package (default `require('playwright')`), `CHROMIUM_PATH` at a matching Chromium binary, `NODE` at the Node executable (default `node` on PATH), and `QA_OUT_DIR` at the folder for JSON/screenshots. Run from the repository root against an isolated loopback preview (for example `community-server.py --port 3201` with a temporary `AVOSHACK_COMMUNITY_DB`); the catalog check only reads that page, and the community check uses its own temporary database on port 3102. Example:
 
     PLAYWRIGHT_MODULE=/path/to/node_modules/playwright CHROMIUM_PATH=/path/to/chrome-headless-shell \
-      QA_OUT_DIR=/tmp/avoshack-qa node storefront-mockup/catalog-only-qa.cjs
-    PLAYWRIGHT_MODULE=... CHROMIUM_PATH=... QA_OUT_DIR=/tmp/avoshack-qa python3 storefront-mockup/community-qa.py
+      PREVIEW_URL=http://127.0.0.1:3201 QA_OUT_DIR=/tmp/avoshack-qa node storefront-mockup/catalog-only-qa.cjs
+    PLAYWRIGHT_MODULE=... CHROMIUM_PATH=... PREVIEW_URL=http://127.0.0.1:3201 QA_OUT_DIR=/tmp/avoshack-qa python3 storefront-mockup/community-qa.py
+
+The current QA scripts (`catalog-only-qa.cjs`, `section-navigation-qa.cjs`, `community-ui-qa.cjs`, `community-qa.py`) have no defaults that reach the live service or the committed evidence. `PREVIEW_URL` is required and must be an `http://` loopback address (`127.0.0.1` or `localhost`) with an explicit port; point it at an isolated preview with a temporary database, never the sandbox service. `QA_OUT_DIR`, if set, must be outside the repository; if unset, a fresh temp folder is created and printed as `QA_OUT_DIR=<path>`. Otherwise the script exits 2 with a `QA refused:` line before starting a browser or server.
 
 Older commerce-era QA scripts still hardcode the Mac runtime and are left as historical.
 
