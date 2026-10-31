@@ -142,8 +142,20 @@ def _check_value(problems, where, arg: Arg, value, makers, site_dir):
     elif kind == "image":
         if not IMAGE_RE.fullmatch(value) or ".." in value:
             problems.append(f"{where}: must be assets/products/<file>")
-        elif not (Path(site_dir) / value).is_file():
-            problems.append(f"{where}: image file does not exist")
+        elif (problem := _image_file_problem(site_dir, value)) is not None:
+            problems.append(f"{where}: {problem}")
+
+
+def _image_file_problem(site_dir, value) -> str | None:
+    """The file must be a regular file, not a link, whose resolved path stays inside the site folder."""
+    path = Path(site_dir) / value
+    if path.is_symlink():
+        return "image file must not be a link"
+    if not path.is_file():
+        return "image file does not exist"
+    if not path.resolve().is_relative_to(Path(site_dir).resolve()):
+        return "image file is outside the site folder"
+    return None
 
 
 def check_args(op: Op, args, makers, site_dir) -> tuple[list[str], list[str]]:
