@@ -3,7 +3,8 @@
 `<state>/inbox.sqlite3` (0600) records the approved start point on first open; a message received before it is kept as
 `history` (id and time only) and never becomes a command. `drain()` hands each pending message to `Conversation.handle`
 in `(received_at, provider_id)` order and only then marks it done, so a crash in between re-delivers the message and
-`Conversation` answers `duplicate` without a second write. Payloads are erased once a message is done. Fixtures only.
+`Conversation` answers `duplicate` without a second write. Payloads are erased once a message is done. A payload that
+cannot be decoded into an `Inbound` is marked done as `unreadable` and skipped; its content is not kept. Fixtures only.
 """
 import contextlib, json, os, sqlite3, sys  # noqa: E401
 from dataclasses import asdict
@@ -139,7 +140,12 @@ class Inbox:
         handle (or the mark) propagates and leaves that message and every later one pending for the next drain."""
         handled = []
         while (row := self._next()) is not None:
-            disposition = conversation.handle(Inbound(**json.loads(row["payload"])))
+            try:
+                msg = Inbound(**json.loads(row["payload"]))
+                if msg.provider_id != row["provider_id"]: raise ValueError("payload names another message")
+            except (TypeError, ValueError):  # a poison payload must not block every later message
+                msg = None
+            disposition = "unreadable" if msg is None else conversation.handle(msg)
             self._mark(row["provider_id"], disposition)
             handled.append((row["provider_id"], disposition))
         return handled

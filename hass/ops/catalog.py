@@ -2,6 +2,7 @@
 
 "Remove" means hide: no record is ever deleted. Held products are refused by every op (no op changes ``held`` or
 ``hold``). Ops take only exact ids/keys; resolving a name is always ``lookup`` first. Facts come from arguments only.
+Add and rename refuse a name+brand (product) or name (maker) another record has, case and spacing ignored, naming it.
 """
 
 from __future__ import annotations
@@ -48,11 +49,30 @@ def _maker(content, key):
     return content.makers[key] if key in content.makers else NotFound(key)
 
 
+def _same(a, b) -> bool:
+    return " ".join(str(a).split()).casefold() == " ".join(str(b).split()).casefold()
+
+
+def _twin(content, name, brand, pid=None):
+    """The first product other than ``pid`` with this name and brand (any status), else None."""
+    return next((p for p in content.products if p["id"] != pid and _same(p["name"], name) and _same(p["brand"], brand)),
+                None)
+
+
+def _maker_twin(content, name, key=None):
+    return next((k for k, m in content.makers.items() if k != key and _same(m.get("name", ""), name)), None)
+
+
 def _touch(collection, key, before, after):
     return [Touched(collection, key, before, copy.deepcopy(after))]
 
 
 def _product_add(content, args, ctx):
+    if twin := _twin(content, args["name"], args["brand"]):
+        tail = {"active": "already has this name and brand; edit it instead",
+                "hidden": "has this name and brand and is hidden; restore it instead"}.get(
+            twin.get("status"), "has this name and brand and is held; it needs review of the recorded concern")
+        return Refused(f"{twin['id']} {tail}")
     key = args.get("producerKey")
     if refused := _maker_problem(content, key):
         return refused
@@ -87,6 +107,9 @@ def _product_edit(content, args, ctx):
         return NeedsDetails(fields, f"What should change on {args['id']}? Give at least one of: " + ", ".join(fields))
     if refused := _maker_problem(content, changes.get("producerKey")):
         return refused
+    if ("name" in changes or "brand" in changes) and (twin := _twin(
+            content, changes.get("name", product["name"]), changes.get("brand", product["brand"]), product["id"])):
+        return Refused(f"{twin['id']} already has this name and brand")
     before = copy.deepcopy(product)
     product.update(changes)
     if clear_alt:
@@ -126,6 +149,9 @@ def _maker_add(content, args, ctx):
         return Refused(f"maker key is longer than {MAX_KEY} characters")
     if key in content.makers:
         return Refused(f"maker {key} already exists")
+    if twin := _maker_twin(content, args["name"]):
+        verb = "restore" if content.makers[twin].get("hidden") is True else "edit"
+        return Refused(f"maker {twin} already has this name; {verb} it instead")
     content.makers[key] = {field: args[field] for field in MAKER_EDITABLE}
     return _touch("makers", key, None, content.makers[key])
 
@@ -138,6 +164,8 @@ def _maker_edit(content, args, ctx):
     if not changes:
         return NeedsDetails(list(MAKER_EDITABLE), f"What should change on maker {args['key']}? "
                             "Give at least one of: " + ", ".join(MAKER_EDITABLE))
+    if "name" in changes and (twin := _maker_twin(content, changes["name"], args["key"])):
+        return Refused(f"maker {twin} already has this name")
     before = copy.deepcopy(maker)
     maker.update(changes)
     return _touch("makers", args["key"], before, maker)
