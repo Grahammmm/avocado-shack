@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import re
 import sqlite3
+import unicodedata
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -92,7 +93,8 @@ def _event(content, event_id):
 
 
 def _slug_id(content, day, title):
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    plain = "".join(c for c in unicodedata.normalize("NFKD", title) if not unicodedata.combining(c))  # ñ→n, é→e, ﬁ→fi
+    slug = re.sub(r"[^a-z0-9]+", "-", plain.lower()).strip("-")
     base = f"hike-{day}-{slug}"[:MAX_ID_BASE].rstrip("-")
     taken = {e["id"] for e in _events(content)} | {i["id"] for i in content.community["routeIdeas"]}
     candidate, n = base, 1
