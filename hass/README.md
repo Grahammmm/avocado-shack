@@ -124,7 +124,7 @@ Limits: H13 is partial; home-page copy and image slots are not built.
 - `status` is read-only (even a lapsed proposal is only hidden, not expired): `Changes: on` or `Changes: paused since …`, each waiting or needs-details draft (or `Nothing is waiting for approval.`), `Last change: <code> <state>: <summary> (<commit7>)` with the failed or `not verified: …` reason, and for every upcoming scheduled hike `Hike <title> <local start>: <n> confirmed of <capacity|no limit>`.
 - Guest totals come from `hikes.guest_counts(settings["guestCountsDb"])`, an optional setting in `<state>/config.json` (seat totals only, no names or emails). Unset, missing or wrong-schema database → `guest count unavailable`, never 0; unreadable worktree content → `Hikes: unavailable`.
 
-Limits: H17 and H14 are partial; the support path for persistent outages is not written.
+Limits: H17 and H14 are partial. The support path for each health problem is `docs/hass/SUPPORT.md`.
 
 ## H20 prep: private state backup and restore drill
 
