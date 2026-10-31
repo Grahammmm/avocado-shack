@@ -16,9 +16,8 @@ from __future__ import annotations
 
 import copy
 
+from hass.content_model import MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
-
-MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80
 
 
 def _touch(before, store):

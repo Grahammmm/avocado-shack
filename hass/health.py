@@ -1,9 +1,11 @@
 """Hass private state health check that alerts once per change (H19).
 
     python3 hass/health.py --state DIR [--backups DIR] [--seen FILE] [--outbox-minutes 15] [--backup-hours 26]
+                           [--inbox-minutes 15]
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
+inbox-stuck (pending inbound older than --inbox-minutes), inbox-integrity,
 paused (info only), backup-age (with --backups: no complete hass-state-* dir within --backup-hours). Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
@@ -52,6 +54,19 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
     except sqlite3.DatabaseError:
         problems.append(_problem("db-integrity", "database unreadable"))
 
+def _inbox_check(sdir: Path, now: datetime, minutes: int, problems: list) -> None:
+    """H16 queue: pending inbound enqueued (this box's clock) over `minutes` ago; no inbox file -> nothing to check."""
+    if not (path := sdir / "inbox.sqlite3").is_file(): return
+    try:
+        with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
+            result = [r[0] for r in db.execute("PRAGMA quick_check").fetchall()]
+            if result != ["ok"]: return problems.append(_problem("inbox-integrity", f"{len(result)} issue(s)"))
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'inbound'").fetchone(): return
+            rows = db.execute("SELECT enqueued_at FROM inbound WHERE state = 'pending'").fetchall()
+            if n := _older(rows, now - timedelta(minutes=minutes)): problems.append(_problem("inbox-stuck", str(n)))
+    except sqlite3.DatabaseError:
+        problems.append(_problem("inbox-integrity", "database unreadable"))
+
 def _backup_check(raw, now: datetime, hours: int, problems: list) -> None:
     newest = None
     try:
@@ -78,7 +93,7 @@ def _seen_path(raw, state) -> Path:
         raise UnsafeState("--seen must be a file in an existing folder")
     return full
 
-def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None) -> tuple:
+def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -92,6 +107,7 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None) -> 
     except ConfigError as exc:
         problems.append(_problem("settings", str(exc)))
     _db_checks(sdir, now, outbox_minutes, problems, info)
+    _inbox_check(sdir, now, inbox_minutes, problems)
     if backups is not None: _backup_check(backups, now, backup_hours, problems)
     return problems, info, False
 
@@ -121,16 +137,18 @@ def main(argv=None, now=None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--state", required=True)
     for flag in ("--backups", "--seen"): parser.add_argument(flag)
-    for flag, default in (("--outbox-minutes", 15), ("--backup-hours", 26)):
+    for flag, default in (("--outbox-minutes", 15), ("--backup-hours", 26), ("--inbox-minutes", 15)):
         parser.add_argument(flag, type=int, default=default)
     args = parser.parse_args(argv)
-    if args.outbox_minutes < 1 or args.backup_hours < 1: parser.error("minutes and hours must be >= 1")
+    if min(args.outbox_minutes, args.backup_hours, args.inbox_minutes) < 1:
+        parser.error("minutes and hours must be >= 1")
     try:
         seen = _seen_path(args.seen, args.state) if args.seen else None
     except UnsafeState as exc:
         _emit([_problem("seen", str(exc))], [], True)
         return 2
-    problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now)
+    problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
+                                   args.inbox_minutes)
     _emit(problems, info, _remember(seen, fingerprint(problems)) if seen else bool(problems))
     return 2 if unsafe else 1 if problems else 0
 

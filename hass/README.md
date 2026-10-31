@@ -64,7 +64,7 @@ The state dir must be owned by the current user, mode 0700 and outside the repos
 `hass/ops/hikes.py` adds `hike.create|update|cancel|complete`. Every event field comes from the arguments: nothing is copied from a route idea or `hiking-preview.json`, and there is no `id` argument, so a sample or route-idea id can never become an event. `trailId` only links to a route idea.
 
 - The start is the local `date` + `time` in `America/Los_Angeles`, written with its offset (`2026-12-05T09:00:00-08:00`). A time that happens twice (DST ends) or not at all (DST starts) gives `needs-details` on `time`; a start in the past is `refused`. A new `date` keeps the local time, a new `time` keeps the local date.
-- With `rsvpEnabled` true, `hike.create` needs exactly one of `capacity` or `noCapacityLimit: true`. `hike.update` with `capacity` reads `guest_counts(settings["guestCountsDb"])` (read-only SQLite, seat totals only, no names or emails) and refuses a capacity below the confirmed guests; an unset or unreadable database is refused (`guest count unavailable`). Existing RSVPs are never changed.
+- With `rsvpEnabled` true, `hike.create` needs exactly one of `capacity` or `noCapacityLimit: true`, and so does `hike.update` when it turns RSVPs on for an event without a capacity. `hike.update` with `capacity` reads `guest_counts(settings["guestCountsDb"])` (read-only SQLite, seat totals only, no names or emails) and refuses a capacity below the confirmed guests; an unset or unreadable database is refused (`guest count unavailable`). Existing RSVPs are never changed.
 - `hike.cancel` and `hike.complete` (only once the start has passed; optional `recap`) work on `scheduled` events; a cancelled or completed event refuses every later op.
 - No op sends, queues or drafts a message, and `club.emailConnected` stays `false`. Real hikes need the owner's confirmed details; the committed events list stays empty.
 
@@ -99,13 +99,56 @@ export PLAYWRIGHT_MODULE=/home/user/.hermes/hermes-agent/node_modules/playwright
 export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell
 ```
 
+## H13: store hours and address
+
+`hass/ops/store.py` adds `store.set_hours` and `store.set_address` to the registry; they go through the normal draft, approval and single-writer path and change only `content/store.json` (and so the store slots of the generated pages).
+
+```json
+{"ops": [{"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}]}
+{"ops": [{"op": "store.set_address", "args": {"streetAddress": "100 Example Street"}}]}
+```
+
+- `store.set_hours` takes `hours` (a text list) and replaces all lines. Refused: more than 7 lines, a line over 60 characters (`hours line <i>` counts from 0), a repeated line, or hours equal to the current ones.
+- `store.set_address` takes `streetAddress` and/or `town`; only the given fields change. No argument gives `needs-details` (`streetAddress`, `town`); a value over 80 characters or an unchanged address is refused.
+- `name` and `schemaVersion` are not arguments (unknown argument → `invalid`). Text kinds reject markup, `$` and control characters as usual.
+- Undo: the store is one record, so `undo` of an older store change after a later one gives `conflict: store store changed after <change_id>`; undo the newest first.
+
+Limits: H13 is partial; home-page copy and image slots are not built.
+
+## H17: status, pause and resume (with H14 guest totals)
+
+`hass/conversation.py` treats a whole message `status`, `pause` / `pause changes` or `resume` / `resume changes` as a command (lower case, trailing `.`/`!` ignored, as for `yes`); anything longer, such as `pause the hike`, goes to the interpreter. Only owner senders in the owner chat are heard, as in H05.
+
+- `pause changes` stores one `control` row in the conversation store (the table is created by the first pause) and survives restarts. While paused, drafts are still prepared and each proposal ends with `Changes are paused; send resume changes before yes.`; an approval for one draft gets `Changes are paused; <code> was not applied. Send resume changes, then yes <code>.` and writes no approval, moves no state and keeps the expiry. `no`/`cancel` still work; undo drafts are gated the same way. A second pause answers `Changes are already paused (since …).`
+- `resume changes` removes the row and lists the codes still waiting; it never applies anything. When not paused it answers `Changes are not paused.`
+- `status` is read-only (even a lapsed proposal is only hidden, not expired): `Changes: on` or `Changes: paused since …`, each waiting or needs-details draft (or `Nothing is waiting for approval.`), `Last change: <code> <state>: <summary> (<commit7>)` with the failed or `not verified: …` reason, and for every upcoming scheduled hike `Hike <title> <local start>: <n> confirmed of <capacity|no limit>`.
+- Guest totals come from `hikes.guest_counts(settings["guestCountsDb"])`, an optional setting in `<state>/config.json` (seat totals only, no names or emails). Unset, missing or wrong-schema database → `guest count unavailable`, never 0; unreadable worktree content → `Hikes: unavailable`.
+
+Limits: H17 and H14 are partial. The support path for each health problem is `docs/hass/SUPPORT.md`.
+
+## H20 prep: private state backup and restore drill
+
+`hass/statebackup.py` backs up a settled state dir, checks a backup and restores it into a new state dir for a drill. It prints one JSON line; exit 0 `ok`, 1 any other result, 2 unsafe dir or usage (`unsafe-state`).
+
+```sh
+python3 hass/statebackup.py create --state DIR --out DIR      # OUT: existing dir of yours, mode exactly 0700
+python3 hass/statebackup.py verify BACKUP
+python3 hass/statebackup.py restore BACKUP --into DIR --worktree WT   # WT: a separate drill worktree
+```
+
+- `create` writes `<out>/hass-state-<UTC stamp>/`: `config.json`, `drafts/`, `changes/`, `screenshots/` (0600/0700), SQLite online-backup snapshots of `inbox.sqlite3` (the H16 queue, when present; taken first) and then `conversation.sqlite3`, and `MANIFEST.json` (SHA-256 per file) last; `writer.lock` is never copied. Refused: `out` missing, not 0700, or inside the state dir, the repository or the writer worktree (exit 2); a symlinked or odd `config.json`/`writer.lock` before either is opened, any symlink or unknown entry (`refused`, each named); a held writer lock (`busy`); a pending journal (`unsettled`, run `editor.py recover` first); an existing backup dir of the same stamp (`exists`).
+- `verify` checks the manifest layout, every hash and mode, unlisted files and symlinks and `PRAGMA integrity_check`; damage gives `corrupt` naming the file.
+- `restore` verifies first, refuses an existing `--into` (left untouched), the recorded writer worktree (an attended operation) and a worktree that fails the editor checks, builds the new state dir beside `--into` and renames it into place. Only `config.json` `worktree` is rewritten.
+
+No network, no Git writes, no deletion of source data. Limits: drill on isolated copies only; no live restore, scheduling, retention, off-box copy or encryption.
+
 ## H08 prep: bridge adapter (fixtures only)
 
 `hass/bridge.py` is tested only against synthetic fixtures (`hass/tests/fixtures/bridge/`). Nothing here listens, connects to a Mac or BlueBubbles, or sends a message; there is no CLI or config key.
 
 - `normalize(event)`: a BlueBubbles `new-message` / `updated-message` webhook event becomes an `Inbound` (`kind` `new` / `edited`, `isFromMe` → `from_me`, `dateCreated` ms → UTC `received_at`), or a `Drop` naming why: `unsupported-event`, `group-or-unknown-chat` (only one `iMessage;-;…` chat passes), `attachments-not-supported` (H10/H12) or `malformed`. The owner filter stays in `Conversation`, which records an `updated-message` reusing a seen guid as `duplicate`.
 - `seal()` / `unseal()`: Mac → Agent Orange envelope `{v, ts, nonce, body, mac}`, HMAC-SHA256 over canonical JSON with a key of at least 32 bytes. `unseal` raises `EnvelopeError` `shape`, `version`, `mac`, `stale` (more than 300 s off) or `replay` (nonce already in `seen`); only a valid envelope adds its nonce (BL-AV-4 persists `seen`).
-- `BlueBubblesSender(base_url, password_file)`: an `Outbox` adapter that POSTs `/api/v1/message/text` (`chatGuid`, fresh `tempGuid`, `message`, `method: apple-script`) to `http(s)://127.0.0.1|localhost:<port>` only, without proxies or redirects. The password file must be a regular 0600-style file (no group/other access) and is read per send. Failures raise `BridgeError(code, status, path)`; no error carries the URL, query string or password.
+- `BlueBubblesSender(base_url, password_file)`: an `Outbox` adapter that POSTs `/api/v1/message/text` (`chatGuid`, fresh `tempGuid`, `message`, `method: apple-script`) to `http(s)://127.0.0.1|localhost:<port>` only, without proxies or redirects. The password file must be a regular 0600-style file (no group/other access) and is read per send. Failures raise `BridgeError(code, status, path)`; no error carries the URL, query string or password. A reply with attachments (the H06 preview PNG) is sent as its text plus one fixed `PICTURE_NOTE` line, so the outbox moves on; the picture is never read or sent and stays in the private state dir. Inbound attachments are still dropped by `normalize`.
 
 ## H16 part: durable inbound queue
 
@@ -115,6 +158,6 @@ export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-124
 - `enqueue(msg)` → `queued`, `duplicate` (id already stored, nothing changes) or `history` (received before the start point; only id and time are kept, it never becomes a command). A `received_at` that is empty, has no zone or is not a date raises `ValueError` and stores nothing.
 - `drain(conversation)` hands pending messages to `Conversation.handle` in `(received_at, provider_id)` order and marks each `done` with its disposition only afterwards. A crash in between re-delivers the message and `Conversation` answers `duplicate` without a second write; an exception stops the drain and leaves that message and later ones pending.
 - Payloads are erased once a message is done (history rows never store one); retention periods stay H21.
-- `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart.
+- `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart; nonces older than one day are pruned when a new one is recorded.
 
 No worker, timer, CLI or live adapter: fixtures only.
