@@ -5,7 +5,8 @@
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
-inbox-stuck (pending inbound older than --inbox-minutes), inbox-integrity, writer (--writer: one per reason editor
+inbox-stuck (pending inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
+--inbox-unreadable-hours; count only), inbox-integrity, writer (--writer: one per reason editor
 apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
 paused (info only), backup-age (--backups: no complete hass-state-* within --backup-hours), backup-verify. Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
@@ -29,11 +30,11 @@ PAUSED_SQL = "SELECT set_at FROM control WHERE name = 'paused'"  # paused <=> th
 def _problem(check, detail) -> dict:
     return {"check": check, "detail": detail}
 
-def _older(rows, limit: datetime) -> int:
-    """How many ISO times lie before limit; an unreadable or zone-less time counts (fail closed)."""
+def _older(rows, limit: datetime, newer=False) -> int:
+    """How many ISO times lie before limit (newer: at/after it); unreadable or zone-less times count (fail closed)."""
     def old(raw) -> bool:
         try:
-            return datetime.fromisoformat(raw) < limit
+            return (datetime.fromisoformat(raw) < limit) != newer
         except (TypeError, ValueError):
             return True
     return sum(old(raw) for (raw,) in rows)
@@ -55,7 +56,7 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
     except sqlite3.DatabaseError:
         problems.append(_problem("db-integrity", "database unreadable"))
 
-def _inbox_check(sdir: Path, now: datetime, minutes: int, problems: list) -> None:
+def _inbox_check(sdir: Path, now: datetime, minutes: int, problems: list, unreadable_hours=24) -> None:
     """H16 queue: pending inbound enqueued (this box's clock) over `minutes` ago; no inbox file -> nothing to check."""
     if not (path := sdir / "inbox.sqlite3").is_file(): return
     try:
@@ -65,6 +66,10 @@ def _inbox_check(sdir: Path, now: datetime, minutes: int, problems: list) -> Non
             if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'inbound'").fetchone(): return
             rows = db.execute("SELECT enqueued_at FROM inbound WHERE state = 'pending'").fetchall()
             if n := _older(rows, now - timedelta(minutes=minutes)): problems.append(_problem("inbox-stuck", str(n)))
+            if "disposition" in {r[1] for r in db.execute("PRAGMA table_info(inbound)")}:  # count only (RF1230-11)
+                rows = db.execute("SELECT done_at FROM inbound WHERE state = 'done' AND disposition = 'unreadable'")
+                if n := _older(rows.fetchall(), now - timedelta(hours=unreadable_hours), newer=True):
+                    problems.append(_problem("inbox-unreadable", str(n)))
     except sqlite3.DatabaseError:
         problems.append(_problem("inbox-integrity", "database unreadable"))
 
@@ -117,7 +122,8 @@ def _writer_check(state, problems: list) -> None:
         if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
         else: os.environ["GIT_OPTIONAL_LOCKS"] = old
 
-def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False) -> tuple:
+def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False,
+          inbox_unreadable_hours=24) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -131,7 +137,7 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
     except ConfigError as exc:
         problems.append(_problem("settings", str(exc)))
     _db_checks(sdir, now, outbox_minutes, problems, info)
-    _inbox_check(sdir, now, inbox_minutes, problems)
+    _inbox_check(sdir, now, inbox_minutes, problems, inbox_unreadable_hours)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
         _verify_backup(newest, problems)
     if writer: _writer_check(sdir, problems)
@@ -165,9 +171,10 @@ def main(argv=None, now=None) -> int:
     for flag in ("--backups", "--seen"): parser.add_argument(flag)
     for flag, default in (("--outbox-minutes", 15), ("--backup-hours", 26), ("--inbox-minutes", 15)):
         parser.add_argument(flag, type=int, default=default)
+    parser.add_argument("--inbox-unreadable-hours", type=int, default=24)
     parser.add_argument("--writer", action="store_true")
     args = parser.parse_args(argv)
-    if min(args.outbox_minutes, args.backup_hours, args.inbox_minutes) < 1:
+    if min(args.outbox_minutes, args.backup_hours, args.inbox_minutes, args.inbox_unreadable_hours) < 1:
         parser.error("minutes and hours must be >= 1")
     try:
         seen = _seen_path(args.seen, args.state) if args.seen else None
@@ -175,7 +182,7 @@ def main(argv=None, now=None) -> int:
         _emit([_problem("seen", str(exc))], [], True)
         return 2
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
-                                   args.inbox_minutes, args.writer)
+                                   args.inbox_minutes, args.writer, args.inbox_unreadable_hours)
     try:
         notify = _remember(seen, fingerprint(problems)) if seen else bool(problems)
     except OSError:  # fail open: an unrecorded fingerprint must not silence an alert; the detail names no path
