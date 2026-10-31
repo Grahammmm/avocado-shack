@@ -35,7 +35,7 @@ class AltOpTests(CatalogTestCase):
         repo = self.repo()
         repo.run(("product.add", NEW))
         self.assertNotIn("imageAlt", repo.products()[-1])
-        repo.run(("product.add", {**NEW, "imageAlt": ALT}))
+        repo.run(("product.add", {**NEW, "name": "Test quince with alt", "imageAlt": ALT}))
         added = repo.products()[-1]
         self.assertEqual((list(added)[-2:], added["imageAlt"]), (["status", "imageAlt"], ALT))
         public = _record(repo.catalog(), added["id"])
