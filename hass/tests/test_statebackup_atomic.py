@@ -1,7 +1,7 @@
 """H20 tests: `statebackup create` builds the backup in a dot-named partial dir and renames it in last, so a failed or
 interrupted run leaves no hass-state-<stamp> folder (and no partial). test_statebackup fixtures; temp dirs only."""
 
-import contextlib, errno, hashlib, io, json, os  # noqa: E401
+import contextlib, errno, hashlib, io, json, os, shutil  # noqa: E401
 from pathlib import Path
 from unittest import mock
 
@@ -9,7 +9,8 @@ from hass import health, statebackup
 from hass.tests.test_statebackup import STAMP, BackupTestCase, tree
 
 NAME = f"hass-state-{STAMP.strftime('%Y%m%dT%H%M%SZ')}"
-REAL_SNAPSHOT, REAL_COPY, REAL_REPLACE, REAL_RENAME = statebackup._snapshot, statebackup._copy, os.replace, os.rename
+REAL_SNAPSHOT, REAL_COPY, REAL_REPLACE = statebackup._snapshot, statebackup._copy, os.replace
+REAL_PUBLISH = statebackup._rename_noreplace
 
 class AtomicCreateTests(BackupTestCase):
     def setUp(self):
@@ -98,25 +99,26 @@ class AtomicCreateTests(BackupTestCase):
         before = tree(self.bk)
         self.assertEqual(self.make(), {"result": "exists", "backup": str(self.final)})
         self.assertEqual(tree(self.bk), before)
-        (self.final / "keep").unlink()
-        self.final.rmdir()
+        shutil.rmtree(self.final)
         self.final.symlink_to(self.tmp / "nowhere")  # a dangling link is not a free stamp either
         self.assertEqual(self.make()["result"], "exists")
         self.assertEqual(tree(self.bk), {NAME: "->" + str(self.tmp / "nowhere")})
 
-    def test_final_dir_appearing_during_the_build_is_untouched(self):
-        def rename(src, dst):  # a full folder appears just before the rename
-            if Path(dst) == self.final:
+    def test_final_dir_appearing_inside_the_rename_is_untouched(self):
+        for keep in (b"theirs", b""):  # full, then empty: os.rename would silently replace an empty dir
+            def rename(src, dst):  # it appears inside the publish step, after any check, just before the kernel rename
                 self.final.mkdir(mode=0o700)
-                (self.final / "keep").write_bytes(b"theirs")
-            return REAL_RENAME(src, dst)
-        with mock.patch.object(statebackup.os, "rename", side_effect=rename):
-            code, out = self.cli_at_stamp()
-        self.assertEqual((code, out["result"]), (1, "error"), out)
-        self.assertEqual(tree(self.bk), {NAME: None, f"{NAME}/keep": hashlib.sha256(b"theirs").hexdigest()})
+                if keep: (self.final / "keep").write_bytes(keep)
+                return REAL_PUBLISH(src, dst)
+            with self.subTest(full=bool(keep)), mock.patch.object(statebackup, "_rename_noreplace", side_effect=rename):
+                code, out = self.cli_at_stamp()
+                self.assertEqual((code, out["result"]), (1, "error"), out)
+                want = {NAME: None, f"{NAME}/keep": hashlib.sha256(keep).hexdigest()} if keep else {NAME: None}
+                self.assertEqual(tree(self.bk), want)  # theirs untouched, our partial removed
+                shutil.rmtree(self.final)
 
     def test_empty_final_dir_appearing_during_the_build_is_not_replaced(self):
-        def copy(src, dst):  # an empty folder would be silently replaced by os.rename; the check refuses it
+        def copy(src, dst):  # an empty folder would be silently replaced by os.rename; the no-replace rename refuses it
             os.makedirs(self.final, mode=0o700, exist_ok=True)
             return REAL_COPY(src, dst)
         with mock.patch.object(statebackup, "_copy", side_effect=copy), self.assertRaises(FileExistsError):

@@ -15,7 +15,7 @@ dir or onto the recorded writer worktree (an attended operation); backups stay p
 repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
 exit 0 ok, 1 any other result, 2 unsafe dir or usage. list (read-only): a line per hass-state-* entry, complete or not.
 """
-import argparse, contextlib, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
+import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -49,6 +49,14 @@ def _write_new(path: Path, data: bytes) -> None:
 
 def _copy(src: Path, dst: Path) -> None:
     _write_new(dst, _read(src))
+
+def _rename_noreplace(src: Path, dst: Path) -> None:
+    """Atomic rename that raises FileExistsError if dst exists, even as an empty dir (os.rename would replace it)."""
+    libc, a, b = ctypes.CDLL(None, use_errno=True), os.fsencode(src), os.fsencode(dst)
+    if hasattr(libc, "renameat2"): rc = libc.renameat2(-100, a, -100, b, 1)  # AT_FDCWD, RENAME_NOREPLACE (Linux)
+    elif hasattr(libc, "renamex_np"): rc = libc.renamex_np(a, b, 4)  # RENAME_EXCL (macOS)
+    else: raise OSError(errno.ENOSYS, "no atomic no-replace rename here", str(dst))
+    if rc: raise OSError(ctypes.get_errno(), os.strerror(ctypes.get_errno()), str(dst))  # EEXIST: FileExistsError
 
 def _connect_ro(path: Path):
     return contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True))
@@ -152,8 +160,7 @@ def create(state, out, now=None, media=None) -> dict:
         if mroot: doc["media"] = {"originals": len(mfiles) // 2}
         _write_new(dest / (MANIFEST + ".tmp"), json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
         os.replace(dest / (MANIFEST + ".tmp"), dest / MANIFEST)  # last: a backup without it is incomplete
-        if os.path.lexists(final): raise FileExistsError(f"backup dir appeared during create: {final}")
-        os.rename(dest, final)
+        _rename_noreplace(dest, final)  # a final dir that appeared meanwhile (even empty) is refused, never replaced
         undo.pop_all()  # renamed in: nothing left to clean up
     extra = {"media": len(mfiles) // 2} if mroot else {}  # settled: one sidecar per original
     return {"result": "ok", "backup": str(final), "files": len(hashes), **extra}
