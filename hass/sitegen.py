@@ -113,12 +113,23 @@ def diff_paths(files: dict[str, bytes], root: Path) -> list[str]:
     return changed
 
 
+def _check_folders(root: Path, target: Path) -> None:
+    """Refuse a symlinked folder below root on the way to target (root itself may be a link)."""
+    parts = target.relative_to(root).parts if target.is_relative_to(root) else ("..",)
+    if not parts or ".." in parts:
+        raise ValueError("generated path escapes root")
+    for i in range(1, len(parts)):
+        if os.path.islink(Path(root, *parts[:i])):
+            raise OSError(errno.ELOOP, "generated folder is a symlink")
+
+
 def write_files(files: dict[str, bytes], root: Path, only: list[str] | None = None) -> list[str]:
     """Atomically replace each (changed) file under root; return written paths."""
     written = []
-    for rel, data in files.items():
-        if only is not None and rel not in only:
-            continue
+    selected = [(rel, data) for rel, data in files.items() if only is None or rel in only]
+    for rel, _ in selected:
+        _check_folders(Path(root), Path(root) / rel)
+    for rel, data in selected:
         target = Path(root) / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         mode = target.stat().st_mode & 0o777 if target.exists() else 0o644
