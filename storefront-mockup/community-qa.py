@@ -8,10 +8,10 @@ except ValueError:loop=False
 if not loop:refuse('set PREVIEW_URL to an isolated loopback server (http://127.0.0.1:<port>)')
 out=os.environ.get('QA_OUT_DIR')
 if out:
- p=Path(os.path.abspath(out));tail=[]
- while not p.exists():tail.insert(0,p.name);p=p.parent
- p=p.resolve().joinpath(*tail);repo=root.parent.resolve()
- if p==repo or repo in p.parents:refuse('QA_OUT_DIR must be outside the repository')
+ p='/'  # resolve symlinks and '..' in order, as the filesystem does (abspath first would not)
+ for c in os.path.join(os.getcwd(),out).split('/'):p=p if c in('','.') else os.path.dirname(p) if c=='..' else os.path.realpath(os.path.join(p,c))
+ out=p;repo=str(root.parent.resolve())
+ if p==repo or p.startswith(repo+os.sep):refuse('QA_OUT_DIR must be outside the repository')
 else:out=tempfile.mkdtemp(prefix='avoshack-qa-');print('QA_OUT_DIR='+out,file=sys.stderr)
 future=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=30)).isoformat()
 events=[dict(id='qa-hike',title='QA trail fixture',startsAt=future,status='scheduled',meetingPoint='QA meeting point',distance='3 miles',difficulty='Gentle pace',duration='2 hours',capacity=3,rsvpEnabled=True),dict(id='qa-race',title='QA limited places',startsAt=future,status='scheduled',meetingPoint='QA meeting point',capacity=1,rsvpEnabled=True),dict(id='qa-past',title='QA past outing',startsAt='2025-01-01T10:00:00-08:00',status='completed',meetingPoint='QA meeting point',recap='A test history entry; not a published hike.',rsvpEnabled=False)]

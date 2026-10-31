@@ -52,8 +52,9 @@ class QaEnvTest(unittest.TestCase):
 
     def test_out_dir_inside_repo_refused(self):
         os.symlink(REPO, os.path.join(self.other, "link"))
-        for out in (str(SITE), str(REPO / "new-subdir"), str(REPO), f"{SITE}/../new-subdir/x",
-                    "storefront-mockup/new", os.path.join(self.other, "link", "evidence")):
+        os.symlink(SITE, os.path.join(self.other, "site"))  # other/site/.. is the repo on disk, not other
+        for out in (str(SITE), str(REPO / "new-subdir"), str(REPO), f"{SITE}/../new-subdir/x", "storefront-mockup/new",
+                    os.path.join(self.other, "link", "evidence"), f"{self.other}/site/..", f"{self.other}/site/../new/x"):
             for cmd in SCRIPTS:
                 with self.subTest(out=out, script=cmd[1]):
                     self.refused(cmd, DIR_REFUSAL, PREVIEW_URL=SAFE_URL, QA_OUT_DIR=out)
@@ -65,25 +66,25 @@ class QaEnvTest(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             got = json.loads(r.stdout)
             self.assertEqual(got["base"], "http://localhost:4173")
-            self.assertTrue(os.path.isdir(got["out"]))
-            self.assertNotIn(REPO, Path(os.path.realpath(got["out"])).parents)
+            self.assertTrue(os.path.isdir(got["out"]) and REPO not in Path(os.path.realpath(got["out"])).parents)
             self.assertEqual(r.stderr, "QA_OUT_DIR=" + got["out"] + "\n")
             seen.add(got["out"])
         self.assertEqual(len(seen), 2)
         self.assertEqual(tree(), self.before)
 
-    def test_explicit_out_dir_outside_repo_accepted_and_not_created(self):
-        for out in (self.other, str(REPO.parent / (REPO.name + "-qa-sibling"))):
-            r = self.run_env(["node", str(DRIVER)], PREVIEW_URL="http://127.0.0.1:4173", QA_OUT_DIR=out)
-            self.assertEqual((r.returncode, r.stderr), (0, ""))
-            self.assertEqual(json.loads(r.stdout), {"out": out, "base": "http://127.0.0.1:4173"})
-        self.assertFalse(os.path.exists(REPO.parent / (REPO.name + "-qa-sibling")))
+    def test_explicit_out_dir_outside_repo_accepted_canonical_and_not_created(self):
+        os.mkdir(os.path.join(self.tmp, "in")), os.symlink(os.path.join(self.tmp, "in"), os.path.join(self.other, "ext"))
+        sib, real, u = str(REPO.parent / (REPO.name + "-qa-sibling")), os.path.realpath, "http://127.0.0.1:4173"
+        for out, want, url, base in ((self.other, real(self.other), u, u), (sib, sib, "http://localhost:80/", "http://localhost"),
+                                     (f"{self.other}/ext/..", real(self.tmp), u, u)):  # ext/.. is the link target's parent
+            r = self.run_env(["node", str(DRIVER)], PREVIEW_URL=url, QA_OUT_DIR=out)
+            self.assertEqual((r.returncode, r.stderr, json.loads(r.stdout or "null")), (0, "", {"out": want, "base": base}))
+        self.assertFalse(os.path.exists(sib))
 
-    def test_community_qa_refuses_before_its_server_starts(self):
-        for extra in ({}, {"PREVIEW_URL": SAFE_URL, "QA_OUT_DIR": str(SITE)}):
+    def test_community_qa_refuses_before_its_server_starts(self):  # :80 passes its URL check, then the dir is refused
+        for extra in ({}, {"PREVIEW_URL": "http://localhost:80", "QA_OUT_DIR": str(SITE)}):
             start = time.monotonic()
             self.refused(SCRIPTS[-1], URL_REFUSAL if not extra else DIR_REFUSAL, **extra)
             self.assertLess(time.monotonic() - start, 5)
             with socket.socket() as s:
-                s.settimeout(1)
                 self.assertNotEqual(s.connect_ex(("127.0.0.1", 3102)), 0)  # nothing listens on 3102
