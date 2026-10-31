@@ -113,10 +113,11 @@ def diff_paths(files: dict[str, bytes], root: Path) -> list[str]:
     return changed
 
 
-def _check_folders(root: Path, target: Path) -> None:
-    """Refuse a symlinked folder below root on the way to target (root itself may be a link)."""
-    parts = target.relative_to(root).parts if target.is_relative_to(root) else ("..",)
-    if not parts or ".." in parts:
+def _check_folders(root: Path, rel: str) -> None:
+    """Refuse an absolute/escaping key or a symlinked folder below root (root itself may be a link)."""
+    key = Path(rel)
+    parts = key.parts
+    if key.is_absolute() or key.drive or not parts or ".." in parts:
         raise ValueError("generated path escapes root")
     for i in range(1, len(parts)):
         if os.path.islink(Path(root, *parts[:i])):
@@ -128,7 +129,7 @@ def write_files(files: dict[str, bytes], root: Path, only: list[str] | None = No
     written = []
     selected = [(rel, data) for rel, data in files.items() if only is None or rel in only]
     for rel, _ in selected:
-        _check_folders(Path(root), Path(root) / rel)
+        _check_folders(Path(root), rel)
     for rel, data in selected:
         target = Path(root) / rel
         target.parent.mkdir(parents=True, exist_ok=True)

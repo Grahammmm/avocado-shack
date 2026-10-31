@@ -122,6 +122,16 @@ class GeneratedLinkTests(unittest.TestCase):
                 self.assertEqual(_tree(self.outside), {})
                 self.assertFalse(self.root.parent.joinpath("escape.txt").exists())
 
+    def test_absolute_key_inside_root_is_refused_and_nothing_written(self):
+        inside = str(self.root / SITE / "index.html")  # absolute, but would resolve under root
+        for files in ({inside: b"abs"}, {SITE + "producers.json": b"{}\n", inside: b"abs"}):
+            with self.subTest(keys=list(files)):
+                with self.assertRaises(ValueError) as ctx:
+                    sitegen.write_files(files, self.root)
+                self.assertEqual(str(ctx.exception), "generated path escapes root")
+                self.assertEqual(_tree(self.root), {})
+                self.assertEqual(_tree(self.outside), {})
+
 
 if __name__ == "__main__":
     unittest.main()
