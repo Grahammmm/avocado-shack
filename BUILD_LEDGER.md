@@ -664,3 +664,27 @@ Branch rb/rf0850-4 from origin/main c9ae3cf (RF0850-4, PR #27: commit 96dbc69, m
 Checks at PR head 96dbc69 (recorded in PR #27): `python3 -m unittest hass.tests.test_statebackup_paused hass.tests.test_statebackup hass.tests.test_status_pause -v` ran 24 tests, OK; `python3 -m unittest discover -s hass/tests -t . -v` ran 152 tests, OK (skipped=4); `python3 hass/sitegen.py --check` and `python3 hass/migration_check.py` passed. CI `check` passed at 96dbc69.
 
 Limits: H20 stays partial: no live restore was run, and restoring onto the recorded writer worktree stays attended. Scheduling, retention, off-box copies and encryption are not built.
+
+## H17 support path per health problem (RF0935-6) — October 31, 2026
+
+Branch rb/rf0935-6 from origin/main 59b7210 (RF0935-6, PR #29: commit 44acfcd, merged as 307c90a). Added `docs/hass/SUPPORT.md`: one heading for every problem id `hass/health.py` emits (`state`, `settings`, `db-integrity`, `outbox-stuck`, `apply-stuck`, `backup-age`, `seen`, `inbox-stuck`, `inbox-integrity`) and for the info lines `conversation` and `paused`, each with Means / Check first / Next step / Stop and ask, plus a Restore section naming `restore --paused`. The `hass/README.md` H17 limits line points to it. Added `hass/tests/test_support_doc.py`: the ids found by `ast` in `health.py` must equal the documented headings (an undocumented id or a stale heading is reported by name), heading wording must be exact, every `python3 hass/...` path must exist, and the doc holds no `@`, 7+ digit run or http URL.
+
+Checks at PR head 44acfcd (recorded in PR #29): `python3 -m unittest hass.tests.test_support_doc hass.tests.test_health -v` ran 16 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 177 tests, OK (skipped=4). CI `check` passed at 44acfcd.
+
+Limits: H17 stays partial: the support path is a document only and no live support contact is set up. When merged, `statebackup.py create` refused a state dir holding `inbox.sqlite3` and the doc said so; RF1035-6 below adds the inbox to backups.
+
+## H16 fixture_chat --queue (RF0935-7) — October 31, 2026
+
+Branch rb/rf0935-7 from origin/main 59b7210 (RF0935-7, PR #30: commit bb3094c, merged as d40dc5f). `hass/fixture_chat.py` takes an optional `--queue START_AT`: it opens `Inbox(state, start_at)`, enqueues every fixture message before the first drain, drains once, closes in `finally`, then flushes as before. A `ValueError` (start point mismatch, bad `at`) exits 2 before draining. One counts-only stderr line reports `queued`, `duplicate`, `history` and `handled`. Without the flag the code path is unchanged. Added `hass/tests/test_fixture_chat_queue.py` (CLI subprocess tests on a throwaway `WriterRepo`); a symlink to a group-readable state dir exits 2 and creates no `inbox.sqlite3`.
+
+Checks at PR head bb3094c (recorded in PR #30): `python3 -B -m unittest hass.tests.test_fixture_chat_queue hass.tests.test_inbox hass.tests.test_demo_transcript -v` ran 20 tests, OK; `python3 -B -m unittest discover -s hass/tests -t .` ran 177 tests, OK (skipped=4). CI `check` passed at bb3094c.
+
+Limits: H16 stays partial: the queue is fed and drained only by the fixture CLI; there is no live transport, worker or timer.
+
+## H20 state backup covers the inbound queue (RF1035-6) — October 31, 2026
+
+Branch rb/rf1035-6 from origin/main 9320452e (RF1035-6, PR #33: commit 952d721, test-budget fit f3770cf, merged as bf8b183). `hass/statebackup.py` accepts `inbox.sqlite3` as a top-level regular file. `create` snapshots it before `conversation.sqlite3`, so a message handled between the two snapshots stays pending and is answered `duplicate` on a later drain. `verify` runs `PRAGMA integrity_check` on both stores; `restore` copies it like any file and `--paused` still touches only `conversation.sqlite3`. A leftover `inbox.sqlite3-journal` is still refused as `unknown entry`. The `hass/README.md` H20 bullet and `docs/hass/SUPPORT.md` say the inbox is included. Added `hass/tests/test_statebackup_inbox.py` (fixtures only).
+
+Checks at PR head f3770cf (recorded in PR #33): `python3 -m unittest hass.tests.test_statebackup_inbox hass.tests.test_statebackup hass.tests.test_statebackup_paused hass.tests.test_inbox hass.tests.test_support_doc -v` ran 38 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 194 tests, OK (skipped=4). CI `check` passed at f3770cf.
+
+Limits: H20 stays partial: no live restore was run; scheduling, retention, off-box copies and encryption are not built. The `inbox-integrity` section of `docs/hass/SUPPORT.md` still says backups do not hold the inbox (noted in PR #33 for a follow-up).
