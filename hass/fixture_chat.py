@@ -1,12 +1,14 @@
 """Fixture conversation adapter (H05). A fixture is not iMessage: messages come from a JSONL file and sends are
 only recorded in memory.
 
-    python3 hass/fixture_chat.py --state DIR --fixture FILE --interpreter FILE [--preview]
+    python3 hass/fixture_chat.py --state DIR --fixture FILE --interpreter FILE [--preview] [--queue START_AT]
 
 Runs every fixture message through a Conversation (production op registry, FixtureInterpreter from the JSON
 mapping FILE), flushes the outbox into memory and prints it as JSON lines. It sends nothing anywhere.
 --preview adds the writer worktree's Previewer (private proposal/result screenshots, verify-before-reply;
 PLAYWRIGHT_MODULE and CHROMIUM_PATH are read from the environment).
+--queue START_AT stores every message in <state>/inbox.sqlite3 first, then drains it once (H16): messages before the
+start point and repeats never become commands; stderr gets one counts-only summary line.
 Exit codes: 0 done, 2 unsafe state dir, missing settings or unreadable input.
 """
 import argparse, json, sys  # noqa: E401
@@ -18,6 +20,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 from hass.conversation import ConfigError, Conversation, Editor, FixtureInterpreter, Inbound  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
 from hass import editor as editor_mod  # noqa: E402
+from hass.inbox import Inbox  # noqa: E402
 from hass.preview import Previewer  # noqa: E402
 
 
@@ -45,6 +48,7 @@ def main(argv=None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     for name in ("--state", "--fixture", "--interpreter"): parser.add_argument(name, required=True)
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--queue", metavar="START_AT")
     args = parser.parse_args(argv)
     try:
         adapter = FixtureAdapter(args.fixture)
@@ -52,7 +56,16 @@ def main(argv=None) -> int:
         editor = Editor(args.state)
         previewer = Previewer(editor_mod._load(args.state)[2]) if args.preview else None
         conversation = Conversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer)
-        for message in adapter.inbound(): conversation.handle(message)
+        if args.queue is None:
+            for message in adapter.inbound(): conversation.handle(message)
+        else:
+            inbox, counts = Inbox(args.state, start_at=args.queue), {"queued": 0, "duplicate": 0, "history": 0}
+            try:  # store every message before handling any (H16)
+                for message in adapter.inbound(): counts[inbox.enqueue(message)] += 1
+                counts["handled"] = len(inbox.drain(conversation))
+            finally:
+                inbox.close()
+            print("fixture_chat: " + " ".join(f"{k}={v}" for k, v in counts.items()), file=sys.stderr)
         conversation.flush(adapter)
     except (ConfigError, UnsafeState, OSError, ValueError, KeyError, TypeError) as exc:
         print(f"fixture_chat: {type(exc).__name__}: {exc}", file=sys.stderr)
