@@ -295,7 +295,7 @@ def _listed(entry):  # (manifest doc or None, problem or None); a symlink is nev
 
 def list_backups(out):
     """list: one dict per hass-state-* entry, newest first. Read-only; no content hashing (that is verify)."""
-    if not out or os.path.islink(out) or not os.path.isdir(out):
+    if not out or os.path.islink(re.sub(r"(/\.?)+$", "", out) or "/") or not os.path.isdir(out):  # 'link/' = link
         return {"result": "refused", "problems": ["--out must be a folder, not a link"]}
     rows = []
     for entry in sorted((e for e in os.scandir(out) if NAME_RE.fullmatch(e.name)), key=lambda e: e.name, reverse=True):

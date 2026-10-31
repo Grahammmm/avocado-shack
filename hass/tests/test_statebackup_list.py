@@ -92,13 +92,14 @@ class ListTests(BackupTestCase):
         (link := self.tmp / "bk-link").symlink_to(self.bk, target_is_directory=True)
         (plain := self.tmp / "plain").write_bytes(b"")
         before = tree(self.bk)
-        for out in (link, self.tmp / "missing", plain):
+        for out in (link, f"{link}/", f"{link}//", f"{link}/.", f"{link}/./", self.tmp / "missing", plain):
             code, rows, raw = self.cli(out)
             self.assertEqual((code, raw), (2, json.dumps(REFUSED) + "\n"), out)  # only the refusal, no listing
             self.assertEqual(statebackup.list_backups(str(out)), REFUSED)
         self.assertEqual((tree(self.bk), os.path.exists(self.tmp / "missing")), (before, False))
         (empty := self.tmp / "empty").mkdir()
         self.assertEqual(self.cli(empty), (0, [], ""))  # no backups: no lines, exit 0
+        self.assertEqual([(c, len(r)) for c, r, _ in (self.cli(f"{self.bk}/"), self.cli(f"{self.bk}/."))], [(0, 1)] * 2)
 
     def test_list_writes_nothing_and_hashes_nothing(self):
         good = self.make(STAMP)
