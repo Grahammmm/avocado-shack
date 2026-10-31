@@ -1,18 +1,10 @@
 """H20 prep tests: private state backup, verify and an isolated restore drill.
 
-Each test uses the H06 conversation setup (temp Git repo, linked writer worktree, private 0700 state dir, fake
-previewer, injected clock) plus a second linked drill worktree of the same throwaway repo on its own branch. Every dir
-lives under the test's temp dir; the live state, community database and checkout are never touched.
-Run: python3 -m unittest discover -s hass/tests -t . -v
+H06 conversation setup (temp Git repo, linked writer worktree, private 0700 state dir, fake previewer, injected clock) plus
+a second linked drill worktree of the same throwaway repo; every dir lives under the test's temp dir (no live state).
 """
 
-import hashlib
-import json
-import os
-import shutil
-import subprocess
-import sys
-import unittest
+import hashlib, json, os, shutil, subprocess, sys, unittest  # noqa: E401
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -111,19 +103,27 @@ class CreateRefusalTests(BackupTestCase):
             self.assertTrue(held)
             self.assertEqual(statebackup.create(str(state), str(self.bk)), {"result": "busy"})
         (state / "journal").mkdir(mode=0o700, exist_ok=True)
+        outside_cfg, outside_lock = self.tmp / "outside.json", self.tmp / "outside.lock"  # lock target never exists
+        shutil.copy(state / "config.json", outside_cfg)
         cases = (("journal/chg-000000000000.json", None, "unsettled", None),
                  ("drafts/x.json", "/etc/hostname", "refused", "symlink: drafts/x.json"),
                  ("notes.txt", None, "refused", "unknown entry: notes.txt"),
-                 ("drafts/notes.txt", None, "refused", "unknown entry: drafts/notes.txt"))
+                 ("drafts/notes.txt", None, "refused", "unknown entry: drafts/notes.txt"),
+                 ("config.json", outside_cfg, "refused", "symlink: config.json"),
+                 ("writer.lock", outside_lock, "refused", "symlink: writer.lock"))
         for rel, link, result, problem in cases:
-            with self.subTest(rel=rel):
-                path = state / rel
+            with self.subTest(rel=rel), mock.patch.object(editor, "_read", wraps=editor._read) as read:
+                path, aside = state / rel, self.tmp / "aside"
+                if path.exists(): path.rename(aside)
                 path.symlink_to(link) if link else path.write_text("{}", "utf-8")
                 got = statebackup.create(str(state), str(self.bk))
                 self.assertEqual(got["result"], result, got)
                 if problem: self.assertIn(problem, got["problems"])
+                if rel in ("config.json", "writer.lock"):  # never read through, never created through
+                    self.assertEqual((read.call_count, outside_lock.exists()), (0, False))
                 self.assertEqual(os.listdir(self.bk), [])
                 path.unlink()
+                if aside.exists(): aside.rename(path)
         made = statebackup.create(str(state), str(self.bk), now=STAMP)
         self.assertEqual(made["result"], "ok")
         kept = tree(self.bk)
@@ -131,11 +131,13 @@ class CreateRefusalTests(BackupTestCase):
         self.assertEqual(tree(self.bk), kept)
 
     def test_unsafe_out_dirs_exit_2(self):
-        loose = self.tmp / "loose"
-        loose.mkdir(mode=0o700)
-        os.chmod(loose, 0o755)
-        cases = {"missing": self.tmp / "missing", "mode 0755": loose, "inside the repo": self.repo.main / "bk",
-                 "inside the writer worktree": self.repo.wt / "bk", "inside the state dir": self.repo.state / "bk"}
+        loose, owner = self.tmp / "loose", self.tmp / "owner-0500"
+        for path, mode in ((loose, 0o755), (owner, 0o500)):
+            path.mkdir(mode=0o700)
+            os.chmod(path, mode)
+        cases = {"missing": self.tmp / "missing", "mode 0755": loose, "mode 0500": owner,
+                 "inside the repo": self.repo.main / "bk", "inside the writer worktree": self.repo.wt / "bk",
+                 "inside the state dir": self.repo.state / "bk"}
         for name, out in cases.items():
             with self.subTest(name):
                 if name != "missing" and not out.exists(): out.mkdir(mode=0o700)
@@ -186,8 +188,7 @@ class RestoreRefusalTests(BackupTestCase):
     def test_refusals_leave_into_absent_or_untouched(self):
         self.apply("kumquat desc")
         backup = self.backup()
-        bad = self.bk / "bad"
-        shutil.copytree(backup, bad)
+        shutil.copytree(backup, bad := self.bk / "bad")
         (bad / statebackup.MANIFEST).unlink()
         plain, link = self.tmp / "plain", self.tmp / "writer-link"
         plain.mkdir()
@@ -249,8 +250,7 @@ class CliTests(BackupTestCase):
         new = self.tmp / "restored"
         self.assertEqual(cli(0, "restore", backup, "--into", new, "--worktree", self.drill_wt)["result"], "ok")
         self.assertEqual(editor.history(state=str(new)), editor.history(state=str(self.repo.state)))
-        bad = self.bk / "bad"
-        shutil.copytree(backup, bad)
+        shutil.copytree(backup, bad := self.bk / "bad")
         (bad / "config.json").write_text("{}", "utf-8")
         self.assertEqual(cli(1, "verify", bad)["problems"], ["hash mismatch: config.json"])
         self.assertEqual(cli(1, "restore", bad, "--into", self.tmp / "again", "--worktree", self.drill_wt)["result"],

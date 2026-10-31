@@ -2,14 +2,15 @@
 
     python3 hass/statebackup.py create --state DIR --out DIR | verify BACKUP | restore BACKUP --into DIR --worktree WT
 
-create takes the writer lock and copies a settled state dir (config.json, drafts, changes, screenshots and a consistent
-sqlite snapshot of conversation.sqlite3; never writer.lock, a symlink or an unknown entry) into a new private
-<out>/hass-state-<UTC stamp>/ and writes MANIFEST.json (sha256 per file) last. verify re-checks every hash and mode,
-refuses extra entries and symlinks and runs the sqlite integrity check. restore verifies first, then builds a NEW state
-dir bound to a separate drill worktree (only config.json `worktree` is rewritten).
-Isolation rule: nothing restores over an existing dir or onto the recorded writer worktree (an attended operation);
-backups stay private (0700/0600) and outside the repository, the worktrees and the state dir. No network, no Git
-writes, no deletes of source data. One JSON line out; exit 0 ok, 1 any other result, 2 unsafe dir or usage.
+create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
+settled state dir (config.json, drafts, changes, screenshots and a consistent sqlite snapshot of conversation.sqlite3;
+never writer.lock, a symlink or an unknown entry) into a new private <out>/hass-state-<UTC stamp>/ (out: an existing
+0700 dir of the user) and writes MANIFEST.json (sha256 per file) last. verify re-checks every hash and mode, refuses
+extra entries and symlinks and runs the sqlite integrity check. restore verifies first, then builds a NEW state dir bound
+to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
+dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
+repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
+exit 0 ok, 1 any other result, 2 unsafe dir or usage.
 """
 import argparse, contextlib, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timezone
@@ -62,8 +63,7 @@ def _roots(wt: Path) -> list:
 def _private_out(raw, roots) -> Path:
     path = Path(raw).resolve()
     if not path.is_dir(): raise UnsafeState("backup dir must already exist")
-    st = path.stat()
-    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+    if (st := path.stat()).st_uid != os.getuid() or stat.S_IMODE(st.st_mode) != 0o700:
         raise UnsafeState("backup dir must be owned by the current user with mode 0700")
     if _inside(path, roots):
         raise UnsafeState("backup dir must lie outside the state dir, the repository and the writer worktree")
@@ -86,12 +86,13 @@ def _scan(sdir: Path):
 
 def create(state, out, now=None) -> dict:
     if not state or not Path(state).is_dir(): raise UnsafeState("state dir must already exist")  # open_state creates
+    top = [p for p in _scan(editor.open_state(state))[1] if p.split(": ", 1)[1] in (CONFIG, LOCK)]
+    if top: return {"result": "refused", "problems": top}  # before _load reads config / _writer_lock creates the lock
     sdir, cfg, wt = editor._load(state)
     dest_root = _private_out(out, _roots(wt) + [sdir])
     with editor._writer_lock(sdir) as held:
         if not held: return {"result": "busy"}
-        journal = sdir / "journal"
-        if journal.is_dir() and not journal.is_symlink() and any(journal.iterdir()):
+        if (journal := sdir / "journal").is_dir() and not journal.is_symlink() and any(journal.iterdir()):
             return {"result": "unsettled", "problems": ["an interrupted write is pending; run editor.py recover first"]}
         files, bad = _scan(sdir)
         if bad: return {"result": "refused", "problems": bad}
