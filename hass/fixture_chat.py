@@ -1,10 +1,12 @@
 """Fixture conversation adapter (H05). A fixture is not iMessage: messages come from a JSONL file and sends are
 only recorded in memory.
 
-    python3 hass/fixture_chat.py --state DIR --fixture FILE --interpreter FILE
+    python3 hass/fixture_chat.py --state DIR --fixture FILE --interpreter FILE [--preview]
 
 Runs every fixture message through a Conversation (production op registry, FixtureInterpreter from the JSON
 mapping FILE), flushes the outbox into memory and prints it as JSON lines. It sends nothing anywhere.
+--preview adds the writer worktree's Previewer (private proposal/result screenshots, verify-before-reply;
+PLAYWRIGHT_MODULE and CHROMIUM_PATH are read from the environment).
 Exit codes: 0 done, 2 unsafe state dir, missing settings or unreadable input.
 """
 import argparse, json, sys  # noqa: E401
@@ -15,6 +17,8 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass.conversation import ConfigError, Conversation, Editor, FixtureInterpreter, Inbound  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
+from hass import editor as editor_mod  # noqa: E402
+from hass.preview import Previewer  # noqa: E402
 
 
 class FixtureAdapter:
@@ -40,11 +44,14 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/fixture_chat.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     for name in ("--state", "--fixture", "--interpreter"): parser.add_argument(name, required=True)
+    parser.add_argument("--preview", action="store_true")
     args = parser.parse_args(argv)
     try:
         adapter = FixtureAdapter(args.fixture)
         interpreter = FixtureInterpreter(json.loads(Path(args.interpreter).read_text("utf-8")))
-        conversation = Conversation(args.state, Editor(args.state), interpreter, lambda: datetime.now(timezone.utc))
+        editor = Editor(args.state)
+        previewer = Previewer(editor_mod._load(args.state)[2]) if args.preview else None
+        conversation = Conversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer)
         for message in adapter.inbound(): conversation.handle(message)
         conversation.flush(adapter)
     except (ConfigError, UnsafeState, OSError, ValueError, KeyError, TypeError) as exc:
