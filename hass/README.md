@@ -106,3 +106,15 @@ export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-124
 - `normalize(event)`: a BlueBubbles `new-message` / `updated-message` webhook event becomes an `Inbound` (`kind` `new` / `edited`, `isFromMe` → `from_me`, `dateCreated` ms → UTC `received_at`), or a `Drop` naming why: `unsupported-event`, `group-or-unknown-chat` (only one `iMessage;-;…` chat passes), `attachments-not-supported` (H10/H12) or `malformed`. The owner filter stays in `Conversation`, which records an `updated-message` reusing a seen guid as `duplicate`.
 - `seal()` / `unseal()`: Mac → Agent Orange envelope `{v, ts, nonce, body, mac}`, HMAC-SHA256 over canonical JSON with a key of at least 32 bytes. `unseal` raises `EnvelopeError` `shape`, `version`, `mac`, `stale` (more than 300 s off) or `replay` (nonce already in `seen`); only a valid envelope adds its nonce (BL-AV-4 persists `seen`).
 - `BlueBubblesSender(base_url, password_file)`: an `Outbox` adapter that POSTs `/api/v1/message/text` (`chatGuid`, fresh `tempGuid`, `message`, `method: apple-script`) to `http(s)://127.0.0.1|localhost:<port>` only, without proxies or redirects. The password file must be a regular 0600-style file (no group/other access) and is read per send. Failures raise `BridgeError(code, status, path)`; no error carries the URL, query string or password.
+
+## H16 part: durable inbound queue
+
+`hass/inbox.py` `Inbox(state_dir, start_at=None)` keeps `<state>/inbox.sqlite3` (0600) next to the conversation store. Every inbound message is written there before any processing; nothing is backfilled as a command.
+
+- **Start point.** The first open must pass `start_at` (timezone-aware ISO-8601) and records it; later opens reuse it, and a different value raises `start point already recorded as <iso>`. The module never moves it.
+- `enqueue(msg)` → `queued`, `duplicate` (id already stored, nothing changes) or `history` (received before the start point; only id and time are kept, it never becomes a command). A `received_at` that is empty, has no zone or is not a date raises `ValueError` and stores nothing.
+- `drain(conversation)` hands pending messages to `Conversation.handle` in `(received_at, provider_id)` order and marks each `done` with its disposition only afterwards. A crash in between re-delivers the message and `Conversation` answers `duplicate` without a second write; an exception stops the drain and leaves that message and later ones pending.
+- Payloads are erased once a message is done (history rows never store one); retention periods stay H21.
+- `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart.
+
+No worker, timer, CLI or live adapter: fixtures only.
