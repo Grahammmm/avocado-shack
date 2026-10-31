@@ -1,7 +1,7 @@
 """Hass private state backup, verify and isolated restore drill (H20 prep).
 
     python3 hass/statebackup.py create --state DIR --out DIR [--media DIR] | verify BACKUP
-                                | restore BACKUP --into DIR --worktree WT [--paused] [--media-into DIR]
+                                | restore BACKUP --into DIR --worktree WT [--paused] [--media-into DIR] | list --out DIR
 
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
 settled state dir (config.json, drafts, changes, screenshots and consistent sqlite snapshots of inbox.sqlite3, then
@@ -13,7 +13,7 @@ then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
 repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
-exit 0 ok, 1 any other result, 2 unsafe dir or usage.
+exit 0 ok, 1 any other result, 2 unsafe dir or usage. list (read-only): a line per hass-state-* entry, complete or not.
 """
 import argparse, contextlib, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timezone
@@ -284,11 +284,32 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
     if mrels: extra.update({"mediaRestored": bool(mtarget), "media": len(mrels) // 2})
     return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]), **extra}
 
+NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
+def _listed(entry):  # (manifest doc or None, problem or None); a symlink is never followed
+    if entry.is_symlink(): return None, "symlink"
+    if not entry.is_dir(follow_symlinks=False): return None, "not a folder"
+    try: os.lstat(Path(entry.path, MANIFEST))
+    except FileNotFoundError: return None, "no manifest (interrupted)"  # create() writes MANIFEST.json last
+    except OSError: return None, "manifest invalid"
+    return (doc := _manifest(Path(entry.path))), None if doc else "manifest invalid"
+
+def list_backups(out):
+    """list: one dict per hass-state-* entry, newest first. Read-only; no content hashing (that is verify)."""
+    if not out or os.path.islink(re.sub(r"(/\.?)+$", "", out) or "/") or not os.path.isdir(out):  # 'link/' = link
+        return {"result": "refused", "problems": ["--out must be a folder, not a link"]}
+    rows = []
+    for entry in sorted((e for e in os.scandir(out) if NAME_RE.fullmatch(e.name)), key=lambda e: e.name, reverse=True):
+        doc, problem = _listed(entry)
+        created = (doc or {}).get("createdAt")
+        rows.append({"backup": entry.name, "createdAt": created if isinstance(created, str) else None,
+                     "files": len(doc["files"]) if doc else None, "complete": doc is not None, "problem": problem})
+    return rows
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/statebackup.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name, params in (("create", ["--state", "--out"]), ("verify", ["backup"]),
+    for name, params in (("create", ["--state", "--out"]), ("verify", ["backup"]), ("list", ["--out"]),
                          ("restore", ["backup", "--into", "--worktree"])):
         cmd = sub.add_parser(name)
         for param in params: cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
@@ -297,6 +318,10 @@ def main(argv=None) -> int:
     sub.choices["create"].add_argument("--media")
     args = parser.parse_args(argv)
     try:
+        if args.cmd == "list":
+            rows = list_backups(args.out)
+            for row in [rows] if isinstance(rows, dict) else rows: print(json.dumps(row, ensure_ascii=False))
+            return 2 if isinstance(rows, dict) else 0  # refused: --out missing or a link
         out = create(args.state, args.out, media=args.media) if args.cmd == "create" else verify(args.backup) \
             if args.cmd == "verify" else restore(args.backup, args.into, args.worktree, paused=args.paused,
                                                  media_into=args.media_into)
