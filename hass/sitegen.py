@@ -19,6 +19,7 @@ products.json) and hiking-preview.json (labelled samples, kept separate).
 from __future__ import annotations
 
 import argparse
+import errno
 import html
 import json
 import os
@@ -32,7 +33,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import (  # noqa: E402
-    PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError, load_and_validate,
+    PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError, load_and_validate,
 )
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
@@ -42,7 +43,7 @@ SLOT_RE = re.compile(r"\{\{([a-zA-Z.]+)\}\}")
 
 
 def _catalog_js(content: Content) -> bytes:
-    records = [{k: v for k, v in p.items() if k in PRODUCT_PUBLIC_FIELDS} for p in content.active_products()]
+    records = [{k: v for k, v in p.items() if k in PRODUCT_PUBLIC_FIELDS + PRODUCT_OPTIONAL_PUBLIC} for p in content.active_products()]
     return ("const catalog=" + json.dumps(records, ensure_ascii=False) + ";\n").encode("utf-8")
 
 
@@ -121,6 +122,8 @@ def write_files(files: dict[str, bytes], root: Path, only: list[str] | None = No
         target = Path(root) / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         mode = target.stat().st_mode & 0o777 if target.exists() else 0o644
+        if os.path.islink(target):
+            raise OSError(errno.ELOOP, "generated target is a symlink")
         fd, tmp = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
         try:
             with os.fdopen(fd, "wb") as fh:
@@ -138,6 +141,14 @@ def write_files(files: dict[str, bytes], root: Path, only: list[str] | None = No
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except (OSError, ValueError) as exc:  # ContentError is handled inside _main first
+        print(f"sitegen: io error: {type(exc).__name__}", file=sys.stderr)
+        return 2
+
+
+def _main(argv: list[str] | None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true", help="fail if generated files differ from the repo")

@@ -1,12 +1,13 @@
 """Hass private state backup, verify and isolated restore drill (H20 prep).
 
-    python3 hass/statebackup.py create --state DIR --out DIR | verify BACKUP | restore BACKUP --into DIR --worktree WT
+    python3 hass/statebackup.py create --state DIR --out DIR | verify BACKUP | restore BACKUP --into DIR --worktree WT [--paused]
 
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
-settled state dir (config.json, drafts, changes, screenshots and a consistent sqlite snapshot of conversation.sqlite3;
-never writer.lock, a symlink or an unknown entry) into a new private <out>/hass-state-<UTC stamp>/ (out: an existing
-0700 dir of the user) and writes MANIFEST.json (sha256 per file) last. verify re-checks every hash and mode, refuses
-extra entries and symlinks and runs the sqlite integrity check. restore verifies first, then builds a NEW state dir bound
+settled state dir (config.json, drafts, changes, screenshots and consistent sqlite snapshots of inbox.sqlite3, then
+conversation.sqlite3; never writer.lock, a journal, a symlink or an unknown entry) into a new private
+<out>/hass-state-<UTC stamp>/ (out: an existing 0700 dir of the user) and writes MANIFEST.json (sha256 per file) last.
+verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
+stores. restore verifies first, then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
 repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
@@ -19,12 +20,14 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor  # noqa: E402
+from hass.conversation import CONTROL, _iso  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
 
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
+INBOX = "inbox.sqlite3"  # H16 inbound queue; snapshotted like DB
 DIRS = ("drafts", "changes", "screenshots")
-FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
+FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
                      r"|screenshots/[0-9A-Za-z_-][0-9A-Za-z._-]*\.png")
 HEX_RE = re.compile(r"[0-9a-f]{64}")
 ATTENDED = "restoring onto the recorded writer worktree is an attended operation"
@@ -80,7 +83,7 @@ def _scan(sdir: Path):
                 if sub.is_symlink(): bad.append(f"symlink: {rel}")
                 elif sub.is_file(follow_symlinks=False) and FILE_RE.fullmatch(rel): files.append(rel)
                 else: bad.append(f"unknown entry: {rel}")
-        elif entry.is_file(follow_symlinks=False) and entry.name in (CONFIG, DB): files.append(entry.name)
+        elif entry.is_file(follow_symlinks=False) and entry.name in (CONFIG, DB, INBOX): files.append(entry.name)
         elif not (entry.is_file(follow_symlinks=False) and entry.name == LOCK): bad.append(f"unknown entry: {entry.name}")
     return files, bad
 
@@ -104,9 +107,11 @@ def create(state, out, now=None) -> dict:
             return {"result": "exists", "backup": str(dest)}
         os.chmod(dest, 0o700)
         hashes = {}
-        for rel in files:
+        # The inbox goes first: a row it shows `done` was handled before, so the later DB snapshot holds its effect;
+        # one handled in between stays `pending` here and a later drain answers it `duplicate` (no second write).
+        for rel in sorted(files, key=lambda rel: rel != INBOX):
             (dest / rel).parent.mkdir(mode=0o700, exist_ok=True)
-            (_snapshot if rel == DB else _copy)(sdir / rel, dest / rel)
+            (_snapshot if rel in (DB, INBOX) else _copy)(sdir / rel, dest / rel)
             hashes[rel] = hashlib.sha256(_read(dest / rel)).hexdigest()
         doc = {"schemaVersion": 1, "createdAt": now.isoformat(), "worktree": cfg["worktree"], "files": hashes}
         _write_new(dest / (MANIFEST + ".tmp"), json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
@@ -153,10 +158,20 @@ def verify(backup) -> dict:
     for rel, digest in sorted(files.items()):
         if rel not in seen: problems.append(f"missing: {rel}")
         elif hashlib.sha256(_read(bdir / rel)).hexdigest() != digest: problems.append(f"hash mismatch: {rel}")
-        elif rel == DB and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
+        elif rel in (DB, INBOX) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
     return {"result": "corrupt", "problems": problems} if problems else {"result": "ok", "files": len(files)}
 
-def restore(backup, into, worktree) -> dict:
+def _pause(path: Path, now) -> str:  # restore --paused, before the dir appears; an older pause keeps its set_at
+    if not path.exists(): _write_new(path, b"")
+    with contextlib.closing(sqlite3.connect(path)) as db, db:
+        db.execute(CONTROL)
+        db.execute("INSERT OR IGNORE INTO control(name, value, set_at, provider_id) VALUES ('paused', '1', ?, "
+                   "'statebackup-restore')", (_iso(now or datetime.now(timezone.utc)),))
+        since = db.execute("SELECT set_at FROM control WHERE name = 'paused'").fetchone()[0]
+    os.chmod(path, 0o600)
+    return since
+
+def restore(backup, into, worktree, paused=False, now=None) -> dict:
     checked = verify(backup)
     if checked["result"] != "ok": return {"result": "corrupt", "problems": checked["problems"]}
     bdir = Path(backup).absolute()
@@ -179,12 +194,13 @@ def restore(backup, into, worktree) -> dict:
                 continue
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+        extra = {"paused": True, "pausedSince": _pause(tmp / DB, now)} if paused else {}
         if os.path.lexists(target): raise FileExistsError(f"restore dir appeared during restore: {target}")
         os.rename(tmp, target)
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)  # only the temp dir this call created
         raise
-    return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"])}
+    return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]), **extra}
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/statebackup.py", description=__doc__,
@@ -194,10 +210,11 @@ def main(argv=None) -> int:
                          ("restore", ["backup", "--into", "--worktree"])):
         cmd = sub.add_parser(name)
         for param in params: cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
+    cmd.add_argument("--paused", action="store_true")  # restore only (the last parser)
     args = parser.parse_args(argv)
     try:
         out = create(args.state, args.out) if args.cmd == "create" else verify(args.backup) \
-            if args.cmd == "verify" else restore(args.backup, args.into, args.worktree)
+            if args.cmd == "verify" else restore(args.backup, args.into, args.worktree, paused=args.paused)
     except UnsafeState as exc:
         print(json.dumps({"result": "unsafe-state", "problems": [str(exc)]}))
         return 2

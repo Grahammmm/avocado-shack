@@ -4,6 +4,7 @@
     python3 hass/editor.py apply CHANGE_ID --hash DRAFT_HASH | show CHANGE_ID | recover | ops | history [--limit N]
 prepare binds typed ops to the content revision; apply (internal caller only) locks, re-checks worktree and revision,
 writes only owned paths, runs the H01 checks and commits signed off. No listener, no push. One JSON object out.
+I/O errors: result io-error, exit 2 (history lists a corrupt change record as state unreadable).
 """
 import argparse, contextlib, copy, fcntl, hashlib, json, os, re, subprocess, sys  # noqa: E401
 from dataclasses import asdict
@@ -304,8 +305,17 @@ def history(limit=20, *, state=None) -> dict:
     sdir, _cfg, _wt = _load(state)
     entries = []
     for path in (sdir / "changes").glob("chg-*.json") if (sdir / "changes").is_dir() else ():
-        rec, draft = _read(path), sdir / "drafts" / path.name
-        ops = _read(draft).get("ops", []) if draft.is_file() else []
+        draft = sdir / "drafts" / path.name
+        try:
+            rec = _read(path)
+        except (OSError, ValueError):  # one corrupt record must not hide the others
+            entries.append((("", path.stat().st_mtime_ns), {"change_id": path.stem, "state": "unreadable",
+                            "applied_at": None, "commit": None, "revertedBy": None, "ops": []}))
+            continue
+        try:
+            ops = _read(draft).get("ops", []) if draft.is_file() else []
+        except (OSError, ValueError):
+            ops = []
         entries.append(((rec.get("applied_at") or rec.get("failed_at") or "", path.stat().st_mtime_ns), {
             "change_id": path.stem, "state": rec.get("state"), "applied_at": rec.get("applied_at"),
             "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"),
@@ -348,6 +358,9 @@ def main(argv=None) -> int:
         out = commands[args.cmd]()
     except UnsafeState as exc:
         print(json.dumps({"result": "unsafe-state", "problems": [str(exc)]}))
+        return 2
+    except (OSError, ValueError) as exc:  # class name only: never a path, request body or file content
+        print(json.dumps({"result": "io-error", "problems": [type(exc).__name__]}))
         return 2
     for line in out["history"] if args.cmd == "history" else [out]:  # history: one JSON line per change
         print(json.dumps(line, ensure_ascii=False, sort_keys=True))

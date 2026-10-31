@@ -7,7 +7,7 @@ in `(received_at, provider_id)` order and only then marks it done, so a crash in
 """
 import contextlib, json, os, sqlite3, sys  # noqa: E401
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS inbound(provider_id TEXT PRIMARY KEY, received_at TEX
   done_at TEXT);
 CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY, seen_at TEXT NOT NULL);
 """
+NONCE_KEEP_S = 86400  # >= 2 x bridge.MAX_SKEW; a pruned nonce's envelope is already stale
 
 
 def _utc_now() -> datetime:
@@ -56,9 +57,12 @@ class Nonces:
         return self._inbox.db.execute("SELECT 1 FROM nonces WHERE nonce = ?", (str(nonce),)).fetchone() is not None
 
     def add(self, nonce) -> None:
+        now = self._inbox.clock()
+        cut = _iso(now - timedelta(seconds=NONCE_KEEP_S))  # a future-dated row (clock moved back) is kept
         with self._inbox._tx():
+            self._inbox.db.execute("DELETE FROM nonces WHERE seen_at < ?", (cut,))
             self._inbox.db.execute("INSERT OR IGNORE INTO nonces(nonce, seen_at) VALUES (?, ?)",
-                                   (str(nonce), _iso(self._inbox.clock())))
+                                   (str(nonce), _iso(now)))
 
 
 class Inbox:

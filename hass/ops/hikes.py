@@ -95,10 +95,13 @@ def _touch(before, event):
     return [Touched("events", event["id"], before, copy.deepcopy(event))]
 
 
+CAPACITY_QUESTION = ("RSVPs are on: give either a capacity (a number of guests) or noCapacityLimit true for no limit, "
+                     "but not both.")
+
+
 def _hike_create(content, args, ctx):
     if args["rsvpEnabled"] and ("capacity" in args) == bool(args.get("noCapacityLimit")):
-        return NeedsDetails(["capacity", "noCapacityLimit"], "RSVPs are on: give either a capacity (a number of "
-                            "guests) or noCapacityLimit true for no limit, but not both.")
+        return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
@@ -137,6 +140,9 @@ def _hike_update(content, args, ctx):
                             + ", ".join(UPDATE_FIELDS))
     if "capacity" in given and "noCapacityLimit" in given:
         return NeedsDetails(["capacity", "noCapacityLimit"], "Give either a new capacity or noCapacityLimit true, not both.")
+    turning_on = given.get("rsvpEnabled") is True and not event.get("rsvpEnabled")
+    if turning_on and "capacity" not in given and "noCapacityLimit" not in given and event.get("capacity") is None:
+        return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
     changes = {f: v for f, v in given.items() if f not in ("date", "time", "noCapacityLimit")}
     if "date" in given or "time" in given:
         old_day, old_clock = _local_parts(event["startsAt"])
