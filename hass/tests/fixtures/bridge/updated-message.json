@@ -1,0 +1,13 @@
+{
+  "type": "updated-message",
+  "data": {
+    "guid": "FAKE-0000-0000-0000-000000000002",
+    "text": "yes",
+    "handle": {"address": "owner@example.invalid", "country": "US"},
+    "chats": [{"guid": "iMessage;-;owner@example.invalid"}],
+    "attachments": [],
+    "dateCreated": 1793638860000,
+    "dateEdited": 1793638870000,
+    "isFromMe": false
+  }
+}

@@ -98,3 +98,11 @@ Browser tests (`hass/tests/test_preview.py`) skip only when `PLAYWRIGHT_MODULE` 
 export PLAYWRIGHT_MODULE=/home/user/.hermes/hermes-agent/node_modules/playwright
 export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell
 ```
+
+## H08 prep: bridge adapter (fixtures only)
+
+`hass/bridge.py` is tested only against synthetic fixtures (`hass/tests/fixtures/bridge/`). Nothing here listens, connects to a Mac or BlueBubbles, or sends a message; there is no CLI or config key.
+
+- `normalize(event)`: a BlueBubbles `new-message` / `updated-message` webhook event becomes an `Inbound` (`kind` `new` / `edited`, `isFromMe` → `from_me`, `dateCreated` ms → UTC `received_at`), or a `Drop` naming why: `unsupported-event`, `group-or-unknown-chat` (only one `iMessage;-;…` chat passes), `attachments-not-supported` (H10/H12) or `malformed`. The owner filter stays in `Conversation`, which records an `updated-message` reusing a seen guid as `duplicate`.
+- `seal()` / `unseal()`: Mac → Agent Orange envelope `{v, ts, nonce, body, mac}`, HMAC-SHA256 over canonical JSON with a key of at least 32 bytes. `unseal` raises `EnvelopeError` `shape`, `version`, `mac`, `stale` (more than 300 s off) or `replay` (nonce already in `seen`); only a valid envelope adds its nonce (BL-AV-4 persists `seen`).
+- `BlueBubblesSender(base_url, password_file)`: an `Outbox` adapter that POSTs `/api/v1/message/text` (`chatGuid`, fresh `tempGuid`, `message`, `method: apple-script`) to `http(s)://127.0.0.1|localhost:<port>` only, without proxies or redirects. The password file must be a regular 0600-style file (no group/other access) and is read per send. Failures raise `BridgeError(code, status, path)`; no error carries the URL, query string or password.
