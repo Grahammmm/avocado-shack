@@ -32,7 +32,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import (  # noqa: E402
-    PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError, load_and_validate,
+    PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError, load_and_validate,
 )
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
@@ -42,7 +42,7 @@ SLOT_RE = re.compile(r"\{\{([a-zA-Z.]+)\}\}")
 
 
 def _catalog_js(content: Content) -> bytes:
-    records = [{k: v for k, v in p.items() if k in PRODUCT_PUBLIC_FIELDS} for p in content.active_products()]
+    records = [{k: v for k, v in p.items() if k in PRODUCT_PUBLIC_FIELDS + PRODUCT_OPTIONAL_PUBLIC} for p in content.active_products()]
     return ("const catalog=" + json.dumps(records, ensure_ascii=False) + ";\n").encode("utf-8")
 
 

@@ -16,7 +16,7 @@ PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
 # storefront-mockup/shop.js organic(): name matches /\borganic\b/i or the maker is one of these.
 ORGANIC_NAME_RE = re.compile(r"\borganic\b", re.IGNORECASE | re.ASCII)
 ORGANIC_MAKERS = ("Ocean Ranch", "Straus", "Green Gold", "Massa Organics")
-PRODUCT_EDITABLE = ("name", "brand", "category", "image", "description", "displayBrand")
+PRODUCT_EDITABLE = ("name", "brand", "category", "image", "description", "displayBrand", "imageAlt")
 MAKER_EDITABLE = ("name", "place", "story", "url")
 MAX_KEY, MAX_CANDIDATES = 64, 10
 
@@ -61,6 +61,7 @@ def _product_add(content, args, ctx):
     for field in ("name", "brand", "category", "image", "description"):
         record[field] = args[field]
     record.update(producerKey=key, displayBrand=args["displayBrand"], status="active")
+    record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
     content.products.append(record)
     if _organic(record):
         ctx.warnings.append(f"adds Organic badge to {record['id']}")
@@ -74,17 +75,22 @@ def _product_edit(content, args, ctx):
     changes = {field: args[field] for field in PRODUCT_EDITABLE if field in args}
     if "producerKey" in args and args.get("clearProducer"):
         return Refused("producerKey and clearProducer cannot be combined")
+    if "imageAlt" in args and args.get("clearImageAlt"):
+        return Refused("imageAlt and clearImageAlt cannot be combined")
     if "producerKey" in args:
         changes["producerKey"] = args["producerKey"]
     elif args.get("clearProducer"):
         changes["producerKey"] = None
-    if not changes:
-        fields = list(PRODUCT_EDITABLE) + ["producerKey", "clearProducer"]
+    clear_alt = bool(args.get("clearImageAlt")) and "imageAlt" in product  # clearing an absent alt is no change
+    if not changes and not clear_alt:
+        fields = list(PRODUCT_EDITABLE) + ["producerKey", "clearProducer", "clearImageAlt"]
         return NeedsDetails(fields, f"What should change on {args['id']}? Give at least one of: " + ", ".join(fields))
     if refused := _maker_problem(content, changes.get("producerKey")):
         return refused
     before = copy.deepcopy(product)
     product.update(changes)
+    if clear_alt:
+        del product["imageAlt"]
     if _organic(product) and not _organic(before):
         ctx.warnings.append(f"adds Organic badge to {product['id']}")
     return _touch("products", product["id"], before, product)
@@ -183,7 +189,7 @@ def lookup(content, kind, query):
 
 _PRODUCT_FIELDS = {"name": Arg("text"), "brand": Arg("text"), "category": Arg("enum", choices=CATEGORIES),
                    "image": Arg("image"), "description": Arg("text"), "displayBrand": Arg("text")}
-_OPTIONAL = {"producerKey": Arg("maker_key", required=False)}
+_OPTIONAL = {"producerKey": Arg("maker_key", required=False), "imageAlt": Arg("text", required=False)}
 # The maker target is plain text, not "maker_key": membership is checked by _maker() so an unknown key is NotFound.
 # (product producerKey references stay "maker_key", so an unknown maker there is still invalid.)
 _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
@@ -191,7 +197,8 @@ _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 OPS = (
     Op("product.add", {**_PRODUCT_FIELDS, **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
-                        **_OPTIONAL, "clearProducer": Arg("bool", required=False)}, _product_edit),
+                        **_OPTIONAL, "clearProducer": Arg("bool", required=False),
+                        "clearImageAlt": Arg("bool", required=False)}, _product_edit),
     Op("product.hide", _ID, _product_hide),
     Op("product.restore", _ID, _product_restore),
     Op("maker.add", {"key": Arg("text"), **{k: Arg("url" if k == "url" else "text") for k in MAKER_EDITABLE}},
