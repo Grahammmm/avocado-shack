@@ -1,11 +1,12 @@
 """Hass private state health check that alerts once per change (H19).
 
     python3 hass/health.py --state DIR [--backups DIR] [--seen FILE] [--outbox-minutes 15] [--backup-hours 26]
-                           [--inbox-minutes 15]
+                           [--inbox-minutes 15] [--writer]
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
-inbox-stuck (pending inbound older than --inbox-minutes), inbox-integrity,
+inbox-stuck (pending inbound older than --inbox-minutes), inbox-integrity, writer (--writer: one per reason editor
+apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
 paused (info only), backup-age (--backups: no complete hass-state-* within --backup-hours), backup-verify. Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
@@ -101,7 +102,22 @@ def _seen_path(raw, state) -> Path:
         raise UnsafeState("--seen must be a file in an existing folder")
     return full
 
-def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15) -> tuple:
+def _writer_check(state, problems: list) -> None:
+    old = os.environ.get("GIT_OPTIONAL_LOCKS")
+    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # this call only: git status must not refresh the writer's index
+    try:
+        wt = editor._load(state)[2]
+    except UnsafeState as exc:
+        problems.append(_problem("writer", str(exc)))
+    except (OSError, ValueError, KeyError, TypeError):
+        problems.append(_problem("writer", "writer config unreadable"))
+    else:
+        problems.extend(_problem("writer", detail) for detail in editor.worktree_problems(wt))
+    finally:
+        if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
+        else: os.environ["GIT_OPTIONAL_LOCKS"] = old
+
+def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -118,6 +134,7 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
     _inbox_check(sdir, now, inbox_minutes, problems)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
         _verify_backup(newest, problems)
+    if writer: _writer_check(sdir, problems)
     return problems, info, False
 
 def fingerprint(problems) -> str:
@@ -148,6 +165,7 @@ def main(argv=None, now=None) -> int:
     for flag in ("--backups", "--seen"): parser.add_argument(flag)
     for flag, default in (("--outbox-minutes", 15), ("--backup-hours", 26), ("--inbox-minutes", 15)):
         parser.add_argument(flag, type=int, default=default)
+    parser.add_argument("--writer", action="store_true")
     args = parser.parse_args(argv)
     if min(args.outbox_minutes, args.backup_hours, args.inbox_minutes) < 1:
         parser.error("minutes and hours must be >= 1")
@@ -157,7 +175,7 @@ def main(argv=None, now=None) -> int:
         _emit([_problem("seen", str(exc))], [], True)
         return 2
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
-                                   args.inbox_minutes)
+                                   args.inbox_minutes, args.writer)
     try:
         notify = _remember(seen, fingerprint(problems)) if seen else bool(problems)
     except OSError:  # fail open: an unrecorded fingerprint must not silence an alert; the detail names no path

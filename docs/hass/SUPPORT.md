@@ -69,6 +69,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** `pause changes` if the chat still answers; leave the file untouched. Backups do not hold the inbox, so there is nothing to restore.
 - **Stop and ask:** always. Recreating the queue needs a new start point, which the owner/G decides.
 
+### `writer`
+- **Means:** with `--writer`: one entry per reason `apply` would refuse the recorded writer worktree: `uncommitted changes`, `branch main` or `detached HEAD` refused, `git user.name`/`user.email` not configured, `main checkout` refused, not the top of a Hass checkout (moved or deleted), or `config.json` missing (`not initialised`) or unreadable. Git runs read-only; no path is printed.
+- **Check first:** `git -C WT status` and `git -C WT branch --show-current` on the worktree recorded in `config.json`.
+- **Next step:** after `pause changes`, commit or stash in the writer worktree, switch it to a non-main branch, or set its Git identity; re-run the check, then the owner sends `resume changes`.
+- **Stop and ask:** the worktree is gone or is the main checkout (re-running `python3 hass/editor.py init` onto a new linked worktree is attended), or changes there are not known.
+
 ## Info lines
 
 ### `conversation`
