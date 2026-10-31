@@ -98,3 +98,46 @@ Browser tests (`hass/tests/test_preview.py`) skip only when `PLAYWRIGHT_MODULE` 
 export PLAYWRIGHT_MODULE=/home/user/.hermes/hermes-agent/node_modules/playwright
 export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell
 ```
+
+## H13: store hours and address
+
+`hass/ops/store.py` adds `store.set_hours` and `store.set_address` to the registry; they go through the normal draft, approval and single-writer path and change only `content/store.json` (and so the store slots of the generated pages).
+
+```json
+{"ops": [{"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}]}
+{"ops": [{"op": "store.set_address", "args": {"streetAddress": "100 Example Street"}}]}
+```
+
+- `store.set_hours` takes `hours` (a text list) and replaces all lines. Refused: more than 7 lines, a line over 60 characters (`hours line <i>` counts from 0), a repeated line, or hours equal to the current ones.
+- `store.set_address` takes `streetAddress` and/or `town`; only the given fields change. No argument gives `needs-details` (`streetAddress`, `town`); a value over 80 characters or an unchanged address is refused.
+- `name` and `schemaVersion` are not arguments (unknown argument → `invalid`). Text kinds reject markup, `$` and control characters as usual.
+- Undo: the store is one record, so `undo` of an older store change after a later one gives `conflict: store store changed after <change_id>`; undo the newest first.
+
+Limits: H13 is partial; home-page copy and image slots are not built.
+
+## H17: status, pause and resume (with H14 guest totals)
+
+`hass/conversation.py` treats a whole message `status`, `pause` / `pause changes` or `resume` / `resume changes` as a command (lower case, trailing `.`/`!` ignored, as for `yes`); anything longer, such as `pause the hike`, goes to the interpreter. Only owner senders in the owner chat are heard, as in H05.
+
+- `pause changes` stores one `control` row in the conversation store (the table is created by the first pause) and survives restarts. While paused, drafts are still prepared and each proposal ends with `Changes are paused; send resume changes before yes.`; an approval for one draft gets `Changes are paused; <code> was not applied. Send resume changes, then yes <code>.` and writes no approval, moves no state and keeps the expiry. `no`/`cancel` still work; undo drafts are gated the same way. A second pause answers `Changes are already paused (since …).`
+- `resume changes` removes the row and lists the codes still waiting; it never applies anything. When not paused it answers `Changes are not paused.`
+- `status` is read-only (even a lapsed proposal is only hidden, not expired): `Changes: on` or `Changes: paused since …`, each waiting or needs-details draft (or `Nothing is waiting for approval.`), `Last change: <code> <state>: <summary> (<commit7>)` with the failed or `not verified: …` reason, and for every upcoming scheduled hike `Hike <title> <local start>: <n> confirmed of <capacity|no limit>`.
+- Guest totals come from `hikes.guest_counts(settings["guestCountsDb"])`, an optional setting in `<state>/config.json` (seat totals only, no names or emails). Unset, missing or wrong-schema database → `guest count unavailable`, never 0; unreadable worktree content → `Hikes: unavailable`.
+
+Limits: H17 and H14 are partial; the support path for persistent outages is not written.
+
+## H20 prep: private state backup and restore drill
+
+`hass/statebackup.py` backs up a settled state dir, checks a backup and restores it into a new state dir for a drill. It prints one JSON line; exit 0 `ok`, 1 any other result, 2 unsafe dir or usage (`unsafe-state`).
+
+```sh
+python3 hass/statebackup.py create --state DIR --out DIR      # OUT: existing dir of yours, mode exactly 0700
+python3 hass/statebackup.py verify BACKUP
+python3 hass/statebackup.py restore BACKUP --into DIR --worktree WT   # WT: a separate drill worktree
+```
+
+- `create` writes `<out>/hass-state-<UTC stamp>/`: `config.json`, `drafts/`, `changes/`, `screenshots/` (0600/0700), a SQLite online-backup snapshot of `conversation.sqlite3`, and `MANIFEST.json` (SHA-256 per file) last; `writer.lock` is never copied. Refused: `out` missing, not 0700, or inside the state dir, the repository or the writer worktree (exit 2); a symlinked or odd `config.json`/`writer.lock` before either is opened, any symlink or unknown entry (`refused`, each named); a held writer lock (`busy`); a pending journal (`unsettled`, run `editor.py recover` first); an existing backup dir of the same stamp (`exists`).
+- `verify` checks the manifest layout, every hash and mode, unlisted files and symlinks and `PRAGMA integrity_check`; damage gives `corrupt` naming the file.
+- `restore` verifies first, refuses an existing `--into` (left untouched), the recorded writer worktree (an attended operation) and a worktree that fails the editor checks, builds the new state dir beside `--into` and renames it into place. Only `config.json` `worktree` is rewritten.
+
+No network, no Git writes, no deletion of source data. Limits: drill on isolated copies only; no live restore, scheduling, retention, off-box copy or encryption.
