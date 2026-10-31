@@ -52,6 +52,7 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 
 ### `seen`
 - **Means:** `--seen FILE` is a symlink, lies inside the repository or the state dir, or its folder is missing. Exit 2; no other check ran.
+- As an `info` entry `seen file not updated`: the check ran but its folder could not be written; `notify` is forced true. Check free space and the folder's owner/mode.
 - **Check first:** `ls -l` on the seen path and its folder.
 - **Next step:** point `--seen` at a plain file in an existing folder outside both (a missing file is created on the next run).
 - **Stop and ask:** the file turned into a symlink without a known reason.
