@@ -75,6 +75,7 @@ jobs:
         run: |
           export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
           export QA_OUT_DIR="$RUNNER_TEMP/qa"
+          export PREVIEW_URL=http://127.0.0.1:3101
           mkdir -p "$QA_OUT_DIR"
           AVOSHACK_COMMUNITY_DB="$RUNNER_TEMP/site.sqlite3" \
             python3 storefront-mockup/community-server.py --port 3101 >"$RUNNER_TEMP/server.log" 2>&1 &

@@ -141,3 +141,11 @@ python3 hass/statebackup.py restore BACKUP --into DIR --worktree WT   # WT: a se
 - `restore` verifies first, refuses an existing `--into` (left untouched), the recorded writer worktree (an attended operation) and a worktree that fails the editor checks, builds the new state dir beside `--into` and renames it into place. Only `config.json` `worktree` is rewritten.
 
 No network, no Git writes, no deletion of source data. Limits: drill on isolated copies only; no live restore, scheduling, retention, off-box copy or encryption.
+
+## H08 prep: bridge adapter (fixtures only)
+
+`hass/bridge.py` is tested only against synthetic fixtures (`hass/tests/fixtures/bridge/`). Nothing here listens, connects to a Mac or BlueBubbles, or sends a message; there is no CLI or config key.
+
+- `normalize(event)`: a BlueBubbles `new-message` / `updated-message` webhook event becomes an `Inbound` (`kind` `new` / `edited`, `isFromMe` → `from_me`, `dateCreated` ms → UTC `received_at`), or a `Drop` naming why: `unsupported-event`, `group-or-unknown-chat` (only one `iMessage;-;…` chat passes), `attachments-not-supported` (H10/H12) or `malformed`. The owner filter stays in `Conversation`, which records an `updated-message` reusing a seen guid as `duplicate`.
+- `seal()` / `unseal()`: Mac → Agent Orange envelope `{v, ts, nonce, body, mac}`, HMAC-SHA256 over canonical JSON with a key of at least 32 bytes. `unseal` raises `EnvelopeError` `shape`, `version`, `mac`, `stale` (more than 300 s off) or `replay` (nonce already in `seen`); only a valid envelope adds its nonce (BL-AV-4 persists `seen`).
+- `BlueBubblesSender(base_url, password_file)`: an `Outbox` adapter that POSTs `/api/v1/message/text` (`chatGuid`, fresh `tempGuid`, `message`, `method: apple-script`) to `http(s)://127.0.0.1|localhost:<port>` only, without proxies or redirects. The password file must be a regular 0600-style file (no group/other access) and is read per send. Failures raise `BridgeError(code, status, path)`; no error carries the URL, query string or password.
