@@ -8,7 +8,8 @@ settled state dir (config.json, drafts, changes, screenshots and consistent sqli
 conversation.sqlite3; never writer.lock, a journal, a symlink or an unknown entry) into a new private
 <out>/hass-state-<UTC stamp>/ (out: an existing 0700 dir of the user) and writes MANIFEST.json (sha256 per file) last.
 verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
-stores. restore verifies first, then builds a NEW state dir bound
+stores; listed photo originals and sidecars must pair one-to-one and match media.originals. restore verifies first,
+then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
 repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
@@ -201,7 +202,22 @@ def verify(backup) -> dict:
             sha, side = rel[19:83], rel[:84] + "json"  # media/originals/<aa>/<sha>.<ext>
             if hashlib.sha256(_read(bdir / rel)).hexdigest() != sha: problems.append(f"content mismatch: {rel}")
             if not (side in seen and _sidecar_sha(bdir / side) == sha): problems.append(f"sidecar mismatch: {rel}")
+    problems += _pair_problems(doc)
     return {"result": "corrupt", "problems": problems} if problems else {"result": "ok", "files": len(files)}
+
+def _pair_problems(doc) -> list:
+    """Listed media in both directions: every sha has exactly one original and one sidecar, and media.originals
+    equals the number of those complete pairs (a listed orphan sidecar or original is never restored as a store)."""
+    pairs, problems, complete = {}, [], 0
+    for rel in doc["files"]:
+        if rel.startswith(ORIG): pairs.setdefault(rel[19:83], []).append(rel)
+    for _, rels in sorted(pairs.items()):
+        if sorted(rel.endswith(".json") for rel in rels) == [False, True]: complete += 1
+        else: problems += [f"unpaired: {rel}" for rel in sorted(rels)]
+    if "media" not in doc and not pairs: return problems
+    count = doc["media"].get("originals") if isinstance(doc.get("media"), dict) else None
+    if type(count) is not int or count != complete: problems.append("media count mismatch")
+    return problems
 
 def _sidecar_sha(path: Path):
     try: return json.loads(_read(path).decode("utf-8")).get("sha256")

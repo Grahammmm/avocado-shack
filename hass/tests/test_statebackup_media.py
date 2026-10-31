@@ -130,6 +130,29 @@ class MediaBackupTests(BackupTestCase):
         self.assertEqual(statebackup.verify(str(backup))["problems"], [f"unlisted: {self.rel('jpg', self.wrong)}"])
         self.assertEqual(self.relist(backup, aa=self.wrong, jpg=self.jsha), ["MANIFEST.json missing or invalid"])
 
+    def test_orphan_sidecar_and_media_count_are_checked_both_ways(self):  # RETURN t_68f64a9f
+        backup = Path(self.make()["backup"])
+        manifest = backup / statebackup.MANIFEST
+        def edit(drop=(), originals=2):  # a tamperer who deletes files and their manifest entries
+            doc = json.loads(manifest.read_text("utf-8"))
+            for ext in drop:
+                doc["files"].pop(self.rel(ext))
+                (backup / self.rel(ext)).unlink(missing_ok=True)
+            doc["media"] = {"originals": originals}
+            manifest.write_text(json.dumps(doc), "utf-8")
+            return statebackup.verify(str(backup)).get("problems", [])
+        self.assertEqual(edit(["jpg"]), [f"unpaired: {self.rel('json')}", "media count mismatch"])
+        self.assertEqual(edit(originals=1), [f"unpaired: {self.rel('json')}"])  # the count alone cannot excuse it
+        self.assertEqual(self.restore(backup, self.tmp / "media2")["result"], "corrupt")
+        self.assertFalse((self.tmp / "media2").exists() or (self.tmp / "restored").exists())
+        self.assertEqual(edit(["json"], originals=2), ["media count mismatch"])  # both gone, count still 2
+        for bad in (0, "1", True, None):
+            with self.subTest(originals=bad): self.assertEqual(edit(originals=bad), ["media count mismatch"])
+        self.assertEqual(edit(originals=1), [])
+        got = self.restore(backup, self.tmp / "media2")
+        self.assertEqual((got["result"], got["media"]), ("ok", 1), got)
+        self.assertEqual(len([n for _, _, names in os.walk(self.tmp / "media2") for n in names]), 2)
+
     def test_unsafe_media_dirs_raise_and_exit_2(self):
         (link := self.tmp / "link").symlink_to(self.media)
         (loose := self.tmp / "loose").mkdir(mode=0o700)
