@@ -3,7 +3,6 @@
 A fake ``node`` first on the PATH given in ``env`` (no Chromium) records each call (VIEWPORT, PREVIEW_URL, a GET of the
 live server), writes a tiny PNG to OUT and prints the checks a per-viewport plan file chooses; the real
 community-server.py serves a temp writer repo. The real-Chromium case is skipped unless PLAYWRIGHT_MODULE is set.
-Run: python3 -m unittest discover -s hass/tests -t . -v
 """
 
 import json
@@ -47,15 +46,14 @@ class ViewportTests(EditorTestCase):
         holder = tempfile.TemporaryDirectory(prefix="hass-viewports-")
         self.addCleanup(holder.cleanup)
         self.tmp = Path(holder.name)
-        (self.tmp / "bin").mkdir()
-        (self.tmp / "temp").mkdir()
+        for name in ("bin", "temp"):
+            (self.tmp / name).mkdir()
         self.plan, self.log = self.tmp / "plan.json", self.tmp / "calls.jsonl"
         node = self.tmp / "bin" / "node"
         node.write_text(FAKE_NODE.format(python=sys.executable, log=str(self.log), plan=str(self.plan), png=PNG))
         node.chmod(0o700)
         self.env = {"PATH": f"{self.tmp / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}", "HOME": str(self.tmp)}
-        self.out = self.tmp / "shots" / "c1-proposal.png"
-        self.desktop_png = self.tmp / "shots" / "c1-proposal-desktop.png"
+        self.out, self.desktop_png = (self.tmp / "shots" / n for n in ("c1-proposal.png", "c1-proposal-desktop.png"))
 
     def capture(self, plan, viewports=preview.VIEWPORTS):
         """Run one capture; check the server is stopped and the temp copy gone; return (result, calls, server)."""
@@ -150,6 +148,3 @@ class RealBrowserViewportTests(test_preview.BrowserCase):
         self.assertEqual(stat.S_IMODE(png.stat().st_mode), 0o600)
         self.assertEqual(int.from_bytes(Path(result["png"]).read_bytes()[16:20], "big"), 390)
 
-
-if __name__ == "__main__":
-    unittest.main()
