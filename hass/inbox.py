@@ -61,7 +61,8 @@ class Nonces:
         cut = _iso(now - timedelta(seconds=NONCE_KEEP_S))  # a future-dated row (clock moved back) is kept
         with self._inbox._tx():
             self._inbox.db.execute("DELETE FROM nonces WHERE seen_at < ?", (cut,))
-            self._inbox.db.execute("INSERT OR IGNORE INTO nonces(nonce, seen_at) VALUES (?, ?)", (str(nonce), _iso(now)))
+            self._inbox.db.execute("INSERT OR IGNORE INTO nonces(nonce, seen_at) VALUES (?, ?)",
+                                   (str(nonce), _iso(now)))
 
 
 class Inbox:
