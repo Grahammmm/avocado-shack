@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTENT_DIR = REPO_ROOT / "hass" / "content"
@@ -233,6 +234,8 @@ def _offset_datetime(problems, where, value):
         parsed = None
     if parsed is None or parsed.tzinfo is None:
         problems.append(f"{where}: not a valid ISO date-time")
+        return None
+    return parsed
 
 
 def validate_community(problems, community):
@@ -285,9 +288,14 @@ def validate_community(problems, community):
         if isinstance(eid, str) and eid.startswith(("preview-", "idea-")):
             problems.append(f"{where}: sample/route-idea ids cannot become real events")
         _text(problems, f"{where}.title", ev.get("title"))
-        _offset_datetime(problems, f"{where}.startsAt", ev.get("startsAt"))
+        starts = _offset_datetime(problems, f"{where}.startsAt", ev.get("startsAt"))
         if ev.get("timezone") != "America/Los_Angeles":
             problems.append(f"{where}: timezone must be America/Los_Angeles")
+        elif starts is not None:
+            local = starts.astimezone(ZoneInfo("America/Los_Angeles"))
+            if starts.utcoffset() != local.utcoffset():  # %:z shows Z as +00:00
+                problems.append(f"{where}.startsAt: offset {starts.strftime('%:z')} is not Pacific time on "
+                                f"{local.date().isoformat()} (expected {local.strftime('%:z')})")
         if ev.get("status") not in EVENT_STATUSES:
             problems.append(f"{where}: status must be one of {EVENT_STATUSES}")
         if "rsvpEnabled" in ev and not isinstance(ev["rsvpEnabled"], bool):
