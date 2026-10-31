@@ -27,8 +27,10 @@ python3 -m unittest discover -s hass/tests -t . -v
 ```
 
 `content/migration-baseline.json` is the frozen record of the site at the migration commit: 170 listing ids, 26 maker keys, 30 source links and the 2 held ids, plus the SHA-256 of the pre-migration site files. The migration check fails if a baseline listing is deleted (hiding is allowed), a maker or source link disappears, a held product leaves `held` or appears in the catalog, or a committed site file differs from the generated output. It also reports whether the output is still identical to the pre-migration files.
+A read or decode error gives one stderr line `sitegen: io error: <ExcName>` (or `migration_check: ...`) and exit 2, never a path or file bytes; `--write`/`--out` refuse a symlinked generated file.
 
 Tests write only to temporary directories; they never touch the checkout, the live service or the community database.
+`hass/tests/test_output_hygiene.py` (H21) checks on fixture canaries that `fixture_chat`, `health`, `statebackup` and `editor history` output carries no sender or message text.
 
 ## H02: private typed editing service
 
@@ -47,6 +49,7 @@ python3 hass/editor.py show CHANGE_ID | recover | ops   # --state DIR or HASS_ST
 ```
 
 The state dir must be owned by the current user, mode 0700 and outside the repository and the writer worktree; otherwise every command exits 2. Exit codes: 0 `ok`/`applied`/`already-applied`, 1 any other result, 2 usage or unsafe state dir.
+A CLI read or decode error prints `{"result": "io-error", "problems": ["<ExcName>"]}` (class name only) and exits 2; library calls still raise.
 
 ## H03: product and maker ops
 
@@ -83,6 +86,7 @@ python3 hass/fixture_chat.py --state DIR --fixture hass/tests/fixtures/conversat
 ```
 
 Prints the outbox as JSON lines (sends nothing anywhere); exit 2 for an unsafe state dir or missing settings.
+Every fixture line is checked before anything is handled or queued: a bad line exits 2 with `fixture_chat: fixture line <n>: <field> <rule>`, naming the field, never its value.
 
 ## H06: preview, history and undo
 
@@ -90,6 +94,7 @@ Prints the outbox as JSON lines (sends nothing anywhere); exit 2 for an unsafe s
 
 - Given a `previewer` (`Conversation(..., previewer=Previewer(worktree))`), every proposal carries `<change_id>-proposal.png` (a failed capture adds `Preview unavailable: <error>` and still proposes). After an apply, `verify()` needs current generated files, `migration_check` passing and the result screenshot's checks passing (the product card and its description, a scheduled hike's title, every hours line, no page error): then `verified` and `Applied and checked <code>` + PNG; otherwise the draft stays `applied` with `not verified: <error>` and the reply says the preview check failed. Nothing is re-applied. Without a previewer the H05 behaviour is unchanged; `fixture_chat.py --preview` runs a fixture with the writer worktree's previewer.
 - `history` replies the last 5 drafts (code, state, summary, short commit); `python3 hass/editor.py history --state DIR [--limit N]` prints change records newest first as JSON lines (ops, commit, `revertedBy`).
+- A change record that cannot be read is listed by `editor.py history` as `state` `unreadable` with `ops: []`; the other records are unchanged.
 - `undo` (newest applied draft) or `undo <code>` proposes `history.revert`, which needs its own `yes`. It sets back only that change's records, and only while each still holds the value the change wrote (else `conflict: <collection> <key> changed after <change_id>`, no draft). An added product/maker/hike is hidden/cancelled, never deleted. The editor then sets `revertedBy` and the original draft becomes `reverted`. No repository reset, no `git revert`, no community-DB restore.
 
 Browser tests (`hass/tests/test_preview.py`) skip only when `PLAYWRIGHT_MODULE` is unset. On Agent Orange:
