@@ -158,6 +158,6 @@ No network, no Git writes, no deletion of source data. Limits: drill on isolated
 - `enqueue(msg)` → `queued`, `duplicate` (id already stored, nothing changes) or `history` (received before the start point; only id and time are kept, it never becomes a command). A `received_at` that is empty, has no zone or is not a date raises `ValueError` and stores nothing.
 - `drain(conversation)` hands pending messages to `Conversation.handle` in `(received_at, provider_id)` order and marks each `done` with its disposition only afterwards. A crash in between re-delivers the message and `Conversation` answers `duplicate` without a second write; an exception stops the drain and leaves that message and later ones pending.
 - Payloads are erased once a message is done (history rows never store one); retention periods stay H21.
-- `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart.
+- `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart; nonces older than one day are pruned when a new one is recorded.
 
 No worker, timer, CLI or live adapter: fixtures only.
