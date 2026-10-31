@@ -4,6 +4,7 @@ import os, tempfile, unittest  # noqa: E401
 from pathlib import Path
 from unittest import mock
 
+from hass.content_model import SITE_DIR
 from hass.ops import Arg, Op, check_args
 
 OP = Op("t.op", {"image": Arg("image")}, lambda *a: None)
@@ -63,6 +64,20 @@ class ImageArgTests(unittest.TestCase):
         (self.outside / "products" / "x.webp").write_bytes(b"private")
         os.symlink(self.outside, self.site / "assets")
         self.assertEqual(self.check(), (OUTSIDE, []))
+
+    def test_assets_linked_to_repo_assets_allowed_other_links_refused(self):
+        """Operator amendment: only <site>/assets resolving to this checkout's tracked assets (the editor harness)."""
+        real = next(p for p in sorted((SITE_DIR / "assets" / "products").iterdir()) if p.suffix == ".webp")
+        value = f"assets/products/{real.name}"
+        self.products.rmdir()
+        os.symlink(real.parent, self.products)  # a link at assets/products, not the assets dir: refused
+        self.assertEqual(self.check(value), (OUTSIDE, []))
+        self.products.unlink()
+        (self.site / "assets").rmdir()
+        os.symlink(SITE_DIR / "assets", self.site.parent / "hop")
+        os.symlink(self.site.parent / "hop", self.site / "assets")  # resolved before comparing, so a chain is allowed
+        self.assertEqual(self.check(value), ([], []))
+        self.assertEqual(self.check(), (MISSING, []))
 
     def test_linked_products_folder_inside_site_allowed(self):
         self.products.rmdir()

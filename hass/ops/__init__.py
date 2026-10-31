@@ -12,7 +12,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from hass.content_model import ID_RE, IMAGE_RE, _https, _text
+from hass.content_model import ID_RE, IMAGE_RE, SITE_DIR, _https, _text
 
 KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "date", "time", "image")
 TIME_RE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
@@ -153,7 +153,11 @@ def _image_file_problem(site_dir, value) -> str | None:
         return "image file must not be a link"
     if not path.is_file():
         return "image file does not exist"
-    if not path.resolve().is_relative_to(Path(site_dir).resolve()):
+    roots, repo_assets = [Path(site_dir).resolve()], (SITE_DIR / "assets").resolve()
+    # The one allowed linked folder: <site>/assets resolving to this checkout's own tracked assets (editor test harness).
+    if (Path(site_dir) / "assets").resolve() == repo_assets:
+        roots.append(repo_assets)
+    if not any(path.resolve().is_relative_to(root) for root in roots):
         return "image file is outside the site folder"
     return None
 
