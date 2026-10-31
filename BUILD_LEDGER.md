@@ -608,3 +608,59 @@ Checks at PR head d237c14: PR #17's body lists the covered refusal and acceptanc
 Review fix (d237c14): `QA_OUT_DIR` resolves symlinks and `..` in filesystem order, and an explicit `:80` port is accepted.
 
 Limits: the legacy QA scripts hard-coded to the Mac are unchanged and stay documented history.
+
+## H16 durable inbound queue (BL-AV-4) — October 31, 2026
+
+Branch rb/bl-av-4 from origin/main 398986b, stacked on BL-AV-3 (BL-AV-4, PR #19: commit 6924e83, BL-AV-3 merged in at 3569d10 with the replayed-envelope-after-reopen test, origin/main merged in at 5e2e34d, merged as b604406). Added `hass/inbox.py`: `Inbox(state_dir, start_at=None)` keeps `<state>/inbox.sqlite3` (0600). The first open must record a timezone-aware start point, which later opens cannot move. `enqueue` answers `queued`, `duplicate` or `history` (received before the start point: id and time only, never a command); an empty, zone-less or non-date `received_at` raises `ValueError` and stores nothing. `drain` hands pending messages to `Conversation.handle` in `(received_at, provider_id)` order and marks each done only afterwards, so a crash in between redelivers and is answered `duplicate`; an exception leaves that message and later ones pending. Payloads are erased when done, and `seen()` is the persistent nonce set for `bridge.unseal`. Added `hass/tests/test_inbox.py` and the `hass/README.md` section `H16 part: durable inbound queue`.
+
+Checks at PR head 5e2e34d: PR #19's body points to a card comment for the output; its body records no commands or counts. CI `check` passed at 5e2e34d.
+
+Limits: H16 stays partial: no worker, timer, CLI or live adapter feeds or drains the queue; fixtures only. Retention periods stay H21.
+
+## H19 read-only health check, change-only notify (RF0708-4) — October 31, 2026
+
+Branch rb/rf0708-4 from origin/main 071c781 (RF0708-4, PR #20: commit bc15751, merged as 56388d2). Added `hass/health.py`: one JSON line with `ok`, `problems` (`{check, detail}` only, no message text, sender or number), `info`, `fingerprint` and `notify`. Checks in order: `state` (an unsafe, symlinked or missing dir exits 2 and is never created), `settings`, `db-integrity` (`PRAGMA quick_check`), `outbox-stuck` (unsent rows older than `--outbox-minutes`, default 15), `apply-stuck` (approved drafts older than 10 min), `paused` (info only) and, with `--backups`, `backup-age` (default 26 h). The database is opened `mode=ro`, `writer.lock` is never taken and nothing is written into the state dir. `--seen FILE` (outside the repo and state dir, not a symlink) is written 0600 and `notify` is true only when the fingerprint changes; without it `notify` is `not ok`. Exit 0 ok, 1 problems, 2 unsafe or usage. Added `hass/tests/test_health.py`.
+
+Checks at PR head bc15751: PR #20's body lists the covered edge paths; its body records no commands or counts. CI `check` passed at bc15751.
+
+Limits: H19 stays partial: no timer or service runs the check and nothing is sent; `notify` is only a flag in the output line.
+
+## H15 owner memory store (RF0708-5) — October 31, 2026
+
+Branch rb/rf0708-5 from origin/main 071c781 (RF0708-5, PR #21: commit 2d8dccc, merged as cf884aa). Added `hass/memory.py`: a `memory` table in the private `conversation.sqlite3`, created on first use, so the H20 backup covers it. `Memory(state_dir, clock)` offers remember, correct, forget, get and list. A source must be `owner-approved:<id>`, `owner-stated:<id>` or `operator:<note>`; anything else is `ValueError('unverified source')`, and remembering a stored key says to use correct. `correct` supersedes in one `BEGIN IMMEDIATE` transaction; `forget` marks the active row forgotten and blanks the value of every row of that key (dates kept), with `secure_delete` on. Added `hass/tests/test_memory.py`.
+
+Checks at PR head 2d8dccc (recorded in PR #21): `test_memory` ran 9 tests, OK; with `test_statebackup` and `test_conversation`, 29 OK; discover ran 127 tests, OK (4 skipped). CI `check` passed at 2d8dccc.
+
+Limits: H15 stays partial: the store has no chat wiring. The owner commands are RF0835-4 (PR #26), not merged when this section was written.
+
+## H09 fixture demo transcript (RF0708-6) — October 31, 2026
+
+Branch rb/rf0708-6 from origin/main 071c781 (RF0708-6, PR #23: commit d47bfb8, current main merged in at 3fe6f57 and again at 83f2130, merged as c9ae3cf). Added the 8-row fixture `hass/tests/fixtures/conversation-demo.jsonl` (request, `yes`, `history`, `undo`, `yes`, a repeated `demo-1`, an `undo` from a stranger, a final `yes`), its interpreter fixture `conversation-demo-interpreter.json` (one `product.edit` description change) and `hass/tests/test_demo_transcript.py`. The test runs `fixture_chat.py` by subprocess on a throwaway `WriterRepo` and checks the reply sequence (proposal, applied, history, undo proposal, reverted, nothing waiting), that the repeated and stranger rows get no reply and no draft, that the undo restores the original description, that two fresh runs agree, and that a missing `--interpreter` file exits 2.
+
+Checks at PR head 83f2130 (recorded in PR #23): `python3 -B -m unittest hass.tests.test_demo_transcript -v` ran 3 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 147 tests, OK (skipped=4); `python3 -m compileall -q storefront-mockup reports/hermes-handoff` passed. CI `check` passed at 83f2130.
+
+Limits: H09 stays partial: fixture identities only, no bridge and nothing sent. `--preview` screenshots and time-based expiry or old-approval cases are not in the demo.
+
+## H19 inbox-stuck and inbox-integrity (RF0905-6) — October 31, 2026
+
+Branch rb/rf0905-6 from origin/main c9ae3cf (RF0905-6, PR #25: commit bb99582, merged as 0f340f0). `hass/health.py` also opens `<state>/inbox.sqlite3` (the H16 queue) with `mode=ro`. Pending rows whose `enqueued_at` is strictly older than `--inbox-minutes` (default 15, at least 1) give `inbox-stuck` with only the count as detail; unreadable or zone-less times count too. A failed `quick_check` or an unreadable file gives `inbox-integrity`, and the conversation checks still run. With no inbox file or no `inbound` table the output is unchanged; `done` and `history` rows are ignored. The check never creates the file, writes or takes the writer lock. Added `hass/tests/test_health_inbox.py`; `hass/tests/test_health.py` is unedited.
+
+Checks at PR head bb99582 (recorded in PR #25): `python3 -m unittest hass.tests.test_health_inbox hass.tests.test_health hass.tests.test_inbox -v` ran 25 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 155 tests, OK (skipped=4). CI `check` passed at bb99582.
+
+Limits: H19 stays partial: still no timer or service runs the check, and nothing is sent.
+
+## H10 product imageAlt (RF0905-5) — October 31, 2026
+
+Branch rb/rf0905-5 from origin/main c9ae3cf (RF0905-5, PR #28: commit 0753789e, merged as d24e758). `hass/content_model.py` allows the optional public product field `imageAlt` (plain text, at most 200 characters, checked on every status). `hass/sitegen.py` emits it when present; with no record using it the output is byte-identical. In `hass/ops/catalog.py`, `product.add` and `product.edit` take `imageAlt` and `product.edit` takes `clearImageAlt`; both together are refused, and clearing an absent alt with nothing else needs details. `storefront-mockup/shop.js` uses `imageAlt` for the photo alt and falls back to the product name. Added `hass/tests/test_product_alt.py` and the driver `hass/tests/fixtures/shop_photo_driver.cjs`.
+
+Checks at PR head 0753789e (recorded in PR #28): `python3 -m unittest hass.tests.test_product_alt hass.tests.test_catalog_ops hass.tests.test_content -v` ran 37 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 156 tests, OK (skipped=4); `python3 hass/sitegen.py --check` reported 6 generated files matching (170 active products, 26 makers). CI `check` passed at 0753789e.
+
+Limits: H10 stays partial: there is no photo pipeline or photo-to-product wiring yet; alt text is set only through product ops. `history.revert` restores a record with its keys in a different order.
+
+## H20 statebackup restore --paused (RF0850-4) — October 31, 2026
+
+Branch rb/rf0850-4 from origin/main c9ae3cf (RF0850-4, PR #27: commit 96dbc69, merged as 59b7210). `python3 hass/statebackup.py restore BACKUP --into DIR --worktree WT --paused` restores as before, then, inside the temp dir before the rename, records the H17 pause flag (`CONTROL` from `hass.conversation`, set by `statebackup-restore`) in the restored `conversation.sqlite3`. An already-paused backup keeps its original `set_at`; a backup without a store gets a new 0600 store holding only `control`. A failure there removes the temp dir as a copy failure does, so `--into` never appears. The result gains `"paused": true` and `"pausedSince"`; without the flag nothing changes. Added `hass/tests/test_statebackup_paused.py`.
+
+Checks at PR head 96dbc69 (recorded in PR #27): `python3 -m unittest hass.tests.test_statebackup_paused hass.tests.test_statebackup hass.tests.test_status_pause -v` ran 24 tests, OK; `python3 -m unittest discover -s hass/tests -t . -v` ran 152 tests, OK (skipped=4); `python3 hass/sitegen.py --check` and `python3 hass/migration_check.py` passed. CI `check` passed at 96dbc69.
+
+Limits: H20 stays partial: no live restore was run, and restoring onto the recorded writer worktree stays attended. Scheduling, retention, off-box copies and encryption are not built.
