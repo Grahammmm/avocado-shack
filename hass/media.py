@@ -14,6 +14,7 @@ from hass import editor
 MAX_BYTES = 20 * 1024 * 1024
 KINDS = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG\r\n\x1a\n"}
 EXT = {"jpeg": "jpg", "png": "png"}
+PNG_END = b"\x00\x00\x00\x00IEND\xaeB`\x82"  # zero-length IEND chunk with its fixed CRC32 (0xAE426082)
 SOURCE_RE = re.compile(r"[a-z0-9-]{1,32}")
 REPLIES = {
     "empty": "That photo arrived empty. Please send it again.",
@@ -35,9 +36,9 @@ def _prefix(data: bytes):
 
 def sniff(data: bytes):
     """'jpeg' | 'png' from the magic bytes, or None (unknown type or a truncated upload)."""
-    kind = _prefix(data)
-    if kind == "jpeg" and data.rstrip(b"\x00").endswith(b"\xff\xd9"): return "jpeg"
-    if kind == "png" and b"\x00\x00\x00\x00IEND" in data[len(KINDS["png"]):]: return "png"  # zero-length IEND chunk
+    kind, end = _prefix(data), data.rstrip(b"\x00")  # trailing NUL padding is tolerated for both kinds
+    if kind == "jpeg" and end.endswith(b"\xff\xd9"): return "jpeg"
+    if kind == "png" and len(end) >= len(KINDS["png"]) + len(PNG_END) and end.endswith(PNG_END): return "png"
     return None
 
 def _private_dir(path: Path) -> None:

@@ -87,7 +87,10 @@ class MediaTestCase(unittest.TestCase):
         cases = [(b"", "empty"), (b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64, "unsupported-type"),
                  (b"GIF89a\x01\x00\x01\x00" + b"\x00" * 32, "unsupported-type"), (b"plain text", "unsupported-type"),
                  (JPEG[:-2], "truncated"), (JPEG[:-2] + b"\x00\x00", "truncated"),
-                 (PNG[:PNG.index(b"IEND")], "truncated"), (media.KINDS["png"] + b"IEND", "truncated")]
+                 (PNG[:PNG.index(b"IEND")], "truncated"), (media.KINDS["png"] + b"IEND", "truncated"),
+                 (media.KINDS["png"] + media.PNG_END[:-1], "truncated"),
+                 (PNG[:-4] + b"\x00\x00\x00\x00", "truncated"), (PNG[:-4] + b"\xae\x42\x60\x83", "truncated")]
+        cases += [(PNG[:-n], "truncated") for n in (1, 2, 3, 4)]  # IEND CRC partly or wholly missing
         for data, code in cases:
             with self.subTest(code=code, head=data[:12]):
                 self.assertRefused(data, code)
@@ -96,6 +99,7 @@ class MediaTestCase(unittest.TestCase):
             self.assertRefused(JPEG, "too-large")
         self.assertEqual(files(self.root), [])
         self.assertEqual(self.store(JPEG + b"\x00\x00")["kind"], "jpeg")  # trailing NUL padding after EOI is fine
+        self.assertEqual(self.store(PNG + b"\x00\x00")["kind"], "png")  # and after a complete IEND chunk
 
     def test_unsafe_roots_write_nothing(self):
         fake_repo = self.tmp / "repo"
