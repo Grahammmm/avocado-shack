@@ -6,7 +6,7 @@
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
 inbox-stuck (pending inbound older than --inbox-minutes), inbox-integrity,
-paused (info only), backup-age (with --backups: no complete hass-state-* dir within --backup-hours). Problems carry a
+paused (info only), backup-age (--backups: no complete hass-state-* within --backup-hours), backup-verify. Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
 fingerprint; notify only when it changed (else notify = not ok). No network or send. Exit 0 ok, 1 problems, 2 unsafe.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import editor  # noqa: E402
+from hass import editor, statebackup  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.conversation import ConfigError, load_settings  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
@@ -67,7 +67,7 @@ def _inbox_check(sdir: Path, now: datetime, minutes: int, problems: list) -> Non
     except sqlite3.DatabaseError:
         problems.append(_problem("inbox-integrity", "database unreadable"))
 
-def _backup_check(raw, now: datetime, hours: int, problems: list) -> None:
+def _backup_check(raw, now: datetime, hours: int, problems: list):
     newest = None
     try:
         for entry in os.scandir(raw):
@@ -77,12 +77,20 @@ def _backup_check(raw, now: datetime, hours: int, problems: list) -> None:
                 continue
             manifest = os.path.join(entry.path, MANIFEST)
             if entry.is_dir(follow_symlinks=False) and os.path.isfile(manifest) and not os.path.islink(manifest):
-                newest = stamp if newest is None else max(newest, stamp)
+                newest = (stamp, entry.path) if newest is None else max(newest, (stamp, entry.path))
     except OSError:
         return problems.append(_problem("backup-age", "backup dir unreadable"))
     if newest is None: problems.append(_problem("backup-age", "no complete backup"))
-    elif now - newest > timedelta(hours=hours):
+    elif now - newest[0] > timedelta(hours=hours):
         problems.append(_problem("backup-age", f"newest complete backup older than {hours} h"))
+    else: return newest[1]  # the newest complete backup within the window: the only one verified
+
+def _verify_backup(path, problems: list) -> None:  # H20, read-only; the detail is a count, never a file name
+    try:
+        result = statebackup.verify(path)
+    except (OSError, sqlite3.DatabaseError):
+        return problems.append(_problem("backup-verify", "verify failed"))
+    if result["result"] != "ok": problems.append(_problem("backup-verify", f"{len(result['problems'])} problem(s)"))
 
 def _seen_path(raw, state) -> Path:
     if Path(raw).is_symlink(): raise UnsafeState("--seen must not be a symlink")
@@ -108,7 +116,8 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
         problems.append(_problem("settings", str(exc)))
     _db_checks(sdir, now, outbox_minutes, problems, info)
     _inbox_check(sdir, now, inbox_minutes, problems)
-    if backups is not None: _backup_check(backups, now, backup_hours, problems)
+    if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
+        _verify_backup(newest, problems)
     return problems, info, False
 
 def fingerprint(problems) -> str:
