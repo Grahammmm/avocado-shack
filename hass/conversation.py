@@ -325,10 +325,11 @@ class Conversation:
         if ignored:
             self._record(msg, ignored, owner=False)
             return ignored, None
-        now = self._now()
+        now, command = self._now(), parse_command(msg.text)
         expired = [r for r in self._drafts("state = 'proposed'") if datetime.fromisoformat(r["expires_at"]) <= now]
+        if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
         for row in expired: self._move(row, "expired")
-        if command := parse_command(msg.text):
+        if command:
             disposition = self._command(msg, now, *command)
             self._record(msg, disposition)
             return disposition, None
@@ -550,7 +551,8 @@ class Conversation:
         lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
-                  for r in self._drafts("state IN ('proposed', 'needs-details')")] or [NOTHING]
+                  for r in self._drafts("state IN ('proposed', 'needs-details')")
+                  if r["state"] != "proposed" or datetime.fromisoformat(r["expires_at"]) > now] or [NOTHING]
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()

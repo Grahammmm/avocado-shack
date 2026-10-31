@@ -115,6 +115,22 @@ class ReadOnlyTests(StoreMixin, ConversationTestCase):
         self.assertNotIn("control", self.tables())
         self.assertEqual(self.disposition("s1"), "status")
 
+    def test_status_after_expiry_changes_nothing(self):
+        self.assertEqual(self.say("pause changes"), "pause")
+        self.replies()
+        draft, _reply = self.propose("hours")
+        self.now = T0 + timedelta(seconds=601)  # the proposal lapsed; no other message has swept it yet
+        control = lambda: self.conv.db.execute("SELECT * FROM control").fetchall()
+        before = (self.drafts(), self.approvals(), control(), self.commits())
+        self.assertEqual(before[0][0]["state"], "proposed")
+        self.assertEqual(self.status()[:2], ["Changes: paused since 2026-11-02 09:00 PST", conversation.NOTHING])
+        self.assertEqual((self.drafts(), self.approvals(), control(), self.commits()), before)
+        self.assertEqual(self.say("resume changes"), "resume")  # any later message still expires it
+        self.assertEqual(self.replies(), ["Changes resumed."])
+        self.assertEqual(self.say(f"yes {draft['code']}"), "no-target")
+        self.assertEqual(self.replies(), [f"{draft['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual((self.drafts()[0]["state"], self.approvals(), self.commits()), ("expired", 0, 0))
+
     def test_ignored_and_duplicate_messages_do_not_pause(self):
         draft, _reply = self.propose("hours")
         cases = [("echo", dict(from_me=True)), ("edited-ignored", dict(kind="edited")),
