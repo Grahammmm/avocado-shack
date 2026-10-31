@@ -1,8 +1,5 @@
-"""RF1240-4 tests: hike.update moving an RSVP'd hike warns how many confirmed guests are not told.
-
-Reuses the test_hike_ops fixture repo and the H06 fixture conversation (throwaway Git repos, private temp state
-dirs, placeholder example.invalid RSVP rows only). Nobody is notified; the warning is only a draft line.
-Run: python3 -m unittest hass.tests.test_hike_move_warning -v
+"""RF1240-4 tests: hike.update moving an RSVP'd hike warns how many confirmed guests are not told. Fixture repos
+and placeholder example.invalid RSVP rows only (test_hike_ops / H06 helpers); nobody is notified.
 """
 
 import sqlite3
@@ -36,8 +33,7 @@ class MoveWarningTests(HikeTestCase):
         self.assertEqual(repo.apply(draft["draft"])["result"], "applied")
         return draft["draft"]["warnings"]
 
-    def unread(self, repo):
-        """Point the settings at an absent database: opening it would give the unavailable warning."""
+    def unread(self, repo):  # an absent database: opening it would give the unavailable warning
         repo.use_db(str(repo.db.parent / "absent.sqlite3"))
         spy = mock.patch.object(hikes, "guest_counts", wraps=hikes.guest_counts)
         self.addCleanup(spy.stop)
@@ -59,21 +55,20 @@ class MoveWarningTests(HikeTestCase):
     def test_same_date_and_time_never_opens_the_database(self):
         repo = self.hike_repo()
         spy = self.unread(repo)
-        for n, args in enumerate(({"date": "2026-12-05"}, {"time": "09:00"}, {"date": "2026-12-05", "time": "09:00"})):
-            args["title"] = f"Same start {n}"  # a request that changes nothing is refused before any warning
+        same = ({"date": "2026-12-05"}, {"time": "09:00"}, {"date": "2026-12-05", "time": "09:00"}, {})
+        for n, args in enumerate(same):
+            args["title"] = f"Same start {n}"  # {} is title only; a request changing nothing is refused anyway
             with self.subTest(args=args):
                 self.assertEqual(self.warnings(repo, ("hike.update", {"id": HIKE_ID, **args})), [])
-        self.assertEqual(self.warnings(repo, ("hike.update", {"id": HIKE_ID, "title": "Title only"})), [])
         spy.assert_not_called()
         self.assertEqual(repo.event()["startsAt"], "2026-12-05T09:00:00-08:00")
 
     def test_dst_shows_the_local_clock_given(self):
-        repo = self.hike_repo([("hike-2026-10-31-test-hike", 2)], date="2026-10-31")  # PDT, -07:00
-        self.assertEqual(self.warnings(repo, ("hike.update", {"id": "hike-2026-10-31-test-hike", "date": "2026-11-02",
-                                                              "time": "08:00"})),
-                         ["hike-2026-10-31-test-hike moves to 2026-11-02 08:00 Pacific; 2 confirmed guests are not told"
-                          " automatically"])
-        self.assertEqual(repo.event("hike-2026-10-31-test-hike")["startsAt"], "2026-11-02T08:00:00-08:00")
+        eid = "hike-2026-10-31-test-hike"  # created in PDT (-07:00), moved past the November change
+        repo = self.hike_repo([(eid, 2)], date="2026-10-31")
+        self.assertEqual(self.warnings(repo, ("hike.update", {"id": eid, "date": "2026-11-02", "time": "08:00"})),
+                         [f"{eid} moves to 2026-11-02 08:00 Pacific; 2 confirmed guests are not told automatically"])
+        self.assertEqual(repo.event(eid)["startsAt"], "2026-11-02T08:00:00-08:00")
 
     def test_unknown_count_still_drafts_with_a_warning(self):
         def unset(repo): pass
@@ -99,8 +94,7 @@ class MoveWarningTests(HikeTestCase):
 
     def test_move_and_rsvps_off_warn_once(self):
         repo = self.hike_repo([(HIKE_ID, 1), (HIKE_ID, 2)])
-        self.assertEqual(self.warnings(repo, ("hike.update", {"id": HIKE_ID, "time": "10:30", "rsvpEnabled": False})),
-                         [THREE_OFF])
+        self.assertEqual(self.warnings(repo, (MOVE[0], {**MOVE[1], "rsvpEnabled": False})), [THREE_OFF])
         self.assertEqual((repo.event()["startsAt"], repo.event()["rsvpEnabled"]), ("2026-12-05T10:30:00-08:00", False))
 
     def test_refused_or_needs_details_move_warns_nothing(self):
