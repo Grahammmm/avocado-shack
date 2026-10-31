@@ -65,7 +65,7 @@ The state dir must be owned by the current user, mode 0700 and outside the repos
 
 - The start is the local `date` + `time` in `America/Los_Angeles`, written with its offset (`2026-12-05T09:00:00-08:00`). A time that happens twice (DST ends) or not at all (DST starts) gives `needs-details` on `time`; a start in the past is `refused`. A new `date` keeps the local time, a new `time` keeps the local date.
 - With `rsvpEnabled` true, `hike.create` needs exactly one of `capacity` or `noCapacityLimit: true`, and so does `hike.update` when it turns RSVPs on for an event without a capacity. `hike.update` with `capacity` reads `guest_counts(settings["guestCountsDb"])` (read-only SQLite, seat totals only, no names or emails) and refuses a capacity below the confirmed guests; an unset or unreadable database is refused (`guest count unavailable`). Existing RSVPs are never changed.
-- `hike.cancel` and `hike.complete` (only once the start has passed; optional `recap`) work on `scheduled` events; a cancelled or completed event refuses every later op.
+- `hike.cancel` and `hike.complete` (only once the start has passed; optional `recap`) work on `scheduled` events; a cancelled or completed event refuses every later op. `hike.cancel` or `hike.update` turning RSVPs off on an event with confirmed guests adds the draft warning `<id> has N confirmed guests; nobody is notified automatically` (`<id> guest count unavailable; check RSVPs before approving` when the count cannot be read) and is never refused for it.
 - No op sends, queues or drafts a message, and `club.emailConnected` stays `false`. Real hikes need the owner's confirmed details; the committed events list stays empty.
 
 ## H05: approval state machine and fixture conversation
