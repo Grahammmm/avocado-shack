@@ -1,6 +1,6 @@
+const {out,base}=require('./qa-env.cjs').qaEnv({preview:true});
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('fs'),assert=require('assert/strict');
-const out=process.env.QA_OUT_DIR||'storefront-mockup',base=process.env.PREVIEW_URL||'http://127.0.0.1:3101';
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined}),page=await browser.newPage();const results=[],errors=[];page.on('pageerror',e=>errors.push(e.message));
  for(const width of [390,1440]){
