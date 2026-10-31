@@ -1,6 +1,6 @@
+const {out,base}=require('./qa-env.cjs').qaEnv({preview:true});
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('fs');
-const out=process.env.QA_OUT_DIR||'storefront-mockup';
 const check=(value,message)=>{if(!value)throw Error(message)};
 (async()=>{
  const b=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
@@ -29,7 +29,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  check(await p.getByText('QA past outing',{exact:true}).count(),'History missing');
  check(!await p.locator('#preview-hike-rsvp').count(),'Preview replaced a confirmed event');
  // The normal site's mock invitation must never post or store personal data.
- await p.goto((process.env.PREVIEW_URL||'http://127.0.0.1:3101')+'/hike');
+ await p.goto(base+'/hike');
  await p.locator('#preview-hike-rsvp').waitFor();
  const publicData=await p.evaluate(()=>fetch('/api/community').then(r=>r.json()));
  check(publicData.events.length===0,'Mock events entered real calendar');
