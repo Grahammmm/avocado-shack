@@ -12,13 +12,16 @@ from zoneinfo import ZoneInfo
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import editor as editor_mod  # noqa: E402
+from hass import editor as editor_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
+from hass.content_model import ContentError, load_and_validate  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
+COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?")  # H06, same normalisation as KEYWORD_RE
 TRANSITIONS = {"needs-details": {"proposed", "rejected"}, "proposed": {"approved", "rejected", "expired"},
-               "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"}}
+               "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
+               "verified": {"reverted"}}
 INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
@@ -27,7 +30,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT);
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
   reason TEXT, replaced_by TEXT, draft_hash TEXT, base TEXT, ops_json TEXT NOT NULL, summary TEXT NOT NULL,
-  sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT);
+  sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT,
+  screenshot TEXT, checked_at TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NULL, chat TEXT NOT NULL,
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
@@ -70,6 +74,9 @@ class Editor:
 
     def recover(self):
         return editor_mod.recover(state=self.state)
+
+    def render_draft(self, change_id):
+        return editor_mod.render_draft(change_id, state=self.state, registry=self.registry)
 
 
 class FixtureInterpreter:
@@ -136,6 +143,12 @@ def parse_keyword(text: str):
     return ("approve" if match[1] in APPROVE else "reject"), match[2]
 
 
+def parse_command(text: str):
+    """("history", None) or ("undo", code or None) when the whole message is that command; otherwise None."""
+    match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
+    return None if not match else ("history", None) if match[1] else ("undo", match[3])
+
+
 def _checked(result) -> dict:
     if isinstance(result, dict):
         if set(result) == {"ops", "revises"} and isinstance(result["ops"], list) \
@@ -179,15 +192,21 @@ def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False)
 
 
 class Conversation:
-    def __init__(self, state_dir, editor, interpreter, clock):
+    def __init__(self, state_dir, editor, interpreter, clock, previewer=None):
+        """previewer (H06, e.g. preview.Previewer(worktree)): proposal screenshots and checked results; None keeps
+        the H05 behaviour (no screenshot, an applied draft stays `applied`)."""
         sdir = editor_mod.open_state(state_dir)
         self.settings, self.editor, self.interpreter, self.clock = load_settings(sdir), editor, interpreter, clock
+        self.sdir, self.previewer = sdir, previewer
         path = sdir / "conversation.sqlite3"
         os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
         os.chmod(path, 0o600)
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
+        for column in ("screenshot", "checked_at"):  # an H05 database gains the H06 columns
+            if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
         self.outbox = Outbox(self.db, self._now)
         self.recover()
 
@@ -241,8 +260,20 @@ class Conversation:
         if not row["draft_hash"]: return False
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
-    def _reply(self, text):
-        self.outbox.add(self.settings["ownerChat"], text)
+    def _reply(self, text, attachments=()):
+        self.outbox.add(self.settings["ownerChat"], text, attachments)
+
+    def _proposal_reply(self, row, draft, prefix=""):
+        """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
+        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row)), []
+        if self.previewer is not None:
+            rendered = self.editor.render_draft(draft["change_id"])
+            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(draft["records"][0]),
+                                          self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png") \
+                if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
+            shots = [shot["png"]] if shot.get("png") else []
+            if not shot["ok"]: text += f"\nPreview unavailable: {shot['error']}"
+        self._reply(text, shots)
 
     def _record(self, msg, disposition, owner=True):
         self.db.execute("INSERT INTO messages(provider_id, disposition, received_at) VALUES (?, ?, ?)",
@@ -272,6 +303,7 @@ class Conversation:
         out = self.editor.apply(approved["change_id"], approved["draft_hash"])
         with self._tx():
             self._outcome(self._row(approved["row_id"]), out, self._now())
+        self._verify_pending()
         return disposition
 
     def _handle(self, msg):
@@ -286,6 +318,10 @@ class Conversation:
         now = self._now()
         expired = [r for r in self._drafts("state = 'proposed'") if datetime.fromisoformat(r["expires_at"]) <= now]
         for row in expired: self._move(row, "expired")
+        if command := parse_command(msg.text):
+            disposition = self._command(msg, now, *command)
+            self._record(msg, disposition)
+            return disposition, None
         keyword = parse_keyword(msg.text)
         if keyword is None:
             disposition = self._request(msg, now)
@@ -366,7 +402,7 @@ class Conversation:
         else:
             row = self._propose(draft, msg.sender, now)
             if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
-        self._reply(proposal_text(row["code"], draft, row["expires_at"], self._repeat(row)))
+        self._proposal_reply(row, draft)
         return "proposed"
 
     def _outcome(self, row, out, now):
@@ -374,14 +410,20 @@ class Conversation:
         result = out.get("result")
         if result in ("applied", "already-applied"):
             self._move(row, "applied", commit=out.get("commit"))
-            self._reply(f"Applied {row['code']}: {row['summary']}")
+            for call in json.loads(row["ops_json"]):  # an applied undo closes the draft it reverted
+                if call.get("op") == "history.revert":
+                    for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
+                                             call["args"].get("changeId")):
+                        self._move(orig, "reverted", reason=f"undone by {row['code']}")
+            if self.previewer is None: self._reply(f"Applied {row['code']}: {row['summary']}")
+            # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "stale":
             again = self.editor.prepare(json.loads(row["ops_json"]))
             if again["result"] == "ok":
                 new = self._propose(again["draft"], row["sender"], now)
                 self._move(row, "rejected", reason="stale", replaced_by=new["code"])
-                self._reply(f"The site changed since {row['code']}; please approve {new['code']}.\n"
-                            + proposal_text(new["code"], again["draft"], new["expires_at"], self._repeat(new)))
+                self._proposal_reply(new, again["draft"], f"The site changed since {row['code']}; "
+                                                          f"please approve {new['code']}.\n")
             else:
                 self._move(row, "rejected", reason="stale")
                 self._reply(f"The site changed since {row['code']}; not applied: {_reason(again)}")
@@ -390,16 +432,71 @@ class Conversation:
             self._reply(f"Not applied: {_reason(out)}")
 
     def recover(self) -> list:
-        """Settle drafts left `approved` by a crash from the editor's change record. Never calls apply again."""
+        """Settle drafts left `approved` by a crash from the editor's change record, then verify (once) any applied
+        draft with no verification record. Never calls apply again."""
         rows = self._drafts("state = 'approved'")
-        if not rows: return []
-        if hasattr(self.editor, "recover"): self.editor.recover()  # settles journals; never re-applies
-        with self._tx():
-            for row in rows:
-                change = self.editor.show(row["change_id"]).get("change") or {}
-                if change.get("state") == "applied":
-                    self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
-                else:
-                    self._move(row, "failed", reason=INTERRUPTED)
-                    self._reply(f"Not applied: {INTERRUPTED}")
+        if rows:
+            if hasattr(self.editor, "recover"): self.editor.recover()  # settles journals; never re-applies
+            with self._tx():
+                for row in rows:
+                    change = self.editor.show(row["change_id"]).get("change") or {}
+                    if change.get("state") == "applied":
+                        self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
+                    else:
+                        self._move(row, "failed", reason=INTERRUPTED)
+                        self._reply(f"Not applied: {INTERRUPTED}")
+        self._verify_pending()
         return [self._row(r["row_id"])["state"] for r in rows]
+
+    # -- H06: checked results, history and undo ------------------------------------------------------------------
+    def verify(self, row):
+        """(screenshot path, None) when the worktree is current, the migration checks pass and the result
+        screenshot's checks pass; otherwise (None, error)."""
+        wt = editor_mod._load(str(self.sdir))[2]
+        try:
+            content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
+            stale = sitegen.diff_paths(sitegen.render(content, wt / "hass" / "templates"), wt)
+        except ContentError as exc:
+            return None, "; ".join(exc.problems)
+        problems = [f"generated file out of date: {p}" for p in stale] + migration_check.run_checks(wt)[0]
+        if problems: return None, "; ".join(problems)
+        change = self.editor.show(row["change_id"]).get("change") or {}
+        if not change.get("records"): return None, "no change record"
+        files = {p: (wt / p).read_bytes() for p in editor_mod.GENERATED_PATHS}  # the committed files
+        shot = self.previewer.capture(files, preview_mod.target_for(change["records"][0]),
+                                      self.sdir / "screenshots" / f"{row['change_id']}-result.png")
+        return (shot["png"], None) if shot["ok"] else (None, shot["error"])
+
+    def _verify_pending(self):
+        if self.previewer is None: return
+        for row in self._drafts("state = 'applied' AND checked_at IS NULL"):
+            png, error = self.verify(row)  # outside the transaction; the result and reply are stored together
+            with self._tx():
+                if png:
+                    self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
+                    self._reply(f"Applied and checked {row['code']}: {row['summary']}", [png])
+                else:
+                    self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
+                                    (f"not verified: {error}", _iso(self._now()), row["row_id"]))
+                    self._reply(f"Applied {row['code']}, but the preview check failed: {error}")
+
+    def _command(self, msg, now, verb, code) -> str:
+        if verb == "history":
+            rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT 5").fetchall()
+            self._reply("\n".join(["Recent changes:"] + [
+                f"{r['code']} {r['state']}: {r['summary']}" + (f" ({r['commit'][:7]})" if r["commit"] else "")
+                for r in rows]) if rows else "No changes yet.")
+            return "history"
+        done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")
+                if code is None and r["state"] in ("applied", "verified") or r["code"] == code]
+        if not done:
+            self._reply(f"Nothing to undo for {code}." if code else "Nothing to undo.")
+            return "no-target"
+        out = self.editor.prepare([{"op": "history.revert", "args": {"changeId": done[-1]["change_id"]}}])
+        if out["result"] != "ok":
+            self._reply(f"Not undone: {_reason(out)}")
+            return "not-drafted"
+        same = self._drafts("state = 'proposed' AND change_id = ?", out["draft"]["change_id"])
+        row = same[0] if same else self._propose(out["draft"], msg.sender, now)
+        self._proposal_reply(row, out["draft"], f"Undo {done[-1]['code']}:\n")
+        return "proposed"

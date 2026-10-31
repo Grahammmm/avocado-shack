@@ -6,7 +6,7 @@ package (A3/A4/A6) export ``OPS = (Op(...), ...)``; ``load_registry()`` collects
 
 from __future__ import annotations
 
-import importlib, pkgutil, re  # noqa: E401
+import importlib, json, pkgutil, re  # noqa: E401
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -18,6 +18,7 @@ KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "
 TIME_RE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 COLLECTIONS = ("products", "makers", "events", "routeIdeas", "store")
+CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,14 @@ class OpContext:
     site_dir: Path
     settings: Mapping[str, Any]
     warnings: list = field(default_factory=list)
+    state_dir: Path | None = None
+
+    def change(self, change_id):
+        """Read-only: the recorded change ``<state>/changes/<id>.json`` as a dict, or None (H06 undo)."""
+        if self.state_dir is None or not CHANGE_ID_RE.fullmatch(str(change_id)):
+            return None
+        path = Path(self.state_dir) / "changes" / f"{change_id}.json"
+        return json.loads(path.read_text("utf-8")) if path.is_file() else None
 
 
 @dataclass

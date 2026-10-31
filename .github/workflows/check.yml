@@ -89,6 +89,7 @@ jobs:
 
       - name: Hass tests (placeholder until hass/tests exists)
         run: |
+          export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
           if [ -d hass/tests ]; then
             python3 -m unittest discover -s hass/tests -t . -v
           else
