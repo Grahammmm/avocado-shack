@@ -6,7 +6,7 @@
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
 settled state dir (config.json, drafts, changes, screenshots and consistent sqlite snapshots of inbox.sqlite3, then
 conversation.sqlite3; never writer.lock, a journal, a symlink or an unknown entry) into a new private
-<out>/hass-state-<UTC stamp>/ (out: an existing 0700 dir of the user) and writes MANIFEST.json (sha256 per file) last.
+<out>/hass-state-<UTC stamp>/ (out: an existing 0700 user dir; built aside, renamed in) and writes MANIFEST.json last.
 verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
 stores; listed photo originals and sidecars must pair one-to-one and match media.originals. restore verifies first,
 then builds a NEW state dir bound
@@ -124,7 +124,7 @@ def create(state, out, now=None, media=None) -> dict:
     sdir, cfg, wt = editor._load(state)
     dest_root = _private_out(out, _roots(wt) + [sdir])
     mroot = None if media is None else _media_root(media, _roots(wt) + [sdir, dest_root])
-    with editor._writer_lock(sdir) as held:
+    with editor._writer_lock(sdir) as held, contextlib.ExitStack() as undo:
         if not held: return {"result": "busy"}
         if (journal := sdir / "journal").is_dir() and not journal.is_symlink() and any(journal.iterdir()):
             return {"result": "unsettled", "problems": ["an interrupted write is pending; run editor.py recover first"]}
@@ -133,11 +133,11 @@ def create(state, out, now=None, media=None) -> dict:
         if bad or mbad: return {"result": "refused", "problems": bad + mbad}
         if unsettled: return {"result": "unsettled", "problems": unsettled}  # a photo write may be in flight
         now = now or datetime.now(timezone.utc)
-        dest = dest_root / f"hass-state-{now.strftime('%Y%m%dT%H%M%SZ')}"
-        try:
-            dest.mkdir(mode=0o700)
-        except FileExistsError:
-            return {"result": "exists", "backup": str(dest)}
+        final = dest_root / f"hass-state-{now.strftime('%Y%m%dT%H%M%SZ')}"
+        if os.path.lexists(final): return {"result": "exists", "backup": str(final)}
+        dest = dest_root / f".{final.name}.partial-{os.getpid()}"  # built aside (dot name), renamed to final last
+        dest.mkdir(mode=0o700)
+        undo.callback(shutil.rmtree, dest, ignore_errors=True)  # any failure: only the folder this call created
         os.chmod(dest, 0o700)
         hashes = {}
         for sub in ("media", ORIG) if mfiles else (): (dest / sub).mkdir(mode=0o700)
@@ -152,8 +152,11 @@ def create(state, out, now=None, media=None) -> dict:
         if mroot: doc["media"] = {"originals": len(mfiles) // 2}
         _write_new(dest / (MANIFEST + ".tmp"), json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
         os.replace(dest / (MANIFEST + ".tmp"), dest / MANIFEST)  # last: a backup without it is incomplete
+        if os.path.lexists(final): raise FileExistsError(f"backup dir appeared during create: {final}")
+        os.rename(dest, final)
+        undo.pop_all()  # renamed in: nothing left to clean up
     extra = {"media": len(mfiles) // 2} if mroot else {}  # settled: one sidecar per original
-    return {"result": "ok", "backup": str(dest), "files": len(hashes), **extra}
+    return {"result": "ok", "backup": str(final), "files": len(hashes), **extra}
 
 def _manifest(bdir: Path):
     try:
