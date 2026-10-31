@@ -138,36 +138,45 @@ def _jpeg_kept(marker: int, seg: bytes) -> bool:
 def _jpeg_name(marker: int) -> str:
     return "COM" if marker == 0xFE else f"APP{marker - 0xE0}" if 0xE0 <= marker <= 0xEF else f"FF{marker:02X}"
 
+def _jpeg_fill(data: bytes, i: int) -> int:
+    """Index of the marker's own FF: any marker may be preceded by fill bytes (repeated FF), which are skipped."""
+    while data[i:i + 2] == b"\xff\xff": i += 1
+    return i
+
 def _jpeg_segment(data: bytes, i: int):
-    """(marker, end) of the length-prefixed segment starting at i; unreadable if there is none."""
+    """(start, marker, end) of the length-prefixed segment at i after any fill; unreadable if there is none."""
+    i = _jpeg_fill(data, i)
     if i + 4 > len(data) or data[i] != 0xFF: raise Refused("unreadable")
     marker, end = data[i + 1], i + 2 + int.from_bytes(data[i + 2:i + 4], "big")
     if marker in (0x00, 0x01, 0xD8, 0xD9, 0xFF) or 0xD0 <= marker <= 0xD7 or end < i + 4 or end > len(data):
         raise Refused("unreadable")
-    return marker, end
+    return i, marker, end
 
 def _jpeg_split(data: bytes):
-    """Header segments [(marker, bytes)] before the first SOS, and the SOS..end tail."""
+    """Header segments [(marker, bytes)] before the first SOS (header fill dropped), and the SOS..end tail
+    (copied byte-for-byte, including any fill in front of the SOS marker)."""
     if not data.startswith(b"\xff\xd8"): raise Refused("unreadable")
     segs, i = [], 2
     while True:
-        marker, end = _jpeg_segment(data, i)
+        start, marker, end = _jpeg_segment(data, i)
         if marker == 0xDA: return segs, data[i:]
-        segs.append((marker, data[i:end]))
+        segs.append((marker, data[start:end]))
         i = end
 
 def _jpeg_check_tail(tail: bytes) -> None:
     """The tail is copied unchanged, so it may hold only scans and kept tables up to one EOI, then NUL padding:
     a COM/APPn between progressive scans or a second image appended after EOI (which can carry its own EXIF)
-    is refused as unreadable rather than published."""
+    is refused as unreadable rather than published. Fill bytes before any marker (EOI and RSTn too) are legal."""
     i = 0
-    while tail[i:i + 2] != b"\xff\xd9":
-        marker, end = _jpeg_segment(tail, i)
-        if marker not in (0xDA, 0xDC) and not _jpeg_kept(marker, tail[i:end]): raise Refused("unreadable")
+    while tail[(i := _jpeg_fill(tail, i)):i + 2] != b"\xff\xd9":
+        start, marker, end = _jpeg_segment(tail, i)
+        if marker not in (0xDA, 0xDC) and not _jpeg_kept(marker, tail[start:end]): raise Refused("unreadable")
         i = end
-        while marker == 0xDA and (i := tail.find(b"\xff", i)) >= 0 and (tail[i + 1:i + 2] == b"\0"
-                                                                         or b"\xd0" <= tail[i + 1:i + 2] <= b"\xd7"):
-            i += 2  # entropy-coded data: FF00 is a stuffed byte, FFD0-FFD7 a restart marker
+        while marker == 0xDA and (i := tail.find(b"\xff", i)) >= 0:
+            j = _jpeg_fill(tail, i)  # entropy-coded data: FF00 is a stuffed byte, FFD0-FFD7 a restart marker
+            if j == i and tail[i + 1:i + 2] == b"\0": i += 2
+            elif b"\xd0" <= tail[j + 1:j + 2] <= b"\xd7": i = j + 2
+            else: break
         if i < 0: raise Refused("unreadable")
     if tail[i + 2:].strip(b"\0"): raise Refused("unreadable")
 

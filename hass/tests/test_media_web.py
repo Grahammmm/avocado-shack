@@ -80,6 +80,19 @@ class WebCopyTest(unittest.TestCase):
         self.assertEqual(Path(rec["path"]).read_bytes(), b"\xff\xd8" + APP0 + icc + adobe + TABLES + SCAN)
         self.assertEqual(rec["removed"], ["APP0", "APP14", "APP2", "APP5"])
 
+    def test_marker_fill_bytes_are_legal(self):
+        # header fill: dropped with the header rebuild; the dropped EXIF still goes, the kept segments stay canonical
+        data = b"\xff\xd8\xff\xff" + APP0 + b"\xff" + exif("II", 1) + b"\xff\xff\xff" + TABLES + SCAN
+        rec = self.copy(data)
+        self.assertEqual(Path(rec["path"]).read_bytes(), b"\xff\xd8" + APP0 + TABLES + SCAN)
+        self.assertEqual(rec["removed"], ["APP1"])
+        # fill before SOS, a restart marker, a second scan and EOI: the whole SOS..EOI tail is copied byte-for-byte
+        body = SCAN[:SCAN.index(b"\xff\xd0")]
+        tail = b"\xff\xff" + body + b"\xff\xff\xd0\x56\xff\xff" + SCAN[:-2] + b"\xff\xff\xff\xd9"
+        rec = self.copy(jpeg(scan=tail))
+        self.assertEqual(Path(rec["path"]).read_bytes(), b"\xff\xd8" + APP0 + TABLES + tail)
+        self.assertEqual(rec["removed"], [])
+
     def test_orientation_needs_rotation_or_proceeds(self):
         for order in ("II", "MM"):
             with self.subTest(order=order):
@@ -114,6 +127,8 @@ class WebCopyTest(unittest.TestCase):
             "jpeg orientation 9": jpeg(exif("II", 9)),
             "jpeg appended image with exif": jpeg() + jpeg(exif("II", 1)),
             "jpeg comment between scans": jpeg(scan=SCAN[:-2] + seg(0xFE, b"GPS") + SCAN),
+            "jpeg filled comment between scans": jpeg(scan=SCAN[:-2] + b"\xff\xff" + seg(0xFE, b"GPS") + SCAN),
+            "jpeg appended image after filled EOI": jpeg(scan=SCAN[:-2] + b"\xff\xff\xd9") + jpeg(exif("II", 1)),
             "png bad crc": media.KINDS["png"] + b"".join(PNG_KEPT) + bad_idat + b"".join(PNG_DATA[1:]),
             "png truncated chunk": media.KINDS["png"] + PNG_KEPT[0] + b"\0\0\x03\xe8IDATxx" + media.PNG_END,
             "png trailer after IEND": png() + chunk(b"tEXt", b"GPS 0 0 0") + PNG_DATA[-1],
