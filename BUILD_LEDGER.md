@@ -588,3 +588,23 @@ Branch rb/av-n1 from origin/main 8adcb41 (AV-N1, PR #12: commit e20d7ab, main me
 Checks at PR head e20d7ab (recorded in PR #12): `python3 -m unittest discover -s hass/tests -t . -v` ran 78 tests, OK (skipped=3); `python3 hass/sitegen.py --check` reported 6 files matching (170 active products, 26 makers); `python3 hass/migration_check.py` passed. CI `check` succeeded at e20d7ab. No review fix.
 
 Limits: H13 stays partial: home-page copy and image slots are not built. The store is one record, so undoing an older store change after a later one is refused (`conflict: store store changed after <id>`); undo the newest first. The `hours line <i>` refusal counts from 0.
+
+## H08 prep: bridge adapter, fixtures only (BL-AV-3) — October 31, 2026
+
+Branch rb/bl-av-3 from origin/main 398986b (BL-AV-3, Hass plan unit A8, PR #18: commit b48bb1c and review fix f29c3ec, merged as 544f4e7). Added `hass/bridge.py`: `normalize()` turns a documented BlueBubbles `new-message` or `updated-message` webhook event into an `Inbound` for `Conversation`, or a named `Drop` (`unsupported-event`, `group-or-unknown-chat`, `attachments-not-supported`, `malformed`). `seal`/`unseal` wrap it in an HMAC-SHA256 envelope that refuses a bad shape, version or MAC, a stale timestamp (over 300 s) and a replayed nonce. `BlueBubblesSender` posts Outbox replies only to a loopback base URL, reads a non-symlink owner-only password file at each send and raises `BridgeError` without the URL query or password. Added `hass/tests/test_bridge.py` and six synthetic fixtures under `hass/tests/fixtures/bridge/`; the existing `hass/README.md` section `H08 prep: bridge adapter (fixtures only)` documents it.
+
+Checks at PR head f29c3ec (commands listed in PR #18; its body records no counts): `python3 -m unittest discover -s hass/tests -t . -v`, `python3 hass/sitegen.py --check`, `python3 hass/migration_check.py`, `git diff --stat origin/main...HEAD`. CI `check` passed at f29c3ec.
+
+Review fix (f29c3ec): from-me echoes also need `handle.address`, so no sender is invented, and a lone surrogate in `guid`, `handle.address`, the chat guid or `text` is `malformed`; `unseal()` refuses one as `EnvelopeError("shape")` before the MAC is computed, so the nonce is not used up.
+
+Limits: H08 stays open; this is fixture-only prep. Nothing listens, no BlueBubbles server or Mac is connected and nothing is sent; connecting one (A9) needs the owner and G. Attachments are dropped as not supported.
+
+## Storefront QA scripts: explicit preview URL, private output (BL-AV-2) — October 31, 2026
+
+Branch rb/bl-av-2 from origin/main 398986b (BL-AV-2, PR #17: commit e8238ea, test-budget fit 3fd517b and review fix d237c14, merged as 071c781). The four current QA scripts (`catalog-only-qa.cjs`, `section-navigation-qa.cjs`, `community-ui-qa.cjs`, `community-qa.py`) now exit 2 with one stderr line, before Playwright loads or a server starts, unless `PREVIEW_URL` is an explicit `http://` loopback address with a port and `QA_OUT_DIR` resolves outside the repository; an unset `QA_OUT_DIR` gets a fresh `avoshack-qa-*` temp folder. Added the shared guard `storefront-mockup/qa-env.cjs` and `hass/tests/test_qa_env.py` with its driver `hass/tests/fixtures/qa_env_driver.cjs` (subprocesses only, no browser or server). CI's "Catalog + community checks" step exports `PREVIEW_URL=http://127.0.0.1:3101`, and `storefront-mockup/README.md` documents both variables.
+
+Checks at PR head d237c14: PR #17's body lists the covered refusal and acceptance cases but no commands or counts. CI `check` passed at d237c14.
+
+Review fix (d237c14): `QA_OUT_DIR` resolves symlinks and `..` in filesystem order, and an explicit `:80` port is accepted.
+
+Limits: the legacy QA scripts hard-coded to the Mac are unchanged and stay documented history.
