@@ -31,9 +31,11 @@ class MediaTestCase(unittest.TestCase):
     def store(self, data, root=None, source="fixture"):
         return media.store_original(self.root if root is None else root, data, received_at=AT, source=source)
 
-    def target(self, data, ext):
+    def target(self, data, ext, make=False):
         sha = hashlib.sha256(data).hexdigest()
-        return self.root / "originals" / sha[:2] / f"{sha}.{ext}", sha
+        path = self.root / "originals" / sha[:2] / f"{sha}.{ext}"
+        for d in (self.root, path.parent.parent, path.parent) if make else (): d.mkdir(mode=0o700, exist_ok=True)
+        return path, sha
 
     def test_accept_layout_and_sidecar(self):
         for data, kind, ext in ((JPEG, "jpeg", "jpg"), (PNG, "png", "png")):
@@ -117,8 +119,7 @@ class MediaTestCase(unittest.TestCase):
             with self.assertRaises(editor.UnsafeState): media.store_original(empty, JPEG, received_at=AT, source="x")
 
     def test_corrupt_store_is_left_unchanged(self):
-        path, _ = self.target(JPEG, "jpg")
-        path.parent.mkdir(mode=0o700, parents=True)
+        path, _ = self.target(JPEG, "jpg", make=True)
         path.write_bytes(b"other bytes")
         self.assertRefused(JPEG, "corrupt-store")
         self.assertEqual(path.read_bytes(), b"other bytes")
@@ -127,8 +128,7 @@ class MediaTestCase(unittest.TestCase):
     def test_planted_symlinks_are_refused_and_not_followed(self):
         victim = self.tmp / "victim"
         victim.write_bytes(b"keep me")
-        path, sha = self.target(PNG, "png")
-        path.parent.mkdir(mode=0o700, parents=True)
+        path, sha = self.target(PNG, "png", make=True)
         for planted in (path, path.with_suffix(".json")):
             with self.subTest(planted=planted.name):
                 planted.symlink_to(victim)
