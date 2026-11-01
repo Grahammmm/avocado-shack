@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import interpret_check  # noqa: E402
+from hass import claims, interpret_check  # noqa: E402
 from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -424,6 +424,15 @@ class Conversation:
         if getattr(self, "_ops", None) is None: self._ops = self.editor.registry or load_registry()
         return self._ops
 
+    def _makers(self):
+        """The worktree's makers (read-only) for the claim check; None when unreadable (every maker change asks)."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            makers = json.loads((wt / "hass" / "content" / "makers.json").read_text("utf-8"))["makers"]
+        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState):
+            return None
+        return makers if isinstance(makers, dict) else None
+
     def _request(self, msg, now) -> str:
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
                     r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
@@ -459,6 +468,9 @@ class Conversation:
             self._reply(f"Not drafted: {_reason(out)}")
             return "not-drafted"
         draft = out["draft"]
+        if hits := claims.unstated(draft, msg.text, self._makers()):  # NB-AV-05: an unstated claim asks, never drafts
+            self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
+            return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]
         if same and (revised is None or revised["row_id"] == same[0]["row_id"]):
             row = same[0]
