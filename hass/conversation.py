@@ -88,6 +88,17 @@ class TransitionError(Exception): """A draft state change outside the allowed tr
 class AttachmentPending(Exception): """NB-AV-11 (H16): the photo could not be fetched yet; nothing was recorded."""
 
 
+class _Held(Exception):
+    """handle(apply=False): an owner approval that must roll back unapplied."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+HELD_REPLY = "{code} was not applied: approvals are not acted on until the channel is connected. It still waits."
+
+
 @dataclass(frozen=True)
 class Inbound:
     provider_id: str
@@ -393,11 +404,20 @@ class Conversation:
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------
-    def handle(self, msg: Inbound, last_try=False) -> str:
-        """Process one inbound message; returns its disposition. Replies are only enqueued (see flush)."""
+    def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
+        """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
+        apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
+        row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
         self._label_job = None
-        with self._tx():
-            disposition, approved = self._handle(msg, last_try)
+        try:
+            with self._tx():
+                disposition, approved = self._handle(msg, last_try)
+                if approved is not None and not apply: raise _Held(approved["code"])
+        except _Held as held:
+            with self._tx():
+                self._reply(HELD_REPLY.format(code=held.code))
+                self._record(msg, "approval-held")
+            return "approval-held"
         if self._label_job: self._read_label(*self._label_job)  # AV1537-15: after the commit, never holding the lock
         if approved is None: return disposition
         out = self.editor.apply(approved["change_id"], approved["draft_hash"])

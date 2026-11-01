@@ -12,10 +12,11 @@ before any agent sends a message (the fleet AGENTS.md/CLAUDE.md rule: no outboun
 - `Receiver.receive()` / `receiver.receive()`: `bridge.unseal` (signature, 5-minute clock window, nonce replay
   refusal) -> `Inbox.enqueue` (durable, start point, duplicates) -> one `Inbox.drain` -> `Conversation.handle`
   (owner sender, owner chat, echo and kind checks) -> a draft for approval.
-- Results: `drafted`, `duplicate`, `history`, `rejected`, `ignored`, `handled` (an owner command or question, no new
-  draft) or `queued` (waiting behind an earlier photo retry), each with a reason in plain words.
-- Nothing is applied by the receiver, nothing is sent: the default `reply` raises `NotConnected`, so replies stay
-  unsent in the conversation outbox.
+- Results: `drafted` (with the code of the draft this message made), `duplicate`, `history`, `rejected`, `ignored`,
+  `handled` (an owner command or question, no new draft; an owner `yes` is `approval-held`: not applied, the draft
+  still waits) or `queued` (waiting behind an earlier photo retry), each with a reason in plain words.
+- Nothing is applied by the receiver (it drains with `Conversation.handle(apply=False)`), nothing is sent: the
+  default `reply` raises `NotConnected`, so replies stay unsent in the conversation outbox.
 - Tests: `python3 -B -m unittest hass.tests.test_receiver`.
 
 ## 2. What G must do to connect the channel
@@ -33,7 +34,8 @@ before any agent sends a message (the fleet AGENTS.md/CLAUDE.md rule: no outboun
    inbox start point when the inbox is first opened, so older messages stay history.
 7. Write and run, as services, the forwarder on the Mac (BlueBubbles webhook -> `normalize` -> `seal` -> post to
    the receiver) and the receiver host side (read the secret, call `receive`), with `BlueBubblesSender` as `reply`.
-   Neither exists in this repository yet; each is its own reviewed change.
+   Neither exists in this repository yet; each is its own reviewed change. This receiver holds every approval
+   (`approval-held`); acting on an owner `yes` is part of that reviewed change, not a setting.
 8. Smoke checks, by G, in this order: the owner texts `status` and gets one reply; a stranger's text gets no reply
    and no draft; the owner texts a small change, a draft arrives, the owner replies `no` and nothing changes;
    `python3 hass/inbox.py status --state <state dir>` shows the messages as done and no pending backlog.

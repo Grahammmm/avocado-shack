@@ -77,6 +77,54 @@ class DraftTests(ReceiverTestCase):
         self.assertEqual((out["result"], self.drafts()), ("history", []))
 
 
+class HeldApprovalTests(ReceiverTestCase):
+    """Review item 1: a change then a freshly sealed owner `yes <code>` (or bare `yes`) is held, never applied."""
+
+    def yes(self, guid, text, t):
+        ev = self.event_from("new-message", guid=guid, text=text, dateCreated=t * 1000)
+        return self.rx.receive(self.seal(ev, now=t), secret=SECRET, now=t)
+
+    def test_owner_yes_after_a_change_applies_nothing_and_the_draft_still_waits(self):
+        code = self.rx.receive(self.seal(event("new-message")), secret=SECRET, now=NOW)["draft_id"]
+        for guid, text, t in (("FAKE-YES-CODE", f"yes {code}", NOW + 5), ("FAKE-YES-BARE", "yes", NOW + 6)):
+            out = self.yes(guid, text, t)
+            self.assertEqual((out["result"], out["disposition"], out["draft_id"]), ("handled", "approval-held", None))
+            self.assertIn("applies nothing", out["reason"])
+            self.assertEqual(([d["state"] for d in self.drafts()], self.editor.applies, self.commits()),
+                             (["proposed"], 0, 0), text)
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0], 0)
+        self.assertEqual(self.reply.calls, [])
+        held = self.conv.db.execute("SELECT text FROM outbox WHERE sent_at IS NULL ORDER BY id").fetchall()
+        self.assertEqual(sum(f"{code} was not applied" in r["text"] for r in held), 2)  # stored unsent
+        self.assertEqual([r["state"] for r in self.inbound_rows()], ["done"] * 3)
+        self.assertEqual(self.yes("FAKE-YES-CODE", f"yes {code}", NOW + 7)["result"], "duplicate")  # recorded once
+        self.assertEqual(self.editor.applies, 0)
+
+    def test_the_conversation_still_applies_when_called_directly(self):  # the hold is the receiver's, not global
+        code = self.rx.receive(self.seal(event("new-message")), secret=SECRET, now=NOW)["draft_id"]
+        msg = conversation.Inbound(provider_id="FAKE-DIRECT", chat=OWNER_CHAT, sender=SETTINGS["ownerSenders"][0],
+                                   text=f"yes {code}", received_at=T0.isoformat())
+        self.assertEqual(self.conv.handle(msg), "approved")
+        self.assertEqual(self.editor.applies, 1)
+
+
+class OwnDraftTests(ReceiverTestCase):
+    """Review item 2: the code returned is the draft made by the received message, not the newest draft of the drain."""
+
+    def test_earlier_incoming_message_gets_its_own_code_when_a_later_pending_message_drains_after_it(self):
+        later = self.event_from("new-message", guid="FAKE-LATER", text="hours", dateCreated=(NOW + 5) * 1000)
+        with mock.patch.object(self.inbox, "drain", side_effect=RuntimeError("crash before drain")):
+            with self.assertRaises(RuntimeError):
+                self.rx.receive(self.seal(later, now=NOW + 5), secret=SECRET, now=NOW + 5)
+        self.assertEqual((self.inbox.state("FAKE-LATER"), self.drafts()), ("pending", []))
+        out = self.rx.receive(self.seal(event("new-message"), now=NOW + 6), secret=SECRET, now=NOW + 6)  # earlier time
+        first, second = self.drafts()  # drained in time order: the incoming message, then the pending later one
+        self.assertEqual(out["result"], "drafted")
+        self.assertEqual(out["draft_id"], first["code"])
+        self.assertNotEqual(out["draft_id"], second["code"])
+        self.assertEqual([r["state"] for r in self.inbound_rows()], ["done", "done"])
+
+
 class DuplicateTests(ReceiverTestCase):
     def test_same_envelope_twice_is_a_duplicate_without_a_second_draft(self):
         raw = self.seal(event("new-message"))

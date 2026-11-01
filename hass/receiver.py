@@ -1,6 +1,7 @@
 """SHOP-3: the inbound receiver, up to but NOT including the live connection (fixtures only).
 WORKS NOW: a sealed envelope -> bridge.unseal (MAC, 300 s window, nonce replay) -> Inbox.enqueue -> one drain ->
-Conversation.handle (the existing owner/chat/echo/kind guard) -> a draft that waits for the owner's approval.
+Conversation.handle(apply=False) (owner/chat/echo/kind guard) -> a draft that waits for the owner's approval.
+An owner `yes` is held (`approval-held`): rolled back unapplied, the draft stays proposed; editor.apply is never called.
 NOT HERE: no listener, socket, daemon, network call, key file, environment read or sign-in. The secret is a parameter.
 Outbound is refused: the default reply raises NotConnected; receive() never sends and never applies a change.
 CONNECTING THE REAL CHANNEL is G's job, step by step in docs/hass/CONNECT.md; no agent does any of it.
@@ -60,14 +61,25 @@ class Receiver:
     reply: the outbound send callable, never called by receive(); the default refuses with NotConnected."""
 
     def __init__(self, *, state, settings, reply=not_connected):
-        self.inbox, self.conversation, self.reply = state, settings, reply
+        self.inbox, self.conversation, self.reply, self._codes = state, settings, reply, {}
 
     def send(self, chat, text, attachments=()):
         """Outbox adapter shape, so Conversation.flush(receiver) goes to `reply` (refused by default)."""
         return self.reply(chat, text, attachments)
 
-    def _last_draft(self) -> int:
-        return self.conversation.db.execute("SELECT COALESCE(MAX(row_id), 0) FROM drafts").fetchone()[0]
+    def handle(self, msg, last_try=False) -> str:
+        """What drain() calls for each message: Conversation.handle with apply=False (an owner approval is held, never
+        applied), noting the code of the draft THIS message made proposed (a new row, or a question it filled)."""
+        before = self._proposed()
+        disposition = self.conversation.handle(msg, last_try=last_try, apply=False)
+        if disposition == "proposed":
+            made = {k: v for k, v in self._proposed().items() if k not in before}
+            self._codes[msg.provider_id] = made[max(made)] if made else None  # None: a repeat reused a waiting draft
+        return disposition
+
+    def _proposed(self) -> dict:
+        rows = self.conversation.db.execute("SELECT row_id, code FROM drafts WHERE state = 'proposed'")
+        return {r[0]: r[1] for r in rows}
 
     def receive(self, raw, *, secret, now) -> dict:
         """One sealed envelope (JSON text, bytes or dict) -> {result, draft_id, reason, disposition}. result is
@@ -87,18 +99,19 @@ class Receiver:
         queued = self.inbox.enqueue(msg)
         if queued == "duplicate": return _result("duplicate", "this message id was already received; not queued again")
         if queued == "history": return _result("history", "sent before the recorded start point; kept as history only")
-        before = self._last_draft()
-        handled = dict(self.inbox.drain(self.conversation))
+        self._codes = {}
+        handled = dict(self.inbox.drain(self))  # self.handle: draft-only, one code per message
         if msg.provider_id not in handled:
             return _result("queued", "stored; it waits behind an earlier message and is handled by the next drain")
         disposition = handled[msg.provider_id]
         if disposition == "duplicate": return _result("duplicate", "already handled; nothing new", None, disposition)
         if disposition in IGNORED: return _result("ignored", IGNORED[disposition], None, disposition)
-        if disposition == "proposed":  # the newest proposed draft is this message's (a new row has the highest id)
-            row = self.conversation.db.execute("SELECT code FROM drafts WHERE state = 'proposed' AND row_id > ?"
-                                               " ORDER BY row_id DESC LIMIT 1", (before,)).fetchone()
+        if disposition == "proposed":  # this message's own draft, whatever else the same drain handled
             return _result("drafted", "a draft waits for the owner's approval; nothing was applied",
-                           row["code"] if row else None, disposition)
+                           self._codes.get(msg.provider_id), disposition)
+        if disposition == "approval-held":
+            return _result("handled", "an owner approval; this receiver applies nothing until the channel is "
+                                      "connected, so the draft still waits", None, disposition)
         return _result("handled", f"an owner message handled without a new draft ({disposition}); its reply waits "
                                   "unsent in the outbox", None, disposition)
 
