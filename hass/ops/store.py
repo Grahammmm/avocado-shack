@@ -5,7 +5,8 @@ Usage (request ops):
     {"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}
     {"op": "store.set_address", "args": {"streetAddress": "1023 Example Street"}}   # town kept; give either or both
 
-Limits: at most 7 hours lines of at most 60 characters, no repeated line; street and town at most 80 characters.
+Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
+ignored; the refusal names both line numbers); street and town at most 80 characters.
 Text kinds already reject markup, ``$`` and control characters. ``name`` and ``schemaVersion`` are not editable.
 
 Selective-undo limit: the store is ONE record, so ``history.revert`` of an older store change after a later store
@@ -15,9 +16,18 @@ change is refused as a conflict (``conflict: store store changed after <id>``). 
 from __future__ import annotations
 
 import copy
+import unicodedata
 
 from hass.content_model import MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
+
+
+_DASHES = {c: "-" for c in [*range(0x2010, 0x2016), 0x2212]}
+
+
+def _line_key(line):
+    """Repeat key for an hours line: case, spacing and dash style ignored; accents kept (never stored)."""
+    return " ".join(unicodedata.normalize("NFKC", line).translate(_DASHES).split()).casefold()
 
 
 def _touch(before, store):
@@ -31,8 +41,11 @@ def _set_hours(content, args, ctx):
     for i, line in enumerate(hours):
         if len(line) > MAX_HOURS_LINE:
             return Refused(f"hours line {i} is longer than {MAX_HOURS_LINE} characters")
-    if len(set(hours)) != len(hours):
-        return Refused("hours lines must not repeat")
+    first_seen = {}
+    for i, line in enumerate(hours):
+        j = first_seen.setdefault(_line_key(line), i)
+        if j != i:
+            return Refused(f"hours lines {j + 1} and {i + 1} say the same thing")
     if hours == content.store["hours"]:
         return Refused("store hours are already " + " / ".join(hours))
     before = copy.deepcopy(content.store)
