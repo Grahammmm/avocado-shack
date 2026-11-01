@@ -13,8 +13,9 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
+from hass import interpret_check  # noqa: E402
 from hass.content_model import ContentError, load_and_validate  # noqa: E402
-from hass.ops import hikes  # noqa: E402
+from hass.ops import hikes, load_registry  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
@@ -410,10 +411,16 @@ class Conversation:
         if state == "rejected": return f"{code} was cancelled ({row['reason']}); nothing changed."
         return f"{code} is {state}."
 
+    def _registry(self):
+        """The editor's ops registry (production: load_registry()), loaded once per conversation."""
+        if getattr(self, "_ops", None) is None: self._ops = self.editor.registry or load_registry()
+        return self._ops
+
     def _request(self, msg, now) -> str:
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
                     r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')")]
-        result = _checked(self.interpreter.interpret(msg.text, pending))
+        result = interpret_check.check(_checked(self.interpreter.interpret(msg.text, pending)), self._registry(),
+                                       {p["code"] for p in pending})  # NB-AV-01: a bad op/arg/kind/code asks
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])

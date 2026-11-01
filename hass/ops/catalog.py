@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import re
+import unicodedata
 
 from hass.content_model import CATEGORIES
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
@@ -219,19 +220,29 @@ def _maker_restore(content, args, ctx):
     return _touch("makers", args["key"], before, maker)
 
 
+_FOLD_PUNCT = str.maketrans({**{c: "'" for c in "\u2018\u2019\u02bc\u0060\u00b4"}, "\u201c": '"', "\u201d": '"',
+                             **{chr(c): "-" for c in range(0x2010, 0x2016)}})
+
+
+def _fold(text) -> str:
+    """Lookup form: accents removed, typographic punctuation made ASCII, apostrophes dropped, spaces collapsed, casefolded."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", str(text)) if not unicodedata.combining(c))
+    return " ".join(plain.translate(_FOLD_PUNCT).replace("'", "").split()).casefold()
+
+
 def lookup(content, kind, query):
     """Read-only name lookup: {"match": id} for one hit, {"candidates": [...]} (<=10, by id) otherwise."""
     if kind not in ("product", "maker"):
         raise ValueError("kind must be 'product' or 'maker'")
-    needle = query.casefold().strip() if isinstance(query, str) else ""
+    needle = _fold(query) if isinstance(query, str) else ""
     hits = []
     if needle and kind == "product":
         hits = [(p["id"], {"id": p["id"], "name": p["name"], "brand": p["brand"], "status": p["status"]})
                 for p in content.products
-                if any(needle in str(p.get(f, "")).casefold() for f in ("name", "brand", "displayBrand"))]
+                if any(needle in _fold(p.get(f, "")) for f in ("name", "brand", "displayBrand"))]
     elif needle:
         hits = [(k, {"id": k, "name": m["name"], "status": "hidden" if m.get("hidden") else "visible"})
-                for k, m in content.makers.items() if needle in k.casefold() or needle in m["name"].casefold()]
+                for k, m in content.makers.items() if needle in _fold(k) or needle in _fold(m["name"])]
     hits.sort(key=lambda hit: hit[0])
     if len(hits) == 1:
         return {"match": hits[0][0]}

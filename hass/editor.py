@@ -15,7 +15,7 @@ from types import MappingProxyType
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import migration_check, sitegen  # noqa: E402
-from hass.content_model import REPO_ROOT, ContentError, load_and_validate, validate  # noqa: E402
+from hass.content_model import IMAGE_RE, REPO_ROOT, ContentError, load_and_validate, validate  # noqa: E402
 from hass.ops import (  # noqa: E402
     NeedsDetails, NotFound, OpContext, Refused, check_args, has_control_chars, load_registry)
 
@@ -151,13 +151,23 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
         if isinstance(out, Refused): return {"result": "refused", "reason": out.reason}
         records += [asdict(t) for t in out]
         summary.append(f"{call['op']}: " + (", ".join(f"{t.collection}/{t.key}" for t in out) or "no records"))
-    validate(new, site)
+    if bad := [p for p in ctx.assets if not IMAGE_RE.fullmatch(p) or ".." in p]:
+        return {"result": "refused", "reason": f"photo path is not assets/products/<file>: {bad[0]}"}
+    if ctx.assets and not (site / "assets/products").resolve().is_relative_to(wt.resolve()):
+        return {"result": "refused", "reason": "the photo folder is outside the writer worktree"}
+    try:
+        validate(new, site)
+    except ContentError as exc:  # a photo this change adds is not on disk until apply writes it
+        missing_photo = [f"image file {a} does not exist" for a in ctx.assets]
+        if rest := [p for p in exc.problems if not any(p.endswith(m) for m in missing_photo)]:
+            raise ContentError(rest) from None
     files = sitegen.render(new, wt / "hass" / "templates")
     generated = sitegen.diff_paths(files, wt)
     names = sorted({COLLECTION_FILE[r["collection"]] for r in records})
     writes = {f"hass/content/{n}.json": _serialize(new, n) for n in names}
     writes = {p: data for p, data in writes.items() if (wt / p).read_bytes() != data}
     writes.update({p: files[p] for p in generated})
+    writes.update({sitegen.SITE_PREFIX + p: data for p, data in ctx.assets.items()})
     if not writes: return {"result": "refused", "reason": "the operations change nothing"}
     return {"result": "ok", "base": base, "records": records, "generated": generated,
             "warnings": list(ctx.warnings), "summary": summary, "writes": writes, "files": files}
@@ -198,6 +208,15 @@ def _writer_lock(sdir: Path):
     finally:
         os.close(fd)
 
+def _drop_new_assets(wt: Path, paths) -> None:
+    """Undo photo files a failed apply wrote: restore one HEAD has, else unstage and unlink it (no stray file left)."""
+    site = sitegen.SITE_PREFIX
+    for p in (p for p in paths or () if isinstance(p, str) and p.startswith(site) and IMAGE_RE.fullmatch(p[len(site):])):
+        if _git(wt, "cat-file", "-e", f"HEAD:{p}").returncode == 0: _git(wt, "checkout", "HEAD", "--", p)
+        else:
+            _git(wt, "rm", "-q", "--cached", "--ignore-unmatch", "--", p)
+            if (wt / p).parent.resolve().is_relative_to(wt.resolve()): (wt / p).unlink(missing_ok=True)
+
 def _recover_locked(sdir: Path, wt: Path, now) -> dict:
     """Resolve every journal: committed -> applied; HEAD still at base -> restore and failed. Never re-apply."""
     if problems := worktree_problems(wt, recovering=True): return {"result": "refused", "problems": problems}
@@ -210,6 +229,7 @@ def _recover_locked(sdir: Path, wt: Path, now) -> dict:
                    "recovered": True, "applied_at": _now(now), **{k: draft.get(k) for k in ("base", "records", "generated")}}
         elif CHANGE_ID_RE.fullmatch(cid) and head == journal.get("base_commit"):
             _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
+            _drop_new_assets(wt, journal.get("paths"))
             rec = {"state": "failed", "change_id": cid, "problems": ["interrupted; needs a new approval"],
                    "failed_at": _now(now)}
         else:
@@ -272,6 +292,7 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
         if _git(wt, "commit", "-q", "-s", *message).returncode: problems = ["git commit failed"]
     if problems:
         _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
+        _drop_new_assets(wt, paths)
         _write_json(rec_path, {"state": "failed", "change_id": change_id, "problems": problems, "failed_at": _now(now)})
         journal.unlink()
         return {"result": "failed", "problems": problems}
