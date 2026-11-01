@@ -15,8 +15,8 @@ The two note commands are stricter:
 | --- | --- | --- |
 | `yes <code>` (or `approve <code>`, `approved <code>`) | Applies that draft, then replies when it is done and checked. | `YES A1B2` |
 | `yes` alone (or `approve`, `approved`) | Applies the one waiting draft. If more than one is waiting, Hass asks which. | `approve` |
-| `no <code>` (or `cancel <code>`, `reject <code>`) | Cancels that draft; nothing changes on the site. | `cancel A1B2` |
-| `no` alone (or `cancel`, `reject`) | Cancels the one waiting draft; nothing changes. | `no` |
+| `no <code>` (or `cancel <code>`, `reject <code>`) | Cancels that draft or question; nothing changes on the site. | `cancel A1B2` |
+| `no` alone (or `cancel`, `reject`) | Cancels the waiting draft or question; nothing changes. | `no` |
 | `history` | Lists the last five changes with their codes and states. | `history` |
 | `undo` | Drafts an undo of the most recent applied change. It needs `yes <code>` like any draft. | `undo` |
 | `undo <code>` | Drafts an undo of that applied change. It needs `yes <code>`. | `undo A1B2!` |
