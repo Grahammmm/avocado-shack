@@ -4,6 +4,7 @@ street address / town shown on the site, through the normal typed-op path (draft
 Usage (request ops):
     {"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}
     {"op": "store.set_address", "args": {"streetAddress": "1023 Example Street"}}   # town kept; give either or both
+    {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}
 
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
 ignored; the refusal names both line numbers); street and town at most 80 characters.
@@ -17,9 +18,11 @@ from __future__ import annotations
 
 import copy
 import unicodedata
+from datetime import date
 
-from hass.content_model import MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES
+from hass.content_model import AVAILABILITY, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, checked_on, shop_today
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
+from hass.ops.catalog import _product
 
 
 _DASHES = {c: "-" for c in [*range(0x2010, 0x2016), 0x2212]}
@@ -68,8 +71,45 @@ def _set_address(content, args, ctx):
     return _touch(before, store)
 
 
+def _confirm_selection(content, args, ctx):
+    """SHOP-1: record that Michael checked the selection (today, or an earlier ``date``) and, optionally, which
+    products are available (``yes``), limited or sold out (``no``): lists of exact product ids."""
+    today = shop_today(ctx.now)
+    day = date.fromisoformat(args["date"]) if "date" in args else today
+    if day > today:
+        return Refused(f"{day.isoformat()} is in the future; the selection can only be checked today or earlier")
+    last = checked_on(content.store)
+    if last is not None and day < last:
+        return Refused(f"the selection was already checked on {last.isoformat()}, after {day.isoformat()}")
+    wanted, touched = {}, []
+    for value in AVAILABILITY:
+        for pid in args.get(value, ()):
+            if pid in wanted:
+                return Refused(f"{pid} is listed twice ({wanted[pid]} and {value})")
+            wanted[pid] = value
+    for pid, value in wanted.items():
+        product = _product(content, pid)
+        if not isinstance(product, dict):
+            return product
+        if product["status"] != "active":
+            return Refused(f"{pid} is {product['status']}; restore it before marking it available")
+        if product.get("available") != value:
+            before = copy.deepcopy(product)
+            product["available"] = value
+            touched.append(Touched("products", pid, before, copy.deepcopy(product)))
+    if day == last and not touched:
+        return Refused(f"the selection was already checked on {day.isoformat()}; nothing to change")
+    if day != last:
+        before = copy.deepcopy(content.store)
+        content.store["selection_checked_on"] = day.isoformat()
+        touched = _touch(before, content.store) + touched
+    return touched
+
+
 OPS = (
     Op("store.set_hours", {"hours": Arg("text_list")}, _set_hours),
+    Op("store.confirm_selection", {"date": Arg("date", required=False),
+                                   **{v: Arg("text_list", required=False) for v in AVAILABILITY}}, _confirm_selection),
     Op("store.set_address", {"streetAddress": Arg("text", required=False), "town": Arg("text", required=False)},
        _set_address),
 )

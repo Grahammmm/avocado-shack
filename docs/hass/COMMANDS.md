@@ -38,3 +38,14 @@ gets a reply naming the limit, and nothing is saved or drafted.
 
 Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are
 missing). A draft is never applied until you reply `yes <code>`; drafts that wait too long expire and nothing changes.
+
+Checking the selection (change requests, not commands; each still needs `yes <code>`):
+
+- `store.confirm_selection`: tell Hass you checked the shelves, for example "I checked the selection today: the
+  avocados are in, the eggs are limited, the sourdough is sold out." The site then says "Selection last checked by
+  Michael on <day>." and the named products show "Available today", "Limited" or "Sold out". You may name an
+  earlier day you checked, never a future one or a day before the last recorded check.
+- `product.set_availability`: change one product's word ("the eggs are sold out") without a new check date.
+- Until the first check the site says "The selection has not been checked yet." and shows no availability words. If
+  the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
+  visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
