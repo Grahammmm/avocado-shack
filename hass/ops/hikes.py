@@ -125,6 +125,10 @@ CAPACITY_QUESTION = ("RSVPs are on: give either a capacity (a number of guests) 
                      "but not both.")
 
 
+def _off_capacity(event_id, capacity):  # a capacity stored on an event that takes no RSVPs (warning, never refused)
+    return f"{event_id}: RSVPs are off, so capacity {capacity} has no effect until RSVPs are turned on"
+
+
 def _hike_create(content, args, ctx):
     if args["rsvpEnabled"] and ("capacity" in args) == bool(args.get("noCapacityLimit")):
         return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
@@ -139,6 +143,8 @@ def _hike_create(content, args, ctx):
         if field in args:
             event[field] = args[field]
     _events(content).append(event)
+    if not args["rsvpEnabled"] and "capacity" in args:
+        ctx.warnings.append(_off_capacity(event["id"], args["capacity"]))
     return _touch(None, event)
 
 
@@ -186,6 +192,10 @@ def _hike_update(content, args, ctx):
         _guest_warning(ctx, event)
     elif "startsAt" in changes and event.get("rsvpEnabled"):
         _move_warning(ctx, event, changes["startsAt"])
+    if "capacity" in given and not given.get("rsvpEnabled", event.get("rsvpEnabled")):
+        ctx.warnings.append(_off_capacity(event["id"], given["capacity"]))
+    elif turning_on and "capacity" not in given and "noCapacityLimit" not in given and event.get("capacity") is not None:
+        ctx.warnings.append(f"{event['id']}: RSVPs turned on with the stored capacity {event['capacity']}")
     before = copy.deepcopy(event)
     event.update(changes)
     if "noCapacityLimit" in given:
