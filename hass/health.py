@@ -2,7 +2,7 @@
 
     python3 hass/health.py --state DIR [--backups DIR] [--seen FILE] [--outbox-minutes 15] [--backup-hours 26]
                            [--inbox-minutes 15] [--paused-hours 24] [--writer] [--model URL [--model-name NAME]]
-                           [--media DIR]
+                           [--media DIR] [--min-free-mb MB]
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
@@ -14,7 +14,8 @@ apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCK
 paused (info; problem paused-long when set over --paused-hours ago or unreadable), memory-invariant (owner memory
 rows breaking its rules: two active rows for one key, or text left on a forgotten key; count only), backup-age
 (--backups: no complete hass-state-* within --backup-hours), backup-verify, media-store (--media DIR: media.py
-verify of the photo store, read-only, never inside the state dir; count only), model (--model:
+verify of the photo store, read-only, never inside the state dir; count only), disk-low (--min-free-mb: the state
+or --backups filesystem has under that many MB free; `<store>: <n> MB free` in 50-MB steps, no path), model (--model:
 one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed). Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
@@ -139,6 +140,14 @@ def _media_check(raw, sdir: Path, problems: list) -> None:  # RF1710-6 (H10): co
     if result["result"] == "unsafe": problems.append(_problem("media-store", "media store unsafe"))
     elif result["result"] != "ok": problems.append(_problem("media-store", f"{len(result['problems'])} problem(s)"))
 
+def _disk_check(label, path, floor_mb, problems: list, statvfs=None) -> None:  # AV1737-14: free MB, never the path
+    try:
+        st = (statvfs or os.statvfs)(path)  # looked up per call so a test can patch os.statvfs
+    except OSError:
+        return problems.append(_problem("disk-low", f"{label}: free space unreadable"))
+    if (free_mb := st.f_bavail * st.f_frsize // 2**20) < floor_mb:  # 50-MB steps keep the fingerprint stable
+        problems.append(_problem("disk-low", f"{label}: {free_mb // 50 * 50} MB free"))
+
 def _seen_path(raw, state) -> Path:
     if Path(raw).is_symlink(): raise UnsafeState("--seen must not be a symlink")
     full = Path(raw).resolve()
@@ -204,7 +213,7 @@ def _model_check(url, name, problems: list, transport) -> None:  # NB-AV-06: fix
 
 def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False,
           inbox_unreadable_hours=24, *, model=None, model_name=None, transport=None, unverified_hours=72,
-          paused_hours=24, media=None) -> tuple:
+          paused_hours=24, media=None, min_free_mb=None) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -226,6 +235,9 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
     if writer: _writer_check(sdir, problems)
     if model: _model_check(model, model_name, problems, transport)
     if media is not None: _media_check(media, sdir, problems)
+    if min_free_mb is not None:  # a missing backups dir is backup-age's problem only
+        _disk_check("state", sdir, min_free_mb, problems)
+        if backups is not None and os.path.isdir(backups): _disk_check("backups", backups, min_free_mb, problems)
     return problems, info, False
 
 def fingerprint(problems) -> str:
@@ -260,7 +272,9 @@ def main(argv=None, now=None, transport=None) -> int:
     parser.add_argument("--unverified-hours", type=int, default=72)
     parser.add_argument("--paused-hours", type=int, default=24)
     parser.add_argument("--writer", action="store_true")
+    parser.add_argument("--min-free-mb", type=int)  # default off: output unchanged without it
     args = parser.parse_args(argv)
+    if args.min_free_mb is not None and args.min_free_mb < 1: parser.error("--min-free-mb must be >= 1")
     hours = (args.backup_hours, args.inbox_unreadable_hours, args.unverified_hours, args.paused_hours)
     if min(args.outbox_minutes, args.inbox_minutes, *hours) < 1:
         parser.error("minutes and hours must be >= 1")
@@ -277,7 +291,8 @@ def main(argv=None, now=None, transport=None) -> int:
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
                                    args.inbox_minutes, args.writer, args.inbox_unreadable_hours, model=model,
                                    model_name=args.model_name, transport=transport, media=args.media,
-                                   unverified_hours=args.unverified_hours, paused_hours=args.paused_hours)
+                                   unverified_hours=args.unverified_hours, paused_hours=args.paused_hours,
+                                   min_free_mb=args.min_free_mb)
     try:
         notify = _remember(seen, fingerprint(problems)) if seen else bool(problems)
     except OSError:  # fail open: an unrecorded fingerprint must not silence an alert; the detail names no path

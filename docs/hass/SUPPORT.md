@@ -111,6 +111,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** restore the named originals from the newest verified backup into a drill dir first (`python3 hass/statebackup.py restore BACKUP --into NEWDIR --worktree DRILLWT --paused --media-into NEWMEDIA`), then copy only those originals back.
 - **Stop and ask:** before deleting or renaming anything in the store.
 
+### `disk-low`
+- **Means:** with `--min-free-mb MB`: the filesystem holding the state dir (`state: <n> MB free`) or the `--backups` dir (`backups: <n> MB free`) has less than MB megabytes available (rounded down to 50 MB), or its free space cannot be read (`free space unreadable`). Writes and backups fail once it is full. No path is printed.
+- **Check first:** `df -h DIR` on that dir; on the Mac, free space in System Settings > General > Storage.
+- **Next step:** free space only from files known to be safe to remove that are not Hass state, backups or owner files, then re-run the check.
+- **Stop and ask:** before deleting anything owner-related; never delete or rotate backups to make room without the owner.
+
 ### `paused-long`
 - **Means:** changes have been paused for longer than `--paused-hours` (default 24; `over <N> h`), or the pause time cannot be read (`unreadable time`). Every approved change is held until someone sends `resume changes`. The `paused` info line still shows when.
 - **Check first:** ask the owner why changes are paused; the owner sends `status` to see the waiting drafts.
