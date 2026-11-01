@@ -206,7 +206,7 @@ class StatusTests(StoreMixin, H06TestCase):
         applied = self.apply("desc")
         self.assertEqual(applied["state"], "applied")
         self.assertEqual(self.status()[-1], f"Last change: {applied['code']} {applied['summary']} - " + NOT_ON_SITE.format(
-            why="The preview check failed (simulated check failure)"))
+            why="The preview check failed (products photo-product-001: simulated check failure)"))
         self.assertEqual(self.commits(), 1)
 
     def test_undo_while_paused_is_proposed_but_gated(self):

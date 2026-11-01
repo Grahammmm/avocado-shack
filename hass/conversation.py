@@ -66,6 +66,7 @@ INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT);
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
@@ -706,9 +707,19 @@ class Conversation:
         change = self.editor.show(row["change_id"]).get("change") or {}
         if not change.get("records"): return None, "no change record"
         files = {p: (wt / p).read_bytes() for p in editor_mod.GENERATED_PATHS}  # the committed files
-        shot = self.previewer.capture(files, preview_mod.target_for(change["records"][0]),
-                                      self.sdir / "screenshots" / f"{row['change_id']}-result.png")
-        return (shot["png"], None) if shot["ok"] else (None, shot["error"])
+        picked, png = [], None  # AV1737-08: each touched record with a distinct target, in order
+        for record in change["records"]:
+            target = preview_mod.target_for(record)
+            if all(target != t for _r, t in picked): picked.append((record, target))
+        for i, (record, target) in enumerate(picked[:VERIFY_MAX], 1):
+            shot = self.previewer.capture(files, target, self.sdir / "screenshots" /
+                                          f"{row['change_id']}-result{'' if i == 1 else f'-{i}'}.png")
+            if not shot["ok"]: return None, f"{record['collection']} {record['key']}: {shot['error']}"
+            png = shot["png"] if i == 1 else png  # the reply keeps the first record's screenshot
+        if picked[VERIFY_MAX:]:
+            print(f"verify {row['change_id']}: over {VERIFY_MAX} records, not checked: "
+                  + ", ".join(f"{r['collection']} {r['key']}" for r, _t in picked[VERIFY_MAX:]), file=sys.stderr)
+        return png, None
 
     def _verify_pending(self):
         if self.previewer is None: return
