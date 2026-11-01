@@ -9,10 +9,20 @@ from unittest import mock
 
 from hass import editor, health, statebackup
 from hass.tests.test_conversation import T0
-from hass.tests.test_statebackup import PRIVATE, SCRIPT, BackupTestCase, tree
+from hass.tests.test_statebackup import PRIVATE, SCRIPT, BackupTestCase, tree, without_tmp
 
 FIXED, SENTINEL = T0 + timedelta(minutes=3), "SENTINEL-drill-owner-text"
 KEYS = {"result", "state", "worktree", "files", "paused", "health_problems", "health_info", "history"}
+# A mocked health detail the drill line must never carry. The NUL byte makes it impossible in any filesystem path (POSIX
+# paths are NUL-terminated C strings), so the temp dirs the line rightly names can never contain it by accident.
+DETAIL = "SECRET-DETAIL\0SENTINEL"
+
+def strings(value):  # every key and string in decoded JSON: a leaked NUL is escaped in the raw line, intact once decoded
+    if isinstance(value, dict):
+        for key, item in value.items(): yield key; yield from strings(item)  # noqa: E702
+    elif isinstance(value, list):
+        for item in value: yield from strings(item)
+    elif isinstance(value, str): yield value
 
 class DrillCommandTests(BackupTestCase):
     def cli(self, *argv):  # (exit code, the one JSON line, raw stdout), in process so mocks apply
@@ -54,7 +64,8 @@ class DrillCommandTests(BackupTestCase):
                              [("paused", "1", "statebackup-restore")])
         hist = json.dumps(editor.history(state=str(new)))
         self.assertIn(SENTINEL, hist)  # the restored history holds it; the drill line never does
-        for text in (SENTINEL, *PRIVATE, "kumquat", "product.", "chg-"): self.assertNotIn(text, run.stdout, text)
+        out = without_tmp(run.stdout, self.tmp)  # the paths it rightly names may hold any word via TMPDIR
+        for text in (SENTINEL, *PRIVATE, "kumquat", "product.", "chg-"): self.assertNotIn(text, out, text)
         self.assertEqual(run.stderr, "")
 
     def test_corrupt_backup_stops_at_verify_and_makes_nothing(self):
@@ -103,15 +114,15 @@ class DrillCommandTests(BackupTestCase):
         backup = self.backup()
         cases = (([{"check": "db-integrity", "detail": "database unreadable"}], False, "db-integrity"),
                  ([{"check": "inbox-integrity", "detail": "1 issue(s)"}], False, "inbox-integrity"),
-                 ([{"check": "settings", "detail": "SECRET-DETAIL-SENTINEL"}], False, "settings"),
-                 ([{"check": "state", "detail": "SECRET-DETAIL-SENTINEL"}], True, "state"))
+                 ([{"check": "settings", "detail": DETAIL}], False, "settings"),
+                 ([{"check": "state", "detail": DETAIL}], True, "state"))
         for i, (problems, unsafe, check) in enumerate(cases):
             new = self.tmp / f"restored-{i}"
             with self.subTest(check=check), mock.patch.object(health, "check", return_value=(problems, [], unsafe)):
                 code, got, out = self.cli(*self.drill_args(backup, new))
                 self.assertEqual((code, got["result"], got["step"], got["health_problems"]),
                                  (1, "drill-failed", "health", [check]))
-                self.assertNotIn(problems[0]["detail"], out)  # ids only, never the detail
+                self.assertFalse([s for s in strings(got) if problems[0]["detail"] in s], out)  # ids only, no detail
                 self.assertTrue((new / statebackup.DB).is_file())  # left in place for inspection
                 self.assertEqual(statebackup.verify(str(backup))["result"], "ok")
 
