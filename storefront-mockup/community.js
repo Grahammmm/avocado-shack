@@ -1,7 +1,9 @@
 (()=>{
 let club, preview;
 const dateLabel=e=>new Date(e.startsAt).toLocaleString('en-US',{timeZone:e.timezone||'America/Los_Angeles',weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
-const upcoming=e=>e.status==='scheduled'&&new Date(e.startsAt)>new Date();
+const pacificDay=d=>new Date(d).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});
+const upcoming=e=>e.status==='scheduled'&&(new Date(e.startsAt)>new Date()||pacificDay(e.startsAt)===pacificDay(Date.now()));
+const hikeDate=e=>new Date(e.startsAt)<=new Date()?`Today — started ${new Date(e.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})}`:dateLabel(e);
 const trailById=id=>(club.routeIdeas||[]).find(t=>t.id===id);
 const metric=(label,value)=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`;
 function attendance(e){const n=Number.isInteger(e.confirmedGuests)&&e.confirmedGuests>=0?e.confirmedGuests:0;return `<p class="hike-attendance"><strong data-confirmed-guests>${n}</strong> confirmed ${n===1?'guest':'guests'}</p>`}
@@ -30,7 +32,7 @@ function sampleHistory(item,index){
 function render(){
  const next=club.events.filter(upcoming).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt));
  const demo=preview?.enabled&&preview.upcoming&&trailById(preview.upcoming.trailId);
- $('#upcoming-hikes').innerHTML=next.length?next.map(e=>`<article class="hike-event"><p class="label">THE NEXT HIKE</p><p class="hike-date">${esc(dateLabel(e))}</p><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${attendance(e)}${details(e)}${e.rsvpOpen?`<p class="club-small">${e.remaining===null?'RSVPs open':`${e.remaining} places available`}</p><button class="button" data-rsvp="${esc(e.id)}" ${e.remaining===0?'disabled':''}>${e.remaining===0?'This hike is full':'RSVP to this hike ↗'}</button>`:'<p class="club-small">RSVP details will be shared when confirmed.</p>'}</article>`).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h3>The next walk starts here.</h3><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
+ $('#upcoming-hikes').innerHTML=next.length?next.map(e=>`<article class="hike-event"><p class="label">THE NEXT HIKE</p><p class="hike-date">${esc(hikeDate(e))}</p><h3>${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${attendance(e)}${details(e)}${e.rsvpOpen?`<p class="club-small">${e.remaining===null?'RSVPs open':`${e.remaining} places available`}</p><button class="button" data-rsvp="${esc(e.id)}" ${e.remaining===0?'disabled':''}>${e.remaining===0?'This hike is full':'RSVP to this hike ↗'}</button>`:'<p class="club-small">RSVP details will be shared when confirmed.</p>'}</article>`).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h3>The next walk starts here.</h3><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
  const past=club.events.filter(e=>e.status==='completed').sort((a,b)=>new Date(b.startsAt)-new Date(a.startsAt));
  const samplePast=!past.length&&preview?.enabled&&(preview.past||[]).some(e=>trailById(e.trailId));
  $('#history-context').textContent=samplePast?'Sample archive · these outings are not confirmed club history.':'Places and memories from our walks together.';
