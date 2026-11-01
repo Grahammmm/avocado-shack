@@ -40,10 +40,10 @@ def _touch(before, store):
 def _set_hours(content, args, ctx):
     hours = list(args["hours"])
     if len(hours) > MAX_HOURS_LINES:
-        return Refused(f"at most {MAX_HOURS_LINES} hours lines")
+        return Refused(f"at most {MAX_HOURS_LINES} hours lines (you sent {len(hours)})")
     for i, line in enumerate(hours):
         if len(line) > MAX_HOURS_LINE:
-            return Refused(f"hours line {i} is longer than {MAX_HOURS_LINE} characters")
+            return Refused(f"hours line {i + 1} is longer than {MAX_HOURS_LINE} characters")
     first_seen = {}
     for i, line in enumerate(hours):
         j = first_seen.setdefault(_line_key(line), i)
