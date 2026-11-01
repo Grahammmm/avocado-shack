@@ -1,4 +1,4 @@
-"""NB-AV-05 (H03/H05): organic, origin and maker claims a draft adds that the owner did not say.
+"""NB-AV-05 (H03/H05): organic, origin, grade, process, diet and maker claims a draft adds that the owner did not say.
 
 Pure and stdlib-only. After the editor prepares a draft, every text field it changes is scanned for claim terms that
 are new (more of them than before) and absent from the owner's message; a new producerKey must name a maker the owner
@@ -9,7 +9,10 @@ import re
 import unicodedata
 
 TERMS = ("organic", "certified", "pesticide-free", "spray-free", "non-gmo", "local", "locally", "grown in", "made in",
-         "raised in", "harvested in", "sourced from", "produced in", "family farm", "estate")
+         "raised in", "harvested in", "sourced from", "produced in", "family farm", "estate",
+         "extra virgin", "cold pressed", "first press", "unfiltered", "unpasteurized", "raw honey", "gluten-free",
+         "dairy-free", "nut-free", "sugar-free", "vegan", "kosher", "halal", "all natural", "no preservatives", "grass-fed",
+         "pasture-raised", "wild-caught")
 _PUNCT = str.maketrans({**{c: "'" for c in "\u2018\u2019\u201b\u02bc\u0060\u00b4\u2032"},
                         **{c: '"' for c in "\u201c\u201d\u201e\u2033"}, **{chr(c): "-" for c in range(0x2010, 0x2016)}})
 
