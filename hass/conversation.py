@@ -14,8 +14,8 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass import interpret_check  # noqa: E402
-from hass.content_model import ContentError, load_and_validate  # noqa: E402
-from hass.ops import hikes, load_registry  # noqa: E402
+from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
+from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
@@ -23,7 +23,7 @@ KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
                         r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?")  # H17
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
-MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)", re.IGNORECASE | re.DOTALL)
+MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX = 20
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
@@ -172,6 +172,9 @@ def parse_memory(text: str):
     if match and match[1]:
         key, colon, value = (match[2] or "").partition(":")
         return "remember", key.strip().lower(), value.strip() if colon else ""
+    if match and match[6]:  # ("alias", name, product id or maker key); a missing part is refused, not guessed
+        name, colon, ident = (match[7] or "").partition(":")
+        return "alias", name.strip(), ident.strip() if colon else ""
     match = MEMORY_RE.fullmatch(re.sub(r"!+$", "", text.strip()))  # a key may end in "." (KEY_RE), never "!"
     if match and match[3]: return "forget", match[4].lower(), None
     match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
@@ -567,6 +570,7 @@ class Conversation:
             more = [f"… and {len(rows) - MEMORY_LIST_MAX} more."] if len(rows) > MEMORY_LIST_MAX else []
             self._reply("\n".join([f"Saved ({len(rows)}):"] + lines + more) if rows else "Nothing saved.")
             return "memory-list"
+        if verb == "alias": return self._alias(msg, key, value)
         valid = memory_mod.KEY_RE.fullmatch(key) is not None
         if verb == "forget":
             if not valid or self.memory.get(key) is None:
@@ -578,6 +582,7 @@ class Conversation:
         problem = "key must be 1–64 of a-z 0-9 . -" if not valid else None
         if valid and (not memory_mod._clean(value) or len(value) > memory_mod.MAX_VALUE):
             problem = f"text must be 1–{memory_mod.MAX_VALUE} plain characters"
+        if valid and key.startswith("alias."): problem = "send alias <name>: <id> to save an alias"
         old, source = (self.memory.get(key) if valid else None), f"owner-stated:{msg.provider_id}"
         try:
             if problem is None and old is None: self.memory.remember(key, value, "fact", source)
@@ -590,6 +595,38 @@ class Conversation:
         self._reply((f"Saved {key}: {value}." if old is None else f"Updated {key} (was: {old}).")
                     + f" Send forget {key} to remove it.")
         return "memory-saved" if old is None else "memory-updated"
+
+    def _alias(self, msg, name, ident) -> str:
+        """`alias <name>: <id>` saves memory alias.<slug> = product:<id> | maker:<key>, only if that record exists now."""
+        key, found = "alias." + catalog._fold(name).replace(" ", "-"), []
+        problem = ("alias name must be 1–60 plain letters, digits, spaces, . or -" if not memory_mod._clean(name)
+                   or len(name) > 60 or not memory_mod.KEY_RE.fullmatch(key[6:]) or not memory_mod.KEY_RE.fullmatch(key)
+                   else "send alias <name>: <product id or maker key>" if not ident else None)
+        try:  # the current catalog, read from the writer worktree as _hike_lines does
+            content = None if problem else load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+            found = [] if problem else [("product", p, p["status"]) for p in content.products if p["id"] == ident] + (
+                [("maker", m, "hidden" if m.get("hidden") else "visible")] if (m := content.makers.get(ident)) else [])
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            problem = "the catalog is unavailable"
+        problem = problem or (f"no product or maker {ident}" if not found
+                              else f"{ident} is both a product and a maker" if len(found) > 1 else None)
+        if problem:
+            self._reply(f"Not saved: {problem}.")
+            return "memory-invalid"
+        old, value, source = self.memory.get(key), f"{found[0][0]}:{ident}", f"owner-stated:{msg.provider_id}"
+        self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
+        kind, rec, status = found[0]
+        target = f"{kind} {ident} ({rec['name']}" + ("" if status in ("active", "visible") else f", {status}") + ")"
+        self._reply((f"Saved alias {name} → " if old is None else f"Updated alias {name} (was: {old}) → ")
+                    + f"{target}. Send forget {key} to remove it.")
+        return "memory-saved" if old is None else "memory-updated"
+
+    def aliases(self) -> dict:
+        """Read-only H15 aliases {name: (kind, id)} from active memory rows, for catalog.lookup(aliases=…)."""
+        if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
+        rows = [(r["key"][6:], r["value"].partition(":")) for r in self.memory.list() if r["key"].startswith("alias.")]
+        return {slug.replace("-", " "): (kind, ident) for slug, (kind, colon, ident) in rows
+                if colon and kind in ("product", "maker")}
 
     # -- H17: status, pause changes, resume changes ----------------------------------------------------------------
     def _paused(self):

@@ -26,6 +26,7 @@ The two note commands are stricter:
 | `remember <key>: <text>` | Saves a note for Hass (key: a-z, 0-9, `.` or `-`). Sending the same key again updates it. | `remember parking: use the back lot` |
 | `forget <key>` | Deletes that saved note. | `forget parking` |
 | `memory` | Lists the saved notes (up to 20). | `memory` |
+| `alias <name>: <id>` | Saves your own name for a product id or maker key that exists now, so a lookup of that name finds it. Send `forget alias.<name with - for spaces>` to remove it. | `alias green jam: photo-product-001` |
 
 Saved notes never change the site, and pause does not affect them.
 
