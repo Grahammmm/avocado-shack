@@ -9,6 +9,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  assert.equal(await page.locator('[data-source],.sourcing-filters').count(),0);
  assert.equal(await page.locator('[data-add],#bag,#boxes,#merch,#owner,#order-preview,.price,[data-product],.food-detail,#hikes').count(),0);
  assert.doesNotMatch(await page.locator('body').innerText(),/\$\d|add to basket|pickup|local delivery|weekly boxes|online shop|merchandise|Discover this food|Food & maker story/i);
+ const countText=async()=>(await page.locator('#catalog-count').textContent()).split(' \u00b7 ')[0],fullCount=await countText();assert.equal(fullCount,(await page.evaluate(()=>catalog.length))+' selections');
  await page.locator('#product-search').fill('Cambria');const count=await page.locator('#catalog-grid article').count();assert.ok(count>0);
  assert.ok((await page.locator('#catalog-grid .origin-label').allTextContents()).every(t=>t.includes('Cambria')));
  assert.ok(await page.locator('#catalog-grid .maker-story a[href^="https://"]').count());
@@ -19,8 +20,17 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await summary.click();assert.equal(await story.evaluate(e=>e.open),true);await summary.click();assert.equal(await story.evaluate(e=>e.open),false);
  // Product imagery no longer opens a separate dialog.
  await page.locator('#catalog-grid .product-image').first().click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),false);
+ // RF1650-8: accents and curly apostrophes are folded in both the search term and the product text.
+ const q=async t=>{await page.locator('#product-search').fill(t);return page.evaluate(()=>({n:filteredProducts().length,ids:filteredProducts().map(p=>p.id).sort(),cards:document.querySelectorAll('#catalog-grid article').length,names:[...document.querySelectorAll('#catalog-grid article h3')].map(e=>e.textContent)}))};
+ for(const [t,want] of [['jalapenos','Jalape\u00f1os'],['JALAPE\u00d1OS','Jalape\u00f1os'],['chevre','Ch\u00e8vre'],['montana','Monta\u00f1a']]){const r=await q(t);assert.ok(r.cards>0&&r.names.some(n=>n.includes(want)),t);}
+ const lion=await page.evaluate(()=>catalog.filter(p=>/lion\u2019s mane/i.test(p.name)).map(p=>p.id).sort());assert.equal(lion.length,2);
+ for(const t of ["lion's",'lion\u2019s','LION\u2018S','lion\u02bcs']){const r=await q(t);assert.deepEqual(r.ids,lion,t);assert.equal(r.cards,2,t);}
+ assert.equal((await q('lions')).n,0,'lions without an apostrophe stays unmatched (pinned)');
+ const ca=await page.evaluate(()=>catalog.filter(p=>producers[p.producerKey]?.place.includes('California\u2019s')).map(p=>p.id));
+ if(ca.length){const r=await q("california's");assert.ok(ca.every(id=>r.ids.includes(id)),"california's");}else console.log("NOTE: no catalog product's maker is placed in California\u2019s; california's check skipped");
  await page.locator('#product-search').fill('');await page.locator('[data-filter="fruit"]').click();assert.equal(await page.locator('#catalog-grid article:not([data-category="fruit"])').count(),0);
  await page.locator('#product-search').fill('unfindablefoo');assert.equal(await page.locator('#catalog-grid article').count(),0);await page.locator('#product-search').fill('');await page.locator('[data-filter="all"]').click();
+ assert.equal(await countText(),fullCount,'empty term shows the full catalog count');
  for(let i=0;i<22;i++){await page.locator('#catalog-sentinel').scrollIntoViewIfNeeded();await page.waitForTimeout(100);}
  const all=await page.locator('#catalog-grid article').count();assert.equal(all,170);
  const content=await page.evaluate(()=>{
