@@ -130,7 +130,7 @@ class AttachmentReplyTests(ConversationTestCase):
 
     def test_strangers_echoes_and_edits_behave_as_before(self):
         cases = [("ignored", dict(pid="s1", handle={"address": STRANGER})), ("echo", dict(pid="e1", isFromMe=True)),
-                 ("edited-ignored", dict(pid="u1"))]
+                 ("edited-ignored", dict(pid="u1", dateEdited=1793638870000))]  # AV1737-01: no dateEdited = receipt
         for disposition, kwargs in cases:
             with self.subTest(disposition):
                 ev = photo_event(**kwargs)
