@@ -217,7 +217,7 @@ class ConversationBridgeTests(ConversationTestCase):
                                  for m in inbound), "utf-8")
         self.assertEqual(FixtureAdapter(jsonl).inbound(), inbound)
         self.assertEqual([self.conv.handle(m) for m in inbound],
-                         ["proposed", "duplicate", "echo", "edited-ignored", "ignored"])
+                         ["proposed", "duplicate", "echo", "not-read", "ignored"])
 
     def test_failed_send_stays_unsent_until_the_next_flush(self):
         self.assertEqual(self.conv.handle(normalize(event("new-message"))), "proposed")

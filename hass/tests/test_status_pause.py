@@ -133,13 +133,14 @@ class ReadOnlyTests(StoreMixin, ConversationTestCase):
 
     def test_ignored_and_duplicate_messages_do_not_pause(self):
         draft, _reply = self.propose("hours")
-        cases = [("echo", dict(from_me=True)), ("edited-ignored", dict(kind="edited")),
+        cases = [("echo", dict(from_me=True)), ("not-read", dict(kind="edited")),
                  ("ignored", dict(sender=STRANGER)), ("ignored", dict(chat=GROUP))]
         for text in ("status", "pause changes"):
             for disposition, kwargs in cases:
                 with self.subTest(text=text, case=kwargs):
                     self.assertEqual(self.say(text, **kwargs), disposition)
-                    self.assertEqual((self.replies(), self.conv._paused()), ([], None))
+                    reply = [conversation.NOT_READ_REPLY] if disposition == "not-read" else []
+                    self.assertEqual((self.replies(), self.conv._paused()), (reply, None))
         self.assertEqual(self.say("pause changes", pid="dup"), "pause")
         self.assertEqual(self.say("resume changes"), "resume")
         self.replies()

@@ -10,7 +10,7 @@ from unittest import mock
 
 from hass import inbox as inbox_mod
 from hass.bridge import Drop, EnvelopeError, normalize, seal, unseal
-from hass.conversation import ATTACHMENT_REPLY, Inbound
+from hass.conversation import ATTACHMENT_REPLY, NOT_READ_REPLY, Inbound
 from hass.tests.test_bridge import KEY, NONCE, NOW, OWNER_CHAT, event
 from hass.tests.test_conversation import SETTINGS, STRANGER, T0, ConversationTestCase
 
@@ -130,13 +130,13 @@ class AttachmentReplyTests(ConversationTestCase):
 
     def test_strangers_echoes_and_edits_behave_as_before(self):
         cases = [("ignored", dict(pid="s1", handle={"address": STRANGER})), ("echo", dict(pid="e1", isFromMe=True)),
-                 ("edited-ignored", dict(pid="u1", dateEdited=1793638870000))]  # AV1737-01: no dateEdited = receipt
+                 ("not-read", dict(pid="u1", dateEdited=1793638870000))]  # AV1737-01: no dateEdited = receipt
         for disposition, kwargs in cases:
             with self.subTest(disposition):
                 ev = photo_event(**kwargs)
-                if disposition == "edited-ignored": ev["type"] = "updated-message"
+                if disposition == "not-read": ev["type"] = "updated-message"
                 self.assertEqual(self.conv.handle(normalize(ev)), disposition)
-                self.assertEqual(self.replies(), [])
+                self.assertEqual(self.replies(), [NOT_READ_REPLY] if disposition == "not-read" else [])
         self.assertEqual(self.interpret.call_count, 0)
 
     def test_paused_photo_still_gets_the_reply(self):

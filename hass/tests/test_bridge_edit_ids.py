@@ -103,7 +103,7 @@ class EditConversationTests(ConversationTestCase):
     def test_edit_of_a_handled_message_is_not_a_duplicate(self):
         original, edit = normalize(event("new-message")), normalize(edit_of("new-message", EDIT_MS))
         self.assertEqual([self.conv.handle(m) for m in (original, edit, edit)],
-                         ["proposed", "edited-ignored", "duplicate"])
+                         ["proposed", "not-read", "duplicate"])
 
 
 if __name__ == "__main__":
