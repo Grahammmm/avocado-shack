@@ -37,7 +37,10 @@ REPLIES = {
     "needs-rotation": "This photo is stored sideways, and it has to be stored the right way up, so nothing was changed. "
                       "Please send it again as a screenshot.",
     "many": "Please send one photo at a time (one per message); nothing was saved.",  # NB-AV-10 (H12)
+    "audio": "That looks like a voice note or audio file. I can't understand voice notes yet, so nothing was saved. "
+             "Please type the change as a text message.",  # AV2022-05 (H11/H12)
 }
+AUDIO_BRANDS = (b"M4A ", b"M4B ")
 SHA_RE = re.compile(r"[0-9a-f]{64}")
 JPEG_KEEP = {*range(0xC0, 0xD0), 0xDB, 0xDD}  # SOFn plus DHT C4, JPG C8, DAC CC; DQT; DRI
 JPEG_TAGGED = {0xE0: b"JFIF\0", 0xE2: b"ICC_PROFILE\0", 0xEE: b"Adobe"}  # colour/format only, no location
@@ -51,6 +54,13 @@ class Refused(Exception):
 
 def _prefix(data: bytes):
     return next((kind for kind, magic in KINDS.items() if data.startswith(magic)), None)
+
+def is_audio(data: bytes) -> bool:
+    """True for CAF (iPhone voice note), AMR / AMR-WB, or an ISO-BMFF M4A/M4B; from the bytes only."""
+    return data.startswith((b"caff", b"#!AMR")) or (data[4:8] == b"ftyp" and data[8:12] in AUDIO_BRANDS)
+
+def _unknown(data: bytes) -> str:
+    return "truncated" if _prefix(data) else "audio" if is_audio(data) else "unsupported-type"
 
 def sniff(data: bytes):
     """'jpeg' | 'png' from the magic bytes, or None (unknown type or a truncated upload)."""
@@ -119,7 +129,7 @@ def store_original(root, data: bytes, *, received_at: str, source: str) -> dict:
     if not data: raise Refused("empty")
     if len(data) > MAX_BYTES: raise Refused("too-large")
     kind = sniff(data)
-    if kind is None: raise Refused("truncated" if _prefix(data) else "unsupported-type")
+    if kind is None: raise Refused(_unknown(data))
     sha = hashlib.sha256(data).hexdigest()
     _private_dir(base / "originals")
     folder = base / "originals" / sha[:2]
@@ -141,7 +151,7 @@ def check_photo(data: bytes) -> str:
     if not data: raise Refused("empty")
     if len(data) > MAX_BYTES: raise Refused("too-large")
     kind = sniff(data)
-    if kind is None: raise Refused("truncated" if _prefix(data) else "unsupported-type")
+    if kind is None: raise Refused(_unknown(data))
     (_jpeg_copy if kind == "jpeg" else _png_copy)(data)  # the web-copy filter; its result is discarded
     return kind
 
