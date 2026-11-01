@@ -17,6 +17,7 @@ Private owner-assistant tooling for the Avocado Shack site. Plan: [docs/hass](..
 Not generated: `held-products.json` stays as the historical hold evidence (its sample prices are not copied into the source), and `hiking-preview.json` keeps the labelled sample invitation separate from real events.
 
 Validation is closed: unknown fields are rejected, so prices, units, baskets and similar commerce fields cannot enter the source. Text fields reject markup and `$`; links must be https; categories must match the site filters; `producerKey` must name a maker; active images must exist; events need an exact start with UTC offset, `America/Los_Angeles`, a known status, a meeting point when RSVPs are on and a positive capacity. Route ideas stay undated with RSVPs off, and sample ids cannot become events. Records keep their own field order so the output stays byte-identical.
+Every owner-editable text field has a maximum length in `content_model.TEXT_LIMITS` (one table, counted in code points); a longer value is `<where>: longer than <n> characters`, so ops refuse it as `invalid` before any draft.
 
 ```sh
 python3 hass/sitegen.py --check        # generated site files match the source (CI)
