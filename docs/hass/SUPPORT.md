@@ -77,9 +77,9 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 
 ### `inbox-integrity`
 - **Means:** `inbox.sqlite3` fails its quick check (`<n> issue(s)`) or cannot be opened (`database unreadable`).
-- **Check first:** re-run the check once.
-- **Next step:** `pause changes` if the chat still answers; leave the file untouched. Backups do not hold the inbox, so there is nothing to restore.
-- **Stop and ask:** always. Recreating the queue needs a new start point, which the owner/G decides.
+- **Check first:** re-run the check once; `python3 hass/statebackup.py verify BACKUP` on the newest backup (it checks that backup's `inbox.sqlite3` snapshot).
+- **Next step:** `pause changes` if the chat still answers; leave the damaged file untouched; run the isolated restore drill (below) to see whether the newest good backup's inbox snapshot is intact. A restored inbox can replay or miss messages received after that backup.
+- **Stop and ask:** always. Recreating the queue needs a new start point, which the owner/G decides. Always before any live replacement of `inbox.sqlite3` (attended).
 
 ### `writer`
 - **Means:** with `--writer`: one entry per reason `apply` would refuse the recorded writer worktree: `uncommitted changes`, `branch main` or `detached HEAD` refused, `git user.name`/`user.email` not configured, `main checkout` refused, not the top of a Hass checkout (moved or deleted), or `config.json` missing (`not initialised`) or unreadable. Git runs read-only; no path is printed.
