@@ -32,6 +32,10 @@ Suggested source location for new code: `hass/`, with `adapters/`, `content/`, `
 
 Use explicit states such as received → needs-details → proposed → approved → validating → applied → verified. Also support rejected, expired, failed and reverted. Distinguish an applied change with a pending reply from an unapplied change. A partial failure must enter reconciliation, not blind retry.
 
+## Local-model interpreter (NB-AV-02)
+
+`hass/interpreter_local.py` `LocalInterpreter(base_url, model, system_prompt, timeout=30, transport=None)` sends one Ollama `POST /api/chat` (`stream: false`, `format: "json"`, temperature 0) to a loopback `http` URL only (`127.0.0.1`, `localhost`, `::1`; no userinfo, query or path), with no environment proxy and no redirects. The reply's JSON object is returned as-is for the registry check; any failure (timeout, connection, non-200, body over 256 KiB, bad JSON or shape) returns one fixed `unsupported` reply, so nothing is drafted, and keeps only a reason code in `last_error` (never the URL, prompt or owner text). There is no default model name and nothing is wired into a service yet; tests use a fake transport.
+
 ## Editing tools and data contracts
 
 | Tool family | Allowed inputs / behavior |

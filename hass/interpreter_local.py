@@ -1,0 +1,112 @@
+"""NB-AV-02 (H05): local-model interpreter adapter for the Ollama JSON chat API, behind an injectable transport.
+
+LocalInterpreter(base_url, model, system_prompt).interpret(text, pending) sends one `POST /api/chat` to a loopback
+http URL and returns the decoded JSON object the model wrote, or {"unsupported": FAILED} on any failure. The failure
+reason is kept only as a short code in `last_error` (never the URL, prompt or owner text); nothing is logged.
+Not wired into any service: the operator names the existing local model; nothing is pulled or changed here.
+"""
+import json, urllib.error, urllib.parse, urllib.request  # noqa: E401
+
+LOOPBACK = ("127.0.0.1", "localhost", "::1")
+CHAT_PATH, MAX_BODY, MAX_MODEL = "/api/chat", 256 * 1024, 100
+HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
+FAILED = "I could not work that out right now, so nothing was drafted. Please try again in a few minutes."
+URL_ERROR = "interpreter URL must be loopback http"
+
+
+def check_url(base_url) -> str:
+    """`http://<loopback>[:port]` with no userinfo, query, fragment or path beyond `/`; else ValueError (no URL)."""
+    try:
+        if not isinstance(base_url, str) or "?" in base_url or "#" in base_url or "@" in base_url: raise ValueError
+        parts = urllib.parse.urlsplit(base_url)
+        parts.port  # noqa: B018 - raises ValueError for a malformed port
+        ok = parts.scheme == "http" and parts.hostname in LOOPBACK and parts.path in ("", "/")
+    except ValueError:
+        ok = False
+    if not ok: raise ValueError(URL_ERROR)
+    return f"http://{parts.netloc}"
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None  # a 3xx is a failed call, never followed to another host
+
+
+def _opener():
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)  # no env proxy, no redirect
+
+
+def urllib_transport(url, body, headers, timeout):
+    """(status, body bytes) for one POST, reading at most MAX_BODY + 1 bytes."""
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with _opener().open(request, timeout=timeout) as response:
+            return response.status, response.read(MAX_BODY + 1)
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        return exc.code, b""
+
+
+class _Failed(Exception):
+    pass
+
+
+class LocalInterpreter:
+    """The Conversation interpreter contract: interpret(text, pending) -> dict. Transport is
+    (url, body_bytes, headers, timeout) -> (status, body_bytes); the default never uses a proxy or follows a redirect."""
+
+    def __init__(self, base_url, model, system_prompt, timeout=30, transport=None):
+        self.url = check_url(base_url) + CHAT_PATH
+        if not (isinstance(model, str) and 0 < len(model) <= MAX_MODEL and not any(c.isspace() for c in model)):
+            raise ValueError(f"model must be a name of 1-{MAX_MODEL} characters without spaces")
+        if not (isinstance(system_prompt, str) and system_prompt.strip()):
+            raise ValueError("system prompt must be non-empty text")
+        if type(timeout) is not int or not 1 <= timeout <= 120:
+            raise ValueError("timeout must be a whole number of seconds from 1 to 120")
+        self.model, self.system_prompt, self.timeout = model, system_prompt, timeout
+        self.transport = transport or urllib_transport
+        self.last_error = None
+
+    def _request(self, text, pending) -> bytes:
+        user = json.dumps({"message": text, "pending": pending}, ensure_ascii=False)
+        return json.dumps({"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
+                                                             {"role": "user", "content": user}],
+                           "stream": False, "format": "json", "options": {"temperature": 0}},
+                          ensure_ascii=False).encode("utf-8")
+
+    def _call(self, body) -> dict:
+        try:
+            status, raw = self.transport(self.url, body, dict(HEADERS), self.timeout)
+        except urllib.error.URLError as exc:
+            raise _Failed("timeout" if isinstance(exc.reason, TimeoutError) else "connect") from None
+        except TimeoutError:
+            raise _Failed("timeout") from None
+        except Exception:  # noqa: BLE001 - refused, reset, protocol error: all are "could not reach the model"
+            raise _Failed("connect") from None
+        if status != 200: raise _Failed(f"http-{status}" if type(status) is int else "shape")
+        if not isinstance(raw, (bytes, bytearray)): raise _Failed("shape")
+        if len(raw) > MAX_BODY: raise _Failed("too-large")
+        try:
+            reply = json.loads(raw)
+        except (ValueError, RecursionError):
+            raise _Failed("not-json") from None
+        if not isinstance(reply, dict) or reply.get("done") is not True: raise _Failed("shape")
+        message = reply.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str): raise _Failed("shape")
+        try:
+            result = json.loads(content)
+        except (ValueError, RecursionError):
+            raise _Failed("shape") from None
+        if not isinstance(result, dict): raise _Failed("shape")
+        return result
+
+    def interpret(self, text, pending) -> dict:
+        """The model's decoded JSON object as-is (Conversation's checks decide if it is usable), else the fixed
+        unsupported reply with the reason code in last_error."""
+        self.last_error = None
+        try:
+            return self._call(self._request(text, pending))
+        except _Failed as failure:
+            self.last_error = failure.args[0]
+            return {"unsupported": FAILED}
