@@ -103,8 +103,8 @@ class DrillCommandTests(BackupTestCase):
         backup = self.backup()
         cases = (([{"check": "db-integrity", "detail": "database unreadable"}], False, "db-integrity"),
                  ([{"check": "inbox-integrity", "detail": "1 issue(s)"}], False, "inbox-integrity"),
-                 ([{"check": "settings", "detail": "x"}], False, "settings"),
-                 ([{"check": "state", "detail": "x"}], True, "state"))
+                 ([{"check": "settings", "detail": f"{SENTINEL}-settings"}], False, "settings"),
+                 ([{"check": "state", "detail": f"{SENTINEL}-state"}], True, "state"))  # never in a tmp path
         for i, (problems, unsafe, check) in enumerate(cases):
             new = self.tmp / f"restored-{i}"
             with self.subTest(check=check), mock.patch.object(health, "check", return_value=(problems, [], unsafe)):
