@@ -93,6 +93,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** none in the repo: health only reads and never restarts or changes the model.
 - **Stop and ask:** always before restarting Ollama, pulling or changing a model, or editing its service (attended; tell the operator).
 
+### `guest-counts`
+- **Means:** `unreadable`: the configured RSVP database (`guestCountsDb`) cannot be opened read-only; `unset`: RSVPs are on for an upcoming hike but no RSVP database is configured. Status shows `guest count unavailable` and capacity edits are refused. As an `info` entry `hikes unreadable`: the setting is unset and the writer worktree's `community.json` could not be read. No path is printed.
+- **Check first:** the file exists and is readable by the Hass user.
+- **Next step:** fix the `guestCountsDb` setting in the private config (attended).
+- **Stop and ask:** before editing or copying the RSVP database (it holds guests' names).
+
 ## Info lines
 
 ### `conversation`
