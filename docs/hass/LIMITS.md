@@ -31,6 +31,8 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Hiking club: name, organizer and sender **400 characters** <!-- content_model.TEXT_LIMITS[club][clubName] --> each.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->.
 - A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->.
+- A change request: at most **4000 characters** <!-- conversation.MAX_OWNER_TEXT --> in one message. A longer one is
+  not read; send a shorter change.
 
 ## What Hass never does
 
