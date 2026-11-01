@@ -79,7 +79,7 @@ A CLI read or decode error prints `{"result": "io-error", "problems": ["<ExcName
 - Settings in `<state>/config.json` `settings`: `ownerSenders` (non-empty list), `ownerChat`, `approvalTtlSeconds` (int ≥ 60). Missing or invalid → `ConfigError`; there are no defaults. Real addresses are configuration, never committed.
 - Store `<state>/conversation.sqlite3` (0600): `messages`, `drafts`, `approvals`, `outbox`. Duplicates, `fromMe` echoes, edited messages and anything not from an owner sender in the owner chat get no reply and no state change; for those only the message id and disposition are stored, never the text.
 - `yes|approve|approved` / `no|cancel|reject` (optionally `+ code`) act only on one `proposed` draft; several → the reply lists the codes. Expired, replaced or cancelled codes are named and nothing is written. A code is never reissued: repeating a closed draft (same hash) gets a new code and needs `yes <new code>`, so a late `yes` or `yes <old code>` writes nothing. Stale base → `rejected` (`stale`) and a new proposal that needs its own `yes`.
-- Draft states: `needs-details → proposed | rejected`, `proposed → approved | rejected | expired`, `approved → applied | failed | rejected (stale)`, `applied → verified | reverted`; anything else raises.
+- Draft states: `needs-details → proposed | rejected | expired` (a question lapses after `approvalTtlSeconds` like a proposal; an answer refreshes it, a later one starts a new request), `proposed → approved | rejected | expired`, `approved → applied | failed | rejected (stale)`, `applied → verified | reverted`; anything else raises.
 - Each result and its reply are committed before `flush(adapter)` sends; a failed send leaves the reply queued. On start `recover()` settles drafts left `approved` from the H02 change record (`applied` or `failed`) and never applies again.
 
 ```sh
@@ -170,3 +170,11 @@ No network, no Git writes, no deletion of source data. Limits: drill on isolated
 - `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart; nonces older than one day are pruned when a new one is recorded.
 
 No worker, timer, CLI or live adapter: fixtures only.
+
+## Retention report (H21)
+
+`python3 hass/retention.py report --state DIR --days N [--media ROOT] [--backups DIR]` prints one JSON line: how many inbox and conversation rows, outbox replies, drafts, screenshots, photo originals (and web copies) and state backups are older than N days, with the oldest kept date of each. `--days` is required (a whole number ≥ 1).
+
+- Read-only: SQLite opens with `mode=ro`, nothing is created, written or deleted (`"deletes": 0`). No ids, text or file names are printed.
+- A missing or unreadable store reports `"unavailable"` (exit 1); an unsafe path (missing, symlink) exits 2. A photo whose sidecar has no `received_at` counts as `undated`, never guessed.
+- The owner picks the retention period (owner action 4). Nothing deletes or prunes yet; that is a later unit.
