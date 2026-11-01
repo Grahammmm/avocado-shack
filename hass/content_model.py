@@ -52,6 +52,17 @@ EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
 MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
+# Maximum length (Python len: code points, so "é" written as e + combining accent counts 2) of every owner-editable
+# text field. Each limit is at least 1.5x the longest current value (test_text_limits checks the real content).
+# Store limits are the constants above, listed here so one table documents every limit.
+TEXT_LIMITS = {
+    "product": {"name": 80, "brand": 60, "displayBrand": 60, "category": 40, "description": 600, "imageAlt": 200},
+    "maker": {"name": 80, "place": 60, "story": 600},
+    "event": {f: 400 for f in EVENT_TEXT_FIELDS} | {"title": 80, "description": 800, "meetingPoint": 160, "recap": 2000},
+    "routeIdea": {f: 600 for f in ROUTE_IDEA_FIELDS if f not in ("id", "sourceUrl", "status", "rsvpEnabled")},
+    "club": {f: 400 for f in ("clubName", "organizer", "intendedSender")},
+    "store": {"streetAddress": MAX_ADDRESS_PART, "town": MAX_ADDRESS_PART, "hoursLine": MAX_HOURS_LINE},
+}
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 IMAGE_RE = re.compile(r"^assets/products/[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(webp|jpg|jpeg|png)$")
@@ -117,10 +128,12 @@ def load_content(content_dir: Path = CONTENT_DIR) -> Content:
     )
 
 
-def _text(problems, where, value, *, allow_empty=False, plain=True):
+def _text(problems, where, value, *, allow_empty=False, plain=True, limit=None):
     if not isinstance(value, str):
         problems.append(f"{where}: must be a string")
         return
+    if limit is not None and len(value) > limit:
+        problems.append(f"{where}: longer than {limit} characters")
     if (m := INVISIBLE_RE.search(value)):
         problems.append(f"{where}: contains invisible or control character U+{ord(m.group()):04X}")
     if not allow_empty and not value.strip():
@@ -173,17 +186,19 @@ def validate_products(problems, products, makers, site_dir: Path | None):
         status = rec.get("status")
         if status not in PRODUCT_STATUSES:
             problems.append(f"{where}: status must be one of {PRODUCT_STATUSES}")
+        limits = TEXT_LIMITS["product"]
         for field in ("name", "brand"):
-            _text(problems, f"{where}.{field}", rec.get(field))
-        if rec.get("category") not in CATEGORIES:
-            problems.append(f"{where}: category {rec.get('category')!r} not in {CATEGORIES}")
+            _text(problems, f"{where}.{field}", rec.get(field), limit=limits[field])
+        category = rec.get("category")
+        if isinstance(category, str) and len(category) > limits["category"]:
+            problems.append(f"{where}.category: longer than {limits['category']} characters")
+        elif category not in CATEGORIES:
+            problems.append(f"{where}: category {category!r} not in {CATEGORIES}")
         image = rec.get("image")
         if not isinstance(image, str) or not IMAGE_RE.fullmatch(image):
             problems.append(f"{where}: image must be assets/products/<file> ({image!r})")
         if "imageAlt" in rec:
-            _text(problems, f"{where}.imageAlt", rec["imageAlt"])
-            if isinstance(rec["imageAlt"], str) and len(rec["imageAlt"]) > 200:
-                problems.append(f"{where}.imageAlt: longer than 200 characters")
+            _text(problems, f"{where}.imageAlt", rec["imageAlt"], limit=limits["imageAlt"])
         if status == "held":
             hold = rec.get("hold")
             if _closed_keys(problems, f"{where}.hold", hold, HOLD_FIELDS, ("reason", "source")):
@@ -199,8 +214,8 @@ def validate_products(problems, products, makers, site_dir: Path | None):
         for field in PRODUCT_PUBLIC_FIELDS:
             if field not in rec:
                 problems.append(f"{where}: missing field {field!r}")
-        _text(problems, f"{where}.description", rec.get("description"))
-        _text(problems, f"{where}.displayBrand", rec.get("displayBrand"))
+        for field in ("description", "displayBrand"):
+            _text(problems, f"{where}.{field}", rec.get(field), limit=limits[field])
         key = rec.get("producerKey")
         if key is not None and (not isinstance(key, str) or key not in makers):
             problems.append(f"{where}: producerKey {key!r} is not a maker in makers.json")
@@ -224,7 +239,7 @@ def validate_makers(problems, makers):
         if "hidden" in rec and rec["hidden"] is not True:
             problems.append(f"{where}.hidden: must be true when present")
         for field in ("name", "place", "story"):
-            _text(problems, f"{where}.{field}", rec.get(field))
+            _text(problems, f"{where}.{field}", rec.get(field), limit=TEXT_LIMITS["maker"][field])
         _https(problems, f"{where}.url", rec.get("url"))
 
 
@@ -249,7 +264,7 @@ def validate_community(problems, community):
     club = community.get("club")
     if _closed_keys(problems, "community.club", club, CLUB_FIELDS, CLUB_FIELDS):
         for field in ("clubName", "organizer", "intendedSender"):
-            _text(problems, f"community.club.{field}", club.get(field))
+            _text(problems, f"community.club.{field}", club.get(field), limit=TEXT_LIMITS["club"][field])
         if club.get("emailConnected") is not False:
             problems.append("community.club.emailConnected: email delivery is not connected; must be false")
     ideas = community.get("routeIdeas")
@@ -268,7 +283,7 @@ def validate_community(problems, community):
             idea_ids.add(rid)
         for field in ROUTE_IDEA_FIELDS:
             if field not in ("sourceUrl", "status", "rsvpEnabled", "id"):
-                _text(problems, f"{where}.{field}", idea.get(field))
+                _text(problems, f"{where}.{field}", idea.get(field), limit=TEXT_LIMITS["routeIdea"][field])
         _https(problems, f"{where}.sourceUrl", idea.get("sourceUrl"))
         # Route ideas are undated suggestions; they never take RSVPs.
         if idea.get("status") != "idea":
@@ -291,7 +306,7 @@ def validate_community(problems, community):
             event_ids.add(eid)
         if isinstance(eid, str) and eid.startswith(("preview-", "idea-")):
             problems.append(f"{where}: sample/route-idea ids cannot become real events")
-        _text(problems, f"{where}.title", ev.get("title"))
+        _text(problems, f"{where}.title", ev.get("title"), limit=TEXT_LIMITS["event"]["title"])
         starts = _offset_datetime(problems, f"{where}.startsAt", ev.get("startsAt"))
         if ev.get("timezone") != "America/Los_Angeles":
             problems.append(f"{where}: timezone must be America/Los_Angeles")
@@ -318,7 +333,7 @@ def validate_community(problems, community):
             problems.append(f"{where}: trailId {ev['trailId']!r} is not a route idea")
         for field in EVENT_TEXT_FIELDS:
             if field in ev:
-                _text(problems, f"{where}.{field}", ev[field])
+                _text(problems, f"{where}.{field}", ev[field], limit=TEXT_LIMITS["event"][field])
 
 
 def validate_store(problems, store):

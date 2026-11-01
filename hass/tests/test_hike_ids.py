@@ -53,7 +53,8 @@ class AccentedIdTests(HikeTestCase):
 
     def test_long_accented_title_keeps_the_length_limits(self):
         repo = self.repo()
-        title = ("Señal á " * 12).strip()  # cut lands right after a hyphen, which must not stay at the end
+        title = ("Señal á " * 10).strip()  # cut lands right after a hyphen, which must not stay at the end
+        self.assertEqual(len(title), 79)  # within the 80-code-point event title limit (H01 TEXT_LIMITS)
         first = self.create(repo, title)
         self.assertTrue(first.startswith(f"hike-{DAY}-senal-a-senal-a"), first)
         self.assertEqual(len(first), MAX_ID_BASE - 1)  # ≤ 56: the 56th character was a hyphen and is dropped

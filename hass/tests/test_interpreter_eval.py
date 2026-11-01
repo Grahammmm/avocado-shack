@@ -1,0 +1,150 @@
+"""NB-AV-04 tests: the interpreter eval set and offline scorer. No model, no socket: --live uses a fake transport."""
+
+import contextlib, io, json, os, tempfile, unittest  # noqa: E401
+from collections import Counter
+from pathlib import Path
+
+from hass import interpret_check, interpreter_eval as ev
+from hass.content_model import load_content
+from hass.ops import load_registry
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+CASES, REPLIES = FIXTURES / "interpreter-eval.jsonl", FIXTURES / "interpreter-eval-replies.jsonl"
+REGISTRY, URL = load_registry(), "http://127.0.0.1:11434"
+
+
+def run(*argv, transport=None):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = ev.main([str(a) for a in argv], transport=transport)
+    return code, out.getvalue(), err.getvalue().removeprefix("interpreter_eval: ").strip()
+
+
+def scored(cases, replies): return run("score", "--cases", cases, "--replies", replies)
+
+
+class EvalTestCase(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.cases, self.replies = ev.load_cases(CASES), ev.load_replies(REPLIES)
+        self.rows = CASES.read_text("utf-8").splitlines()
+
+    def write(self, name, rows):
+        path = self.tmp / name
+        path.write_text("".join((r if isinstance(r, str) else json.dumps(r)) + "\n" for r in rows), "utf-8")
+        return path
+
+    def why(self, case_id, reply):
+        case = next(c for c in self.cases if c["id"] == case_id)
+        return [f["why"] for f in ev.score([case], {case_id: reply}, REGISTRY)["failed"]]
+
+
+class ScoreTests(EvalTestCase):
+    def test_recorded_fixture_passes_27_and_names_the_3_wrong(self):
+        code, out, err = scored(CASES, REPLIES)
+        summary = json.loads(out)
+        self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
+                         (0, "", {"cases": 30, "passed": 27, "missing": [], "extra": []}))
+        self.assertEqual(summary["failed"], [
+            {"id": "e06", "why": "ops product.restore but expected product.hide"},  # wrong op
+            {"id": "e13", "why": "op 1 hike.create: missing arg capacity"},  # missing arg
+            {"id": "e25", "why": "expected question, got ops"}])  # answered instead of asking
+        self.assertEqual(json.loads(REPLIES.read_text("utf-8").splitlines()[0]),
+                         {"_note": "synthetic replies for scorer tests; not model output"})
+
+    def test_output_never_holds_a_case_text_or_reply_body(self):
+        _, out, _ = scored(CASES, REPLIES)
+        bodies = [c["text"] for c in self.cases] + [r.get("question") or r.get("unsupported") or "" for r in
+                                                    self.replies.values()]
+        bodies += [s for r in self.replies.values() for c in r.get("ops", []) for v in c["args"].values()
+                   for s in (v if isinstance(v, list) else [v]) if isinstance(s, str)]
+        self.assertTrue(all(len(b) < 4 or b not in out for b in bodies))
+        leak = self.cases[2]["text"]  # replies whose op name or arg value carry owner text
+        named = {"ops": [{"op": leak, "args": {}}], "revises": None}
+        valued = {"ops": [{"op": "product.edit", "args": {"id": "photo-product-081", "name": leak}}], "revises": None}
+        for got in (self.why("e03", named), self.why("e01", valued), self.why("e04", valued)):
+            self.assertTrue(got and leak not in json.dumps(got), got)
+
+    def test_spread_and_expected_ops_valid_against_real_registry_and_catalog(self):
+        content, kinds = load_content(), Counter()
+        products, trails = {p["id"] for p in content.products}, {r["id"] for r in content.community["routeIdeas"]}
+        for case in self.cases:
+            expect = case["expect"]
+            kinds[next(iter(expect)) if "ops" not in expect else "revises" if expect["revises"]
+                  else expect["ops"][0]["op"].split(".")[0]] += 1
+            if "ops" not in expect: continue
+            result = {"ops": expect["ops"], "revises": expect["revises"]}
+            codes = {p["code"] for p in case["pending"]}
+            self.assertIs(interpret_check.check(result, REGISTRY, codes), result, case["id"])  # names/kinds/code
+            for call in expect["ops"]:
+                op, args = call["op"], call["args"]
+                if op.startswith("product.") and "id" in args: self.assertIn(args["id"], products, case["id"])
+                if op in ("maker.edit", "maker.hide", "maker.restore"): self.assertIn(args["key"], content.makers)
+                if "trailId" in args: self.assertIn(args["trailId"], trails)
+        self.assertEqual(kinds, {"product": 8, "maker": 4, "hike": 6, "store": 3, "revises": 3, "question": 3,
+                                 "unsupported": 3})
+
+    def test_missing_and_extra_ids(self):
+        replies = {k: v for k, v in self.replies.items() if k != "e05"} | {"e99": {"question": "?"}}
+        path = self.write("r.jsonl", [{"id": k, "reply": v} for k, v in replies.items()])
+        code, out, _ = scored(CASES, path)
+        summary = json.loads(out)
+        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 26))
+
+    def test_duplicate_id_in_either_file_exits_2(self):
+        dup_cases = self.write("c.jsonl", self.rows[:29] + [self.rows[0]])
+        dup_replies = self.write("r.jsonl", [{"_note": "x"}, {"id": "e01", "reply": {}}, {"id": "e01", "reply": {}}])
+        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 30: duplicate id"))
+        self.assertEqual(scored(CASES, dup_replies), (2, "", "replies line 3: duplicate id"))
+
+    def test_malformed_line_or_29_cases_exits_2_naming_only_the_line(self):
+        broken = self.write("c.jsonl", self.rows[:3] + ['{"id": "e04", "text": "owner words"'] + self.rows[4:])
+        self.assertEqual(scored(broken, REPLIES), (2, "", "cases line 4: not valid JSON"))
+        self.assertEqual(scored(self.write("c29.jsonl", self.rows[:29]), REPLIES),
+                         (2, "", "cases: 29 cases, expected 30"))
+        self.assertEqual(scored(CASES, self.tmp / "absent.jsonl"), (2, "", "replies: unreadable"))
+
+    def test_unknown_op_scores_as_question(self):
+        unknown = {"ops": [{"op": "product.colour", "args": {"id": "photo-product-001"}}], "revises": None}
+        self.assertEqual(self.why("e26", unknown), [])  # must-ask case: the check's question passes
+        self.assertEqual(self.why("e03", unknown), ["expected ops, got question"])
+        self.assertEqual(self.why("e26", "not an object"), ["expected question, got unsupported"])
+
+    def test_revises_args_and_claim_fields(self):
+        def hide(code): return {"ops": [{"op": "product.hide", "args": {"id": "photo-product-098"}}], "revises": code}
+        self.assertEqual(self.why("e22", hide(None)), ["revises differs"])
+        self.assertEqual(self.why("e22", hide("ffff")), ["expected ops, got question"])  # code not waiting
+        self.assertEqual(self.why("e07", hide(None)), ["op 1 product.hide: arg id differs"])
+        add = self.replies["e01"]["ops"][0]
+        claim = {"ops": [{"op": add["op"], "args": {**add["args"], "producerKey": "Etto"}}], "revises": None}
+        self.assertEqual(self.why("e01", claim), ["op 1 product.add: unexpected claim arg producerKey"])
+
+
+class LiveTests(EvalTestCase):
+    def fake(self, calls):
+        def transport(url, body, headers, timeout):
+            calls.append(url)
+            return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
+        return transport
+
+    def test_out_inside_repo_existing_or_bad_url_refused_before_any_request(self):
+        calls, existing, link = [], self.write("exists.jsonl", ["{}"]), self.tmp / "link.jsonl"
+        os.symlink(self.tmp / "nowhere", link)
+        for out, url in ((ev.REPO / "replies.jsonl", URL), (existing, URL), (link, URL),
+                         (self.tmp / "new.jsonl", "http://example.com")):
+            code, stdout, _ = run("--live", "--url", url, "--model", "m", "--out", out, transport=self.fake(calls))
+            self.assertEqual((code, stdout), (2, ""), out)
+        self.assertEqual((calls, existing.read_text("utf-8")), ([], "{}\n"))
+        self.assertFalse((ev.REPO / "replies.jsonl").exists() or (self.tmp / "new.jsonl").exists())
+
+    def test_live_records_one_reply_per_case_that_score_reads(self):
+        calls, out = [], self.tmp / "fresh.jsonl"
+        code, stdout, _ = run("--live", "--url", URL, "--model", "m", "--out", out, transport=self.fake(calls))
+        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 30}, 30))
+        replies = ev.load_replies(out)
+        self.assertEqual(list(replies), [c["id"] for c in self.cases])
+        self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 3)  # only the 3 must-ask cases pass
+
+
+if __name__ == "__main__":
+    unittest.main()
