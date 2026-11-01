@@ -128,6 +128,24 @@ class VerifyStoreTest(unittest.TestCase):
         (self.root / "web").symlink_to(self.tmp / "web-real", target_is_directory=True)
         self.assertEqual(self.verify(1)["problems"][-1], "symlink: web")
 
+    def test_unreadable_directories_are_problems_not_crashes(self):
+        self.build()
+        shard = self.root / "originals" / J[:2]
+        os.chmod(shard, 0)
+        self.addCleanup(os.chmod, shard, 0o700)
+        got = self.problems(1)  # CLI: exit 1, one JSON line, no absolute path, store unchanged
+        self.assertEqual(got, [f"mode: originals/{J[:2]}", f"unreadable: originals/{J[:2]}", f"web orphan: {J[:12]}"])
+        os.chmod(shard, 0o600)  # names listable, entries not stat-able
+        got = media.verify_store(self.root)["problems"]
+        self.assertIn(f"unreadable: originals/{J[:2]}/{J[:12]}.jpg", got)
+        self.assertFalse([p for p in got if str(self.tmp) in p], got)
+        os.chmod(shard, 0o700)
+        os.chmod(self.root, 0)
+        self.addCleanup(os.chmod, self.root, 0o700)
+        self.assertEqual(self.problems(1), ["mode: .", "unreadable: ."])
+        os.chmod(self.root, 0o700)
+        self.assertEqual(self.verify(0)["result"], "ok")
+
     def test_unknown_entries(self):
         self.build()
         wrong = self.root / "originals" / ("00" if P[:2] != "00" else "01")
@@ -160,6 +178,18 @@ class VerifyStoreTest(unittest.TestCase):
         self.root = self.tmp / "link"
         self.root.symlink_to(real, target_is_directory=True)
         self.assertEqual(self.verify(2)["result"], "unsafe")
+        link = self.root
+        for spelling in ("/", "/.", "/./", "//", "/./."):  # lstat would follow the link for these spellings
+            with self.subTest(spelling=spelling), \
+                    mock.patch.object(media.os, "scandir", wraps=os.scandir) as scanned:
+                self.assertEqual(media.verify_store(str(link) + spelling),
+                                 {"result": "unsafe", "problems": ["media root must be a real directory, not a symlink"]})
+                self.assertEqual(scanned.call_count, 0)
+                run = subprocess.run([sys.executable, "hass/media.py", "verify", "--root", str(link) + spelling],
+                                     cwd=REPO_ROOT, capture_output=True, text=True, timeout=60)
+                self.assertEqual((run.returncode, json.loads(run.stdout)["result"]), (2, "unsafe"))
+            with self.subTest(real=spelling):
+                self.assertEqual(media.verify_store(str(real) + spelling)["result"], "ok")
         for root in (REPO_ROOT, REPO_ROOT / "hass", REPO_ROOT / "hass" / ".." / "hass", FIX / "pixel.jpg"):
             with self.subTest(root=str(root)):
                 self.assertEqual(media.verify_store(root)["result"], "unsafe")

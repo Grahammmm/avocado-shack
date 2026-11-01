@@ -267,34 +267,49 @@ def web_copy(root, sha256: str) -> dict:
             "removed": sorted(removed), "path": str(final), "duplicate": have is not None}
 
 def _verify_unsafe(root):  # checked before anything is opened, so a missing root is never created
-    if root is None or str(root) == "": return "a media root is required"
-    try: st = os.lstat(root)
-    except FileNotFoundError: return "media root does not exist"
-    if not stat.S_ISDIR(st.st_mode): return "media root must be a real directory, not a symlink"
+    """(reason, None) when unsafe, else (None, path): the normalized, unresolved root that is checked AND walked.
+
+    abspath drops a trailing '/' or '/.' (with which lstat would follow a symlink root) and collapses '..'
+    lexically, so the entry lstat sees is exactly the one walk scans."""
+    if root is None or str(root) == "": return "a media root is required", None
+    path = os.path.abspath(os.fspath(root))
+    try: st = os.lstat(path)
+    except FileNotFoundError: return "media root does not exist", None
+    except OSError: return "media root cannot be read", None
+    if not stat.S_ISDIR(st.st_mode): return "media root must be a real directory, not a symlink", None
     repo = editor.REPO_ROOT.resolve()
-    return "media root must lie outside the repository" if repo in (p := Path(root).resolve(), *p.parents) else None
+    if repo in (p := Path(path).resolve(), *p.parents): return "media root must lie outside the repository", None
+    return None, path
 
 def verify_store(root) -> dict:
     """Read-only re-hash of the store with sidecar, mode, temp and web-copy checks; a sha is shown as 12 hex only."""
-    if (bad := _verify_unsafe(root)) is not None: return {"result": "unsafe", "problems": [bad]}
+    bad, root = _verify_unsafe(root)
+    if bad is not None: return {"result": "unsafe", "problems": [bad]}
     problems, found, short = set(), {"originals": {}, "web": {}}, lambda rel: SHA_RE.sub(lambda m: m[0][:12], rel)
     def walk(path, rel, depth):  # depth 0 root, 1 originals|web, 2 <aa> (files live here only); links never followed
-        if stat.S_IMODE(os.lstat(path).st_mode) != 0o700: problems.add(f"mode: {rel}")
-        for e in list(os.scandir(path)):  # list() exhausts the iterator, which closes it
+        try:  # an access error is a redacted one-line problem (relative name only), never a crash or a path
+            st = os.lstat(path)
+            if not stat.S_ISDIR(st.st_mode): return problems.add(f"symlink: {short(rel)}")  # swapped since checked
+            if stat.S_IMODE(st.st_mode) != 0o700: problems.add(f"mode: {short(rel)}")
+            entries = list(os.scandir(path))  # list() exhausts the iterator, which closes it
+        except OSError: return problems.add(f"unreadable: {short(rel)}")
+        for e in entries:
             sub, m = e.name if depth == 0 else f"{rel}/{e.name}", depth == 2 and re.fullmatch(r"([0-9a-f]{64})\.(jpg|png|json)", e.name)
-            if e.is_symlink(): problems.add(f"symlink: {short(sub)}")
-            elif depth < 2 and e.is_dir(follow_symlinks=False) and re.fullmatch(("originals|web", "[0-9a-f]{2}")[depth], e.name):
-                walk(Path(e.path), sub, depth + 1)
-            elif depth == 2 and e.name.startswith(".tmp-") and e.is_file(follow_symlinks=False):
-                problems.add(f"leftover temp: {path.name}")
-            elif m and e.is_file(follow_symlinks=False) and m[1][:2] == path.name and not (rel[:3] == "web" and m[2] == "json"):
-                if stat.S_IMODE(e.stat(follow_symlinks=False).st_mode) != 0o600: problems.add(f"mode: {short(sub)}")
-                found[rel.split("/")[0]].setdefault(m[1], {})[m[2]] = e.path
-            else: problems.add(f"unknown entry: {short(sub)}")
+            try:
+                if e.is_symlink(): problems.add(f"symlink: {short(sub)}")
+                elif depth < 2 and e.is_dir(follow_symlinks=False) and re.fullmatch(("originals|web", "[0-9a-f]{2}")[depth], e.name):
+                    walk(Path(e.path), sub, depth + 1)
+                elif depth == 2 and e.name.startswith(".tmp-") and e.is_file(follow_symlinks=False):
+                    problems.add(f"leftover temp: {path.name}")
+                elif m and e.is_file(follow_symlinks=False) and m[1][:2] == path.name and not (rel[:3] == "web" and m[2] == "json"):
+                    if stat.S_IMODE(e.stat(follow_symlinks=False).st_mode) != 0o600: problems.add(f"mode: {short(sub)}")
+                    found[rel.split("/")[0]].setdefault(m[1], {})[m[2]] = e.path
+                else: problems.add(f"unknown entry: {short(sub)}")
+            except OSError: problems.add(f"unreadable: {short(sub)}")
     def read(path, sha):
         try: return _existing(Path(path))  # lstat + O_NOFOLLOW: a link swapped in now is refused, never opened
         except (OSError, Refused): problems.add(f"unreadable: {sha[:12]}")
-    walk(Path(root), ".", 0)
+    walk(Path(str(root)), ".", 0)
     for sha, files in found["originals"].items():
         if not (images := {ext: path for ext, path in files.items() if ext != "json"}): problems.add(f"orphan sidecar: {sha[:12]}")
         for ext, path in images.items():
