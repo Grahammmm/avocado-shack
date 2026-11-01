@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import interpret_check  # noqa: E402
+from hass import interpret_check, media  # noqa: E402
 from hass.content_model import ContentError, load_and_validate  # noqa: E402
 from hass.ops import hikes, load_registry  # noqa: E402
 
@@ -28,6 +28,8 @@ MEMORY_LIST_MAX = 20
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
+PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
+                  "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
@@ -133,7 +135,7 @@ def _local(iso: str) -> str:
     return datetime.fromisoformat(iso).astimezone(LOCAL_TZ).strftime("%Y-%m-%d %H:%M %Z")
 
 
-def load_settings(sdir) -> dict:
+def load_settings(sdir, photos=False) -> dict:
     try:
         settings = json.loads((Path(sdir) / "config.json").read_text("utf-8")).get("settings")
     except (OSError, ValueError, AttributeError):
@@ -145,8 +147,10 @@ def load_settings(sdir) -> dict:
         problems.append("ownerSenders must be a non-empty list of sender addresses")
     if not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
+    root = settings.get("mediaRoot")  # NB-AV-09: required only with a photo source
+    if photos and (not isinstance(root, str) or not root.strip()): problems.append("mediaRoot must be set to use photos")
     if problems: raise ConfigError("; ".join(problems))
-    return {"ownerSenders": tuple(senders), "ownerChat": chat, "approvalTtlSeconds": ttl,
+    return {"ownerSenders": tuple(senders), "ownerChat": chat, "approvalTtlSeconds": ttl, "mediaRoot": root,
             "guestCountsDb": settings.get("guestCountsDb")}  # H17 status only; not validated, not required
 
 
@@ -221,11 +225,12 @@ def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False)
 
 
 class Conversation:
-    def __init__(self, state_dir, editor, interpreter, clock, previewer=None):
+    def __init__(self, state_dir, editor, interpreter, clock, previewer=None, photos=None):
         """previewer (H06, e.g. preview.Previewer(worktree)): proposal screenshots and checked results; None keeps
         the H05 behaviour (no screenshot, an applied draft stays `applied`)."""
         sdir = editor_mod.open_state(state_dir)
-        self.settings, self.editor, self.interpreter, self.clock = load_settings(sdir), editor, interpreter, clock
+        self.settings, self.photos = load_settings(sdir, photos is not None), photos  # fetch(provider_id, n) -> [bytes]
+        self.editor, self.interpreter, self.clock = editor, interpreter, clock
         self.sdir, self.previewer = sdir, previewer
         path = sdir / "conversation.sqlite3"
         os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
@@ -346,16 +351,16 @@ class Conversation:
         if ignored:
             self._record(msg, ignored, owner=False)
             return ignored, None
-        if msg.attachments > 0:  # H12 part 1: the caption is never interpreted; no draft, keyword or approval
+        if msg.attachments > 0 and self.photos is None:  # H12 part 1: the caption is never interpreted
             self._reply(ATTACHMENT_REPLY)
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
-        now, command = self._now(), parse_command(msg.text)
+        now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
         expired = [r for r in self._drafts("state = 'proposed'") if datetime.fromisoformat(r["expires_at"]) <= now]
         if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
         for row in expired: self._move(row, "expired")
-        if command:
-            disposition = self._command(msg, now, *command)
+        if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
+            disposition = self._photo(msg, now) if msg.attachments > 0 else self._command(msg, now, *command)
             self._record(msg, disposition)
             return disposition, None
         memory = parse_memory(msg.text)
@@ -426,6 +431,11 @@ class Conversation:
                 self._reply(result[key])
                 return key
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
+        photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
+                     None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
+        calls = [c for c in result["ops"] if c["op"] == "product.set_photo"] if photo else []
+        if any(c["args"].setdefault("photo", photo) != photo for c in calls):
+            return self._reply("That draft is for another photo.") or "photo-mismatch"
         out = self.editor.prepare(result["ops"])
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
@@ -456,6 +466,23 @@ class Conversation:
             if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
         self._proposal_reply(row, draft)
         return "proposed"
+
+    def _photo(self, msg, now) -> str:  # NB-AV-09: store one photo, then open (or name) its needs-details draft
+        if msg.attachments != 1: return self._reply("One photo at a time, please; nothing was saved.") or "attachment-many"
+        try:
+            sha = media.store_original(self.settings["mediaRoot"], self.photos.fetch(msg.provider_id, 1)[0],
+                                       received_at=msg.received_at or _iso(now), source="owner-chat")["sha256"]
+        except media.Refused as exc:
+            return self._reply(exc.reply) or "photo-refused"
+        dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
+        if dup: return self._reply(f"That photo is already in draft {dup[0]['code']}." + (
+            f" {dup[0]['summary']}" if dup[0]["state"] == "needs-details" else "")) or "photo-duplicate"
+        self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at) VALUES"
+                        " (?, 'needs-details', ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
+                            [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now)))
+        self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
+        caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
+        return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"
 
     def _outcome(self, row, out, now):
         """Store the apply result and its reply in one transaction (before anything is sent)."""
