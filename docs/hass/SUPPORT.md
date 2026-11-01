@@ -137,6 +137,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** the owner sends `resume changes` when the pause is no longer wanted; resuming never applies anything.
 - **Stop and ask:** nobody knows why changes were paused.
 
+### `photo-unused`
+- **Means:** with `--writer`: the writer worktree has `assets/products/photo-<sha>.jpg|png` copies that no product's `image` uses (`<n> unused: <names>`, at most five names, then `and <m> more`), usually left by an undo or a newer photo. Info only: it never changes `ok`, `notify` or the exit code. File names only; no path is printed.
+- **Check first:** `git -C WT log --oneline -- storefront-mockup/assets/products/FILE` to see which change added it, and that no product in `hass/content/products.json` names it.
+- **Next step:** removing a file is an attended operator step: `git rm` it in the writer worktree on its branch, then commit. Health and Hass never delete it.
+- **Stop and ask:** the owner undid that photo because it showed a person, a receipt or a private place (it stays in Git history; tell the operator).
+
 ## Restore
 
 First pick the backup: `python3 hass/statebackup.py list --out BACKUPS` (read-only) names every `hass-state-*` entry, newest first; use one with `complete: true` (`no manifest (interrupted)` is an unfinished backup).
