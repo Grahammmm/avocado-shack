@@ -4,17 +4,35 @@ The photo is named by the sha256 of an original in the private media store (sett
 metadata-free web copy (``media.web_copy``), points the product's ``image`` at
 ``assets/products/photo-<sha[:16]>.<ext>`` and sets ``imageAlt``; the editor writes that file and commits it with the
 content change. Undo restores the old image; the committed photo file stays, unreferenced. No resizing, conversion or
-deletion of old photo files.
+deletion of old photo files. ``imageAlt`` must say what the photo shows: a file name, camera default name, placeholder
+word, the photo id or fewer than 3 letters is refused before the media store is read.
 """
 
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 
 from hass import editor, media
 from hass.ops import Arg, Op, Refused, Touched
 from hass.ops.catalog import _product
+
+_IMAGE_EXT = (".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp", ".tif", ".tiff")
+_CAMERA_RE = re.compile(r"^(img|dsc|dscn|pxl|photo|image)[_ -]?\d{2,}")
+_PLACEHOLDERS = {"photo", "image", "picture", "pic", "img", "product", "product photo", "alt", "n/a", "na", "none", "todo",
+                 "tbd"}
+ALT_REPLY = ("imageAlt should say what the photo shows (for example \"Hass avocados in a wooden crate\"), "
+             "not a file name or placeholder")
+
+
+def _alt_problem(alt, sha):
+    """The fixed owner reply when ``alt`` is a file name, camera name, placeholder, the photo id or too short."""
+    folded = alt.strip().casefold()
+    if (folded.endswith(_IMAGE_EXT) or _CAMERA_RE.match(folded) or folded in _PLACEHOLDERS
+            or sha[:12].casefold() in folded or sum(c.isalpha() for c in folded) < 3):
+        return ALT_REPLY
+    return None
 
 
 def _web_bytes(root, sha):
@@ -35,6 +53,9 @@ def _set_photo(content, args, ctx):
     sha = args["photo"]
     if not media.SHA_RE.fullmatch(sha):
         return Refused("photo must be a stored photo id")
+    problem = _alt_problem(args["imageAlt"], sha)
+    if problem:
+        return Refused(problem)
     root = ctx.settings.get("mediaRoot")
     if not root:
         return Refused("photo store is not configured")
