@@ -641,7 +641,7 @@ class Conversation:
             self._reply(HELP_TEXT)
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
-        if verb == "find": return self._find(code)
+        if verb == "find": return self._find(code) if 1 <= len(code) <= 60 else (self._reply(FIND_USAGE), "find")[1]
         if verb == "history":
             rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT 5").fetchall()
             self._reply("\n".join(["Recent changes:"] + [
@@ -663,11 +663,7 @@ class Conversation:
         return "proposed"
 
     def _find(self, query) -> str:
-        """AV1537-04: read-only catalog.lookup for products, then makers; id, name and status only (never the interpreter,
-        a draft or a memory table). More than FIND_MAX lines ends with a count; `or more` when lookup hit its own cap."""
-        if not 1 <= len(query) <= 60:
-            self._reply(FIND_USAGE)
-            return "find"
+        """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
         try:  # the current catalog, read from the writer worktree as _hike_lines does
             wt = editor_mod._load(str(self.sdir))[2]
             content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
