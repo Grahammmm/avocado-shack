@@ -44,6 +44,8 @@ FIND_MAX, FIND_USAGE = 10, "Send find and 1–60 characters, e.g. find lion's ma
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
+NOT_READ_REPLY = ("I only read new messages, so that reaction or edit changed nothing. "
+                  "Send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
 PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
                   "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
 FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was changed. Please send it again."
@@ -404,9 +406,12 @@ class Conversation:
     def _handle(self, msg, last_try=False):
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone():
             return "duplicate", None
-        s = self.settings
-        ignored = "echo" if msg.from_me else "edited-ignored" if msg.kind != "new" else \
-            "ignored" if msg.chat != s["ownerChat"] or msg.sender not in s["ownerSenders"] else None
+        owner = msg.chat == self.settings["ownerChat"] and msg.sender in self.settings["ownerSenders"]
+        if owner and not msg.from_me and msg.kind in ("edited", "reaction"):  # AV1737-03: never read, never approves
+            self._reply(NOT_READ_REPLY)
+            self._record(msg, "not-read")
+            return "not-read", None
+        ignored = "echo" if msg.from_me else "edited-ignored" if msg.kind != "new" else None if owner else "ignored"
         if ignored:
             self._record(msg, ignored, owner=False)
             return ignored, None

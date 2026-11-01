@@ -114,12 +114,13 @@ class FlowTests(ConversationTestCase):
         self.replies()
         self.propose("desc")
         before = self.drafts()
-        cases = [("duplicate", dict(pid="yes-1")), ("echo", dict(from_me=True)), ("edited-ignored", dict(kind="edited")),
+        cases = [("duplicate", dict(pid="yes-1")), ("echo", dict(from_me=True)), ("not-read", dict(kind="edited")),
                  ("ignored", dict(sender=STRANGER)), ("ignored", dict(chat=GROUP))]
         for disposition, kwargs in cases:
             with self.subTest(case=kwargs):
                 self.assertEqual(self.say("yes", **kwargs), disposition)
-                self.assertEqual((self.replies(), self.commits(), self.drafts()), ([], 1, before))
+                reply = [conversation.NOT_READ_REPLY] if disposition == "not-read" else []
+                self.assertEqual((self.replies(), self.commits(), self.drafts()), (reply, 1, before))
         self.assertEqual(self.say("zqx stranger request", sender=STRANGER), "ignored")
         stored = (self.repo.state / "conversation.sqlite3").read_bytes()
         self.assertNotIn(b"zqx", stored)
@@ -272,8 +273,8 @@ class ConfigAndCliTests(ConversationTestCase):
                              capture_output=True, text=True, cwd=REPO_ROOT)
         self.assertEqual((run.returncode, run.stderr), (0, ""))
         rows = [json.loads(line) for line in run.stdout.splitlines()]
-        self.assertEqual([(r["chat"], r["attachments"]) for r in rows], [(CHAT, [])] * 3)
-        self.assertEqual([r["text"] for r in rows], ["Which hours should Saturday have?",
+        self.assertEqual([(r["chat"], r["attachments"]) for r in rows], [(CHAT, [])] * 4)
+        self.assertEqual([r["text"] for r in rows], ["Which hours should Saturday have?", conversation.NOT_READ_REPLY,
                                                      conversation.NOTHING, "Sorry, I can't do that yet."])
         self.assertEqual(self.commits(), 0)
 
