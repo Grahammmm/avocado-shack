@@ -23,13 +23,16 @@ SOURCE_RE = re.compile(r"[a-z0-9-]{1,32}")
 REPLIES = {
     "empty": "That photo arrived empty. Please send it again.",
     "too-large": "That photo is too large for me (20 MB limit). Please send a smaller copy or a screenshot of it.",
-    "unsupported-type": "I can only use JPEG or PNG photos for now. On iPhone: Settings > Camera > Formats > "
-                        "Most Compatible, or send a screenshot of the photo.",
+    "unsupported-type": "I can't use that file (JPEG or PNG only), so nothing was saved. On iPhone: Settings > Camera > "
+                        "Formats > Most Compatible, or send a screenshot of the photo.",
     "truncated": "That photo arrived incomplete. Please send it again.",
     "corrupt-store": "I could not save that photo safely, so nothing was changed. The operator needs to check the photo store.",
     "not-found": "I could not find that photo any more, so nothing was changed. Please send it again.",
-    "unreadable": "I could not read that photo safely, so nothing was changed. Please send it again as a screenshot.",
-    "needs-rotation": "This photo is stored sideways. Please send it again as a screenshot so it shows the right way up.",
+    "unreadable": "I could not read that photo safely, so nothing was changed. Please send it again as a screenshot "
+                  "(JPEG or PNG, up to 20 MB).",
+    "needs-rotation": "This photo is stored sideways, and it has to be stored the right way up, so nothing was changed. "
+                      "Please send it again as a screenshot.",
+    "many": "Please send one photo at a time (one per message); nothing was saved.",  # NB-AV-10 (H12)
 }
 SHA_RE = re.compile(r"[0-9a-f]{64}")
 JPEG_KEEP = {*range(0xC0, 0xD0), 0xDB, 0xDD}  # SOFn plus DHT C4, JPG C8, DAC CC; DQT; DRI
@@ -117,6 +120,17 @@ def store_original(root, data: bytes, *, received_at: str, source: str) -> dict:
         meta = {"sha256": sha, "kind": kind, "bytes": len(data), "received_at": received_at, "source": source}
         _write_new(sidecar, json.dumps(meta, indent=2, sort_keys=True).encode("utf-8") + b"\n")
     return {"sha256": sha, "kind": kind, "bytes": len(data), "path": str(final), "duplicate": duplicate}
+
+def check_photo(data: bytes) -> str:
+    """NB-AV-10 (H12): the kind, after every store_original and web_copy check on the bytes in memory; writes nothing."""
+    if not isinstance(data, (bytes, bytearray)): raise TypeError("data must be bytes")
+    data = bytes(data)
+    if not data: raise Refused("empty")
+    if len(data) > MAX_BYTES: raise Refused("too-large")
+    kind = sniff(data)
+    if kind is None: raise Refused("truncated" if _prefix(data) else "unsupported-type")
+    (_jpeg_copy if kind == "jpeg" else _png_copy)(data)  # the web-copy filter; its result is discarded
+    return kind
 
 def _check_orientation(tiff: bytes) -> None:
     """EXIF IFD0 Orientation (0x0112): absent or 1 passes; 2-8 -> needs-rotation; malformed EXIF -> unreadable."""
