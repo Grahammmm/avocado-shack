@@ -4,6 +4,8 @@ Pure and stdlib-only. After the editor prepares a draft, every text field it cha
 are new (more of them than before) and absent from the owner's message; a new producerKey must name a maker the owner
 named (by key or by name). Matching is on folded text and whole words: "organically" is not "organic", "locale" is
 not "local". A revert draft (only history.revert ops) restores earlier text and is never checked.
+RF2030-4: an owner word with a negator among the 3 words before it in its clause ("not organic", "isn't local") is not
+said; fail-closed, so "not only organic but local" leaves "organic" unsaid and the owner gets the claim question.
 """
 import re
 import unicodedata
@@ -32,6 +34,22 @@ def _pattern(phrase: str):
 _TERM_RES = tuple((term, _pattern(term)) for term in TERMS)
 
 
+NEGATORS = ("not", "no", "never", "nor", "without", "isn't", "aren't", "wasn't", "weren't", "don't", "doesn't", "didn't",
+            "won't", "cannot", "can't")
+_CLAUSE = re.compile(r"[.!?;:\n]")
+
+
+def _affirmed(rx, owner: str) -> bool:
+    """True when some match of rx in the folded owner text (newlines kept) has no negator among the (up to) 3 words
+    just before it in its clause. Clauses end at . ! ? ; : or a newline; words split on whitespace, , " ( ) stripped."""
+    for clause in _CLAUSE.split(owner):
+        for m in rx.finditer(clause):
+            words = [w for w in (w.strip(',"()') for w in clause[:m.start()].split()) if w]
+            if not set(words[-3:]) & set(NEGATORS):
+                return True
+    return False
+
+
 def _said(phrase, owner: str) -> bool:
     return bool(isinstance(phrase, str) and phrase.strip() and _pattern(phrase).search(owner))
 
@@ -42,6 +60,7 @@ def unstated(draft: dict, owner_text, makers) -> list:
     if all(isinstance(c, dict) and c.get("op") == "history.revert" for c in draft.get("ops") or [None]):
         return []
     owner, records = fold(owner_text or ""), draft.get("records") or []
+    lines = "\n".join(fold(line) for line in str(owner_text or "").splitlines())  # fold() collapses newlines
     known = dict(makers or {})
     known.update({r.get("key"): r["after"] for r in records if r.get("collection") == "makers"
                   and isinstance(r.get("after"), dict)})  # a maker this same draft adds or renames
@@ -60,7 +79,7 @@ def unstated(draft: dict, owner_text, makers) -> list:
                 continue
             text, was = fold(new), fold(old if isinstance(old, str) else "")
             hits += [(where, term) for term, rx in _TERM_RES
-                     if len(rx.findall(text)) > len(rx.findall(was)) and not rx.search(owner)]
+                     if len(rx.findall(text)) > len(rx.findall(was)) and not _affirmed(rx, lines)]
     return hits
 
 
