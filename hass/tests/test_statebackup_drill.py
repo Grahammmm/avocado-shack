@@ -13,6 +13,16 @@ from hass.tests.test_statebackup import PRIVATE, SCRIPT, BackupTestCase, tree
 
 FIXED, SENTINEL = T0 + timedelta(minutes=3), "SENTINEL-drill-owner-text"
 KEYS = {"result", "state", "worktree", "files", "paused", "health_problems", "health_info", "history"}
+# A mocked health detail the drill line must never carry. The NUL byte makes it impossible in any filesystem path (POSIX
+# paths are NUL-terminated C strings), so the temp dirs the line rightly names can never contain it by accident.
+DETAIL = "SECRET-DETAIL\0SENTINEL"
+
+def strings(value):  # every key and string in decoded JSON: a leaked NUL is escaped in the raw line, intact once decoded
+    if isinstance(value, dict):
+        for key, item in value.items(): yield key; yield from strings(item)  # noqa: E702
+    elif isinstance(value, list):
+        for item in value: yield from strings(item)
+    elif isinstance(value, str): yield value
 
 class DrillCommandTests(BackupTestCase):
     def cli(self, *argv):  # (exit code, the one JSON line, raw stdout), in process so mocks apply
@@ -103,15 +113,15 @@ class DrillCommandTests(BackupTestCase):
         backup = self.backup()
         cases = (([{"check": "db-integrity", "detail": "database unreadable"}], False, "db-integrity"),
                  ([{"check": "inbox-integrity", "detail": "1 issue(s)"}], False, "inbox-integrity"),
-                 ([{"check": "settings", "detail": "SECRET-DETAIL-SENTINEL"}], False, "settings"),
-                 ([{"check": "state", "detail": "SECRET-DETAIL-SENTINEL"}], True, "state"))
+                 ([{"check": "settings", "detail": DETAIL}], False, "settings"),
+                 ([{"check": "state", "detail": DETAIL}], True, "state"))
         for i, (problems, unsafe, check) in enumerate(cases):
             new = self.tmp / f"restored-{i}"
             with self.subTest(check=check), mock.patch.object(health, "check", return_value=(problems, [], unsafe)):
                 code, got, out = self.cli(*self.drill_args(backup, new))
                 self.assertEqual((code, got["result"], got["step"], got["health_problems"]),
                                  (1, "drill-failed", "health", [check]))
-                self.assertNotIn(problems[0]["detail"], out)  # ids only, never the detail
+                self.assertFalse([s for s in strings(got) if problems[0]["detail"] in s], out)  # ids only, no detail
                 self.assertTrue((new / statebackup.DB).is_file())  # left in place for inspection
                 self.assertEqual(statebackup.verify(str(backup))["result"], "ok")
 
