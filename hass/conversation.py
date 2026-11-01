@@ -163,6 +163,12 @@ def _local(iso: str) -> str:
     return datetime.fromisoformat(iso).astimezone(LOCAL_TZ).strftime("%Y-%m-%d %H:%M %Z")
 
 
+def _hike_time(iso):  # AV1737-07 (H04/H05): `Sat 2026-11-07 09:00 PST`; a bad or naive value is shown raw, never raised
+    try: start = datetime.fromisoformat(iso)
+    except (ValueError, TypeError): return iso
+    return iso if start.tzinfo is None else start.astimezone(LOCAL_TZ).strftime("%a %Y-%m-%d %H:%M %Z")
+
+
 def load_settings(sdir, photos=False) -> dict:
     try:
         settings = json.loads((Path(sdir) / "config.json").read_text("utf-8")).get("settings")
@@ -264,7 +270,7 @@ def _summary(draft: dict) -> str:
 
 
 def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty fields, sorted, one per line (≤ 40)
-    rows = [(k, v) for k, v in sorted(r["after"].items()) if v not in (None, "", [])]
+    rows = [(k, _hike_time(v) if k == "startsAt" else v) for k, v in sorted(r["after"].items()) if v not in (None, "", [])]
     more = [f"  … and {len(rows) - 40} more fields"] if len(rows) > 40 else []
     return [f"{r['collection']} {r['key']}: new"] + [f"  {k}: " + "\n    ".join(
         (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
@@ -274,7 +280,8 @@ def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False)
     lines = [f"Draft {code}:"]
     for r in draft["records"]:
         lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
-            f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in _changes(r)]
+            f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in (
+                (f, *(map(_hike_time, (b, a)) if f == "startsAt" else (b, a))) for f, b, a in _changes(r))]
     lines += [f"Warning: {w}" for w in draft.get("warnings") or []]
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
@@ -902,13 +909,13 @@ class Conversation:
                 counts = None
         lines = []
         for e in upcoming:
-            head = f"Hike {e.get('title')} {_local(e['startsAt'])}: "
+            head = f"Hike {e.get('title')} {_hike_time(e['startsAt'])}: "
             limit = e.get("capacity") if e.get("capacity") is not None else "no limit"
             lines.append(head + ("RSVPs off" if not e.get("rsvpEnabled") else "guest count unavailable" if counts is None
                                  else f"{counts.get(e.get('id'), 0)} confirmed of {limit}"))
         for e in passed[:5]:
             title = e.get("title")
-            lines.append(f"Hike {title} {_local(e['startsAt'])} has passed but is still scheduled; "
+            lines.append(f"Hike {title} {_hike_time(e['startsAt'])} has passed but is still scheduled; "
                          f'send "complete {title}" or "cancel {title}" in your own words.')
         if len(passed) > 5:
             lines.append(f"… and {len(passed) - 5} more past hikes still scheduled.")
