@@ -5,6 +5,7 @@
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
+unverified (applied drafts, undone or not, whose preview check failed within --unverified-hours; count only),
 inbox-stuck (pending inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
 --inbox-unreadable-hours; count only), inbox-integrity, writer (--writer: one per reason editor
 apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
@@ -28,6 +29,9 @@ from hass.editor import UnsafeState  # noqa: E402
 
 DB, MANIFEST, APPLY_MINUTES, STAMP = "conversation.sqlite3", "MANIFEST.json", 10, "hass-state-%Y%m%dT%H%M%SZ"
 PAUSED_SQL = "SELECT set_at FROM control WHERE name = 'paused'"  # paused <=> this row (conversation.py H17)
+UNVERIFIED_SQL = ("SELECT checked_at FROM drafts WHERE checked_at IS NOT NULL AND (state = 'applied' AND reason LIKE"
+                  " 'not verified: %' OR state = 'reverted' AND screenshot IS NULL)")  # failed check (_verify_pending);
+# an undo (_outcome) rewrites the reason, but only a passed check stores a screenshot, so the window alone clears it
 
 def _problem(check, detail) -> dict:
     return {"check": check, "detail": detail}
@@ -41,7 +45,7 @@ def _older(rows, limit: datetime, newer=False) -> int:
             return True
     return sum(old(raw) for (raw,) in rows)
 
-def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, info: list) -> None:
+def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, info: list, unverified_hours=72) -> None:
     if not (path := sdir / DB).is_file(): return info.append(_problem("conversation", "no conversation yet"))
     try:
         with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
@@ -53,6 +57,10 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
                     ("apply-stuck", "drafts", "SELECT created_at FROM drafts WHERE state = 'approved'", APPLY_MINUTES)):
                 if table in tables and (n := _older(db.execute(sql).fetchall(), now - timedelta(minutes=minutes))):
                     problems.append(_problem(check, str(n)))
+            if {"checked_at", "screenshot"} <= {r[1] for r in db.execute("PRAGMA table_info(drafts)")}:  # none: no table
+                rows = db.execute(UNVERIFIED_SQL).fetchall()  # an H05 database without checked_at is skipped
+                if n := _older(rows, now - timedelta(hours=unverified_hours), newer=True):
+                    problems.append(_problem("unverified", str(n)))
             if "control" in tables and (row := db.execute(PAUSED_SQL).fetchone()):
                 info.append(_problem("paused", str(row[0])))
     except sqlite3.DatabaseError:
@@ -148,7 +156,7 @@ def _model_check(url, name, problems: list, transport) -> None:  # NB-AV-06: fix
         problems.append(_problem("model", "model not installed"))
 
 def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False,
-          inbox_unreadable_hours=24, *, model=None, model_name=None, transport=None) -> tuple:
+          inbox_unreadable_hours=24, *, model=None, model_name=None, transport=None, unverified_hours=72) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -161,7 +169,7 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
         load_settings(sdir)
     except ConfigError as exc:
         problems.append(_problem("settings", str(exc)))
-    _db_checks(sdir, now, outbox_minutes, problems, info)
+    _db_checks(sdir, now, outbox_minutes, problems, info, unverified_hours)
     _inbox_check(sdir, now, inbox_minutes, problems, inbox_unreadable_hours)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
         _verify_backup(newest, problems)
@@ -198,9 +206,11 @@ def main(argv=None, now=None, transport=None) -> int:
     for flag, default in (("--outbox-minutes", 15), ("--backup-hours", 26), ("--inbox-minutes", 15)):
         parser.add_argument(flag, type=int, default=default)
     parser.add_argument("--inbox-unreadable-hours", type=int, default=24)
+    parser.add_argument("--unverified-hours", type=int, default=72)
     parser.add_argument("--writer", action="store_true")
     args = parser.parse_args(argv)
-    if min(args.outbox_minutes, args.backup_hours, args.inbox_minutes, args.inbox_unreadable_hours) < 1:
+    hours = (args.backup_hours, args.inbox_unreadable_hours, args.unverified_hours)
+    if min(args.outbox_minutes, args.inbox_minutes, *hours) < 1:
         parser.error("minutes and hours must be >= 1")
     if args.model_name is not None and not (args.model and args.model_name): parser.error("--model-name needs --model")
     try:
@@ -214,7 +224,8 @@ def main(argv=None, now=None, transport=None) -> int:
         return 2
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
                                    args.inbox_minutes, args.writer, args.inbox_unreadable_hours, model=model,
-                                   model_name=args.model_name, transport=transport)
+                                   model_name=args.model_name, transport=transport,
+                                   unverified_hours=args.unverified_hours)
     try:
         notify = _remember(seen, fingerprint(problems)) if seen else bool(problems)
     except OSError:  # fail open: an unrecorded fingerprint must not silence an alert; the detail names no path
