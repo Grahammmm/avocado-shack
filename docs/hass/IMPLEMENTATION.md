@@ -40,6 +40,10 @@ Use explicit states such as received → needs-details → proposed → approved
 
 `python3 hass/interpreter_eval.py score --cases hass/tests/fixtures/interpreter-eval.jsonl --replies REPLIES.jsonl` scores recorded replies against 30 synthetic owner texts (expected ops, a question or unsupported) after the same `_checked` and registry checks the conversation uses, and prints one JSON summary of ids and short reasons, never message text. It measures; no pass threshold gates anything. `--live --url U --model M --out FILE` is **operator-only**: it uses the existing local model through `LocalInterpreter` and writes a new file outside the repo. It is never run in CI or tests (they use a fake transport).
 
+## Label reader (AV1537-15)
+
+`hass/label_reader.py` `LabelReader(base_url, model, timeout=30, transport=None)` has the NB-AV-02 checks and transport. `Conversation(..., labels=reader)`: after a new photo draft is committed (outside the transaction), the metadata-free web copy goes to the local vision model; a name, brand or a known product category read from the label is added to the photo question as "The label looks like: … Is that right?". Maker, origin, organic and any claim term are never taken from a photo, nothing enters ops or a proposal, and any failure leaves today's reply exactly (reason code in `last_error`). Not wired into a service; a live run on the existing local model is an operator step.
+
 ## Editing tools and data contracts
 
 | Tool family | Allowed inputs / behavior |
