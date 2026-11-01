@@ -85,7 +85,7 @@ class OpsAndEditorTests(StoreTestCase):
         repo = self.repo()
         cases = [((SET_HOURS, {"hours": lines(8)}), "at most 7 hours lines"),
                  ((SET_HOURS, {"hours": ["a" * 61]}), "hours line 0 is longer than 60 characters"),
-                 ((SET_HOURS, {"hours": ["Closed", "Closed"]}), "hours lines must not repeat"),
+                 ((SET_HOURS, {"hours": ["Closed", "Closed"]}), "hours lines 1 and 2 say the same thing"),
                  ((SET_ADDRESS, {"town": "t" * 81}), "town is longer than 80 characters")]
         for op, reason in cases:
             out = repo.prepare(_req(op))
