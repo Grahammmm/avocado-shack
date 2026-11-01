@@ -5,6 +5,8 @@
 in `(received_at, provider_id)` order and only then marks it done, so a crash in between re-delivers the message and
 `Conversation` answers `duplicate` without a second write. Payloads are erased once a message is done. A payload that
 cannot be decoded into an `Inbound` is marked done as `unreadable` and skipped; its content is not kept. Fixtures only.
+NB-AV-11: a photo that cannot be fetched (`AttachmentPending`) stays pending with a try count and holds every later
+message until its next try (30 s, then 2 min); the 3rd try is handled as the last one and replies once.
 """
 import contextlib, json, os, sqlite3, sys  # noqa: E401
 from dataclasses import asdict
@@ -14,7 +16,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod  # noqa: E402
-from hass.conversation import Inbound  # noqa: E402
+from hass.conversation import AttachmentPending, Inbound  # noqa: E402
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS inbound(provider_id TEXT PRIMARY KEY, received_at TEX
 CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY, seen_at TEXT NOT NULL);
 """
 NONCE_KEEP_S = 86400  # >= 2 x bridge.MAX_SKEW; a pruned nonce's envelope is already stale
+MAX_TRIES, BACKOFF_S = 3, (30, 120)  # NB-AV-11: photo fetch tries; wait after the 1st and 2nd failure
 
 
 def _utc_now() -> datetime:
@@ -79,6 +82,9 @@ class Inbox:
         self.db.row_factory = sqlite3.Row
         try:
             self.db.executescript(SCHEMA)
+            columns = {r["name"] for r in self.db.execute("PRAGMA table_info(inbound)")}  # an older H16 inbox
+            for column, kind in (("tries", "INTEGER NOT NULL DEFAULT 0"), ("next_try_at", "TEXT")):
+                if column not in columns: self.db.execute(f"ALTER TABLE inbound ADD COLUMN {column} {kind}")
             self.start_at = datetime.fromisoformat(self._start_point(start_at))
         except BaseException:
             self.db.close()
@@ -126,8 +132,14 @@ class Inbox:
         return "queued" if state == "pending" else "history"
 
     def _next(self):
-        return self.db.execute("SELECT provider_id, payload FROM inbound WHERE state = 'pending'"
+        return self.db.execute("SELECT provider_id, payload, tries, next_try_at FROM inbound WHERE state = 'pending'"
                                " ORDER BY received_at, provider_id LIMIT 1").fetchone()
+
+    def _retry(self, provider_id: str, tries: int) -> None:
+        wait = BACKOFF_S[min(tries, len(BACKOFF_S)) - 1]
+        with self._tx():
+            self.db.execute("UPDATE inbound SET tries = ?, next_try_at = ? WHERE provider_id = ? AND state = 'pending'",
+                            (tries, _iso(self.clock() + timedelta(seconds=wait)), provider_id))
 
     def _mark(self, provider_id: str, disposition: str) -> None:
         with self._tx():
@@ -137,18 +149,30 @@ class Inbox:
 
     def drain(self, conversation) -> list:
         """Hand each pending message to conversation.handle in order, marking it done afterwards. An exception from
-        handle (or the mark) propagates and leaves that message and every later one pending for the next drain."""
+        handle (or the mark) propagates and leaves that message and every later one pending for the next drain;
+        AttachmentPending counts a try and stops the drain until that message's next try time."""
         handled = []
         while (row := self._next()) is not None:
+            if row["next_try_at"] is not None and row["next_try_at"] > _iso(self.clock()): break  # order is kept
             try:
                 msg = Inbound(**json.loads(row["payload"]))
                 if msg.provider_id != row["provider_id"]: raise ValueError("payload names another message")
             except (TypeError, ValueError):  # a poison payload must not block every later message
                 msg = None
-            disposition = "unreadable" if msg is None else conversation.handle(msg)
+            try:  # last_try only on the last try, so a plain handle(msg) stand-in still works
+                last = row["tries"] + 1 >= MAX_TRIES
+                disposition = "unreadable" if msg is None else \
+                    conversation.handle(msg, last_try=True) if last else conversation.handle(msg)
+            except AttachmentPending:
+                self._retry(row["provider_id"], row["tries"] + 1)
+                break
             self._mark(row["provider_id"], disposition)
             handled.append((row["provider_id"], disposition))
         return handled
+
+    def waiting(self) -> int:
+        """Pending messages whose photo fetch has failed at least once (read-only; NB-AV-12 status)."""
+        return self.db.execute("SELECT COUNT(*) FROM inbound WHERE state = 'pending' AND tries > 0").fetchone()[0]
 
     def state(self, provider_id: str):
         row = self.db.execute("SELECT state FROM inbound WHERE provider_id = ?", (provider_id,)).fetchone()
