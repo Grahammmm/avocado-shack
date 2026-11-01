@@ -30,6 +30,7 @@ ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so not
                     "Please send the change as text.")
 PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
                   "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
+FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was changed. Please send it again."
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
@@ -61,6 +62,9 @@ class ConfigError(Exception): """ownerSenders, ownerChat or approvalTtlSeconds i
 
 
 class TransitionError(Exception): """A draft state change outside the allowed transitions."""
+
+
+class AttachmentPending(Exception): """NB-AV-11 (H16): the photo could not be fetched yet; nothing was recorded."""
 
 
 @dataclass(frozen=True)
@@ -345,10 +349,10 @@ class Conversation:
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------
-    def handle(self, msg: Inbound) -> str:
+    def handle(self, msg: Inbound, last_try=False) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush)."""
         with self._tx():
-            disposition, approved = self._handle(msg)
+            disposition, approved = self._handle(msg, last_try)
         if approved is None: return disposition
         out = self.editor.apply(approved["change_id"], approved["draft_hash"])
         with self._tx():
@@ -356,7 +360,7 @@ class Conversation:
         self._verify_pending()
         return disposition
 
-    def _handle(self, msg):
+    def _handle(self, msg, last_try=False):
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone():
             return "duplicate", None
         s = self.settings
@@ -374,7 +378,7 @@ class Conversation:
         if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
-            disposition = self._photo(msg, now) if msg.attachments > 0 else self._command(msg, now, *command)
+            disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
             self._record(msg, disposition)
             return disposition, None
         memory = parse_memory(msg.text)
@@ -526,10 +530,14 @@ class Conversation:
         self._proposal_reply(row, draft)
         return "proposed"
 
-    def _photo(self, msg, now) -> str:  # NB-AV-09: store one photo, then open (or name) its needs-details draft
+    def _photo(self, msg, now, last_try=False) -> str:  # NB-AV-09: store one photo, then open (or name) its draft
         if msg.attachments != 1: return self._reply("One photo at a time, please; nothing was saved.") or "attachment-many"
+        try: data = self.photos.fetch(msg.provider_id, 1)[0]  # NB-AV-11: an empty/short answer is a failure too
+        except Exception:  # never applied or read without the photo: retry via the inbox, or one reply on the last try
+            if not last_try: raise AttachmentPending("fetch") from None
+            return self._reply(FETCH_FAILED) or "attachment-failed"
         try:
-            sha = media.store_original(self.settings["mediaRoot"], self.photos.fetch(msg.provider_id, 1)[0],
+            sha = media.store_original(self.settings["mediaRoot"], data,
                                        received_at=msg.received_at or _iso(now), source="owner-chat")["sha256"]
         except media.Refused as exc:
             return self._reply(exc.reply) or "photo-refused"
