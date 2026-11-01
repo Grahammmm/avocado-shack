@@ -5,17 +5,19 @@ root/originals/<sha[:2]>/<sha>.<ext> (0600 files, 0700 dirs) with a <sha>.json s
 timezone-aware ISO-8601 time (else ValueError before the root is opened). The kind comes from the
 bytes only; a sender's mimeType or file name is never trusted. The caller passes a media root that is NOT the Hass
 state dir (statebackup refuses unknown state entries) and lies outside the repository. Stdlib only; no network,
-no CLI, no wiring into the bridge. Refusals carry a fixed short owner reply with no path or hash in it.
+no wiring into the bridge. Refusals carry a fixed short owner reply with no path or hash in it. The one CLI is
+`python3 hass/media.py verify --root DIR` (verify_store: read-only re-hash of the store, one JSON line, exit 0/1/2).
 
 web_copy(root, sha256) (H10 part 2) writes root/web/<sha[:2]>/<sha>.<ext>: the stored original with every metadata
 block that can carry location, device or time removed by JPEG segment / PNG chunk filtering (pixels byte-identical,
 no image library). A photo that would show sideways without its EXIF Orientation is refused, never rotated.
 """
-import hashlib, json, os, re, stat, tempfile, zlib  # noqa: E401
+import argparse, hashlib, json, os, re, stat, sys, tempfile, zlib  # noqa: E401
 from datetime import datetime
 from pathlib import Path
 
-from hass import editor
+if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from hass import editor  # noqa: E402
 
 MAX_BYTES = 20 * 1024 * 1024
 KINDS = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG\r\n\x1a\n"}
@@ -263,3 +265,58 @@ def web_copy(root, sha256: str) -> dict:
     if have is None: _write_new(final, out)
     return {"sha256": sha256, "web_sha256": hashlib.sha256(out).hexdigest(), "kind": kind, "bytes": len(out),
             "removed": sorted(removed), "path": str(final), "duplicate": have is not None}
+
+def _verify_unsafe(root):  # checked before anything is opened, so a missing root is never created
+    if root is None or str(root) == "": return "a media root is required"
+    try: st = os.lstat(root)
+    except FileNotFoundError: return "media root does not exist"
+    if not stat.S_ISDIR(st.st_mode): return "media root must be a real directory, not a symlink"
+    repo = editor.REPO_ROOT.resolve()
+    return "media root must lie outside the repository" if repo in (p := Path(root).resolve(), *p.parents) else None
+
+def verify_store(root) -> dict:
+    """Read-only re-hash of the store with sidecar, mode, temp and web-copy checks; a sha is shown as 12 hex only."""
+    if (bad := _verify_unsafe(root)) is not None: return {"result": "unsafe", "problems": [bad]}
+    problems, found, short = set(), {"originals": {}, "web": {}}, lambda rel: SHA_RE.sub(lambda m: m[0][:12], rel)
+    def walk(path, rel, depth):  # depth 0 root, 1 originals|web, 2 <aa> (files live here only); links never followed
+        if stat.S_IMODE(os.lstat(path).st_mode) != 0o700: problems.add(f"mode: {rel}")
+        for e in list(os.scandir(path)):  # list() exhausts the iterator, which closes it
+            sub, m = e.name if depth == 0 else f"{rel}/{e.name}", depth == 2 and re.fullmatch(r"([0-9a-f]{64})\.(jpg|png|json)", e.name)
+            if e.is_symlink(): problems.add(f"symlink: {short(sub)}")
+            elif depth < 2 and e.is_dir(follow_symlinks=False) and re.fullmatch(("originals|web", "[0-9a-f]{2}")[depth], e.name):
+                walk(Path(e.path), sub, depth + 1)
+            elif depth == 2 and e.name.startswith(".tmp-") and e.is_file(follow_symlinks=False):
+                problems.add(f"leftover temp: {path.name}")
+            elif m and e.is_file(follow_symlinks=False) and m[1][:2] == path.name and not (rel[:3] == "web" and m[2] == "json"):
+                if stat.S_IMODE(e.stat(follow_symlinks=False).st_mode) != 0o600: problems.add(f"mode: {short(sub)}")
+                found[rel.split("/")[0]].setdefault(m[1], {})[m[2]] = e.path
+            else: problems.add(f"unknown entry: {short(sub)}")
+    def read(path, sha):
+        try: return _existing(Path(path))  # lstat + O_NOFOLLOW: a link swapped in now is refused, never opened
+        except (OSError, Refused): problems.add(f"unreadable: {sha[:12]}")
+    walk(Path(root), ".", 0)
+    for sha, files in found["originals"].items():
+        if not (images := {ext: path for ext, path in files.items() if ext != "json"}): problems.add(f"orphan sidecar: {sha[:12]}")
+        for ext, path in images.items():
+            if (data := read(path, sha)) is not None and hashlib.sha256(data).hexdigest() != sha:
+                problems.add(f"content mismatch: {sha[:12]}")
+            if "json" not in files: problems.add(f"sidecar missing: {sha[:12]}")
+            elif data is not None and (raw := read(files["json"], sha)) is not None:
+                try: meta = json.loads(raw)
+                except ValueError: meta = None
+                want = {"sha256": sha, "kind": "jpeg" if ext == "jpg" else "png", "bytes": len(data)}
+                if not (isinstance(meta, dict) and want.items() <= meta.items()): problems.add(f"sidecar invalid: {sha[:12]}")
+    for sha, files in found["web"].items():
+        have = set(found["originals"].get(sha, {})) - {"json"}
+        problems.update(f"web {'kind' if have else 'orphan'}: {sha[:12]}" for ext in files if ext not in have)
+    return {"result": "problems" if problems else "ok", "problems": sorted(problems), "web": sum(map(len, found["web"].values())),
+            "originals": sum(len(f) - ("json" in f) for f in found["originals"].values())}
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="hass/media.py", description="Read-only check of the private photo store.")
+    parser.add_subparsers(dest="cmd", required=True).add_parser("verify").add_argument("--root", required=True)
+    print(json.dumps(out := verify_store(parser.parse_args(argv).root), ensure_ascii=False, sort_keys=True))
+    return {"ok": 0, "problems": 1}.get(out["result"], 2)
+
+if __name__ == "__main__":
+    sys.exit(main())
