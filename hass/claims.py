@@ -6,6 +6,7 @@ named (by key or by name). Matching is on folded text and whole words: "organica
 not "local". A revert draft (only history.revert ops) restores earlier text and is never checked.
 RF2030-4: an owner word with a negator among the 3 words before it in its clause ("not organic", "isn't local") is not
 said; fail-closed, so "not only organic but local" leaves "organic" unsaid and the owner gets the claim question.
+RF2030-5: a list-of-text field (store hours lines) is checked as its newline-joined lines; other lists are skipped.
 """
 import re
 import unicodedata
@@ -50,6 +51,10 @@ def _affirmed(rx, owner: str) -> bool:
     return False
 
 
+def _lines(value) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
 def _said(phrase, owner: str) -> bool:
     return bool(isinstance(phrase, str) and phrase.strip() and _pattern(phrase).search(owner))
 
@@ -70,6 +75,8 @@ def unstated(draft: dict, owner_text, makers) -> list:
         after = r.get("after") if isinstance(r.get("after"), dict) else {}
         for field in sorted(after):
             new, old = after[field], before.get(field)
+            if _lines(new):  # RF2030-5: a list of text (store hours) is checked as its newline-joined lines
+                new, old = "\n".join(new), "\n".join(old) if _lines(old) else ""
             if not isinstance(new, str) or new == old: continue
             where = f"{r.get('collection')} {r.get('key')} {field}"
             if field == "producerKey" and r.get("collection") == "products":
