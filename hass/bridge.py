@@ -1,6 +1,8 @@
 """H08 prep: BlueBubbles bridge adapter (fixtures only). Nothing here listens, connects to a Mac or runs on its own.
 
 - normalize(event): a BlueBubbles webhook event -> Inbound, or a named Drop. Owner identity stays in Conversation.
+  A tapback (associatedMessageType set) is kind "reaction"; an updated-message without dateEdited (delivery/read)
+  is Drop("receipt"); a real edit stays kind "edited".
 - seal()/unseal(): the Mac -> Agent Orange envelope (HMAC-SHA256, 300 s clock window, nonce replay refusal).
 - BlueBubblesSender: Outbox adapter posting to the loopback-only REST API. The password travels in the query string
   (the documented `password` parameter), so no error raised here ever carries the URL, the query or the password.
@@ -74,6 +76,13 @@ def normalize(event):
         received = datetime.fromtimestamp(created / 1000, tz=timezone.utc).isoformat(timespec="seconds")
     except (OverflowError, OSError, ValueError):
         return Drop("malformed")
+    edited = msg.get("dateEdited")
+    if event["type"] == "updated-message" and not (type(edited) is int and edited > 0):
+        return Drop("receipt")  # checked first: a delivery/read update of a tapback is a receipt too
+    tapback = msg.get("associatedMessageType")
+    if tapback is not None and tapback != "":
+        if not (type(tapback) is int or isinstance(tapback, str)): return Drop("malformed")
+        kind = "reaction"  # text passes through unchanged; never read as a new change request
     return Inbound(provider_id=guid, chat=chats[0]["guid"], sender=handle["address"], text=text, from_me=from_me,
                    kind=kind, received_at=received, attachments=len(attachments))
 
