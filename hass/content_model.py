@@ -59,6 +59,8 @@ IMAGE_RE = re.compile(r"^assets/products/[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(webp|
 STARTS_AT_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})")
 # Characters never allowed in short display text: markup and currency.
 FORBIDDEN_TEXT = ("<", ">", "$", "{{", "}}")
+# Control, zero-width and direction-changing characters never allowed in any content text.
+INVISIBLE_RE = re.compile("[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
 
 
 class ContentError(ValueError):
@@ -119,6 +121,8 @@ def _text(problems, where, value, *, allow_empty=False, plain=True):
     if not isinstance(value, str):
         problems.append(f"{where}: must be a string")
         return
+    if (m := INVISIBLE_RE.search(value)):
+        problems.append(f"{where}: contains invisible or control character U+{ord(m.group()):04X}")
     if not allow_empty and not value.strip():
         problems.append(f"{where}: must not be empty")
     if value != value.strip():
