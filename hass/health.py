@@ -1,7 +1,7 @@
 """Hass private state health check that alerts once per change (H19).
 
     python3 hass/health.py --state DIR [--backups DIR] [--seen FILE] [--outbox-minutes 15] [--backup-hours 26]
-                           [--inbox-minutes 15] [--writer] [--model URL [--model-name NAME]]
+                           [--inbox-minutes 15] [--paused-hours 24] [--writer] [--model URL [--model-name NAME]]
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
@@ -10,9 +10,9 @@ guest-counts (guestCountsDb set but unreadable, or unset while an upcoming hike 
 inbox-stuck (pending inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
 --inbox-unreadable-hours; count only), inbox-integrity, writer (--writer: one per reason editor
 apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
-paused (info only), memory-invariant (owner memory rows breaking its rules: two active rows for one key, or text
-left on a forgotten key; count only), backup-age (--backups: no complete hass-state-* within --backup-hours),
-backup-verify, model (--model:
+paused (info; problem paused-long when set over --paused-hours ago or unreadable), memory-invariant (owner memory
+rows breaking its rules: two active rows for one key, or text left on a forgotten key; count only), backup-age
+(--backups: no complete hass-state-* within --backup-hours), backup-verify, model (--model:
 one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed). Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
@@ -53,7 +53,8 @@ def _older(rows, limit: datetime, newer=False) -> int:
             return True
     return sum(old(raw) for (raw,) in rows)
 
-def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, info: list, unverified_hours=72) -> None:
+def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, info: list, unverified_hours=72,
+               paused_hours=24) -> None:
     if not (path := sdir / DB).is_file(): return info.append(_problem("conversation", "no conversation yet"))
     try:
         with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
@@ -71,6 +72,10 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
                     problems.append(_problem("unverified", str(n)))
             if "control" in tables and (row := db.execute(PAUSED_SQL).fetchone()):
                 info.append(_problem("paused", str(row[0])))
+                if _older([row], limit := now - timedelta(hours=paused_hours)):  # RF1650-12; only an unreadable
+                    unreadable = _older([row], limit, newer=True)  # time counts as both older and newer
+                    detail = "unreadable time" if unreadable else f"over {paused_hours} h"
+                    problems.append(_problem("paused-long", detail))
             if "memory" in tables:  # RF1710-5: hass/memory.py rules, count only (no key, value or source)
                 try:
                     if n := db.execute(MEMORY_SQL).fetchone()[0]:
@@ -186,7 +191,8 @@ def _model_check(url, name, problems: list, transport) -> None:  # NB-AV-06: fix
         problems.append(_problem("model", "model not installed"))
 
 def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False,
-          inbox_unreadable_hours=24, *, model=None, model_name=None, transport=None, unverified_hours=72) -> tuple:
+          inbox_unreadable_hours=24, *, model=None, model_name=None, transport=None, unverified_hours=72,
+          paused_hours=24) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -201,7 +207,7 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
         problems.append(_problem("settings", str(exc)))
     else:
         _guest_check(sdir, settings, now, problems, info)
-    _db_checks(sdir, now, outbox_minutes, problems, info, unverified_hours)
+    _db_checks(sdir, now, outbox_minutes, problems, info, unverified_hours, paused_hours)
     _inbox_check(sdir, now, inbox_minutes, problems, inbox_unreadable_hours)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
         _verify_backup(newest, problems)
@@ -239,9 +245,10 @@ def main(argv=None, now=None, transport=None) -> int:
         parser.add_argument(flag, type=int, default=default)
     parser.add_argument("--inbox-unreadable-hours", type=int, default=24)
     parser.add_argument("--unverified-hours", type=int, default=72)
+    parser.add_argument("--paused-hours", type=int, default=24)
     parser.add_argument("--writer", action="store_true")
     args = parser.parse_args(argv)
-    hours = (args.backup_hours, args.inbox_unreadable_hours, args.unverified_hours)
+    hours = (args.backup_hours, args.inbox_unreadable_hours, args.unverified_hours, args.paused_hours)
     if min(args.outbox_minutes, args.inbox_minutes, *hours) < 1:
         parser.error("minutes and hours must be >= 1")
     if args.model_name is not None and not (args.model and args.model_name): parser.error("--model-name needs --model")
@@ -257,7 +264,7 @@ def main(argv=None, now=None, transport=None) -> int:
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
                                    args.inbox_minutes, args.writer, args.inbox_unreadable_hours, model=model,
                                    model_name=args.model_name, transport=transport,
-                                   unverified_hours=args.unverified_hours)
+                                   unverified_hours=args.unverified_hours, paused_hours=args.paused_hours)
     try:
         notify = _remember(seen, fingerprint(problems)) if seen else bool(problems)
     except OSError:  # fail open: an unrecorded fingerprint must not silence an alert; the detail names no path

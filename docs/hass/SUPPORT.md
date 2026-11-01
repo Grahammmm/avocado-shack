@@ -105,6 +105,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** `pause changes`, then restore the newest verified backup into a drill dir (`python3 hass/statebackup.py restore BACKUP --into NEWDIR --worktree DRILLWT --paused`) and compare its memory history to find when the rule broke.
 - **Stop and ask:** before editing the database by hand: blanking leftover forgotten text or retiring a second current row is an attended operator change; the owner's `forget`/`remember` commands cannot fix either.
 
+### `paused-long`
+- **Means:** changes have been paused for longer than `--paused-hours` (default 24; `over <N> h`), or the pause time cannot be read (`unreadable time`). Every approved change is held until someone sends `resume changes`. The `paused` info line still shows when.
+- **Check first:** ask the owner why changes are paused; the owner sends `status` to see the waiting drafts.
+- **Next step:** the owner sends `resume changes` once the pause is no longer wanted; resuming never applies anything. Health never resumes by itself.
+- **Stop and ask:** nobody knows why changes were paused, or the pause time is unreadable (tell the operator).
+
 ## Info lines
 
 ### `conversation`
