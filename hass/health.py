@@ -143,7 +143,8 @@ def _model_check(url, name, problems: list, transport) -> None:  # NB-AV-06: fix
     except (ValueError, TypeError, KeyError, RecursionError):
         return problems.append(_problem("model", "bad reply"))
     want = name if not name or ":" in name else f"{name}:latest"  # a name without a tag means :latest
-    if want and want not in {m.get("name") for m in models if isinstance(m, dict)}:
+    names = {m["name"] for m in models if isinstance(m, dict) and isinstance(m.get("name"), str)}  # skip malformed
+    if want and want not in names:
         problems.append(_problem("model", "model not installed"))
 
 def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False,

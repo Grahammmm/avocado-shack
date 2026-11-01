@@ -85,6 +85,14 @@ class HealthModelTest(unittest.TestCase):
         for name in ("x:7b", "llama3", "qwen:7b", "QWEN"):
             self.assertEqual(self.model_problems(reply(200, TAGS), "--model-name", name), ["model not installed"], name)
 
+    def test_malformed_model_names_are_skipped_not_a_crash(self):
+        for bad in ([], {}, {"a": 1}, 7, None, True):
+            body = json.dumps({"models": [{"name": bad}, {"name": [bad]}, {}]}).encode()
+            self.assertEqual(self.model_problems(reply(200, body), "--model-name", "qwen"), ["model not installed"], bad)
+            self.assertEqual(self.model_problems(reply(200, body)), [], bad)
+        mixed = json.dumps({"models": [{"name": []}, {"name": {"x": 1}}, {"name": "qwen:latest"}]}).encode()
+        self.assertEqual(self.model_problems(reply(200, mixed), "--model-name", "qwen"), [])
+
     def test_each_failure_is_one_fixed_problem(self):
         cases = [(fail(ConnectionRefusedError()), "unreachable"), (fail(TimeoutError()), "unreachable"),
                  (fail(OSError("reset")), "unreachable"), (reply(503, MARK.encode()), "http 503"),
