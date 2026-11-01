@@ -9,7 +9,7 @@ Each file is staged in its target folder, fsynced and os.replace()d; the set is 
 mismatch or error restores every previous byte. The outcome is stored as `install` in `<state>/changes/<id>.json`.
 Writes nothing outside site_dir and that record. No network, no restart.
 """
-import hashlib, os, re, subprocess, tempfile  # noqa: E401
+import hashlib, os, re, stat, subprocess, tempfile  # noqa: E401
 from pathlib import Path
 
 from hass import editor, sitegen
@@ -69,6 +69,19 @@ def _current(target: Path) -> bytes | None:
     if os.path.islink(target): raise OSError("site file is a symlink")
     return target.read_bytes() if target.is_file() else None
 
+def _not_regular(site: Path, sub: str) -> bool:
+    """True if the target (or a folder on its way) exists but is not a plain file (folder): dir, link, fifo..."""
+    parts = Path(sub).parts
+    for i in range(1, len(parts)):
+        folder = Path(site, *parts[:i])
+        if os.path.lexists(folder) and (os.path.islink(folder) or not folder.is_dir()): return True
+    target = Path(site, sub)
+    return os.path.lexists(target) and not stat.S_ISREG(os.lstat(target).st_mode)
+
+def _finish(rec_path: Path, rec: dict, change_id: str, result: dict) -> dict:
+    editor._write_json(rec_path, {**rec, "install": result})
+    return {"result": result["state"], "change_id": change_id, **{k: v for k, v in result.items() if k != "state"}}
+
 def _later_installed(sdir: Path, wt: Path, change_id: str, commit: str) -> str | None:
     for path in sorted((sdir / "changes").glob("chg-*.json")):
         inst = (editor._read(path) if path.stem != change_id else {}).get("install") or {}
@@ -103,6 +116,9 @@ def _install_locked(sdir, cfg, wt, change_id, now) -> dict:
     if None in want.values(): return {"result": "refused", "reason": "the change commit cannot be read"}
     targets = {rel: site / rel[len(PREFIX):] for rel in paths}
     for rel in paths: sitegen._check_folders(site, rel[len(PREFIX):])
+    if odd := [rel[len(PREFIX):] for rel in paths if _not_regular(site, rel[len(PREFIX):])]:
+        return _finish(rec_path, rec, change_id, {"state": "failed", "reason": f"site path is not a regular file: {odd[0]}",
+                                                  "failed_at": editor._now(now), "commit": commit})
     prev = {rel: _current(targets[rel]) for rel in paths}
     done = {"commit": commit, "files": len(paths)}
     if (rec.get("install") or {}).get("state") == "installed" and rec["install"].get("commit") == commit \
@@ -123,11 +139,16 @@ def _install_locked(sdir, cfg, wt, change_id, now) -> dict:
     except OSError as exc:
         reason = f"write failed: {type(exc).__name__}"
     if reason:
+        undone = []
         for rel in paths:  # roll back every file to the bytes it had before this call
-            if prev[rel] is None: targets[rel].unlink(missing_ok=True)
-            elif _current(targets[rel]) != prev[rel]: _put(targets[rel], prev[rel], modes[rel])
+            try:
+                if prev[rel] is None:  # only a plain file this call created is removed, never a folder
+                    if os.path.isfile(targets[rel]) and not os.path.islink(targets[rel]): targets[rel].unlink()
+                elif _current(targets[rel]) != prev[rel]: _put(targets[rel], prev[rel], modes[rel])
+            except OSError:
+                undone.append(rel[len(PREFIX):])
+        reason += f"; rollback failed: {', '.join(undone)}" if undone else ""
         result = {"state": "failed", "reason": reason, "failed_at": editor._now(now), "commit": commit}
     else:
         result = {"state": "installed", "installed_at": editor._now(now), **done}
-    editor._write_json(rec_path, {**rec, "install": result})
-    return {"result": result["state"], "change_id": change_id, **{k: v for k, v in result.items() if k != "state"}}
+    return _finish(rec_path, rec, change_id, result)

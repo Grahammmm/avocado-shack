@@ -141,6 +141,49 @@ class InstallTest(unittest.TestCase):
         self.assertEqual([p.name for p in self.site.rglob(install.TMP_PREFIX + "*")], [])
         self.assertEqual(self.install(cid)["result"], "installed", "a failed install can be retried")
 
+    def test_folder_or_link_at_a_target_fails_before_any_write_and_keeps_it(self):
+        cid, _commit = self.applied()
+        (self.site / "outside.txt").write_bytes(b"keep\n")
+        original = (self.site / "index.html").read_bytes()
+        for name, make in (("folder", lambda t: (t.mkdir(), (t / "keep.txt").write_bytes(b"keep\n"))),
+                           ("link", lambda t: t.symlink_to(self.site / "outside.txt"))):
+            with self.subTest(name):
+                target = self.site / "index.html"  # sorts after catalog-products.js, which must stay unwritten
+                target.unlink()
+                make(target)
+                before = self.snapshot()
+                out = self.install(cid)
+                self.assertEqual((out["result"], out["reason"]), ("failed", "site path is not a regular file: index.html"))
+                self.assertEqual(self.snapshot(), before, "no file may change, the folder/link is kept")
+                self.assertEqual((target.is_dir(), target.is_symlink()), (name == "folder", name == "link"))
+                self.assertEqual([p.name for p in self.site.rglob(install.TMP_PREFIX + "*")], [])
+                self.assertTrue(self.status(cid).startswith(
+                    "committed, not installed (install failed: site path is not a regular file"), self.status(cid))
+                if name == "folder": shutil.rmtree(target)
+                else: target.unlink()
+                target.write_bytes(original)
+        self.assertEqual(self.install(cid)["result"], "installed", "the install succeeds once the folder is gone")
+
+    def test_rollback_keeps_a_folder_that_appears_during_the_write(self):
+        before = self.snapshot()
+        cid, _commit = self.applied()
+        real, calls = install._swap, []
+
+        def folder_second(tmp, target):
+            calls.append(target)
+            if len(calls) == 2:
+                (self.site / "index.html").unlink()
+                (self.site / "index.html").mkdir()
+                raise IsADirectoryError("is a folder")
+            real(tmp, target)
+        with mock.patch.object(install, "_swap", folder_second):
+            out = self.install(cid)
+        self.assertEqual(out["result"], "failed", out)
+        self.assertTrue(out["reason"].startswith("write failed: IsADirectoryError; rollback failed: index.html"), out)
+        self.assertTrue((self.site / "index.html").is_dir(), "rollback must not delete a folder")
+        self.assertEqual(self.snapshot()["catalog-products.js"], before["catalog-products.js"])
+        self.assertTrue(self.status(cid).startswith("committed, not installed (install failed: write failed"))
+
     def test_bad_site_dir_is_refused_before_any_write(self):
         cid, _commit = self.applied()
         link = self.site.parent / "link"
