@@ -45,6 +45,8 @@ const allowed=req=>{
         await line.scrollIntoViewIfNeeded();
         const text=await page.locator('body').innerText();
         checks.hoursShown=lines.length>0&&lines.every(l=>text.includes(l));
+        const s=target.streetAddress,t=target.town;
+        if(s&&t)checks.addressShown=text.includes(`${s}, ${t}`)&&text.includes(`${s} · ${t}`);
       }
     }
     await page.waitForTimeout(150);
