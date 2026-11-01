@@ -99,7 +99,7 @@ class CreateTests(HikeTestCase):
                          ("Test hike", "Test trailhead lot", True, 12))
         site = json.loads((repo.wt / "storefront-mockup/community.json").read_text("utf-8"))
         self.assertEqual([e["id"] for e in site["events"]], [HIKE_ID])
-        repo.run(("hike.create", {**HIKE, "capacity": 8}))  # same title and date: the id gets a suffix
+        repo.run(("hike.create", {**HIKE, "title": "Test-hike", "capacity": 8}))  # same slug and date: the id gets a suffix
         self.assertEqual([e["id"] for e in repo.community()["events"]], [HIKE_ID, HIKE_ID + "-2"])
 
     def test_missing_details_give_needs_details_and_no_draft(self):
@@ -208,7 +208,7 @@ class SamplesStayAsSamplesTests(HikeTestCase):
             self.assertNotIn(field, event)
         self.assertRejected(repo, "invalid", ("hike.create", {**HIKE, "id": "idea-point-buchon"}))
         self.assertRejected(repo, "invalid", ("hike.create", {**HIKE, "id": "preview-point-buchon"}))
-        self.assertRejected(repo, "invalid", ("hike.create", {**HIKE, "trailId": "preview-point-buchon"}))
+        self.assertRejected(repo, "invalid", ("hike.create", {**HIKE, "title": "Other hike", "trailId": "preview-point-buchon"}))
 
 
 if __name__ == "__main__":

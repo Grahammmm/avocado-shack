@@ -40,16 +40,16 @@ class AccentedIdTests(HikeTestCase):
     def test_title_without_latin_letters_falls_back_to_date(self):
         repo = self.repo()
         self.assertEqual(self.create(repo, "山歩き"), f"hike-{DAY}")
-        self.assertEqual(self.create(repo, "山歩き"), f"hike-{DAY}-2")
+        self.assertEqual(self.create(repo, "山登り"), f"hike-{DAY}-2")
         self.assertEqual(self.create(repo, "ß øæ 🥑"), f"hike-{DAY}-3")  # no decomposition: hyphens, as before
 
     def test_collision_across_accent_forms_gets_a_suffix(self):
         repo = self.repo()
         plain = self.create(repo, "Montana de Oro")
         self.assertEqual(self.create(repo, "Montaña de Oro"), plain + "-2")
-        self.assertEqual(self.create(repo, "MONTAÑA DE ORO"), plain + "-3")
+        self.assertEqual(self.create(repo, "MONTAÑA DE ORO!"), plain + "-3")
         self.assertEqual([e["title"] for e in repo.community()["events"]],
-                         ["Montana de Oro", "Montaña de Oro", "MONTAÑA DE ORO"])  # nothing overwritten
+                         ["Montana de Oro", "Montaña de Oro", "MONTAÑA DE ORO!"])  # nothing overwritten
 
     def test_long_accented_title_keeps_the_length_limits(self):
         repo = self.repo()
@@ -59,7 +59,7 @@ class AccentedIdTests(HikeTestCase):
         self.assertTrue(first.startswith(f"hike-{DAY}-senal-a-senal-a"), first)
         self.assertEqual(len(first), MAX_ID_BASE - 1)  # ≤ 56: the 56th character was a hyphen and is dropped
         self.assertFalse(first.endswith("-"))
-        second = self.create(repo, title)
+        second = self.create(repo, title + "!")
         self.assertEqual(second, first + "-2")
         self.assertLessEqual(len(second), 64)
         self.assertTrue(ID_RE.fullmatch(second))
