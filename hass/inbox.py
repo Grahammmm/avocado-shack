@@ -7,8 +7,9 @@ in `(received_at, provider_id)` order and only then marks it done, so a crash in
 cannot be decoded into an `Inbound` is marked done as `unreadable` and skipped; its content is not kept. Fixtures only.
 NB-AV-11: a photo that cannot be fetched (`AttachmentPending`) stays pending with a try count and holds every later
 message until its next try (30 s, then 2 min); the 3rd try is handled as the last one and replies once.
+RF1710-3: `python3 hass/inbox.py status --state DIR` prints one JSON line of counts (sqlite mode=ro; no ids or text).
 """
-import contextlib, json, os, sqlite3, sys  # noqa: E401
+import argparse, contextlib, json, os, re, sqlite3, sys  # noqa: E401
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -180,3 +181,45 @@ class Inbox:
 
     def seen(self) -> Nonces:
         return Nonces(self)
+
+
+def status(state_dir, now=None):
+    """(report, exit code) for `<state_dir>/inbox.sqlite3` opened mode=ro: never creates it, never shows an id or text."""
+    sdir = Path(state_dir)
+    if sdir.is_symlink() or not sdir.is_dir(): return {"result": "unsafe", "reason": "missing or a symlink"}, 2
+    if not (path := sdir / "inbox.sqlite3").exists(): return {"result": "ok", "inbox": "none"}, 0
+    try:
+        with contextlib.closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+            if db.execute("PRAGMA quick_check").fetchone()[0] != "ok": return {"result": "unreadable"}, 1
+            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            rows = lambda table, sql: db.execute(sql).fetchall() if table in tables else []  # noqa: E731
+            counts = dict(rows("inbound", "SELECT state, COUNT(*) FROM inbound GROUP BY state"))
+            out = {"result": "ok", "start_at": (rows("meta", "SELECT value FROM meta WHERE name = 'start_at'") or [(None,)])[0][0],
+                   **{k: counts.get(k, 0) for k in ("pending", "done", "history")}}
+            if "disposition" in {r[1] for r in db.execute("PRAGMA table_info(inbound)")}:  # an older schema lacks it
+                out["dispositions"] = disp = {}
+                for (code,) in db.execute("SELECT disposition FROM inbound WHERE state = 'done'"):
+                    ok = isinstance(code, str) and re.fullmatch(r"[a-z0-9-]{1,32}", code)
+                    disp[key] = disp.get(key := "none" if code is None else code if ok else "other", 0) + 1
+            try:
+                times = [parse_aware(t, "enqueued_at") for (t,) in
+                         rows("inbound", "SELECT enqueued_at FROM inbound WHERE state = 'pending'")]
+                out["oldest_pending_minutes"] = int(((now or _utc_now()) - min(times)).total_seconds() // 60) if times else None
+            except (ValueError, TypeError):
+                out["oldest_pending_minutes"] = "unreadable"
+            out["nonces"] = (rows("nonces", "SELECT COUNT(*) FROM nonces") or [(0,)])[0][0]
+            return out, 0
+    except sqlite3.DatabaseError:
+        return {"result": "unreadable"}, 1
+
+
+def main(argv=None, now=None) -> int:
+    ap = argparse.ArgumentParser(prog="inbox.py", description="H16 inbound queue (read-only status).")
+    ap.add_subparsers(dest="cmd", required=True).add_parser("status").add_argument("--state", required=True)
+    report, code = status(ap.parse_args(argv).state, now)
+    print(json.dumps(report, sort_keys=True))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
