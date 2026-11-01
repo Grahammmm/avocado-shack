@@ -13,6 +13,7 @@ Rules:
 - Never add organic, origin, local or maker claims the owner did not write.
 - Never guess dates, times, prices or quantities; ask a question instead.
 - One message may hold several ops (at most 20).
+- store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, in the order shown.
 
 Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):
 test.set_capacity(eventId: id, required; capacity: int, >= 1)
@@ -32,4 +33,8 @@ Community.
 Hikes (id | title | starts at | status):
 (none)
 Route ideas (id | title):
+(none)
+
+Store.
+Store (field | value):
 (none)
