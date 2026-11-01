@@ -146,12 +146,19 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None) -> d
     return files
 
 
+def _linked(root: Path, rel: str) -> bool:
+    """True when the generated file or a folder between root and it is a symlink (root itself may be a link)."""
+    parts = Path(rel).parts
+    return any(os.path.islink(Path(root, *parts[:i])) for i in range(1, len(parts) + 1))
+
+
 def diff_paths(files: dict[str, bytes], root: Path) -> list[str]:
-    """Generated paths whose bytes differ from (or are missing under) root."""
+    """Generated paths that are symlinked (file or folder below root), missing, not regular files, or differ in bytes.
+    A symlinked path is never read, so --check agrees with --write, which refuses it."""
     changed = []
     for rel, data in files.items():
         target = Path(root) / rel
-        if not target.is_file() or target.read_bytes() != data:
+        if _linked(root, rel) or not target.is_file() or target.read_bytes() != data:
             changed.append(rel)
     return changed
 
@@ -231,7 +238,7 @@ def _main(argv: list[str] | None) -> int:
         if changed:
             print("generated files out of date (run python3 hass/sitegen.py --write):")
             for rel in changed:
-                print("  " + rel)
+                print("  " + rel + (" (symlink)" if _linked(repo, rel) else ""))
             return 1
         print(f"ok: {len(files)} generated files match hass/content "
               f"({len(content.active_products())} active products, {len(content.makers)} makers)")
