@@ -92,6 +92,7 @@ python3 hass/fixture_chat.py --state DIR --fixture hass/tests/fixtures/conversat
 
 Prints the outbox as JSON lines (sends nothing anywhere); exit 2 for an unsafe state dir or missing settings.
 Every fixture line is checked before anything is handled or queued: a bad line exits 2 with `fixture_chat: fixture line <n>: <field> <rule>`, naming the field, never its value.
+H09 demo v2 (NB-AV-13): `--photos hass/tests/fixtures/media` with `conversation-demo-photo.jsonl` and its `-interpreter.json` runs photo → question → filled → `yes` → `history` → `undo` → `yes`; a row's `photos: [name]` must be regular files directly in that folder (no `..`, no symlink) or the run exits 2 first. Checked by `hass/tests/test_demo_transcript_photo.py`.
 
 ## H06: preview, history and undo
 
