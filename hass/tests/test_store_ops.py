@@ -189,7 +189,8 @@ class StoreUndoAndPreviewTests(StoreTestCase):
         from hass import preview
         repo = self.repo()
         draft = repo.prepare(_req((SET_HOURS, {"hours": NEW_HOURS})))["draft"]
-        self.assertEqual(preview.target_for(draft["records"][0]), {"kind": "store", "hours": NEW_HOURS})
+        self.assertEqual(preview.target_for(draft["records"][0]), {"kind": "store", "hours": NEW_HOURS,
+                         "streetAddress": "2190 Main Street", "town": "Morro Bay"})
         address = repo.prepare(_req((SET_ADDRESS, {"town": "Cayucos"})))["draft"]
         self.assertEqual(preview.target_for(address["records"][0])["kind"], "store")
 
