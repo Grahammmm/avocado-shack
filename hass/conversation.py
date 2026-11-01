@@ -237,8 +237,7 @@ def _full(v) -> str:
 
 def _arrow(v) -> str:
     """`→ <new value>`; a value with a line break goes on its own lines, indented two spaces."""
-    text = _full(v)
-    parts = text.splitlines()
+    parts = (text := _full(v)).splitlines()
     return "→\n  " + "\n  ".join(parts) if text and parts != [text] else "→ " + text
 
 
