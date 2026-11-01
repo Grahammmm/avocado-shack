@@ -21,7 +21,20 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
-                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?")  # H17
+                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?|(help|commands|\?)")  # H17
+HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
+    'yes [code] - apply the waiting draft: "yes a1b2"',
+    'no [code] - cancel the waiting draft or question: "no a1b2"',
+    'status - pause state, waiting drafts, hike seats: "status"',
+    'history - the last five changes: "history"',
+    'undo [code] - draft an undo of an applied change: "undo a1b2"',
+    'pause changes - stop approvals from applying: "pause changes"',
+    'resume changes - let approvals apply again: "resume changes"',
+    'remember <key>: <text> - save a note: "remember parking: back lot"',
+    'forget <key> - delete a saved note: "forget parking"',
+    'memory - list the saved notes: "memory"',
+    'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
+    'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX = 20
@@ -168,10 +181,11 @@ def parse_keyword(text: str):
 
 
 def parse_command(text: str):
-    """("undo", code or None) or (history|status|pause|resume, None) when the whole message is that command;
+    """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[7]: return "help", None
     return ("undo", match[3]) if match[2] else (next(v for v in (match[1], match[4], match[5], match[6]) if v), None)
 
 
@@ -371,7 +385,7 @@ class Conversation:
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= now]
-        if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
+        if command and command[0] in ("status", "help"): expired = []  # H17: read-only; status only hides lapsed drafts
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -619,6 +633,9 @@ class Conversation:
                     self._reply(f"Applied {row['code']}, but the preview check failed: {error}")
 
     def _command(self, msg, now, verb, code) -> str:
+        if verb == "help":
+            self._reply(HELP_TEXT)
+            return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "history":
             rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT 5").fetchall()
