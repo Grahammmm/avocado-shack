@@ -9,6 +9,7 @@ said; fail-closed, so "not only organic but local" leaves "organic" unsaid and t
 RF2030-5: a list-of-text field (store hours lines) is checked as its newline-joined lines; other lists are skipped.
 RF0250-3: a maker key or name the owner only negates is not named.
 RF1230-17: negators also count typed without the apostrophe ("isnt", "dont"); "wont"/"cant" may over-ask (fail-closed).
+AV2022-04: a changed product brand/displayBrand or maker place must share a word with the owner's text; a maker url's host.
 """
 import re
 import unicodedata
@@ -54,6 +55,33 @@ def _affirmed(rx, owner: str) -> bool:
     return False
 
 
+SOURCE_FIELDS = {"products": ("brand", "displayBrand"), "makers": ("place", "url")}
+STOP = {"the", "and", "of", "a", "an", "co", "inc", "llc", "company"}
+PLACEHOLDER = "Producer not identified"
+
+
+def _words(value) -> set:
+    """Folded words of value, stop words and single characters dropped."""
+    return {w for w in re.findall(r"\w+", fold(value)) if w not in STOP and len(w) > 1}
+
+
+def _host(url) -> str:
+    """Folded host of url (scheme and user part skipped, port dropped), leading "www." removed; "" when there is none."""
+    m = re.match(r"(?:[a-z][a-z0-9+.-]*://)?(?:[^@/?#\s]*@)?([^/:?#\s]*)", fold(url))
+    host = m.group(1).strip(".") if m else ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def _source_hit(field: str, new: str, owner: str) -> bool:
+    """True when a source field's new value is not backed by the owner's (folded) text."""
+    if new == PLACEHOLDER: return False
+    if field == "url":
+        host = _host(new)
+        return not host or not re.search(r"(?<![\w.-])(?:www\.)?" + re.escape(host) + r"(?![\w-]|\.\w)", owner)
+    words = _words(new)
+    return bool(words) and not words & set(re.findall(r"\w+", owner))
+
+
 def _lines(value) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
@@ -87,6 +115,8 @@ def unstated(draft: dict, owner_text, makers) -> list:
                 name = maker.get("name") if isinstance(maker, dict) else None
                 if makers is None or not (_said(new, lines) or _said(name, lines)): hits.append((where, "maker"))
                 continue
+            if field in SOURCE_FIELDS.get(r.get("collection"), ()) and new.strip() and _source_hit(field, new, lines):
+                hits.append((where, "link" if field == "url" else field))  # AV2022-04; the term scan still runs
             text, was = fold(new), fold(old if isinstance(old, str) else "")
             hits += [(where, term) for term, rx in _TERM_RES
                      if len(rx.findall(text)) > len(rx.findall(was)) and not _affirmed(rx, lines)]
