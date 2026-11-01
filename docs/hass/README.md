@@ -53,6 +53,7 @@ The Mac receives iMessages. Agent Orange handles the assistant, the website and 
 Planning estimate: allow **1–2 focused development weeks** for the first connected text demo after Mac/account access, then **1–2 weeks** for photo/voice and an owner trial. Reliability work follows the trial findings. These are estimates, not a delivery commitment; macOS compatibility, account sign-in and owner feedback can change them. Work on the content tools can start before account access is ready.
 
 The [feature list](FEATURES.md) defines the scope of each milestone. [GitHub Issues](https://github.com/Grahammmm/avocado-shack/issues) track delivery; acceptance checks, not elapsed time, decide completion.
+[Known limits](LIMITS.md) lists, in plain words, what Hass cannot do yet and its photo, list and text size limits.
 
 ### GitHub work queue
 
