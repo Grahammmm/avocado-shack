@@ -17,6 +17,8 @@ from hass.tests.test_hike_ops import HIKE, HIKE_ID, NOW, SCHEMA as RSVP_SCHEMA, 
 from hass.tests.test_undo import H06TestCase
 
 PAUSED = "Changes paused. Drafts can still be prepared; nothing is applied until you send resume changes."
+PAST = ('Hike Past hike 2026-11-01 09:00 PST has passed but is still scheduled; '  # AV1537-07: started before T0
+        'send "complete Past hike" or "cancel Past hike" in your own words.')
 
 
 def gated(code):
@@ -254,10 +256,11 @@ class GuestTotalTests(StoreMixin, H06TestCase):
         self.use(self.rsvp_db("rsvps.sqlite3", [(HIKE_ID, 2), (HIKE_ID, 3), ("hike-2026-12-01-cancelled-hike", 4),
                                                 ("hike-2026-11-01-past-hike", 6)]))
         lines = self.status()
-        self.assertEqual(lines[-2:], ["Hike Open hike 2026-11-20 09:00 PST: 0 confirmed of no limit",
-                                      "Hike Test hike 2026-12-05 09:00 PST: 5 confirmed of 12"])
+        self.assertEqual(lines[-3:], ["Hike Open hike 2026-11-20 09:00 PST: 0 confirmed of no limit",
+                                      "Hike Test hike 2026-12-05 09:00 PST: 5 confirmed of 12", PAST])
+        self.assertEqual([line for line in lines if "Past hike" in line], [PAST])  # its 6 RSVPs are never shown
         text = "\n".join(lines)
-        for absent in ("Past hike", "Cancelled hike", "example.invalid", "guest1", "Placeholder"):
+        for absent in ("Cancelled hike", "example.invalid", "guest1", "Placeholder"):
             self.assertNotIn(absent, text)
 
     def test_unknown_counts_are_never_guessed(self):
@@ -265,8 +268,9 @@ class GuestTotalTests(StoreMixin, H06TestCase):
         for path in (None, "", str(self.repo.state.parent / "missing.sqlite3"), wrong):
             with self.subTest(path=path):
                 self.use(path)
-                self.assertEqual(self.status()[-2:], ["Hike Open hike 2026-11-20 09:00 PST: guest count unavailable",
-                                                      "Hike Test hike 2026-12-05 09:00 PST: guest count unavailable"])
+                self.assertEqual(self.status()[-3:], ["Hike Open hike 2026-11-20 09:00 PST: guest count unavailable",
+                                                      "Hike Test hike 2026-12-05 09:00 PST: guest count unavailable",
+                                                      PAST])
         self.assertFalse((self.repo.state.parent / "missing.sqlite3").exists())
 
     def test_unreadable_content_gives_one_line(self):
