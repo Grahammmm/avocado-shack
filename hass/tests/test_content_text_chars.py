@@ -85,8 +85,7 @@ class ContentTextCharTests(unittest.TestCase):
     def test_one_problem_per_value(self):
         found = self.char_problems("products.json", lambda d: d["products"][0].update(name="A\u200bv\u200bo\u200b"))
         self.assertEqual(found, [f"{P}.name{MSG}200B"])
-
-    def test_first_offending_character_is_named(self):
+        self.setUp()  # mixed characters: the first offending one is named, still once
         found = self.char_problems("products.json", lambda d: d["products"][0].update(name="A\u2060b\x07c"))
         self.assertEqual(found, [f"{P}.name{MSG}2060"])
 
@@ -120,7 +119,3 @@ class OpsPathTests(CatalogTestCase):
         result = self.assertRejected(repo, "invalid", ("product.edit", {"id": "photo-product-001", "name": "Ched\u200fdar"}))
         self.assertTrue(any("name" in p and "U+200F" in p for p in result["problems"]), result)
         self.assertEqual(repo.status(), "")
-
-
-if __name__ == "__main__":
-    unittest.main()
