@@ -15,7 +15,7 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from hass.content_model import EVENT_TEXT_FIELDS
+from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -160,14 +160,25 @@ def _scheduled(content, event_id):
 
 UPDATE_FIELDS = ("title", "date", "time", "meetingPoint", "rsvpEnabled", "capacity", "noCapacityLimit", "trailId") \
     + TEXT_FIELDS
+# Optional fields hike.update may delete; title, date, time, meetingPoint, RSVPs and capacity are never cleared.
+CLEARABLE = tuple(f for f in TEXT_FIELDS if f != "meetingPoint") + ("trailId",)
+_KNOWN = set(UPDATE_FIELDS) | set(EVENT_REQUIRED) | {"recap"}
+_CLEAR_CHECKS = ((lambda n, a: n not in _KNOWN, "clear: {} is not a hike field"),  # checked in this order
+                 (lambda n, a: n not in CLEARABLE, "clear: {} cannot be removed"),
+                 (lambda n, a: n in a, "{} cannot be set and cleared together"))
 
 
 def _hike_update(content, args, ctx):
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
+    clear = list(dict.fromkeys(args.get("clear", ())))  # duplicates collapse
+    for test, why in _CLEAR_CHECKS:
+        bad = next((n for n in clear if test(n, args)), None)
+        if bad is not None:
+            return Refused(why.format(bad))
     given = {f: args[f] for f in UPDATE_FIELDS if f in args and not (f == "noCapacityLimit" and not args[f])}
-    if not given:
+    if not given and not clear:
         return NeedsDetails(list(UPDATE_FIELDS), f"What should change on {args['id']}? Give at least one of: "
                             + ", ".join(UPDATE_FIELDS))
     if "capacity" in given and "noCapacityLimit" in given:
@@ -200,6 +211,8 @@ def _hike_update(content, args, ctx):
     event.update(changes)
     if "noCapacityLimit" in given:
         event.pop("capacity", None)
+    for name in clear:  # deleted, never set to ""; an absent field is no change
+        event.pop(name, None)
     return _touch(before, event)
 
 
@@ -237,7 +250,8 @@ OPS = (
     Op("hike.update", {**_ID, "title": Arg("text", required=False), "date": Arg("date", required=False),
                        "time": Arg("time", required=False), "meetingPoint": Arg("text", required=False),
                        "rsvpEnabled": Arg("bool", required=False), **_CAPACITY,
-                       "trailId": Arg("id", required=False), **_OPTIONAL_TEXT}, _hike_update),
+                       "trailId": Arg("id", required=False), **_OPTIONAL_TEXT,
+                       "clear": Arg("text_list", required=False)}, _hike_update),
     Op("hike.cancel", _ID, _hike_cancel),
     Op("hike.complete", {**_ID, "recap": Arg("text", required=False)}, _hike_complete),
 )
