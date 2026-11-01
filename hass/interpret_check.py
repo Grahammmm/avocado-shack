@@ -3,8 +3,11 @@
 check() is pure: an op, argument name or value type the registry does not allow, or a ``revises`` code that is not
 waiting, becomes one owner question naming the field. Value checks (real dates, makers, files) stay in the editor.
 Names shown to the owner contain only visible characters (no controls, zero-width, direction or line-separator marks).
+The same change listed twice (same op, equal args in any key order) becomes one question naming the first repeated
+pair; it is checked after the shape check and before op/field checks, so a repeated unknown op is reported as a repeat.
 """
 
+import json
 import unicodedata
 
 HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
@@ -35,6 +38,13 @@ def _problem(result: dict, registry, pending_codes):
         if not (isinstance(call, dict) and set(call) == {"op", "args"} and isinstance(call["op"], str)
                 and isinstance(call["args"], dict)):
             return f"I could not read change {n} of that message. {AGAIN}"
+    seen = {}
+    for i, call in enumerate(calls, 1):
+        try: key = (call["op"], json.dumps(call["args"], sort_keys=True, ensure_ascii=False))
+        except (TypeError, ValueError): continue  # args that cannot be compared are never called the same
+        if key in seen:
+            return f"Changes {seen[key]} and {i} in that message are the same. Did you mean to change something else? {AGAIN}"
+        seen[key] = i
     for call in calls:
         op = registry.get(call["op"])
         if op is None:
