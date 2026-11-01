@@ -72,8 +72,8 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
     def test_yes_never_approves_a_question(self):
         q = self.ask()
         still = f"{q['code']} still needs details: {q['summary']}"
-        self.assertEqual(self.say("yes"), "no-target")  # bare yes: test_conversation (unedited) pins this reply
-        self.assertEqual(self.replies(), [conversation.NOTHING])
+        self.assertEqual(self.say("yes"), "no-target")  # bare yes repeats the only waiting question (AV1737-05)
+        self.assertEqual(self.replies(), [still])
         for text in (f"yes {q['code']}", f"Approve {q['code']}!", f"approved {q['code']}."):
             with self.subTest(text=text):
                 self.assertEqual(self.say(text), "no-target")
