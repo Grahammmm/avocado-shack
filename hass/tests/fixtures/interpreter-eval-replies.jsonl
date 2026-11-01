@@ -1,0 +1,31 @@
+{"_note": "synthetic replies for scorer tests; not model output"}
+{"id": "e01", "reply": {"ops": [{"op": "product.add", "args": {"name": "Fuyu persimmons", "brand": "Avocado Shack", "category": "fruit", "description": "Sweet and crisp, eat them like an apple."}}], "revises": null}}
+{"id": "e02", "reply": {"ops": [{"op": "product.add", "args": {"name": "Sourdough loaf", "brand": "Avocado Shack", "category": "bread"}}], "revises": null}}
+{"id": "e03", "reply": {"ops": [{"op": "product.edit", "args": {"id": "photo-product-001", "description": "Creamy flesh, a little lime, enough salt."}}], "revises": null}}
+{"id": "e04", "reply": {"ops": [{"op": "product.edit", "args": {"id": "photo-product-081", "name": "Keitt mangoes"}}], "revises": null}}
+{"id": "e05", "reply": {"ops": [{"op": "product.edit", "args": {"id": "photo-product-016", "displayBrand": "Avocado Shack"}}], "revises": null}}
+{"id": "e06", "reply": {"ops": [{"op": "product.restore", "args": {"id": "photo-product-056"}}], "revises": null}}
+{"id": "e07", "reply": {"ops": [{"op": "product.hide", "args": {"id": "photo-product-058"}}], "revises": null}}
+{"id": "e08", "reply": {"ops": [{"op": "product.restore", "args": {"id": "photo-product-040"}}], "revises": null}}
+{"id": "e09", "reply": {"ops": [{"op": "maker.add", "args": {"key": "Morro Bay Oysters", "name": "Morro Bay Oyster Company", "place": "Morro Bay, California", "url": "https://example.com/oysters", "story": "Oysters grown in the bay."}}], "revises": null}}
+{"id": "e10", "reply": {"ops": [{"op": "maker.edit", "args": {"key": "Etto", "url": "https://ettopastificio.com"}}], "revises": null}}
+{"id": "e11", "reply": {"ops": [{"op": "maker.hide", "args": {"key": "Taco Works"}}], "revises": null}}
+{"id": "e12", "reply": {"ops": [{"op": "maker.restore", "args": {"key": "Maple Valley"}}], "revises": null}}
+{"id": "e13", "reply": {"ops": [{"op": "hike.create", "args": {"title": "Point Buchon morning walk", "date": "2026-11-14", "time": "08:30", "meetingPoint": "Point Buchon trailhead", "rsvpEnabled": true}}], "revises": null}}
+{"id": "e14", "reply": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-22", "time": "09:00", "meetingPoint": "The shop", "rsvpEnabled": false}}], "revises": null}}
+{"id": "e15", "reply": {"ops": [{"op": "hike.create", "args": {"title": "Fiscalini Bluff walk", "date": "2026-12-05", "time": "10:00", "meetingPoint": "The shop", "rsvpEnabled": true, "noCapacityLimit": true, "trailId": "idea-fiscalini-bluff"}}], "revises": null}}
+{"id": "e16", "reply": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "time": "09:00"}}], "revises": null}}
+{"id": "e17", "reply": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "capacity": 20}}], "revises": null}}
+{"id": "e18", "reply": {"ops": [{"op": "hike.cancel", "args": {"id": "hike-2026-11-22-cass-hill"}}], "revises": null}}
+{"id": "e19", "reply": {"ops": [{"op": "store.set_hours", "args": {"hours": ["Mon-Fri 9am-6pm", "Sat-Sun 8am-5pm"]}}], "revises": null}}
+{"id": "e20", "reply": {"ops": [{"op": "store.set_hours", "args": {"hours": ["Daily 9am-5pm"]}}], "revises": null}}
+{"id": "e21", "reply": {"ops": [{"op": "store.set_address", "args": {"streetAddress": "1024 Example Street", "town": "Cambria"}}], "revises": null}}
+{"id": "e22", "reply": {"ops": [{"op": "product.hide", "args": {"id": "photo-product-098"}}], "revises": "a1b2"}}
+{"id": "e23", "reply": {"ops": [{"op": "hike.create", "args": {"title": "Point Buchon morning walk", "date": "2026-11-14", "time": "09:30"}}], "revises": "c3d4"}}
+{"id": "e24", "reply": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-29"}}], "revises": "e5f6"}}
+{"id": "e25", "reply": {"ops": [{"op": "product.hide", "args": {"id": "photo-product-057"}}], "revises": null}}
+{"id": "e26", "reply": {"question": "Which date should the Cass Hill hike be?"}}
+{"id": "e27", "reply": {"question": "How are the lemons farmed? I will only write what you tell me."}}
+{"id": "e28", "reply": {"unsupported": "Refunds are not something I can change on the site."}}
+{"id": "e29", "reply": {"unsupported": "I cannot send email to customers."}}
+{"id": "e30", "reply": {"unsupported": "The logo is not an editable field yet."}}

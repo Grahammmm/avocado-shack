@@ -36,6 +36,10 @@ Use explicit states such as received → needs-details → proposed → approved
 
 `hass/interpreter_local.py` `LocalInterpreter(base_url, model, system_prompt, timeout=30, transport=None)` sends one Ollama `POST /api/chat` (`stream: false`, `format: "json"`, temperature 0) to a loopback `http` URL only (`127.0.0.1`, `localhost`, `::1`; no userinfo, query or path), with no environment proxy and no redirects. The reply's JSON object is returned as-is for the registry check; any failure (timeout, connection, non-200, body over 256 KiB, bad JSON or shape) returns one fixed `unsupported` reply, so nothing is drafted, and keeps only a reason code in `last_error` (never the URL, prompt or owner text). There is no default model name and nothing is wired into a service yet; tests use a fake transport.
 
+## Interpreter eval set (NB-AV-04)
+
+`python3 hass/interpreter_eval.py score --cases hass/tests/fixtures/interpreter-eval.jsonl --replies REPLIES.jsonl` scores recorded replies against 30 synthetic owner texts (expected ops, a question or unsupported) after the same `_checked` and registry checks the conversation uses, and prints one JSON summary of ids and short reasons, never message text. It measures; no pass threshold gates anything. `--live --url U --model M --out FILE` is **operator-only**: it uses the existing local model through `LocalInterpreter` and writes a new file outside the repo. It is never run in CI or tests (they use a fake transport).
+
 ## Editing tools and data contracts
 
 | Tool family | Allowed inputs / behavior |
