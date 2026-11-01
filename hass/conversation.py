@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, media  # noqa: E402
+from hass import claims, interpret_check, label_reader, media  # noqa: E402
 from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -256,12 +256,12 @@ def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False)
 
 
 class Conversation:
-    def __init__(self, state_dir, editor, interpreter, clock, previewer=None, photos=None):
+    def __init__(self, state_dir, editor, interpreter, clock, previewer=None, photos=None, labels=None):
         """previewer (H06, e.g. preview.Previewer(worktree)): proposal screenshots and checked results; None keeps
         the H05 behaviour (no screenshot, an applied draft stays `applied`)."""
         sdir = editor_mod.open_state(state_dir)
         self.settings, self.photos = load_settings(sdir, photos is not None), photos  # fetch(provider_id, n) -> [bytes]
-        self.editor, self.interpreter, self.clock = editor, interpreter, clock
+        self.editor, self.interpreter, self.clock, self.labels, self._label_job = editor, interpreter, clock, labels, None
         self.sdir, self.previewer = sdir, previewer
         path = sdir / "conversation.sqlite3"
         os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
@@ -369,8 +369,10 @@ class Conversation:
     # -- message handling ----------------------------------------------------------------------------------------
     def handle(self, msg: Inbound, last_try=False) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush)."""
+        self._label_job = None
         with self._tx():
             disposition, approved = self._handle(msg, last_try)
+        if self._label_job: self._read_label(*self._label_job)  # AV1537-15: after the commit, never holding the lock
         if approved is None: return disposition
         out = self.editor.apply(approved["change_id"], approved["draft_hash"])
         with self._tx():
@@ -567,8 +569,21 @@ class Conversation:
                         " (?, 'needs-details', ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
                             [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now)))
         self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
+        if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
         caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
         return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"
+
+    def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
+        try:
+            web = Path(media.web_copy(self.settings["mediaRoot"], sha)["path"]).read_bytes()  # metadata-free copy only
+            products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
+            found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
+        except Exception: return  # noqa: BLE001 - no label is today's reply exactly
+        line = label_reader.question(found) if found else None
+        with self._tx():
+            if line and self.db.execute("UPDATE drafts SET summary = summary || ? WHERE code = ? AND state = "
+                                        "'needs-details'", (" " + line, code)).rowcount:
+                self.db.execute("UPDATE outbox SET text = text || ? WHERE id = ? AND sent_at IS NULL", (" " + line, reply_id))
 
     def _outcome(self, row, out, now):
         """Store the apply result and its reply in one transaction (before anything is sent)."""
