@@ -928,3 +928,27 @@ Branch rb/rf1720-3 from origin/main 6304c56 (RF1720-3, PR #117: commit 03d551e, 
 Checks at PR head 03d551e (recorded in PR #117, real Chromium, none skipped): `python3 -m unittest hass.tests.test_preview_store_address hass.tests.test_preview hass.tests.test_preview_viewports hass.tests.test_preview_overlay hass.tests.test_store_ops -v` ran 37 tests, OK. Pre-push tests were not run (host busy). CI `check` passed at 03d551e.
 
 Limits: maker previews still have no check.
+
+## H05 interpreter-check names drop invisible and direction characters (RF1730-1) — October 31, 2026
+
+Branch rb/rf1730-1 from origin/main 6304c56 (RF1730-1, PR #116: commit 52e1bca, merged as bad06d5bb93086cf019257e0ebf0acf332d51e7d). For Michael: any op, field or draft-code name that the interpreter check shows him in a question now contains only visible characters. `hass/interpret_check.py` `_clean` drops characters in Unicode categories `Cc`, `Cf`, `Zl`, `Zp`, `Cs`, `Co` and `Cn` (controls, zero-width and direction marks, BOM, line and paragraph separators), then applies the existing 40-character cut, so the cut counts visible characters only. A name left empty shows as `(unnamed)`. Accents, CJK and emoji are kept. Values are never touched, and a valid result is still returned unchanged. Existing `test_interpret_check.py` unedited. Added `hass/tests/test_interpret_check_names.py`.
+
+Checks at PR head 52e1bca (recorded in PR #116): `python3 -m unittest hass.tests.test_interpret_check_names hass.tests.test_interpret_check -v` ran 18 tests, OK; `hass.tests.test_interpreter_eval` ran 10 tests, OK. Pre-push tests were not run (host busy). CI `check` passed at 52e1bca.
+
+Limits: only names shown in interpreter-check questions are cleaned; the content text rules are RF1300-10's.
+
+## H10 product photo alt text must describe the photo (RF1730-2) — October 31, 2026
+
+Branch rb/rf1730-2 from origin/main e485da9 (RF1730-2, PR #119: commit bc549f9, merged as 0cb6ac9e85404b4c7be5dfd47b265b4f4c6a2556). For Michael: `product.set_photo` now refuses an `imageAlt` that is a file name (ends `.jpg`, `.jpeg`, `.png`, `.heic`, `.heif`, `.gif`, `.webp`, `.tif` or `.tiff`), a camera or phone default name (`IMG_4021`, `DSC 0042`, `pxl_2026…`), a bare placeholder word (`photo`, `image`, `N/A`, `TBD`, …), contains the photo id, or has fewer than 3 letters, with one fixed reply: `imageAlt should say what the photo shows (for example "Hass avocados in a wooden crate"), not a file name or placeholder`. The new `_alt_problem` in `hass/ops/photos.py` runs right after the photo-id check and before the media store is read, so nothing is written. Real descriptions behave as before. Existing tests unedited. Added `hass/tests/test_set_photo_alt.py`.
+
+Checks at PR head bc549f9 (recorded in PR #119, run under `memcap`): `python3 -m unittest hass.tests.test_set_photo_alt hass.tests.test_set_photo hass.tests.test_undo -v` ran 23 tests, OK. Pre-push tests passed (hass unittests). CI `check` passed at bc549f9.
+
+Limits: the rule catches file names and placeholders, not wrong descriptions.
+
+## H05 a repeated change in one message becomes a question (RF1730-3) — October 31, 2026
+
+Branch rb/rf1730-3 from origin/main 0cb6ac9 (RF1730-3, PR #122: commit 3fe510a, merged as d31d732cfc529135b3136c153f5e366ca800da1b). For Michael: when one message lists the same change twice (same `op` and equal `args` in any key order, compared with `json.dumps(sort_keys=True)`), `interpret_check.check` returns one question naming the first repeated pair: `Changes 1 and 2 in that message are the same. Did you mean to change something else? Could you say it another way?` Nothing is drafted. The check runs after the per-call shape check and before the op, field, kind and revises checks. Args that cannot be serialised are never called the same and never raise. Different changes to the same item, and JSON-different values (`true`, `1`, `1.0`), pass unchanged. No existing test edited. Added `hass/tests/test_interpret_check_repeat.py`.
+
+Checks at PR head 3fe510a (recorded in PR #122): `python3 -m unittest hass.tests.test_interpret_check_repeat hass.tests.test_interpret_check -v` ran 20 tests, OK. CI `check` passed at 3fe510a.
+
+Limits: only exact repeats in one message are caught; repeats across messages are the editor's no-op refusal.
