@@ -4,12 +4,14 @@ build(registry, content) -> str returns a deterministic plain-text prompt: role,
 op (sorted by name) and the catalog's product ids/names/status and maker keys/names. A registry or catalog change
 changes the prompt. Pure: no clock, no env, no I/O. Catalog values are JSON-string-escaped (line separators too), so
 a name can never break a line or a section. Not wired into any service (NB-AV-02's LocalInterpreter takes the text).
+AV2022-01: a Community section lists every hike (id | title | starts at | status) and route idea (id | title).
 """
 from __future__ import annotations
 
 import json
 
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
+MAX_HIKES, MAX_ROUTES = 60, 60
 PROMPT_MAX_BYTES = 64 * 1024
 _LINE_BREAKS = {"\x85": "\\u0085", "\u2028": "\\u2028", "\u2029": "\\u2029"}  # json.dumps keeps these raw
 
@@ -24,7 +26,7 @@ CONTRACT = (
     '"revises" may only be a code from the "pending" list in the user message; otherwise it is null.')
 
 RULES = (
-    "Use only the product ids and maker keys listed below, exactly as written.",
+    "Use only the product ids, maker keys, hike ids and route idea ids listed below, exactly as written.",
     "If a product or maker is not clearly one listed entry, ask a question naming the candidates.",
     "Never add organic, origin, local or maker claims the owner did not write.",
     "Never guess dates, times, prices or quantities; ask a question instead.",
@@ -74,8 +76,26 @@ def _maker_lines(makers) -> list:
     return _capped(rows, MAX_MAKERS)
 
 
+def _dicts(items) -> list:
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+def _hike_lines(events) -> list:
+    rows = sorted(sorted(_dicts(events), key=lambda e: str(e.get("id", ""))),
+                  key=lambda e: str(e.get("startsAt", "")), reverse=True)  # newest first, ties by id
+    return _capped([f"{_q(e.get('id'))} | {_q(e.get('title'))} | {_q(e.get('startsAt'))} | {_q(e.get('status'))}"
+                    for e in rows], MAX_HIKES)
+
+
+def _route_lines(ideas) -> list:
+    rows = sorted(_dicts(ideas), key=lambda r: str(r.get("id", "")))
+    return _capped([f"{_q(r.get('id'))} | {_q(r.get('title'))}" for r in rows], MAX_ROUTES)
+
+
 def build(registry, content) -> str:
-    """The system prompt for ``registry`` (name -> Op) and ``content`` (.products list, .makers dict)."""
+    """The system prompt for ``registry`` (name -> Op) and ``content`` (.products, .makers, .community)."""
+    community = getattr(content, "community", None) or {}
+    community = community if isinstance(community, dict) else {}
     sections = [
         ROLE,
         CONTRACT,
@@ -83,6 +103,8 @@ def build(registry, content) -> str:
         "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
         "Catalog.\nProducts (id | name | status):\n" + "\n".join(_product_lines(content.products or []))
         + "\nMakers (key | name):\n" + "\n".join(_maker_lines(content.makers or {})),
+        "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
+        + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),
     ]
     prompt = "\n\n".join(sections) + "\n"
     if len(prompt.encode("utf-8")) > PROMPT_MAX_BYTES:
