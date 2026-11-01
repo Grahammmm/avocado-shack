@@ -152,12 +152,12 @@ class PhotoDraftTests(unittest.TestCase):
 
     def test_several_attachments_and_refused_photos_store_and_draft_nothing(self):
         self.assertEqual(self.say(attachments=2), "attachment-many")
-        self.assertEqual(self.replies(), ["One photo at a time, please; nothing was saved."])
+        self.assertEqual(self.replies(), [media.REPLIES["many"]])
         self.assertEqual(self.photos.calls, [])
         for data, code in ((b"", "empty"), (b"GIF89a\x01\x00\x01\x00", "unsupported-type"), (JPG[:-2], "truncated")):
             with self.subTest(code):
                 self.photos.data = data
-                self.assertEqual(self.say(ANSWER, attachments=1), "photo-refused")
+                self.assertEqual(self.say(ANSWER, attachments=1), f"photo-refused:{code}")
                 self.assertEqual(self.replies(), [media.REPLIES[code]])
         self.assertEqual((self.drafts(), self.originals(), self.interp.texts), ([], [], []))
 

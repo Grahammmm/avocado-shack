@@ -527,12 +527,13 @@ class Conversation:
         return "proposed"
 
     def _photo(self, msg, now) -> str:  # NB-AV-09: store one photo, then open (or name) its needs-details draft
-        if msg.attachments != 1: return self._reply("One photo at a time, please; nothing was saved.") or "attachment-many"
+        if msg.attachments != 1: return self._reply(media.REPLIES["many"]) or "attachment-many"
         try:
-            sha = media.store_original(self.settings["mediaRoot"], self.photos.fetch(msg.provider_id, 1)[0],
+            media.check_photo(data := self.photos.fetch(msg.provider_id, 1)[0])  # NB-AV-10: all checks before any write
+            sha = media.store_original(self.settings["mediaRoot"], data,
                                        received_at=msg.received_at or _iso(now), source="owner-chat")["sha256"]
         except media.Refused as exc:
-            return self._reply(exc.reply) or "photo-refused"
+            return self._reply(exc.reply) or f"photo-refused:{exc.code}"
         dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
         if dup: return self._reply(f"That photo is already in draft {dup[0]['code']}." + (
             f" {dup[0]['summary']}" if dup[0]["state"] == "needs-details" else "")) or "photo-duplicate"
