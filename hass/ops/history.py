@@ -4,6 +4,8 @@ Only the records that change touched are set back, and only when each still hold
 later edits to other records are kept. A record the change created is hidden/cancelled, never deleted. The A2 writer
 sets ``revertedBy`` on the original change record once the revert is committed.
 An undo of an undo is refused, so the original keeps ``revertedBy``; to bring a change back, ask for it again.
+An undo that cancels a hike, moves its start or turns its RSVPs off carries the forward op's guest warning, never a
+refusal, and only when the undo is drafted.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 from hass.ops import COLLECTIONS, Arg, Op, Refused, Touched
-from hass.ops.hikes import _seats
+from hass.ops.hikes import _guest_warning, _move_warning, _seats
 
 # What "undo an addition" means per collection: hide or cancel, never delete.
 UNDO_ADDITION = {"products": ("status", "hidden"), "events": ("status", "cancelled"), "makers": ("hidden", True)}
@@ -68,6 +70,19 @@ def _draft_ops(ctx, change_id):
     return ops if isinstance(ops, list) and all(isinstance(call, dict) for call in ops) else False
 
 
+def _event_warning(ctx, current, before):
+    """The forward op's guest warning for undoing a scheduled hike back to ``before`` (a callable), or None."""
+    if not isinstance(current, dict) or current.get("status") != "scheduled":
+        return None
+    if before is None or before.get("status") == "cancelled" or (current.get("rsvpEnabled")
+                                                                    and not before.get("rsvpEnabled")):
+        return lambda: _guest_warning(ctx, current)  # cancels the hike or turns RSVPs off: one warning
+    if (current.get("rsvpEnabled") and before.get("status") == "scheduled"  # as hike.update: no RSVPs, no move warning
+            and before.get("startsAt") != current.get("startsAt")):
+        return lambda: _move_warning(ctx, current, before["startsAt"])
+    return None
+
+
 def _revert(content, args, ctx):
     change_id = args["changeId"]
     try:
@@ -96,7 +111,7 @@ def _revert(content, args, ctx):
     for (collection, key), after in last.items():
         if _current(content, collection, key) != after:
             return Refused(f"conflict: {collection} {key} changed after {change_id}")
-    touched = []
+    touched, pending = [], []  # pending: guest warnings, added only once the whole undo is drafted
     for (collection, key), before in first.items():
         current = copy.deepcopy(_current(content, collection, key))
         if before is not None:
@@ -119,6 +134,10 @@ def _revert(content, args, ctx):
         if value != current:
             _put(content, collection, key, value)
             touched.append(Touched(collection, key, current, copy.deepcopy(value)))
+            if collection == "events" and (warn := _event_warning(ctx, current, before)):
+                pending.append(warn)
+    for warn in pending:  # only reached when nothing was refused; non-empty pending means touched is non-empty
+        warn()
     return touched or Refused(f"undoing {change_id} changes nothing")
 
 
