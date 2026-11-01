@@ -1,8 +1,7 @@
 """RF1300-10 tests: content text refuses control, zero-width and direction-changing characters.
 
 Each case copies the checkout content to a temporary directory, changes one value and validates it.
-The checkout is only read. Run: python3 -m unittest hass.tests.test_content_text_chars -v
-"""
+The checkout is only read. Run: python3 -m unittest hass.tests.test_content_text_chars -v"""
 
 import json
 import shutil
