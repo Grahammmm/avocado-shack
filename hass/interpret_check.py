@@ -10,6 +10,8 @@ pair; it is checked after the shape check and before op/field checks, so a repea
 import json
 import unicodedata
 
+from hass.editor import MAX_OPS
+
 HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
 STRING_KINDS = ("id", "maker_key", "text", "url", "enum", "date", "time", "image")
 NAME_CUT = 40
@@ -34,6 +36,9 @@ def _kind_ok(kind: str, value) -> bool:
 def _problem(result: dict, registry, pending_codes):
     calls = result["ops"]
     if not calls: return "I did not find a change in that message. What would you like to change?"
+    if len(calls) > MAX_OPS:  # RF2030-7: counted before shapes, repeats and the revises code
+        return (f"That is {len(calls)} changes in one message; I can take at most {MAX_OPS} at a time. "
+                "Please send them in smaller groups.")
     for n, call in enumerate(calls, 1):
         if not (isinstance(call, dict) and set(call) == {"op", "args"} and isinstance(call["op"], str)
                 and isinstance(call["args"], dict)):
