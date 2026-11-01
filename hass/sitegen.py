@@ -33,17 +33,57 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import (  # noqa: E402
-    PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError, load_and_validate,
+    PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError, checked_on, load_and_validate,
+    shop_today,
 )
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
 SITE_PREFIX = "storefront-mockup/"
 TEMPLATES = ("index.html", "hike/index.html")
 SLOT_RE = re.compile(r"\{\{([a-zA-Z.]+)\}\}")
+# SHOP-1: freshness words come only from Michael's recorded check (store.selection_checked_on), never from the clock.
+# The generation date is used only to decide whether that stored date is more than STALE_AFTER_DAYS old.
+STALE_AFTER_DAYS = 7
+AVAILABILITY_WORDS = {"yes": "Available today", "limited": "Limited", "no": "Sold out"}
+_DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+           "November", "December")
 
 
-def _catalog_js(content: Content) -> bytes:
-    records = [{k: v for k, v in p.items() if k in PRODUCT_PUBLIC_FIELDS + PRODUCT_OPTIONAL_PUBLIC} for p in content.active_products()]
+def _day_text(day) -> str:
+    """'Friday, October 23' (fixed English names; no locale)."""
+    return f"{_DAYS[day.weekday()]}, {_MONTHS[day.month - 1]} {day.day}"
+
+
+def _check_state(store: dict, today):
+    """(check date or None, stale?) where stale means older than STALE_AFTER_DAYS at generation date ``today``."""
+    day = checked_on(store)
+    return day, day is not None and (today - day).days > STALE_AFTER_DAYS
+
+
+def checked_line(store: dict, today) -> str:
+    day, stale = _check_state(store, today)
+    if day is None:
+        return "The selection has not been checked yet."
+    tail = " (more than a week ago - call or visit to confirm)" if stale else ""
+    return f"Selection last checked by Michael on {_day_text(day)}{tail}."
+
+
+def availability_label(product: dict, store: dict, today) -> str | None:
+    """Card words for an active product, or None (no check yet, or availability not confirmed)."""
+    day, stale = _check_state(store, today)
+    if day is None or product.get("available") not in AVAILABILITY_WORDS:
+        return None
+    return f"Last confirmed {_day_text(day)}" if stale else AVAILABILITY_WORDS[product["available"]]
+
+
+def _catalog_js(content: Content, today) -> bytes:
+    records = []
+    for p in content.active_products():
+        record = {k: v for k, v in p.items() if k in PRODUCT_PUBLIC_FIELDS + PRODUCT_OPTIONAL_PUBLIC}
+        if (label := availability_label(p, content.store, today)) is not None:
+            record["availability"] = label
+        records.append(record)
     return ("const catalog=" + json.dumps(records, ensure_ascii=False) + ";\n").encode("utf-8")
 
 
@@ -88,15 +128,18 @@ def render_template(text: str, slots: dict[str, str]) -> str:
     return out
 
 
-def render(content: Content, template_dir: Path = TEMPLATE_DIR) -> dict[str, bytes]:
-    """Return {repo-relative path: bytes} for every generated site file."""
+def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None) -> dict[str, bytes]:
+    """Return {repo-relative path: bytes} for every generated site file. ``today`` (default: the shop's current date)
+    only decides whether the stored selection check is stale; no clock value is ever written into the output."""
+    today = today or shop_today()
     files = {
-        SITE_PREFIX + "catalog-products.js": _catalog_js(content),
+        SITE_PREFIX + "catalog-products.js": _catalog_js(content, today),
         SITE_PREFIX + "producers.js": _producers_js(content),
         SITE_PREFIX + "producers.json": _producers_json(content),
         SITE_PREFIX + "community.json": _community_json(content),
     }
-    slots = store_slots(content.store)
+    line = html.escape(checked_line(content.store, today), quote=False)
+    slots = {**store_slots(content.store), "selection.checkedLine": line}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")
         files[SITE_PREFIX + rel] = render_template(text, slots).encode("utf-8")

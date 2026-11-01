@@ -13,7 +13,7 @@ import copy
 import re
 import unicodedata
 
-from hass.content_model import CATEGORIES
+from hass.content_model import AVAILABILITY, CATEGORIES
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
@@ -165,6 +165,20 @@ def _product_restore(content, args, ctx):
     return _set_status(content, args, ctx, expect="hidden", new="active", state_error=lambda s: f"is {s}, not hidden")
 
 
+def _product_set_availability(content, args, ctx):
+    """SHOP-1: mark one active product yes|limited|no. Shown on its card only while the selection check is recent."""
+    product = _product(content, args["id"])
+    if not isinstance(product, dict):
+        return product
+    if product["status"] != "active":
+        return Refused(f"{product['id']} is {product['status']}; restore it before marking it available")
+    if product.get("available") == args["available"]:
+        return Refused(f"{product['id']} is already marked available={args['available']}; nothing to change")
+    before = copy.deepcopy(product)
+    product["available"] = args["available"]
+    return _touch("products", product["id"], before, product)
+
+
 def _maker_add(content, args, ctx):
     key = args["key"]
     if len(key) > MAX_KEY:
@@ -275,6 +289,7 @@ OPS = (
                         "clearImageAlt": Arg("bool", required=False)}, _product_edit),
     Op("product.hide", _ID, _product_hide),
     Op("product.restore", _ID, _product_restore),
+    Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
     Op("maker.add", {"key": Arg("text"), **{k: Arg("url" if k == "url" else "text") for k in MAKER_EDITABLE}},
        _maker_add),
     Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE}},

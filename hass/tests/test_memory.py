@@ -41,7 +41,10 @@ class MemoryTests(unittest.TestCase):
             return [dict(r) for r in db.execute(sql, args)]
 
     def test_remember_get_correct_list_keeps_dated_history(self):
-        self.mem.remember("pickup.day", "Saturday", "fact", "owner-approved:chg-1", approved_change="chg-1")
+        (self.state / "changes").mkdir(mode=0o700)  # RF1650-2: an owner-approved source names an applied change record
+        (self.state / "changes" / "chg-0123456789ab.json").write_text('{"state": "applied"}', "utf-8")
+        self.mem.remember("pickup.day", "Saturday", "fact", "owner-approved:chg-0123456789ab",
+                          approved_change="chg-0123456789ab")
         self.assertEqual(self.mem.get("pickup.day"), "Saturday")
         self.mem.correct("pickup.day", "Sunday", "owner-stated:msg-9")
         self.mem.remember("tone", "short replies", "preference", "operator:set at onboarding")
@@ -49,7 +52,7 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual([(r["key"], r["value"]) for r in listed], [("pickup.day", "Sunday"), ("tone", "short replies")])
         self.assertEqual((listed[0]["kind"], listed[0]["source"]), ("fact", "owner-stated:msg-9"))
         old, new = self.rows("pickup.day")
-        self.assertEqual((old["value"], old["approved_change"], new["value"]), ("Saturday", "chg-1", "Sunday"))
+        self.assertEqual((old["value"], old["approved_change"], new["value"]), ("Saturday", "chg-0123456789ab", "Sunday"))
         self.assertTrue(old["created_at"] < old["superseded_at"] < new["created_at"])
         self.assertIsNone(new["superseded_at"])
         self.assertIsNone(self.mem.get("unknown"))
