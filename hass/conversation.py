@@ -21,7 +21,20 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
-                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?")  # H17
+                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?|(help|commands|\?)")  # H17
+HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
+    'yes [code] - apply the waiting draft: "yes a1b2"',
+    'no [code] - cancel the waiting draft or question: "no a1b2"',
+    'status - pause state, waiting drafts, hike seats: "status"',
+    'history - the last five changes: "history"',
+    'undo [code] - draft an undo of an applied change: "undo a1b2"',
+    'pause changes - stop approvals from applying: "pause changes"',
+    'resume changes - let approvals apply again: "resume changes"',
+    'remember <key>: <text> - save a note: "remember parking: back lot"',
+    'forget <key> - delete a saved note: "forget parking"',
+    'memory - list the saved notes: "memory"',
+    'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
+    'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX = 20
@@ -168,10 +181,11 @@ def parse_keyword(text: str):
 
 
 def parse_command(text: str):
-    """("undo", code or None) or (history|status|pause|resume, None) when the whole message is that command;
+    """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[7]: return "help", None
     return ("undo", match[3]) if match[2] else (next(v for v in (match[1], match[4], match[5], match[6]) if v), None)
 
 
@@ -371,7 +385,7 @@ class Conversation:
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= now]
-        if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
+        if command and command[0] in ("status", "help"): expired = []  # H17: read-only; status only hides lapsed drafts
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -527,12 +541,13 @@ class Conversation:
         return "proposed"
 
     def _photo(self, msg, now) -> str:  # NB-AV-09: store one photo, then open (or name) its needs-details draft
-        if msg.attachments != 1: return self._reply("One photo at a time, please; nothing was saved.") or "attachment-many"
+        if msg.attachments != 1: return self._reply(media.REPLIES["many"]) or "attachment-many"
         try:
-            sha = media.store_original(self.settings["mediaRoot"], self.photos.fetch(msg.provider_id, 1)[0],
+            media.check_photo(data := self.photos.fetch(msg.provider_id, 1)[0])  # NB-AV-10: all checks before any write
+            sha = media.store_original(self.settings["mediaRoot"], data,
                                        received_at=msg.received_at or _iso(now), source="owner-chat")["sha256"]
         except media.Refused as exc:
-            return self._reply(exc.reply) or "photo-refused"
+            return self._reply(exc.reply) or f"photo-refused:{exc.code}"
         dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
         if dup: return self._reply(f"That photo is already in draft {dup[0]['code']}." + (
             f" {dup[0]['summary']}" if dup[0]["state"] == "needs-details" else "")) or "photo-duplicate"
@@ -619,6 +634,9 @@ class Conversation:
                     self._reply(f"Applied {row['code']}, but the preview check failed: {error}")
 
     def _command(self, msg, now, verb, code) -> str:
+        if verb == "help":
+            self._reply(HELP_TEXT)
+            return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "history":
             rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT 5").fetchall()
@@ -747,6 +765,7 @@ class Conversation:
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]
+        lines += self._photo_lines(now)  # NB-AV-12: counts only, before Last change
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
@@ -758,6 +777,25 @@ class Conversation:
                 text += f" - {last['reason']}"
             lines.append(text)
         return "\n".join(lines + self._hike_lines(now))
+
+    def _photo_lines(self, now) -> list:
+        """NB-AV-12: waiting photo drafts (every op product.set_photo) and pending inbox messages with tries > 0.
+        The inbox is opened read-only (never created); no file or no tries column means no line."""
+        def photo_only(raw):
+            try: ops = json.loads(raw)
+            except (TypeError, ValueError): return False
+            return isinstance(ops, list) and bool(ops) and all(
+                isinstance(c, dict) and c.get("op") == "product.set_photo" for c in ops)
+        n = sum(self._expiry(r) > now and photo_only(r["ops_json"]) for r in self._drafts("state = 'needs-details'"))
+        lines, path = [f"Photos waiting for details: {n}"] if n else [], self.sdir / "inbox.sqlite3"
+        if not path.is_file(): return lines
+        try:
+            with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=1)) as db:
+                if "tries" not in {r[1] for r in db.execute("PRAGMA table_info(inbound)")}: return lines
+                m = db.execute("SELECT COUNT(*) FROM inbound WHERE state = 'pending' AND tries > 0").fetchone()[0]
+        except sqlite3.Error:
+            return lines + ["Photos still downloading: unavailable"]
+        return lines + ([f"Photos still downloading: {m}"] if m else [])
 
     def _hike_lines(self, now) -> list:
         """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed."""

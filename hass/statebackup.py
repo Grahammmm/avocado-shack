@@ -2,6 +2,7 @@
 
     python3 hass/statebackup.py create --state DIR --out DIR [--media DIR] | verify BACKUP
                                 | restore BACKUP --into DIR --worktree WT [--paused] [--media-into DIR] | list --out DIR
+                                | drill BACKUP --into DIR --worktree WT [--media-into DIR]
 
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
 settled state dir (config.json, drafts, changes, screenshots and consistent sqlite snapshots of inbox.sqlite3, then
@@ -294,6 +295,25 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
     if mrels: extra.update({"mediaRestored": bool(mtarget), "media": len(mrels) // 2})
     return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]), **extra}
 
+STRUCTURAL = ("state", "settings", "db-integrity", "inbox-integrity")  # a drill fails on these health checks
+
+def drill(backup, into, worktree, media_into=None, now=None) -> dict:
+    """verify, restore --paused into a NEW dir, then the read-only health check and history on it; ids/counts only."""
+    checked = verify(backup)
+    if checked["result"] != "ok": return {"result": "corrupt", "step": "verify", "problems": checked["problems"]}
+    out = restore(backup, into, worktree, paused=True, now=now, media_into=media_into)
+    if out["result"] != "ok": return {**out, "step": "restore"}
+    from hass import health  # lazy: health imports this module at its top
+    problems, info, unsafe = health.check(out["state"], now=now)
+    ids = sorted({p["check"] for p in problems})
+    try: hist = editor.history(5, state=out["state"])
+    except UnsafeState: hist = {"result": "unsafe-state"}
+    step = "health" if unsafe or set(ids) & set(STRUCTURAL) else None if hist.get("result") == "ok" else "history"
+    return ({"result": "drill-failed", "step": step} if step else {"result": "ok"}) | {
+        "state": out["state"], "worktree": out["worktree"], "files": out["files"], "paused": out["paused"],
+        "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
+        "history": len(hist.get("history") or []), **{k: out[k] for k in ("media", "mediaRestored") if k in out}}
+
 NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
 def _listed(entry):  # (manifest doc or None, problem or None); a symlink is never followed
     if entry.is_symlink(): return None, "symlink"
@@ -320,11 +340,13 @@ def main(argv=None) -> int:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, params in (("create", ["--state", "--out"]), ("verify", ["backup"]), ("list", ["--out"]),
+                         ("drill", ["backup", "--into", "--worktree"]),  # before restore: --paused stays restore's
                          ("restore", ["backup", "--into", "--worktree"])):
         cmd = sub.add_parser(name)
         for param in params: cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
     cmd.add_argument("--paused", action="store_true")  # restore only (the last parser)
     cmd.add_argument("--media-into")
+    sub.choices["drill"].add_argument("--media-into")
     sub.choices["create"].add_argument("--media")
     args = parser.parse_args(argv)
     try:
@@ -333,8 +355,9 @@ def main(argv=None) -> int:
             for row in [rows] if isinstance(rows, dict) else rows: print(json.dumps(row, ensure_ascii=False))
             return 2 if isinstance(rows, dict) else 0  # refused: --out missing or a link
         out = create(args.state, args.out, media=args.media) if args.cmd == "create" else verify(args.backup) \
-            if args.cmd == "verify" else restore(args.backup, args.into, args.worktree, paused=args.paused,
-                                                 media_into=args.media_into)
+            if args.cmd == "verify" else drill(args.backup, args.into, args.worktree, media_into=args.media_into) \
+            if args.cmd == "drill" else restore(args.backup, args.into, args.worktree, paused=args.paused,
+                                                media_into=args.media_into)
     except UnsafeState as exc:
         print(json.dumps({"result": "unsafe-state", "problems": [str(exc)]}))
         return 2
