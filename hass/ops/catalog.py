@@ -230,11 +230,17 @@ def _fold(text) -> str:
     return " ".join(plain.translate(_FOLD_PUNCT).replace("'", "").split()).casefold()
 
 
-def lookup(content, kind, query):
-    """Read-only name lookup: {"match": id} for one hit, {"candidates": [...]} (<=10, by id) otherwise."""
+def lookup(content, kind, query, aliases=None):
+    """Read-only name lookup: {"match": id} for one hit, {"candidates": [...]} (<=10, by id) otherwise.
+    H15 aliases {name: (kind, id)}: a folded query equal to an alias of this kind whose record still exists gives
+    {"match": id, "via": "alias <name>"} (space and - compare equal); a dangling alias is ignored."""
     if kind not in ("product", "maker"):
         raise ValueError("kind must be 'product' or 'maker'")
     needle = _fold(query) if isinstance(query, str) else ""
+    for name, (alias_kind, ident) in (aliases or {}).items():
+        if needle and alias_kind == kind and _fold(name).replace(" ", "-") == needle.replace(" ", "-") and (
+                ident in content.makers if kind == "maker" else any(p["id"] == ident for p in content.products)):
+            return {"match": ident, "via": f"alias {name}"}
     hits = []
     if needle and kind == "product":
         hits = [(p["id"], {"id": p["id"], "name": p["name"], "brand": p["brand"], "status": p["status"]})
