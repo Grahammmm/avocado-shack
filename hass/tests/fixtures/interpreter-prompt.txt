@@ -8,7 +8,7 @@ Reply with exactly one JSON object and nothing else, in one of these shapes:
 "revises" may only be a code from the "pending" list in the user message; otherwise it is null.
 
 Rules:
-- Use only the product ids and maker keys listed below, exactly as written.
+- Use only the product ids, maker keys, hike ids and route idea ids listed below, exactly as written.
 - If a product or maker is not clearly one listed entry, ask a question naming the candidates.
 - Never add organic, origin, local or maker claims the owner did not write.
 - Never guess dates, times, prices or quantities; ask a question instead.
@@ -27,3 +27,9 @@ Products (id | name | status):
 Makers (key | name):
 "Etto" | "Etto Pastificio"
 "Stepladder" | "Stepladder Ranch"
+
+Community.
+Hikes (id | title | starts at | status):
+(none)
+Route ideas (id | title):
+(none)

@@ -28,6 +28,8 @@ SIDEWAYS = ("This photo is stored sideways, and it has to be stored the right wa
             "Please send it again as a screenshot.")
 EMPTY, INCOMPLETE = "That photo arrived empty. Please send it again.", "That photo arrived incomplete. Please send it again."
 MANY = "Please send one photo at a time (one per message); nothing was saved."
+AUDIO = ("That looks like a voice note or audio file. I can't understand voice notes yet, so nothing was saved. "
+         "Please type the change as a text message.")
 
 BAD_IDAT = PNG_DATA[0][:-1] + bytes([PNG_DATA[0][-1] ^ 1])  # one CRC bit flipped
 CASES = {  # name: (bytes, code, full reply)
@@ -36,7 +38,7 @@ CASES = {  # name: (bytes, code, full reply)
     "gif": (b"GIF89a\x01\x00\x01\x00" + b"\0" * 32, "unsupported-type", UNSUPPORTED),
     "heic": (b"\x00\x00\x00\x18ftypheic" + b"\0" * 64, "unsupported-type", UNSUPPORTED),
     "pdf": (b"%PDF-1.4\n%fake\n%%EOF\n", "unsupported-type", UNSUPPORTED),
-    "voice note (m4a)": (b"\x00\x00\x00\x1cftypM4A " + b"\0" * 64, "unsupported-type", UNSUPPORTED),
+    "voice note (m4a)": (b"\x00\x00\x00\x1cftypM4A " + b"\0" * 64, "audio", AUDIO),
     "truncated jpeg": (JPG[:-2], "truncated", INCOMPLETE),
     "jpeg comment between scans": (jpeg(scan=SCAN[:-2] + seg(0xFE, b"GPS") + SCAN), "unreadable", UNREADABLE),
     "png bad crc": (media.KINDS["png"] + b"".join(PNG_KEPT) + BAD_IDAT + b"".join(PNG_DATA[1:]), "unreadable",

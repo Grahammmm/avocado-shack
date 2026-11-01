@@ -85,10 +85,11 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
 
     def test_owner_gate_and_duplicate(self):
         for kw, disposition in ((dict(sender=STRANGER), "ignored"), (dict(chat=GROUP), "ignored"),
-                                (dict(from_me=True), "echo"), (dict(kind="edited"), "edited-ignored")):
+                                (dict(from_me=True), "echo"), (dict(kind="edited"), "not-read")):
             with self.subTest(**kw):
                 self.chat("remember hours: 9-5", disposition, **kw)
-                self.assertEqual(self.out.sent, [])
+                self.assertEqual([r["text"] for r in self.out.sent],
+                                 [conversation.NOT_READ_REPLY] if disposition == "not-read" else [])
         self.assertNotIn("memory", self.tables())
         self.chat("remember hours: 9-5", "memory-saved", pid="d1")
         self.chat("remember hours: 9-5", "duplicate", pid="d1")
