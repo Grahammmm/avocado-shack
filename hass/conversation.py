@@ -378,6 +378,8 @@ class Conversation:
             return disposition, None
         verb, code = keyword
         targets = [r for r in self._drafts("state = 'proposed'") if code is None or r["code"] == code]
+        if verb == "reject" and not targets:  # NB-AV-09: a needs-details draft (a photo) can be cancelled, never approved
+            targets = [r for r in self._drafts("state = 'needs-details'") if code is None or r["code"] == code]
         if len(targets) != 1:
             self._reply(self._no_target(code, targets, expired))
             self._record(msg, "no-target")

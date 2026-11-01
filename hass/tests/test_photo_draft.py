@@ -13,7 +13,7 @@ import stat
 import unittest
 
 from hass import conversation, media
-from hass.conversation import PHOTO_QUESTION, ConfigError, Inbound
+from hass.conversation import NOTHING, PHOTO_QUESTION, ConfigError, Inbound
 from hass.fixture_chat import FixtureAdapter
 from hass.tests.test_conversation import CHAT, OWNER, SETTINGS, T0
 from hass.tests.test_set_photo import ALT, FIXTURES, PID, PhotoRepo, _settings
@@ -176,6 +176,24 @@ class PhotoDraftTests(unittest.TestCase):
         self.assertEqual(self.replies(), [f"Cancelled {SHA[:4]}; nothing changed."])
         self.assertEqual(self.say(attachments=1), "photo-draft")  # a cancelled draft no longer holds the photo
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "needs-details"])
+        self.assertEqual(self.repo.product(PID)["image"], "assets/products/photo-product-001.webp")
+
+    def test_no_cancels_the_photo_draft_before_it_is_filled_and_yes_never_approves_it(self):
+        self.say(attachments=1)
+        self.replies()
+        for keyword in ("yes", f"yes {SHA[:4]}"):  # a needs-details draft is never approved
+            with self.subTest(keyword):
+                self.assertEqual(self.say(keyword), "no-target")
+        self.assertEqual(self.replies(), [NOTHING, f"{SHA[:4]} is needs-details."])
+        self.assertEqual(self.say(f"no {SHA[:4]}"), "rejected")
+        self.assertEqual(self.replies(), [f"Cancelled {SHA[:4]}; nothing changed."])
+        [row] = self.drafts()
+        self.assertEqual((row["state"], row["reason"]), ("rejected", "owner"))
+        self.assertEqual(self.say(attachments=1), "photo-draft")  # the photo can open a new draft, new code
+        self.assertEqual(self.say("no"), "rejected")  # a bare no cancels the only waiting photo draft
+        self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "rejected"])
+        self.assertNotEqual(self.drafts()[1]["code"], SHA[:4])
+        self.assertEqual(self.say("no"), "no-target")
         self.assertEqual(self.repo.product(PID)["image"], "assets/products/photo-product-001.webp")
 
     def test_photos_need_a_media_root(self):
