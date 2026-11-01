@@ -1,7 +1,8 @@
 """Hass private photo original store (H10 part 1): type check, size cap, sha256 name, no duplicates.
 
 store_original(root, data, received_at=..., source=...) keeps accepted JPEG/PNG bytes once under
-root/originals/<sha[:2]>/<sha>.<ext> (0600 files, 0700 dirs) with a <sha>.json sidecar. The kind comes from the
+root/originals/<sha[:2]>/<sha>.<ext> (0600 files, 0700 dirs) with a <sha>.json sidecar; received_at must be a
+timezone-aware ISO-8601 time (else ValueError before the root is opened). The kind comes from the
 bytes only; a sender's mimeType or file name is never trusted. The caller passes a media root that is NOT the Hass
 state dir (statebackup refuses unknown state entries) and lies outside the repository. Stdlib only; no network,
 no CLI, no wiring into the bridge. Refusals carry a fixed short owner reply with no path or hash in it.
@@ -11,6 +12,7 @@ block that can carry location, device or time removed by JPEG segment / PNG chun
 no image library). A photo that would show sideways without its EXIF Orientation is refused, never rotated.
 """
 import hashlib, json, os, re, stat, tempfile, zlib  # noqa: E401
+from datetime import datetime
 from pathlib import Path
 
 from hass import editor
@@ -95,11 +97,20 @@ def _open_root(root) -> Path:
         raise editor.UnsafeState("media root must lie outside the repository")
     return editor.open_state(str(path))
 
+def _aware(value) -> str:
+    """value unchanged if it is a timezone-aware ISO-8601 time (inbox.parse_aware's rule); else ValueError."""
+    msg = "received_at must be a timezone-aware ISO-8601 time"
+    if not isinstance(value, str) or not value: raise ValueError(msg)
+    try: dt = datetime.fromisoformat(value)
+    except ValueError: raise ValueError(msg) from None
+    if dt.tzinfo is None or dt.utcoffset() is None: raise ValueError(msg)
+    return value
+
 def store_original(root, data: bytes, *, received_at: str, source: str) -> dict:
     """Keep data once under its sha256; a repeat returns the existing entry with duplicate=True."""
     if not isinstance(source, str) or not SOURCE_RE.fullmatch(source):
         raise ValueError("source must match ^[a-z0-9-]{1,32}$")
-    if not isinstance(received_at, str) or not received_at: raise ValueError("received_at must be a non-empty string")
+    _aware(received_at)  # before _open_root: a refused time creates nothing
     if not isinstance(data, (bytes, bytearray)): raise TypeError("data must be bytes")
     data = bytes(data)
     base = _open_root(root)
