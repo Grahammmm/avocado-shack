@@ -2,8 +2,12 @@
 
 check() is pure: an op, argument name or value type the registry does not allow, or a ``revises`` code that is not
 waiting, becomes one owner question naming the field. Value checks (real dates, makers, files) stay in the editor.
+Names shown to the owner contain only visible characters (no controls, zero-width, direction or line-separator marks).
 """
 
+import unicodedata
+
+HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
 STRING_KINDS = ("id", "maker_key", "text", "url", "enum", "date", "time", "image")
 NAME_CUT = 40
 AGAIN = "Could you say it another way?"
@@ -11,8 +15,8 @@ WANTS = {"bool": "a yes/no", "int": "a whole number", "text_list": "a list of te
 
 
 def _clean(value) -> str:
-    """A name safe to show the owner: control characters removed, cut to NAME_CUT characters."""
-    text = "".join(c for c in str(value) if not (ord(c) < 32 or 127 <= ord(c) < 160))
+    """A name safe to show the owner: invisible characters removed, cut to NAME_CUT characters, "(unnamed)" if empty."""
+    text = "".join(c for c in str(value) if unicodedata.category(c) not in HIDDEN) or "(unnamed)"
     return text if len(text) <= NAME_CUT else text[:NAME_CUT - 3] + "..."
 
 
