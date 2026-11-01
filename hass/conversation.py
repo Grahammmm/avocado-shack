@@ -428,9 +428,10 @@ class Conversation:
         # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
         states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
         targets = [r for r in self._drafts(f"state IN {states}") if code is None or r["code"] == code]
-        if verb == "approve" and code and not targets and (ask := self._by_code(code, ("needs-details",))):
-            # a waiting question is never approved; a bare yes keeps NOTHING (test_conversation pins it)
-            self._reply(f"{ask['code']} still needs details: {ask['summary']}")
+        asks = [] if verb != "approve" or targets else [self._by_code(code, ("needs-details",))] if code else \
+            [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > now]  # AV1737-05: bare yes
+        if asks := [a for a in asks if a is not None]:  # a waiting question is never approved; it is repeated
+            self._reply("\n".join(f"{a['code']} still needs details: {a['summary']}" for a in asks))
             self._record(msg, "no-target")
             return "no-target", None
         if len(targets) != 1:
