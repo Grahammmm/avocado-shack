@@ -4,9 +4,10 @@ Rows live in a `memory` table inside the private state dir's conversation.sqlite
 state backup covers it unchanged). Every row records its source and dates. A fact needs an explicit approved source:
 chat history, model output or repetition is never proof. correct() supersedes in one transaction; forget() blanks the
 text of every row of the key and keeps only the audit dates. Store only, plus a read-only history command: no chat
-commands, interpreter or network.
+commands, interpreter or network. An owner-approved:<change id> source must name a change whose record in this state
+dir is applied and not undone (RF1650-2); anything else is the same "unverified source".
 """
-import argparse, contextlib, json, os, re, sqlite3, sys  # noqa: E401
+import argparse, contextlib, json, os, re, sqlite3, stat, sys  # noqa: E401
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -48,7 +49,7 @@ def _check_source(source) -> None:
 class Memory:
     def __init__(self, state_dir, clock):
         """state_dir is validated by editor.open_state (UnsafeState if shared/foreign); clock() returns a datetime."""
-        sdir = editor_mod.open_state(state_dir)
+        self.sdir = sdir = editor_mod.open_state(state_dir)
         path = sdir / "conversation.sqlite3"
         os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
         os.chmod(path, 0o600)
@@ -59,10 +60,12 @@ class Memory:
         self.db.execute(TABLE)
 
     @classmethod
-    def on_connection(cls, db, clock):
-        """Share an open connection (the H05 Conversation's, sqlite3.Row rows): no second writer on the file."""
+    def on_connection(cls, db, clock, state_dir=None):
+        """Share an open connection (the H05 Conversation's, sqlite3.Row rows): no second writer on the file.
+        Without state_dir no change record can be read, so an owner-approved source is refused."""
         self = cls.__new__(cls)
         self.db, self.clock = db, clock
+        self.sdir = None if state_dir is None else editor_mod.open_state(state_dir)
         for sql in ("PRAGMA secure_delete = ON", TABLE): db.execute(sql)
         return self
 
@@ -90,6 +93,26 @@ class Memory:
         self.db.execute("INSERT INTO memory(key, value, kind, source, approved_change, created_at) "
                         "VALUES (?, ?, ?, ?, ?, ?)", (key, value, kind, source, approved_change, self._now()))
 
+    def _approved_problem(self, change_id):
+        """None if change_id names an applied, not-undone change record in this state dir, else why not."""
+        if not editor_mod.CHANGE_ID_RE.fullmatch(change_id): return "malformed id"  # before any path is built
+        if self.sdir is None: return "no state dir"
+        path = self.sdir / "changes" / f"{change_id}.json"
+        try:  # regular file only (no symlink, no symlinked dir); O_NONBLOCK: a swapped-in FIFO cannot hang
+            if path.parent.is_symlink() or not stat.S_ISREG(path.lstat().st_mode): return "no such change"
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with open(fd, encoding="utf-8") as fh: rec = json.load(fh)
+        except FileNotFoundError: return "no such change"
+        except (OSError, ValueError, RecursionError): return "unreadable change"
+        if not isinstance(rec, dict): return "unreadable change"
+        return "not applied" if rec.get("state") != "applied" else "undone" if "revertedBy" in rec else None
+
+    def _check_approved(self, source):
+        """The change id of an owner-approved source once its record checks out (else unverified); None otherwise."""
+        change_id = source.split(":", 1)[1] if source.startswith("owner-approved:") else None
+        if change_id is not None and self._approved_problem(change_id): raise ValueError("unverified source")
+        return change_id
+
     def remember(self, key, value, kind, source, approved_change=None) -> None:
         _check_key(key)
         _check_value(value)
@@ -97,9 +120,12 @@ class Memory:
         _check_source(source)
         if approved_change is not None and (not _clean(approved_change) or len(approved_change) > MAX_VALUE):
             raise ValueError("invalid approved_change")
+        if source.startswith("owner-approved:") and approved_change not in (None, source.split(":", 1)[1]):
+            raise ValueError("approved_change does not match source")
         with self._tx():
             if self._active(key) is not None: raise ValueError("use correct")
-            self._insert(key, value, kind, source, approved_change)
+            change_id = self._check_approved(source)  # after the key check: a stored key still says "use correct"
+            self._insert(key, value, kind, source, approved_change if change_id is None else change_id)
 
     def correct(self, key, value, source) -> None:
         """Supersede the active row with a new value (same kind) in one transaction; KeyError if none is active."""
@@ -109,8 +135,9 @@ class Memory:
         with self._tx():
             old = self._active(key)
             if old is None: raise KeyError(key)
+            change_id = self._check_approved(source)  # before any write: a refusal leaves the active row as it was
             self.db.execute("UPDATE memory SET superseded_at = ? WHERE id = ?", (self._now(), old["id"]))
-            self._insert(key, value, old["kind"], source, None)
+            self._insert(key, value, old["kind"], source, change_id)
 
     def forget(self, key) -> None:
         """Mark the active row forgotten and blank the value of every row of the key; the dates stay."""
