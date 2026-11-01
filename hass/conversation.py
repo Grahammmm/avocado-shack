@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import interpret_check, media  # noqa: E402
+from hass import claims, interpret_check, media  # noqa: E402
 from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -33,7 +33,10 @@ PHOTO_QUESTION = ("Which product is this photo for, and how would you describe t
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
-TRANSITIONS = {"needs-details": {"proposed", "rejected"}, "proposed": {"approved", "rejected", "expired"},
+USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
+DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
+               "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
+TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
 INTERRUPTED = "interrupted; not applied; approve a new draft"
@@ -149,9 +152,12 @@ def load_settings(sdir, photos=False) -> dict:
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
     root = settings.get("mediaRoot")  # NB-AV-09: required only with a photo source
     if photos and (not isinstance(root, str) or not root.strip()): problems.append("mediaRoot must be set to use photos")
+    cap = settings.get("interpreterDailyCap")  # H22: optional; absent or null means no cap (no default enables it)
+    if cap is not None and (type(cap) is not int or not 1 <= cap <= 10000):
+        problems.append("interpreterDailyCap must be an integer 1-10000")
     if problems: raise ConfigError("; ".join(problems))
     return {"ownerSenders": tuple(senders), "ownerChat": chat, "approvalTtlSeconds": ttl, "mediaRoot": root,
-            "guestCountsDb": settings.get("guestCountsDb")}  # H17 status only; not validated, not required
+            "guestCountsDb": settings.get("guestCountsDb"), "interpreterDailyCap": cap}  # guestCountsDb: H17, unchecked
 
 
 def parse_keyword(text: str):
@@ -275,6 +281,11 @@ class Conversation:
         rows = [r for r in self._drafts("code = ?", code) if states is None or r["state"] in states]
         return rows[-1] if rows else None
 
+    def _expiry(self, row) -> datetime:
+        """H16: a needs-details row stored before expiry existed (expires_at NULL) lapses at created_at + ttl."""
+        if row["expires_at"]: return datetime.fromisoformat(row["expires_at"])
+        return datetime.fromisoformat(row["created_at"]) + timedelta(seconds=self.settings["approvalTtlSeconds"])
+
     def _move(self, row, state, **fields):
         current = self._row(row["row_id"])["state"]
         if state not in TRANSITIONS.get(current, ()) or \
@@ -359,9 +370,9 @@ class Conversation:
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
-        expired = [r for r in self._drafts("state = 'proposed'") if datetime.fromisoformat(r["expires_at"]) <= now]
+        expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= now]
         if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
-        for row in expired: self._move(row, "expired")
+        for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now) if msg.attachments > 0 else self._command(msg, now, *command)
             self._record(msg, disposition)
@@ -377,9 +388,14 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         verb, code = keyword
-        targets = [r for r in self._drafts("state = 'proposed'") if code is None or r["code"] == code]
-        if verb == "reject" and not targets:  # NB-AV-09: a needs-details draft (a photo) can be cancelled, never approved
-            targets = [r for r in self._drafts("state = 'needs-details'") if code is None or r["code"] == code]
+        # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
+        states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
+        targets = [r for r in self._drafts(f"state IN {states}") if code is None or r["code"] == code]
+        if verb == "approve" and code and not targets and (ask := self._by_code(code, ("needs-details",))):
+            # a waiting question is never approved; a bare yes keeps NOTHING (test_conversation pins it)
+            self._reply(f"{ask['code']} still needs details: {ask['summary']}")
+            self._record(msg, "no-target")
+            return "no-target", None
         if len(targets) != 1:
             self._reply(self._no_target(code, targets, expired))
             self._record(msg, "no-target")
@@ -409,7 +425,8 @@ class Conversation:
 
     def _no_target(self, code, targets, expired) -> str:
         if targets:
-            return "\n".join(["Which draft do you mean?"] + [f"{r['code']}: {r['summary']}" for r in targets]
+            return "\n".join(["Which draft do you mean?"] + [f"{r['code']}: " + ("needs details: " if r["state"] ==
+                             "needs-details" else "") + r["summary"] for r in targets]
                              + ["Reply yes <code> or no <code>."])
         named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired]
         return "\n".join(self._state_text(r) for r in named if r is not None) or NOTHING
@@ -426,11 +443,44 @@ class Conversation:
         if getattr(self, "_ops", None) is None: self._ops = self.editor.registry or load_registry()
         return self._ops
 
+    def _calls(self, now):
+        """H22: (local day, interpreter calls counted for it). No usage table yet means no calls."""
+        day = now.astimezone(LOCAL_TZ).strftime("%Y-%m-%d")
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage'").fetchone(): return day, 0
+        row = self.db.execute("SELECT calls FROM usage WHERE day = ?", (day,)).fetchone()
+        return day, row["calls"] if row else 0
+
+    def _makers(self):
+        """The worktree's makers (read-only) for the claim check; None when unreadable (every maker change asks)."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            makers = json.loads((wt / "hass" / "content" / "makers.json").read_text("utf-8"))["makers"]
+        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState):
+            return None
+        return makers if isinstance(makers, dict) else None
+
     def _request(self, msg, now) -> str:
+        cap = self.settings["interpreterDailyCap"]
+        if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
+            day, calls = self._calls(now)
+            if calls >= cap:
+                self._reply(DAILY_LIMIT)
+                return "daily-limit"
+            self.db.execute(USAGE)
+            self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
-                    r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')")]
-        result = interpret_check.check(_checked(self.interpreter.interpret(msg.text, pending)), self._registry(),
-                                       {p["code"] for p in pending})  # NB-AV-01: a bad op/arg/kind/code asks
+                    r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+        try:
+            result = _checked(self.interpreter.interpret(msg.text, pending))
+        except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
+            result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
+        codes = {p["code"] for p in pending}
+        named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
+        cancelled_question = named is not None and named["state"] == "rejected" and named["reason"] == "owner" \
+            and named["change_id"] is None  # AV1537-02: a question the owner cancelled is not filled later
+        if named is not None and named["state"] == "expired" or cancelled_question:  # H16 vs NB-AV-01 (2026-10-31):
+            result = {**result, "revises": None}  # a closed draft has nothing left to revise; an unknown code still asks
+        result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])
@@ -444,15 +494,16 @@ class Conversation:
         out = self.editor.prepare(result["ops"])
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
-            if revised is not None and revised["state"] == "needs-details":
-                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ? WHERE row_id = ?",
-                                (ops_json, out["question"], revised["row_id"]))
+            expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))  # H16: questions lapse too
+            if revised is not None and revised["state"] == "needs-details":  # the owner just answered: refresh
+                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ?, expires_at = ? WHERE row_id = ?",
+                                (ops_json, out["question"], expires, revised["row_id"]))
             else:
                 code = self._code(hashlib.sha256(msg.provider_id.encode()).hexdigest())
                 self.db.execute(
-                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at)"
-                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?)",
-                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now)))
+                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at)"
+                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?, ?)",
+                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now), expires))
                 # An incomplete correction still supersedes the proposal it names: it can no longer be approved.
                 if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
@@ -461,6 +512,9 @@ class Conversation:
             self._reply(f"Not drafted: {_reason(out)}")
             return "not-drafted"
         draft = out["draft"]
+        if hits := claims.unstated(draft, msg.text, self._makers()):  # NB-AV-05: an unstated claim asks, never drafts
+            self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
+            return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]
         if same and (revised is None or revised["row_id"] == same[0]["row_id"]):
             row = same[0]
@@ -688,10 +742,11 @@ class Conversation:
     def _status(self, now, since) -> str:
         """Read-only: pause state, waiting drafts, the last apply result and confirmed guests of upcoming hikes."""
         lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
+        if (cap := self.settings["interpreterDailyCap"]) is not None:
+            lines.append(f"Interpreter today: {self._calls(now)[1]} of {cap}")  # H22, only with a cap
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
-                  for r in self._drafts("state IN ('proposed', 'needs-details')")
-                  if r["state"] != "proposed" or datetime.fromisoformat(r["expires_at"]) > now] or [NOTHING]
+                  for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()

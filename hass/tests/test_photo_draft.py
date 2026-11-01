@@ -184,7 +184,7 @@ class PhotoDraftTests(unittest.TestCase):
         for keyword in ("yes", f"yes {SHA[:4]}"):  # a needs-details draft is never approved
             with self.subTest(keyword):
                 self.assertEqual(self.say(keyword), "no-target")
-        self.assertEqual(self.replies(), [NOTHING, f"{SHA[:4]} is needs-details."])
+        self.assertEqual(self.replies(), [NOTHING, f"{SHA[:4]} still needs details: {PHOTO_QUESTION}"])  # AV1537-02
         self.assertEqual(self.say(f"no {SHA[:4]}"), "rejected")
         self.assertEqual(self.replies(), [f"Cancelled {SHA[:4]}; nothing changed."])
         [row] = self.drafts()

@@ -81,6 +81,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** after `pause changes`, commit or stash in the writer worktree, switch it to a non-main branch, or set its Git identity; re-run the check, then the owner sends `resume changes`.
 - **Stop and ask:** the worktree is gone or is the main checkout (re-running `python3 hass/editor.py init` onto a new linked worktree is attended), or changes there are not known.
 
+### `model`
+- **Means:** with `--model` (a loopback address only): the local model did not answer `/api/tags` within 3 s (`unreachable`), answered with an error status (`http <status>`), sent something that is not a model list (`bad reply`), or the `--model-name` model is missing (`model not installed`; a name without a tag means `:latest`). No URL or reply text is printed.
+- **Check first:** `ollama list` on Agent Orange, and whether the Ollama service is running; re-run the check once.
+- **Next step:** none in the repo: health only reads and never restarts or changes the model.
+- **Stop and ask:** always before restarting Ollama, pulling or changing a model, or editing its service (attended; tell the operator).
+
 ## Info lines
 
 ### `conversation`
