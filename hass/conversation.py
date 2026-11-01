@@ -258,10 +258,18 @@ def _summary(draft: dict) -> str:
     return _value(text or "no records")
 
 
+def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty fields, sorted, one per line (≤ 40)
+    rows = [(k, v) for k, v in sorted(r["after"].items()) if v not in (None, "", [])]
+    more = [f"  … and {len(rows) - 40} more fields"] if len(rows) > 40 else []
+    return [f"{r['collection']} {r['key']}: new"] + [f"  {k}: " + "\n    ".join(
+        (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
+
+
 def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False) -> str:
     lines = [f"Draft {code}:"]
-    lines += [f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}"
-              for r in draft["records"] for f, b, a in _changes(r)]
+    for r in draft["records"]:
+        lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
+            f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in _changes(r)]
     lines += [f"Warning: {w}" for w in draft.get("warnings") or []]
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
