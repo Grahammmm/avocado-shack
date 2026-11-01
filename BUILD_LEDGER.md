@@ -904,3 +904,27 @@ Branch rb/nb-av-13 from origin/main 4f33ef9 (NB-AV-13, PR #96: commits b3215fc, 
 Checks at commit b3215fc (recorded in PR #96, run under `memcap`): `python3 -B -m unittest hass.tests.test_demo_transcript_photo hass.tests.test_demo_transcript hass.tests.test_fixture_chat -v` ran 12 tests, OK (skipped=1); pre-push hass unittests passed. CI `check` passed at PR head 58ce584. Re-run on main df99c97 for this ledger: `python3 -B -m unittest hass.tests.test_set_photo hass.tests.test_interpret_check hass.tests.test_memory_alias hass.tests.test_interpreter_local hass.tests.test_retention hass.tests.test_claims hass.tests.test_interpreter_prompt hass.tests.test_interpreter_cap hass.tests.test_health_model hass.tests.test_interpreter_eval hass.tests.test_photo_draft hass.tests.test_status_photos hass.tests.test_photo_limits hass.tests.test_attachment_retry hass.tests.test_demo_transcript_photo` ran 132 tests, OK.
 
 Limits: fixtures only: no live bridge, download, model call or send. The v1 `test_demo_transcript.py` is unedited.
+
+## H13 store hours repeats ignore case, spacing and dash style (RF1720-1) — October 31, 2026
+
+Branch rb/rf1720-1 from origin/main dea25e3 (RF1720-1, PR #114: commit 3854827134d, merged as e485da94f9ef26e191f06bf40cf0d9fa95f0527d). For Michael: two hours lines that differ only by case, spacing or dash style are now refused as repeats, and the refusal names both 1-based line numbers: `hours lines {j} and {i} say the same thing` (first pair only). New private `_line_key` in `hass/ops/store.py` (NFKC, U+2010–U+2015 and U+2212 to `-`, whitespace runs collapsed, `casefold()`) is used only for the comparison; Michael's exact text is saved. The no-op check stays exact (re-casing a line is a real change), and the line count and length limits are still checked first with the same messages. One `test_store_limits.py` assertion now expects the new message. Added `hass/tests/test_store_hours_repeat.py`.
+
+Checks at PR head 3854827134d (recorded in PR #114): `python3 -m unittest hass.tests.test_store_hours_repeat hass.tests.test_store_ops hass.tests.test_store_limits hass.tests.test_undo` ran 32 tests, OK. CI `check` passed at 3854827134d.
+
+Limits: accents are not folded. The content validator's repeat check stays exact.
+
+## Site: today's hike stays listed as Today until midnight Pacific (RF1720-2) — October 31, 2026
+
+Branch rb/rf1720-2 from origin/main 6304c56 (RF1720-2, PR #115: commit 8d3257d, merged as a962d6cb645550292284b2ca4b925f60ec5f3544). For Michael: a scheduled hike that started earlier today stays on the community page until midnight Pacific, and its date line reads `Today — started <h:mm AM/PM Pacific>`. `storefront-mockup/community.js` adds `pacificDay` (YYYY-MM-DD in America/Los_Angeles); `upcoming` keeps a `scheduled` hike while its start is in the future or its Pacific day is today. Cancelled and completed hikes never qualify. Sorting, the `THE NEXT HIKE` label, the RSVP button and the RSVP modal are unchanged. `storefront-mockup/community-ui-qa.cjs` adds one block (no existing assertion edited) with a fixed browser clock per case: start + 30 min, start − 1 min, 00:01 Pacific the next day, 23:59 Pacific in an `Asia/Tokyo` browser, and a cancelled copy of the fixture hike. The block reads the fixture hike from `/api/community`, because the static `community.json` has no events.
+
+Checks at PR head 8d3257d (recorded in PR #115, run under `memcap` on port 3191 because 3101 was in use): the `check.yml` community UI steps printed `Community UI passed` and `community-qa.py exit 0`; the same run with the old `community.js` failed `Started hike not listed as Today`. `python3 -m unittest discover -s hass/tests -t .` ran 849 tests, OK (skipped=5). CI `check` passed at 8d3257d.
+
+Limits: the day is the Pacific day, whatever the visitor's time zone. RSVP acceptance is unchanged.
+
+## H06 store preview check also finds the address (RF1720-3) — October 31, 2026
+
+Branch rb/rf1720-3 from origin/main 6304c56 (RF1720-3, PR #117: commit 03d551e, merged as b52437cd9a4fdbf6656d4e44de595762664696d4). For Michael: the store preview check now also reports whether the street address and town are shown, not only the hours. `hass/preview.py` `target_for` store branch carries `streetAddress` and `town` from the record's `after` value (empty string when missing). `hass/screenshot.cjs` sets `checks.addressShown` when both are non-empty: true only when the page text contains `<street>, <town>` (top line) and `<street> · <town>` (visit block). When either is empty the key is not set, so older records keep working. Product, maker and event checks are unchanged. One `test_store_ops.py` assertion now expects the two new keys. Added `hass/tests/test_preview_store_address.py`.
+
+Checks at PR head 03d551e (recorded in PR #117, real Chromium, none skipped): `python3 -m unittest hass.tests.test_preview_store_address hass.tests.test_preview hass.tests.test_preview_viewports hass.tests.test_preview_overlay hass.tests.test_store_ops -v` ran 37 tests, OK. Pre-push tests were not run (host busy). CI `check` passed at 03d551e.
+
+Limits: maker previews still have no check.

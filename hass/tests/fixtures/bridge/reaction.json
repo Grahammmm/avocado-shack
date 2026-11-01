@@ -1,0 +1,14 @@
+{
+  "type": "new-message",
+  "data": {
+    "guid": "FAKE-0000-0000-0000-000000000007",
+    "text": "Liked \u201cDraft A1 ready\u201d",
+    "handle": {"address": "owner@example.invalid", "country": "US"},
+    "chats": [{"guid": "iMessage;-;owner@example.invalid"}],
+    "attachments": [],
+    "dateCreated": 1793638880000,
+    "isFromMe": false,
+    "associatedMessageGuid": "p:0/FAKE-0000-0000-0000-000000000099",
+    "associatedMessageType": "like"
+  }
+}
