@@ -130,7 +130,7 @@ export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-124
 {"ops": [{"op": "store.set_address", "args": {"streetAddress": "100 Example Street"}}]}
 ```
 
-- `store.set_hours` takes `hours` (a text list) and replaces all lines. Refused: more than 7 lines, a line over 60 characters (`hours line <i>` counts from 0), a repeated line, or hours equal to the current ones.
+- `store.set_hours` takes `hours` (a text list) and replaces all lines. Refused: more than 7 lines, a line over 60 characters (`hours line <i>` counts from 1), a repeated line, or hours equal to the current ones.
 - `store.set_address` takes `streetAddress` and/or `town`; only the given fields change. No argument gives `needs-details` (`streetAddress`, `town`); a value over 80 characters or an unchanged address is refused.
 - `name` and `schemaVersion` are not arguments (unknown argument → `invalid`). Text kinds reject markup, `$` and control characters as usual.
 - Undo: the store is one record, so `undo` of an older store change after a later one gives `conflict: store store changed after <change_id>`; undo the newest first.
