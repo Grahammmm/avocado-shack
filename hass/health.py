@@ -6,6 +6,7 @@
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
 unverified (applied drafts, undone or not, whose preview check failed within --unverified-hours; count only),
+guest-counts (guestCountsDb set but unreadable, or unset while an upcoming hike takes RSVPs; no path printed),
 inbox-stuck (pending inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
 --inbox-unreadable-hours; count only), inbox-integrity, writer (--writer: one per reason editor
 apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
@@ -132,6 +133,22 @@ def _writer_check(state, problems: list) -> None:
         if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
         else: os.environ["GIT_OPTIONAL_LOCKS"] = old
 
+def _guest_check(sdir, settings, now, problems: list, info: list) -> None:  # AV1537-12: fixed words, never the path
+    from hass.ops import hikes  # lazy, as in status; reads seat totals only (mode=ro, query_only)
+    if (path := settings.get("guestCountsDb")) not in (None, ""):  # a set path that does not open is always a problem
+        try:
+            hikes.guest_counts(path)
+        except (sqlite3.Error, OSError, ValueError, TypeError):
+            problems.append(_problem("guest-counts", "unreadable"))
+        return
+    try:  # unset: a problem only while an upcoming scheduled hike takes RSVPs (the filter status uses)
+        if not (wt := editor._load(sdir)[2]).is_dir(): return  # no worktree, no hikes to read: `writer` owns that
+        events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
+        if any(e.get("status") == "scheduled" and e.get("rsvpEnabled") and datetime.fromisoformat(e["startsAt"]) > now
+               for e in events): problems.append(_problem("guest-counts", "unset"))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, UnsafeState):
+        info.append(_problem("guest-counts", "hikes unreadable"))
+
 def _model_get(url, timeout) -> tuple:  # (status, body) via bridge's opener: no env proxy, no redirect, capped read
     try:
         with bridge._OPENER.open(url, timeout=timeout) as r: return r.status, r.read(interpreter_local.MAX_BODY + 1)
@@ -166,9 +183,11 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
     except UnsafeState as exc:
         return [_problem("state", str(exc))], info, True
     try:
-        load_settings(sdir)
+        settings = load_settings(sdir)
     except ConfigError as exc:
         problems.append(_problem("settings", str(exc)))
+    else:
+        _guest_check(sdir, settings, now, problems, info)
     _db_checks(sdir, now, outbox_minutes, problems, info, unverified_hours)
     _inbox_check(sdir, now, inbox_minutes, problems, inbox_unreadable_hours)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
