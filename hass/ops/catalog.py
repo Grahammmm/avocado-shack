@@ -93,10 +93,21 @@ def _product_add(content, args, ctx):
     key = args.get("producerKey")
     if refused := _maker_problem(content, key):
         return refused
+    if "image" in args and "photo" in args:
+        return Refused("give image or photo, not both")
+    if "image" not in args and "photo" not in args:
+        return Refused("product.add needs image or photo")
+    if "photo" in args and "imageAlt" not in args:
+        return Refused("imageAlt is required with photo")
+    image = args.get("image")
+    if "photo" in args:
+        from hass.ops import photos  # lazy: photos imports this module
+        if isinstance(image := photos.install(ctx, args["photo"], args["imageAlt"]), Refused):
+            return image
     numbers = [int(m.group(1)) for p in content.products if (m := PRODUCT_ID_RE.fullmatch(p["id"]))]
     record = {"id": "photo-product-%03d" % (max(numbers, default=0) + 1)}
     for field in ("name", "brand", "category", "image", "description"):
-        record[field] = args[field]
+        record[field] = image if field == "image" else args[field]
     record.update(producerKey=key, displayBrand=args["displayBrand"], status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
     content.products.append(record)
@@ -283,7 +294,8 @@ _OPTIONAL = {"producerKey": Arg("maker_key", required=False), "imageAlt": Arg("t
 _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 
 OPS = (
-    Op("product.add", {**_PRODUCT_FIELDS, **_OPTIONAL}, _product_add),
+    Op("product.add", {**_PRODUCT_FIELDS, "image": Arg("image", required=False), "photo": Arg("id", required=False),
+                       **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),
                         "clearImageAlt": Arg("bool", required=False)}, _product_edit),
