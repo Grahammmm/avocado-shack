@@ -7,9 +7,12 @@ from pathlib import Path
 
 from hass import conversation, health
 from hass.tests import test_health as base
+from hass.tests.test_status_pause import FailingPreviewer
+from hass.tests.test_undo import FakePreviewer, H06TestCase
 
 NOW, SECRET = base.NOW, "SECRET-SENTINEL"
-COLS = ("code", "state", "reason", "checked_at", "ops_json", "summary", "sender", "chat", "created_at")
+COLS = ("code", "state", "reason", "checked_at", "ops_json", "summary", "sender", "chat", "created_at",
+        "screenshot")
 
 
 def ago(hours):
@@ -25,12 +28,12 @@ class HealthUnverifiedTest(unittest.TestCase):
         (self.state / "config.json").write_text(json.dumps({"worktree": str(self.tmp / "wt"), "settings": base.SETTINGS}))
         self.path = self.state / "conversation.sqlite3"
 
-    def draft(self, state, reason, checked_at, code="ab12", summary="placeholder change"):
+    def draft(self, state, reason, checked_at, code="ab12", summary="placeholder change", screenshot=None):
         with contextlib.closing(sqlite3.connect(self.path)) as db, db:
             db.executescript(conversation.SCHEMA)
             db.execute(f"INSERT INTO drafts({', '.join(COLS)}) VALUES ({', '.join('?' * len(COLS))})",
                        (code, state, reason, checked_at, "[]", summary, "owner@example.invalid",
-                        "chat@example.invalid", ago(0)))
+                        "chat@example.invalid", ago(0), screenshot))
 
     def failed(self, hours, error="x", **kw):
         when = hours if isinstance(hours, str) else ago(hours)
@@ -67,16 +70,22 @@ class HealthUnverifiedTest(unittest.TestCase):
         self.assertEqual(self.run_health("--unverified-hours", "71"), (0, []))
 
     def test_verified_unchecked_and_other_rows_not_counted(self):
-        self.draft("verified", None, ago(1), code="v1")
+        self.draft("verified", None, ago(1), code="v1", screenshot="v1.png")
         self.draft("applied", None, None, code="n1")  # no previewer: never checked
         self.draft("applied", "not verified: x", None, code="n2")  # reason without a check time
-        self.draft("reverted", "undone by cd34", ago(1), code="r1")  # a failed change later undone
+        self.draft("reverted", "undone by cd34", ago(1), code="r1", screenshot="r1.png")  # a checked change undone
+        self.draft("reverted", "undone by cd35", None, code="r2")  # no previewer: never checked, then undone
         self.draft("rejected", "not verified: x", ago(1), code="j1")
         self.draft("applied", "verified elsewhere: not verified: x", ago(1), code="w1")  # wording is not a prefix
         self.assertEqual(self.run_health(), (0, []))
         self.failed(1, code="f1")
         self.failed(2, code="f2")
         self.assertEqual(self.run_health(), (1, self.unverified(2)))
+
+    def test_failed_change_later_undone_counts_until_the_window_passes(self):
+        self.draft("reverted", "undone by cd34", ago(72), code="r1")  # _outcome rewrote the reason; no screenshot
+        self.assertEqual(self.run_health(), (1, self.unverified(1)))
+        self.assertEqual(self.run_health("--unverified-hours", "71"), (0, []))
 
     def test_unreadable_checked_at_counts(self):
         self.failed("garbage", code="g1")
@@ -117,6 +126,40 @@ class HealthUnverifiedTest(unittest.TestCase):
         before = {p.name: p.read_bytes() for p in self.state.iterdir()}
         self.run_health()
         self.assertEqual({p.name: p.read_bytes() for p in self.state.iterdir()}, before)
+
+
+class UndoAfterPreviewTest(H06TestCase):
+    """A real conversation: preview check, then undo (history.revert) applied and checked."""
+
+    def unverified(self, hours):
+        problems = health.check(str(self.repo.state), now=self.now + timedelta(hours=hours))[0]
+        return [p for p in problems if p["check"] == "unverified"]
+
+    def apply_then_undo(self, previewer):
+        self.previewer = previewer
+        self.conv = self.open()
+        done = self.apply("desc")
+        self.previewer = FakePreviewer()  # the undo itself passes its check
+        self.conv = self.open()
+        self.assertEqual(self.say(f"undo {done['code']}"), "proposed")
+        self.assertEqual(self.say("yes"), "approved")
+        self.sent()
+        orig, undo = self.drafts()
+        self.assertIn('"history.revert"', undo["ops_json"])
+        self.assertEqual((orig["state"], orig["reason"], undo["state"]),
+                         ("reverted", f"undone by {undo['code']}", "verified"))
+        return done
+
+    def test_failed_preview_then_undo_still_counts_inside_the_window(self):
+        done = self.apply_then_undo(FailingPreviewer())
+        self.assertEqual((done["state"], done["reason"]), ("applied", "not verified: simulated check failure"))
+        self.assertEqual(self.unverified(1), [{"check": "unverified", "detail": "1"}])
+        self.assertEqual(self.unverified(72), [{"check": "unverified", "detail": "1"}])
+        self.assertEqual(self.unverified(73), [])
+
+    def test_passed_preview_then_undo_not_counted(self):
+        self.apply_then_undo(FakePreviewer())
+        self.assertEqual(self.unverified(1), [])
 
 
 if __name__ == "__main__":

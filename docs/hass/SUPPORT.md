@@ -39,7 +39,7 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Stop and ask:** `recover` fails or reports a conflict, the writer worktree is not clean, or the count stays after `recover`. Never re-run `apply` by hand.
 
 ### `unverified`
-- **Means:** a change was applied but its preview screenshot check failed, within `--unverified-hours` (default 72); the detail is the count. It clears once that change is undone or the window passes.
+- **Means:** a change was applied but its preview screenshot check failed, within `--unverified-hours` (default 72); the detail is the count. An undo does not clear it (the site was changed unchecked); it clears once the window passes.
 - **Check first:** the owner sends `status` (the last change line shows `not verified: …`), or `python3 hass/editor.py history --state DIR --limit 5`.
 - **Next step:** look at the live page for that change; if it is wrong, the owner sends `undo <code>`.
 - **Stop and ask:** before re-applying or editing the site by hand, or when the count rises on every change.

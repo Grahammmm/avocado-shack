@@ -5,8 +5,8 @@
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
-unverified (applied drafts whose preview check failed within --unverified-hours; count only), inbox-stuck (pending
-inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
+unverified (applied drafts, undone or not, whose preview check failed within --unverified-hours; count only),
+inbox-stuck (pending inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
 --inbox-unreadable-hours; count only), inbox-integrity, writer (--writer: one per reason editor
 apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
 paused (info only), backup-age (--backups: no complete hass-state-* within --backup-hours), backup-verify, model (--model:
@@ -29,8 +29,9 @@ from hass.editor import UnsafeState  # noqa: E402
 
 DB, MANIFEST, APPLY_MINUTES, STAMP = "conversation.sqlite3", "MANIFEST.json", 10, "hass-state-%Y%m%dT%H%M%SZ"
 PAUSED_SQL = "SELECT set_at FROM control WHERE name = 'paused'"  # paused <=> this row (conversation.py H17)
-UNVERIFIED_SQL = ("SELECT checked_at FROM drafts WHERE state = 'applied' AND checked_at IS NOT NULL"
-                  " AND reason LIKE 'not verified: %'")  # a failed preview check (conversation._verify_pending)
+UNVERIFIED_SQL = ("SELECT checked_at FROM drafts WHERE checked_at IS NOT NULL AND (state = 'applied' AND reason LIKE"
+                  " 'not verified: %' OR state = 'reverted' AND screenshot IS NULL)")  # failed check (_verify_pending);
+# an undo (_outcome) rewrites the reason, but only a passed check stores a screenshot, so the window alone clears it
 
 def _problem(check, detail) -> dict:
     return {"check": check, "detail": detail}
@@ -56,7 +57,7 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
                     ("apply-stuck", "drafts", "SELECT created_at FROM drafts WHERE state = 'approved'", APPLY_MINUTES)):
                 if table in tables and (n := _older(db.execute(sql).fetchall(), now - timedelta(minutes=minutes))):
                     problems.append(_problem(check, str(n)))
-            if "drafts" in tables and "checked_at" in {r[1] for r in db.execute("PRAGMA table_info(drafts)")}:
+            if {"checked_at", "screenshot"} <= {r[1] for r in db.execute("PRAGMA table_info(drafts)")}:  # none: no table
                 rows = db.execute(UNVERIFIED_SQL).fetchall()  # an H05 database without checked_at is skipped
                 if n := _older(rows, now - timedelta(hours=unverified_hours), newer=True):
                     problems.append(_problem("unverified", str(n)))
