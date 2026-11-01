@@ -11,7 +11,8 @@ from hass.content_model import REPO_ROOT
 from hass.tests.test_memory import Clock
 
 PROVIDER = "provider-sentinel-6620"  # source detail after ':'
-CHANGE = "change-sentinel-4417"  # approved_change
+CHANGE = "chg-4417aaaa0000"  # approved_change (RF1650-2: a valid id with an applied record in the test's state dir)
+OTHER = "chg-00000000c001"  # another applied change, for tests that only need some owner-approved row
 
 
 class HistoryTests(unittest.TestCase):
@@ -26,6 +27,11 @@ class HistoryTests(unittest.TestCase):
         self.addCleanup(mem.close)
         return mem
 
+    def applied(self, change_id):
+        """Write an applied change record into this test's state dir, so owner-approved:<change_id> is verified."""
+        (self.state / "changes").mkdir(mode=0o700, exist_ok=True)
+        (self.state / "changes" / f"{change_id}.json").write_text('{"state": "applied"}', "utf-8")
+
     def history(self, *args):
         out = io.StringIO()
         with contextlib.redirect_stdout(out): code = memory.main(["history", "--state", str(self.state), *args])
@@ -38,6 +44,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_remember_correct_correct_forget_keeps_dated_trail_without_values(self):
         mem = self.store()
+        self.applied(CHANGE)
         mem.remember("pickup.day", "Saturday", "fact", f"owner-approved:{CHANGE}", approved_change=CHANGE)
         mem.correct("pickup.day", "Sunday", f"owner-stated:{PROVIDER}")
         mem.correct("pickup.day", "Monday", "operator:fixed typo")
@@ -73,7 +80,8 @@ class HistoryTests(unittest.TestCase):
 
     def test_key_filter_unknown_key_and_order(self):
         mem = self.store()
-        mem.remember("pickup.day", "Saturday", "fact", "owner-approved:c-1")
+        self.applied(OTHER)
+        mem.remember("pickup.day", "Saturday", "fact", f"owner-approved:{OTHER}")
         mem.remember("other.key", "x", "fact", "operator:n")
         mem.correct("pickup.day", "Sunday", "operator:n")
         code, doc, _ = self.history()
@@ -127,7 +135,8 @@ class HistoryTests(unittest.TestCase):
 
     def test_history_is_read_only(self):
         mem = self.store()
-        mem.remember("pickup.day", "Saturday", "fact", "owner-approved:c-1")
+        self.applied(OTHER)
+        mem.remember("pickup.day", "Saturday", "fact", f"owner-approved:{OTHER}")
         mem.forget("pickup.day")
         mem.close()
         os.utime(self.db, ns=(1_000_000_000, 1_000_000_000))
