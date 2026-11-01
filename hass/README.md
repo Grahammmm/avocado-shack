@@ -60,6 +60,7 @@ A CLI read or decode error prints `{"result": "io-error", "problems": ["<ExcName
 - `product.add` takes the next id above the highest (never reuses a gap), status `active`, `producerKey` `null` unless given. `product.edit` changes only the named fields; `clearProducer` sets `producerKey` to `null`.
 - A maker may carry an optional `"hidden": true`. `maker.hide` is refused while an active product names the maker (the reason lists the ids); hidden makers are left out of `producers.js` and `producers.json`, and an active product may not name one.
 - An add or edit that makes a product newly match the shop's organic rule (name contains "organic", or maker Ocean Ranch, Straus, Green Gold or Massa Organics) gets the draft warning `adds Organic badge to <id>`; the owner decides at approval.
+- A `maker.edit` that changes `place` drafts as usual with one warning: `changes the "Based in" line on N active product card(s) of maker <key> (town search follows it)`, or `maker <key> has no active products; no product card changes`. Hidden and held products are not counted; an unchanged `place` never warns.
 - Facts (names, places, stories, links, organic status) come only from the arguments; there are no price, stock or basket fields.
 
 ## H04: real-hike ops
