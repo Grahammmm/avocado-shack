@@ -21,7 +21,8 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
-                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?|(help|commands|\?)")  # H17
+                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?|(help|commands|\?)"  # H17
+                        r"|(find)(?:\s+(.*))?")  # AV1537-04; the query is re-read from the original text to keep its case
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -34,10 +35,12 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'forget <key> - delete a saved note: "forget parking"',
     'memory - list the saved notes: "memory"',
     'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
+    'find <words> - matching products and makers, ids: "find lion\'s mane"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX = 20
+FIND_MAX, FIND_USAGE = 10, "Send find and 1–60 characters, e.g. find lion's mane."  # AV1537-04
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
@@ -190,6 +193,7 @@ def parse_command(text: str):
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
     if match[7]: return "help", None
+    if match[8]: return "find", re.sub(r"[.!]+$", "", text.strip())[4:].strip()  # ("find", query in its own case)
     return ("undo", match[3]) if match[2] else (next(v for v in (match[1], match[4], match[5], match[6]) if v), None)
 
 
@@ -389,7 +393,7 @@ class Conversation:
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= now]
-        if command and command[0] in ("status", "help"): expired = []  # H17: read-only; status only hides lapsed drafts
+        if command and command[0] in ("status", "help", "find"): expired = []  # H17: read-only; status hides lapsed drafts
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -646,6 +650,7 @@ class Conversation:
             self._reply(HELP_TEXT)
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
+        if verb == "find": return self._find(code) if 1 <= len(code) <= 60 else (self._reply(FIND_USAGE), "find")[1]
         if verb == "history":
             rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT 5").fetchall()
             self._reply("\n".join(["Recent changes:"] + [
@@ -665,6 +670,30 @@ class Conversation:
         row = same[0] if same else self._propose(out["draft"], msg.sender, now)
         self._proposal_reply(row, out["draft"], f"Undo {done[-1]['code']}:\n")
         return "proposed"
+
+    def _find(self, query) -> str:
+        """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
+        try:  # the current catalog, read from the writer worktree as _hike_lines does
+            wt = editor_mod._load(str(self.sdir))[2]
+            content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
+            has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+            aliases, lines, capped = self.aliases() if has_memory else {}, [], False
+            records = {"product": {p["id"]: (p["name"], p["status"]) for p in content.products},
+                       "maker": {k: (m["name"], "hidden" if m.get("hidden") else "visible") for k, m in content.makers.items()}}
+            for kind in ("product", "maker"):
+                found = catalog.lookup(content, kind, query, aliases=aliases)
+                ids = [found["match"]] if "match" in found else [c["id"] for c in found["candidates"]]
+                capped |= len(ids) >= catalog.MAX_CANDIDATES
+                lines += [f"{kind} {i}: {records[kind][i][0]} ({records[kind][i][1]})"
+                          + (" (your alias)" if found.get("via") else "") for i in ids]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            self._reply("Catalog unavailable right now; nothing changed.")
+            return "find"
+        more = len(lines) - FIND_MAX
+        tail = [f"… {more} or more; add a word." if capped else f"… {more} more; add a word."] if more > 0 else \
+            ["… maybe more; add a word."] if capped else []
+        self._reply("\n".join(lines[:FIND_MAX] + tail) if lines else f'No product or maker matches "{query}".')
+        return "find"
 
     # -- H15: remember, forget, memory ---------------------------------------------------------------------------
     def _memory(self, msg, verb, key, value) -> str:
