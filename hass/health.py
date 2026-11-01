@@ -137,7 +137,7 @@ def _model_check(url, name, problems: list, transport) -> None:  # NB-AV-06: fix
     except Exception:  # noqa: BLE001 - refused, reset, timeout: the model cannot be reached
         return problems.append(_problem("model", "unreachable"))
     try:
-        if type(status) is not int or not isinstance(raw, bytes) or len(raw) > interpreter_local.MAX_BODY: raise ValueError
+        if type(status) is not int or type(raw) is not bytes or len(raw) > interpreter_local.MAX_BODY: raise ValueError
         if status != 200: return problems.append(_problem("model", f"http {status}"))
         if not isinstance(models := json.loads(raw)["models"], list): raise ValueError
     except (ValueError, TypeError, KeyError, RecursionError):
