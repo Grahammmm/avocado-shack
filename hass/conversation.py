@@ -228,6 +228,20 @@ def _value(v) -> str:
     return text if len(text) <= VALUE_CUT else text[:VALUE_CUT - 3] + "..."
 
 
+def _full(v) -> str:
+    """AV1537-06 (H05): a proposal's new value uncut (TEXT_LIMITS bound it); a list of strings joins with "; ".
+    Anything else (None, numbers, whole JSON records) keeps the _value cut."""
+    if isinstance(v, list) and v and all(isinstance(i, str) for i in v): return "; ".join(v)
+    return v if isinstance(v, str) else _value(v)
+
+
+def _arrow(v) -> str:
+    """`→ <new value>`; a value with a line break goes on its own lines, indented two spaces."""
+    text = _full(v)
+    parts = text.splitlines()
+    return "→\n  " + "\n  ".join(parts) if text and parts != [text] else "→ " + text
+
+
 def _changes(record: dict):
     before, after = record.get("before"), record.get("after")
     if isinstance(before, dict) and isinstance(after, dict):
@@ -243,7 +257,7 @@ def _summary(draft: dict) -> str:
 
 def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False) -> str:
     lines = [f"Draft {code}:"]
-    lines += [f"{r['collection']} {r['key']}: {f} {_value(b)} → {_value(a)}"
+    lines += [f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}"
               for r in draft["records"] for f, b, a in _changes(r)]
     lines += [f"Warning: {w}" for w in draft.get("warnings") or []]
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
