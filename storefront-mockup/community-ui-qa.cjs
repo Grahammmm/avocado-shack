@@ -99,24 +99,41 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  const pacificAt=w=>{const t=w-(wall(w)-w);return w-(wall(t)-t)}; // the instant whose Pacific wall clock reads w
  const nextDay=Date.parse(new Date(start).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})+'T00:00Z')+864e5;
  const today='Today — started '+new Date(start).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
- const view=async(now,timezoneId='America/Los_Angeles',extra=[])=>{
+ const view=async(now,timezoneId='America/Los_Angeles',extra=[],keep=()=>true)=>{
   const c=await b.newContext({timezoneId}),pg=await c.newPage(),errs=[];pg.on('pageerror',e=>errs.push(e.message));
-  await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events.push(...extra);await r.fulfill({response:res,json:j})});
+  await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events=j.events.filter(keep).concat(extra);await r.fulfill({response:res,json:j})});
   await pg.clock.setFixedTime(now);await pg.goto(process.env.COMMUNITY_TEST_URL+'/hike');
   await pg.locator('#upcoming-hikes :is(.hike-event,.hike-empty,.trail-invitation)').first().waitFor();
-  const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h3').textContent,a.querySelector('.hike-date').textContent]))}));
+  const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h3').textContent,a.querySelector('.hike-date').textContent])),
+   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h3').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
   check(!errs.length,'Page errors at '+new Date(now).toISOString()+': '+JSON.stringify(errs));await c.close();return r;
  };
  const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};
  let v=await view(after,'America/Los_Angeles',[cancelled]);
  check(v.dates['QA trail fixture']===today,'Started hike not listed as Today: '+v.dates['QA trail fixture']);
- check(!v.up.includes('QA cancelled fixture'),'Cancelled same-day hike listed');
+ const sentence='This hike is cancelled. Nothing else is needed from you.',cx=v=>v.cards.find(c=>c.title==='Cancelled: QA cancelled fixture');
+ // AV1737-12 inverts RF1720-2's same-day check: a hike cancelled earlier today stays listed, marked, with no RSVP, despite rsvpOpen.
+ check(cx(v)&&cx(v).rsvp===0&&cx(v).text.includes(sentence)&&cx(v).text.includes(today),'Cancelled hike from earlier today not listed: '+v.up);
  v=await view(start-6e4);
  check(v.dates['QA trail fixture']&&!v.dates['QA trail fixture'].includes('Today'),'Hike before start not shown with its date');
  v=await view(pacificAt(nextDay+6e4));
  check(!v.up.includes('QA trail fixture')&&!v.past.includes('QA trail fixture'),'Hike still listed after midnight Pacific');
  v=await view(pacificAt(nextDay-6e4),'Asia/Tokyo');
  check(v.dates['QA trail fixture'],'Hike dropped at the viewer’s midnight, not Pacific midnight');
+ // AV1737-12: cancelled hikes stay listed, marked, with no RSVP, until midnight Pacific at the end of their own day.
+ const tomorrow={...cancelled,startsAt:new Date(start+864e5).toISOString()},early={...cancelled,id:'qa-early',title:'QA early cancelled',startsAt:new Date(start-3e4).toISOString()};
+ v=await view(start-6e4,'America/Los_Angeles',[tomorrow,early]);
+ const titles=v.cards.map(c=>c.title),s=v.cards.find(c=>c.title==='QA uncapped event'),c=cx(v);
+ check(titles[0]==='Cancelled: QA early cancelled'&&titles.at(-1)==='Cancelled: QA cancelled fixture'&&titles.includes('QA uncapped event'),'Scheduled and cancelled not listed by start: '+JSON.stringify(titles));
+ check(c.cls==='hike-event hike-cancelled'&&c.label==='CANCELLED'&&c.text.includes(sentence)&&c.rsvp===0&&!/RSVPs open|places? available|This hike is full|RSVP details|THE NEXT HIKE/.test(c.text),'Tomorrow’s cancelled hike card wrong: '+c.text);
+ check(s.rsvp===1&&s.cls==='hike-event'&&s.label==='THE NEXT HIKE'&&!s.text.includes(sentence),'Scheduled hike lost its RSVP or was marked cancelled: '+s.text);
+ v=await view(pacificAt(nextDay+6e4),'America/Los_Angeles',[cancelled]);
+ check(!v.up.includes('QA cancelled fixture'),'Cancelled hike still listed after midnight Pacific at the end of its day');
+ v=await view(pacificAt(nextDay-6e4),'Asia/Tokyo',[cancelled]);
+ check(cx(v)&&cx(v).rsvp===0,'Cancelled hike dropped at the viewer’s midnight, not Pacific midnight');
+ v=await view(start-6e4,'America/Los_Angeles',[tomorrow],e=>e.status!=='scheduled');
+ check(v.cards.length===1&&cx(v)&&cx(v).rsvp===0&&!v.empty,'Only a cancelled hike showed the empty state or sample invitation: '+v.up);
+ check(v.past.includes('QA past outing')&&!v.up.includes('QA past outing'),'Completed hike not only under past hikes');
  const result={guestCountUpdatedAfterRSVP:true,demoGuestCountUnchanged:true,checkedAt:new Date().toISOString(),rsvpForm:true,newsletterForm:true,hikingUpdates:true,pastHikes:true,confirmedEventTakesPrecedence:true,realCalendarEmpty:true,demoPosts:posts.length,demoBrowserStorage:false,demoValidation:true,demoSuccessFocus:true,layouts,errors};
  fs.writeFileSync(out+'/community-ui-QA.json',JSON.stringify(result,null,2));
  console.log('Community UI passed');await b.close();
