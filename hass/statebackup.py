@@ -2,7 +2,7 @@
 
     python3 hass/statebackup.py create --state DIR --out DIR [--media DIR] | verify BACKUP
                                 | restore BACKUP --into DIR --worktree WT [--paused] [--media-into DIR] | list --out DIR
-                                | drill BACKUP --into DIR --worktree WT [--media-into DIR]
+                                | drill BACKUP --into DIR --worktree WT [--media-into DIR] | diff OLD NEW
 
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
 settled state dir (config.json, drafts, changes, screenshots and consistent sqlite snapshots of inbox.sqlite3, then
@@ -15,6 +15,8 @@ to a separate drill worktree (only config.json `worktree` is rewritten). Isolati
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
 repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
 exit 0 ok, 1 any other result, 2 unsafe dir or usage. list (read-only): a line per hass-state-* entry, complete or not.
+diff (read-only): files added, removed and changed from OLD to NEW (photo originals as counts), i.e. what a restore of
+OLD would lose. diff reads manifests only; run verify for integrity.
 """
 import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timezone
@@ -335,11 +337,33 @@ def list_backups(out):
                      "files": len(doc["files"]) if doc else None, "complete": doc is not None, "problem": problem})
     return rows
 
+def diff(old, new) -> dict:
+    """Two manifests compared by rel and recorded hash; no sqlite file is opened, nothing hashed, linked or written."""
+    docs, problems = [], []
+    for label, raw in (("OLD", old), ("NEW", new)):
+        bdir = Path(raw).absolute()  # 'link/' is the link itself: refused, never followed
+        if bdir.is_symlink() or not bdir.is_dir(): problems.append(f"{label}: not a backup dir")
+        elif (doc := _manifest(bdir)) is None: problems.append(f"{label}: {MANIFEST} missing or invalid")
+        else: docs.append(doc)
+    if problems: return {"result": "corrupt", "problems": problems}
+    (a, b), when = (d["files"] for d in docs), [d.get("createdAt") for d in docs]
+    def rels(files, keep): return sorted(r for r in files if not r.startswith(ORIG) and keep(r))  # media never named
+    def originals(files, other): return sum(r.startswith(ORIG) and not r.endswith(".json") and r not in other
+                                            for r in files)
+    try: order = {"order": "reversed"} if datetime.fromisoformat(when[0]) > datetime.fromisoformat(when[1]) else {}
+    except (TypeError, ValueError): order = {"order": "unknown"}  # missing, odd or naive-vs-aware createdAt
+    stamp = [w if isinstance(w, str) else None for w in when]
+    return {"result": "ok", "added": rels(b, lambda r: r not in a), "removed": rels(a, lambda r: r not in b),
+            "changed": rels(a, lambda r: r in b and a[r] != b[r]), "same": sum(a[r] == b.get(r) for r in a),
+            "media_added": originals(b, a), "media_removed": originals(a, b), "older": stamp[0], "newer": stamp[1],
+            "worktree_changed": docs[0]["worktree"] != docs[1]["worktree"], **order}
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/statebackup.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, params in (("create", ["--state", "--out"]), ("verify", ["backup"]), ("list", ["--out"]),
+                         ("diff", ["old", "new"]),
                          ("drill", ["backup", "--into", "--worktree"]),  # before restore: --paused stays restore's
                          ("restore", ["backup", "--into", "--worktree"])):
         cmd = sub.add_parser(name)
@@ -355,7 +379,8 @@ def main(argv=None) -> int:
             for row in [rows] if isinstance(rows, dict) else rows: print(json.dumps(row, ensure_ascii=False))
             return 2 if isinstance(rows, dict) else 0  # refused: --out missing or a link
         out = create(args.state, args.out, media=args.media) if args.cmd == "create" else verify(args.backup) \
-            if args.cmd == "verify" else drill(args.backup, args.into, args.worktree, media_into=args.media_into) \
+            if args.cmd == "verify" else diff(args.old, args.new) if args.cmd == "diff" \
+            else drill(args.backup, args.into, args.worktree, media_into=args.media_into) \
             if args.cmd == "drill" else restore(args.backup, args.into, args.worktree, paused=args.paused,
                                                 media_into=args.media_into)
     except UnsafeState as exc:
