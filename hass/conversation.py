@@ -764,6 +764,7 @@ class Conversation:
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]
+        lines += self._photo_lines(now)  # NB-AV-12: counts only, before Last change
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
@@ -775,6 +776,25 @@ class Conversation:
                 text += f" - {last['reason']}"
             lines.append(text)
         return "\n".join(lines + self._hike_lines(now))
+
+    def _photo_lines(self, now) -> list:
+        """NB-AV-12: waiting photo drafts (every op product.set_photo) and pending inbox messages with tries > 0.
+        The inbox is opened read-only (never created); no file or no tries column means no line."""
+        def photo_only(raw):
+            try: ops = json.loads(raw)
+            except (TypeError, ValueError): return False
+            return isinstance(ops, list) and bool(ops) and all(
+                isinstance(c, dict) and c.get("op") == "product.set_photo" for c in ops)
+        n = sum(self._expiry(r) > now and photo_only(r["ops_json"]) for r in self._drafts("state = 'needs-details'"))
+        lines, path = [f"Photos waiting for details: {n}"] if n else [], self.sdir / "inbox.sqlite3"
+        if not path.is_file(): return lines
+        try:
+            with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=1)) as db:
+                if "tries" not in {r[1] for r in db.execute("PRAGMA table_info(inbound)")}: return lines
+                m = db.execute("SELECT COUNT(*) FROM inbound WHERE state = 'pending' AND tries > 0").fetchone()[0]
+        except sqlite3.Error:
+            return lines + ["Photos still downloading: unavailable"]
+        return lines + ([f"Photos still downloading: {m}"] if m else [])
 
     def _hike_lines(self, now) -> list:
         """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed."""
