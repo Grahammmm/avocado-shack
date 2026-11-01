@@ -1,0 +1,10 @@
+{
+  "This is for the avocados": {
+    "ops": [{"op": "product.set_photo", "args": {"id": "photo-product-001"}}],
+    "revises": "79a8"
+  },
+  "Ripe avocados in a wooden crate": {
+    "ops": [{"op": "product.set_photo", "args": {"id": "photo-product-001", "imageAlt": "Ripe avocados in a wooden crate"}}],
+    "revises": "79a8"
+  }
+}
