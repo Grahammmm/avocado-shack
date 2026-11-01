@@ -55,6 +55,9 @@ CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEX
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
 DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
                "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
+MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
+TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
+            "Send a shorter change.")
 TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
@@ -511,6 +514,9 @@ class Conversation:
         return makers if isinstance(makers, dict) else None
 
     def _request(self, msg, now) -> str:
+        if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
+            self._reply(TOO_LONG)
+            return "too-long"
         cap = self.settings["interpreterDailyCap"]
         if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
             day, calls = self._calls(now)
