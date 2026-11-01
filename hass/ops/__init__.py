@@ -47,6 +47,7 @@ class OpContext:
     settings: Mapping[str, Any]
     warnings: list = field(default_factory=list)
     state_dir: Path | None = None
+    assets: dict = field(default_factory=dict)  # site-relative assets/products path -> bytes the editor writes (H10)
 
     def change(self, change_id):
         """Read-only: the recorded change ``<state>/changes/<id>.json`` as a dict, or None (H06 undo)."""
