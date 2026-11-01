@@ -32,6 +32,17 @@ def tree(root):
                 hashlib.sha256(path.read_bytes()).hexdigest()
     return out
 
+def without_tmp(text, tmp):
+    """`text` with the test's own temp dir blanked out, raw and JSON-escaped, as given and resolved.
+
+    The CLI rightly prints paths under it, and TMPDIR is arbitrary (a parent named `kumquat` is legal), so a private
+    word may sit in that prefix by accident. Only the prefix goes: a private word anywhere else, including a name below
+    tmp, is still a leak."""
+    roots = {str(tmp), str(Path(tmp).resolve())}
+    for spelled in sorted({s for r in roots for s in (r, json.dumps(r)[1:-1])}, key=len, reverse=True):
+        text = text.replace(spelled, "<tmp>")
+    return text
+
 class BackupTestCase(H06TestCase):
     def setUp(self):
         super().setUp()
@@ -263,8 +274,9 @@ class CliTests(BackupTestCase):
         cli(2, "create", "--state", self.tmp / "no-state", "--out", self.bk)
         self.assertFalse((self.tmp / "no-state").exists() or (self.tmp / "again").exists())
         for run in runs:
+            out = without_tmp(run.stdout + run.stderr, self.tmp)
             for private in PRIVATE:
-                self.assertNotIn(private, run.stdout + run.stderr)
+                self.assertNotIn(private, out)
 
 if __name__ == "__main__":
     unittest.main()

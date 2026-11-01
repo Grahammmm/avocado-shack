@@ -9,7 +9,7 @@ from unittest import mock
 
 from hass import editor, health, statebackup
 from hass.tests.test_conversation import T0
-from hass.tests.test_statebackup import PRIVATE, SCRIPT, BackupTestCase, tree
+from hass.tests.test_statebackup import PRIVATE, SCRIPT, BackupTestCase, tree, without_tmp
 
 FIXED, SENTINEL = T0 + timedelta(minutes=3), "SENTINEL-drill-owner-text"
 KEYS = {"result", "state", "worktree", "files", "paused", "health_problems", "health_info", "history"}
@@ -64,7 +64,8 @@ class DrillCommandTests(BackupTestCase):
                              [("paused", "1", "statebackup-restore")])
         hist = json.dumps(editor.history(state=str(new)))
         self.assertIn(SENTINEL, hist)  # the restored history holds it; the drill line never does
-        for text in (SENTINEL, *PRIVATE, "kumquat", "product.", "chg-"): self.assertNotIn(text, run.stdout, text)
+        out = without_tmp(run.stdout, self.tmp)  # the paths it rightly names may hold any word via TMPDIR
+        for text in (SENTINEL, *PRIVATE, "kumquat", "product.", "chg-"): self.assertNotIn(text, out, text)
         self.assertEqual(run.stderr, "")
 
     def test_corrupt_backup_stops_at_verify_and_makes_nothing(self):
