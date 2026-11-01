@@ -952,3 +952,123 @@ Branch rb/rf1730-3 from origin/main 0cb6ac9 (RF1730-3, PR #122: commit 3fe510a, 
 Checks at PR head 3fe510a (recorded in PR #122): `python3 -m unittest hass.tests.test_interpret_check_repeat hass.tests.test_interpret_check -v` ran 20 tests, OK. CI `check` passed at 3fe510a.
 
 Limits: only exact repeats in one message are caught; repeats across messages are the editor's no-op refusal.
+
+## H16 a waiting question expires like a proposal (AV1537-01) — October 31, 2026
+
+Branch rb/av1537-01 from origin/main 6a5328b (AV1537-01, PR #73: commits 9bf984b, c1ec1ed, 2d17b97, merged as 26a0f0878c4765811acd178b51aeaafab91b9eeb). For Michael: a needs-details question now lapses after `approvalTtlSeconds` like a proposal; an answer refreshes it, and a late answer starts a new request. `hass/conversation.py` adds `expired` to the needs-details transitions and `_expiry(row)` (a legacy row without `expires_at` uses `created_at + ttl`, no migration write); `status` and the interpreter's `pending` hide a lapsed question. Merge fix c1ec1ed (operator decision 2026-10-31 17:28): a `revises` code whose draft expired starts fresh; an unknown code still gets NB-AV-01's question. Added `hass/tests/test_needs_details_expiry.py` and `hass/tests/test_revises_expired_vs_unknown.py`.
+
+Checks at PR head 2d17b97 (recorded in PR #73): `python3 -B -m unittest hass.tests.test_revises_expired_vs_unknown hass.tests.test_needs_details_expiry hass.tests.test_interpret_check -v` ran 19 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 538 tests, OK (skipped=5). CI `check` passed at 2d17b97.
+
+Limits: no separate question TTL setting, no schema migration and no health check; cancelling a question is AV1537-02.
+
+## H17 no or cancel closes a waiting question (AV1537-02) — October 31, 2026
+
+Branch rb/av1537-02 from origin/main 26a0f08 (AV1537-02, PR #84: commit d61583a, merged as d3f700db7ae4f46e9da25eee79d0886412bb0553). For Michael: `no`, `cancel` or `reject` (with or without a code) now closes one open question as well as a proposal, with `Cancelled <code>; nothing changed.`; several open items give the usual "Which draft do you mean?" list. It works while paused. `yes <question code>` answers `<code> still needs details: <question>` and never approves; a bare `yes` keeps `Nothing is waiting for approval.` (unedited `test_conversation`). A later fill naming a cancelled question starts a new request. `docs/hass/COMMANDS.md` rows say "draft or question". Added `hass/tests/test_cancel_question.py`.
+
+Checks at PR head d61583a (recorded in PR #84, run under `memcap`): `python3 -B -m unittest hass.tests.test_cancel_question hass.tests.test_conversation hass.tests.test_status_pause hass.tests.test_commands_doc -v` ran 39 tests, OK; full hass discovery ran 579 tests, OK (skipped=5). Pre-push tests were not run (host busy). CI `check` passed at d61583a.
+
+Limits: help text, expiry and interpreter behaviour are unchanged.
+
+## H17/H25 help lists the owner commands (AV1537-03) — October 31, 2026
+
+Branch rb/av1537-03 from origin/main d3f700d (AV1537-03, PR #89: commit 983196510a, merged as 53669fe9fc2e996d91d5c31df3a02786a643a1f4). For Michael: a whole message `help`, `commands` or `?` replies a short plain-text list (13 lines of at most 70 characters): how to send a change in plain words, then one example per command. It is read-only like `status`, works while paused, and expires nothing. `hass/conversation.py` adds `HELP_TEXT` and the `help` verb; `docs/hass/COMMANDS.md` one row. Added `hass/tests/test_help.py`, which keeps the list in step with the parser verbs.
+
+Checks at PR head 983196510a (recorded in PR #89): `python3 -B -m unittest hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation -v` ran 28 tests, OK; full hass discovery ran 617 tests, OK (skipped=5). Pre-push tests were not run (host busy). CI `check` passed at 983196510a.
+
+Limits: the owner phone guide is separate H25 work; `find` came with AV1537-04.
+
+## H03 find lists matching products and makers (AV1537-04) — October 31, 2026
+
+Branch rb/av1537-04 from origin/main 53669fe (AV1537-04, PR #99: commits 03b0cca, a1290fa4f, d6ba964, merged as 33279db21e9fd1de3b1aed2a9a95d16cb44a1a56). For Michael: `find <words>` replies up to 10 lines `product <id>: <name> (<status>)` or `maker <key>: <name> (<status>)`, then `… <n> more; add a word.` (or `or more` / `maybe more` when the lookup cap hides the true total; no made-up count). No hit gives `No product or maker matches "<query>".`; unreadable content gives `Catalog unavailable right now; nothing changed.` An alias match adds ` (your alias)`. Read-only: no interpreter, draft or expiry pass; works while paused. One `HELP_TEXT` line and one `docs/hass/COMMANDS.md` row. Added `hass/tests/test_find.py`.
+
+Checks at PR head d6ba964 (recorded in PR #99): `python3 -B -m unittest hass.tests.test_find hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_catalog_ops -v` ran 34 tests, OK; full hass discovery ran 701 tests, OK (skipped=5). Pre-push tests passed. CI `check` passed at d6ba964.
+
+Limits: `lookup` itself is unchanged; hikes and route ideas are not searched.
+
+## H01 text fields have maximum lengths (AV1537-05) — October 31, 2026
+
+Branch rb/av1537-05 from origin/main 833b0fb (AV1537-05, PR #85: commits 57e2ae2, 2a270a2, 4c38657, merged as abaf1176abfad7eeee780ff1de4510e5311a3b1e). For Michael: every owner-editable text field has a maximum length from one table, `content_model.TEXT_LIMITS` (for example product name 80, description 600, hike recap 2000 characters, counted in code points). A longer value is `<where>: longer than <n> characters`, so ops refuse it as `invalid` before any draft; current content passes. Fix commit 4c38657 shortens one `test_hike_ids.py` fixture title to 79 characters (it was over the new 80 limit). One `hass/README.md` line. Added `hass/tests/test_text_limits.py`.
+
+Checks at PR head 4c38657 (recorded in PR #85): the spec acceptance set plus `test_hike_ids`, `python3 -B -m unittest hass.tests.test_text_limits hass.tests.test_content hass.tests.test_catalog_ops hass.tests.test_hike_ops hass.tests.test_store_ops hass.tests.test_product_alt hass.tests.test_hike_ids -v`, ran 65 tests, OK. Pre-push tests were not run (host busy). CI `check` passed at 4c38657.
+
+Limits: no limit value is owner-configurable; `hass/ops/__init__.py` and the content are unchanged.
+
+## H05/H06 proposals show changed text in full (AV1537-06) — October 31, 2026
+
+Branch rb/av1537-06 from origin/main 33279db (AV1537-06, PR #102: commits ac3ceb7, d27c780, dc0fa0e, merged as 0f89574bb7837465485d9a89990d963b5099b8ae). For Michael: a proposal shows each changed field's new value in full, so he approves what he can read; store hours lines are joined with `; `, and a value with line breaks is printed indented after `→`, so `Expires …` and `Reply yes …` stay the last two lines. The old value, `status`, `history` and `Applied …` keep the 120-character cut. `hass/conversation.py` adds `_full` and `_arrow`. Added `hass/tests/test_proposal_full_text.py`.
+
+Checks at PR head dc0fa0e (recorded in PR #102, run under `memcap`): `python3 -B -m unittest hass.tests.test_proposal_full_text hass.tests.test_conversation hass.tests.test_demo_transcript hass.tests.test_status_pause -v` ran 37 tests, OK; full hass discovery ran 738 tests, OK (skipped=5). Pre-push tests passed. CI `check` passed at dc0fa0e.
+
+Limits: no bridge message splitting; screenshots and the summary format are unchanged.
+
+## H17 status names past scheduled hikes (AV1537-07) — November 1, 2026
+
+Branch rb/av1537-07 from origin/main 5370850e (AV1537-07, PR #145: commit 275d2e4, merged as b9612d0c37c64d04d3d885b5140733a38973377b). For Michael: `status` adds, after the upcoming hikes, `Hike <title> <local start> has passed but is still scheduled; send "complete <title>" or "cancel <title>" in your own words.` for each scheduled hike whose start is at or before now (oldest first, at most 5, then `… and <n> more past hikes still scheduled.`). These lines never show or read guest counts; unreadable content is still `Hikes: unavailable`. `test_status_pause.py` and `test_status_rsvp_off.py` were edited to expect the new line (G decision 2026-11-01 05:45 PST, this card only). Added `hass/tests/test_status_past_hikes.py`.
+
+Checks at PR head 275d2e4 (recorded in PR #145): `python3 -B -m unittest hass.tests.test_status_past_hikes hass.tests.test_status_pause hass.tests.test_status_rsvp_off -v` ran 25 tests, OK; full hass discovery ran 1065 tests, OK (skipped=10). Pre-push tests passed. CI `check` passed at 275d2e4.
+
+Limits: hikes are never completed automatically; no site JS change and no health alert.
+
+## H04 hike.update can clear optional fields (AV1537-08) — October 31, 2026
+
+Branch rb/av1537-08 from origin/main db937b3 (AV1537-08, PR #75: commit 03670656f, merged as f311e31281394ccaa75ec04f65384cd99d64e910). For Michael: `hike.update` takes `clear: [names]` and removes those optional fields (hike text except `meetingPoint`, or `trailId`) in the same draft as any set fields. Refused in this order: an unknown name (`clear: <name> is not a hike field`), a field that can never be removed (title, date, time, meetingPoint, RSVPs, capacity: `clear: <name> cannot be removed`), a field also set (`<name> cannot be set and cleared together`). Clearing only absent fields changes nothing. `hass/ops/hikes.py`, one `hass/README.md` line. Added `hass/tests/test_hike_clear.py`.
+
+Checks at PR head 03670656f (recorded in PR #75): `python3 -B -m unittest hass.tests.test_hike_clear hass.tests.test_hike_ops hass.tests.test_hike_rsvp_on hass.tests.test_hike_guest_warning hass.tests.test_hike_capacity_rsvp_off hass.tests.test_hike_move_warning hass.tests.test_interpret_check -v` ran 60 tests, OK; full hass discovery ran 525 tests, OK (skipped=5). CI `check` passed at 03670656f.
+
+Limits: recaps (AV1537-09) and route ideas are not cleared by this op.
+
+## H04 hike.recap corrects a completed hike's recap (AV1537-09) — October 31, 2026
+
+Branch rb/av1537-09 from origin/main 833b0fb (AV1537-09, PR #86: commit a15bc34, merged as 278dca8be5c55fd1ce76e18f9c1773c5c9f81f64). For Michael: `hike.recap {id, recap}` sets or corrects the trail-journal recap of a completed hike and changes nothing else; undo restores the old text. A scheduled hike is refused (`<id> is scheduled; use hike.complete with a recap`), a cancelled one too (`<id> is cancelled`), and the same recap again changes nothing. Every other field of a completed hike stays locked. `hass/ops/hikes.py`, `hass/README.md`. Added `hass/tests/test_hike_recap.py`.
+
+Checks at PR head a15bc34 (recorded in PR #86): `python3 -B -m unittest hass.tests.test_hike_recap hass.tests.test_hike_ops hass.tests.test_hike_clear -v` ran 23 tests, OK; full hass discovery ran 588 tests, OK (skipped=5). Pre-push tests passed. CI `check` passed at a15bc34.
+
+Limits: other completed-hike fields, photo recaps and site JS are unchanged.
+
+## H03 changing a maker's place warns how many product cards change (AV1537-10) — October 31, 2026
+
+Branch rb/av1537-10 from origin/main 212262c (AV1537-10, PR #87: commit 43f93b6, merged as b10efa4b7d84a34499fddea1b3c9dbb2e9445be6). For Michael: a `maker.edit` that changes `place` still drafts and adds one warning, `changes the "Based in" line on N active product card(s) of maker <key> (town search follows it)`, or `maker <key> has no active products; no product card changes`. Hidden and held products are not counted; an unchanged place, or a name, story or link change alone, never warns. `hass/ops/catalog.py`, one `hass/README.md` line. Added `hass/tests/test_catalog_place.py`.
+
+Checks at PR head 43f93b6 (recorded in PR #87, run under `memcap`): `python3 -m unittest hass.tests.test_catalog_place hass.tests.test_catalog_ops hass.tests.test_catalog_badge hass.tests.test_catalog_unchanged -v` ran 36 tests, OK. Pre-push tests passed. CI `check` passed at 43f93b6.
+
+Limits: a place edit is never refused; `shop.js` and the proposal text are unchanged.
+
+## H19 health reports applied changes whose preview check failed (AV1537-11) — October 31, 2026
+
+Branch rb/av1537-11 from origin/main fe8971e (AV1537-11, PR #91: commits eab712c, f6f40cd, dc5992f, d2a7476, merged as 340515b9d2b7d7a96270acc2db960a976590266c). For the operator: `hass/health.py` reports `unverified` with a count of applied changes whose preview check failed in the last 72 hours (`--unverified-hours N`, at least 1); a database without `checked_at` is skipped. Count only: no code, summary or sender. The count clears once the change is undone or the window passes. `docs/hass/SUPPORT.md` gains an `unverified` section. Added `hass/tests/test_health_unverified.py`.
+
+Checks at PR head d2a7476: PR #91 lists the eight edge paths but records no run output; its spec acceptance command is `python3 -m unittest hass.tests.test_health_unverified hass.tests.test_health hass.tests.test_health_unreadable hass.tests.test_support_doc -v`. CI `check` passed at d2a7476.
+
+Limits: the preview check is not re-run; alert delivery and timers are attended operator work.
+
+## H19 health reports guest counts unreadable or unset (AV1537-12) — October 31, 2026
+
+Branch rb/av1537-12 from origin/main 340515b (AV1537-12, PR #100: commit 6b3e836, merged as 4f33ef95773e4384cd150b777196c4471d251d52). For the operator: `hass/health.py` reports `guest-counts` `unreadable` when `guestCountsDb` is set but cannot be opened read-only, and `unset` when it is not set while an upcoming scheduled hike takes RSVPs; `hikes unreadable` is info only. The detail is always a fixed word, never a path, name or address. `docs/hass/SUPPORT.md` gains a `guest-counts` section. Added `hass/tests/test_health_guests.py`.
+
+Checks at PR head 6b3e836 (recorded in PR #100): `python3 -m unittest hass.tests.test_health_guests hass.tests.test_health hass.tests.test_health_unverified hass.tests.test_support_doc -v` ran 41 tests, OK. Pre-push tests were not run (host busy). CI `check` passed at 6b3e836.
+
+Limits: no capacity or over-booking check; guest names are never read; `status` and `hikes.py` are unchanged.
+
+## H20/H25 statebackup drill runs the restore drill in one command (AV1537-13) — October 31, 2026
+
+Branch rb/av1537-13 from origin/main fe8971e (AV1537-13, PR #90: commit 9f31f11, merged as 5ffc2d70ded975d35e9e5d0a6515f0a61053fa3e). For the operator: `python3 hass/statebackup.py drill BACKUP --into NEWDIR --worktree DRILLWT` runs `verify`, `restore --paused` into a new dir, then the read-only health check and history on it, and prints one JSON line of check ids and counts (`ok`, `corrupt` with `step: verify`, or `drill-failed` with its step; the restored dir is kept). It adds no write path of its own. The drill never restores onto the writer worktree: restore's attended refusal stands. `docs/hass/SUPPORT.md` uses it for restore steps 2–3. Added `hass/tests/test_statebackup_drill.py`.
+
+Checks at PR head 9f31f11 (recorded in PR #90): `python3 -m unittest hass.tests.test_statebackup_drill hass.tests.test_statebackup hass.tests.test_statebackup_paused hass.tests.test_health hass.tests.test_support_doc -v` ran 37 tests, OK. CI `check` passed at 9f31f11.
+
+Limits: no live restore, no deletion of drill dirs, no timers and no backup retention.
+
+## H25 owner known-limits page tied to the code (AV1537-14) — October 31, 2026
+
+Branch rb/av1537-14 from origin/main 53669fe (AV1537-14, PR #97: commits f8049fb, e22a272, merged as 422a4a953ead456f56f09412e0da56aa296bb89d). For Michael: `docs/hass/LIMITS.md` lists in plain words what Hass can take: one photo per message (JPEG or PNG, up to 20 MB), waiting changes expire, at most 20 things per message, history 5, memory 20, name search 10, and the text sizes. Each number cites its code constant; `hass/conversation.py` names `HISTORY_MAX = 5`. `docs/hass/README.md` links the page. Added `hass/tests/test_limits_doc.py`, which fails when a number and its constant disagree.
+
+Checks at commit f8049fb (recorded in PR #97): `python3 -m unittest hass.tests.test_limits_doc hass.tests.test_conversation hass.tests.test_status_pause -v` ran 34 tests, OK. Pre-push tests passed. CI `check` passed at PR head e22a272.
+
+Limits: no limit value changes (owner call); support contact text and voice notes are out of scope.
+
+## H10 label reader suggests name, brand and category (AV1537-15) — October 31, 2026
+
+Branch rb/av1537-15 from origin/main ca364a6 (AV1537-15, PR #103: commits 2692d21, 2f41ba9, merged as c09719988c755ce34b44ab4824c117b76b37aae7). For Michael: when a new photo opens a needs-details draft and a label reader is configured, the reply may add `The label looks like: <brand> <name> (<category>). Is that right? Say which product it is either way.` Label facts are only a question: ops stay `product.set_photo {photo}` and nothing is filled in. Maker, organic and origin are never read from a photo. New `hass/label_reader.py` (loopback local model, injectable transport) reads the metadata-free web copy outside the transaction and drops a value with a claim term, control characters, an unknown category or one over `TEXT_LIMITS`; any failure leaves the reply unchanged. `docs/hass/IMPLEMENTATION.md` section. Added `hass/tests/test_label_reader.py`.
+
+Checks at PR head 2f41ba9 (recorded in PR #103): `python3 -m unittest hass.tests.test_label_reader hass.tests.test_interpreter_local hass.tests.test_conversation hass.tests.test_media hass.tests.test_media_time hass.tests.test_proposal_full_text` ran 60 tests, OK. Pre-push tests passed. CI `check` passed at 2f41ba9.
+
+Limits: not wired into a service; no live model call in tests or CI, no model change and no Mac bridge.

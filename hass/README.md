@@ -84,6 +84,8 @@ A CLI read or decode error prints `{"result": "io-error", "problems": ["<ExcName
 - Store `<state>/conversation.sqlite3` (0600): `messages`, `drafts`, `approvals`, `outbox`. Duplicates, `fromMe` echoes, edited messages and anything not from an owner sender in the owner chat get no reply and no state change; for those only the message id and disposition are stored, never the text.
 - `yes|approve|approved` / `no|cancel|reject` (optionally `+ code`) act only on one `proposed` draft; several → the reply lists the codes. Expired, replaced or cancelled codes are named and nothing is written. A code is never reissued: repeating a closed draft (same hash) gets a new code and needs `yes <new code>`, so a late `yes` or `yes <old code>` writes nothing. Stale base → `rejected` (`stale`) and a new proposal that needs its own `yes`.
 - Draft states: `needs-details → proposed | rejected | expired` (a question lapses after `approvalTtlSeconds` like a proposal; an answer refreshes it, a later one starts a new request), `proposed → approved | rejected | expired`, `approved → applied | failed | rejected (stale)`, `applied → verified | reverted`; anything else raises.
+- `no` / `cancel` / `reject` (bare or with a code) also closes one open needs-details question (`Cancelled <code>; nothing changed.`); `yes <question code>` answers `<code> still needs details: …` and never approves.
+- A proposal shows each changed field's new value in full (hours lines joined with `; `, multi-line text indented after `→`); the old value, `status` and `history` keep the 120-character cut.
 - Each result and its reply are committed before `flush(adapter)` sends; a failed send leaves the reply queued. On start `recover()` settles drafts left `approved` from the H02 change record (`applied` or `failed`) and never applies again.
 
 ```sh
@@ -135,6 +137,9 @@ Limits: H13 is partial; home-page copy and image slots are not built.
 - `status` is read-only (even a lapsed proposal is only hidden, not expired): `Changes: on` or `Changes: paused since …`, each waiting or needs-details draft (or `Nothing is waiting for approval.`), `Last change: <code> <state>: <summary> (<commit7>)` with the failed or `not verified: …` reason, and for every upcoming scheduled hike `Hike <title> <local start>: <n> confirmed of <capacity|no limit>` (`RSVPs off` for a hike without RSVPs). After them, each scheduled hike whose start is at or before now (oldest first, at most 5, then `… and <n> more past hikes still scheduled.`; no guest counts) gets `Hike <title> <local start> has passed but is still scheduled; send "complete <title>" or "cancel <title>" in your own words.`
 - Guest totals come from `hikes.guest_counts(settings["guestCountsDb"])`, an optional setting in `<state>/config.json` (seat totals only, no names or emails). Unset, missing or wrong-schema database → `guest count unavailable`, never 0; unreadable worktree content → `Hikes: unavailable`.
 - `hass/health.py --seen FILE` still prints its one JSON line when that file cannot be written (full disk, read-only folder): `notify` is true and `info` holds `seen file not updated`, with no path.
+- `help` (also `commands`, `?`) replies the short owner command list, one example each; `find <words>` lists up to 10 matching products and makers with id and status. Both are read-only and work while paused.
+- Health also reports `unverified` (count of applied changes whose preview check failed in the last `--unverified-hours`, default 72) and `guest-counts` (`unreadable`, or `unset` while an upcoming hike takes RSVPs); fixed words and counts only.
+- `docs/hass/LIMITS.md` lists the owner-facing limits (photo size and types, things per message, list and text sizes); `hass/tests/test_limits_doc.py` checks every number against its code constant.
 
 Limits: H17 and H14 are partial. The support path for each health problem is `docs/hass/SUPPORT.md`.
 
@@ -147,12 +152,14 @@ python3 hass/statebackup.py create --state DIR --out DIR      # OUT: existing di
 python3 hass/statebackup.py list --out DIR                    # read-only, before verify/restore: each hass-state-* entry, newest first
 python3 hass/statebackup.py verify BACKUP
 python3 hass/statebackup.py restore BACKUP --into DIR --worktree WT   # WT: a separate drill worktree
+python3 hass/statebackup.py drill BACKUP --into DIR --worktree WT     # verify, restore --paused, health, history; one JSON line
 ```
 
 - `create` writes `<out>/hass-state-<UTC stamp>/`: `config.json`, `drafts/`, `changes/`, `screenshots/` (0600/0700), SQLite online-backup snapshots of `inbox.sqlite3` (the H16 queue, when present; taken first) and then `conversation.sqlite3`, and `MANIFEST.json` (SHA-256 per file) last; `writer.lock` is never copied. Refused: `out` missing, not 0700, or inside the state dir, the repository or the writer worktree (exit 2); a symlinked or odd `config.json`/`writer.lock` before either is opened, any symlink or unknown entry (`refused`, each named); a held writer lock (`busy`); a pending journal (`unsettled`, run `editor.py recover` first); an existing backup dir of the same stamp (`exists`).
 - `create` builds in a dot-named `.hass-state-<stamp>.partial-<pid>` folder and renames it to `hass-state-<stamp>` only after `MANIFEST.json` is written, so a failed run leaves no `hass-state-*` folder and the stamp stays free.
 - `verify` checks the manifest layout, every hash and mode, unlisted files and symlinks and `PRAGMA integrity_check`; damage gives `corrupt` naming the file.
 - `restore` verifies first, refuses an existing `--into` (left untouched), the recorded writer worktree (an attended operation) and a worktree that fails the editor checks, builds the new state dir beside `--into` and renames it into place. Only `config.json` `worktree` is rewritten.
+- `drill` prints check ids and counts only (`ok`, `corrupt` with `step: verify`, or `drill-failed` with its step, keeping the restored dir); it never restores onto the writer worktree.
 
 No network, no Git writes, no deletion of source data. Limits: drill on isolated copies only; no live restore, scheduling, retention, off-box copy or encryption.
 
@@ -175,6 +182,8 @@ No network, no Git writes, no deletion of source data. Limits: drill on isolated
 - `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart; nonces older than one day are pruned when a new one is recorded.
 
 No worker, timer, CLI or live adapter: fixtures only.
+
+H10 label reader (`hass/label_reader.py`, loopback local model, not wired into a service): for a new photo question it may add `The label looks like: <brand> <name> (<category>). Is that right?`; it is only a question, ops stay `product.set_photo {photo}`, and maker, organic and origin are never read from a photo.
 
 ## Retention report (H21)
 
