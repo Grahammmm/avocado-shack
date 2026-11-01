@@ -99,6 +99,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** fix the `guestCountsDb` setting in the private config (attended).
 - **Stop and ask:** before editing or copying the RSVP database (it holds guests' names).
 
+### `paused-long`
+- **Means:** changes have been paused for longer than `--paused-hours` (default 24; `over <N> h`), or the pause time cannot be read (`unreadable time`). Every approved change is held until someone sends `resume changes`. The `paused` info line still shows when.
+- **Check first:** ask the owner why changes are paused; the owner sends `status` to see the waiting drafts.
+- **Next step:** the owner sends `resume changes` once the pause is no longer wanted; resuming never applies anything. Health never resumes by itself.
+- **Stop and ask:** nobody knows why changes were paused, or the pause time is unreadable (tell the operator).
+
 ## Info lines
 
 ### `conversation`

@@ -9,6 +9,8 @@ mapping FILE), flushes the outbox into memory and prints it as JSON lines. It se
 PLAYWRIGHT_MODULE and CHROMIUM_PATH are read from the environment).
 --queue START_AT stores every message in <state>/inbox.sqlite3 first, then drains it once (H16): messages before the
 start point and repeats never become commands; stderr gets one counts-only summary line.
+--photos DIR (NB-AV-13): a row's `photos: [name]` become its attachments, read from regular files directly in DIR
+(settings need mediaRoot); without it the field is ignored.
 Exit codes: 0 done, 2 unsafe state dir, missing settings or unreadable input.
 """
 import argparse, json, sys  # noqa: E401
@@ -24,7 +26,7 @@ from hass.inbox import Inbox  # noqa: E402
 from hass.preview import Previewer  # noqa: E402
 
 
-def _row(n, line) -> Inbound:  # every check names line n and the field, never the value
+def _row(n, line, photos=None, names=None) -> Inbound:  # every check names line n and the field, never the value
     def bad(what): raise ValueError(f"fixture line {n}: {what}")
     try: r = json.loads(line)
     except ValueError: bad("not JSON")
@@ -37,19 +39,28 @@ def _row(n, line) -> Inbound:  # every check names line n and the field, never t
     try: at = datetime.fromisoformat(r.get("at"))
     except (TypeError, ValueError): at = None
     if at is None or at.utcoffset() is None: bad("at must be an ISO time with a UTC offset")
+    files = r.get("photos", []) if photos is not None else []  # NB-AV-13: plain names of regular files in --photos
+    if not isinstance(files, list) or not all(isinstance(f, str) and f not in ("", ".", "..") and Path(f).name == f and
+                                              not (q := Path(photos) / f).is_symlink() and q.is_file() for f in files):
+        bad("photos must name regular files directly inside --photos")
+    if names is not None: names.setdefault(str(r["id"]), files)  # a repeated id keeps its first row's photos
     return Inbound(provider_id=str(r["id"]), chat=r["chat"], sender=r["sender"], text=r["text"],
-                   from_me=r.get("fromMe", False), kind=kind, received_at=r["at"])
+                   from_me=r.get("fromMe", False), kind=kind, received_at=r["at"], attachments=len(files))
 
 
 class FixtureAdapter:
-    """Reads inbound JSONL (`id, chat, sender, text, fromMe, kind, at`); records sends; `fail_sends=N` raises N times."""
+    """Reads inbound JSONL (`id, chat, sender, text, fromMe, kind, at`, with `photos=DIR` also `photos: [name]`);
+    records sends; `fail_sends=N` raises N times. With `photos` it is also the Conversation's photo source."""
 
-    def __init__(self, path=None, fail_sends=0):
-        self.path, self.fail_sends, self.sent = path, fail_sends, []
+    def __init__(self, path=None, fail_sends=0, photos=None):
+        self.path, self.fail_sends, self.sent, self.photos, self.names = path, fail_sends, [], photos, {}
 
     def inbound(self) -> list:
         lines = Path(self.path).read_text("utf-8").splitlines()
-        return [_row(n, s) for n, s in enumerate(lines, 1) if s.strip()]  # n counts physical lines, blanks included
+        return [_row(n, s, self.photos, self.names) for n, s in enumerate(lines, 1) if s.strip()]  # n: physical lines
+
+    def fetch(self, provider_id, count) -> list:  # NB-AV-13 photo source: that row's files, as checked by _row
+        return [(Path(self.photos) / name).read_bytes() for name in self.names[provider_id][:count]]
 
     def send(self, chat, text, attachments):
         if self.fail_sends > 0:
@@ -64,13 +75,15 @@ def main(argv=None) -> int:
     for name in ("--state", "--fixture", "--interpreter"): parser.add_argument(name, required=True)
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--queue", metavar="START_AT")
+    parser.add_argument("--photos", metavar="DIR")
     args = parser.parse_args(argv)
     try:
-        adapter = FixtureAdapter(args.fixture)
+        adapter = FixtureAdapter(args.fixture, photos=args.photos)
         interpreter = FixtureInterpreter(json.loads(Path(args.interpreter).read_text("utf-8")))
         editor = Editor(args.state)
         previewer = Previewer(editor_mod._load(args.state)[2]) if args.preview else None
-        conversation = Conversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer)
+        conversation = Conversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer,
+                                    photos=adapter if args.photos is not None else None)
         if args.queue is None:
             for message in adapter.inbound(): conversation.handle(message)
         else:
