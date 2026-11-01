@@ -7,6 +7,30 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  const p=await b.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
  const errors=[];p.on('pageerror',e=>errors.push(e.message));
  // Real integration checks are confined to the temporary fixture server.
+ // AV1737-11: a full hike says so with no RSVP button; one place left is singular. Only qa-hike's fields are overridden.
+ const api=process.env.COMMUNITY_TEST_URL+'/api/community',qaHike=()=>p.locator('.hike-event').filter({hasText:'QA trail fixture'});
+ const shown=async fields=>{
+  await p.unroute(api);
+  await p.route(api,async r=>{const res=await r.fetch(),j=await res.json();Object.assign(j.events.find(e=>e.id==='qa-hike'),fields);await r.fulfill({response:res,json:j})});
+  await p.goto(process.env.COMMUNITY_TEST_URL+'/hike');await qaHike().waitFor();
+  const buttons=qaHike().locator('[data-rsvp]');
+  return {text:await qaHike().innerText(),count:await buttons.count(),buttons};
+ };
+ let h=await shown({remaining:0});
+ check(h.text.includes('This hike is full.')&&!/places? available/.test(h.text)&&h.count===0,'Full hike offered an RSVP: '+h.text);
+ check((await qaHike().locator('.hike-full').innerText()).trim()==='This hike is full.','Full hike notice missing its hook');
+ check(await qaHike().getByRole('button').count()===0,'Full hike still shows a button');
+ h=await shown({remaining:1});
+ check(h.text.includes('1 place available')&&!h.text.includes('1 places')&&!h.text.includes('This hike is full'),'One place not singular: '+h.text);
+ check(h.count===1&&await h.buttons.isEnabled()&&(await h.buttons.innerText()).trim()==='RSVP to this hike ↗','One place lost its enabled RSVP button');
+ h=await shown({remaining:2});
+ check(h.text.includes('2 places available')&&h.count===1&&await h.buttons.isEnabled(),'Two places wrong: '+h.text);
+ h=await shown({remaining:null});
+ check(h.text.includes('RSVPs open')&&!/places? available/.test(h.text)&&h.count===1&&await h.buttons.isEnabled(),'Uncapped hike wrong: '+h.text);
+ h=await shown({rsvpOpen:false,remaining:0});
+ check(h.text.includes('RSVP details will be shared when confirmed.')&&!h.text.includes('This hike is full')&&h.count===0,'Closed RSVP lost to full: '+h.text);
+ await p.unroute(api);
+ check(!errors.length,'Page errors while overriding places: '+JSON.stringify(errors));
  await p.goto(process.env.COMMUNITY_TEST_URL+'/hike');
  check(await p.locator('.hike-event').filter({hasText:'QA trail fixture'}).locator('[data-confirmed-guests]').textContent()==='2','Initial party count wrong');
  await p.getByRole('button',{name:'RSVP to this hike ↗',exact:true}).first().click();
