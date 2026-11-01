@@ -784,3 +784,123 @@ Branch rb/rf1105-13 from origin/main f2576fee25 (RF1105-13, PR #58: commits 5601
 Checks at PR head d39d71f (recorded in PR #58): a targeted statebackup/health set ran 70 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 397 tests, OK (skipped=5). CI `check` passed at d39d71f. Re-run on main 4baeaaa for this ledger: `python3 -B -m unittest hass.tests.test_health_seen hass.tests.test_statebackup_atomic hass.tests.test_hike_rsvp_on hass.tests.test_hike_guest_warning hass.tests.test_status_rsvp_off hass.tests.test_bridge_pictures` ran 46 tests, OK.
 
 Limits: `verify`/`restore`, the manifest schema, cleaning up partial folders left by a killed process, retention/pruning and timers are not built.
+
+## H10 product.set_photo installs a stored photo's web copy (NB-AV-08) — October 31, 2026
+
+Branch rb/nb-av-08 from origin/main 7ae191d (NB-AV-08, PR #72: commit f125a52, merged as c179e3270f826d6106e7aa479df9eb9088965f0c). New op `product.set_photo {id, photo, imageAlt}` in `hass/ops/photos.py`: the product must exist and `photo` must be 64 lowercase hex naming a stored original. It calls `media.web_copy` under the `mediaRoot` setting (a media root inside the repo is refused) and sets `image` to `assets/products/photo-<sha[:16]>.<jpg|png>` plus `imageAlt`. `hass/editor.py` refuses an asset path outside `IMAGE_RE` or the writer worktree and writes the asset with the content change; a failed or recovered apply restores or removes the photo file. `OpContext.assets`; one `docs/hass/IMPLEMENTATION.md` line. Added `hass/tests/test_set_photo.py`.
+
+Checks at PR head f125a52 (recorded in PR #72): `python3 -m unittest hass.tests.test_set_photo hass.tests.test_catalog_ops hass.tests.test_editor hass.tests.test_undo hass.tests.test_media_web` ran 46 tests, OK. CI `check` passed at f125a52.
+
+Limits: undo (`history.revert`) restores `image`/`imageAlt` but leaves the committed photo file in place, unreferenced.
+
+## H05 interpreter output checked against the ops registry (NB-AV-01) — October 31, 2026
+
+Branch rb/nb-av-01 from origin/main 7ae191d (NB-AV-01, PR #70: commit e77dfcb, merged as db937b35d55c8f3793e98c88899a4de65d33ebfd). New pure `hass/interpret_check.py` runs between `_checked` and `editor.prepare` in `Conversation._request`. The first problem wins: empty `ops`, a call that is not exactly `{"op", "args"}`, an unknown op, an unknown argument, a wrong Python type for the argument kind, or `revises` naming no waiting draft. Each gets a fixed reply; names are cut to 40 characters with control characters removed. The registry is cached on the conversation. Added `hass/tests/test_interpret_check.py`.
+
+Checks at PR head e77dfcb (recorded in PR #70): `python3 -m unittest hass.tests.test_interpret_check hass.tests.test_conversation hass.tests.test_demo_transcript hass.tests.test_fixture_chat -v` ran 29 tests, OK (skipped=1); `python3 -m unittest discover -s hass/tests -t .` ran 477 tests, OK (skipped=5). CI `check` passed at e77dfcb.
+
+Limits: value checks (maker exists, real date, image file, choices) stay in the editor with `Not drafted:`.
+
+## H15 owner alias memory resolves lookup (NB-AV-14) — October 31, 2026
+
+Branch rb/nb-av-14 from origin/main db937b3 (NB-AV-14, PR #78: commit 330d45d, merged as 3f3547d2c6ae5318927f6ae646bab1bbf3fb7ae1). `alias <name>: <product id or maker key>` saves memory key `alias.<slug>` (kind `fact`, value `product:<id>` or `maker:<key>`) only when the id exists in the writer-worktree catalog. A bad name, an unknown id, an id that is both product and maker, or an unavailable catalog is a named refusal that stores nothing, and `remember alias.<x>: …` is refused. `catalog.lookup(..., aliases=None)` returns `{"match", "via": "alias <name>"}` for a folded whole-name match whose record still exists; dangling or other-kind aliases fall back to names. `forget alias.<slug>` uses the existing forget path. One `docs/hass/COMMANDS.md` row. Added `hass/tests/test_memory_alias.py`.
+
+Checks at PR head 330d45d (recorded in PR #78): `python3 -B -m unittest hass.tests.test_memory_alias hass.tests.test_memory hass.tests.test_memory_chat hass.tests.test_catalog_ops hass.tests.test_commands_doc` ran 44 tests, OK; `python3 -B -m unittest hass.tests.test_conversation hass.tests.test_status_pause` ran 25 tests, OK. CI `check` passed at 330d45d.
+
+Limits: the interpreter still never reads memory.
+
+## H05 local-model interpreter adapter, loopback only (NB-AV-02) — October 31, 2026
+
+Branch rb/nb-av-02 from origin/main db937b3 (NB-AV-02, PR #77: commit d51710c, merged as 4eba2f6924dcbd41d26cae5359bda7bd9b1ddecb). New `hass/interpreter_local.py`: `LocalInterpreter(base_url, model, system_prompt, timeout=30, transport=None).interpret(text, pending)` makes one Ollama `POST /api/chat` (`stream` false, `format` json, temperature 0) to `http` on `127.0.0.1`, `localhost` or `::1` only. The default transport ignores environment proxies, follows no redirect and reads at most 256 KiB + 1. Any failure returns a fixed `unsupported` reply and keeps only a code in `last_error` (`timeout|connect|http-<n>|too-large|not-json|shape`); the URL, prompt and owner text are never kept. A short `docs/hass/IMPLEMENTATION.md` section. Added `hass/tests/test_interpreter_local.py` (fake transport only).
+
+Checks at PR head d51710c (recorded in PR #77): `python3 -m unittest hass.tests.test_interpreter_local hass.tests.test_interpret_check hass.tests.test_conversation -v` ran 32 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 526 tests, OK (skipped=5). CI `check` passed at d51710c.
+
+Limits: nothing is wired into a service and `Conversation` is unchanged; tests open no socket and call no model.
+
+## H21 read-only retention report (NB-AV-15) — October 31, 2026
+
+Branch rb/nb-av-15 from origin/main 92e4c2d (NB-AV-15, PR #74: commits 4e68653, e491cee, ac6b395, merged as 833b0fbf7ae3e7761c1031c81ee372897ff3014a). `python3 hass/retention.py report --state DIR --days N [--media ROOT] [--backups DIR] [--now ISO]` prints one JSON line of counts strictly older than now minus N days for inbox, messages, outbox, drafts, screenshots, media and backups, with `deletes: 0`. Photos with no usable date are `undated`, never guessed. SQLite is opened `mode=ro`; a missing or corrupt DB reports `"unavailable"` (exit 1). A missing or symlinked folder or DB, or a bad `--days`/`--now`, exits 2 with nothing opened or created. No ids, text or file names are printed. Commit e491cee ignores stamp-shaped backup names that are no real calendar time. `hass/README.md` gains a `## Retention report (H21)` section. Added `hass/tests/test_retention.py`.
+
+Checks recorded in PR #74 (head not named in the PR): `python3 -B -m unittest hass.tests.test_retention -v` ran 9 tests, OK; `python3 -m unittest discover -s hass/tests -t .` ran 496 tests, OK (skipped=5). CI `check` passed at PR head ac6b395.
+
+Limits: a report only; it deletes nothing. `docs/hass/SUPPORT.md` is not touched.
+
+## H03/H05 unstated organic, origin or maker claims become a question (NB-AV-05) — October 31, 2026
+
+Branch rb/nb-av-05 from origin/main f311e31 (NB-AV-05, PR #76: commits de339da, 45d5912, merged as 8363e3ae0f082d7b29cea994b3c92b1bc2520f31). After `editor.prepare` returns `ok`, `_request` runs `claims.unstated(draft, msg.text, makers)`. A `claims.TERMS` term (organic, certified, origin, local, family farm and similar) that the draft adds and the owner's message does not contain, or a changed `producerKey` whose maker the owner did not name, gets one question with disposition `claim-question` and no `drafts` row; a waiting draft named by `revises` keeps its state. Matching is whole words on folded text. Unreadable `makers.json` fails closed. New `hass/claims.py`. Added `hass/tests/test_claims.py`.
+
+Checks at commit de339da (recorded in PR #76): `python3 -m unittest hass.tests.test_claims hass.tests.test_interpret_check hass.tests.test_conversation hass.tests.test_demo_transcript -v` ran 38 tests, OK. CI `check` passed at PR head 45d5912.
+
+Limits: the term list is fixed; only a draft made entirely of `history.revert` ops skips the check.
+
+## H05 interpreter prompt from the ops registry and catalog (NB-AV-03) — October 31, 2026
+
+Branch rb/nb-av-03 from origin/main a82ab14 (NB-AV-03, PR #81: commit 75a413b, merged as 212262c7627ab2a34e6ff9c00b514d92f001dd8b). New pure `hass/interpreter_prompt.py`: `build(registry, content)` returns a deterministic system prompt: role, reply contract, fixed rules, one line per op sorted by name, then products (`id | name | status`) and makers (`key | name`). Catalog values are JSON-string-escaped, U+0085/U+2028/U+2029 included. Caps are `MAX_PRODUCTS = 400` and `MAX_MAKERS = 200`, then `… and N more (ask the owner)`; above `PROMPT_MAX_BYTES` (64 KiB) it raises `ValueError`. Snapshot `hass/tests/fixtures/interpreter-prompt.txt`. Added `hass/tests/test_interpreter_prompt.py`.
+
+Checks at PR head 75a413b (recorded in PR #81): `python3 -m unittest hass.tests.test_interpreter_prompt hass.tests.test_interpreter_local -v` ran 18 tests, OK. CI `check` passed at 75a413b.
+
+Limits: no wiring and no model call.
+
+## H22 daily interpreter call cap (NB-AV-07) — October 31, 2026
+
+Branch rb/nb-av-07 from origin/main 212262c (NB-AV-07, PR #83: commits 6caf121, 8148a6e, merged as d56f15358c628e0fd71ca4cf1593357d27c48f6a). Optional setting `interpreterDailyCap`: an int from 1 to 10000, absent or `null` for no cap, anything else a `ConfigError`. With a cap, `_request` counts calls per America/Los_Angeles day in a `usage(day, calls)` table before calling the interpreter. At or over the cap the owner gets one `DAILY_LIMIT` reply (disposition `daily-limit`), with no draft and no call. Approvals, `undo`, `remember`, `history`, `no` and `status` are never counted, a duplicate provider id is never counted twice, and a failed call stays counted. `status` shows `Interpreter today: N of CAP`; the `docs/hass/COMMANDS.md` status row says so. Added `hass/tests/test_interpreter_cap.py`.
+
+Checks at commit 6caf121 (recorded in PR #83, run under `memcap`): `python3 -m unittest hass.tests.test_interpreter_cap hass.tests.test_conversation hass.tests.test_status_pause hass.tests.test_commands_doc hass.tests.test_health -v` ran 47 tests, OK. CI `check` passed at PR head 8148a6e.
+
+Limits: without a cap there is no `usage` table and no status line, and an interpreter exception behaves as before.
+
+## H19 health reports the local model unreachable (NB-AV-06) — October 31, 2026
+
+Branch rb/nb-av-06 from origin/main 212262c (NB-AV-06, PR #82: commits 61eacd1, 0a64fdc, f13497a, ecdeac7, merged as fe8971edf4efac05ea1e19a1ccd2c70538ada7a0). `python3 hass/health.py --state DIR --model <loopback url> [--model-name NAME]` adds check `model`: one GET `/api/tags` with a 3 s timeout, no proxy, no redirect and at most 256 KiB + 1 read; the URL rule is `interpreter_local.check_url`. The problem detail is fixed: `unreachable`, `http <status>`, `bad reply` or `model not installed` (a name without `:` means `<name>:latest`). A bad `--model`, an empty `--model-name` or `--model-name` alone exits 2 before any read. The URL and reply text never appear. Commit f13497a skips malformed model names in the reply instead of crashing. `docs/hass/SUPPORT.md` gains a `model` section. Added `hass/tests/test_health_model.py`.
+
+Checks: test count not recorded in the PR (PR #82 points to the card for its output). CI `check` passed at PR head ecdeac7.
+
+Limits: no `--model` leaves the output unchanged; notify is the existing `--seen` fingerprint. No send; the only network use is the loopback GET.
+
+## H09 interpreter eval set and offline scorer (NB-AV-04) — October 31, 2026
+
+Branch rb/nb-av-04 from origin/main d3f700d (NB-AV-04, PR #88: commit 88c3f59, merged as b75fd83f9610a6097faa260c6dae81c422a607ca). `hass/tests/fixtures/interpreter-eval.jsonl` holds exactly 30 synthetic cases: 8 product, 4 maker, 6 hike, 3 store hours/address, 3 corrections with `revises`, 3 must-ask, 3 unsupported. `hass/interpreter_eval.py` `score(cases, replies, registry)` passes each reply through `conversation._checked` and `interpret_check.check` and reports only ids and short reasons (`cases`, `passed`, `failed`, `missing`, `extra`). It exits 2 for an unreadable or malformed file, a bad or duplicate id, or a count other than 30. The replies fixture has 27 correct and 3 deliberately wrong replies. 4 `docs/hass/IMPLEMENTATION.md` lines. Added `hass/tests/test_interpreter_eval.py`.
+
+Checks: test count not recorded in the PR. CI `check` passed at PR head 88c3f59.
+
+Limits: `--live --url U --model M --out FILE` is operator-only, writes a new file outside the repo and is never run in CI or tests (fake transport).
+
+## H12 a photo opens one needs-details draft; a later text fills it (NB-AV-09) — October 31, 2026
+
+Branch rb/nb-av-09 from origin/main fe8971e (NB-AV-09, PR #79: commits 8e97486, 4f5c5c3, be0b176, 56d0b5c, merged as 34856246dc42a98f8ee007a4041756717f5850f1). `Conversation(..., photos=None)`: with a photo source, one owner photo is stored with `media.store_original(..., source="owner-chat")` and opens one `needs-details` draft `[product.set_photo {photo}]` asking `PHOTO_QUESTION` (disposition `photo-draft`); `load_settings(sdir, photos=True)` requires `mediaRoot`. More than one attachment gets `attachment-many` with nothing fetched. The same photo while its draft waits gets `photo-duplicate` and no new row. A caption goes to `_request` and is never a command or approval. A fill naming another photo gets `photo-mismatch`. Fix commit be0b176: `no <code>` (or a bare no) cancels a needs-details photo draft; `yes` never approves it. Added `hass/tests/test_photo_draft.py`.
+
+Checks at commit 8e97486 (recorded in PR #79): `python3 -m unittest hass.tests.test_photo_draft hass.tests.test_attachment_reply hass.tests.test_conversation hass.tests.test_set_photo -v` ran 41 tests, OK. CI `check` passed at PR head 56d0b5c.
+
+Limits: `photos=None` keeps the RF0835-5 `ATTACHMENT_REPLY` path unchanged.
+
+## H17 status counts photo drafts and pending attachments (NB-AV-12) — October 31, 2026
+
+Branch rb/nb-av-12 from origin/main 53669fe (NB-AV-12, PR #95: commit 8f8d9cb, merged as 65d074f1893ffc6bcd2222456a7ecb461fa7da50). `status` adds `Photos waiting for details: N` (unexpired needs-details drafts made only of `product.set_photo` ops) and `Photos still downloading: M` (inbox rows `pending` with `tries > 0`, read with `mode=ro` and `timeout=1`). There is no line when the count is 0, when the inbox file is missing (it is never created) or has no `tries` column; any `sqlite3.Error` gives `unavailable`. The `docs/hass/COMMANDS.md` status row names both lines. Added `hass/tests/test_status_photos.py`.
+
+Checks at PR head 8f8d9cb (recorded in PR #95): `python3 -m unittest hass.tests.test_status_photos hass.tests.test_status_pause hass.tests.test_status_rsvp_off hass.tests.test_commands_doc -v` ran 31 tests, OK. CI `check` passed at 8f8d9cb.
+
+Limits: read-only and counts only; the per-draft `needs details` line is unchanged.
+
+## H12 photo limits named in the reply; nothing stored or drafted (NB-AV-10) — October 31, 2026
+
+Branch rb/nb-av-10 from origin/main a808bd1 (NB-AV-10, PR #94: commit 5bd825b, merged as 31d573c5d8dd4980b86516ccd2666d35dda10996). New pure `media.check_photo(data)` runs the `store_original` checks and the web-copy filter in memory and raises `Refused(code)`. `_photo` runs it first, so a refused photo gets its fixed reply (disposition `photo-refused:<code>`) and leaves no original, sidecar, web copy or draft; before, a sideways or unreadable photo was still stored. `REPLIES` name the limit (JPEG or PNG, 20 MB, the right way up), and the new code `many` answers two or more attachments with nothing fetched. 3 `docs/hass/COMMANDS.md` lines; two `test_photo_draft.py` assertions now expect the new reply and disposition. Added `hass/tests/test_photo_limits.py`.
+
+Checks at PR head 5bd825b (recorded in PR #94, run under `memcap`): `python3 -m unittest hass.tests.test_photo_limits hass.tests.test_photo_draft hass.tests.test_media hass.tests.test_media_web hass.tests.test_commands_doc -v` ran 44 tests, OK. CI `check` passed at 5bd825b.
+
+Limits: `store_original` itself is unchanged and still keeps a sideways original, which `web_copy` then refuses.
+
+## H16 attachment fetch failures wait, retry 3 times, then reply (NB-AV-11) — October 31, 2026
+
+Branch rb/nb-av-11 from origin/main 33279db (NB-AV-11, PR #93: commits f370f9b, 88e30a0, 755f926, merged as ca364a672604b62a1abc15a329a738aae10e1f3c). When the photo source's `fetch` raises or returns nothing, `handle` raises `AttachmentPending` and the transaction rolls back: nothing is recorded and the caption is not read. `hass/inbox.py` adds `tries`/`next_try_at` (by `ALTER TABLE` on an older inbox), `MAX_TRIES = 3` and `BACKOFF_S = (30, 120)`; `drain` stops at a head message that is not yet due, so order is kept. The 3rd try sends one `FETCH_FAILED` reply (disposition `attachment-failed`) and stores and drafts nothing. New read-only `Inbox.waiting()`. Added `hass/tests/test_attachment_retry.py`.
+
+Checks at commit f370f9b (recorded in PR #93): `python3 -m unittest hass.tests.test_attachment_retry hass.tests.test_inbox hass.tests.test_inbox_unreadable hass.tests.test_statebackup_inbox hass.tests.test_health_inbox hass.tests.test_photo_draft -v` ran 50 tests, OK. CI `check` passed at PR head 755f926.
+
+Limits: other exceptions behave as before: they propagate and are not counted as a try.
+
+## H09 demo transcript v2 with a photo, approval, screenshot and undo (NB-AV-13) — October 31, 2026
+
+Branch rb/nb-av-13 from origin/main 4f33ef9 (NB-AV-13, PR #96: commits b3215fc, 9970d36, 43833e8, 58ce584, merged as 759dc93d1a37adca339b1dc85cfccae6e54f22af). `hass/fixture_chat.py --photos DIR`: a fixture row's `photos: [name]` becomes its attachments, and the adapter serves those files' bytes as the Conversation's photo source. Each name must be a regular file directly inside DIR (no `..`, `/`, symlink or missing file), otherwise exit 2 at parse time before anything is handled; without `--photos` the field is ignored. New 8-row `conversation-demo-photo.jsonl` and `-interpreter.json`: photo with caption, the same photo again, the fill, `yes`, `history`, `undo`, `yes` and a redelivered photo. Fix commit 43833e8 gives a statebackup drill redaction test a sentinel no tmp path can contain. One `hass/README.md` pointer. Added `hass/tests/test_demo_transcript_photo.py`.
+
+Checks at commit b3215fc (recorded in PR #96, run under `memcap`): `python3 -B -m unittest hass.tests.test_demo_transcript_photo hass.tests.test_demo_transcript hass.tests.test_fixture_chat -v` ran 12 tests, OK (skipped=1); pre-push hass unittests passed. CI `check` passed at PR head 58ce584. Re-run on main df99c97 for this ledger: `python3 -B -m unittest hass.tests.test_set_photo hass.tests.test_interpret_check hass.tests.test_memory_alias hass.tests.test_interpreter_local hass.tests.test_retention hass.tests.test_claims hass.tests.test_interpreter_prompt hass.tests.test_interpreter_cap hass.tests.test_health_model hass.tests.test_interpreter_eval hass.tests.test_photo_draft hass.tests.test_status_photos hass.tests.test_photo_limits hass.tests.test_attachment_retry hass.tests.test_demo_transcript_photo` ran 132 tests, OK.
+
+Limits: fixtures only: no live bridge, download, model call or send. The v1 `test_demo_transcript.py` is unedited.
