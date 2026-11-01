@@ -4,7 +4,8 @@
 
 One JSON line: per data class, the count strictly older than now - N days and the oldest kept UTC date (or null), dated
 by inbox/messages received_at, outbox/drafts created_at (closed draft: no further transition), screenshot mtime, the
-photo sidecar received_at (none usable: undated, never guessed) and the backup name's stamp (other names ignored).
+photo sidecar received_at (none usable: undated, never guessed), the backup name's stamp (other names ignored),
+approvals approved_at and closed memory rows by forgotten_at, else superseded_at (active memory is not counted).
 Zone-less or malformed times, and backup stamps that are no real calendar time, count nowhere. No ids, text or file
 names print. SQLite opens mode=ro; nothing is created or written; the owner picks the period (owner action 4). Exit 1:
 a store is missing or unreadable (its keys say "unavailable"); exit 2, before anything opens: bad usage (incl. a
@@ -112,12 +113,19 @@ def report(state, days: int, media=None, backups=None, now=None) -> dict:
         rows = _rows(sdir / CONV, {
             "messages": ("messages", "SELECT 'rows', received_at FROM messages"),
             "outbox": ("outbox", "SELECT IIF(sent_at IS NULL, 'unsent', 'sent'), created_at FROM outbox"),
-            "drafts": ("drafts", "SELECT state, created_at FROM drafts")})
+            "drafts": ("drafts", "SELECT state, created_at FROM drafts"),
+            "approvals": ("approvals", "SELECT 'rows', approved_at FROM approvals"),
+            "memory": ("memory", "SELECT IIF(forgotten_at IS NOT NULL, 'forgotten', 'superseded'), "
+                       "COALESCE(forgotten_at, superseded_at) FROM memory "
+                       "WHERE forgotten_at IS NOT NULL OR superseded_at IS NOT NULL")})
         doc["messages"] = _tally(cutoff, ((k, _when(t)) for k, t in rows["messages"]), ("rows",))
         doc["outbox"] = _tally(cutoff, ((k, _when(t)) for k, t in rows["outbox"]), ("sent", "unsent"))
         drafts = (("open" if s in TRANSITIONS else "closed", _when(t)) for s, t in rows["drafts"])
         doc["drafts"] = {k: v for k, v in _tally(cutoff, drafts, ("closed", "open")).items() if k != "oldest"}
-    except sqlite3.DatabaseError: doc["messages"] = doc["outbox"] = doc["drafts"] = UNAVAILABLE
+        doc["approvals"] = _tally(cutoff, ((k, _when(t)) for k, t in rows["approvals"]), ("rows",))
+        doc["memory"] = _tally(cutoff, ((k, _when(t)) for k, t in rows["memory"]), ("forgotten", "superseded"))
+    except sqlite3.DatabaseError:
+        doc["messages"] = doc["outbox"] = doc["drafts"] = doc["approvals"] = doc["memory"] = UNAVAILABLE
     for key, folder, scan in (("screenshots", sdir / "screenshots", _shots), ("media", mroot, _media),
                               ("backups", bdir, _backups)):
         try: doc[key] = None if folder is None else scan(folder, cutoff)
