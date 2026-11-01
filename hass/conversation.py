@@ -877,13 +877,15 @@ class Conversation:
         return lines + ([f"Photos still downloading: {m}"] if m else [])
 
     def _hike_lines(self, now) -> list:
-        """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed."""
+        """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed.
+        AV1537-07: then scheduled hikes whose start has passed (oldest first, at most 5, no guest counts)."""
         try:
             wt = editor_mod._load(str(self.sdir))[2]
             events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
-            upcoming = sorted(((datetime.fromisoformat(e["startsAt"]), e) for e in events
-                               if e.get("status") == "scheduled"), key=lambda pair: pair[0])
-            upcoming = [e for start, e in upcoming if start > now]
+            scheduled = sorted(((datetime.fromisoformat(e["startsAt"]), e) for e in events
+                                if e.get("status") == "scheduled"), key=lambda pair: pair[0])
+            upcoming = [e for start, e in scheduled if start > now]
+            passed = [e for start, e in scheduled if start <= now]  # the site hides these too (`>` rule)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return ["Hikes: unavailable"]
         path, counts = self.settings.get("guestCountsDb"), None
@@ -898,4 +900,10 @@ class Conversation:
             limit = e.get("capacity") if e.get("capacity") is not None else "no limit"
             lines.append(head + ("RSVPs off" if not e.get("rsvpEnabled") else "guest count unavailable" if counts is None
                                  else f"{counts.get(e.get('id'), 0)} confirmed of {limit}"))
+        for e in passed[:5]:
+            title = e.get("title")
+            lines.append(f"Hike {title} {_local(e['startsAt'])} has passed but is still scheduled; "
+                         f'send "complete {title}" or "cancel {title}" in your own words.')
+        if len(passed) > 5:
+            lines.append(f"… and {len(passed) - 5} more past hikes still scheduled.")
         return lines

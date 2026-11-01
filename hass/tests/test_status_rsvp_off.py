@@ -16,6 +16,8 @@ OFF = {k: v for k, v in HIKE.items() if k != "capacity"} | {"rsvpEnabled": False
 QUIET_ID = "hike-2026-12-10-quiet-hike"
 QUIET = "Hike Quiet hike 2026-12-10 09:00 PST: RSVPs off"
 ON = "Hike Test hike 2026-12-05 09:00 PST: "
+PAST_QUIET = ('Hike Past quiet 2026-11-01 09:00 PST has passed but is still scheduled; '  # AV1537-07: before T0
+              'send "complete Past quiet" or "cancel Past quiet" in your own words.')
 
 
 class RsvpOffStatusTests(sp.StoreMixin, H06TestCase):
@@ -37,21 +39,22 @@ class RsvpOffStatusTests(sp.StoreMixin, H06TestCase):
 
     def test_rsvp_off_hike_reads_rsvps_off(self):  # stale rows for the hike are not shown as confirmed
         self.use(self.rsvp_db("rsvps.sqlite3", [(QUIET_ID, 3), ("hike-2026-11-25-cancelled-quiet", 2)]))
-        self.assertEqual(self.hike_lines(), [QUIET])  # past and cancelled RSVP-off hikes are not listed
+        self.assertEqual(self.hike_lines(), [QUIET, PAST_QUIET])  # cancelled not listed; past only as passed line
+        self.assertEqual([line for line in self.status() if "Past quiet" in line], [PAST_QUIET])
         text = "\n".join(self.status())
-        for absent in ("confirmed", "no limit", "Past quiet", "Cancelled quiet", "guest count unavailable"):
+        for absent in ("confirmed", "no limit", "Cancelled quiet", "guest count unavailable"):
             self.assertNotIn(absent, text)
 
     def test_mixed_hikes_in_start_order(self):
         self.hike(("hike.create", HIKE))  # created last, starts first
         self.use(self.rsvp_db("rsvps.sqlite3", [(HIKE_ID, 2), (QUIET_ID, 4)]))
-        self.assertEqual(self.hike_lines(), [ON + "2 confirmed of 12", QUIET])
+        self.assertEqual(self.hike_lines(), [ON + "2 confirmed of 12", QUIET, PAST_QUIET])
 
     def test_only_rsvp_off_never_opens_the_database(self):
         for path in self.unreadable():
             with self.subTest(path=path), mock.patch.object(conversation.hikes, "guest_counts") as counts:
                 self.use(path)
-                self.assertEqual(self.hike_lines(), [QUIET])
+                self.assertEqual(self.hike_lines(), [QUIET, PAST_QUIET])
                 counts.assert_not_called()
         self.assertFalse((self.repo.state.parent / "missing.sqlite3").exists())
 
@@ -61,16 +64,16 @@ class RsvpOffStatusTests(sp.StoreMixin, H06TestCase):
             with self.subTest(path=path), mock.patch.object(conversation.hikes, "guest_counts",
                                                             wraps=conversation.hikes.guest_counts) as counts:
                 self.use(path)
-                self.assertEqual(self.hike_lines(), [ON + "guest count unavailable", QUIET])
+                self.assertEqual(self.hike_lines(), [ON + "guest count unavailable", QUIET, PAST_QUIET])
                 counts.assert_called_once_with(path)
         self.use(None)
-        self.assertEqual(self.hike_lines(), [ON + "guest count unavailable", QUIET])
+        self.assertEqual(self.hike_lines(), [ON + "guest count unavailable", QUIET, PAST_QUIET])
 
     def test_turning_rsvps_off_switches_the_line(self):
         self.hike(("hike.create", HIKE))
         self.hike(("hike.update", {"id": HIKE_ID, "rsvpEnabled": False}))
         self.use(self.rsvp_db("rsvps.sqlite3", [(HIKE_ID, 2)]))
-        self.assertEqual(self.hike_lines(), [ON + "RSVPs off", QUIET])
+        self.assertEqual(self.hike_lines(), [ON + "RSVPs off", QUIET, PAST_QUIET])
 
     def test_status_changes_nothing(self):
         self.hike(("hike.create", HIKE))
@@ -79,7 +82,7 @@ class RsvpOffStatusTests(sp.StoreMixin, H06TestCase):
         content = self.repo.wt / "hass/content/community.json"
         files = lambda: sorted(p.name for p in self.repo.state.parent.iterdir())
         before = (self.drafts(), self.approvals(), self.tables(), self.commits(), content.read_bytes(), files())
-        self.assertEqual(self.hike_lines(), [ON + "2 confirmed of 12", QUIET])
+        self.assertEqual(self.hike_lines(), [ON + "2 confirmed of 12", QUIET, PAST_QUIET])
         self.assertEqual((self.drafts(), self.approvals(), self.tables(), self.commits(), content.read_bytes(),
                           files()), before)
 
