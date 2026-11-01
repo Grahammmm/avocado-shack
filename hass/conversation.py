@@ -31,7 +31,7 @@ ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so not
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
-TRANSITIONS = {"needs-details": {"proposed", "rejected"}, "proposed": {"approved", "rejected", "expired"},
+TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
 INTERRUPTED = "interrupted; not applied; approve a new draft"
@@ -270,6 +270,11 @@ class Conversation:
         rows = [r for r in self._drafts("code = ?", code) if states is None or r["state"] in states]
         return rows[-1] if rows else None
 
+    def _expiry(self, row) -> datetime:
+        """H16: a needs-details row stored before expiry existed (expires_at NULL) lapses at created_at + ttl."""
+        if row["expires_at"]: return datetime.fromisoformat(row["expires_at"])
+        return datetime.fromisoformat(row["created_at"]) + timedelta(seconds=self.settings["approvalTtlSeconds"])
+
     def _move(self, row, state, **fields):
         current = self._row(row["row_id"])["state"]
         if state not in TRANSITIONS.get(current, ()) or \
@@ -354,9 +359,9 @@ class Conversation:
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), parse_command(msg.text)
-        expired = [r for r in self._drafts("state = 'proposed'") if datetime.fromisoformat(r["expires_at"]) <= now]
+        expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= now]
         if command and command[0] == "status": expired = []  # H17: status is read-only; it only hides lapsed drafts
-        for row in expired: self._move(row, "expired")
+        for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command:
             disposition = self._command(msg, now, *command)
             self._record(msg, disposition)
@@ -421,9 +426,13 @@ class Conversation:
 
     def _request(self, msg, now) -> str:
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
-                    r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')")]
-        result = interpret_check.check(_checked(self.interpreter.interpret(msg.text, pending)), self._registry(),
-                                       {p["code"] for p in pending})  # NB-AV-01: a bad op/arg/kind/code asks
+                    r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+        result = _checked(self.interpreter.interpret(msg.text, pending))
+        codes = {p["code"] for p in pending}
+        named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
+        if named is not None and named["state"] == "expired":  # H16 vs NB-AV-01 (operator 2026-10-31 17:28):
+            result = {**result, "revises": None}  # a lapsed draft has nothing left to revise; an unknown code still asks
+        result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])
@@ -432,15 +441,16 @@ class Conversation:
         out = self.editor.prepare(result["ops"])
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
-            if revised is not None and revised["state"] == "needs-details":
-                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ? WHERE row_id = ?",
-                                (ops_json, out["question"], revised["row_id"]))
+            expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))  # H16: questions lapse too
+            if revised is not None and revised["state"] == "needs-details":  # the owner just answered: refresh
+                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ?, expires_at = ? WHERE row_id = ?",
+                                (ops_json, out["question"], expires, revised["row_id"]))
             else:
                 code = self._code(hashlib.sha256(msg.provider_id.encode()).hexdigest())
                 self.db.execute(
-                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at)"
-                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?)",
-                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now)))
+                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at)"
+                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?, ?)",
+                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now), expires))
                 # An incomplete correction still supersedes the proposal it names: it can no longer be approved.
                 if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
@@ -661,8 +671,7 @@ class Conversation:
         lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
-                  for r in self._drafts("state IN ('proposed', 'needs-details')")
-                  if r["state"] != "proposed" or datetime.fromisoformat(r["expires_at"]) > now] or [NOTHING]
+                  for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
