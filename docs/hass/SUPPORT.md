@@ -105,6 +105,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** `pause changes`, then restore the newest verified backup into a drill dir (`python3 hass/statebackup.py restore BACKUP --into NEWDIR --worktree DRILLWT --paused`) and compare its memory history to find when the rule broke.
 - **Stop and ask:** before editing the database by hand: blanking leftover forgotten text or retiring a second current row is an attended operator change; the owner's `forget`/`remember` commands cannot fix either.
 
+### `media-store`
+- **Means:** with `--media DIR`, the private photo store has a damaged, missing or stray file (`<n> problem(s)`); `media store unsafe` when the dir is missing, a symlink, or inside the repository or the state dir; `media store unreadable` when it cannot be read. No file name or hash is printed.
+- **Check first:** `python3 hass/media.py verify --root DIR` (read-only; names 12-character sha prefixes only).
+- **Next step:** restore the named originals from the newest verified backup into a drill dir first (`python3 hass/statebackup.py restore BACKUP --into NEWDIR --worktree DRILLWT --paused --media-into NEWMEDIA`), then copy only those originals back.
+- **Stop and ask:** before deleting or renaming anything in the store.
+
 ### `paused-long`
 - **Means:** changes have been paused for longer than `--paused-hours` (default 24; `over <N> h`), or the pause time cannot be read (`unreadable time`). Every approved change is held until someone sends `resume changes`. The `paused` info line still shows when.
 - **Check first:** ask the owner why changes are paused; the owner sends `status` to see the waiting drafts.
