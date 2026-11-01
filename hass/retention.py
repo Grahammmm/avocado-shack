@@ -5,9 +5,10 @@
 One JSON line: per data class, the count strictly older than now - N days and the oldest kept UTC date (or null), dated
 by inbox/messages received_at, outbox/drafts created_at (closed draft: no further transition), screenshot mtime, the
 photo sidecar received_at (none usable: undated, never guessed) and the backup name's stamp (other names ignored).
-Zone-less or malformed times count nowhere. No ids, text or file names print. SQLite opens mode=ro; nothing is created
-or written; the owner picks the period (owner action 4). Exit 1: a store is missing or unreadable (its keys say
-"unavailable"); exit 2, before anything opens: bad usage, or a missing/symlinked dir or symlinked database; else 0.
+Zone-less or malformed times, and backup stamps that are no real calendar time, count nowhere. No ids, text or file
+names print. SQLite opens mode=ro; nothing is created or written; the owner picks the period (owner action 4). Exit 1:
+a store is missing or unreadable (its keys say "unavailable"); exit 2, before anything opens: bad usage, or a
+missing/symlinked dir or symlinked database; else 0.
 """
 import argparse, contextlib, json, os, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timedelta, timezone
@@ -82,7 +83,8 @@ def _backups(folder: Path, cutoff) -> dict:
     items = []
     for entry in os.scandir(folder):
         if not NAME_RE.fullmatch(entry.name): continue
-        when = datetime.strptime(entry.name, "hass-state-%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        try: when = datetime.strptime(entry.name, "hass-state-%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        except ValueError: continue  # stamp-shaped but not a real calendar time (month 13, Feb 30): foreign
         manifest = os.path.join(entry.path, MANIFEST)
         complete = entry.is_dir(follow_symlinks=False) and os.path.isfile(manifest) and not os.path.islink(manifest)
         items.append(("complete" if complete else "incomplete", when))

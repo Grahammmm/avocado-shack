@@ -148,7 +148,8 @@ class RetentionTest(unittest.TestCase):
         for when, manifest in ((OLD, True), (OLD + timedelta(hours=1), False), (NEW, True)):
             (folder := self.backups / when.strftime(stamp)).mkdir()
             if manifest: (folder / "MANIFEST.json").write_text("{}")
-        for foreign in ("hass-state-latest", "notes", "hass-state-20200101T000000Z.tmp"):
+        for foreign in ("hass-state-latest", "notes", "hass-state-20200101T000000Z.tmp",
+                        "hass-state-20261301T000000Z", "hass-state-20260230T000000Z"):  # stamp-shaped, no such date
             (self.backups / foreign).mkdir()
         code, doc, _ = self.report("--backups", str(self.backups))
         self.assertEqual(code, 0)
