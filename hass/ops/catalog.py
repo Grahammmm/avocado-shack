@@ -4,6 +4,7 @@
 ``hold``). Ops take only exact ids/keys; resolving a name is always ``lookup`` first. Facts come from arguments only.
 Add and rename refuse a name+brand (product) or name (maker) another record has, case and spacing ignored, naming it.
 Edits drop fields that already have the asked value (exact equality); an edit left with nothing is refused, naming them.
+A maker ``place`` edit warns with the number of active product cards whose "Based in" line (and town search) it relabels.
 """
 
 from __future__ import annotations
@@ -190,6 +191,11 @@ def _maker_edit(content, args, ctx):
         return changes
     if "name" in changes and (twin := _maker_twin(content, changes["name"], args["key"])):
         return Refused(f"maker {twin} already has this name")
+    if "place" in changes:  # only active products are on the shop; hidden and held ones are not counted
+        n = sum(1 for p in content.active_products() if p.get("producerKey") == args["key"])
+        ctx.warnings.append(f"changes the \"Based in\" line on {n} active product card{'s' if n != 1 else ''} of maker "
+                            f"{args['key']} (town search follows it)" if n else
+                            f"maker {args['key']} has no active products; no product card changes")
     before = copy.deepcopy(maker)
     maker.update(changes)
     return _touch("makers", args["key"], before, maker)
