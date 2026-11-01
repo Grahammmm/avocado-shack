@@ -51,6 +51,30 @@ with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
    results=list(pool.map(lambda i:request('/api/community/rsvps',{**payload,'eventId':'qa-race','partySize':1,'email':f'race{i}@example.invalid'})[0],range(2)))
   assert sorted(results)==[200,409]
   public=json.dumps(request('/api/community')[1]);assert 'example.invalid' not in public
+  def raw(body,path='/api/community/rsvps'):
+   r=urllib.request.Request(base+path,data=body,headers={'Content-Type':'application/json'})
+   try:
+    with urllib.request.urlopen(r,timeout=5) as x:return x.status,json.load(x)
+   except urllib.error.HTTPError as x:return x.code,json.load(x)
+  def rows():
+   with sqlite3.connect(dbpath) as db:return [db.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in ('subscriptions','rsvps')]
+  sub,rsv,new='/api/community/subscriptions','/api/community/rsvps',{'eventId':'qa-hike','name':'New Guest','email':'new@example.invalid','partySize':1}
+  bad_email,bad_name,bad_party,form_msg='Please enter a valid email address.','Please enter your name (up to 120 characters).','Choose between one and six people.','Please use the form on the page.'
+  generic,closed='Please check your name, email, and form selections.','This hike is not accepting RSVPs.'
+  cases=[(sub,{'email':'not-an-email','newsletter':True},400,bad_email),(sub,{'newsletter':True},400,bad_email),
+   (sub,{'email':'new@example.invalid'},400,'Choose at least one kind of update.'),(sub,{'email':'new@example.invalid','newsletter':False,'hikes':'yes'},400,'Choose at least one kind of update.'),
+   (rsv,{**new,'email':'not-an-email'},400,bad_email),(rsv,{**new,'name':''},400,bad_name),(rsv,{**new,'name':'   '},400,bad_name),(rsv,{**new,'name':'x'*121},400,bad_name),
+   (rsv,{**new,'partySize':0},400,bad_party),(rsv,{**new,'partySize':7},400,bad_party),(rsv,{**new,'partySize':'2'},400,bad_party),(rsv,{**new,'partySize':True},400,bad_party),
+   (sub,[],400,form_msg),(rsv,[],400,form_msg),(rsv,'qa-hike',400,form_msg),(sub,None,400,form_msg),
+   (rsv,{**new,'eventId':'qa-past','email':'not-an-email','partySize':0},409,closed),(rsv,{**new,'eventId':'no-such-hike','name':''},409,closed),(rsv,{'name':'x'},409,closed)]
+  before=rows()
+  for path,body,code,msg in cases:
+   got=raw(json.dumps(body).encode(),path);assert got==(code,{'error':msg}),(path,body,got)
+   assert rows()==before,(path,body,rows())
+  for body in (b'{bad',b'{"email": "new@example.invalid", "newsletter": true',b'\xff\xfe',b'NaN-not-json'):
+   for path in (sub,rsv):
+    got=raw(body,path);assert got==(400,{'error':generic}),(path,body,got);assert rows()==before
+  assert request(rsv,{**new,'eventId':'qa-unlimited','name':'x'*120,'partySize':6})[0]==200 and rows()==[before[0],before[1]+1]
   node=os.environ.get('NODE','node')
   subprocess.run([node,str(root/'community-ui-qa.cjs')],env={**os.environ,'COMMUNITY_TEST_URL':base,'QA_OUT_DIR':out},check=True)
   result={'subscriptionsPersisted':True,'consentMerge':True,'invalidEmailRejected':True,'crossOriginRejected':True,'duplicateRSVPPrevented':True,'capacityEnforced':True,'concurrentCapacitySafe':True,'pastRSVPRejected':True,'noPersonalDataInPublicAPI':True,'noExternalEmailSent':True,'fixtureDataIsolated':True,'guestCountIncludesPartySize':True,'duplicateGuestCountStable':True,'uncappedGuestCount':True,'configuredCountCannotOverrideDatabase':True}

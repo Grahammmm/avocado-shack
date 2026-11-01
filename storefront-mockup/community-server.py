@@ -31,10 +31,13 @@ def config():
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+class FormError(ValueError):
+    """A guest-facing form problem whose text is safe to show as-is."""
+
 def email_address(value):
     value = str(value or '').strip().lower()
     if len(value)>254 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
-        raise ValueError('Please enter a valid email address.')
+        raise FormError('Please enter a valid email address.')
     return value
 
 def scheduled(event):
@@ -82,11 +85,11 @@ class Handler(SimpleHTTPRequestHandler):
             if length<=0 or length>8192: return self.reply(413,{'error':'Please use the form on the page.'})
             if self.headers.get_content_type()!='application/json': return self.reply(415,{'error':'JSON is required.'})
             data=json.loads(self.rfile.read(length))
-            if not isinstance(data,dict): raise ValueError('Please use the form on the page.')
+            if not isinstance(data,dict): raise FormError('Please use the form on the page.')
             path=urlsplit(self.path).path
             if path=='/api/community/subscriptions':
                 address=email_address(data.get('email')); newsletter=data.get('newsletter') is True; hikes=data.get('hikes') is True
-                if not (newsletter or hikes): raise ValueError('Choose at least one kind of update.')
+                if not (newsletter or hikes): raise FormError('Choose at least one kind of update.')
                 stamp=now()
                 with connect() as db:
                     db.execute('''INSERT INTO subscriptions VALUES(?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET
@@ -98,9 +101,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if not event or not scheduled(event) or not event.get('rsvpEnabled') or not event.get('meetingPoint'):
                     return self.reply(409,{'error':'This hike is not accepting RSVPs.'})
                 address=email_address(data.get('email')); name=str(data.get('name','')).strip()
-                if not name or len(name)>120: raise ValueError('Please enter your name (up to 120 characters).')
+                if not name or len(name)>120: raise FormError('Please enter your name (up to 120 characters).')
                 party=data.get('partySize',1)
-                if type(party) is not int or not 1<=party<=6: raise ValueError('Choose between one and six people.')
+                if type(party) is not int or not 1<=party<=6: raise FormError('Choose between one and six people.')
                 db=connect()
                 try:
                     db.execute('BEGIN IMMEDIATE')
@@ -115,6 +118,8 @@ class Handler(SimpleHTTPRequestHandler):
                 finally: db.close()
                 return self.reply(200,{'saved':True,'emailSent':False,'message':'Your RSVP is saved locally. No confirmation email has been sent.'})
             return self.reply(404,{'error':'Not found.'})
+        except FormError as e:
+            return self.reply(400,{'error':str(e)})
         except (ValueError,json.JSONDecodeError):
             return self.reply(400,{'error':'Please check your name, email, and form selections.'})
         except sqlite3.Error:

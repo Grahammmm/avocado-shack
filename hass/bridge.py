@@ -3,6 +3,7 @@
 - normalize(event): a BlueBubbles webhook event -> Inbound, or a named Drop. Owner identity stays in Conversation.
   A tapback (associatedMessageType set) is kind "reaction"; an updated-message without dateEdited (delivery/read)
   is Drop("receipt"); a real edit stays kind "edited".
+  Each real edit is its own message: provider_id "<guid>:edited:<dateEdited>", received_at from dateEdited.
 - seal()/unseal(): the Mac -> Agent Orange envelope (HMAC-SHA256, 300 s clock window, nonce replay refusal).
 - BlueBubblesSender: Outbox adapter posting to the loopback-only REST API. The password travels in the query string
   (the documented `password` parameter), so no error raised here ever carries the URL, the query or the password.
@@ -49,6 +50,10 @@ class BridgeError(Exception):
         self.code, self.status = code, status
 
 
+def _utc(ms):
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat(timespec="seconds")
+
+
 def normalize(event):
     """Inbound for a one-to-one message event (attachments as a count only); otherwise Drop(<reason>). Pure: no I/O,
     no owner check."""
@@ -73,7 +78,7 @@ def normalize(event):
     if not isinstance(text, str) or any(map(SURROGATE_RE.search, (guid, handle["address"], chats[0]["guid"], text))):
         return Drop("malformed")
     try:
-        received = datetime.fromtimestamp(created / 1000, tz=timezone.utc).isoformat(timespec="seconds")
+        received = _utc(created)
     except (OverflowError, OSError, ValueError):
         return Drop("malformed")
     edited = msg.get("dateEdited")
@@ -83,7 +88,12 @@ def normalize(event):
     if tapback is not None and tapback != "":
         if not (type(tapback) is int or isinstance(tapback, str)): return Drop("malformed")
         kind = "reaction"  # text passes through unchanged; never read as a new change request
-    return Inbound(provider_id=guid, chat=chats[0]["guid"], sender=handle["address"], text=text, from_me=from_me,
+    pid = guid
+    if kind == "edited":  # an edit keeps the original guid: its own id, timed by the edit, so the inbox keeps it
+        pid = f"{guid}:edited:{edited}"
+        try: received = _utc(edited)
+        except (OverflowError, OSError, ValueError): return Drop("malformed")
+    return Inbound(provider_id=pid, chat=chats[0]["guid"], sender=handle["address"], text=text, from_me=from_me,
                    kind=kind, received_at=received, attachments=len(attachments))
 
 
