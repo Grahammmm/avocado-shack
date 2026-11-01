@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import interpret_check  # noqa: E402
+from hass import claims, interpret_check  # noqa: E402
 from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -377,7 +377,14 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         verb, code = keyword
-        targets = [r for r in self._drafts("state = 'proposed'") if code is None or r["code"] == code]
+        # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
+        states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
+        targets = [r for r in self._drafts(f"state IN {states}") if code is None or r["code"] == code]
+        if verb == "approve" and code and not targets and (ask := self._by_code(code, ("needs-details",))):
+            # a waiting question is never approved; a bare yes keeps NOTHING (test_conversation pins it)
+            self._reply(f"{ask['code']} still needs details: {ask['summary']}")
+            self._record(msg, "no-target")
+            return "no-target", None
         if len(targets) != 1:
             self._reply(self._no_target(code, targets, expired))
             self._record(msg, "no-target")
@@ -407,7 +414,8 @@ class Conversation:
 
     def _no_target(self, code, targets, expired) -> str:
         if targets:
-            return "\n".join(["Which draft do you mean?"] + [f"{r['code']}: {r['summary']}" for r in targets]
+            return "\n".join(["Which draft do you mean?"] + [f"{r['code']}: " + ("needs details: " if r["state"] ==
+                             "needs-details" else "") + r["summary"] for r in targets]
                              + ["Reply yes <code> or no <code>."])
         named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired]
         return "\n".join(self._state_text(r) for r in named if r is not None) or NOTHING
@@ -424,14 +432,25 @@ class Conversation:
         if getattr(self, "_ops", None) is None: self._ops = self.editor.registry or load_registry()
         return self._ops
 
+    def _makers(self):
+        """The worktree's makers (read-only) for the claim check; None when unreadable (every maker change asks)."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            makers = json.loads((wt / "hass" / "content" / "makers.json").read_text("utf-8"))["makers"]
+        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState):
+            return None
+        return makers if isinstance(makers, dict) else None
+
     def _request(self, msg, now) -> str:
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
                     r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         result = _checked(self.interpreter.interpret(msg.text, pending))
         codes = {p["code"] for p in pending}
         named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
-        if named is not None and named["state"] == "expired":  # H16 vs NB-AV-01 (operator 2026-10-31 17:28):
-            result = {**result, "revises": None}  # a lapsed draft has nothing left to revise; an unknown code still asks
+        cancelled_question = named is not None and named["state"] == "rejected" and named["reason"] == "owner" \
+            and named["change_id"] is None  # AV1537-02: a question the owner cancelled is not filled later
+        if named is not None and named["state"] == "expired" or cancelled_question:  # H16 vs NB-AV-01 (2026-10-31):
+            result = {**result, "revises": None}  # a closed draft has nothing left to revise; an unknown code still asks
         result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
         for key in ("question", "unsupported"):
             if key in result:
@@ -459,6 +478,9 @@ class Conversation:
             self._reply(f"Not drafted: {_reason(out)}")
             return "not-drafted"
         draft = out["draft"]
+        if hits := claims.unstated(draft, msg.text, self._makers()):  # NB-AV-05: an unstated claim asks, never drafts
+            self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
+            return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]
         if same and (revised is None or revised["row_id"] == same[0]["row_id"]):
             row = same[0]
