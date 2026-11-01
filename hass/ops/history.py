@@ -77,7 +77,8 @@ def _event_warning(ctx, current, before):
     if before is None or before.get("status") == "cancelled" or (current.get("rsvpEnabled")
                                                                     and not before.get("rsvpEnabled")):
         return lambda: _guest_warning(ctx, current)  # cancels the hike or turns RSVPs off: one warning
-    if before.get("status") == "scheduled" and before.get("startsAt") != current.get("startsAt"):
+    if (current.get("rsvpEnabled") and before.get("status") == "scheduled"  # as hike.update: no RSVPs, no move warning
+            and before.get("startsAt") != current.get("startsAt")):
         return lambda: _move_warning(ctx, current, before["startsAt"])
     return None
 

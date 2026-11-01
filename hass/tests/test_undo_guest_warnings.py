@@ -14,7 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from hass.ops import OpContext, history
+from hass.ops import OpContext, hikes, history
 from hass.tests.test_hike_ops import HIKE, HIKE_ID, NOW, SCHEMA, HikeTestCase, _req
 
 UNAVAILABLE = f"{HIKE_ID} guest count unavailable; check RSVPs before approving"
@@ -63,6 +63,22 @@ class UndoGuestWarningTests(HikeTestCase):
         self.assertEqual(repo.event()["startsAt"], "2026-12-05T09:00:00-08:00")
         renamed = repo.run(("hike.update", {"id": HIKE_ID, "title": "Renamed"}))  # no move, no cancel: silent
         self.assertEqual(self.undo(repo, renamed), [])
+
+    def test_undo_of_a_move_with_rsvps_off_is_silent_like_the_forward_move(self):
+        for name, rows in (("guests", [(HIKE_ID, 3)]), ("unreadable count", None)):
+            with self.subTest(name):
+                repo = self.repo()
+                repo.run(("hike.create", OFF))
+                if rows:
+                    repo.make_db(rows)
+                else:  # an unreadable count would draft UNAVAILABLE if it were read
+                    repo.use_db(str(repo.state.parent / "missing.sqlite3"))
+                moved = repo.run(("hike.update", {"id": HIKE_ID, "time": "10:00"}))
+                self.assertEqual(moved["warnings"], [])  # the forward move is silent
+                with mock.patch.object(hikes, "_seats", wraps=hikes._seats) as seats:
+                    self.assertEqual(self.undo(repo, moved), [])
+                self.assertEqual(seats.call_count, 0)  # no guest count is read
+                self.assertEqual(repo.event()["startsAt"], "2026-12-05T09:00:00-08:00")
 
     def test_undo_turning_rsvps_off_warns_once(self):
         for extra in ({}, {"time": "10:00"}):
@@ -156,6 +172,10 @@ class DirectRevertTests(HikeTestCase):
         self.assertIsInstance(out, list, out)
         self.assertEqual(content.community["events"][0], before)
         return ctx.warnings
+
+    def test_rsvps_off_move_is_silent(self):  # current takes no RSVPs: hike.update would not warn for this move
+        off = {**EVENT, "rsvpEnabled": False}
+        self.assertEqual(self.revert({**off, "startsAt": "2026-12-06T09:00:00-08:00"}, off), [])
 
     def test_offset_form_only_is_not_a_move(self):
         for form in ("2026-12-05T17:00:00Z", "2026-12-05T17:00:00+00:00"):
