@@ -69,6 +69,30 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  await p.locator('.hike-history').screenshot({path:out+'/hiking-history-mobile.png'});
  await p.setViewportSize({width:1440,height:1000});
  await p.locator('#hikes').screenshot({path:out+'/hiking-desktop.png'});
+ // RF1720-2: a scheduled hike stays listed (as Today) until midnight Pacific on its own day. Times derive from the fixture.
+ const hike=(await (await fetch(process.env.COMMUNITY_TEST_URL+'/api/community')).json()).events.find(e=>e.title==='QA trail fixture');
+ const start=Date.parse(hike.startsAt),wall=t=>Date.parse(new Date(t).toLocaleString('sv-SE',{timeZone:'America/Los_Angeles'}).replace(' ','T')+'Z');
+ const pacificAt=w=>{const t=w-(wall(w)-w);return w-(wall(t)-t)}; // the instant whose Pacific wall clock reads w
+ const nextDay=Date.parse(new Date(start).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})+'T00:00Z')+864e5;
+ const today='Today — started '+new Date(start).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
+ const view=async(now,timezoneId='America/Los_Angeles',extra=[])=>{
+  const c=await b.newContext({timezoneId}),pg=await c.newPage(),errs=[];pg.on('pageerror',e=>errs.push(e.message));
+  await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events.push(...extra);await r.fulfill({response:res,json:j})});
+  await pg.clock.setFixedTime(now);await pg.goto(process.env.COMMUNITY_TEST_URL+'/hike');
+  await pg.locator('#upcoming-hikes :is(.hike-event,.hike-empty,.trail-invitation)').first().waitFor();
+  const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h3').textContent,a.querySelector('.hike-date').textContent]))}));
+  check(!errs.length,'Page errors at '+new Date(now).toISOString()+': '+JSON.stringify(errs));await c.close();return r;
+ };
+ const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};
+ let v=await view(after,'America/Los_Angeles',[cancelled]);
+ check(v.dates['QA trail fixture']===today,'Started hike not listed as Today: '+v.dates['QA trail fixture']);
+ check(!v.up.includes('QA cancelled fixture'),'Cancelled same-day hike listed');
+ v=await view(start-6e4);
+ check(v.dates['QA trail fixture']&&!v.dates['QA trail fixture'].includes('Today'),'Hike before start not shown with its date');
+ v=await view(pacificAt(nextDay+6e4));
+ check(!v.up.includes('QA trail fixture')&&!v.past.includes('QA trail fixture'),'Hike still listed after midnight Pacific');
+ v=await view(pacificAt(nextDay-6e4),'Asia/Tokyo');
+ check(v.dates['QA trail fixture'],'Hike dropped at the viewer’s midnight, not Pacific midnight');
  const result={guestCountUpdatedAfterRSVP:true,demoGuestCountUnchanged:true,checkedAt:new Date().toISOString(),rsvpForm:true,newsletterForm:true,hikingUpdates:true,pastHikes:true,confirmedEventTakesPrecedence:true,realCalendarEmpty:true,demoPosts:posts.length,demoBrowserStorage:false,demoValidation:true,demoSuccessFocus:true,layouts,errors};
  fs.writeFileSync(out+'/community-ui-QA.json',JSON.stringify(result,null,2));
  console.log('Community UI passed');await b.close();
