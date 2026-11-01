@@ -14,9 +14,9 @@ from hass.tests.test_undo import H06TestCase
 OFF = {k: v for k, v in HIKE.items() if k != "capacity"} | {"rsvpEnabled": False, "title": "Quiet hike",
                                                              "date": "2026-12-10"}
 QUIET_ID = "hike-2026-12-10-quiet-hike"
-QUIET = "Hike Quiet hike 2026-12-10 09:00 PST: RSVPs off"
-ON = "Hike Test hike 2026-12-05 09:00 PST: "
-PAST_QUIET = ('Hike Past quiet 2026-11-01 09:00 PST has passed but is still scheduled; '  # AV1537-07: before T0
+QUIET = "Hike Quiet hike Thu 2026-12-10 09:00 PST: RSVPs off"
+ON = "Hike Test hike Sat 2026-12-05 09:00 PST: "
+PAST_QUIET = ('Hike Past quiet Sun 2026-11-01 09:00 PST has passed but is still scheduled; '  # AV1537-07: before T0
               'send "complete Past quiet" or "cancel Past quiet" in your own words.')
 
 

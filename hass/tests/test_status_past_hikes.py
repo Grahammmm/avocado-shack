@@ -14,7 +14,7 @@ from hass.tests.test_conversation import T0
 from hass.tests.test_hike_ops import HIKE, NOW, _req
 from hass.tests.test_undo import H06TestCase
 
-UPCOMING = "Hike Test hike 2026-12-05 09:00 PST: guest count unavailable"
+UPCOMING = "Hike Test hike Sat 2026-12-05 09:00 PST: guest count unavailable"
 
 
 def passed(title, start):
@@ -41,13 +41,13 @@ class PastHikeStatusTests(sp.StoreMixin, H06TestCase):
         self.past("Morning hike", "2026-11-02", "08:00")  # created first, still listed after the upcoming hike
         self.hike(("hike.create", HIKE))
         self.use(None)
-        self.assertEqual(self.hike_lines(), [UPCOMING, passed("Morning hike", "2026-11-02 08:00 PST")])
+        self.assertEqual(self.hike_lines(), [UPCOMING, passed("Morning hike", "Mon 2026-11-02 08:00 PST")])
 
     def test_start_exactly_now_has_passed(self):
         self.past("Now hike", "2026-11-02", "09:00")  # == T0: the site's `startsAt > now` rule hides it too
         self.past("Later hike", "2026-11-02", "09:01")
-        self.assertEqual(self.hike_lines(), ["Hike Later hike 2026-11-02 09:01 PST: guest count unavailable",
-                                             passed("Now hike", "2026-11-02 09:00 PST")])
+        self.assertEqual(self.hike_lines(), ["Hike Later hike Mon 2026-11-02 09:01 PST: guest count unavailable",
+                                             passed("Now hike", "Mon 2026-11-02 09:00 PST")])
 
     def test_completed_and_cancelled_past_hikes_have_no_line(self):
         for title in ("Done hike", "Called off", "Forgotten hike"):
@@ -56,22 +56,22 @@ class PastHikeStatusTests(sp.StoreMixin, H06TestCase):
         self.hike(("hike.cancel", {"id": "hike-2026-11-01-called-off"}))
         lines = self.status()
         self.assertEqual([line for line in lines if line.startswith(("Hike", "…"))],
-                         [passed("Forgotten hike", "2026-11-01 09:00 PST")])
+                         [passed("Forgotten hike", "Sun 2026-11-01 09:00 PST")])
         for absent in ("Done hike", "Called off"):
             self.assertNotIn(absent, "\n".join(lines))
 
     def test_seven_passed_show_the_oldest_five_and_a_count(self):
         for n in range(7, 0, -1):  # created newest first; listed oldest first
             self.past(f"Past {n}", clock=f"{n + 9:02d}:00")
-        expected = [passed(f"Past {n}", f"2026-11-01 {n + 9:02d}:00 PST") for n in range(1, 6)]
+        expected = [passed(f"Past {n}", f"Sun 2026-11-01 {n + 9:02d}:00 PST") for n in range(1, 6)]
         self.assertEqual(self.hike_lines(), expected + ["… and 2 more past hikes still scheduled."])
         for n in (1, 2):  # exactly five left: all named, no count line
             self.hike(("hike.cancel", {"id": f"hike-2026-11-01-past-{n}"}))
-        self.assertEqual(self.hike_lines(), [passed(f"Past {n}", f"2026-11-01 {n + 9:02d}:00 PST") for n in range(3, 8)])
+        self.assertEqual(self.hike_lines(), [passed(f"Past {n}", f"Sun 2026-11-01 {n + 9:02d}:00 PST") for n in range(3, 8)])
 
     def test_rsvp_on_passed_hike_never_opens_the_database(self):
         self.past("Busy hike")  # RSVPs on, capacity 12
-        line = passed("Busy hike", "2026-11-01 09:00 PST")
+        line = passed("Busy hike", "Sun 2026-11-01 09:00 PST")
         readable = self.rsvp_db("rsvps.sqlite3", [("hike-2026-11-01-busy-hike", 4)])
         wrong = self.rsvp_db("wrong.sqlite3", [], schema="CREATE TABLE other(id INTEGER)")
         for path in (None, "", str(self.repo.state.parent / "missing.sqlite3"), wrong, readable):
@@ -102,7 +102,7 @@ class PastHikeStatusTests(sp.StoreMixin, H06TestCase):
         before = (self.drafts(), self.approvals(), self.tables(), self.commits(), content.read_bytes())
         lines = self.status()
         self.assertEqual(lines[0], "Changes: paused since 2026-11-02 09:00 PST")
-        self.assertEqual(lines[-1], passed("Past hike", "2026-11-01 09:00 PST"))
+        self.assertEqual(lines[-1], passed("Past hike", "Sun 2026-11-01 09:00 PST"))
         self.assertEqual((self.drafts(), self.approvals(), self.tables(), self.commits(), content.read_bytes()),
                          before)
 
