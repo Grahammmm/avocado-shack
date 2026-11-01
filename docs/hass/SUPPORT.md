@@ -99,6 +99,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** fix the `guestCountsDb` setting in the private config (attended).
 - **Stop and ask:** before editing or copying the RSVP database (it holds guests' names).
 
+### `memory-invariant`
+- **Means:** owner memory breaks its rules: two current values for one name, or a forgotten fact's text still stored (`<n> row(s)`; `memory table unreadable` when the rows cannot be read). No name, value or source is printed.
+- **Check first:** re-run the check once; ask the operator to open `conversation.sqlite3` read-only to see which names are affected.
+- **Next step:** `pause changes`, then restore the newest verified backup into a drill dir (`python3 hass/statebackup.py restore BACKUP --into NEWDIR --worktree DRILLWT --paused`) and compare its memory history to find when the rule broke.
+- **Stop and ask:** before editing the database by hand: blanking leftover forgotten text or retiring a second current row is an attended operator change; the owner's `forget`/`remember` commands cannot fix either.
+
 ## Info lines
 
 ### `conversation`

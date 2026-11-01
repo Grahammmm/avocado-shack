@@ -10,7 +10,9 @@ guest-counts (guestCountsDb set but unreadable, or unset while an upcoming hike 
 inbox-stuck (pending inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
 --inbox-unreadable-hours; count only), inbox-integrity, writer (--writer: one per reason editor
 apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
-paused (info only), backup-age (--backups: no complete hass-state-* within --backup-hours), backup-verify, model (--model:
+paused (info only), memory-invariant (owner memory rows breaking its rules: two active rows for one key, or text
+left on a forgotten key; count only), backup-age (--backups: no complete hass-state-* within --backup-hours),
+backup-verify, model (--model:
 one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed). Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
@@ -33,6 +35,11 @@ PAUSED_SQL = "SELECT set_at FROM control WHERE name = 'paused'"  # paused <=> th
 UNVERIFIED_SQL = ("SELECT checked_at FROM drafts WHERE checked_at IS NOT NULL AND (state = 'applied' AND reason LIKE"
                   " 'not verified: %' OR state = 'reverted' AND screenshot IS NULL)")  # failed check (_verify_pending);
 # an undo (_outcome) rewrites the reason, but only a passed check stores a screenshot, so the window alone clears it
+MEMORY_SQL = ("SELECT (SELECT COUNT(*) FROM memory m WHERE superseded_at IS NULL AND forgotten_at IS NULL AND (SELECT"
+              " COUNT(*) FROM memory m2 WHERE m2.key = m.key AND m2.superseded_at IS NULL AND m2.forgotten_at IS NULL)"
+              " > 1) + (SELECT COUNT(*) FROM memory m WHERE value != '' AND EXISTS (SELECT 1 FROM memory m2 WHERE"
+              " m2.key = m.key AND m2.forgotten_at >= m.created_at))")  # hass/memory.py: one active row per key;
+# forget blanks every row of the key, so only a row created after the forget (re-remembered) may hold text
 
 def _problem(check, detail) -> dict:
     return {"check": check, "detail": detail}
@@ -64,6 +71,12 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
                     problems.append(_problem("unverified", str(n)))
             if "control" in tables and (row := db.execute(PAUSED_SQL).fetchone()):
                 info.append(_problem("paused", str(row[0])))
+            if "memory" in tables:  # RF1710-5: hass/memory.py rules, count only (no key, value or source)
+                try:
+                    if n := db.execute(MEMORY_SQL).fetchone()[0]:
+                        problems.append(_problem("memory-invariant", f"{n} row(s)"))
+                except sqlite3.DatabaseError:
+                    problems.append(_problem("memory-invariant", "memory table unreadable"))
     except sqlite3.DatabaseError:
         problems.append(_problem("db-integrity", "database unreadable"))
 
