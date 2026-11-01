@@ -19,7 +19,7 @@ from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 TZ = ZoneInfo("America/Los_Angeles")
-# Event text fields an owner may give; recap is written only by hike.complete.
+# Event text fields an owner may give; recap is written only by hike.complete and hike.recap.
 TEXT_FIELDS = tuple(f for f in EVENT_TEXT_FIELDS if f != "recap")
 MAX_ID_BASE = 56  # leaves room for a "-NNN" suffix inside the 64-character id limit
 
@@ -239,6 +239,20 @@ def _hike_complete(content, args, ctx):
     return _touch(before, event)
 
 
+def _hike_recap(content, args, ctx):
+    """Set or correct the recap of a completed hike; no other field changes."""
+    event = _event(content, args["id"])
+    if event is None:
+        return NotFound(args["id"])
+    if event["status"] == "scheduled":
+        return Refused(f"{event['id']} is scheduled; use hike.complete with a recap")
+    if event["status"] != "completed":
+        return Refused(f"{event['id']} is {event['status']}")
+    before = copy.deepcopy(event)
+    event["recap"] = args["recap"]  # the same recap again is left to the editor's "change nothing" refusal
+    return _touch(before, event)
+
+
 _OPTIONAL_TEXT = {f: Arg("text", required=False) for f in TEXT_FIELDS if f != "meetingPoint"}
 _CAPACITY = {"capacity": Arg("int", required=False, minimum=1), "noCapacityLimit": Arg("bool", required=False)}
 _ID = {"id": Arg("id")}
@@ -254,4 +268,5 @@ OPS = (
                        "clear": Arg("text_list", required=False)}, _hike_update),
     Op("hike.cancel", _ID, _hike_cancel),
     Op("hike.complete", {**_ID, "recap": Arg("text", required=False)}, _hike_complete),
+    Op("hike.recap", {**_ID, "recap": Arg("text")}, _hike_recap),
 )
