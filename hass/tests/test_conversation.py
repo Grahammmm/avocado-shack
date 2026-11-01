@@ -191,7 +191,7 @@ class FlowTests(ConversationTestCase):
         self.assertEqual((first["state"], first["reason"], first["replaced_by"]), ("rejected", "revised", pending["code"]))
         self.assertEqual(pending["state"], "needs-details")
         self.assertEqual(self.say("yes"), "no-target")
-        self.assertEqual(self.replies(), [conversation.NOTHING])
+        self.assertEqual(self.replies(), [f"{pending['code']} still needs details: {pending['summary']}"])  # AV1737-05
         self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
         self.assertEqual(self.replies(), [f"{old['code']} was replaced by {pending['code']}."])
         self.assertEqual((self.commits(), self.editor.applies), (0, 0))
