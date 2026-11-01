@@ -52,6 +52,15 @@ python3 hass/editor.py show CHANGE_ID | recover | ops   # --state DIR or HASS_ST
 The state dir must be owned by the current user, mode 0700 and outside the repository and the writer worktree; otherwise every command exits 2. Exit codes: 0 `ok`/`applied`/`already-applied`, 1 any other result, 2 usage or unsafe state dir.
 A CLI read or decode error prints `{"result": "io-error", "problems": ["<ExcName>"]}` (class name only) and exits 2; library calls still raise.
 
+### SHOP-2: install an applied change into the running site
+
+`apply` only commits in the writer worktree. `python3 hass/editor.py install CHANGE_ID --state DIR` is the separate, checkable step that puts that change on the running website; the approval step is unchanged and `apply` never installs by itself.
+- Target: `settings.site_dir` in `<state>/config.json`, the directory the site is served from. The handoff (`HERMES_HANDOFF.txt`, `README.txt`) documents the running site as `/home/user/repos/avocado-shack/storefront-mockup` (served by `community-server.py` on `127.0.0.1:3101`). It must be absolute, exist, contain no symlink and lie outside the writer worktree, any Git directory and the state dir; otherwise `refused` before any write.
+- Only an `applied`, not reverted change whose commit is `hass content: <change_id>` installs; unknown, unapplied, failed or reverted changes are `refused`. Installing an older change after a later one is installed is `refused`.
+- The files are the `storefront-mockup/` generated files and product photos that the commit added or changed, read from the commit (not the worktree). Each is staged in its folder, fsynced and renamed into place; the set is read back by SHA-256. A mismatch or write error restores every previous byte and records `failed`.
+- The result is stored as `install` in `<state>/changes/<change_id>.json`; `show` and `history` report `committed, not installed`, `committed, not installed (install failed: …)` or `installed`. A repeat gives `already_installed`; a retry after an interrupted install converges. Exit 0 for `installed`/`already_installed`, else 1.
+- No network, no restart: the loopback server serves the new files on the next request.
+
 ## H03: product and maker ops
 
 `hass/ops/catalog.py` adds eight typed ops to the registry: `product.add|edit|hide|restore` and `maker.add|edit|hide|restore`, plus a read-only `lookup(content, "product"|"maker", query)`. Ops take exact ids/keys only; an ambiguous name is resolved with `lookup` first (`{"match": id}` for one hit, `{"candidates": [...]}` for none or several, at most 10).
@@ -121,7 +130,7 @@ export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-124
 {"ops": [{"op": "store.set_address", "args": {"streetAddress": "100 Example Street"}}]}
 ```
 
-- `store.set_hours` takes `hours` (a text list) and replaces all lines. Refused: more than 7 lines, a line over 60 characters (`hours line <i>` counts from 0), a repeated line, or hours equal to the current ones.
+- `store.set_hours` takes `hours` (a text list) and replaces all lines. Refused: more than 7 lines, a line over 60 characters (`hours line <i>` counts from 1), a repeated line, or hours equal to the current ones.
 - `store.set_address` takes `streetAddress` and/or `town`; only the given fields change. No argument gives `needs-details` (`streetAddress`, `town`); a value over 80 characters or an unchanged address is refused.
 - `name` and `schemaVersion` are not arguments (unknown argument → `invalid`). Text kinds reject markup, `$` and control characters as usual.
 - Undo: the store is one record, so `undo` of an older store change after a later one gives `conflict: store store changed after <change_id>`; undo the newest first.

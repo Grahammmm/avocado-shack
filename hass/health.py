@@ -10,7 +10,8 @@ unverified (applied drafts, undone or not, whose preview check failed within --u
 guest-counts (guestCountsDb set but unreadable, or unset while an upcoming hike takes RSVPs; no path printed),
 inbox-stuck (pending inbound older than --inbox-minutes), inbox-unreadable (inbound marked unreadable within
 --inbox-unreadable-hours; count only), inbox-integrity, writer (--writer: one per reason editor
-apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed),
+apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCKS=0, no path printed; info
+photo-unused: photo-<sha> copies in assets/products no product's image uses, file names only, never deleted),
 paused (info; problem paused-long when set over --paused-hours ago or unreadable), memory-invariant (owner memory
 rows breaking its rules: two active rows for one key, or text left on a forgotten key; count only), backup-age
 (--backups: no complete hass-state-* within --backup-hours), backup-verify, media-store (--media DIR: media.py
@@ -22,7 +23,7 @@ check id and short detail only (no message text, sender or number). One JSON lin
 fingerprint; notify only when it changed (else notify = not ok). No send; the only network use is --model's loopback
 GET. Exit 0 ok, 1 problems, 2 unsafe.
 """
-import argparse, contextlib, hashlib, json, os, sqlite3, sys, tempfile, urllib.error  # noqa: E401
+import argparse, contextlib, hashlib, json, os, re, sqlite3, sys, tempfile, urllib.error  # noqa: E401
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -173,6 +174,20 @@ def _writer_check(state, problems: list) -> None:
         if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
         else: os.environ["GIT_OPTIONAL_LOCKS"] = old
 
+PHOTO_RE = re.compile(r"photo-[0-9a-f]{16}\.(jpg|png)")  # product.set_photo's web copy (hass/ops/photos.py)
+def _unused_photos(sdir, info: list) -> None:  # AV0022-14 (H21): file names only; read-only, never deletes
+    try:  # no worktree, bad products.json or no products dir: no entry (the `writer` check owns those)
+        wt = editor._load(sdir)[2]
+        products = json.loads((wt / "hass" / "content" / "products.json").read_text("utf-8"))["products"]
+        used = {p["image"] for p in products if isinstance(p, dict) and isinstance(p.get("image"), str)}
+        with os.scandir(wt / "storefront-mockup" / "assets" / "products") as entries:  # symlinks never followed
+            names = sorted(e.name for e in entries if PHOTO_RE.fullmatch(e.name)
+                           and e.is_file(follow_symlinks=False) and f"assets/products/{e.name}" not in used)
+    except (OSError, ValueError, KeyError, TypeError, RecursionError, UnsafeState): return
+    if n := len(names):  # five sorted names, then a count
+        more = f" and {n - 5} more" if n > 5 else ""
+        info.append(_problem("photo-unused", f"{n} unused: {', '.join(names[:5])}{more}"))
+
 def _guest_check(sdir, settings, now, problems: list, info: list) -> None:  # AV1537-12: fixed words, never the path
     from hass.ops import hikes  # lazy, as in status; reads seat totals only (mode=ro, query_only)
     if (path := settings.get("guestCountsDb")) not in (None, ""):  # a set path that does not open is always a problem
@@ -233,7 +248,9 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
     _inbox_check(sdir, now, inbox_minutes, problems, inbox_unreadable_hours)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
         _verify_backup(newest, problems)
-    if writer: _writer_check(sdir, problems)
+    if writer:
+        _writer_check(sdir, problems)
+        _unused_photos(sdir, info)
     if model: _model_check(model, model_name, problems, transport)
     if media is not None: _media_check(media, sdir, problems)
     if min_free_mb is not None:  # a missing backups dir is backup-age's problem only

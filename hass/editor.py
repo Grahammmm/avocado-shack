@@ -2,6 +2,7 @@
 
     python3 hass/editor.py init --state DIR --worktree WT | prepare REQUEST.json
     python3 hass/editor.py apply CHANGE_ID --hash DRAFT_HASH | show CHANGE_ID | recover | ops | history [--limit N]
+    python3 hass/editor.py install CHANGE_ID   # separate step: copy an applied commit's site files to site_dir
 prepare binds typed ops to the content revision; apply (internal caller only) locks, re-checks worktree and revision,
 writes only owned paths, runs the H01 checks and commits signed off. No listener, no push. One JSON object out.
 I/O errors: result io-error, exit 2 (history lists a corrupt change record as state unreadable).
@@ -339,7 +340,7 @@ def history(limit=20, *, state=None) -> dict:
             ops = []
         entries.append(((rec.get("applied_at") or rec.get("failed_at") or "", path.stat().st_mtime_ns), {
             "change_id": path.stem, "state": rec.get("state"), "applied_at": rec.get("applied_at"),
-            "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"),
+            "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"), "install": install_status(rec),
             "ops": [f"{c['op']} {json.dumps(c['args'], ensure_ascii=False, sort_keys=True)}"[:160] for c in ops]}))
     entries.sort(key=lambda e: e[0], reverse=True)
     return {"result": "ok", "history": [e for _key, e in entries[:max(0, int(limit))]]}
@@ -349,8 +350,16 @@ def show(change_id, *, state=None) -> dict:
     if not CHANGE_ID_RE.fullmatch(str(change_id)): return {"result": "invalid", "problems": ["malformed change id"]}
     for kind in ("changes", "drafts"):
         if (sdir / kind / f"{change_id}.json").is_file():
-            return {"result": "ok", kind[:-1]: _read(sdir / kind / f"{change_id}.json")}
+            rec = _read(sdir / kind / f"{change_id}.json")
+            return {"result": "ok", kind[:-1]: rec, **({"install": install_status(rec)} if kind == "changes" else {})}
     return {"result": "not-found", "key": change_id}
+
+def install_status(rec: dict) -> str | None:
+    """SHOP-2: whether an applied change reached the running site (`hass/install.py`); None if not applied."""
+    if rec.get("state") != "applied": return None
+    inst = rec.get("install") or {}
+    if inst.get("state") == "installed": return "installed"
+    return "committed, not installed" + (f" (install failed: {inst.get('reason')})" if inst.get("state") else "")
 
 def list_ops(registry=None) -> dict:
     registry = load_registry() if registry is None else registry
@@ -364,7 +373,8 @@ def main(argv=None) -> int:
     common.add_argument("--state", help="private state dir (default: HASS_STATE_DIR)")
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, params in (("init", ["--worktree"]), ("prepare", ["request"]), ("apply", ["change_id", "--hash"]),
-                         ("show", ["change_id"]), ("recover", []), ("ops", []), ("history", [])):
+                         ("show", ["change_id"]), ("recover", []), ("ops", []), ("history", []),
+                         ("install", ["change_id"])):
         cmd = sub.add_parser(name, parents=[common])
         for param in params:
             cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
@@ -374,7 +384,8 @@ def main(argv=None) -> int:
                 "prepare": lambda: prepare(Path(args.request).read_bytes(), state=args.state),
                 "apply": lambda: apply(args.change_id, args.hash, state=args.state),
                 "show": lambda: show(args.change_id, state=args.state), "recover": lambda: recover(state=args.state),
-                "history": lambda: history(args.limit, state=args.state)}
+                "history": lambda: history(args.limit, state=args.state),
+                "install": lambda: __import__("hass.install").install.install(args.change_id, state=args.state)}
     try:
         out = commands[args.cmd]()
     except UnsafeState as exc:
@@ -385,7 +396,7 @@ def main(argv=None) -> int:
         return 2
     for line in out["history"] if args.cmd == "history" else [out]:  # history: one JSON line per change
         print(json.dumps(line, ensure_ascii=False, sort_keys=True))
-    return 0 if out["result"] in ("ok", "applied", "already-applied") else 1
+    return 0 if out["result"] in ("ok", "applied", "already-applied", "installed", "already_installed") else 1
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -67,9 +67,9 @@ class HoursRepeatTests(StoreTestCase):
 
     def test_existing_limits_refused_first(self):
         repo = self.repo()
-        self.assertEqual(self.refused(repo, ["Closed"] * 8), "at most 7 hours lines")
+        self.assertEqual(self.refused(repo, ["Closed"] * 8), "at most 7 hours lines (you sent 8)")
         self.assertEqual(self.refused(repo, ["Closed", "closed", "a" * 61]),
-                         "hours line 2 is longer than 60 characters")
+                         "hours line 3 is longer than 60 characters")
 
 
 if __name__ == "__main__":
