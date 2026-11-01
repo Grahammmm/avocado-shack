@@ -117,6 +117,23 @@ def _slug_id(content, day, title):
     return candidate
 
 
+def _same(a, b) -> bool:  # same rule as catalog._same: whitespace collapsed, case folded
+    return " ".join(str(a).split()).casefold() == " ".join(str(b).split()).casefold()
+
+
+def _local_day(event):
+    try:
+        return _local_parts(event["startsAt"])[0]
+    except (KeyError, TypeError, ValueError, AttributeError):  # an unparseable start is skipped, never raised
+        return None
+
+
+def _hike_twin(content, day, title):
+    """The first scheduled event with an equal title on the same local (Pacific) date, else None."""
+    return next((e for e in _events(content) if e.get("status") == "scheduled" and _local_day(e) == day
+                 and _same(e.get("title", ""), title)), None)
+
+
 def _touch(before, event):
     return [Touched("events", event["id"], before, copy.deepcopy(event))]
 
@@ -135,6 +152,9 @@ def _hike_create(content, args, ctx):
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
+    twin = _hike_twin(content, args["date"], args["title"])
+    if twin is not None:
+        return Refused(f"{twin['id']} is already scheduled with this title on {args['date']}; update it instead")
     event = {"id": _slug_id(content, args["date"], args["title"]), "title": args["title"], "startsAt": starts,
              "timezone": "America/Los_Angeles", "status": "scheduled", "meetingPoint": args["meetingPoint"]}
     event.update({f: args[f] for f in TEXT_FIELDS if f in args and f != "meetingPoint"})
