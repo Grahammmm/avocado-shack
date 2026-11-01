@@ -245,7 +245,8 @@ class DurabilityTests(ConversationTestCase):
         row = self.drafts()[0]
         self.assertEqual((row["state"], row["reason"]), ("failed", conversation.INTERRUPTED))
         self.assertEqual((fresh.applies, self.commits()), (0, 0))
-        self.assertEqual(self.replies(), [f"Not applied: {conversation.INTERRUPTED}"])
+        self.assertEqual(self.replies(), [f"{row['code']} was interrupted and not saved. The website is as it was "
+                                          "before; send the change again to make a new draft."])  # SHOP-4 wording
 
     def test_state_file_is_private(self):
         self.assertEqual((self.repo.state / "conversation.sqlite3").stat().st_mode & 0o777, 0o600)

@@ -17,11 +17,12 @@ The two note commands are stricter:
 | `yes` alone (or `approve`, `approved`) | Applies the one waiting draft. If more than one is waiting, Hass asks which. | `approve` |
 | `no <code>` (or `cancel <code>`, `reject <code>`) | Cancels that draft or question; nothing changes on the site. | `cancel A1B2` |
 | `no` alone (or `cancel`, `reject`) | Cancels the waiting draft or question; nothing changes. | `no` |
-| `history` | Lists the last five changes with their codes and states. | `history` |
+| `history` | Lists the last five changes with their codes and states, each with where it is now (on the website, not on the website yet, undone). | `history` |
 | `undo` | Drafts an undo of the most recent applied change. It needs `yes <code>` like any draft. | `undo` |
 | `undo <code>` | Drafts an undo of that applied change. It needs `yes <code>`. | `undo A1B2!` |
 | `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals. With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |
-| `pause` or `pause changes` | Stops any approval from applying. Drafts can still be prepared. | `pause changes` |
+| `did it work?` (or `did that work?`, `did my change work?`): the same as `status` | Answers "did my change work?" in its `Last change:` line: done and on the website now (with the time it was checked), saved but not on the website yet (and why), did not reach the website (the website is unchanged), or undone. It changes nothing. | `did it work?` |
+| `stop changes` (or `stop`, `pause`, `pause changes`) | Stops any approval from applying and replies how many requests are waiting. Drafts can still be prepared; changes already on the website stay there. | `stop changes` |
 | `resume` or `resume changes` | Lets approvals apply again. It never applies a waiting draft by itself. | `resume changes` |
 | `remember <key>: <text>` | Saves a note for Hass (key: a-z, 0-9, `.` or `-`). Sending the same key again updates it. | `remember parking: use the back lot` |
 | `forget <key>` | Deletes that saved note. | `forget parking` |
