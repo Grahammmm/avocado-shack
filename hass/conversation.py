@@ -31,6 +31,9 @@ ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so not
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
+USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
+DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
+               "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
 TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
@@ -145,9 +148,12 @@ def load_settings(sdir) -> dict:
         problems.append("ownerSenders must be a non-empty list of sender addresses")
     if not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
+    cap = settings.get("interpreterDailyCap")  # H22: optional; absent or null means no cap (no default enables it)
+    if cap is not None and (type(cap) is not int or not 1 <= cap <= 10000):
+        problems.append("interpreterDailyCap must be an integer 1-10000")
     if problems: raise ConfigError("; ".join(problems))
     return {"ownerSenders": tuple(senders), "ownerChat": chat, "approvalTtlSeconds": ttl,
-            "guestCountsDb": settings.get("guestCountsDb")}  # H17 status only; not validated, not required
+            "guestCountsDb": settings.get("guestCountsDb"), "interpreterDailyCap": cap}  # guestCountsDb: H17, unchecked
 
 
 def parse_keyword(text: str):
@@ -432,6 +438,13 @@ class Conversation:
         if getattr(self, "_ops", None) is None: self._ops = self.editor.registry or load_registry()
         return self._ops
 
+    def _calls(self, now):
+        """H22: (local day, interpreter calls counted for it). No usage table yet means no calls."""
+        day = now.astimezone(LOCAL_TZ).strftime("%Y-%m-%d")
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage'").fetchone(): return day, 0
+        row = self.db.execute("SELECT calls FROM usage WHERE day = ?", (day,)).fetchone()
+        return day, row["calls"] if row else 0
+
     def _makers(self):
         """The worktree's makers (read-only) for the claim check; None when unreadable (every maker change asks)."""
         try:
@@ -442,9 +455,20 @@ class Conversation:
         return makers if isinstance(makers, dict) else None
 
     def _request(self, msg, now) -> str:
+        cap = self.settings["interpreterDailyCap"]
+        if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
+            day, calls = self._calls(now)
+            if calls >= cap:
+                self._reply(DAILY_LIMIT)
+                return "daily-limit"
+            self.db.execute(USAGE)
+            self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
                     r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
-        result = _checked(self.interpreter.interpret(msg.text, pending))
+        try:
+            result = _checked(self.interpreter.interpret(msg.text, pending))
+        except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
+            result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
         codes = {p["code"] for p in pending}
         named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
         cancelled_question = named is not None and named["state"] == "rejected" and named["reason"] == "owner" \
@@ -691,6 +715,8 @@ class Conversation:
     def _status(self, now, since) -> str:
         """Read-only: pause state, waiting drafts, the last apply result and confirmed guests of upcoming hikes."""
         lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
+        if (cap := self.settings["interpreterDailyCap"]) is not None:
+            lines.append(f"Interpreter today: {self._calls(now)[1]} of {cap}")  # H22, only with a cap
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]
