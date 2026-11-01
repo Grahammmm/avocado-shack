@@ -67,9 +67,8 @@ class ProposalTextTests(unittest.TestCase):
         text = _text(("products", "p1", {"imageAlt": "A ripe avocado"}, {"imageAlt": None}))
         self.assertIn("imageAlt A ripe avocado → (none)\n", text)
         record = {"id": "p2", "description": LONG}
-        line = _text(("products", "p2", None, record)).splitlines()[1]
-        self.assertEqual(line, f"products p2: record (none) → {conversation._value(record)}")
-        self.assertTrue(line.endswith("..."))
+        lines = _text(("products", "p2", None, record)).splitlines()
+        self.assertEqual(lines[1:4], ["products p2: new", f"  description: {LONG}", "  id: p2"])  # AV1737-06
         line = _text(("products", "p2", record, None)).splitlines()[1]
         self.assertEqual(line, f"products p2: record {conversation._value(record)} → (none)")
 
