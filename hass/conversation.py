@@ -20,6 +20,7 @@ from hass.ops import catalog, hikes, load_registry  # noqa: E402
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
+NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds good|looks good)(?: ([0-9a-f]{4,12}))?")  # H05
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
                         r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
                         r"|(resume)(?: changes)?|(help|commands|\?)"
@@ -210,6 +211,13 @@ def parse_keyword(text: str):
     match = KEYWORD_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
     return ("approve" if match[1] in APPROVE else "reject"), match[2]
+
+
+def parse_near(text: str):
+    """AV2022-07 (H05): code or "" when the whole message is a casual yes (ok, go ahead, ...); otherwise None.
+    It never approves anything; Hass only answers with the exact `yes <code>` to send."""
+    match = NEAR_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()).removesuffix(","))
+    return None if not match else match[2] or ""
 
 
 def parse_command(text: str):
@@ -466,6 +474,13 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         keyword = parse_keyword(msg.text)
+        if keyword is None and (near := parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
+            codes = [r["code"] for r in self._drafts("state = 'proposed'")
+                     if self._expiry(r) > now and near in ("", r["code"])]
+            self._reply(f"Nothing was applied. To apply {codes[0]}, reply yes {codes[0]}." if len(codes) == 1 else
+                        f"Nothing was applied. Reply yes <code> with one of: {', '.join(codes)}." if codes else NOTHING)
+            self._record(msg, "near-approval")
+            return "near-approval", None
         if keyword is None:
             disposition = self._request(msg, now)
             self._record(msg, disposition)
