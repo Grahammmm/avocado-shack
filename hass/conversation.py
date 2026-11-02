@@ -393,8 +393,9 @@ class Conversation:
         # AVB-03 (H05): an open draft from before proposed_at has no recoverable proposal instant (a filled question
         # keeps its question's created_at), so it counts as proposed when this store is opened: a yes sent earlier is
         # refused and the owner re-sends it; it is never judged from created_at or from the current ttl.
-        self.db.execute("UPDATE drafts SET proposed_at = ? WHERE proposed_at IS NULL AND state = 'proposed'",
-                        (_iso(self._now()),))
+        if self.db.execute("SELECT 1 FROM drafts WHERE proposed_at IS NULL AND state = 'proposed' LIMIT 1").fetchone():
+            self.db.execute("UPDATE drafts SET proposed_at = ? WHERE proposed_at IS NULL AND state = 'proposed'",
+                            (_iso(self._now()),))  # the clock is read only when such a draft exists
         self.outbox = Outbox(self.db, self._now)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.recover()
