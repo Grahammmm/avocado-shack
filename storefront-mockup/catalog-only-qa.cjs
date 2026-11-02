@@ -45,6 +45,30 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const layout=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth,background:getComputedStyle(document.body).backgroundColor,columns:getComputedStyle(document.querySelector('#catalog-grid')).gridTemplateColumns.split(' ').length}));assert.equal(layout.overflow,false,'Overflow '+width);assert.equal(layout.columns,width<520?1:width<=800?2:width<1180?3:4);viewports.push({width,...layout});
  }
  for(const width of [390,1440]){await page.setViewportSize({width,height:1000});await page.goto(base+'/');await page.locator('#brand-filter').selectOption('');await page.locator('#catalog-grid').evaluate(e=>e.scrollIntoView({behavior:'instant',block:'start'}));await page.waitForTimeout(250);await page.screenshot({path:out+`/catalog-inline-${width}.png`});await page.locator('#brand-filter').selectOption('Etto');await page.locator('#catalog-grid').evaluate(e=>e.scrollIntoView({behavior:'instant',block:'start'}));await page.screenshot({path:out+`/catalog-maker-${width}.png`});}
+ // AVB-25: shelf, search and producer live in the address (replaceState, hash and other params untouched).
+ let dialogs=0;page.on('dialog',d=>{dialogs++;d.dismiss()});
+ const open=async s=>{await page.goto(base+'/'+s);await page.waitForSelector('#catalog-grid article, #catalog-sentinel')};
+ const addr=()=>page.evaluate(()=>({search:location.search,hash:location.hash,href:location.href,params:Object.fromEntries(new URLSearchParams(location.search))}));
+ await open('?shelf=pantry&q=jam');
+ assert.equal(await page.locator('[data-filter="pantry"]').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#product-search').inputValue(),'jam');
+ assert.ok(await page.locator('#catalog-grid article').count()>0);assert.equal(await page.locator('#catalog-grid article:not([data-category="pantry"])').count(),0);
+ await open('?shelf=nonsense&maker=Nobody');
+ assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#brand-filter').inputValue(),'');assert.equal(await countText(),fullCount);
+ await open('?shelf=constructor&q=%20%20'+'a'.repeat(100)+'&maker=Etto');
+ assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');assert.equal((await page.locator('#product-search').inputValue()).length,80,'q is cut to 80 characters');assert.equal(await page.locator('#brand-filter').inputValue(),'Etto');
+ await open('?q=%20%20jam%20');assert.equal(await page.locator('#product-search').inputValue(),'jam','q is trimmed');
+ const hostile='<img src=x onerror=alert(1)>';await open('?q='+encodeURIComponent(hostile));await page.waitForTimeout(200);
+ assert.equal(await page.locator('#product-search').inputValue(),hostile);assert.equal(await page.locator('img[src="x"]').count(),0);assert.equal(dialogs,0);
+ await open('');const before=await page.evaluate(()=>history.length);
+ await page.locator('#product-search').fill('jam');await page.locator('[data-filter="pantry"]').click();
+ let a=await addr();assert.deepEqual(a.params,{q:'jam',shelf:'pantry'});assert.equal(await page.evaluate(()=>history.length),before,'filters add no history entries');
+ await open('?q=jam#visit');await page.locator('[data-filter="fruit"]').click();a=await addr();assert.equal(a.hash,'#visit');assert.deepEqual(a.params,{q:'jam',shelf:'fruit'});
+ await page.evaluate(()=>{location.hash='#newsletter'});await page.waitForTimeout(400);assert.deepEqual((await addr()).params,{q:'jam',shelf:'fruit'},'section navigation keeps the filters');
+ await page.locator('#brand-filter').selectOption('Etto');a=await addr();assert.equal(a.params.maker,'Etto');assert.equal(a.hash,'#newsletter');
+ await open('?utm=x&q=jam&shelf=pantry&maker=Etto');
+ await page.locator('#product-search').fill('');await page.locator('[data-filter="all"]').click();await page.locator('#brand-filter').selectOption('');
+ a=await addr();assert.equal(a.search,'?utm=x','an unrelated param survives');
+ await open('?q=jam');await page.locator('#product-search').fill('');a=await addr();assert.equal(a.search,'');assert.ok(!a.href.includes('?'),'no query string left');
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
  const result={checkedAt:new Date().toISOString(),all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
