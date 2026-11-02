@@ -20,6 +20,12 @@ PROMPT = ("Read the product label in this photo. Answer only with a JSON object 
           "brand exactly as printed on the label, and the kind of product. Use null for anything not printed. "
           "Add nothing else.")
 _TERMS = tuple(claims.fold(term).replace("-", " ") for term in claims.TERMS)
+PLACEHOLDERS = frozenset({"null", "none", "nil", "n/a", "na", "unknown", "not printed", "not visible", "not shown",
+                          "-", "--", "?", "no brand", "no name", "unbranded"})  # a "not printed" answer, not a value
+
+
+def _norm(value) -> str:
+    return " ".join(claims.fold(value).split()).rstrip(".")
 
 
 def _clean(field, value, categories):
@@ -30,6 +36,7 @@ def _clean(field, value, categories):
     if len(value) > TEXT_LIMITS["product"][field]: return None
     folded = claims.fold(value).replace("-", " ")
     if any(term in folded for term in _TERMS): return None  # no organic/origin claim ever comes from a photo
+    if _norm(value) in PLACEHOLDERS: return None  # a whole-value placeholder only
     if field == "category":
         return next((c for c in categories if isinstance(c, str) and c.casefold() == value.casefold()), None)
     return value
@@ -38,6 +45,8 @@ def _clean(field, value, categories):
 def keep(result, categories) -> dict:
     """Only name/brand/category, each checked on its own; any other key is dropped silently."""
     found = {field: _clean(field, result.get(field), categories) for field in FIELDS}
+    if found["brand"] and found["name"] and _norm(found["brand"]) == _norm(found["name"]):
+        found["brand"] = None  # a brand that only echoes the name is offered once, as the name
     return {field: value for field, value in found.items() if value is not None}
 
 
