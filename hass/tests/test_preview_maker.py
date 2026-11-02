@@ -97,7 +97,7 @@ class MakerCaptureTests(CatalogTestCase):
 
     def test_new_maker_without_products_adds_no_maker_check(self):
         target = self.change(("maker.add", {"key": "Test Farm", "name": "Test Farm", "place": TEMPLETON,
-                                            "story": "A new farm.", "url": "https://example.invalid/farm"}))
+                                            "story": "A new farm.", "url": "https://example.com/farm"}))
         self.assertEqual((target["hidden"], target["place"]), (False, TEMPLETON))
         result = self.capture(target)
         self.assertEqual(self.maker_checks(result), {})
