@@ -4,8 +4,9 @@
 
 Prints one JSON line {"result": "ok"|"outside", "changed": n, "outside": [...]}
 naming each change that is not an isolated visual change: a path off the design
-surface, a deletion, a symlink or submodule, or a template changed without its
-generated page (or the reverse). Paths only, never contents. Exit 0 ok,
+surface, a deletion, a symlink, submodule or non-plain (e.g. executable) file,
+or a template changed without its generated page (or the reverse). Paths only,
+never contents. Exit 0 ok,
 1 outside, 2 usage. Read-only git in the current directory; nothing is written.
 """
 
@@ -22,7 +23,7 @@ DESIGN = ("hass/templates/index.html", "hass/templates/hike/index.html", "storef
           "storefront-mockup/trail-explorer.css")
 PAIRS = (("hass/templates/index.html", "storefront-mockup/index.html"),
          ("hass/templates/hike/index.html", "storefront-mockup/hike/index.html"))
-BAD_MODES = ("120000", "160000")  # symlink, submodule
+PLAIN_MODE = "100644"  # anything else (symlink, submodule, executable) is outside
 
 
 class Usage(Exception):
@@ -54,7 +55,7 @@ def check(base: str, head: str) -> tuple[int, list[str]]:
     modes = {e.split("\t", 1)[1]: e.split(" ", 1)[0]
              for e in git("ls-tree", "-r", "-z", "--full-tree", head).split("\0") if "\t" in e}
     changed = {p for _, p in changes}
-    outside = {f"{s} {p}" for s, p in changes if p not in DESIGN or s == "D" or modes.get(p) in BAD_MODES}
+    outside = {f"{s} {p}" for s, p in changes if p not in DESIGN or s == "D" or modes.get(p) != PLAIN_MODE}
     for x, y in PAIRS + tuple(pair[::-1] for pair in PAIRS):
         if x in changed and y not in changed:
             outside.add(f"unpaired {x}")
