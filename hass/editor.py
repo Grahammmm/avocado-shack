@@ -359,6 +359,8 @@ def show(change_id, *, state=None) -> dict:
     for kind in ("changes", "drafts"):
         if (sdir / kind / f"{change_id}.json").is_file():
             rec = _read(sdir / kind / f"{change_id}.json")
+            if not isinstance(rec, dict):  # valid JSON of the wrong shape: named, never printed or traced
+                return {"result": "unreadable", "key": change_id, "kind": kind[:-1]}
             return {"result": "ok", kind[:-1]: rec, **({"install": install_status(rec)} if kind == "changes" else {})}
     return {"result": "not-found", "key": change_id}
 
