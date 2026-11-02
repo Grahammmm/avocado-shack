@@ -4,7 +4,7 @@ street address / town shown on the site, through the normal typed-op path (draft
 Usage (request ops):
     {"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}
     {"op": "store.set_address", "args": {"streetAddress": "1023 Example Street"}}   # town kept; give either or both
-    {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}
+    {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}   # an earlier "date" at most 7 days ago
     {"op": "store.set_intro", "args": {"text": "Fresh from the coast."}}   # home-page intro line, at most 160 characters; undo restores the default
 
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
@@ -27,6 +27,7 @@ from hass.content_model import (
 )
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.catalog import _product
+from hass.sitegen import STALE_AFTER_DAYS
 
 
 _DASHES = {c: "-" for c in [*range(0x2010, 0x2016), 0x2212]}
@@ -101,6 +102,9 @@ def _confirm_selection(content, args, ctx):
     day = date.fromisoformat(args["date"]) if "date" in args else today
     if day > today:
         return Refused(f"{day.isoformat()} is in the future; the selection can only be checked today or earlier")
+    if (today - day).days > STALE_AFTER_DAYS:
+        return Refused(f"{day.isoformat()} is more than {STALE_AFTER_DAYS} days ago, so the site would already call it "
+                       "out of date; check the selection today instead")
     last = checked_on(content.store)
     if last is not None and day < last:
         return Refused(f"the selection was already checked on {last.isoformat()}, after {day.isoformat()}")
