@@ -80,6 +80,14 @@ class SocialDraftTests(unittest.TestCase):
         (self.root / "secret.webp").write_bytes(b"x")
         self.assertEqual(self.build("p1", product("p1", image="../secret.webp"))["reason"], "no photo on the site")
 
+    def test_absent_null_or_non_text_image_is_refused_not_raised(self):
+        content = self.load(product("p1"))
+        for image in (None, "", 5, ["assets/products/p1.webp"], {"src": "x"}):
+            content.products[0]["image"] = image
+            self.assertEqual(social_draft.build(content, "p1", self.site), {"draft": False, "reason": "no photo on the site"})
+        del content.products[0]["image"]
+        self.assertEqual(social_draft.build(content, "p1", self.site), {"draft": False, "reason": "no photo on the site"})
+
     def test_organic_stays_verbatim_and_nothing_is_added(self):
         text = "Made with organic wheat."
         out = self.build("p1", product("p1", description=text))

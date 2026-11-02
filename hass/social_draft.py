@@ -24,9 +24,10 @@ CATEGORY_TAGS = {c: "#" + c.capitalize() for c in CATEGORIES}  # fixed per categ
 
 
 def _photo_ok(image, site_dir: Path) -> bool:
+    if not isinstance(image, str) or not image: return False  # absent, null or non-text image: checked before any path
     try:
         path = (site_dir / image).resolve()
-        return isinstance(image, str) and path.is_relative_to(site_dir.resolve()) and path.is_file()
+        return path.is_relative_to(site_dir.resolve()) and path.is_file()
     except (OSError, ValueError):
         return False
 
