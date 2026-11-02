@@ -184,6 +184,18 @@ def _hike_time(iso):  # AV1737-07 (H04/H05): `Sat 2026-11-07 09:00 PST`; a bad o
     return iso if start.tzinfo is None else start.astimezone(LOCAL_TZ).strftime("%a %Y-%m-%d %H:%M %Z")
 
 
+def sender_key(value):
+    """AV2022-08 (H08): an email (casefolded) or `+` and 8-15 digits (spaces, dashes, dots, brackets dropped); else None."""
+    if not isinstance(value, str): return None
+    value = value.strip()
+    if re.fullmatch(r"\+[0-9 .()-]+", value):
+        digits = re.sub(r"[^0-9]", "", value)
+        return "+" + digits if 8 <= len(digits) <= 15 else None
+    local, at, domain = value.partition("@")
+    ok = at and local and "@" not in domain and "." in domain and not re.search(r"\s", value)
+    return value.casefold() if ok else None
+
+
 def load_settings(sdir, photos=False) -> dict:
     try:
         settings = json.loads((Path(sdir) / "config.json").read_text("utf-8")).get("settings")
@@ -192,8 +204,10 @@ def load_settings(sdir, photos=False) -> dict:
     if not isinstance(settings, dict): raise ConfigError("config.json settings are missing")
     senders, chat, ttl = (settings.get(k) for k in ("ownerSenders", "ownerChat", "approvalTtlSeconds"))
     problems = []
-    if not isinstance(senders, list) or not senders or not all(isinstance(s, str) and s.strip() for s in senders):
-        problems.append("ownerSenders must be a non-empty list of sender addresses")
+    keys = [sender_key(s) for s in senders] if isinstance(senders, list) else []
+    if not keys: problems.append("ownerSenders must be a non-empty list of sender addresses")
+    problems += [f"ownerSenders entry {n} is not an email address or a +country phone number"  # value never echoed
+                 for n, key in enumerate(keys, 1) if key is None]
     if not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
     root = settings.get("mediaRoot")  # NB-AV-09: required only with a photo source
@@ -202,8 +216,9 @@ def load_settings(sdir, photos=False) -> dict:
     if cap is not None and (type(cap) is not int or not 1 <= cap <= 10000):
         problems.append("interpreterDailyCap must be an integer 1-10000")
     if problems: raise ConfigError("; ".join(problems))
-    return {"ownerSenders": tuple(senders), "ownerChat": chat, "approvalTtlSeconds": ttl, "mediaRoot": root,
-            "guestCountsDb": settings.get("guestCountsDb"), "interpreterDailyCap": cap}  # guestCountsDb: H17, unchecked
+    return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
+            "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
+            "interpreterDailyCap": cap}
 
 
 def parse_keyword(text: str):
@@ -447,7 +462,7 @@ class Conversation:
     def _handle(self, msg, last_try=False):
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone():
             return "duplicate", None
-        owner = msg.chat == self.settings["ownerChat"] and msg.sender in self.settings["ownerSenders"]
+        owner = msg.chat == self.settings["ownerChat"] and sender_key(msg.sender) in self.settings["ownerKeys"]
         if owner and not msg.from_me and msg.kind in ("edited", "reaction"):  # AV1737-03: never read, never approves
             self._reply(NOT_READ_REPLY)
             self._record(msg, "not-read")

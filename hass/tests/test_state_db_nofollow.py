@@ -22,7 +22,7 @@ class PrivateDbTests(unittest.TestCase):
         self.state = self.root / "state"
         self.state.mkdir(mode=0o700)
         (self.state / "config.json").write_text(json.dumps({"settings": {
-            "ownerSenders": ["owner"], "ownerChat": "chat", "approvalTtlSeconds": 600}}))
+            "ownerSenders": ["owner@example.invalid"], "ownerChat": "chat", "approvalTtlSeconds": 600}}))
         self.path = self.state / "conversation.sqlite3"
 
     def open(self, kind):
