@@ -16,7 +16,7 @@ from hass.content_model import REPO_ROOT
 from hass.tests.test_demo_transcript import MAPPING
 from hass.tests.test_editor import WriterRepo
 
-OWNER, CHAT, STRANGER = "+155****0777", "chat-canary-5150", "+155****0999"
+OWNER, CHAT, STRANGER = "+15550100777", "chat-canary-5150", "+15550100999"  # AV2022-08: an owner entry must be an address
 OWNER_TEXT, STRANGER_TEXT, HISTORY_TEXT = "zebra-canary-7781", "quokka-canary-4242", "yak-canary-3131"
 TEXTS = (OWNER_TEXT, STRANGER_TEXT, HISTORY_TEXT)
 CANARIES = (OWNER, CHAT, STRANGER, *TEXTS)
