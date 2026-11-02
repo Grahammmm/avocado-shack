@@ -10,7 +10,7 @@ import unittest
 from datetime import timedelta
 from pathlib import Path
 
-from hass import conversation, health, preview
+from hass import conversation, health, owner_answers as answers, preview
 from hass.tests.test_undo import PNG, H06TestCase
 
 
@@ -78,7 +78,7 @@ class VerifyAllRecordsTests(H06TestCase):
         first = str(self.repo.state / "screenshots" / files[0])
         self.assertEqual((row["state"], row["screenshot"], row["reason"]), ("verified", first, None))
         self.assertEqual((reply["text"], reply["attachments"]),
-                         (f"Applied and checked {row['code']}: {row['summary']}", [first]))
+                         (f"Applied and checked {row['code']}: {row['summary']}\n{answers.NOT_LIVE}", [first]))
         self.assertEqual(self.log, "")
 
     def test_second_of_three_fails_names_it_and_stops(self):
@@ -86,8 +86,8 @@ class VerifyAllRecordsTests(H06TestCase):
         self.assertEqual([t["id"] for t, _n in self.previewer.results], ["p1", "p2"])  # p3 never captured
         self.assertEqual((row["state"], row["screenshot"]), ("applied", None))
         self.assertEqual(row["reason"], "not verified: products p2: simulated miss")
-        self.assertEqual(reply["text"],
-                         f"Applied {row['code']}, but the preview check failed: products p2: simulated miss")
+        self.assertEqual(reply["text"], f"Applied {row['code']}, but the preview check failed: the preview could not be "
+                                        f"checked (products p2).\n{answers.NOT_LIVE}")  # SHOP-4: plain, still names p2
         self.assertFalse((self.repo.state / "screenshots" / self.names(row, 3)[2]).exists())
 
     def test_first_failure_names_the_first_record(self):
@@ -102,7 +102,7 @@ class VerifyAllRecordsTests(H06TestCase):
         self.assertEqual([t["id"] for t, _n in self.previewer.results], ["p1", "p2", "p3", "p4", "p5"])
         self.assertEqual([n for _t, n in self.previewer.results], self.names(row, 5))
         self.assertEqual((row["state"], reply["text"]),
-                         ("verified", f"Applied and checked {row['code']}: {row['summary']}"))
+                         ("verified", f"Applied and checked {row['code']}: {row['summary']}\n{answers.NOT_LIVE}"))
         self.assertEqual(self.log,
                          f"verify {row['change_id']}: over 5 records, not checked: products p6, products p7\n")
 
@@ -134,7 +134,8 @@ class VerifyAllRecordsTests(H06TestCase):
         row, reply = self.run_change([])
         self.assertEqual(self.previewer.results, [])
         self.assertEqual((row["state"], row["reason"]), ("applied", "not verified: no change record"))
-        self.assertEqual(reply["text"], f"Applied {row['code']}, but the preview check failed: no change record")
+        self.assertEqual(reply["text"], f"Applied {row['code']}, but the preview check failed: the saved change could "
+                                        f"not be found.\n{answers.NOT_LIVE}")
 
     def test_health_counts_the_failed_change_once(self):
         self.run_change([hidden("p1"), hidden("p2"), hidden("p3")], fail_at=2)

@@ -98,11 +98,16 @@ class Content:
 
 
 def _read_json(path: Path):
-    with path.open("r", encoding="utf-8") as fh:
-        try:
-            return json.load(fh)
-        except json.JSONDecodeError as exc:
-            raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise ContentError([f"{path.name}: not UTF-8 text"]) from None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
+    except RecursionError:
+        raise ContentError([f"{path.name}: JSON nested too deeply"]) from None
 
 
 def load_content(content_dir: Path = CONTENT_DIR) -> Content:

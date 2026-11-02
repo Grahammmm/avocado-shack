@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, label_reader, media  # noqa: E402
+from hass import claims, interpret_check, label_reader, media, owner_answers as answers  # noqa: E402
 from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -21,15 +21,16 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
-                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?|(help|commands|\?)"  # H17
+                        r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
+                        r"|(resume)(?: changes)?|(help|commands|\?)"
                         r"|(find)(?:\s+(.*))?")  # AV1537-04; the query is re-read from the original text to keep its case
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
-    'status - pause state, waiting drafts, hike seats: "status"',
+    'status (or did it work?) - last change, waiting drafts: "status"',
     'history - the last five changes: "history"',
     'undo [code] - draft an undo of an applied change: "undo a1b2"',
-    'pause changes - stop approvals from applying: "pause changes"',
+    'stop changes (or pause changes) - nothing applies: "stop changes"',
     'resume changes - let approvals apply again: "resume changes"',
     'remember <key>: <text> - save a note: "remember parking: back lot"',
     'forget <key> - delete a saved note: "forget parking"',
@@ -218,7 +219,9 @@ def parse_command(text: str):
     if not match: return None
     if match[7]: return "help", None
     if match[8]: return "find", re.sub(r"[.!]+$", "", text.strip())[4:].strip()  # ("find", query in its own case)
-    return ("undo", match[3]) if match[2] else (next(v for v in (match[1], match[4], match[5], match[6]) if v), None)
+    if match[2]: return "undo", match[3]
+    found = next(v for v in (match[1], match[4], match[5], match[6]) if v)  # SHOP-4: did it work = status, stop = pause
+    return ("status" if found.startswith("did ") else "pause" if found == "stop" else found), None
 
 
 def parse_memory(text: str):
@@ -309,9 +312,7 @@ class Conversation:
         self.settings, self.photos = load_settings(sdir, photos is not None), photos  # fetch(provider_id, n) -> [bytes]
         self.editor, self.interpreter, self.clock, self.labels, self._label_job = editor, interpreter, clock, labels, None
         self.sdir, self.previewer = sdir, previewer
-        path = sdir / "conversation.sqlite3"
-        os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
-        os.chmod(path, 0o600)
+        path = memory_mod.private_db(sdir, "conversation.sqlite3")
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
@@ -657,7 +658,7 @@ class Conversation:
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
-            if self.previewer is None: self._reply(f"Applied {row['code']}: {row['summary']}")
+            if self.previewer is None: self._reply(answers.applied_text(row["code"], row["summary"]))  # SHOP-4
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "stale":
             again = self.editor.prepare(json.loads(row["ops_json"]))
@@ -686,7 +687,7 @@ class Conversation:
                         self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
                     else:
                         self._move(row, "failed", reason=INTERRUPTED)
-                        self._reply(f"Not applied: {INTERRUPTED}")
+                        self._reply(answers.recovered_text(row["code"]))  # SHOP-4: apply never touches the website
         self._verify_pending()
         return [self._row(r["row_id"])["state"] for r in rows]
 
@@ -726,11 +727,11 @@ class Conversation:
             with self._tx():
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
-                    self._reply(f"Applied and checked {row['code']}: {row['summary']}", [png])
-                else:
+                    self._reply(answers.applied_text(row["code"], row["summary"], checked=True), [png])  # SHOP-4
+                else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
-                    self._reply(f"Applied {row['code']}, but the preview check failed: {error}")
+                    self._reply(answers.applied_text(row["code"], row["summary"], error=error))
 
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":
@@ -741,8 +742,8 @@ class Conversation:
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
-            self._reply("\n".join(["Recent changes:"] + [
-                f"{r['code']} {r['state']}: {r['summary']}" + (f" ({r['commit'][:7]})" if r["commit"] else "")
+            self._reply("\n".join(["Recent changes:"] + [  # SHOP-4: where it is now instead of the commit
+                f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
                 for r in rows]) if rows else "No approved changes yet.")
             return "history"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")
@@ -862,17 +863,38 @@ class Conversation:
         row = self.db.execute("SELECT set_at FROM control WHERE name = 'paused'").fetchone()
         return row["set_at"] if row else None
 
+    def _install(self, row):
+        """SHOP-4: the editor change record's SHOP-2 `install` entry for a draft row; None when there is none."""
+        try:
+            return (self.editor.show(row["change_id"]).get("change") or {}).get("install") if row["change_id"] else None
+        except (OSError, ValueError, AttributeError, editor_mod.UnsafeState):
+            return None
+
+    def _queue(self, msg) -> dict:
+        """SHOP-4: drafts waiting for an OK plus inbox messages not read yet (this one excluded; inbox opened
+        read-only as _photo_lines does), and approvals already under way."""
+        unread, path = 0, self.sdir / "inbox.sqlite3"
+        if path.is_file():
+            try:
+                with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=1)) as db:
+                    unread = db.execute("SELECT COUNT(*) FROM inbound WHERE state = 'pending' AND provider_id != ?",
+                                        (msg.provider_id,)).fetchone()[0]
+            except sqlite3.Error:
+                unread = 0
+        waiting = [r for r in self._drafts("state = 'proposed'") if self._expiry(r) > self._now()]
+        return {"waiting": len(waiting) + unread, "applying": [r["code"] for r in self._drafts("state = 'approved'")]}
+
     def _control(self, msg, now, verb) -> str:
         since = self._paused()
         if verb == "status":
             self._reply(self._status(now, since))
         elif verb == "pause" and since:
-            self._reply(f"Changes are already paused (since {_local(since)}).")
+            self._reply(answers.stopped_state(since, self._queue(msg)))
         elif verb == "pause":
             self.db.execute(CONTROL)
             self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('paused', '1', ?, ?)",
                             (_iso(now), msg.provider_id))
-            self._reply("Changes paused. Drafts can still be prepared; nothing is applied until you send resume changes.")
+            self._reply(answers.stopped_state(_iso(now), self._queue(msg)))
         elif not since:
             self._reply("Changes are not paused.")
         else:  # resume never applies anything by itself
@@ -894,13 +916,9 @@ class Conversation:
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
-        if last:
-            text = f"Last change: {last['code']} {last['state']}: {last['summary']}"
-            text += f" ({last['commit'][:7]})" if last["commit"] else ""
-            if last["reason"] and (last["state"] == "failed" or last["state"] == "applied"
-                                   and last["reason"].startswith("not verified: ")):
-                text += f" - {last['reason']}"
-            lines.append(text)
+        if last:  # SHOP-4: did it work, in plain words (whether it is on the website now), never the commit
+            lines.append(f"Last change: {last['code']} {last['summary']} - "
+                         + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
 
     def _photo_lines(self, now) -> list:

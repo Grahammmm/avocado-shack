@@ -3,6 +3,8 @@
 // env: PREVIEW_URL (http://127.0.0.1:<port>), TARGET (JSON from hass/preview.py target_for), OUT (png path),
 // PLAYWRIGHT_MODULE / CHROMIUM_PATH as in the storefront QA scripts. Only GET/HEAD to the preview origin is
 // allowed; every other request (any POST, anything off 127.0.0.1) is aborted. Prints {"checks": {...}}.
+// Maker: its place search, then all cards if none names it; card text compared (never a selector built from the name).
+// hidden → makerHidden (no card names it); else makerName + makerPlace; a maker with no active card adds no maker check.
 'use strict';
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
 if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
@@ -31,6 +33,22 @@ const allowed=req=>{
         await page.waitForTimeout(200);
         const cards=page.locator('#catalog-grid').first();
         await cards.scrollIntoViewIfNeeded();
+        if(target.kind==='maker'){  // the place search first; if no card names the maker, every card (old place still shown)
+          const count=page.locator('#catalog-count'),sentinel=page.locator('#catalog-sentinel');let places=[];
+          for(const term of [target.place||'','']){
+            await page.locator('#product-search').fill(term);await page.waitForTimeout(200);
+            for(let i=0;i<30&&!/^(\d+) selections · \1 shown$/.test(await count.textContent());i++){
+              await sentinel.scrollIntoViewIfNeeded();await page.waitForTimeout(100);
+            }
+            places=await page.locator('#catalog-grid article').evaluateAll((arts,label)=>arts.filter(a=>[...a.querySelectorAll(
+              '.maker-story summary .sr-only')].some(s=>s.textContent===label)).map(a=>a.querySelector('.origin-label')?.textContent),
+            `: ${target.name}`);
+            if(places.length)break;
+          }
+          if(target.hidden)checks.makerHidden=places.length===0;
+          else if(places.length){checks.makerName=true;checks.makerPlace=places[0]===`Based in ${target.place}`;}
+          await cards.scrollIntoViewIfNeeded();
+        }
         if(target.kind==='product'){
           const card=page.locator(`#catalog-grid article[data-product-id="${target.id}"]`);
           const count=await card.count();

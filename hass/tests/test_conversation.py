@@ -202,7 +202,7 @@ class FlowTests(ConversationTestCase):
         self.replies()
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "proposed"])
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours"])
+        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.commits(), self.drafts()[1]["state"]), (1, "applied"))
 
     def test_stale_approval_redrafts_and_never_writes_old_draft(self):
@@ -231,7 +231,7 @@ class DurabilityTests(ConversationTestCase):
             self.conv.flush(self.out)
         self.assertEqual((self.drafts()[0]["state"], len(self.conv.outbox.unsent()), self.commits()), ("applied", 1, 1))
         self.conv = self.open()
-        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {draft['summary']}"])
+        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {draft['summary']}\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.replies(), self.commits(), self.editor.applies), ([], 1, 1))
 
     def test_recover_fails_interrupted_approval_without_reapplying(self):
@@ -245,7 +245,8 @@ class DurabilityTests(ConversationTestCase):
         row = self.drafts()[0]
         self.assertEqual((row["state"], row["reason"]), ("failed", conversation.INTERRUPTED))
         self.assertEqual((fresh.applies, self.commits()), (0, 0))
-        self.assertEqual(self.replies(), [f"Not applied: {conversation.INTERRUPTED}"])
+        self.assertEqual(self.replies(), [f"{row['code']} was interrupted and not saved. The website is as it was "
+                                          "before; send the change again to make a new draft."])  # SHOP-4 wording
 
     def test_state_file_is_private(self):
         self.assertEqual((self.repo.state / "conversation.sqlite3").stat().st_mode & 0o777, 0o600)
