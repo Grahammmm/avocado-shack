@@ -149,6 +149,19 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** removing a file is an attended operator step: `git rm` it in the writer worktree on its branch, then commit. Health and Hass never delete it.
 - **Stop and ask:** the owner undid that photo because it showed a person, a receipt or a private place (it stays in Git history; tell the operator).
 
+## Service and Mac behaviour
+
+What is known comes from the sandbox user unit file and the Mac notes in IMPLEMENTATION.md; everything else is unmeasured and must not be assumed.
+
+| Event | Known | Not yet measured | Shows up as |
+| --- | --- | --- | --- |
+| Agent Orange reboot | The sandbox unit is a user unit wanted by the default target, so it starts only when the user session (or lingering) starts it. | Whether lingering is on; how long the Hass services take to return. | `inbox-stuck`, `outbox-stuck` |
+| Sandbox service crash | The unit has `Restart=on-failure` with a 3 second delay, so a crash is restarted by the service manager. | How often it has crashed in practice; whether a restart loop would be noticed. | no health check |
+| Mac sleep | The Mac must stay powered, connected and signed in appropriately. | What the bridge does while asleep; the H07 compatibility check has not run. | `outbox-stuck` |
+| Mac logout | The Mac must stay signed in appropriately. | What the bridge does after logout; the H07 compatibility check has not run. | `outbox-stuck` |
+| Mac reboot | A reboot may need a person to unlock or sign in. | Whether it recovers without a person; the H07 compatibility check has not run. | `outbox-stuck` |
+| macOS update | The Mac must stay powered and connected. | Whether the bridge survives an update; the H07 compatibility check has not run. | `outbox-stuck` |
+
 ## Restore
 
 First pick the backup: `python3 hass/statebackup.py list --out BACKUPS` (read-only) names every `hass-state-*` entry, newest first; use one with `complete: true` (`no manifest (interrupted)` is an unfinished backup).
