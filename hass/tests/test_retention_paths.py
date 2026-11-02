@@ -108,7 +108,3 @@ class RetentionPathsTest(unittest.TestCase):
             self.assertEqual((code, out), (2, ""), days)
             self.assertIn("--days must be a whole number", err)
             self.assertNotIn("unsafe", err)
-
-
-if __name__ == "__main__":
-    unittest.main()
