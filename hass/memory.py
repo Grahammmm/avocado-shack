@@ -170,9 +170,16 @@ class Memory:
         return [{name: row[name] for name in COLUMNS} for row in rows]
 
 
+class UnsafeFile(Exception):
+    """conversation.sqlite3 is a symlink (dangling too) or not a regular file: history reads nothing from it."""
+
+
 def history(state_dir, key=None, values=False) -> dict:
     path, rows, out = Path(state_dir) / "conversation.sqlite3", [], []
-    if path.exists():  # mode=ro: never created or written here; sqlite3.DatabaseError if unreadable
+    try: mode = os.lstat(path).st_mode  # lstat: a link is never followed to another state's database
+    except FileNotFoundError: mode = None
+    if mode is not None and not stat.S_ISREG(mode): raise UnsafeFile("conversation file is a link or not a regular file")
+    if mode is not None:  # mode=ro: never created or written here; sqlite3.DatabaseError if unreadable
         with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
             if db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone():
                 rows = db.execute(f"SELECT {', '.join(AUDIT)}, {ACTIVE}, source, value FROM memory WHERE ? IS NULL "
@@ -197,6 +204,7 @@ def main(argv=None) -> int:
             if args.key is not None: _check_key(args.key)
             doc, code = history(args.state, args.key, args.values), 0
         except ValueError: doc, code = {"result": "usage", "problem": "invalid key"}, 2
+        except UnsafeFile as exc: doc, code = {"result": "unsafe", "problem": str(exc)}, 2
         except sqlite3.DatabaseError: doc, code = {"result": "unreadable"}, 1
     print(json.dumps(doc, ensure_ascii=False))
     return code

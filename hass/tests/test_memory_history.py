@@ -145,6 +145,49 @@ class HistoryTests(unittest.TestCase):
             self.assertEqual(self.history(*args)[0], 0)
         self.assertEqual((self.db.read_bytes(), self.db.stat().st_mtime_ns, sorted(os.listdir(self.state))), before)
 
+    UNSAFE = {"result": "unsafe", "problem": "conversation file is a link or not a regular file"}
+
+    def other_db(self):
+        """Another state's conversation.sqlite3 holding an active row whose value must never be printed here."""
+        other = self.state.parent / "other"
+        mem = memory.Memory(str(other), Clock())
+        mem.remember("pickup.day", "other-shop-secret-5511", "fact", "operator:n")
+        mem.close()
+        self.state.mkdir(mode=0o700)
+        return other / "conversation.sqlite3"
+
+    def test_symlinked_conversation_file_is_unsafe_and_prints_no_value(self):
+        target = self.other_db()
+        self.db.symlink_to(target)
+        for args in (("--values",), ("--key", "pickup.day", "--values"), ()):
+            with self.subTest(args=args):
+                code, doc, raw = self.history(*args)
+                self.assertEqual((code, doc), (2, self.UNSAFE))
+                for text in ("other-shop-secret-5511", "pickup.day", str(target.parent)): self.assertNotIn(text, raw)
+        run = self.cli("--state", self.state, "--values")
+        self.assertEqual((run.returncode, json.loads(run.stdout), run.stderr), (2, self.UNSAFE, ""))
+        with self.assertRaises(memory.UnsafeFile): memory.history(self.state, None, True)  # no rows returned
+
+    def test_dangling_link_directory_or_fifo_is_unsafe_not_empty(self):
+        self.state.mkdir(mode=0o700)
+        makes = {"dangling link": lambda: self.db.symlink_to(self.state / "gone.sqlite3"), "directory": self.db.mkdir,
+                 "fifo": lambda: os.mkfifo(self.db)}
+        for name, make in makes.items():
+            with self.subTest(kind=name):
+                make()
+                run = self.cli("--state", self.state, "--values")
+                self.assertEqual((run.returncode, json.loads(run.stdout), run.stderr), (2, self.UNSAFE, ""))
+                with self.assertRaises(memory.UnsafeFile): memory.history(self.state)
+                self.db.rmdir() if self.db.is_dir() and not self.db.is_symlink() else self.db.unlink()
+
+    def test_missing_file_and_real_db_still_read(self):
+        target = self.other_db()
+        self.assertEqual(self.history("--values")[:2], (0, {"result": "ok", "rows": [], "keys": 0, "active": 0,
+                                                             "superseded": 0, "forgotten": 0}))
+        run = self.cli("--state", target.parent, "--values")  # the real DB itself still reads as before
+        self.assertEqual((run.returncode, [(r["key"], r["value"]) for r in json.loads(run.stdout)["rows"]]),
+                         (0, [("pickup.day", "other-shop-secret-5511")]))
+
 
 if __name__ == "__main__":
     unittest.main()
