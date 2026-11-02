@@ -38,6 +38,11 @@ def _line_key(line):
     return " ".join(unicodedata.normalize("NFKC", line).translate(_DASHES).split()).casefold()
 
 
+def _spaced(text):
+    """Already-check key: spacing only; case and characters kept (the page renders runs of spaces as one)."""
+    return " ".join(text.split())
+
+
 def _touch(before, store):
     return [Touched("store", "store", before, copy.deepcopy(store))]
 
@@ -57,8 +62,8 @@ def _set_hours(content, args, ctx):
         j = first_seen.setdefault(_line_key(line), i)
         if j != i:
             return Refused(f"hours lines {j + 1} and {i + 1} say the same thing")
-    if hours == content.store["hours"]:
-        return Refused("store hours are already " + " / ".join(hours))
+    if [_spaced(h) for h in hours] == [_spaced(h) for h in content.store["hours"]]:
+        return Refused("store hours are already " + " / ".join(content.store["hours"]))
     before = copy.deepcopy(content.store)
     content.store["hours"] = hours
     return _touch(before, content.store)
@@ -75,7 +80,7 @@ def _set_address(content, args, ctx):
         if not any(c.isalpha() for c in value):
             return Refused(f"{field} needs at least one letter")
     store = content.store
-    if all(store[f] == v for f, v in given.items()):
+    if all(_spaced(store[f]) == _spaced(v) for f, v in given.items()):
         return Refused(f"store address is already {store['streetAddress']}, {store['town']}")
     before = copy.deepcopy(store)
     store.update(given)
@@ -88,7 +93,7 @@ def _set_intro(content, args, ctx):
         return Refused(f"the intro is longer than {MAX_INTRO} characters")
     if sum(c.isalpha() for c in text) < 3:
         return Refused("the intro needs at least 3 letters")
-    if text == content.store.get("intro", DEFAULT_INTRO):
+    if _spaced(text) == _spaced(content.store.get("intro", DEFAULT_INTRO)):
         return Refused("the intro already says that")
     before = copy.deepcopy(content.store)
     content.store["intro"] = text
