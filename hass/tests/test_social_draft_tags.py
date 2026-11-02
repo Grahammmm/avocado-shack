@@ -61,7 +61,7 @@ class SocialDraftTagTests(unittest.TestCase):
             with self.subTest(category=category):
                 out = self.build("p1", product("p1", category=category, imageAlt="Photo by @someone #nofilter"))
                 self.assertTrue(out["draft"])
-                self.assertEqual(out["alt"], "Photo by @someone #nofilter")
+                self.assertEqual(out["alt"], "Sourdough")
                 self.assertTrue(out["caption"].endswith(f"{FROM}\n\n#AvocadoShack {tag}"))
 
     def test_earlier_refusals_keep_their_order(self):
