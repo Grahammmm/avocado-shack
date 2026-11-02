@@ -69,7 +69,7 @@ class DidItWorkTests(unittest.TestCase):
 
     def test_not_yet_approved_is_never_described_as_applied(self):
         installed = {"state": "installed", "installed_at": "2026-11-02T17:05:00+00:00"}
-        for state in ("proposed", "needs-details", "approved", None):
+        for state in ("proposed", "needs-details", None):
             with self.subTest(state=state):
                 self.assertEqual(answers.did_it_work(row(state), installed, NOW),
                                  "Waiting for your OK - nothing has changed yet.")

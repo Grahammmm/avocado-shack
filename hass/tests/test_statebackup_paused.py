@@ -62,7 +62,7 @@ class PausedRestoreTests(BackupTestCase):
         plain = statebackup.restore(str(bare), str(self.tmp / "plain"), str(self.drill_wt))
         self.assertEqual((plain["result"], (self.tmp / "plain" / statebackup.DB).exists()), ("ok", False))
         got = statebackup.restore(str(backup), str(self.tmp / "default"), str(self.drill_wt))
-        self.assertEqual(set(got), {"result", "state", "worktree", "files"})  # no paused key without the flag
+        self.assertEqual(set(got), {"result", "state", "worktree", "files", "contentCommit"})  # no paused key without the flag
         self.assertEqual((self.tmp / "default" / statebackup.DB).read_bytes(), (backup / statebackup.DB).read_bytes())
         got = statebackup.restore(str(bare), str(new := self.tmp / "restored"), str(self.drill_wt), paused=True, now=FIXED)
         self.assertEqual((got["paused"], (new / statebackup.DB).stat().st_mode & 0o777), (True, 0o600))

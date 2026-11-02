@@ -6,6 +6,7 @@ One JSON line: per data class, the count strictly older than now - N days and th
 by inbox/messages received_at, outbox/drafts created_at (closed draft: no further transition), screenshot mtime, the
 photo sidecar received_at (none usable: undated, never guessed), the backup name's stamp (other names ignored),
 approvals approved_at and closed memory rows by forgotten_at, else superseded_at (active memory is not counted).
+webOrphans: web copies whose original is gone (counted, never dated).
 Zone-less or malformed times, and backup stamps that are no real calendar time, count nowhere. No ids, text or file
 names print. SQLite opens mode=ro; nothing is created or written; the owner picks the period (owner action 4). Exit 1:
 a store is missing or unreadable (its keys say "unavailable"); exit 2, before anything opens: bad usage (incl. a
@@ -85,6 +86,12 @@ def _media(root: Path, cutoff) -> dict:
     web = sum(1 for e in _files(root / "web") if (w := dated.get(os.path.splitext(e.name)[0])) and w < cutoff)
     return {"originals": out["originals"], "bytes": size, "web": web, "oldest": out["oldest"], "undated": undated}
 
+def _web_orphans(root: Path) -> int:
+    """Web copies whose stem names no original image (a sidecar alone is none); _files rule, no link followed."""
+    names = (os.path.splitext(e.name) for e in _files(root / "originals"))
+    stems = {stem for stem, ext in names if ext[1:] in EXT.values()}
+    return sum(1 for e in _files(root / "web") if os.path.splitext(e.name)[0] not in stems)
+
 def _backups(folder: Path, cutoff) -> dict:
     """hass-state-<stamp> entries: complete with a regular MANIFEST.json (statebackup writes it last), else not."""
     items = []
@@ -136,6 +143,8 @@ def report(state, days: int, media=None, backups=None, now=None) -> dict:
                               ("backups", bdir, _backups)):
         try: doc[key] = None if folder is None else scan(folder, cutoff)
         except OSError: doc[key] = UNAVAILABLE
+    try: doc["webOrphans"] = None if mroot is None else _web_orphans(mroot)
+    except OSError: doc["webOrphans"] = UNAVAILABLE
     doc["deletes"] = 0
     return doc
 

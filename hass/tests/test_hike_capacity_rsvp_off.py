@@ -68,7 +68,7 @@ class CapacityRsvpOffTests(HikeTestCase):
     def test_turning_on_reuses_the_stored_capacity_with_a_warning(self):
         for args in ({"rsvpEnabled": True}, {"rsvpEnabled": True, "noCapacityLimit": False}):
             with self.subTest(args=args):
-                repo = self.hike_repo(OFF)
+                repo = self.hike_repo(OFF, rows=[])
                 self.assertEqual(self.warnings(repo, ("hike.update", {"id": HIKE_ID, **args})), [STORED])
                 self.assertEqual((repo.event()["rsvpEnabled"], repo.event()["capacity"]), (True, 5))
 

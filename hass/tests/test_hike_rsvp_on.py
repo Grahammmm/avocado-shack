@@ -61,6 +61,7 @@ class TurnRsvpOnTests(HikeTestCase):
 
     def test_turning_on_keeps_an_existing_capacity(self):
         repo = self.off_repo(capacity=10)
+        repo.make_db([])
         repo.run(("hike.update", {"id": HIKE_ID, "rsvpEnabled": True}))
         event = repo.event()
         self.assertEqual((event["rsvpEnabled"], event["capacity"]), (True, 10))

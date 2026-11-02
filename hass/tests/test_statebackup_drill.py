@@ -12,7 +12,7 @@ from hass.tests.test_conversation import T0
 from hass.tests.test_statebackup import PRIVATE, SCRIPT, BackupTestCase, tree, without_tmp
 
 FIXED, SENTINEL = T0 + timedelta(minutes=3), "SENTINEL-drill-owner-text"
-KEYS = {"result", "state", "worktree", "files", "paused", "health_problems", "health_info", "history"}
+KEYS = {"result", "state", "worktree", "files", "paused", "health_problems", "health_info", "history", "contentCommit"}
 # A mocked health detail the drill line must never carry. The NUL byte makes it impossible in any filesystem path (POSIX
 # paths are NUL-terminated C strings), so the temp dirs the line rightly names can never contain it by accident.
 DETAIL = "SECRET-DETAIL\0SENTINEL"
