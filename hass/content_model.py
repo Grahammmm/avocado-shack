@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -161,6 +162,37 @@ def _https(problems, where, value):
     if not isinstance(value, str) or not value.startswith("https://") or any(c.isspace() for c in value) \
             or any(c in value for c in "<>\"'"):
         problems.append(f"{where}: must be an https:// URL without spaces or quotes")
+    elif reason := _not_public(value):
+        problems.append(f"{where}: must be a public https:// web address ({reason})")
+
+
+HOST_RE = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*")  # plain ASCII labels; IDNs must be written as xn--
+NUMBER_LABEL_RE = re.compile(r"[0-9]+|0x[0-9a-f]*")  # a browser reads a host ending in one of these as IPv4
+
+
+def _not_public(value):  # reason an https:// string is not a public web address, else None; never echoes it
+    if "\\" in value:  # a browser reads \ as / (so the host ends there); urlsplit keeps it inside the hostname
+        return "backslash"
+    try:
+        parts = urlsplit(value)
+    except ValueError:  # bad [IPv6] brackets
+        return "no host"
+    host = (parts.hostname or "").rstrip(".")
+    try:
+        port = parts.port
+    except ValueError:  # outside 0-65535
+        port = 0
+    for reason, bad in (("too long", len(value) > 500), ("no host", not host),
+                        ("user or password", parts.username is not None or parts.password is not None),
+                        ("port", port is not None),
+                        ("IP address", ":" in host or NUMBER_LABEL_RE.fullmatch(host.rsplit(".", 1)[-1])),
+                        # ^ incl. 127.1, 2130706433, 127.0.0.0x1
+                        ("host characters", not HOST_RE.fullmatch(host)),  # %2e, 。, _ etc. a browser may rewrite
+                        ("private name", host == "localhost" or host.endswith(
+                            (".localhost", ".local", ".internal", ".invalid", ".test", ".example"))),
+                        ("host has no dot", "." not in host)):
+        if bad:
+            return reason
 
 
 def _closed_keys(problems, where, rec, allowed, required=()):
