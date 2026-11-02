@@ -1,0 +1,8 @@
+{"id": "neg-1", "chat": "chat-fixture-owner", "sender": "stranger@example.invalid", "text": "Make the avocado description shorter", "fromMe": false, "kind": "new", "at": "2026-11-02T09:00:00-08:00"}
+{"id": "neg-2", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "Make the avocado description shorter", "fromMe": false, "kind": "new", "at": "2026-11-02T09:01:00-08:00"}
+{"id": "neg-3", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "no", "fromMe": false, "kind": "new", "at": "2026-11-02T09:02:00-08:00"}
+{"id": "neg-3", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "no", "fromMe": false, "kind": "new", "at": "2026-11-02T09:03:00-08:00"}
+{"id": "neg-4", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "Make the avocado description plainer", "fromMe": false, "kind": "new", "at": "2026-11-02T09:04:00-08:00"}
+{"id": "neg-5", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "yes", "fromMe": false, "kind": "new", "at": "2026-11-02T09:30:00-08:00"}
+{"id": "neg-6", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "Sort out the shop", "fromMe": false, "kind": "new", "at": "2026-11-02T09:31:00-08:00"}
+{"id": "neg-7", "chat": "chat-fixture-owner", "sender": "owner@example.invalid", "text": "status", "fromMe": false, "kind": "new", "at": "2026-11-02T09:32:00-08:00"}
