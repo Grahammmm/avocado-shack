@@ -386,6 +386,10 @@ class Conversation:
         if row["expires_at"]: return datetime.fromisoformat(row["expires_at"])
         return datetime.fromisoformat(row["created_at"]) + timedelta(seconds=self.settings["approvalTtlSeconds"])
 
+    def _proposed_at(self, row) -> datetime:
+        """AVB-03 (H05): when a draft was proposed (insert and fill both set expires_at = proposal + ttl)."""
+        return self._expiry(row) - timedelta(seconds=self.settings["approvalTtlSeconds"])
+
     def _move(self, row, state, **fields):
         current = self._row(row["row_id"])["state"]
         if state not in TRANSITIONS.get(current, ()) or \
@@ -535,6 +539,10 @@ class Conversation:
                         f"Send resume changes, then yes {target['code']}.")
             self._record(msg, "paused")
             return "paused", None
+        if cutoff != now and cutoff < self._proposed_at(target):  # AVB-03 (H05): a yes sent before the draft existed
+            self._reply(f"That yes was sent before {target['code']} was proposed; reply yes {target['code']} to apply it.")
+            self._record(msg, "no-target")
+            return "no-target", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
             self._reply(f"{target['code']} repeats a draft that was closed; reply yes {target['code']} to apply it.")
             self._record(msg, "no-target")
