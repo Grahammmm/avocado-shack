@@ -2,7 +2,7 @@
 
     python3 hass/health.py --state DIR [--backups DIR] [--seen FILE] [--outbox-minutes 15] [--backup-hours 26]
                            [--inbox-minutes 15] [--paused-hours 24] [--writer] [--model URL [--model-name NAME]]
-                           [--media DIR] [--min-free-mb MB]
+                           [--media DIR] [--min-free-mb MB]   (minutes/hours windows: each 1 to 100 years)
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
@@ -36,6 +36,7 @@ from hass.editor import UnsafeState  # noqa: E402
 from hass.media import verify_store  # noqa: E402
 
 DB, MANIFEST, APPLY_MINUTES, STAMP = "conversation.sqlite3", "MANIFEST.json", 10, "hass-state-%Y%m%dT%H%M%SZ"
+MAX_WINDOW_HOURS = 100 * 365 * 24  # 100 years, as retention.MAX_DAYS; larger windows overflow datetime (RF0050-2)
 PAUSED_SQL = "SELECT set_at FROM control WHERE name = 'paused'"  # paused <=> this row (conversation.py H17)
 UNVERIFIED_SQL = ("SELECT checked_at FROM drafts WHERE checked_at IS NOT NULL AND (state = 'applied' AND reason LIKE"
                   " 'not verified: %' OR state = 'reverted' AND screenshot IS NULL)")  # failed check (_verify_pending);
@@ -295,6 +296,8 @@ def main(argv=None, now=None, transport=None) -> int:
     hours = (args.backup_hours, args.inbox_unreadable_hours, args.unverified_hours, args.paused_hours)
     if min(args.outbox_minutes, args.inbox_minutes, *hours) < 1:
         parser.error("minutes and hours must be >= 1")
+    if max(args.outbox_minutes, args.inbox_minutes) > MAX_WINDOW_HOURS * 60 or max(hours) > MAX_WINDOW_HOURS:
+        parser.error(f"minutes must be at most {MAX_WINDOW_HOURS * 60} and hours at most {MAX_WINDOW_HOURS} (100 years)")
     if args.model_name is not None and not (args.model and args.model_name): parser.error("--model-name needs --model")
     try:
         model = None if args.model is None else interpreter_local.check_url(args.model)
