@@ -10,7 +10,8 @@ no wiring into the bridge. Refusals carry a fixed short owner reply with no path
 
 web_copy(root, sha256) (H10 part 2) writes root/web/<sha[:2]>/<sha>.<ext>: the stored original with every metadata
 block that can carry location, device or time removed by JPEG segment / PNG chunk filtering (pixels byte-identical,
-no image library). A photo that would show sideways without its EXIF Orientation is refused, never rotated.
+no image library). Pixels are never rotated or re-encoded: a JPEG whose EXIF Orientation is 2-8 keeps that one value in a
+fresh EXIF segment holding nothing else (ORIENT_APP1); a PNG with an eXIf rotation tag is refused.
 """
 import argparse, hashlib, json, os, re, stat, sys, tempfile, zlib  # noqa: E401
 from datetime import datetime
@@ -155,19 +156,25 @@ def check_photo(data: bytes) -> str:
     (_jpeg_copy if kind == "jpeg" else _png_copy)(data)  # the web-copy filter; its result is discarded
     return kind
 
-def _check_orientation(tiff: bytes) -> None:
-    """EXIF IFD0 Orientation (0x0112): absent or 1 passes; 2-8 -> needs-rotation; malformed EXIF -> unreadable."""
+def ORIENT_APP1(value: int) -> bytes:  # noqa: N802 - the built segment named in the spec
+    """The only EXIF a web copy may carry: little-endian TIFF, one IFD0 entry (Orientation SHORT = value), no next IFD."""
+    return b"\xff\xe1\x00\x22Exif\0\0II*\0\x08\0\0\0\x01\0\x12\x01\x03\0\x01\0\0\0" + value.to_bytes(2, "little") + bytes(6)
+
+def _check_orientation(tiff: bytes) -> int:
+    """EXIF IFD0 Orientation (0x0112) value 1-8 (1 when absent); malformed EXIF or two differing values -> unreadable."""
     order = {b"II*\0": "little", b"MM\0*": "big"}.get(bytes(tiff[:4]))
     if order is None: raise Refused("unreadable")
     def num(at, size):
         if at + size > len(tiff): raise Refused("unreadable")
         return int.from_bytes(tiff[at:at + size], order)
-    ifd = num(4, 4)
+    ifd, found = num(4, 4), set()
     for entry in range(ifd + 2, ifd + 2 + 12 * num(ifd, 2), 12):
         if num(entry, 2) != 0x0112: continue
         value = num(entry + 8, 2)  # a SHORT sits left-justified in the 4-byte value field for both byte orders
         if num(entry + 2, 2) != 3 or num(entry + 4, 4) != 1 or not 1 <= value <= 8: raise Refused("unreadable")
-        if value != 1: raise Refused("needs-rotation")
+        found.add(value)
+    if len(found) > 1: raise Refused("unreadable")
+    return found.pop() if found else 1
 
 def _jpeg_kept(marker: int, seg: bytes) -> bool:
     return marker in JPEG_KEEP or (marker in JPEG_TAGGED and seg[4:].startswith(JPEG_TAGGED[marker]))
@@ -220,11 +227,13 @@ def _jpeg_check_tail(tail: bytes) -> None:
 def _jpeg_copy(data: bytes):
     segs, tail = _jpeg_split(data)
     _jpeg_check_tail(tail)
-    for marker, seg in segs:
-        if marker == 0xE1 and seg[4:].startswith(b"Exif\0\0"): _check_orientation(seg[10:])
-    out = b"\xff\xd8" + b"".join(seg for marker, seg in segs if _jpeg_kept(marker, seg)) + tail
+    found = {_check_orientation(seg[10:]) for marker, seg in segs if marker == 0xE1 and seg[4:].startswith(b"Exif\0\0")}
+    if len(found) > 1: raise Refused("unreadable")  # two EXIF blocks that disagree on the rotation
+    turn = ORIENT_APP1(next(iter(found))) if found - {1} else b""
+    out = b"\xff\xd8" + turn + b"".join(seg for marker, seg in segs if _jpeg_kept(marker, seg)) + tail
     again, again_tail = _jpeg_split(out)  # invariant self-check before anything is written
-    if again_tail != tail or not all(_jpeg_kept(marker, seg) for marker, seg in again): raise Refused("unreadable")
+    if turn and again[:1] != [(0xE1, turn)]: raise Refused("unreadable")  # the built segment, exactly, at index 0
+    if again_tail != tail or not all(_jpeg_kept(marker, seg) for marker, seg in again[bool(turn):]): raise Refused("unreadable")
     return out, {_jpeg_name(marker) for marker, seg in segs if not _jpeg_kept(marker, seg)}
 
 def _png_chunks(data: bytes):
@@ -246,7 +255,7 @@ def _png_idat(chunks) -> bytes:
 def _png_copy(data: bytes):
     chunks = _png_chunks(data)
     for kind, chunk in chunks:
-        if kind == b"eXIf": _check_orientation(chunk[8:-4])
+        if kind == b"eXIf" and _check_orientation(chunk[8:-4]) != 1: raise Refused("needs-rotation")
     out = KINDS["png"] + b"".join(chunk for kind, chunk in chunks if kind in PNG_KEEP)
     again = _png_chunks(out)  # invariant self-check before anything is written
     if any(kind not in PNG_KEEP for kind, _ in again) or _png_idat(again) != _png_idat(chunks): raise Refused("unreadable")

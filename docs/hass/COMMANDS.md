@@ -33,8 +33,9 @@ The two note commands are stricter:
 
 Saved notes never change the site, and pause does not affect them.
 
-Photos: send one photo per message, as JPEG or PNG, up to 20 MB, the right way up (a photo that only shows upright
-because of a camera rotation tag is refused). Any other file, or a photo that is too large, incomplete or unreadable,
+Photos: send one photo per message, as JPEG or PNG, up to 20 MB. A phone photo's rotation is kept, so it shows upright
+(only that rotation tag is kept, never its location, camera or date); only a PNG with a rotation tag is refused. Any
+other file, or a photo that is too large, incomplete or unreadable,
 gets a reply naming the limit, and nothing is saved or drafted.
 
 Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are

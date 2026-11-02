@@ -93,12 +93,13 @@ class WebCopyTest(unittest.TestCase):
         self.assertEqual(Path(rec["path"]).read_bytes(), b"\xff\xd8" + APP0 + TABLES + tail)
         self.assertEqual(rec["removed"], [])
 
-    def test_orientation_needs_rotation_or_proceeds(self):
+    def test_orientation_is_kept_for_jpeg_and_refused_for_png(self):
+        err = self.refused(png(chunk(b"eXIf", tiff("MM", 8))), "needs-rotation")
+        self.assertIn("sideways", err.reply)
         for order in ("II", "MM"):
             with self.subTest(order=order):
-                err = self.refused(jpeg(exif(order, 6)), "needs-rotation")
-                self.assertIn("sideways", err.reply)
-        self.refused(png(chunk(b"eXIf", tiff("MM", 8))), "needs-rotation")
+                out = Path(self.copy(jpeg(exif(order, 6)))["path"]).read_bytes()
+                self.assertEqual(out, b"\xff\xd8" + media.ORIENT_APP1(6) + APP0 + TABLES + SCAN)
         for data in (jpeg(exif("MM", None)), jpeg(exif("II", None)), jpeg(exif("MM", 1)), png(chunk(b"eXIf", tiff("II", 1)))):
             with self.subTest(head=data[:40]):
                 self.assertNotIn(b"GPS", Path(self.copy(data)["path"]).read_bytes())

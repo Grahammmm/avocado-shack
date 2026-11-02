@@ -15,7 +15,7 @@ from hass.content_model import REPO_ROOT, SITE_DIR
 from hass.ops import Arg, Op, Touched
 from hass.tests.test_catalog_ops import CatalogRepo, _req
 from hass.tests.test_editor import git
-from hass.tests.test_media_web import exif, jpeg
+from hass.tests.test_media_web import chunk, png, tiff
 
 FIXTURES = Path(__file__).parent / "fixtures" / "media"
 PID, OTHER, ALT = "photo-product-001", "photo-product-002", "Ripe avocados in a wooden crate"
@@ -120,9 +120,9 @@ class SetPhotoTests(SetPhotoTestCase):
         self.assertFalse(inside.exists())
 
     def test_sideways_photo_is_refused(self):
-        sideways = self.repo.store(jpeg(exif("II", 6)))
+        sideways = self.repo.store(png(chunk(b"eXIf", tiff("MM", 8))))
         self.assertEqual(self.rejected("refused", _photo(PID, sideways))["reason"], media.REPLIES["needs-rotation"])
-        self.assertFalse((self.repo.wt / self.target(sideways)).exists())
+        self.assertFalse((self.repo.wt / self.target(sideways, "png")).exists())
 
     def test_same_photo_reuses_the_file_and_a_different_file_is_refused(self):
         self.repo.run(_photo(PID, self.jpg))
