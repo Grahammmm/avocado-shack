@@ -11,7 +11,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 ## Waiting changes
 
 - A proposal or a question waits for your reply only for the time the operator has set. After that it expires and nothing
-  happens; send the change again.
+  happens; send the change again. The expiry is judged at the time you sent your reply, so a `yes` sent in time still
+  counts if the shop computer handles it later.
 - One message can change at most **20** <!-- editor.MAX_OPS --> things. Split bigger jobs into several messages.
 
 ## Lists
