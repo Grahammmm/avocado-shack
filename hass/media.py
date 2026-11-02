@@ -291,6 +291,14 @@ def _verify_unsafe(root):  # checked before anything is opened, so a missing roo
     if repo in (p := Path(path).resolve(), *p.parents): return "media root must lie outside the repository", None
     return None, path
 
+def _valid_time(meta: dict) -> bool:
+    """True when the sidecar has no received_at (older stores) or a zoned one; retention dates photos by it."""
+    try: return "received_at" not in meta or bool(_aware(meta["received_at"]))
+    except ValueError: return False
+
+def _valid_source(meta: dict) -> bool:
+    return "source" not in meta or (isinstance(meta["source"], str) and SOURCE_RE.fullmatch(meta["source"]) is not None)
+
 def verify_store(root) -> dict:
     """Read-only re-hash of the store with sidecar, mode, temp and web-copy checks; a sha is shown as 12 hex only."""
     bad, root = _verify_unsafe(root)
@@ -330,7 +338,8 @@ def verify_store(root) -> dict:
                 try: meta = json.loads(raw)
                 except ValueError: meta = None
                 want = {"sha256": sha, "kind": "jpeg" if ext == "jpg" else "png", "bytes": len(data)}
-                if not (isinstance(meta, dict) and want.items() <= meta.items()): problems.add(f"sidecar invalid: {sha[:12]}")
+                if not (isinstance(meta, dict) and want.items() <= meta.items() and type(meta["bytes"]) is int  # 1234.0 == 1234
+                        and _valid_time(meta) and _valid_source(meta)): problems.add(f"sidecar invalid: {sha[:12]}")
     for sha, files in found["web"].items():
         have = set(found["originals"].get(sha, {})) - {"json"}
         problems.update(f"web {'kind' if have else 'orphan'}: {sha[:12]}" for ext in files if ext not in have)
