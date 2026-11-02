@@ -5,8 +5,8 @@ metadata-free web copy (``media.web_copy``), points the product's ``image`` at
 ``assets/products/photo-<sha[:16]>.<ext>`` and sets ``imageAlt``; the editor writes that file and commits it with the
 content change. Undo restores the old image; the committed photo file stays, unreferenced. No resizing, conversion or
 deletion of old photo files. ``imageAlt`` must say what the photo shows: a file name, camera default name, placeholder
-word, the photo id, fewer than 3 letters, a screenshot or messaging-app default name, or a web link is refused before the
-media store is read.
+word, a placeholder word with only an article or number, the photo id, fewer than 3 letters, a screenshot or
+messaging-app default name, or a web link is refused before the media store is read.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ _APP_DEFAULT_RE = re.compile(r"^(screenshot|screen shot|screen recording|whatsap
 _BARE_SCREEN_RE = re.compile(r"^(screenshot|screen shot)( ?\(\d{1,3}\))?$")
 _PLACEHOLDERS = {"photo", "image", "picture", "pic", "img", "product", "product photo", "alt", "n/a", "na", "none", "todo",
                  "tbd"}
+_PLACEHOLDER_RE = re.compile(r"^(?:(?:a|an|the|my|our|this)\s+)?(?:product\s+)?(?:photo|image|picture|pic|img|product)(?:\s*(?:#|no\.?)?\s*\d{1,3})?[\s.!]*$")  # noqa: E501
 ALT_REPLY = ("imageAlt should say what the photo shows (for example \"Hass avocados in a wooden crate\"), "
              "not a file name or placeholder")
 
@@ -35,7 +36,7 @@ def _alt_problem(alt, sha):
     if (folded.endswith(_IMAGE_EXT) or _CAMERA_RE.match(folded) or folded in _PLACEHOLDERS
             or sha[:12].casefold() in folded or sum(c.isalpha() for c in folded) < 3
             or _APP_DEFAULT_RE.match(folded) or _BARE_SCREEN_RE.match(folded)
-            or "://" in folded or folded.startswith("www.")):
+            or "://" in folded or folded.startswith("www.") or _PLACEHOLDER_RE.match(folded)):
         return ALT_REPLY
     return None
 
