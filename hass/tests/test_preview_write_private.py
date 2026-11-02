@@ -107,7 +107,3 @@ class CaptureRefusesLinkTests(EditorTestCase):
         self.assertTrue(self.out.is_symlink())
         self.assertFalse(self.desktop_png.exists())
         self.assertEqual([c["viewport"] for c in calls], ["phone", "desktop"])
-
-
-if __name__ == "__main__":
-    unittest.main()
