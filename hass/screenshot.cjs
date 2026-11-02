@@ -5,6 +5,7 @@
 // allowed; every other request (any POST, anything off 127.0.0.1) is aborted. Prints {"checks": {...}}.
 // Maker: its place search, then all cards if none names it; card text compared (never a selector built from the name).
 // hidden → makerHidden (no card names it); else makerName + makerPlace; a maker with no active card adds no maker check.
+// Hike: scheduled → eventShown; completed → pastShown (+ recapShown if a recap); cancelled → rsvpGone (no RSVP button).
 'use strict';
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
 if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
@@ -26,6 +27,14 @@ const allowed=req=>{
     if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
       if(target.status==='scheduled')checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
+      else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
+        const recaps=await page.locator('#past-hikes .past-hike').evaluateAll((els,title)=>els.filter(d=>
+          d.querySelector('summary span')?.textContent===title).map(d=>d.querySelector(':scope>p')?.textContent),target.title);
+        checks.pastShown=recaps.length>0;
+        if(target.recap)checks.recapShown=recaps[0]===target.recap;
+      }else if(target.status==='cancelled'){  // the id is compared in page JS, never put into a selector
+        checks.rsvpGone=await page.$$eval('[data-rsvp]',(els,id)=>els.filter(b=>b.dataset.rsvp===id).length,target.id||'')===0;
+      }
     }else{
       await page.goto(base+'/',{waitUntil:'networkidle'});
       if(target.kind==='product'||target.kind==='maker'){

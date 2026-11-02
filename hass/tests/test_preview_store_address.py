@@ -43,8 +43,9 @@ class TargetTests(StoreTestCase):
             ({"collection": "makers", "key": "m-1", "after": {"name": "Farm", "town": "Cayucos"}},
              {"kind": "maker", "key": "m-1", "name": "Farm", "place": "", "hidden": False}),
             ({"collection": "events", "after": {"title": "Hike", "status": "scheduled", "town": "Cayucos"}},
-             {"kind": "event", "title": "Hike", "status": "scheduled"}),
-            ({"collection": "community", "after": {"title": "Club"}}, {"kind": "event", "title": "Club", "status": None}),
+             {"kind": "event", "title": "Hike", "status": "scheduled", "id": "", "recap": ""}),
+            ({"collection": "community", "after": {"title": "Club"}},
+             {"kind": "event", "title": "Club", "status": None, "id": "", "recap": ""}),
         ]
         for record, expected in cases:
             with self.subTest(collection=record["collection"]):
