@@ -9,8 +9,8 @@ settled state dir (config.json, drafts, changes, screenshots and consistent sqli
 conversation.sqlite3; never writer.lock, a journal, a symlink or an unknown entry) into a new private
 <out>/hass-state-<UTC stamp>/ (out: an existing 0700 user dir; built aside, renamed in) and writes MANIFEST.json last.
 verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
-stores; listed photo originals and sidecars must pair one-to-one and match media.originals. restore verifies first,
-then builds a NEW state dir bound
+stores, and that config.json is an object naming a worktree; listed photo originals and sidecars must pair one-to-one
+and match media.originals. restore verifies first, then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
 repository, the worktrees and the state dir. No network, no Git writes, no deletes of source data. One JSON line out;
@@ -186,6 +186,11 @@ def _intact(path: Path) -> bool:
     except sqlite3.DatabaseError:
         return False
 
+def _config_ok(path: Path) -> bool:  # restore merges it as a dict and rewrites its worktree; never raises
+    try: cfg = json.loads(_read(path).decode("utf-8"))
+    except (OSError, ValueError, RecursionError): return False
+    return isinstance(cfg, dict) and isinstance(cfg.get("worktree"), str) and cfg["worktree"] != ""
+
 def verify(backup) -> dict:
     bdir = Path(backup).absolute()
     if bdir.is_symlink() or not bdir.is_dir(): return {"result": "corrupt", "problems": ["not a backup dir"]}
@@ -211,6 +216,7 @@ def verify(backup) -> dict:
         if rel not in seen: problems.append(f"missing: {rel}")
         elif hashlib.sha256(_read(bdir / rel)).hexdigest() != digest: problems.append(f"hash mismatch: {rel}")
         elif rel in (DB, INBOX) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
+        elif rel == CONFIG and not _config_ok(bdir / rel): problems.append("config: not a JSON object with a worktree")
         elif rel.startswith(ORIG) and not rel.endswith(".json"):  # the content address and the sidecar both hold
             sha, side = rel[19:83], rel[:84] + "json"  # media/originals/<aa>/<sha>.<ext>
             if hashlib.sha256(_read(bdir / rel)).hexdigest() != sha: problems.append(f"content mismatch: {rel}")
