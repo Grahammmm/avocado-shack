@@ -132,10 +132,10 @@ def _local_day(event):
         return None
 
 
-def _hike_twin(content, day, title):
-    """The first scheduled event with an equal title on the same local (Pacific) date, else None."""
+def _hike_twin(content, day, title, skip=None):
+    """The first scheduled event, other than id skip, with an equal title on the same local (Pacific) date."""
     return next((e for e in _events(content) if e.get("status") == "scheduled" and _local_day(e) == day
-                 and _same(e.get("title", ""), title)), None)
+                 and e.get("id") != skip and _same(e.get("title", ""), title)), None)
 
 
 def _touch(before, event):
@@ -217,6 +217,11 @@ def _hike_update(content, args, ctx):
         if not isinstance(starts, str):
             return starts
         changes["startsAt"] = starts
+    if "title" in given or "date" in given:  # a time-only change cannot move the local day
+        day = given.get("date") or _local_parts(event["startsAt"])[0]
+        twin = _hike_twin(content, day, given.get("title", event.get("title", "")), skip=event["id"])
+        if twin is not None:
+            return Refused(f"{twin['id']} is already scheduled with this title on {day}")
     if "capacity" in given:
         seats = _seats(ctx, event["id"])
         if isinstance(seats, Refused):
