@@ -307,6 +307,13 @@ def _reason(out: dict) -> str:
     return out.get("reason") or "; ".join(out.get("problems") or []) or out.get("question") or str(out.get("result"))
 
 
+def _is_undo(row) -> bool:
+    """AV0022-07 (H06): the draft's ops are a non-empty list of only history.revert calls; unparsable is not an undo."""
+    try: ops = json.loads(row["ops_json"])
+    except (TypeError, ValueError, RecursionError): return False
+    return isinstance(ops, list) and bool(ops) and all(isinstance(c, dict) and c.get("op") == "history.revert" for c in ops)
+
+
 def _value(v) -> str:
     text = "(none)" if v is None else v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, sort_keys=True)
     return text if len(text) <= VALUE_CUT else text[:VALUE_CUT - 3] + "..."
@@ -809,8 +816,8 @@ class Conversation:
                 f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
                 for r in rows]) if rows else "No approved changes yet.")
             return "history"
-        done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")
-                if code is None and r["state"] in ("applied", "verified") or r["code"] == code]
+        done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")  # AV0022-07: skip undos
+                if code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code]
         if not done:
             self._reply(f"Nothing to undo for {code}." if code else "Nothing to undo.")
             return "no-target"

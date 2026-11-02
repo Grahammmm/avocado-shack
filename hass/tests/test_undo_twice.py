@@ -113,9 +113,8 @@ class ConversationUndoTwiceTests(H06TestCase):
         self.sent()
         u = self.drafts()[-1]
         rows, commits = len(self.drafts()), self.commits()
-        self.assertEqual(self.say("undo"), "not-drafted")
-        self.assertEqual(self.replies(),
-                         [f"Not undone: {u['change_id']} is an undo; to bring the change back, ask for it again"])
+        self.assertEqual(self.say("undo"), "no-target")
+        self.assertEqual(self.replies(), ["Nothing to undo."])
         self.assertEqual((len(self.drafts()), self.commits()), (rows, commits))
         self.assertEqual([d["state"] for d in self.drafts()], ["reverted", "verified"])
         self.assertEqual(editor.show(a["change_id"], state=str(self.repo.state))["change"]["revertedBy"],
