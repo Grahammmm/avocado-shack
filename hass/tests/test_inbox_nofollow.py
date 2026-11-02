@@ -73,11 +73,11 @@ class InboxNoFollowTests(unittest.TestCase):
 
     def test_fixture_chat_queue_refuses_link_without_queueing_or_sending(self):
         (self.state / "config.json").write_text(json.dumps({"settings": {
-            "ownerSenders": ["owner"], "ownerChat": "chat", "approvalTtlSeconds": 600}}))
+            "ownerSenders": ["owner@example.invalid"], "ownerChat": "chat", "approvalTtlSeconds": 600}}))
         self.path.symlink_to(target := self.root / "outside.sqlite3")
         mapping, fixture = self.root / "mapping.json", self.root / "fixture.jsonl"
         mapping.write_text("{}")
-        fixture.write_text(json.dumps({"id": "1", "chat": "chat", "sender": "owner", "text": "help", "at": START}) + "\n")
+        fixture.write_text(json.dumps({"id": "1", "chat": "chat", "sender": "owner@example.invalid", "text": "help", "at": START}) + "\n")
         out, err = io.StringIO(), io.StringIO()
         with mock.patch.object(fixture_chat.FixtureAdapter, "send") as send, \
                 contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
