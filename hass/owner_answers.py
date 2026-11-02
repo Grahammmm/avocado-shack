@@ -95,9 +95,17 @@ def stopped_state(paused, queue) -> str:
     """paused: when changes were stopped (ISO time) or None; queue: {"waiting": requests not applied yet (drafts
     waiting for an OK plus messages not read yet), "applying": codes of approvals already under way}."""
     if not paused: return "Changes are on."
-    lines = ["Changes are stopped. Nothing new will be applied until you say 'resume'.", _requests(queue.get("waiting", 0))]
-    for code in queue.get("applying") or ():
+    queue = queue if isinstance(queue, dict) else {}  # RF2320-10: a damaged queue reads as unknown, never crashes
+    waiting, applying = queue.get("waiting"), queue.get("applying")
+    lines = ["Changes are stopped. Nothing new will be applied until you say 'resume'.",
+             _requests(waiting) if type(waiting) is int and waiting >= 0 else "Waiting requests: unknown."]
+    skipped = 0
+    for code in applying if isinstance(applying, (list, tuple)) else ():
+        if not (isinstance(code, str) and len(code) <= 40 and "/" not in code and code.split() == [code]):
+            skipped += 1
+            continue
         lines.append(f"{code} had already started: {UNCHANGED.lower()}, and nothing is copied to it by itself.")
+    if skipped: lines.append(f"{skipped} more change(s) had already started.")
     lines.append("Changes already on the website stay there.")
     return " ".join(lines)
 
@@ -111,7 +119,7 @@ def history_words(change, install) -> str:
     """A short where-is-it phrase for one history line."""
     state = change.get("state")
     if state in SAVED:
-        state = (install or {}).get("state")
+        state = (install if isinstance(install, dict) else {}).get("state")  # same rule as did_it_work
         return "on the website" if state == "installed" else "not on the website yet" if state == "failed" \
             else "not confirmed on the website"
     return {"reverted": "undone", "failed": "not saved; website unchanged", "rejected": "nothing changed",
