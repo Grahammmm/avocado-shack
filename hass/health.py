@@ -38,6 +38,7 @@ from hass.media import verify_store  # noqa: E402
 
 DB, MANIFEST, APPLY_MINUTES, STAMP = "conversation.sqlite3", "MANIFEST.json", 10, "hass-state-%Y%m%dT%H%M%SZ"
 MAX_WINDOW_HOURS = 100 * 365 * 24  # 100 years, as retention.MAX_DAYS; larger windows overflow datetime (RF0050-2)
+SEEN_MAX = 128  # --seen holds a 64-hex fingerprint + newline; a larger record counts as changed (RF1920-9)
 PAUSED_SQL = "SELECT set_at FROM control WHERE name = 'paused'"  # paused <=> this row (conversation.py H17)
 UNVERIFIED_SQL = ("SELECT checked_at FROM drafts WHERE checked_at IS NOT NULL AND (state = 'applied' AND reason LIKE"
                   " 'not verified: %' OR state = 'reverted' AND screenshot IS NULL)")  # failed check (_verify_pending);
@@ -273,8 +274,13 @@ def fingerprint(problems) -> str:
 
 def _remember(seen: Path, digest: str) -> bool:
     """True when digest differs from the stored one, which it then replaces (0600, fresh mkstemp + os.replace)."""
-    with contextlib.suppress(OSError, UnicodeDecodeError):  # a missing or unreadable record counts as a change
-        if seen.read_text("utf-8").strip() == digest: return False
+    with contextlib.suppress(OSError, UnicodeDecodeError):  # missing, unreadable, link, FIFO or oversize: a change
+        fd = os.open(seen, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)  # RF1920-9: one bounded open, never a swap
+        try:
+            raw = os.read(fd, SEEN_MAX + 1) if stat.S_ISREG(os.fstat(fd).st_mode) else b""
+        finally:
+            os.close(fd)
+        if len(raw) <= SEEN_MAX and raw.decode("utf-8").strip() == digest: return False
     fd, tmp = tempfile.mkstemp(prefix=f".{seen.name}.", dir=seen.parent)
     try:
         os.fchmod(fd, 0o600)
