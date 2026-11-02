@@ -26,7 +26,7 @@ class InstallStatusShapeTests(EditorTestCase):
             self.assertEqual(editor.install_status({"state": "applied", "install": bad}), UNREADABLE, repr(bad))
 
     def test_install_state_not_a_string_is_unreadable(self):
-        for bad in (5, [], ["installed"], {"state": "installed"}, True):
+        for bad in (5, [], ["installed"], {"state": "installed"}, True, None):  # an explicit null state too
             out = editor.install_status({"state": "applied", "install": {"state": bad, "reason": "r"}})
             self.assertEqual(out, UNREADABLE, repr(bad))
 
@@ -34,6 +34,10 @@ class InstallStatusShapeTests(EditorTestCase):
         self.assertEqual(editor.install_status({"state": "applied", "install": None}), "committed, not installed")
         self.assertEqual(editor.install_status({"state": "applied"}), "committed, not installed")
         self.assertEqual(editor.install_status({"state": "applied", "install": {}}), "committed, not installed")
+        self.assertEqual(editor.install_status({"state": "applied", "install": {"reason": "r"}}), "committed, not installed")
+
+    def test_explicit_null_install_state_is_unreadable(self):
+        self.assertEqual(editor.install_status({"state": "applied", "install": {"state": None}}), UNREADABLE)
 
     def test_valid_shapes_unchanged(self):
         self.assertEqual(editor.install_status({"state": "applied", "install": {"state": "installed"}}), "installed")
