@@ -5,6 +5,7 @@ An owner `yes` is held (`approval-held`): rolled back unapplied, the draft stays
 NOT HERE: no listener, socket, daemon, network call, key file, environment read or sign-in. The secret is a parameter.
 Outbound is refused: the default reply raises NotConnected; receive() never sends and never applies a change.
 CONNECTING THE REAL CHANNEL is G's job, step by step in docs/hass/CONNECT.md; no agent does any of it.
+Envelope text with a repeated key or a NaN/Infinity constant is rejected unread (shape, before the MAC; nonce untouched).
 """
 import json, sys  # noqa: E401
 from pathlib import Path
@@ -53,6 +54,15 @@ def forward(event, secret, *, nonce, now):
     return json.dumps(bridge.seal(msg, secret, nonce=nonce, now=now), sort_keys=True)
 
 
+def _pairs(pairs):  # object_pairs_hook: a repeated key (at any depth) is not an envelope
+    keys = [k for k, _ in pairs]
+    if len(set(keys)) != len(keys): raise ValueError("repeated key")
+    return dict(pairs)
+
+
+def _no_constant(name): raise ValueError("not JSON")  # parse_constant: NaN, Infinity and -Infinity
+
+
 def _result(result, reason, draft_id=None, disposition=None) -> dict:
     return {"result": result, "draft_id": draft_id, "reason": reason, "disposition": disposition}
 
@@ -94,7 +104,8 @@ class Receiver:
             size = len(raw.encode("utf-8", "surrogatepass")) if isinstance(raw, str) else len(raw)
             if size > MAX_ENVELOPE_BYTES: return _result("rejected", REJECTED["size"])
         try:
-            envelope = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+            envelope = (json.loads(raw, object_pairs_hook=_pairs, parse_constant=_no_constant)
+                        if isinstance(raw, (str, bytes, bytearray)) else raw)
         except (ValueError, UnicodeDecodeError, RecursionError):
             return _result("rejected", REJECTED["shape"])
         try:  # a missing or short secret is a ValueError from bridge: a setup fault, raised, never a message result
