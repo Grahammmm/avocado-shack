@@ -41,7 +41,7 @@ class TargetTests(StoreTestCase):
             ({"collection": "products", "key": "p-1", "after": product},
              {"kind": "product", "id": "p-1", "name": "Avocados", "status": "active", "description": "Ripe."}),
             ({"collection": "makers", "key": "m-1", "after": {"name": "Farm", "town": "Cayucos"}},
-             {"kind": "maker", "name": "Farm"}),
+             {"kind": "maker", "key": "m-1", "name": "Farm", "place": "", "hidden": False}),
             ({"collection": "events", "after": {"title": "Hike", "status": "scheduled", "town": "Cayucos"}},
              {"kind": "event", "title": "Hike", "status": "scheduled"}),
             ({"collection": "community", "after": {"title": "Club"}}, {"kind": "event", "title": "Club", "status": None}),

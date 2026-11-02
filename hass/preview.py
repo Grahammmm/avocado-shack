@@ -24,7 +24,8 @@ def target_for(record: dict) -> dict:
         return {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
                 "status": after.get("status"), "description": after.get("description")}
     if collection == "makers":
-        return {"kind": "maker", "name": after.get("name", "")}
+        return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
+                "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
         return {"kind": "store", "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", "")}
