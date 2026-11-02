@@ -4,6 +4,7 @@ Pure functions over dictionaries the caller has already read (a conversation dra
 `install` entry from SHOP-2, the pause time, waiting counts). No I/O and no clock read other than the `now` argument.
 Never a change hash, draft hash, file path or commit: the owner only sees what changed and where it is now.
 """
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -14,7 +15,16 @@ INSTALL_REASONS = (  # SHOP-2 install failure reasons -> plain words (the file n
     ("write failed", "The website files could not be written"),
     ("readback mismatch", "The website files did not read back as written"),
     ("site path is not a regular file", "Something unexpected is in the website folder"))
-NOT_COPIED = "Copying it to the website has not been done or did not finish"
+PREVIEW_REASONS = (  # preview/result-check diagnostics -> plain words; the raw text (paths, records) stays stored
+    ("generated file out of date", "the website pages were not rebuilt for it"),
+    ("preview server did not start", "the preview could not be started"),
+    ("check failed:", "the preview did not show the change as expected"),
+    ("no change record", "the saved change could not be found"))
+RECORD_RE = re.compile(r"([a-z][a-z0-9_-]{0,40}) ([A-Za-z0-9][A-Za-z0-9._-]{0,80}): (.*)", re.S)  # no path characters
+NOT_COPIED = "Copying it to the website has not been done, or did not finish"
+PARTIAL = ("If copying it was started and stopped part way, some pages may already show it; ask for help to copy it "
+           "to the website again, which puts every page in place")
+NOT_LIVE = "Saved, but not on the website yet: copying it there is a separate step. Ask for help to put it on the website."
 UNCHANGED = "The website is as it was before"
 
 
@@ -50,10 +60,28 @@ def did_it_work(change, install, now) -> str:
             return (f"This did not reach the website, and some website files could not be put back. "
                     f"{_install_reason(install.get('reason'))}. Please ask for help before more changes.")
         return f"This did not reach the website, and the website is unchanged. {_install_reason(install.get('reason'))}."
+    # No install result: never run, or stopped before it could record one (install.py may already have replaced
+    # some files), so the website is unconfirmed, never called intact.
     reason = str(change.get("reason") or "")
-    why = f"The preview check failed ({reason[len('not verified: '):]})" if reason.startswith("not verified: ") \
-        else NOT_COPIED
-    return f"Saved, but not on the website yet. {why}. Nothing is broken; ask for help to put it on the website."
+    why = f"The preview check failed: {preview_reason(reason[len('not verified: '):])}" \
+        if reason.startswith("not verified: ") else NOT_COPIED
+    return f"Saved, but not confirmed on the website. {why}. {PARTIAL}."
+
+
+def preview_reason(error) -> str:
+    """A stored preview/result-check diagnostic in plain words; never the raw text (file paths, exception text).
+    The record the check failed on (AV1737-08: `<collection> <key>: <error>`) stays named, in brackets."""
+    text = str(error or "")
+    found = RECORD_RE.fullmatch(text)
+    rest, which = (found[3], f" ({found[1]} {found[2]})") if found else (text, "")
+    return next((plain for marker, plain in PREVIEW_REASONS if marker in rest), "the preview could not be checked") + which
+
+
+def applied_text(code, summary, checked=False, error=None) -> str:
+    """The reply when an approved change is saved (the apply/approve reply point): applying never copies it to the
+    website, so the reply says so instead of only 'Applied'."""
+    if error is not None: return f"Applied {code}, but the preview check failed: {preview_reason(error)}.\n{NOT_LIVE}"
+    return f"Applied{' and checked' if checked else ''} {code}: {summary}\n{NOT_LIVE}"
 
 
 def _requests(n) -> str:
@@ -80,6 +108,8 @@ def history_words(change, install) -> str:
     """A short where-is-it phrase for one history line."""
     state = change.get("state")
     if state in SAVED:
-        return "on the website" if (install or {}).get("state") == "installed" else "not on the website yet"
+        state = (install or {}).get("state")
+        return "on the website" if state == "installed" else "not on the website yet" if state == "failed" \
+            else "not confirmed on the website"
     return {"reverted": "undone", "failed": "not saved; website unchanged", "rejected": "nothing changed",
             "expired": "nothing changed"}.get(state, "waiting for your OK")

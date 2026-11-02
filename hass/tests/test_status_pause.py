@@ -19,8 +19,9 @@ from hass.tests.test_undo import H06TestCase
 PAUSED = ("Changes are stopped. Nothing new will be applied until you say 'resume'. No requests are waiting. "
           "Changes already on the website stay there.")  # SHOP-4 wording
 PAUSED_ONE = PAUSED.replace("No requests are waiting.", "1 request is waiting.")
-NOT_ON_SITE = "Saved, but not on the website yet. {why}. Nothing is broken; ask for help to put it on the website."
-NOT_COPIED = "Copying it to the website has not been done or did not finish"
+NOT_ON_SITE = ("Saved, but not confirmed on the website. {why}. If copying it was started and stopped part way, some "
+               "pages may already show it; ask for help to copy it to the website again, which puts every page in place.")
+NOT_COPIED = "Copying it to the website has not been done, or did not finish"
 PAST = ('Hike Past hike Sun 2026-11-01 09:00 PST has passed but is still scheduled; '  # AV1537-07: started before T0
         'send "complete Past hike" or "cancel Past hike" in your own words.')
 
@@ -206,7 +207,8 @@ class StatusTests(StoreMixin, H06TestCase):
         applied = self.apply("desc")
         self.assertEqual(applied["state"], "applied")
         self.assertEqual(self.status()[-1], f"Last change: {applied['code']} {applied['summary']} - " + NOT_ON_SITE.format(
-            why="The preview check failed (products photo-product-001: simulated check failure)"))
+            why="The preview check failed: the preview could not be checked (products photo-product-001)"))  # SHOP-4
+        self.assertEqual(self.drafts()[-1]["reason"], "not verified: products photo-product-001: simulated check failure")
         self.assertEqual(self.commits(), 1)
 
     def test_undo_while_paused_is_proposed_but_gated(self):

@@ -202,7 +202,7 @@ class FlowTests(ConversationTestCase):
         self.replies()
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "proposed"])
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours"])
+        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.commits(), self.drafts()[1]["state"]), (1, "applied"))
 
     def test_stale_approval_redrafts_and_never_writes_old_draft(self):
@@ -231,7 +231,7 @@ class DurabilityTests(ConversationTestCase):
             self.conv.flush(self.out)
         self.assertEqual((self.drafts()[0]["state"], len(self.conv.outbox.unsent()), self.commits()), ("applied", 1, 1))
         self.conv = self.open()
-        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {draft['summary']}"])
+        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {draft['summary']}\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.replies(), self.commits(), self.editor.applies), ([], 1, 1))
 
     def test_recover_fails_interrupted_approval_without_reapplying(self):

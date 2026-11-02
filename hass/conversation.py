@@ -659,7 +659,7 @@ class Conversation:
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
-            if self.previewer is None: self._reply(f"Applied {row['code']}: {row['summary']}")
+            if self.previewer is None: self._reply(answers.applied_text(row["code"], row["summary"]))  # SHOP-4
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "stale":
             again = self.editor.prepare(json.loads(row["ops_json"]))
@@ -728,11 +728,11 @@ class Conversation:
             with self._tx():
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
-                    self._reply(f"Applied and checked {row['code']}: {row['summary']}", [png])
-                else:
+                    self._reply(answers.applied_text(row["code"], row["summary"], checked=True), [png])  # SHOP-4
+                else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
-                    self._reply(f"Applied {row['code']}, but the preview check failed: {error}")
+                    self._reply(answers.applied_text(row["code"], row["summary"], error=error))
 
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":

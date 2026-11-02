@@ -21,8 +21,10 @@ NOW = datetime(2026, 11, 2, 17, 30, tzinfo=timezone.utc)  # Mon 09:30 PST
 INTERNAL = re.compile(r"chg-|sha256|[0-9a-f]{7,}|/|worktree|commit|revision|index\.html|PermissionError", re.I)
 STOPPED = "Changes are stopped. Nothing new will be applied until you say 'resume'."
 STAYS = "Changes already on the website stay there."
-NOT_COPIED = ("Saved, but not on the website yet. Copying it to the website has not been done or did not finish. "
-              "Nothing is broken; ask for help to put it on the website.")
+NOT_COPIED = ("Saved, but not confirmed on the website. Copying it to the website has not been done, or did not finish. "
+              "If copying it was started and stopped part way, some pages may already show it; ask for help to copy it "
+              "to the website again, which puts every page in place.")
+NOT_LIVE = "Saved, but not on the website yet: copying it there is a separate step. Ask for help to put it on the website."
 
 
 def row(state, **kw):
@@ -83,14 +85,53 @@ class DidItWorkTests(unittest.TestCase):
                 self.assertEqual(got, f"Done. store store: hours is on the website now (checked {want}).")
 
     def test_preview_failure_is_the_reason_it_is_not_on_the_website(self):
-        got = answers.did_it_work(row("applied", reason="not verified: check failed: productShown"), None, NOW)
-        self.assertEqual(got, "Saved, but not on the website yet. The preview check failed (check failed: productShown)."
-                              " Nothing is broken; ask for help to put it on the website.")
+        got = answers.did_it_work(row("applied", reason="not verified: products avocado-1: check failed: productShown"),
+                                  None, NOW)
+        self.assertEqual(got, "Saved, but not confirmed on the website. The preview check failed: the preview did not "
+                              "show the change as expected (products avocado-1). " + NOT_COPIED.split(". ", 2)[2])
+        self.assertNotIn("Nothing is broken", got)
+
+    def test_preview_diagnostics_are_plain_and_redacted(self):  # RETURN 1: no path or exception text
+        for error, plain in (  # AV1737-08's failed record stays named; everything after it is translated
+                ("generated file out of date: storefront-mockup/index.html; generated file out of date: "
+                 "storefront-mockup/catalog.json", "the website pages were not rebuilt for it"),
+                ("products avocado-1: preview server did not start", "the preview could not be started (products avocado-1)"),
+                ("products avocado-1: desktop: check failed: productShown",
+                 "the preview did not show the change as expected (products avocado-1)"),
+                ("no change record", "the saved change could not be found"),
+                ("products avocado-1: FileNotFoundError: [Errno 2] /home/x/state/screenshots/chg-1.png",
+                 "the preview could not be checked (products avocado-1)"),
+                ("hass/content/products.json: products[0].name must be text", "the preview could not be checked"),
+                ("site/x y: TimeoutError", "the preview could not be checked"),  # a path is never taken as a record
+                ("", "the preview could not be checked")):
+            with self.subTest(error=error):
+                status = answers.did_it_work(row("applied", reason=f"not verified: {error}"), None, NOW)
+                reply = answers.applied_text("ab12", "store store: hours", error=error)
+                self.assertIn(f"The preview check failed: {plain}. ", status)
+                self.assertEqual(reply, f"Applied ab12, but the preview check failed: {plain}.\n{NOT_LIVE}")
+                for text in (status, reply):
+                    self.assertIsNone(INTERNAL.search(text), text)
+                    for raw in ("Error", "Errno", ".json", "storefront", "productShown", "desktop", "home"):
+                        self.assertNotIn(raw, text)
+
+    def test_apply_reply_says_it_is_not_on_the_website(self):  # RETURN 2: the approve/apply reply point
+        self.assertEqual(answers.applied_text("ab12", "store store: hours"), f"Applied ab12: store store: hours\n{NOT_LIVE}")
+        self.assertEqual(answers.applied_text("ab12", "store store: hours", checked=True),
+                         f"Applied and checked ab12: store store: hours\n{NOT_LIVE}")
+
+    def test_no_install_result_is_unconfirmed_never_intact(self):  # RETURN 3: install.py may have died part way
+        for change in (row("applied"), row("verified"), row("applied", reason="not verified: check failed: x")):
+            with self.subTest(reason=change["reason"]):
+                got = answers.did_it_work(change, None, NOW)
+                self.assertTrue(got.startswith("Saved, but not confirmed on the website. "), got)
+                self.assertIn("some pages may already show it; ask for help to copy it to the website again", got)
+                for word in ("Nothing is broken", "unchanged", "as it was"):
+                    self.assertNotIn(word, got)
 
     def test_history_words(self):
         for state, inst, want in (("verified", {"state": "installed"}, "on the website"),
                                   ("applied", {"state": "failed"}, "not on the website yet"),
-                                  ("applied", None, "not on the website yet"), ("reverted", None, "undone"),
+                                  ("applied", None, "not confirmed on the website"), ("reverted", None, "undone"),
                                   ("failed", None, "not saved; website unchanged"), ("expired", None, "nothing changed")):
             with self.subTest(state=state, install=inst):
                 self.assertEqual(answers.history_words(row(state), inst), want)
@@ -132,7 +173,7 @@ class ConversationAnswerTests(ConversationTestCase):
     def applied(self):
         draft, _reply = self.propose("hours")
         self.assertEqual(self.say("yes"), "approved")
-        self.replies()
+        self.assertEqual(self.replies(), [f"Applied {draft['code']}: store store: hours\n{NOT_LIVE}"])  # RETURN 2
         return draft
 
     def last_line(self, text="did it work?"):
@@ -156,7 +197,7 @@ class ConversationAnswerTests(ConversationTestCase):
     def test_did_it_work_follows_the_install(self):
         draft = self.applied()
         self.assertEqual(self.last_line(), f"Last change: {draft['code']} store store: hours - {NOT_COPIED}")
-        self.assertEqual(self.history(), [f"{draft['code']} applied: store store: hours - not on the website yet"])
+        self.assertEqual(self.history(), [f"{draft['code']} applied: store store: hours - not confirmed on the website"])
         self.now = T0 + timedelta(minutes=5)
         out = install.install(draft["change_id"], state=str(self.repo.state), now=self.now)
         self.assertEqual(out["result"], "installed")
@@ -175,7 +216,7 @@ class ConversationAnswerTests(ConversationTestCase):
                                            "be written.")
 
     def test_interrupted_install_is_not_called_done_until_a_retry_finishes(self):
-        draft = self.applied()
+        draft, before = self.applied(), self.snapshot()
         real = install._swap
 
         def killed(tmp, target):
@@ -183,8 +224,11 @@ class ConversationAnswerTests(ConversationTestCase):
             raise Killed()
         with mock.patch.object(install, "_swap", killed), self.assertRaises(Killed):
             install.install(draft["change_id"], state=str(self.repo.state))
+        self.assertNotEqual(self.snapshot(), before)  # RETURN 3: one file was replaced before the process died
         self.conv = self.open()  # restart: recovery has nothing to settle, the answer reads the change record
-        self.assertEqual(self.last_line(), f"Last change: {draft['code']} store store: hours - {NOT_COPIED}")
+        line = self.last_line()
+        self.assertEqual(line, f"Last change: {draft['code']} store store: hours - {NOT_COPIED}")
+        self.assertNotIn("unchanged", line)  # never claims an intact site; says some pages may show it, ask for help
         self.assertEqual(install.install(draft["change_id"], state=str(self.repo.state))["result"], "installed")
         self.assertIn("is on the website now", self.last_line())
 
