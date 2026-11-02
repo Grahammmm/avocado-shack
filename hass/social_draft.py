@@ -6,13 +6,16 @@ Prints one JSON object. Success: {"draft": true, "image", "alt", "caption"} buil
 stored name, description, image, imageAlt and its maker's name and place (caption <= 2200 characters, at most
 5 hashtags: #AvocadoShack plus one fixed tag per category, never derived from free text). Refusal (exit 1):
 {"draft": false, "reason"}: "cannot read content" | "no such product" | "not on the site" | "no photo on the site" |
-"product record incomplete" (name/description not non-empty text) | "caption too long". A malformed maker is no maker.
+"product record incomplete" (name/description not non-empty text) | "free text has a hashtag or account name" (a # or @
+followed by a letter, digit or _ in name, description or maker name/place; nothing is stripped) | "caption too long".
+A malformed maker is no maker.
 Read-only: nothing is posted, scheduled, written or sent, and the module imports no network code.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -22,6 +25,7 @@ from hass.content_model import CATEGORIES, CONTENT_DIR, SITE_DIR, ContentError, 
 
 MAX_CAPTION = 2200
 CATEGORY_TAGS = {c: "#" + c.capitalize() for c in CATEGORIES}  # fixed per category; never from free text
+_TAG_RE = re.compile(r"[#@][\w]", re.UNICODE)  # a hashtag or @account in free text is refused, never rewritten
 
 
 def _photo_ok(image, site_dir: Path) -> bool:
@@ -45,6 +49,8 @@ def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     makers = content.makers if isinstance(content.makers, dict) else {}
     maker = makers.get(product.get("producerKey")) if isinstance(product.get("producerKey"), str) else None
     if not (isinstance(maker, dict) and isinstance(maker.get("name"), str) and isinstance(maker.get("place"), str)): maker = None
+    free = [name, description, *((maker["name"], maker["place"]) if maker else ())]
+    if any(_TAG_RE.search(text) for text in free): return refuse("free text has a hashtag or account name")
     lines = [name, description]
     if maker: lines.append(f"From {maker['name']} in {maker['place']}.")
     tags = ["#AvocadoShack", *([CATEGORY_TAGS[product["category"]]] if product.get("category") in CATEGORY_TAGS else [])]
