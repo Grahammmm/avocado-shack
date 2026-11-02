@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import stat
 from datetime import datetime
 from pathlib import Path
 
@@ -61,10 +63,15 @@ def _well_formed(change):
 def _draft_ops(ctx, change_id):
     """Ops of ``<state>/drafts/<id>.json`` ([] when absent); False for a symlink or an unreadable/malformed draft."""
     path = Path(ctx.state_dir) / "drafts" / f"{change_id}.json"  # state_dir is set: ctx.change found the record
-    if not (path.is_symlink() or path.exists()):
-        return []
     try:
-        ops = None if path.is_symlink() else json.loads(path.read_text("utf-8")).get("ops")
+        if not stat.S_ISREG(os.lstat(path).st_mode):  # link, FIFO, socket, folder: never opened
+            return False
+    except FileNotFoundError:
+        return []
+    except OSError:
+        return False
+    try:
+        ops = json.loads(path.read_text("utf-8")).get("ops")
     except (OSError, UnicodeDecodeError, ValueError, AttributeError, RecursionError):
         return False
     return ops if isinstance(ops, list) and all(isinstance(call, dict) for call in ops) else False
