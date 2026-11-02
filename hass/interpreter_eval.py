@@ -4,7 +4,7 @@ unreadable file, malformed line, duplicate id or a case file without exactly 40 
 --out FILE` is OPERATOR ONLY, never run in CI or tests (they inject a fake transport): it builds the NB-AV-03 prompt
 from the real registry and catalog, asks the existing local model (NB-AV-02, loopback only) once per case and writes
 {"id", "reply"} lines to a new FILE outside the repo."""
-import argparse, json, os, re, sys  # noqa: E401
+import argparse, contextlib, json, os, re, sys, tempfile  # noqa: E401
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -106,7 +106,8 @@ def score(cases, replies, registry) -> dict:
 
 
 def live(cases, url, model, out, transport=None, registry=None, content=None) -> dict:
-    """Record one fresh reply per case into a new file ``out`` outside the repository (operator only)."""
+    """Record one fresh reply per case into a new file ``out`` outside the repository (operator only);
+    the replies file is created 0600 and only when complete."""
     target = Path(out).expanduser().resolve()
     if target == REPO or REPO in target.parents: raise EvalError("--out must be outside the repository")
     if os.path.lexists(Path(out).expanduser()) or target.exists(): raise EvalError("--out already exists")
@@ -117,11 +118,21 @@ def live(cases, url, model, out, transport=None, registry=None, content=None) ->
         raise EvalError(str(exc)) from None
     rows = [{"id": c["id"], "reply": model_call.interpret(c["text"], c["pending"]), "failed": model_call.last_error}
             for c in cases]
-    try:
-        with open(target, "x", encoding="utf-8") as fh:
+    tmp = None
+    try:  # a private temp file beside the target (0600 by construction), linked into place only when complete
+        fd, tmp = tempfile.mkstemp(prefix=".interpreter-eval-", suffix=".tmp", dir=target.parent)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.writelines(json.dumps({"id": r["id"], "reply": r["reply"]}) + "\n" for r in rows)  # ASCII lines
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.link(tmp, target)  # never replaces a file another writer made meanwhile
+    except FileExistsError:
+        raise EvalError("--out already exists") from None
     except OSError:
         raise EvalError("--out could not be created") from None
+    finally:
+        if tmp:
+            with contextlib.suppress(OSError): os.unlink(tmp)
     return {"recorded": len(rows), "failedCalls": sum(r["failed"] is not None for r in rows)}
 
 
