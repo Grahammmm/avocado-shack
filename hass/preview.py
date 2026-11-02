@@ -29,8 +29,9 @@ def target_for(record: dict) -> dict:
     if collection == "store":
         return {"kind": "store", "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", "")}
-    return {"kind": "event", "title": after.get("title", ""),
-            "status": after.get("status") if collection == "events" else None}
+    event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
+    return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
+            "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
 
 
 def _free_port() -> int:
