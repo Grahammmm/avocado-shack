@@ -35,13 +35,31 @@ class Clock(datetime):
         return cls.current
 
 
+class _Held:  # collects the sends of one row's flush; the real adapter gets them when fixture_chat flushes at the end
+    def __init__(self): self.sent = []
+    def send(self, chat, text, attachments): self.sent.append((chat, text, attachments))
+
+
 class ClockedConversation(conversation.Conversation):
     handled = []
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._held = _Held()
 
     def handle(self, msg, *args, **kwargs):
         Clock.current = Clock.fromisoformat(msg.received_at)  # the clock moves to the row's own time
         self.handled.append(disposition := super().handle(msg, *args, **kwargs))
+        # AVB-07: Outbox.flush marks a reply older than DELAYED_AFTER_S as delayed. fixture_chat flushes once after the
+        # whole transcript, so a reply from an early row would look 30 minutes old. Flush at this row's own time instead
+        # (the reply is sent when it is written, so it is not delayed); fixture_chat's final flush forwards the sends.
+        super().flush(self._held)
         return disposition
+
+    def flush(self, adapter):
+        for send in self._held.sent: adapter.send(*send)  # the real adapter, in row order
+        self._held.sent.clear()
+        return super().flush(adapter)  # nothing left unless a row's send failed
 
 
 def _tree(root):  # every file of the writer worktree, by relative path and content hash
