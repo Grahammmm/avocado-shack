@@ -74,8 +74,7 @@ class InboxNoFollowTests(unittest.TestCase):
     def test_fixture_chat_queue_refuses_link_without_queueing_or_sending(self):
         (self.state / "config.json").write_text(json.dumps({"settings": {
             "ownerSenders": ["owner"], "ownerChat": "chat", "approvalTtlSeconds": 600}}))
-        target = self.root / "outside.sqlite3"
-        self.path.symlink_to(target)
+        self.path.symlink_to(target := self.root / "outside.sqlite3")
         mapping, fixture = self.root / "mapping.json", self.root / "fixture.jsonl"
         mapping.write_text("{}")
         fixture.write_text(json.dumps({"id": "1", "chat": "chat", "sender": "owner", "text": "help", "at": START}) + "\n")
@@ -89,7 +88,3 @@ class InboxNoFollowTests(unittest.TestCase):
         self.assertNotIn("queued=", err.getvalue())
         send.assert_not_called()
         self.assertFalse(target.exists())
-
-
-if __name__ == "__main__":
-    unittest.main()
