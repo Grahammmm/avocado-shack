@@ -73,12 +73,14 @@ class MorningReportTests(unittest.TestCase):
         self.assertEqual(json.loads(self.report("--json"))["stale"], True)
 
     def test_twelve_limited_show_ten_names_and_stay_short(self):
-        names = [f"Product {i:02d} " + "x" * 66 for i in range(12)]  # 80 characters each, the longest allowed
+        names = [f"Product {i:02d} " + "x" * 69 for i in range(12)]  # 80 characters each, the longest allowed
+        self.assertEqual({len(n) for n in names}, {80})
         self.content([product(n, "limited") for n in names], checked_days_ago=1)
         text = self.report()
         self.assertEqual(text.split("\n")[2], "Limited: " + ", ".join(names[:10]) + ", +2 more")
         self.assertLessEqual(len(text), 1200)
-        self.content([product(n, "limited") for n in names] + [product(n + "s", "no") for n in names], checked_days_ago=1)
+        sold = [n[:-1] + "s" for n in names]  # distinct names, still the 80-character maximum
+        self.content([product(n, "limited") for n in names] + [product(n, "no") for n in sold], checked_days_ago=1)
         text = self.report()
         self.assertLessEqual(len(text), 1200)
         self.assertEqual(text.split("\n")[-1], LAST)
