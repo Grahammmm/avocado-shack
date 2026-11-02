@@ -1,7 +1,8 @@
 """AVB-04 (H03) tests: maker and source links must be real public https:// web addresses.
 
 content_model._https refuses no host, a dotless host, an IP-literal or private-name host, user:password, an explicit
-port and a URL over 500 characters, each with one named reason that never echoes the value. Fixture content only
+port, a URL over 500 characters, any backslash (a browser ends the host there) and a host that is not plain ASCII
+letters/digits/hyphens/dots, each with one named reason that never echoes the value. Fixture content only
 (throwaway Git repo via test_catalog_ops.CatalogRepo); no DNS lookups.
 Run: python3 -m unittest hass.tests.test_https_links -v
 """
@@ -38,6 +39,20 @@ class HttpsReasonTests(unittest.TestCase):
         self.check("IP address", "https://127.0.0.1/a", "https://[::1]/", "https://10.0.0.5", "https://8.8.8.8/",
                    "https://127.1/", "https://2130706433/", "https://[2001:db8::1]/")
 
+    def test_backslash_is_refused_because_a_browser_ends_the_host_there(self):
+        # urlsplit keeps "\.farm.com" inside a dotted hostname; a browser reads \ as / and goes to 127.0.0.1/localhost
+        self.check("backslash", "https://127.0.0.1\\.farm.com/", "https://localhost\\.farm.com/",
+                   "https://[::1]\\.farm.com/", "https://farm.com\\@127.0.0.1/", "https://farm.com/a\\b",
+                   "https://\\\\localhost/")
+
+    def test_ip_literals_a_browser_would_read(self):
+        self.check("IP address", "https://127.0.0.0x1/", "https://0x7f.0.0.1/", "https://farm.0x/", "https://a.0X7F/")
+
+    def test_host_characters_a_browser_may_rewrite(self):
+        self.check("host characters", "https://127.0.0.1%2e/", "https://127.0.0.\u30021/", "https://a.localhost\u3002/",
+                   "https://\uff4cocalhost.farm.com/", "https://my_farm.com/", "https://farm..com/", "https://.farm.com/",
+                   "https://b\u00fccher.com/")
+
     def test_user_or_password_never_echoed(self):
         self.check("user or password", "https://user:pw@farm.example", "https://user@farm.example", "https://@farm.com")
         problems = []
@@ -62,7 +77,8 @@ class HttpsReasonTests(unittest.TestCase):
 
     def test_ordinary_addresses_accepted(self):
         for url in ("https://www.example-farm.com/about?x=1#y", "https://example.com", "https://farm.co.uk/a/b",
-                    "https://farm.com./", "https://shop-localhost.com", "https://notlocal.com", "https://my.test.farm.org/"):
+                    "https://farm.com./", "https://shop-localhost.com", "https://notlocal.com", "https://my.test.farm.org/",
+                    "https://xn--bcher-kva.com/", "https://0x7f.farm.com/0x1", "https://127.farm.com/a%5Cb"):
             with self.subTest(url=url):
                 self.assertIsNone(reason_for(url))
 
@@ -87,6 +103,9 @@ class MakerLinkOpTests(CatalogTestCase):
                                  ("user or password", "https://user:pw@farm.example"), ("port", "https://farm.com:8443/"),
                                  ("port", "https://farm.com:99999/"), ("private name", "https://shop.local"),
                                  ("private name", "https://localhost"),
+                                 ("backslash", "https://127.0.0.1\\.farm.com/"),
+                                 ("backslash", "https://localhost\\.farm.com/"),
+                                 ("IP address", "https://127.0.0.0x1/"), ("host characters", "https://127.0.0.1%2e/"),
                                  ("too long", "https://farm.com/" + "a" * 500)):
             with self.subTest(url=url[:40]):
                 problem = self.refused_reason(repo, "maker.add", {**NEW, "url": url})
@@ -106,7 +125,9 @@ class MakerLinkOpTests(CatalogTestCase):
         repo.run(("maker.add", {**NEW, "url": "https://farm.com/a"}))
         before = repo.read("hass/content/makers.json")
         for self.reason, url in (("port", "https://farm.com:8443/"), ("IP address", "https://192.168.1.2/"),
-                                 ("private name", "https://farm.internal/")):
+                                 ("private name", "https://farm.internal/"),
+                                 ("backslash", "https://127.0.0.1\\.farm.com/"),
+                                 ("backslash", "https://localhost\\.farm.com/")):
             with self.subTest(url=url):
                 self.refused_reason(repo, "maker.edit", {"key": key, "url": url})
         self.assertEqual(repo.read("hass/content/makers.json"), before)
