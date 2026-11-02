@@ -19,6 +19,7 @@ from hass.tests.test_hike_ops import HikeTestCase
 
 DAY, LATER = "2030-06-01", "2030-06-08"  # far ahead, so a scheduled hike still has an open RSVP on the live clock
 AFTER = datetime(2030, 6, 9, 12, 0, tzinfo=timezone(timedelta(hours=-7)))
+BEFORE = datetime(2030, 5, 20, 12, 0, tzinfo=timezone(timedelta(hours=-7)))  # fixture clock when a hike is created
 COMMUNITY, RECAP = "storefront-mockup/community.json", "Windy but clear."
 ODD = 'Cass "Ridge" [loop]'
 EVENT_CHECKS = ("eventShown", "pastShown", "recapShown", "rsvpGone")
@@ -31,6 +32,7 @@ def hike(title="Cass Hill", day=DAY):
 
 class HikeTargetMixin:
     def create(self, repo, title="Cass Hill", day=DAY):
+        repo.now = BEFORE  # AVB-05: a start more than 400 days after the fixture clock is a question, not a draft
         return repo.run(("hike.create", hike(title, day)))["records"][0]["key"]
 
     def target(self, repo, op, args):

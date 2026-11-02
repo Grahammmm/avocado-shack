@@ -11,7 +11,7 @@ import copy
 import re
 import sqlite3
 import unicodedata
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -21,6 +21,7 @@ from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 TZ = ZoneInfo("America/Los_Angeles")
 # Event text fields an owner may give; recap is written only by hike.complete and hike.recap.
 TEXT_FIELDS = tuple(f for f in EVENT_TEXT_FIELDS if f != "recap")
+MAX_AHEAD_DAYS = 400  # a start further out is a question ("check the year"), never a draft
 MAX_ID_BASE = 56  # leaves room for a "-NNN" suffix inside the 64-character id limit
 
 
@@ -89,6 +90,9 @@ def _start(day: str, clock: str, now):
         return NeedsDetails(["time"], question)
     if first <= now:
         return Refused("start is in the past")
+    if first - now > timedelta(days=MAX_AHEAD_DAYS):
+        return NeedsDetails(["date"], f"{day} is more than {MAX_AHEAD_DAYS} days away; check the year. "
+                                      "What date should it be?")
     return first.isoformat(timespec="seconds")
 
 
