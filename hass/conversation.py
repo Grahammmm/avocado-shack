@@ -4,7 +4,7 @@ The interpreter only turns text into typed ops (it never sees approvals or calls
 does every write. handle() stores each result (message id, draft state, reply) before any reply is sent; flush()
 sends. Approval is bound to sender, chat, change id, draft hash, base revision and expiry. Fixture adapter only.
 """
-import contextlib, copy, hashlib, json, os, re, sqlite3, sys  # noqa: E401
+import contextlib, copy, hashlib, json, os, re, sqlite3, stat, sys  # noqa: E401
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -62,6 +62,7 @@ DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
 TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
             "Send a shorter change.")
+OPS_PENDING_MAX = 4096  # AV0022-03: bytes of a draft's ops_json sent in `pending`; larger -> "opsOmitted": true
 TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
@@ -175,6 +176,12 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
+def _pending_ops(ops_json) -> dict:  # AV0022-03 (H05): a waiting draft's ops; too large or unreadable -> opsOmitted
+    try: ops = json.loads(ops_json) if len(ops_json.encode()) <= OPS_PENDING_MAX else None
+    except (TypeError, ValueError, AttributeError, RecursionError): ops = None
+    return {"ops": ops} if isinstance(ops, list) else {"opsOmitted": True}
+
+
 def _answered_at(msg, now: datetime) -> datetime:
     """AV0022-06 (H16): when the owner sent the reply (received_at); empty, naive, bad or future -> now."""
     try: sent = datetime.fromisoformat(msg.received_at or "")
@@ -204,10 +211,25 @@ def sender_key(value):
     return value.casefold() if ok else None
 
 
+MAX_CONFIG = 1024 * 1024  # RF1910-2 (H08/H20)
+
+
+def _config_bytes(sdir):
+    """RF1910-2: config.json bytes from a regular, non-link file <= 1 MiB; None when missing; else ConfigError."""
+    path, bad = Path(sdir) / "config.json", ConfigError("config.json must be a regular file up to 1 MiB")
+    try: st = os.lstat(path)
+    except FileNotFoundError: return None
+    if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_CONFIG: raise bad  # link, FIFO, folder, too big: never opened
+    with open(path, "rb") as fh: data = fh.read(MAX_CONFIG + 1)
+    if len(data) > MAX_CONFIG: raise bad  # grew past the cap after lstat; the reason names no path or content
+    return data
+
+
 def load_settings(sdir, photos=False) -> dict:
     try:
-        settings = json.loads((Path(sdir) / "config.json").read_text("utf-8")).get("settings")
-    except (OSError, ValueError, AttributeError):
+        data = _config_bytes(sdir)
+        settings = None if data is None else json.loads(data.decode("utf-8")).get("settings")
+    except (OSError, ValueError, AttributeError, RecursionError, UnicodeDecodeError):
         settings = None
     if not isinstance(settings, dict): raise ConfigError("config.json settings are missing")
     senders, chat, ttl = (settings.get(k) for k in ("ownerSenders", "ownerChat", "approvalTtlSeconds"))
@@ -596,7 +618,8 @@ class Conversation:
             self.db.execute(USAGE)
             self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
-                    r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+                    r["summary"], **_pending_ops(r["ops_json"])}  # AV0022-03: + "ops" or "opsOmitted"
+                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         try:
             result = _checked(self.interpreter.interpret(msg.text, pending))
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)

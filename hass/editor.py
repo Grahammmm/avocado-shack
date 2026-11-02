@@ -128,7 +128,7 @@ def _parse_request(request):
         raw = raw.encode("utf-8") if isinstance(raw, str) else raw
         doc = json.loads(raw.decode("utf-8")) if len(raw) <= MAX_REQUEST else None
         json.dumps(doc, ensure_ascii=False).encode("utf-8")  # escaped lone surrogates cannot be stored or rendered
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:  # RF1920-5: nested too deep is not valid JSON, never a traceback
         return None, ["request has unpaired surrogate characters" if isinstance(exc, UnicodeEncodeError)
                       else "request is not valid JSON"]
     if len(raw) > MAX_REQUEST: return None, ["request is larger than 64 KiB"]
@@ -136,7 +136,9 @@ def _parse_request(request):
     ops = doc["ops"]
     if not isinstance(ops, list) or not 1 <= len(ops) <= MAX_OPS:
         return None, [f"ops must be a list of 1-{MAX_OPS} operations"]
-    if has_control_chars(doc): return None, ["control characters are not allowed"]
+    try: control = has_control_chars(doc)
+    except RecursionError: return None, ["request is not valid JSON"]  # json parsed it, but too deep to walk
+    if control: return None, ["control characters are not allowed"]
     return ops, [f'ops[{i}]: must be {{"op": name, "args": {{...}}}}' for i, call in enumerate(ops)
                  if not isinstance(call, dict) or set(call) != {"op", "args"} or not isinstance(call["op"], str)
                  or not isinstance(call["args"], dict)]
@@ -404,6 +406,12 @@ def list_ops(registry=None) -> dict:
     return {"result": "ok", "ops": {name: {arg: asdict(spec) for arg, spec in op.args.items()}
                                     for name, op in sorted(registry.items())}}
 
+def _read_request_file(path) -> bytes:
+    """RF1920-5: a regular file, read only up to MAX_REQUEST + 1 bytes (longer is refused as larger than 64 KiB)."""
+    if stat.S_ISDIR(mode := os.stat(path).st_mode): raise IsADirectoryError  # io-error name unchanged
+    if not stat.S_ISREG(mode): raise ValueError("request is not a regular file")  # FIFO/device: never opened
+    with open(path, "rb") as fh: return fh.read(MAX_REQUEST + 1)
+
 def _limit(text):
     try: n = int(text)
     except ValueError: n = 0
@@ -425,7 +433,7 @@ def main(argv=None) -> int:
         if name == "history": cmd.add_argument("--limit", type=_limit, default=20)
     args = parser.parse_args(argv)
     commands = {"ops": lambda: _load(args.state) and list_ops(), "init": lambda: init(args.state, args.worktree),
-                "prepare": lambda: prepare(Path(args.request).read_bytes(), state=args.state),
+                "prepare": lambda: prepare(_read_request_file(args.request), state=args.state),
                 "apply": lambda: apply(args.change_id, args.hash, state=args.state),
                 "show": lambda: show(args.change_id, state=args.state), "recover": lambda: recover(state=args.state),
                 "history": lambda: history(args.limit, state=args.state),
