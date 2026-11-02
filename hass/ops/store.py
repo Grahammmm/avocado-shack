@@ -5,6 +5,7 @@ Usage (request ops):
     {"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}
     {"op": "store.set_address", "args": {"streetAddress": "1023 Example Street"}}   # town kept; give either or both
     {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}
+    {"op": "store.set_intro", "args": {"text": "Fresh from the coast."}}   # home-page intro line, at most 160 characters; undo restores the default
 
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
 ignored; the refusal names both line numbers); street and town at most 80 characters.
@@ -20,7 +21,9 @@ import copy
 import unicodedata
 from datetime import date
 
-from hass.content_model import AVAILABILITY, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, checked_on, shop_today
+from hass.content_model import (
+    AVAILABILITY, DEFAULT_INTRO, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, MAX_INTRO, checked_on, shop_today,
+)
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.catalog import _product
 
@@ -71,6 +74,19 @@ def _set_address(content, args, ctx):
     return _touch(before, store)
 
 
+def _set_intro(content, args, ctx):
+    text = args["text"]
+    if len(text) > MAX_INTRO:
+        return Refused(f"the intro is longer than {MAX_INTRO} characters")
+    if sum(c.isalpha() for c in text) < 3:
+        return Refused("the intro needs at least 3 letters")
+    if text == content.store.get("intro", DEFAULT_INTRO):
+        return Refused("the intro already says that")
+    before = copy.deepcopy(content.store)
+    content.store["intro"] = text
+    return _touch(before, content.store)
+
+
 def _confirm_selection(content, args, ctx):
     """SHOP-1: record that Michael checked the selection (today, or an earlier ``date``) and, optionally, which
     products are available (``yes``), limited or sold out (``no``): lists of exact product ids."""
@@ -112,4 +128,5 @@ OPS = (
                                    **{v: Arg("text_list", required=False) for v in AVAILABILITY}}, _confirm_selection),
     Op("store.set_address", {"streetAddress": Arg("text", required=False), "town": Arg("text", required=False)},
        _set_address),
+    Op("store.set_intro", {"text": Arg("text")}, _set_intro),
 )
