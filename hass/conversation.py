@@ -927,6 +927,9 @@ class Conversation:
             problem = f"text must be 1–{memory_mod.MAX_VALUE} plain characters"
         if valid and key.startswith("alias."): problem = "send alias <name>: <id> to save an alias"
         old, source = (self.memory.get(key) if valid else None), f"owner-stated:{msg.provider_id}"
+        if problem is None and old is not None and old == value:  # AVB-15: the same text again changes nothing
+            self._reply(f"Already saved {key}: {value}; nothing changed.")
+            return "memory-unchanged"
         try:
             if problem is None and old is None: self.memory.remember(key, value, "fact", source)
             elif problem is None: self.memory.correct(key, value, source)
