@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TE
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
   reason TEXT, replaced_by TEXT, draft_hash TEXT, base TEXT, ops_json TEXT NOT NULL, summary TEXT NOT NULL,
   sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT,
-  screenshot TEXT, checked_at TEXT);
+  screenshot TEXT, checked_at TEXT, proposed_at TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NULL, chat TEXT NOT NULL,
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
@@ -363,7 +363,7 @@ class Conversation:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
-        for column in ("screenshot", "checked_at"):  # an H05 database gains the H06 columns
+        for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
         self.outbox = Outbox(self.db, self._now)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
@@ -402,8 +402,10 @@ class Conversation:
         return datetime.fromisoformat(row["created_at"]) + timedelta(seconds=self.settings["approvalTtlSeconds"])
 
     def _proposed_at(self, row) -> datetime:
-        """AVB-03 (H05): when a draft was proposed (insert and fill both set expires_at = proposal + ttl)."""
-        return self._expiry(row) - timedelta(seconds=self.settings["approvalTtlSeconds"])
+        """AVB-03 (H05): the stored instant the draft was proposed (_propose sets it on insert and on a needs-details
+        fill), so a later approvalTtlSeconds change never moves it. A row from before the column has none: its
+        created_at, never later than its proposal, so such a row is judged no stricter than before AVB-03."""
+        return datetime.fromisoformat(row["proposed_at"] or row["created_at"])
 
     def _move(self, row, state, **fields):
         current = self._row(row["row_id"])["state"]
@@ -452,15 +454,17 @@ class Conversation:
         """Insert a proposed draft (or fill a needs-details row) bound to the A2 hash, base and expiry."""
         expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))
         fields = dict(change_id=draft["change_id"], draft_hash=draft["draft_hash"], base=draft["base"],
-                      ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires)
+                      ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires,
+                      proposed_at=_iso(now))  # AVB-03: the proposal instant itself, not derived from the current ttl
         if row is not None:
             self._move(row, "proposed", **fields)
             return self._row(row["row_id"])
         cur = self.db.execute(
             "INSERT INTO drafts(change_id, code, state, draft_hash, base, ops_json, summary, sender, chat, created_at,"
-            " expires_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?)",
+            " expires_at, proposed_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (fields["change_id"], self._code(draft["draft_hash"][7:]), fields["draft_hash"], fields["base"],
-             fields["ops_json"], fields["summary"], sender, self.settings["ownerChat"], _iso(now), expires))
+             fields["ops_json"], fields["summary"], sender, self.settings["ownerChat"], _iso(now), expires,
+             fields["proposed_at"]))
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------

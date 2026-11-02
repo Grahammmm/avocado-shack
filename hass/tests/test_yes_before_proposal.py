@@ -10,7 +10,7 @@ import unittest
 from datetime import timedelta
 
 from hass import conversation
-from hass.tests.test_conversation import CHAT, OWNER, T0, ConversationTestCase, _ops
+from hass.tests.test_conversation import CHAT, OWNER, SETTINGS, T0, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS
 
 PROPOSED_B = T0 + timedelta(minutes=5)  # A is cancelled at 09:01 PST, B is proposed at 09:05 PST
@@ -18,7 +18,7 @@ HANDLED = T0 + timedelta(minutes=6)  # the delayed reply is handled at 09:06 PST
 BEFORE_B = (PROPOSED_B - timedelta(seconds=1)).isoformat()
 
 
-class YesBeforeProposalTests(ConversationTestCase):
+class _BeforeB(ConversationTestCase):  # shared setup and helpers; no tests of its own
     def setUp(self):
         super().setUp()
         self.a, _reply = self.propose("hours")
@@ -46,6 +46,8 @@ class YesBeforeProposalTests(ConversationTestCase):
         self.assertEqual((row["state"], row["expires_at"], self.approvals(), self.commits(), self.editor.applies),
                          ("proposed", self.b["expires_at"], [], 0, 0))
 
+
+class YesBeforeProposalTests(_BeforeB):
     def test_bare_yes_sent_before_the_draft_was_proposed_is_refused(self):
         self.assert_refused("yes")
 
@@ -112,6 +114,61 @@ class YesBeforeProposalTests(ConversationTestCase):
                                           f"reply yes {row['code']} to apply it."])
         self.assertEqual((self.drafts()[-1]["state"], self.approvals(), self.editor.applies), ("proposed", [], 0))
         self.assertEqual(self.late("yes", filled.isoformat(), now=filled + timedelta(minutes=1)), "approved")
+
+
+class ProposalTimeSurvivesTtlChangeTests(_BeforeB):
+    """AVB-03 review fix: the proposal instant is stored (proposed_at), so a restart with another approvalTtlSeconds
+    never moves it. B was proposed at 09:05 PST with ttl 600, so it expires 09:15 PST either way."""
+
+    def restart(self, ttl):
+        self.conv.db.close()
+        self.set_settings({**SETTINGS, "approvalTtlSeconds": ttl})
+        self.conv = self.open()
+
+    def test_the_proposal_instant_is_stored(self):
+        self.assertEqual(self.b["proposed_at"], conversation._iso(PROPOSED_B))
+
+    def test_a_longer_ttl_after_restart_still_refuses_a_yes_sent_before_the_draft(self):
+        self.restart(3600)  # derived from expiry this would be 08:15 PST, before the yes
+        self.assert_refused("yes")
+
+    def test_a_longer_ttl_after_restart_still_refuses_a_coded_yes_sent_before_the_draft(self):
+        self.restart(3600)
+        self.assert_refused(f"yes {self.b['code']}")
+
+    def test_a_shorter_ttl_after_restart_still_approves_a_yes_sent_after_the_draft(self):
+        self.restart(60)  # derived from expiry this would be 09:14 PST, after the yes
+        self.assertEqual(self.late("yes", (PROPOSED_B + timedelta(seconds=30)).isoformat()), "approved")
+        self.replies()
+        self.assertEqual((self.drafts()[-1]["state"], self.commits()), ("applied", 1))
+
+    def test_a_filled_question_keeps_its_fill_instant_across_a_restart_with_a_longer_ttl(self):
+        self.late("no", HANDLED.isoformat())  # close B so the question is the only open draft
+        self.replies()
+        self.interp.mapping["q"] = {"ops": _ops((HOURS, {}))["ops"], "revises": None}
+        asked = T0 + timedelta(minutes=10)
+        self.now = asked
+        self.assertEqual(self.say("q"), "needs-details")
+        self.replies()
+        code = self.drafts()[-1]["code"]
+        self.interp.mapping["done"] = {**_ops((HOURS, {"hours": ["Daily 8am–7pm"]})), "revises": code}
+        filled = asked + timedelta(minutes=3)
+        self.now = filled
+        self.assertEqual(self.say("done"), "proposed")
+        self.replies()
+        self.assertEqual(self.drafts()[-1]["proposed_at"], conversation._iso(filled))
+        self.restart(3600)
+        sent = (asked + timedelta(minutes=1)).isoformat()  # after the question, before the fill
+        self.assertEqual(self.late("yes", sent, now=filled + timedelta(minutes=1)), "no-target")
+        self.assertEqual(self.replies(), [f"That yes was sent before {code} was proposed; reply yes {code} to apply it."])
+        self.assertEqual(self.late("yes", filled.isoformat(), now=filled + timedelta(minutes=1)), "approved")
+
+    def test_a_row_from_before_the_column_is_judged_from_created_at(self):
+        self.conv.db.execute("ALTER TABLE drafts DROP COLUMN proposed_at")  # a database from before AVB-03's fix
+        self.restart(3600)
+        self.assertIsNone(self.drafts()[-1]["proposed_at"])  # the column is added back, empty for old rows
+        self.assert_refused("yes")
+        self.assertEqual(self.late("yes", PROPOSED_B.isoformat()), "approved")
 
 
 if __name__ == "__main__":
