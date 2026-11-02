@@ -26,7 +26,9 @@ jobs:
     # billable for private repos and were blocked by the account spend limit, which stopped every
     # check job at 0 steps. Runners agentorange-avo-1/2 carry the avocado-shack label.
     runs-on: [self-hosted, Linux, X64, avocado-shack]
-    timeout-minutes: 10
+    # hass/tests took ~6.5 min on GitHub-hosted runners and >9.5 min on the shared
+    # AgentOrange host (run 41518439444 was cancelled at 10 min with every test passing).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
