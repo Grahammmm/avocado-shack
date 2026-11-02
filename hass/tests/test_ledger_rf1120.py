@@ -85,7 +85,7 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "AV1737-15: limit wording?": LEDGER.replace("stays attended", "is automatic"),
                   "AV1737-07: private data": LEDGER.replace("(AV1737-07)", "(AV1737-07)\nmail owner@example.com")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
-                  ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242", "+155****0777")}
+                  ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242", "+15550100777")}
         cases["AV1537-15: private data"] = LEDGER.replace("(AV1537-15)", "(AV1537-15)\ncall +1 555 123 4567")
         for want, text in cases.items():
             self.assertIn(want.split("|")[0], problems(text), want)
