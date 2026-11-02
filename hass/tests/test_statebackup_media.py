@@ -68,7 +68,7 @@ class MediaBackupTests(BackupTestCase):
         self.assertNotIn("media", made)
         backup = Path(made["backup"])
         doc = json.loads((backup / statebackup.MANIFEST).read_text("utf-8"))
-        self.assertEqual(set(doc), {"schemaVersion", "createdAt", "worktree", "files"})
+        self.assertEqual(set(doc), {"schemaVersion", "createdAt", "worktree", "files", "contentCommit"})
         self.assertFalse((backup / "media").exists() or any(rel.startswith("media") for rel in doc["files"]))
         self.assertEqual(self.restore(backup, self.tmp / "media2"), {"result": "refused",
                                                                      "problems": ["no media in backup"]})

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 from hass import health, statebackup
+from hass.tests.test_editor import git
 from hass.tests.test_statebackup import STAMP, BackupTestCase, tree
 
 NAME = f"hass-state-{STAMP.strftime('%Y%m%dT%H%M%SZ')}"
@@ -60,7 +61,8 @@ class AtomicCreateTests(BackupTestCase):
         self.assertEqual(listed, sorted(files + [statebackup.MANIFEST]))
         hashes = {rel: hashlib.sha256((self.final / rel).read_bytes()).hexdigest() for rel in files}
         cfg = json.loads((self.repo.state / "config.json").read_text("utf-8"))
-        doc = {"schemaVersion": 1, "createdAt": STAMP.isoformat(), "worktree": cfg["worktree"], "files": hashes}
+        doc = {"schemaVersion": 1, "createdAt": STAMP.isoformat(), "worktree": cfg["worktree"], "files": hashes,
+               "contentCommit": git(self.repo.wt, "rev-parse", "HEAD")}
         self.assertEqual((self.final / statebackup.MANIFEST).read_bytes(),
                          json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))  # main's manifest bytes
         self.assertEqual(os.stat(self.final).st_mode & 0o777, 0o700)

@@ -12,6 +12,7 @@ from unittest import mock
 
 from hass import media, statebackup
 from hass.tests.test_media import AT, JPEG, PNG
+from hass.tests.test_editor import git
 from hass.tests.test_statebackup import STAMP, BackupTestCase
 
 BAD = f"{statebackup.MANIFEST} missing or invalid"
@@ -56,7 +57,7 @@ class ManifestReadTests(BackupTestCase):
         code, rows = self.cli("list", "--out", self.bk)
         self.assertEqual(code, 0)
         self.assertIn({"backup": backup.name, "createdAt": None, "files": None, "complete": False,
-                       "problem": "manifest invalid"}, rows)
+                       "problem": "manifest invalid", "contentCommit": None}, rows)
         self.assertEqual(self.cli("diff", backup, good), (1, [{"result": "corrupt", "problems": [f"OLD: {BAD}"]}]))
         self.assertEqual(self.cli("diff", good, backup), (1, [{"result": "corrupt", "problems": [f"NEW: {BAD}"]}]))
         self.assertEqual(self.cli("restore", backup, "--into", new, "--worktree", self.drill_wt),
@@ -137,7 +138,8 @@ class ManifestReadTests(BackupTestCase):
         with mock.patch.object(statebackup, "_read_small", side_effect=AssertionError("create used _read_small")):
             made = statebackup.create(str(self.repo.state), str(self.bk), now=STAMP)
         backup = Path(made["backup"])
-        self.assertEqual(made, {"result": "ok", "backup": str(backup), "files": len(self.files(backup))})
+        self.assertEqual(made, {"result": "ok", "backup": str(backup), "files": len(self.files(backup)),
+                                "contentCommit": git(self.repo.wt, "rev-parse", "HEAD")})
         self.assertEqual(self.cli("verify", backup), (0, [{"result": "ok", "files": len(self.files(backup))}]))
         with mock.patch.object(statebackup, "_read", side_effect=AssertionError("manifest read uncapped")):
             self.assertIsNotNone(statebackup._manifest(backup))
