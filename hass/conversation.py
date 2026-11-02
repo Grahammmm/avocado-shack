@@ -365,6 +365,11 @@ class Conversation:
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
         for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
+        # AVB-03 (H05): an open draft from before proposed_at has no recoverable proposal instant (a filled question
+        # keeps its question's created_at), so it counts as proposed when this store is opened: a yes sent earlier is
+        # refused and the owner re-sends it; it is never judged from created_at or from the current ttl.
+        self.db.execute("UPDATE drafts SET proposed_at = ? WHERE proposed_at IS NULL AND state = 'proposed'",
+                        (_iso(self._now()),))
         self.outbox = Outbox(self.db, self._now)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.recover()
@@ -403,9 +408,9 @@ class Conversation:
 
     def _proposed_at(self, row) -> datetime:
         """AVB-03 (H05): the stored instant the draft was proposed (_propose sets it on insert and on a needs-details
-        fill), so a later approvalTtlSeconds change never moves it. A row from before the column has none: its
-        created_at, never later than its proposal, so such a row is judged no stricter than before AVB-03."""
-        return datetime.fromisoformat(row["proposed_at"] or row["created_at"])
+        fill), so a later approvalTtlSeconds change never moves it. Opening the store stamps an open draft from before
+        the column with the open instant; a proposed row still without one fails closed (now: only a yes sent now)."""
+        return datetime.fromisoformat(row["proposed_at"]) if row["proposed_at"] else self._now()
 
     def _move(self, row, state, **fields):
         current = self._row(row["row_id"])["state"]
