@@ -13,7 +13,7 @@ from hass.tests.test_health import NOW, SETTINGS
 
 DIRTY, MAIN, DETACHED = ("writer worktree has uncommitted changes", "branch main is refused", "detached HEAD is refused")
 NO_EMAIL, MAIN_CHECKOUT = "git user.email is not configured", "the main checkout is refused; use a linked writer worktree"
-NOT_TOP, UNREADABLE = "writer worktree is not the top of a Hass Git checkout", "writer config unreadable"
+NOT_TOP, UNREADABLE = "writer worktree is not the top of a Hass Git checkout", "state config is unreadable"  # RF1910-1
 
 
 class HealthWriterTest(unittest.TestCase):

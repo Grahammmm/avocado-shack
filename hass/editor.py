@@ -7,7 +7,7 @@ prepare binds typed ops to the content revision; apply (internal caller only) lo
 writes only owned paths, runs the H01 checks and commits signed off. No listener, no push. One JSON object out.
 I/O errors: result io-error, exit 2 (history lists a corrupt change record as state unreadable).
 """
-import argparse, contextlib, copy, fcntl, hashlib, json, os, re, subprocess, sys  # noqa: E401
+import argparse, contextlib, copy, fcntl, hashlib, json, os, re, stat, subprocess, sys  # noqa: E401
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -75,10 +75,28 @@ def open_state(state=None, worktree=None) -> Path:
         raise UnsafeState("state dir must lie outside the repository and the writer worktree")
     return path
 
+MAX_CONFIG = 1024 * 1024
+
+def _read_config(path: Path) -> dict:
+    """H20: a regular, non-link file <= 1 MiB holding an object with a non-empty string worktree, else UnsafeState."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        raise UnsafeState("state dir is not initialised; run init first") from None
+    bad = UnsafeState("state config is unreadable")  # never the path or the file's bytes
+    if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_CONFIG: raise bad  # link, FIFO, socket, folder, too big
+    with open(path, "rb") as fh:
+        data = fh.read(MAX_CONFIG + 1)
+    try:
+        cfg = json.loads(data.decode("utf-8")) if len(data) <= MAX_CONFIG else None
+    except (UnicodeDecodeError, ValueError, RecursionError):
+        cfg = None
+    if not isinstance(cfg, dict) or not isinstance(cfg.get("worktree"), str) or not cfg["worktree"]: raise bad
+    return cfg
+
 def _load(state):
     sdir = open_state(state)
-    if not (sdir / "config.json").is_file(): raise UnsafeState("state dir is not initialised; run init first")
-    cfg = _read(sdir / "config.json")
+    cfg = _read_config(sdir / "config.json")
     open_state(str(sdir), cfg["worktree"])
     return sdir, cfg, Path(cfg["worktree"])
 
