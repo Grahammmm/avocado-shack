@@ -62,6 +62,7 @@ DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
 TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
             "Send a shorter change.")
+OPS_PENDING_MAX = 4096  # AV0022-03: bytes of a draft's ops_json sent in `pending`; larger -> "opsOmitted": true
 TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
@@ -69,6 +70,7 @@ INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
 VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT);
@@ -165,14 +167,26 @@ class Outbox:
         """A raised send error propagates and leaves that row and every later row unsent."""
         sent = 0
         for row in self.unsent():
-            adapter.send(row["chat"], row["text"], json.loads(row["attachments"]))
+            adapter.send(row["chat"], self._delayed(row["created_at"]) + row["text"], json.loads(row["attachments"]))
             self.db.execute("UPDATE outbox SET sent_at = ? WHERE id = ?", (_iso(self._now()), row["id"]))
             sent += 1
         return sent
 
+    def _delayed(self, created_at) -> str:
+        """AVB-07 (H16): send-time prefix for a reply held over DELAYED_AFTER_S; bad, naive or future -> ''."""
+        try: age = (self._now() - datetime.fromisoformat(created_at)).total_seconds()
+        except (TypeError, ValueError): return ""
+        return f"(Delayed reply, written {_local(created_at)}) " if age > DELAYED_AFTER_S else ""
+
 
 def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _pending_ops(ops_json) -> dict:  # AV0022-03 (H05): a waiting draft's ops; too large or unreadable -> opsOmitted
+    try: ops = json.loads(ops_json) if len(ops_json.encode()) <= OPS_PENDING_MAX else None
+    except (TypeError, ValueError, AttributeError, RecursionError): ops = None
+    return {"ops": ops} if isinstance(ops, list) else {"opsOmitted": True}
 
 
 def _answered_at(msg, now: datetime) -> datetime:
@@ -232,6 +246,10 @@ def load_settings(sdir, photos=False) -> dict:
     problems += [f"ownerSenders entry {n} is not an email address or a +country phone number"  # value never echoed
                  for n, key in enumerate(keys, 1) if key is None]
     if not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
+    elif ";+;" in chat:  # AVB-02 (H08): the owner channel is the owner's one-to-one chat, never a group; ids never echoed
+        problems.append("ownerChat is a group chat; it must be the owner's one-to-one chat")
+    elif (direct := re.fullmatch(r"[^;]+;-;([^;]+)", chat)) and sender_key(direct[1]) not in keys:
+        problems.append("ownerChat is a one-to-one chat with an address that is not in ownerSenders")
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
     root = settings.get("mediaRoot")  # NB-AV-09: required only with a photo source
     if photos and (not isinstance(root, str) or not root.strip()): problems.append("mediaRoot must be set to use photos")
@@ -298,6 +316,13 @@ def _checked(result) -> dict:
 
 def _reason(out: dict) -> str:
     return out.get("reason") or "; ".join(out.get("problems") or []) or out.get("question") or str(out.get("result"))
+
+
+def _is_undo(row) -> bool:
+    """AV0022-07 (H06): the draft's ops are a non-empty list of only history.revert calls; unparsable is not an undo."""
+    try: ops = json.loads(row["ops_json"])
+    except (TypeError, ValueError, RecursionError): return False
+    return isinstance(ops, list) and bool(ops) and all(isinstance(c, dict) and c.get("op") == "history.revert" for c in ops)
 
 
 def _value(v) -> str:
@@ -628,7 +653,8 @@ class Conversation:
             self.db.execute(USAGE)
             self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
-                    r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+                    r["summary"], **_pending_ops(r["ops_json"])}  # AV0022-03: + "ops" or "opsOmitted"
+                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         try:
             result = _checked(self.interpreter.interpret(msg.text, pending))
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
@@ -818,8 +844,8 @@ class Conversation:
                 f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
                 for r in rows]) if rows else "No approved changes yet.")
             return "history"
-        done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")
-                if code is None and r["state"] in ("applied", "verified") or r["code"] == code]
+        done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")  # AV0022-07: skip undos
+                if code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code]
         if not done:
             self._reply(f"Nothing to undo for {code}." if code else "Nothing to undo.")
             return "no-target"

@@ -174,6 +174,11 @@ class UnsafeFile(Exception):
     """conversation.sqlite3 is a symlink (dangling too) or not a regular file: history reads nothing from it."""
 
 
+def _cell(v, nullable=False):
+    """A text cell as stored; None only where nullable (dates); a BLOB, number or other None reads "unreadable"."""
+    return v if isinstance(v, str) or (v is None and nullable) else "unreadable"
+
+
 def history(state_dir, key=None, values=False) -> dict:
     path, rows, out = Path(state_dir) / "conversation.sqlite3", [], []
     try: mode = os.lstat(path).st_mode  # lstat: a link is never followed to another state's database
@@ -185,8 +190,9 @@ def history(state_dir, key=None, values=False) -> dict:
                 rows = db.execute(f"SELECT {', '.join(AUDIT)}, {ACTIVE}, source, value FROM memory WHERE ? IS NULL "
                                   "OR key = ? ORDER BY created_at, id", (key, key)).fetchall()
     for *audit, active, source, value in rows:  # never the source detail, approved_change or an inactive value
-        out.append({**dict(zip(AUDIT, audit)), "source_kind": m[1] if (m := SOURCE_KIND.match(str(source))) else "other",
-                    "active": bool(active), **({"value": value} if values and active else {})})
+        out.append({**{f: _cell(v, f.endswith("_at")) for f, v in zip(AUDIT, audit)},
+                    "source_kind": m[1] if (m := SOURCE_KIND.match(str(source))) else "other",
+                    "active": bool(active), **({"value": _cell(value)} if values and active else {})})
     return {"result": "ok", "rows": out, "keys": len({r["key"] for r in out}), "active": sum(r["active"] for r in out),
             **{f: sum(r[f + "_at"] is not None for r in out) for f in ("superseded", "forgotten")}}
 

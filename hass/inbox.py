@@ -183,6 +183,11 @@ class Inbox:
         return Nonces(self)
 
 
+def _zoned(value) -> bool:  # only a timezone-aware ISO-8601 string; a BLOB, number or garbage cell is not
+    try: return isinstance(parse_aware(value, "start_at"), datetime)
+    except (ValueError, TypeError): return False
+
+
 def status(state_dir, now=None):
     """(report, exit code) for `<state_dir>/inbox.sqlite3` opened mode=ro: never creates it, never shows an id or text."""
     sdir = Path(state_dir)
@@ -196,7 +201,8 @@ def status(state_dir, now=None):
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             rows = lambda table, sql: db.execute(sql).fetchall() if table in tables else []  # noqa: E731
             counts = dict(rows("inbound", "SELECT state, COUNT(*) FROM inbound GROUP BY state"))
-            out = {"result": "ok", "start_at": (rows("meta", "SELECT value FROM meta WHERE name = 'start_at'") or [(None,)])[0][0],
+            start = (rows("meta", "SELECT value FROM meta WHERE name = 'start_at'") or [(None,)])[0][0]
+            out = {"result": "ok", "start_at": None if start is None else start if _zoned(start) else "unreadable",
                    **{k: counts.get(k, 0) for k in ("pending", "done", "history")}}
             if "disposition" in {r[1] for r in db.execute("PRAGMA table_info(inbound)")}:  # an older schema lacks it
                 out["dispositions"] = disp = {}
