@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from hass.ops import COLLECTIONS, Arg, Op, Refused, Touched
+from hass.ops.catalog import _maker_problem
 from hass.ops.hikes import _guest_warning, _move_warning, _seats
 
 # What "undo an addition" means per collection: hide or cancel, never delete.
@@ -133,6 +134,13 @@ def _revert(content, args, ctx):
                 if (value["status"] == "scheduled"
                         and datetime.fromisoformat(value["startsAt"].replace("Z", "+00:00")) <= ctx.now):
                     return Refused("start is in the past")
+            elif collection == "products" and value.get("status") == "active" and (current or {}).get("status") != "active":
+                # making a product active again: the same checks as product.restore (_set_status)
+                if refused := _maker_problem(content, value.get("producerKey")):
+                    return refused
+                image = value.get("image")
+                if not isinstance(image, str) or not (ctx.site_dir / image).is_file():
+                    return Refused(f"{key} cannot be restored: image file {image} is missing")
         elif collection in UNDO_ADDITION:
             field, hidden = UNDO_ADDITION[collection]
             value = {**(current or {}), field: hidden}
