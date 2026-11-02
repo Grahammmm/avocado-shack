@@ -52,6 +52,7 @@ NOT_READ_REPLY = ("I only read new messages, so that reaction or edit changed no
                   "Send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
 PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
                   "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
+PHOTO_OPS = ("product.set_photo", "product.add")  # AV0022-04: ops in a photo-draft answer that get the draft's photo
 FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was changed. Please send it again."
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
@@ -70,6 +71,7 @@ INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
 VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT);
@@ -166,10 +168,16 @@ class Outbox:
         """A raised send error propagates and leaves that row and every later row unsent."""
         sent = 0
         for row in self.unsent():
-            adapter.send(row["chat"], row["text"], json.loads(row["attachments"]))
+            adapter.send(row["chat"], self._delayed(row["created_at"]) + row["text"], json.loads(row["attachments"]))
             self.db.execute("UPDATE outbox SET sent_at = ? WHERE id = ?", (_iso(self._now()), row["id"]))
             sent += 1
         return sent
+
+    def _delayed(self, created_at) -> str:
+        """AVB-07 (H16): send-time prefix for a reply held over DELAYED_AFTER_S; bad, naive or future -> ''."""
+        try: age = (self._now() - datetime.fromisoformat(created_at)).total_seconds()
+        except (TypeError, ValueError): return ""
+        return f"(Delayed reply, written {_local(created_at)}) " if age > DELAYED_AFTER_S else ""
 
 
 def _iso(dt: datetime) -> str:
@@ -649,7 +657,9 @@ class Conversation:
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
         photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
                      None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
-        calls = [c for c in result["ops"] if c["op"] == "product.set_photo"] if photo else []
+        calls = [c for c in result["ops"] if c["op"] in PHOTO_OPS] if photo else []  # AV0022-04: a new product too
+        if len(calls) > 1:  # AV0022-04: one photo, one product; nothing changes until the owner says which
+            return self._reply("One photo can go on one product; say which.") or "photo-many-ops"
         if any(c["args"].setdefault("photo", photo) != photo for c in calls):
             return self._reply("That draft is for another photo.") or "photo-mismatch"
         out = self.editor.prepare(result["ops"])
