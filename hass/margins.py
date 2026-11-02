@@ -17,6 +17,12 @@ class InputError(ValueError):  # a bad input; the message names the field
     pass
 
 
+def _decimal_places(d):  # exact meaningful decimals from the digit tuple; no context rounding, trailing zeros ignored
+    _, digits, exp = d.as_tuple()
+    sig = "".join(map(str, digits)).rstrip("0")
+    return 0 if not sig else max(0, -exp - (len(digits) - len(sig)))
+
+
 def _num(field, raw, lo, hi, places=None, whole=False, decimals=None):
     try:
         d = D(str(raw).strip())
@@ -25,7 +31,7 @@ def _num(field, raw, lo, hi, places=None, whole=False, decimals=None):
     if not d.is_finite() or (whole and d != d.to_integral_value()) or (places and d.as_tuple().exponent < -places):
         kind = "whole number" if whole else "number" + (f" with at most {places} decimals" if places else "")
         raise InputError(f"{field} must be a finite {kind}")
-    if decimals is not None and d.normalize().as_tuple().exponent < -decimals:  # never quantizes: 5 prints as 5
+    if decimals is not None and _decimal_places(d) > decimals:  # never quantizes: 5 prints as 5
         raise InputError(f"{field} must be a finite number with at most {decimals} decimals")
     if not PLAIN.fullmatch(str(raw).strip()):
         raise InputError(f"{field} must be a plain number (digits and one point)")

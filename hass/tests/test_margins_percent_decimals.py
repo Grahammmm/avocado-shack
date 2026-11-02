@@ -45,6 +45,19 @@ class PercentDecimalsTests(unittest.TestCase):
                 self.assertEqual(run(*with_arg(flag, value)), refused(field))
                 self.assertEqual(run(*with_arg(flag, value), "--json"), refused(field))  # no JSON on stdout
 
+    def test_long_values_beyond_context_precision_are_not_rounded_before_the_check(self):
+        long_bad = "12.25000000000000000000000000001"  # 31 decimals; 28-digit context rounding would make it 12.25
+        long_zeros = "12.25" + "0" * 40  # trailing zeros only: still 2 meaningful decimals
+        for flag, field in (("--margin", "margin"), ("--shrink", "shrink")):
+            with self.subTest(flag=flag, value=long_bad):
+                self.assertEqual(run(*with_arg(flag, long_bad)), refused(field))
+                self.assertEqual(run(*with_arg(flag, long_bad), "--json"), refused(field))
+            with self.subTest(flag=flag, value=long_zeros):
+                self.assertEqual(run(*with_arg(flag, long_zeros)), run(*with_arg(flag, "12.25")))
+        with self.assertRaises(margins.InputError) as cm:
+            margins.compute("24.00", "12", long_bad, "35")
+        self.assertEqual(str(cm.exception), "shrink must be a finite number with at most 2 decimals")
+
     def test_compute_direct_refuses_with_the_same_message(self):
         for shrink, margin, field in (("1e-30", "35", "shrink"), ("5", "33.333", "margin")):
             with self.subTest(field=field), self.assertRaises(margins.InputError) as cm:
