@@ -10,7 +10,7 @@ message until its next try (30 s, then 2 min); the 3rd try is handled as the las
 RF1710-3: `python3 hass/inbox.py status --state DIR` prints one JSON line of counts (sqlite mode=ro; no ids or text;
 clock_behind when a pending row is stamped after now).
 """
-import argparse, contextlib, json, os, re, sqlite3, sys  # noqa: E401
+import argparse, contextlib, json, os, re, sqlite3, stat, sys  # noqa: E401
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -188,9 +188,11 @@ def status(state_dir, now=None):
     """(report, exit code) for `<state_dir>/inbox.sqlite3` opened mode=ro: never creates it, never shows an id or text."""
     sdir = Path(state_dir)
     if sdir.is_symlink() or not sdir.is_dir(): return {"result": "unsafe", "reason": "missing or a symlink"}, 2
-    if not (path := sdir / "inbox.sqlite3").exists(): return {"result": "ok", "inbox": "none"}, 0
+    try: mode = os.lstat(path := sdir / "inbox.sqlite3").st_mode  # lstat: a planted (even dangling) link is seen
+    except FileNotFoundError: return {"result": "ok", "inbox": "none"}, 0
+    if not stat.S_ISREG(mode): return {"result": "unsafe", "reason": "inbox file is a link or not a regular file"}, 2
     try:
-        with contextlib.closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
             if db.execute("PRAGMA quick_check").fetchone()[0] != "ok": return {"result": "unreadable"}, 1
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             rows = lambda table, sql: db.execute(sql).fetchall() if table in tables else []  # noqa: E731
