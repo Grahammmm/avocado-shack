@@ -7,7 +7,7 @@ The copy holds the worktree's tracked ``storefront-mockup`` files (assets symlin
 fresh empty temp database and a minimal environment; ``hass/screenshot.cjs`` captures and checks the target page.
 The server is always stopped and the copy removed. Screenshots are written 0600; nothing is published or sent.
 """
-import http.client, json, os, shutil, socket, subprocess, sys, tempfile, time  # noqa: E401
+import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
@@ -52,11 +52,21 @@ def _get_ok(port: int) -> bool:
 
 
 def _write_private(path: Path, data: bytes) -> None:
+    """Whole or not at all; a link or folder at the path is refused."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
-    os.chmod(path, 0o600)
+    if os.path.lexists(path) and not stat.S_ISREG(os.lstat(path).st_mode):
+        raise OSError("screenshot path is not a regular file")
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.fchmod(handle.fileno(), 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _write_overlay(tmp: Path, files: dict) -> None:
