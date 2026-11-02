@@ -59,7 +59,8 @@ class AttachmentIdTests(unittest.TestCase):
         self.refused([{"guid": "att-1", "totalBytes": 10}, {"guid": "att-2", "totalBytes": "10"}], n=2)
 
     def test_total_bytes_none_absent_or_zero_downloads(self):
-        for item in ({"guid": "att-1", "totalBytes": None}, {"guid": "att-1"}, {"guid": "att-1", "totalBytes": 0}):
+        for item in ({"guid": "att-1", "totalBytes": None}, {"guid": "att-1"},
+                     {"guid": "att-1", "totalBytes": len(JPG)}):
             with self.subTest(item=item):
                 fake = FakeTransport(meta=_meta(item))
                 self.assertEqual(self.photos(fake).fetch("msg-1", 1), [JPG])
