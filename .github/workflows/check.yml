@@ -51,16 +51,26 @@ jobs:
             ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
 
+      # The AgentOrange runners are unprivileged user services (no sudo), so
+      # `--with-deps` / `install-deps` (which apt-get through sudo) only run on
+      # GitHub-hosted runners. The self-hosted host already has Chromium's
+      # system libraries installed (same pattern as skippercast's ci.yml);
+      # the verify step below fails loudly if one is ever missing.
       - name: Install Playwright test tool
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/pw-tools
           npm install --prefix ~/pw-tools --no-save --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}"
-          ~/pw-tools/node_modules/.bin/playwright install --with-deps chromium
+          ~/pw-tools/node_modules/.bin/playwright install chromium
 
-      - name: Install Chromium system libraries (cache hit)
-        if: steps.pw-cache.outputs.cache-hit == 'true'
+      - name: Install Chromium system libraries (GitHub-hosted only)
+        if: runner.environment == 'github-hosted'
         run: ~/pw-tools/node_modules/.bin/playwright install-deps chromium
+
+      - name: Verify Chromium launches (system libraries present)
+        run: |
+          cd ~/pw-tools
+          node -e "require('playwright').chromium.launch().then(b => b.close())"
 
       - name: Python syntax check
         run: python3 -m compileall -q storefront-mockup reports/hermes-handoff
