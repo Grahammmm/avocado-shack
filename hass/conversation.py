@@ -578,7 +578,7 @@ class Conversation:
         try:
             wt = editor_mod._load(str(self.sdir))[2]
             makers = json.loads((wt / "hass" / "content" / "makers.json").read_text("utf-8"))["makers"]
-        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState):
+        except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
             return None
         return makers if isinstance(makers, dict) else None
 
@@ -989,7 +989,7 @@ class Conversation:
                                 if e.get("status") == "scheduled"), key=lambda pair: pair[0])
             upcoming = [e for start, e in scheduled if start > now]
             passed = [e for start, e in scheduled if start <= now]  # the site hides these too (`>` rule)
-        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, editor_mod.UnsafeState):
             return ["Hikes: unavailable"]
         path, counts = self.settings.get("guestCountsDb"), None
         if any(e.get("rsvpEnabled") for e in upcoming) and isinstance(path, str) and path:  # RSVP-off only: never opened
