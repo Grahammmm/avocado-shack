@@ -75,7 +75,8 @@ class NegatedOwnerWordTests(unittest.TestCase):
 
     def test_maker_check_is_unchanged(self):
         draft = edit("Linn's", "Etto", field="producerKey")
-        self.assertEqual(claims.unstated(draft, "not Etto", MAKERS), [])  # names are not negated here
+        self.assertEqual(claims.unstated(draft, "not Etto", MAKERS),
+                         [("products p1 producerKey", "maker")])  # RF0250-3: a negated maker is not named
 
 
 class NegatedConversationTests(ConversationTestCase):
