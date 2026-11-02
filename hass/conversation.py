@@ -723,7 +723,7 @@ class Conversation:
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
         except Exception: return  # noqa: BLE001 - no label is today's reply exactly
-        line = label_reader.question(found) if found else None
+        line = label_reader.question(found, self._makers(), products) if found else None  # AVB-10: matching records
         with self._tx():
             if line and self.db.execute("UPDATE drafts SET summary = summary || ? WHERE code = ? AND state = "
                                         "'needs-details'", (" " + line, code)).rowcount:
