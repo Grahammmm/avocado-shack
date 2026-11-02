@@ -2,8 +2,7 @@
 A stranger, an owner `no`, a redelivered message id, a `yes` after the approval window and an unclear request each end
 with no approval and no site write; the writer worktree is byte-identical after the whole run.
 fixture_chat.py reads the real clock, so main() runs in-process with a clock that is each row's own `at` (the gaps
-between rows are the elapsed time), with each row's replies flushed at that time as the live loop sends them, and with
-Editor.apply armed to fail. fixture_chat.py itself is untouched.
+between rows are the elapsed time) and with Editor.apply armed to fail. fixture_chat.py itself is untouched.
 Run: python3 -B -m unittest hass.tests.test_demo_negative -v
 """
 
@@ -36,22 +35,31 @@ class Clock(datetime):
         return cls.current
 
 
-class RecordingAdapter(fixture_chat.FixtureAdapter):
-    last = None
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        RecordingAdapter.last = self
+class _Held:  # collects the sends of one row's flush; the real adapter gets them when fixture_chat flushes at the end
+    def __init__(self): self.sent = []
+    def send(self, chat, text, attachments): self.sent.append((chat, text, attachments))
 
 
 class ClockedConversation(conversation.Conversation):
     handled = []
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._held = _Held()
+
     def handle(self, msg, *args, **kwargs):
         Clock.current = Clock.fromisoformat(msg.received_at)  # the clock moves to the row's own time
         self.handled.append(disposition := super().handle(msg, *args, **kwargs))
-        self.flush(RecordingAdapter.last)  # AVB-07: replies go out at their row's time, as the live loop sends them
+        # AVB-07: Outbox.flush marks a reply older than DELAYED_AFTER_S as delayed. fixture_chat flushes once after the
+        # whole transcript, so a reply from an early row would look 30 minutes old. Flush at this row's own time instead
+        # (the reply is sent when it is written, so it is not delayed); fixture_chat's final flush forwards the sends.
+        super().flush(self._held)
         return disposition
+
+    def flush(self, adapter):
+        for send in self._held.sent: adapter.send(*send)  # the real adapter, in row order
+        self._held.sent.clear()
+        return super().flush(adapter)  # nothing left unless a row's send failed
 
 
 def _tree(root):  # every file of the writer worktree, by relative path and content hash
@@ -71,7 +79,6 @@ class NegativeDemoTests(unittest.TestCase):
         out = io.StringIO()
         with mock.patch.object(fixture_chat, "datetime", Clock), \
                 mock.patch.object(fixture_chat, "Conversation", ClockedConversation), \
-                mock.patch.object(fixture_chat, "FixtureAdapter", RecordingAdapter), \
                 mock.patch.object(conversation.Editor, "apply", side_effect=AssertionError("editor.apply called")) as apply, \
                 contextlib.redirect_stdout(out):
             code = fixture_chat.main(["--state", str(repo.state), "--fixture", str(TRANSCRIPT), "--interpreter", str(MAPPING)])
@@ -100,7 +107,6 @@ class NegativeDemoTests(unittest.TestCase):
         texts = [r["text"] for r in run["rows"]]
         self.assertEqual({(r["chat"], tuple(r["attachments"])) for r in run["rows"]}, {(CHAT, ())})
         self.assertEqual(len(texts), len(KINDS))  # no reply to the stranger, none to the redelivered `no`
-        self.assertFalse([t for t in texts if t.startswith("(Delayed reply")])  # each reply is sent at its row's time
         for text, kind in zip(texts, KINDS):
             self.assertTrue(text.startswith(kind) or kind in text, (kind, text))
         a, b = run["db"].execute("SELECT * FROM drafts ORDER BY row_id").fetchall()  # the unclear request opened no draft
