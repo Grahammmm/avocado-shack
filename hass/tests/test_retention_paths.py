@@ -95,7 +95,8 @@ class RetentionPathsTest(unittest.TestCase):
         want = {"days": base.DAYS, "cutoff": base.AT.isoformat(),
                 "inbox": {"done": 1, "history": 1, "pending": 0, "oldest": oldest},
                 "messages": {"rows": 1, "oldest": oldest}, "outbox": {"sent": 1, "unsent": 1, "oldest": oldest},
-                "drafts": {"closed": 2, "open": 1}, "screenshots": {"files": 1, "bytes": 7},
+                "drafts": {"closed": 2, "open": 1}, "approvals": {"rows": 0, "oldest": None},
+                "memory": {"forgotten": 0, "superseded": 0, "oldest": None}, "screenshots": {"files": 1, "bytes": 7},
                 "media": None, "backups": None, "deletes": 0}
         code, out, err = self.bounded("--state", str(self.state), "--days", str(base.DAYS))
         self.assertEqual((code, out, err), (0, json.dumps(want) + "\n", ""))
