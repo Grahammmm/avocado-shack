@@ -1,6 +1,6 @@
 """NB-AV-04 (H09): interpreter eval set and offline scorer. `score --cases C --replies R` prints one JSON summary (ids
 and short reasons, never a case text or reply); exit 0 when every case was scored, even if some failed; 2 for an
-unreadable file, malformed line, duplicate id or a case file without exactly 30 cases. `--live --url U --model M
+unreadable file, malformed line, duplicate id or a case file without exactly 40 cases. `--live --url U --model M
 --out FILE` is OPERATOR ONLY, never run in CI or tests (they inject a fake transport): it builds the NB-AV-03 prompt
 from the real registry and catalog, asks the existing local model (NB-AV-02, loopback only) once per case and writes
 {"id", "reply"} lines to a new FILE outside the repo."""
@@ -17,7 +17,7 @@ from hass.ops import load_registry  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 CASES = REPO / "hass" / "tests" / "fixtures" / "interpreter-eval.jsonl"
-CASE_COUNT, ID_RE, NOTE_KEY = 30, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
+CASE_COUNT, ID_RE, NOTE_KEY = 40, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
 CLAIM_ARGS = frozenset({"organic", "producerKey"})  # an extra arg the case did not expect fails only for these
 
 
