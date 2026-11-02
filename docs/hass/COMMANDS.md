@@ -29,6 +29,7 @@ The two note commands are stricter:
 | `memory` | Lists the saved notes (up to 20). | `memory` |
 | `alias <name>: <id>` | Saves your own name for a product id or maker key that exists now, so a lookup of that name finds it. Send `forget alias.<name with - for spaces>` to remove it. | `alias green jam: photo-product-001` |
 | `find <words>` | Lists up to 10 products and makers whose name matches (your aliases too), each with its id and status, hidden ones included. It changes nothing and works while paused. | `find lion's mane` |
+| `show <code>` | Sends that draft again: a waiting draft's full proposal text and its preview screenshot, or an applied change's lines (with its commit) and its checked screenshot. An expired, cancelled or replaced draft is named as such. It changes nothing, expires nothing and works while paused. | `show A1B2` |
 | `help` (or `commands`, `?`) | Replies a short list of every command with one example each. It changes nothing. | `help` |
 
 Saved notes never change the site, and pause does not affect them.
