@@ -21,6 +21,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 from hass import editor  # noqa: E402
 
 MAX_BYTES = 20 * 1024 * 1024
+SIDECAR_MAX = 64 * 1024  # a store-written sidecar is ~200 bytes; anything longer is invalid, never parsed
 KINDS = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG\r\n\x1a\n"}
 EXT = {"jpeg": "jpg", "png": "png"}
 PNG_END = b"\x00\x00\x00\x00IEND\xaeB`\x82"  # zero-length IEND chunk with its fixed CRC32 (0xAE426082)
@@ -80,8 +81,10 @@ def _existing(path: Path):
     try: st = os.lstat(path)
     except FileNotFoundError: return None
     if not stat.S_ISREG(st.st_mode): raise Refused("corrupt-store")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    with os.fdopen(fd, "rb") as fh: return fh.read()
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)  # a FIFO swapped in after lstat never blocks open
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fd).st_mode): raise Refused("corrupt-store")
+        return fh.read()
 
 def _write_new(final: Path, data: bytes) -> None:
     """Write via a 0600 temp file in the same dir, fsync, then hard-link; never overwrites or follows a symlink."""
@@ -344,8 +347,8 @@ def verify_store(root) -> dict:
                 problems.add(f"content mismatch: {sha[:12]}")
             if "json" not in files: problems.add(f"sidecar missing: {sha[:12]}")
             elif data is not None and (raw := read(files["json"], sha)) is not None:
-                try: meta = json.loads(raw)
-                except ValueError: meta = None
+                try: meta = json.loads(raw) if len(raw) <= SIDECAR_MAX else None  # RF1920-6: oversize or too deep is
+                except (ValueError, RecursionError): meta = None  # one "sidecar invalid", never a crash of the whole verify
                 want = {"sha256": sha, "kind": "jpeg" if ext == "jpg" else "png", "bytes": len(data)}
                 if not (isinstance(meta, dict) and want.items() <= meta.items() and type(meta["bytes"]) is int  # 1234.0 == 1234
                         and _valid_time(meta) and _valid_source(meta)): problems.add(f"sidecar invalid: {sha[:12]}")
