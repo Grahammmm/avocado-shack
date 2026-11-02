@@ -14,7 +14,7 @@ import re
 import unicodedata
 
 from hass.content_model import AVAILABILITY, CATEGORIES
-from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
+from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
 
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
 # storefront-mockup/shop.js organic(): name matches /\borganic\b/i or the maker is one of these.
@@ -152,6 +152,14 @@ def _product_edit(content, args, ctx):
     return _touch("products", product["id"], before, product)
 
 
+def _restore_image_problem(ctx, pid, image):
+    """Making a product active again checks its image like setting one (shared _image_file_problem rule)."""
+    problem = _image_file_problem(ctx.site_dir, image) if isinstance(image, str) else "image file does not exist"
+    if problem == "image file does not exist":
+        return Refused(f"{pid} cannot be restored: image file {image} is missing")
+    return Refused(f"{pid} cannot be restored: {problem}") if problem else None
+
+
 def _set_status(content, args, ctx, *, expect, new, state_error):
     product = _product(content, args["id"])
     if not isinstance(product, dict):
@@ -161,8 +169,8 @@ def _set_status(content, args, ctx, *, expect, new, state_error):
     if new == "active":
         if refused := _maker_problem(content, product.get("producerKey")):
             return refused
-        if not (ctx.site_dir / product["image"]).is_file():
-            return Refused(f"{product['id']} cannot be restored: image file {product['image']} is missing")
+        if refused := _restore_image_problem(ctx, product["id"], product.get("image")):
+            return refused
     before = copy.deepcopy(product)
     product["status"] = new
     return _touch("products", product["id"], before, product)
