@@ -240,6 +240,10 @@ def load_settings(sdir, photos=False) -> dict:
     problems += [f"ownerSenders entry {n} is not an email address or a +country phone number"  # value never echoed
                  for n, key in enumerate(keys, 1) if key is None]
     if not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
+    elif ";+;" in chat:  # AVB-02 (H08): the owner channel is the owner's one-to-one chat, never a group; ids never echoed
+        problems.append("ownerChat is a group chat; it must be the owner's one-to-one chat")
+    elif (direct := re.fullmatch(r"[^;]+;-;([^;]+)", chat)) and sender_key(direct[1]) not in keys:
+        problems.append("ownerChat is a one-to-one chat with an address that is not in ownerSenders")
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
     root = settings.get("mediaRoot")  # NB-AV-09: required only with a photo source
     if photos and (not isinstance(root, str) or not root.strip()): problems.append("mediaRoot must be set to use photos")
