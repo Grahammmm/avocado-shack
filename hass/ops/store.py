@@ -9,6 +9,7 @@ Usage (request ops):
 
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
 ignored; the refusal names both line numbers); street and town at most 80 characters.
+Each hours line needs a letter or digit, and street and town each need a letter (the refusal names the line or field).
 Text kinds already reject markup, ``$`` and control characters. ``name`` and ``schemaVersion`` are not editable.
 
 Selective-undo limit: the store is ONE record, so ``history.revert`` of an older store change after a later store
@@ -47,6 +48,9 @@ def _set_hours(content, args, ctx):
     for i, line in enumerate(hours):
         if len(line) > MAX_HOURS_LINE:
             return Refused(f"hours line {i + 1} is longer than {MAX_HOURS_LINE} characters")
+    for i, line in enumerate(hours):
+        if not any(c.isalnum() for c in line):
+            return Refused(f"hours line {i + 1} needs a day or time")
     first_seen = {}
     for i, line in enumerate(hours):
         j = first_seen.setdefault(_line_key(line), i)
@@ -66,6 +70,9 @@ def _set_address(content, args, ctx):
     for field, value in given.items():
         if len(value) > MAX_ADDRESS_PART:
             return Refused(f"{field} is longer than {MAX_ADDRESS_PART} characters")
+    for field, value in given.items():
+        if not any(c.isalpha() for c in value):
+            return Refused(f"{field} needs at least one letter")
     store = content.store
     if all(store[f] == v for f, v in given.items()):
         return Refused(f"store address is already {store['streetAddress']}, {store['town']}")
