@@ -24,7 +24,8 @@ NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds g
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
                         r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
                         r"|(resume)(?: changes)?|(help|commands|\?)"
-                        r"|(find)(?:\s+(.*))?")  # AV1537-04; the query is re-read from the original text to keep its case
+                        r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
+                        r"|(show)(?:\s+(.*))?")  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -38,6 +39,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'memory - list the saved notes: "memory"',
     'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
     'find <words> - matching products and makers, ids: "find lion\'s mane"',
+    'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
@@ -52,6 +54,7 @@ NOT_READ_REPLY = ("I only read new messages, so that reaction or edit changed no
                   "Send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
 PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
                   "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
+PHOTO_OPS = ("product.set_photo", "product.add")  # AV0022-04: ops in a photo-draft answer that get the draft's photo
 FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was changed. Please send it again."
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
@@ -77,7 +80,7 @@ CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TE
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
   reason TEXT, replaced_by TEXT, draft_hash TEXT, base TEXT, ops_json TEXT NOT NULL, summary TEXT NOT NULL,
   sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT,
-  screenshot TEXT, checked_at TEXT);
+  screenshot TEXT, checked_at TEXT, proposed_at TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NULL, chat TEXT NOT NULL,
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
@@ -281,6 +284,7 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
     if match[7]: return "help", None
     if match[8]: return "find", re.sub(r"[.!]+$", "", text.strip())[4:].strip()  # ("find", query in its own case)
     if match[2]: return "undo", match[3]
@@ -363,13 +367,17 @@ def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty
         (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
 
 
-def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False) -> str:
-    lines = [f"Draft {code}:"]
+def _record_lines(draft: dict) -> list:  # AV0022-08: a draft's record and warning lines (proposal_text and show)
+    lines = []
     for r in draft["records"]:
         lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
             f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in (
                 (f, *(map(_hike_time, (b, a)) if f == "startsAt" else (b, a))) for f, b, a in _changes(r))]
-    lines += [f"Warning: {w}" for w in draft.get("warnings") or []]
+    return lines + [f"Warning: {w}" for w in draft.get("warnings") or []]
+
+
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "") -> str:
+    lines = [head or f"Draft {code}:"] + _record_lines(draft)
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
     return "\n".join(lines)
@@ -388,8 +396,14 @@ class Conversation:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
-        for column in ("screenshot", "checked_at"):  # an H05 database gains the H06 columns
+        for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
+        # AVB-03 (H05): an open draft from before proposed_at has no recoverable proposal instant (a filled question
+        # keeps its question's created_at), so it counts as proposed when this store is opened: a yes sent earlier is
+        # refused and the owner re-sends it; it is never judged from created_at or from the current ttl.
+        if self.db.execute("SELECT 1 FROM drafts WHERE proposed_at IS NULL AND state = 'proposed' LIMIT 1").fetchone():
+            self.db.execute("UPDATE drafts SET proposed_at = ? WHERE proposed_at IS NULL AND state = 'proposed'",
+                            (_iso(self._now()),))  # the clock is read only when such a draft exists
         self.outbox = Outbox(self.db, self._now)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.recover()
@@ -425,6 +439,12 @@ class Conversation:
         """H16: a needs-details row stored before expiry existed (expires_at NULL) lapses at created_at + ttl."""
         if row["expires_at"]: return datetime.fromisoformat(row["expires_at"])
         return datetime.fromisoformat(row["created_at"]) + timedelta(seconds=self.settings["approvalTtlSeconds"])
+
+    def _proposed_at(self, row) -> datetime:
+        """AVB-03 (H05): the stored instant the draft was proposed (_propose sets it on insert and on a needs-details
+        fill), so a later approvalTtlSeconds change never moves it. Opening the store stamps an open draft from before
+        the column with the open instant; a proposed row still without one fails closed (now: only a yes sent now)."""
+        return datetime.fromisoformat(row["proposed_at"]) if row["proposed_at"] else self._now()
 
     def _move(self, row, state, **fields):
         current = self._row(row["row_id"])["state"]
@@ -473,15 +493,17 @@ class Conversation:
         """Insert a proposed draft (or fill a needs-details row) bound to the A2 hash, base and expiry."""
         expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))
         fields = dict(change_id=draft["change_id"], draft_hash=draft["draft_hash"], base=draft["base"],
-                      ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires)
+                      ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires,
+                      proposed_at=_iso(now))  # AVB-03: the proposal instant itself, not derived from the current ttl
         if row is not None:
             self._move(row, "proposed", **fields)
             return self._row(row["row_id"])
         cur = self.db.execute(
             "INSERT INTO drafts(change_id, code, state, draft_hash, base, ops_json, summary, sender, chat, created_at,"
-            " expires_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?)",
+            " expires_at, proposed_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (fields["change_id"], self._code(draft["draft_hash"][7:]), fields["draft_hash"], fields["base"],
-             fields["ops_json"], fields["summary"], sender, self.settings["ownerChat"], _iso(now), expires))
+             fields["ops_json"], fields["summary"], sender, self.settings["ownerChat"], _iso(now), expires,
+             fields["proposed_at"]))
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------
@@ -527,7 +549,7 @@ class Conversation:
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and command[0] in ("status", "help", "find"): expired = []  # H17: read-only; status hides lapsed drafts
+        if command and command[0] in ("status", "help", "find", "show"): expired = []  # H17: read-only, sweeps nothing
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -575,6 +597,10 @@ class Conversation:
                         f"Send resume changes, then yes {target['code']}.")
             self._record(msg, "paused")
             return "paused", None
+        if cutoff != now and cutoff < self._proposed_at(target):  # AVB-03 (H05): a yes sent before the draft existed
+            self._reply(f"That yes was sent before {target['code']} was proposed; reply yes {target['code']} to apply it.")
+            self._record(msg, "no-target")
+            return "no-target", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
             self._reply(f"{target['code']} repeats a draft that was closed; reply yes {target['code']} to apply it.")
             self._record(msg, "no-target")
@@ -656,7 +682,9 @@ class Conversation:
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
         photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
                      None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
-        calls = [c for c in result["ops"] if c["op"] == "product.set_photo"] if photo else []
+        calls = [c for c in result["ops"] if c["op"] in PHOTO_OPS] if photo else []  # AV0022-04: a new product too
+        if len(calls) > 1:  # AV0022-04: one photo, one product; nothing changes until the owner says which
+            return self._reply("One photo can go on one product; say which.") or "photo-many-ops"
         if any(c["args"].setdefault("photo", photo) != photo for c in calls):
             return self._reply("That draft is for another photo.") or "photo-mismatch"
         out = self.editor.prepare(result["ops"])
@@ -709,12 +737,23 @@ class Conversation:
         dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
         if dup: return self._reply(f"That photo is already in draft {dup[0]['code']}." + (
             f" {dup[0]['summary']}" if dup[0]["state"] == "needs-details" else "")) or "photo-duplicate"
+        caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
+        try:  # H12: a photo that is an active or hidden product's picture opens no draft; unreadable worktree: as before
+            image = re.compile(rf"assets/products/photo-{sha[:16]}\.(jpg|png)")
+            on = next((p for p in sorted((p for p in load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+                       .products if isinstance(p, dict)), key=lambda p: str(p.get("id")))
+                       if p.get("status") in ("active", "hidden") and isinstance(p.get("image"), str)
+                       and image.fullmatch(p["image"])), None)
+            said = on and f"That photo is already on {on['id']} ({on['name']}). To change that product, say what to change."
+        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): said = None  # no id/name: as unreadable
+        if said:
+            self._reply(said)
+            return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at) VALUES"
                         " (?, 'needs-details', ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
                             [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now)))
         self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
         if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
-        caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
         return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"
 
     def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
@@ -723,7 +762,7 @@ class Conversation:
             products = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content").products
             found = self.labels.read(web, sorted({p["category"] for p in products if isinstance(p.get("category"), str)}))
         except Exception: return  # noqa: BLE001 - no label is today's reply exactly
-        line = label_reader.question(found) if found else None
+        line = label_reader.question(found, self._makers(), products) if found else None  # AVB-10: matching records
         with self._tx():
             if line and self.db.execute("UPDATE drafts SET summary = summary || ? WHERE code = ? AND state = "
                                         "'needs-details'", (" " + line, code)).rowcount:
@@ -820,6 +859,7 @@ class Conversation:
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
+        if verb == "show": return self._reply(*self._show(code, now)) or "show"
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
@@ -865,6 +905,30 @@ class Conversation:
         self._reply("\n".join(lines[:FIND_MAX] + tail) if lines else f'No product or maker matches "{query}".')
         return "find"
 
+    def _show(self, code, now) -> tuple:
+        """AV0022-08 (H17): (text, attachments) repeating one draft's stored proposal lines and its saved screenshot.
+        Read-only: no state move, no expiry sweep, never prepared or rendered again; works while paused."""
+        if not re.fullmatch(r"[0-9a-f]{4,12}", code): return "Send show and a draft code, e.g. show a1b2.", []
+        if (row := self._by_code(code)) is None: return f"No draft {code}.", []
+        state = row["state"]
+        if state in ("proposed", "needs-details") and self._expiry(row) <= now:  # lapsed, not swept: words it only
+            return self._state_text({**dict(row), "state": "expired", "expires_at": _iso(self._expiry(row))}), []
+        if state == "needs-details": return f"{code} still needs details: {row['summary']}", []
+        if state not in ("proposed", "applied", "verified"): return self._state_text(row), []
+        try:
+            out = self.editor.show(row["change_id"])
+            rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
+            draft = {"records": rec["records"], "warnings": rec.get("warnings")}
+            if state == "proposed":
+                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), f"Draft {code} (waiting):")
+                shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
+            else:
+                sha = f" ({row['commit'][:7]})" if row["commit"] else ""
+                text, shot = "\n".join([f"Applied {code}{sha}:"] + _record_lines(draft)), row["screenshot"]
+            return text, [str(shot)] if shot and Path(shot).is_file() else []
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            return f"{code}: the draft details are not available any more.", []
+
     # -- H15: remember, forget, memory ---------------------------------------------------------------------------
     def _memory(self, msg, verb, key, value) -> str:
         """Owner-stated facts on this connection inside the message's transaction; a store ValueError undoes only
@@ -892,6 +956,9 @@ class Conversation:
             problem = f"text must be 1–{memory_mod.MAX_VALUE} plain characters"
         if valid and key.startswith("alias."): problem = "send alias <name>: <id> to save an alias"
         old, source = (self.memory.get(key) if valid else None), f"owner-stated:{msg.provider_id}"
+        if problem is None and old is not None and old == value:  # AVB-15: the same text again changes nothing
+            self._reply(f"Already saved {key}: {value}; nothing changed.")
+            return "memory-unchanged"
         try:
             if problem is None and old is None: self.memory.remember(key, value, "fact", source)
             elif problem is None: self.memory.correct(key, value, source)

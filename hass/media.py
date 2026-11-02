@@ -42,7 +42,7 @@ REPLIES = {
     "audio": "That looks like a voice note or audio file. I can't understand voice notes yet, so nothing was saved. "
              "Please type the change as a text message.",  # AV2022-05 (H11/H12)
 }
-AUDIO_BRANDS = (b"M4A ", b"M4B ")
+AUDIO_BRANDS = (b"M4A ", b"M4B ", b"M4P ", b"3gp4", b"3gp5", b"3gp6", b"3gr6", b"3g2a")  # AVB-11: + MMS 3GPP voice
 SHA_RE = re.compile(r"[0-9a-f]{64}")
 JPEG_KEEP = {*range(0xC0, 0xD0), 0xDB, 0xDD}  # SOFn plus DHT C4, JPG C8, DAC CC; DQT; DRI
 JPEG_TAGGED = {0xE0: b"JFIF\0", 0xE2: b"ICC_PROFILE\0", 0xEE: b"Adobe"}  # colour/format only, no location
@@ -58,8 +58,12 @@ def _prefix(data: bytes):
     return next((kind for kind, magic in KINDS.items() if data.startswith(magic)), None)
 
 def is_audio(data: bytes) -> bool:
-    """True for CAF (iPhone voice note), AMR / AMR-WB, or an ISO-BMFF M4A/M4B; from the bytes only."""
-    return data.startswith((b"caff", b"#!AMR")) or (data[4:8] == b"ftyp" and data[8:12] in AUDIO_BRANDS)
+    """True for CAF (iPhone voice note), AMR / AMR-WB, WAV, MP3 (ID3 tag or MPEG frame sync), Ogg, FLAC, or an
+    ISO-BMFF audio brand (M4A/M4B/M4P, 3GPP); from the bytes only. FF D8 (JPEG) never passes the frame-sync rule."""
+    if data.startswith((b"caff", b"#!AMR", b"ID3", b"OggS", b"fLaC")): return True
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE": return True
+    if len(data) >= 2 and data[0] == 0xFF and data[1] & 0xE6 in (0xE2, 0xE4, 0xE6): return True
+    return data[4:8] == b"ftyp" and data[8:12] in AUDIO_BRANDS
 
 def _unknown(data: bytes) -> str:
     return "truncated" if _prefix(data) else "audio" if is_audio(data) else "unsupported-type"

@@ -1,0 +1,29 @@
+{
+  "Make the avocado description shorter": {
+    "ops": [
+      {
+        "op": "product.edit",
+        "args": {
+          "id": "photo-product-001",
+          "description": "Creamy flesh, a little lime, enough salt."
+        }
+      }
+    ],
+    "revises": null
+  },
+  "Make the avocado description plainer": {
+    "ops": [
+      {
+        "op": "product.edit",
+        "args": {
+          "id": "photo-product-001",
+          "description": "Ripe and creamy."
+        }
+      }
+    ],
+    "revises": null
+  },
+  "Sort out the shop": {
+    "question": "Which product or maker should I change, and what should it say?"
+  }
+}

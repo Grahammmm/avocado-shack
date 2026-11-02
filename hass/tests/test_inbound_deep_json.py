@@ -17,6 +17,8 @@ from hass.tests.test_receiver import NOW, SECRET, ReceiverTestCase
 
 DEEP = "[" * 100000
 DEEP_OBJECT = '{"a":' * 100000
+DEEP_ENV = "[" * receiver.MAX_ENVELOPE_BYTES  # envelope inputs stay within the 64 KiB cap so json.loads still runs
+DEEP_OBJ_ENV = '{"a":' * (receiver.MAX_ENVELOPE_BYTES // 5)
 
 
 class DeepEnvelopeTests(ReceiverTestCase):
@@ -28,17 +30,17 @@ class DeepEnvelopeTests(ReceiverTestCase):
         self.assertEqual(self.inbox.db.execute("SELECT COUNT(*) FROM nonces").fetchone()[0], 0)
 
     def test_deep_array_or_object_as_str_bytes_or_bytearray_is_a_shape_rejection(self):
-        for raw in (DEEP, DEEP.encode(), bytearray(DEEP.encode()), DEEP_OBJECT, DEEP_OBJECT.encode()):
+        for raw in (DEEP_ENV, DEEP_ENV.encode(), bytearray(DEEP_ENV.encode()), DEEP_OBJ_ENV, DEEP_OBJ_ENV.encode()):
             with self.subTest(kind=type(raw).__name__, start=raw[:2]):
                 self.assert_shape_rejected(raw)
 
     def test_bridge_is_never_reached_for_a_deep_envelope(self):
         with mock.patch.object(receiver.bridge, "unseal", side_effect=AssertionError("unseal must not run")) as unseal:
-            self.assert_shape_rejected(DEEP)
+            self.assert_shape_rejected(DEEP_ENV)
         unseal.assert_not_called()
 
     def test_a_good_envelope_after_a_deep_one_is_still_drafted(self):
-        self.assert_shape_rejected(DEEP)
+        self.assert_shape_rejected(DEEP_ENV)
         out = self.rx.receive(self.seal(event("new-message")), secret=SECRET, now=NOW)
         self.assertEqual((out["result"], len(self.drafts())), ("drafted", 1))
         self.assertEqual(out["draft_id"], self.drafts()[0]["code"])
