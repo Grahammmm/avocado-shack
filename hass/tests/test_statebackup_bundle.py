@@ -1,7 +1,7 @@
 """FAV-07 tests: a backup carries content.bundle, a full git bundle of the writer worktree at contentCommit (site content
 and committed web photos), listed and hashed in MANIFEST.json; verify checks its head. Temp repos only; nothing live."""
 
-import hashlib, json, os, subprocess  # noqa: E401
+import contextlib, hashlib, io, json, os, subprocess  # noqa: E401
 from datetime import timedelta
 from pathlib import Path
 from unittest import mock
@@ -99,6 +99,27 @@ class ContentBundleTests(BackupTestCase):
         self.write_doc(backup, doc)
         self.assertEqual(statebackup.verify(str(backup)),
                          {"result": "corrupt", "problems": ["content bundle without contentCommit"]})
+
+    def test_a_non_utf8_ref_in_a_rehashed_bundle_is_corrupt_not_a_crash(self):
+        backup, made = self.make()
+        data = (backup / BUNDLE).read_bytes()
+        line = f"{made['contentCommit']} HEAD\n".encode()
+        self.assertIn(line, data)
+        bad = data.replace(line, f"{made['contentCommit']} refs/heads/".encode() + b"\xff\xfe\n", 1)
+        (backup / BUNDLE).write_bytes(bad)
+        doc = self.doc(backup)
+        doc["files"][BUNDLE] = hashlib.sha256(bad).hexdigest()  # rewritten to match: only the head check can catch it
+        self.write_doc(backup, doc)
+        corrupt = {"result": "corrupt", "problems": ["content bundle: head is not contentCommit"]}
+        self.assertEqual(statebackup.verify(str(backup)), corrupt)
+        self.assertEqual(statebackup.restore(str(backup), str(self.tmp / "restored"), str(self.drill_wt))["result"],
+                         "corrupt")
+        self.assertFalse(os.path.lexists(self.tmp / "restored"))
+        self.assertEqual(statebackup.drill(str(backup), str(self.tmp / "drilled"), str(self.drill_wt)),
+                         {"result": "corrupt", "step": "verify", "problems": corrupt["problems"]})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf): code = statebackup.main(["verify", str(backup)])
+        self.assertEqual((code, json.loads(buf.getvalue().strip().splitlines()[-1])), (1, corrupt))
 
     def test_a_symlinked_bundle_is_named_and_never_read_by_git(self):
         backup, _ = self.make()

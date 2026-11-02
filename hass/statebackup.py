@@ -194,11 +194,11 @@ def create(state, out, now=None, media=None) -> dict:
             "contentBundle": BUNDLE in hashes, **extra}
 
 def _git_ro(wt, *args) -> str:
-    """git stdout, or "" if git is missing; read-only callers only."""
+    """git stdout, or "" if git is missing or its output is not UTF-8 (e.g. a crafted ref name); read-only callers only."""
     old = os.environ.get("GIT_OPTIONAL_LOCKS")
     os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # this call only: never refresh the writer's index
     try: return editor._out(wt, *args)
-    except OSError: return ""
+    except (OSError, UnicodeDecodeError): return ""
     finally:
         if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
         else: os.environ["GIT_OPTIONAL_LOCKS"] = old
