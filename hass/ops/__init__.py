@@ -6,7 +6,7 @@ package (A3/A4/A6) export ``OPS = (Op(...), ...)``; ``load_registry()`` collects
 
 from __future__ import annotations
 
-import importlib, json, pkgutil, re  # noqa: E401
+import importlib, json, os, pkgutil, re, stat  # noqa: E401
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -50,11 +50,18 @@ class OpContext:
     assets: dict = field(default_factory=dict)  # site-relative assets/products path -> bytes the editor writes (H10)
 
     def change(self, change_id):
-        """Read-only: the recorded change ``<state>/changes/<id>.json`` as a dict, or None (H06 undo)."""
+        """Read-only: the recorded change ``<state>/changes/<id>.json`` as a dict, or None (H06 undo); regular, non-link
+        file only: a link, FIFO, socket or folder there raises OSError and is never followed or opened."""
         if self.state_dir is None or not CHANGE_ID_RE.fullmatch(str(change_id)):
             return None
         path = Path(self.state_dir) / "changes" / f"{change_id}.json"
-        return json.loads(path.read_text("utf-8")) if path.is_file() else None
+        try:
+            st = os.lstat(path)
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISREG(st.st_mode):
+            raise OSError("not a regular file")
+        return json.loads(path.read_text("utf-8"))
 
 
 @dataclass

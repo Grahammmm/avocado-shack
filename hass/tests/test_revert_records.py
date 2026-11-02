@@ -98,11 +98,11 @@ class RevertRecordTests(StoreTestCase):
                 self.write(data)
                 self.assert_refused(f"{self.change_id} touched no records")
 
-    def test_directory_at_record_path_is_unknown(self):
+    def test_directory_at_record_path_is_unreadable(self):  # RF1800-1: a folder is a damaged record, not "unknown"
         self.path.unlink()
         self.path.mkdir()
         result = self.repo_.prepare(_req((REVERT, {"changeId": self.change_id})))
-        self.assertEqual((result["result"], result["reason"]), ("refused", f"unknown change {self.change_id}"))
+        self.assertEqual((result["result"], result["reason"]), ("refused", f"{self.change_id} record is unreadable"))
         self.assertEqual(self.repo_.store()["hours"], NEW_HOURS)
 
     def test_reason_names_only_the_change_id(self):
