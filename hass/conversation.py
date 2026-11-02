@@ -308,9 +308,7 @@ class Conversation:
         self.settings, self.photos = load_settings(sdir, photos is not None), photos  # fetch(provider_id, n) -> [bytes]
         self.editor, self.interpreter, self.clock, self.labels, self._label_job = editor, interpreter, clock, labels, None
         self.sdir, self.previewer = sdir, previewer
-        path = sdir / "conversation.sqlite3"
-        os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
-        os.chmod(path, 0o600)
+        path = memory_mod.private_db(sdir, "conversation.sqlite3")
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)

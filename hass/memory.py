@@ -7,7 +7,7 @@ text of every row of the key and keeps only the audit dates. Store only, plus a 
 commands, interpreter or network. An owner-approved:<change id> source must name a change whose record in this state
 dir is applied and not undone (RF1650-2); anything else is the same "unverified source".
 """
-import argparse, contextlib, json, os, re, sqlite3, stat, sys  # noqa: E401
+import argparse, contextlib, errno, json, os, re, sqlite3, stat, sys  # noqa: E401
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -46,13 +46,25 @@ def _check_source(source) -> None:
         raise ValueError("unverified source")
 
 
+def private_db(sdir, name) -> Path:
+    path = sdir / name
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENXIO, errno.EISDIR): raise editor_mod.UnsafeState(
+            f"{name} must be a regular file, not a link") from exc
+        raise
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode): raise editor_mod.UnsafeState(f"{name} must be a regular file, not a link")
+        os.fchmod(fd, 0o600)
+    finally: os.close(fd)
+    # SQLite reopens by path; the intervening window is accepted for the owned 0700 state dir.
+    return path
 class Memory:
     def __init__(self, state_dir, clock):
         """state_dir is validated by editor.open_state (UnsafeState if shared/foreign); clock() returns a datetime."""
         self.sdir = sdir = editor_mod.open_state(state_dir)
-        path = sdir / "conversation.sqlite3"
-        os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
-        os.chmod(path, 0o600)
+        path = private_db(sdir, "conversation.sqlite3")
         self.clock = clock
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
