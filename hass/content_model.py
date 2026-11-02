@@ -53,7 +53,9 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on",)  # ISO date of Michael's last selection check; absent until the first one
+STORE_OPTIONAL = ("selection_checked_on", "intro")  # ISO date of Michael's last check; home-page intro line; both absent by default
+MAX_INTRO = 160  # characters in the optional store.intro (ops/store.py imports this)
+DEFAULT_INTRO = "Good food nourishes more than a body. It brings people together."  # shown when store.intro is absent
 MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
 # Maximum length (Python len: code points, so "é" written as e + combining accent counts 2) of every owner-editable
 # text field. Each limit is at least 1.5x the longest current value (test_text_limits checks the real content).
@@ -372,6 +374,10 @@ def validate_store(problems, store, today: date | None = None):
             problems.append("store.selection_checked_on: must be a real date YYYY-MM-DD")
         elif day > (today or shop_today()):
             problems.append(f"store.selection_checked_on: {day.isoformat()} is in the future")
+    if "intro" in store:
+        _text(problems, "store.intro", store["intro"], limit=MAX_INTRO)
+        if isinstance(store["intro"], str) and sum(c.isalpha() for c in store["intro"]) < 3:
+            problems.append("store.intro: needs at least 3 letters")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):
