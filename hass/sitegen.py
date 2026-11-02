@@ -175,12 +175,23 @@ def _check_folders(root: Path, rel: str) -> None:
             raise OSError(errno.ELOOP, "generated folder is a symlink")
 
 
+def _check_target(root: Path, rel: str) -> None:
+    """Refuse a generated target that is a symlink (even dangling) or an existing non-regular file."""
+    p = Path(root) / rel
+    if os.path.islink(p):
+        raise OSError(errno.ELOOP, "generated target is a symlink")
+    if os.path.lexists(p) and not p.is_file():
+        raise OSError(errno.EISDIR if p.is_dir() else errno.EINVAL, "generated target is not a regular file")
+
+
 def write_files(files: dict[str, bytes], root: Path, only: list[str] | None = None) -> list[str]:
-    """Atomically replace each (changed) file under root; return written paths."""
+    """Atomically replace each (changed) file under root; return written paths.
+    Every target is checked before any file is replaced; a refused target leaves all files untouched."""
     written = []
     selected = [(rel, data) for rel, data in files.items() if only is None or rel in only]
     for rel, _ in selected:
         _check_folders(Path(root), rel)
+        _check_target(Path(root), rel)
     for rel, data in selected:
         target = Path(root) / rel
         target.parent.mkdir(parents=True, exist_ok=True)
