@@ -145,10 +145,9 @@ class PhotoDraftTests(unittest.TestCase):
         self.assertEqual((len(self.drafts()), len(self.originals())), (1, 2))
         self.assertEqual(self.interp.texts, [ANSWER])
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.say(attachments=1), "photo-draft")  # after it was applied: a new draft, new code
-        old, new = self.drafts()
-        self.assertEqual((old["state"], new["state"]), ("applied", "needs-details"))
-        self.assertNotEqual(new["code"], old["code"])
+        self.assertEqual(self.say(attachments=1), "photo-on-product")  # after it was applied the photo is the product's: no new draft (AVB-12)
+        [old] = self.drafts()
+        self.assertEqual(old["state"], "applied")
 
     def test_several_attachments_and_refused_photos_store_and_draft_nothing(self):
         self.assertEqual(self.say(attachments=2), "attachment-many")

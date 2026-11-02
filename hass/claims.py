@@ -7,6 +7,7 @@ not "local". A revert draft (only history.revert ops) restores earlier text and 
 RF2030-4: an owner word with a negator among the 3 words before it in its clause ("not organic", "isn't local") is not
 said; fail-closed, so "not only organic but local" leaves "organic" unsaid and the owner gets the claim question.
 RF2030-5: a list-of-text field (store hours lines) is checked as its newline-joined lines; other lists are skipped.
+RF0250-3: a maker key or name the owner only negates is not named.
 """
 import re
 import unicodedata
@@ -55,8 +56,8 @@ def _lines(value) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
-def _said(phrase, owner: str) -> bool:
-    return bool(isinstance(phrase, str) and phrase.strip() and _pattern(phrase).search(owner))
+def _said(phrase, lines: str) -> bool:
+    return bool(isinstance(phrase, str) and phrase.strip() and _affirmed(_pattern(phrase), lines))
 
 
 def unstated(draft: dict, owner_text, makers) -> list:
@@ -64,7 +65,7 @@ def unstated(draft: dict, owner_text, makers) -> list:
     makers: {key: maker} from the content (None when unreadable: every producerKey change is then unstated)."""
     if all(isinstance(c, dict) and c.get("op") == "history.revert" for c in draft.get("ops") or [None]):
         return []
-    owner, records = fold(owner_text or ""), draft.get("records") or []
+    records = draft.get("records") or []
     lines = "\n".join(fold(line) for line in str(owner_text or "").splitlines())  # fold() collapses newlines
     known = dict(makers or {})
     known.update({r.get("key"): r["after"] for r in records if r.get("collection") == "makers"
@@ -82,7 +83,7 @@ def unstated(draft: dict, owner_text, makers) -> list:
             if field == "producerKey" and r.get("collection") == "products":
                 maker = known.get(new)
                 name = maker.get("name") if isinstance(maker, dict) else None
-                if makers is None or not (_said(new, owner) or _said(name, owner)): hits.append((where, "maker"))
+                if makers is None or not (_said(new, lines) or _said(name, lines)): hits.append((where, "maker"))
                 continue
             text, was = fold(new), fold(old if isinstance(old, str) else "")
             hits += [(where, term) for term, rx in _TERM_RES

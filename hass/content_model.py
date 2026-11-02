@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -53,8 +54,11 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on",)  # ISO date of Michael's last selection check; absent until the first one
+STORE_OPTIONAL = ("selection_checked_on", "intro")  # ISO date of Michael's last check; home-page intro line; both absent by default
+MAX_INTRO = 160  # characters in the optional store.intro (ops/store.py imports this)
+DEFAULT_INTRO = "Good food nourishes more than a body. It brings people together."  # shown when store.intro is absent
 MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
+MAX_EVENT_CAPACITY = 1000  # H14 typo guard on events[].capacity (a sanity ceiling, not a business rule; raise if needed)
 # Maximum length (Python len: code points, so "é" written as e + combining accent counts 2) of every owner-editable
 # text field. Each limit is at least 1.5x the longest current value (test_text_limits checks the real content).
 # Store limits are the constants above, listed here so one table documents every limit.
@@ -159,6 +163,37 @@ def _https(problems, where, value):
     if not isinstance(value, str) or not value.startswith("https://") or any(c.isspace() for c in value) \
             or any(c in value for c in "<>\"'"):
         problems.append(f"{where}: must be an https:// URL without spaces or quotes")
+    elif reason := _not_public(value):
+        problems.append(f"{where}: must be a public https:// web address ({reason})")
+
+
+HOST_RE = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*")  # plain ASCII labels; IDNs must be written as xn--
+NUMBER_LABEL_RE = re.compile(r"[0-9]+|0x[0-9a-f]*")  # a browser reads a host ending in one of these as IPv4
+
+
+def _not_public(value):  # reason an https:// string is not a public web address, else None; never echoes it
+    if "\\" in value:  # a browser reads \ as / (so the host ends there); urlsplit keeps it inside the hostname
+        return "backslash"
+    try:
+        parts = urlsplit(value)
+    except ValueError:  # bad [IPv6] brackets
+        return "no host"
+    host = (parts.hostname or "").rstrip(".")
+    try:
+        port = parts.port
+    except ValueError:  # outside 0-65535
+        port = 0
+    for reason, bad in (("too long", len(value) > 500), ("no host", not host),
+                        ("user or password", parts.username is not None or parts.password is not None),
+                        ("port", port is not None),
+                        ("IP address", ":" in host or NUMBER_LABEL_RE.fullmatch(host.rsplit(".", 1)[-1])),
+                        # ^ incl. 127.1, 2130706433, 127.0.0.0x1
+                        ("host characters", not HOST_RE.fullmatch(host)),  # %2e, 。, _ etc. a browser may rewrite
+                        ("private name", host == "localhost" or host.endswith(
+                            (".localhost", ".local", ".internal", ".invalid", ".test", ".example"))),
+                        ("host has no dot", "." not in host)):
+        if bad:
+            return reason
 
 
 def _closed_keys(problems, where, rec, allowed, required=()):
@@ -338,8 +373,8 @@ def validate_community(problems, community):
             _text(problems, f"{where}.meetingPoint", ev.get("meetingPoint"))
         if "capacity" in ev:
             cap = ev["capacity"]
-            if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
-                problems.append(f"{where}: capacity must be a positive integer")
+            if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= MAX_EVENT_CAPACITY:
+                problems.append(f"{where}: capacity must be a positive integer of at most {MAX_EVENT_CAPACITY}")
         if "trailId" in ev and (not isinstance(ev["trailId"], str) or ev["trailId"] not in idea_ids):
             problems.append(f"{where}: trailId {ev['trailId']!r} is not a route idea")
         for field in EVENT_TEXT_FIELDS:
@@ -372,6 +407,10 @@ def validate_store(problems, store, today: date | None = None):
             problems.append("store.selection_checked_on: must be a real date YYYY-MM-DD")
         elif day > (today or shop_today()):
             problems.append(f"store.selection_checked_on: {day.isoformat()} is in the future")
+    if "intro" in store:
+        _text(problems, "store.intro", store["intro"], limit=MAX_INTRO)
+        if isinstance(store["intro"], str) and sum(c.isalpha() for c in store["intro"]) < 3:
+            problems.append("store.intro: needs at least 3 letters")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):

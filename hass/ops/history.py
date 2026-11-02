@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from hass.ops import COLLECTIONS, Arg, Op, Refused, Touched
+from hass.ops.catalog import _maker_problem
 from hass.ops.hikes import _guest_warning, _move_warning, _seats
 
 # What "undo an addition" means per collection: hide or cancel, never delete.
@@ -58,6 +59,20 @@ def _well_formed(change):
     return isinstance(records, list) and all(
         isinstance(r, dict) and r.get("collection") in COLLECTIONS and isinstance(r.get("key"), str)
         and "before" in r and "after" in r for r in records)
+
+
+def _before_ok(collection, before):
+    """RF0310-5: a stored ``before`` undo can put back: None, a dict, and for a hike a text status, a text start that
+    parses with its zone and (if present) an int capacity, so the seat and past-start checks never raise."""
+    if before is None or (isinstance(before, dict) and collection != "events"):
+        return True
+    if not isinstance(before, dict) or not isinstance(before.get("status"), str) or (
+            "capacity" in before and type(before["capacity"]) is not int):
+        return False
+    try:
+        return datetime.fromisoformat(before["startsAt"].replace("Z", "+00:00")).utcoffset() is not None
+    except (KeyError, AttributeError, TypeError, ValueError):
+        return False
 
 
 def _draft_ops(ctx, change_id):
@@ -115,6 +130,8 @@ def _revert(content, args, ctx):
         last[ref] = record["after"]
     if not first:
         return Refused(f"{change_id} touched no records")
+    if not all(_before_ok(collection, before) for (collection, _), before in first.items()):
+        return Refused(f"{change_id} record is malformed")
     for (collection, key), after in last.items():
         if _current(content, collection, key) != after:
             return Refused(f"conflict: {collection} {key} changed after {change_id}")
@@ -133,6 +150,13 @@ def _revert(content, args, ctx):
                 if (value["status"] == "scheduled"
                         and datetime.fromisoformat(value["startsAt"].replace("Z", "+00:00")) <= ctx.now):
                     return Refused("start is in the past")
+            elif collection == "products" and value.get("status") == "active" and (current or {}).get("status") != "active":
+                # making a product active again: the same checks as product.restore (_set_status)
+                if refused := _maker_problem(content, value.get("producerKey")):
+                    return refused
+                image = value.get("image")
+                if not isinstance(image, str) or not (ctx.site_dir / image).is_file():
+                    return Refused(f"{key} cannot be restored: image file {image} is missing")
         elif collection in UNDO_ADDITION:
             field, hidden = UNDO_ADDITION[collection]
             value = {**(current or {}), field: hidden}

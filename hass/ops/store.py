@@ -5,9 +5,11 @@ Usage (request ops):
     {"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}
     {"op": "store.set_address", "args": {"streetAddress": "1023 Example Street"}}   # town kept; give either or both
     {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}
+    {"op": "store.set_intro", "args": {"text": "Fresh from the coast."}}   # home-page intro line, at most 160 characters; undo restores the default
 
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
 ignored; the refusal names both line numbers); street and town at most 80 characters.
+Each hours line needs a letter or digit, and street and town each need a letter (the refusal names the line or field).
 Text kinds already reject markup, ``$`` and control characters. ``name`` and ``schemaVersion`` are not editable.
 
 Selective-undo limit: the store is ONE record, so ``history.revert`` of an older store change after a later store
@@ -20,7 +22,9 @@ import copy
 import unicodedata
 from datetime import date
 
-from hass.content_model import AVAILABILITY, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, checked_on, shop_today
+from hass.content_model import (
+    AVAILABILITY, DEFAULT_INTRO, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, MAX_INTRO, checked_on, shop_today,
+)
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.catalog import _product
 
@@ -44,6 +48,9 @@ def _set_hours(content, args, ctx):
     for i, line in enumerate(hours):
         if len(line) > MAX_HOURS_LINE:
             return Refused(f"hours line {i + 1} is longer than {MAX_HOURS_LINE} characters")
+    for i, line in enumerate(hours):
+        if not any(c.isalnum() for c in line):
+            return Refused(f"hours line {i + 1} needs a day or time")
     first_seen = {}
     for i, line in enumerate(hours):
         j = first_seen.setdefault(_line_key(line), i)
@@ -63,12 +70,28 @@ def _set_address(content, args, ctx):
     for field, value in given.items():
         if len(value) > MAX_ADDRESS_PART:
             return Refused(f"{field} is longer than {MAX_ADDRESS_PART} characters")
+    for field, value in given.items():
+        if not any(c.isalpha() for c in value):
+            return Refused(f"{field} needs at least one letter")
     store = content.store
     if all(store[f] == v for f, v in given.items()):
         return Refused(f"store address is already {store['streetAddress']}, {store['town']}")
     before = copy.deepcopy(store)
     store.update(given)
     return _touch(before, store)
+
+
+def _set_intro(content, args, ctx):
+    text = args["text"]
+    if len(text) > MAX_INTRO:
+        return Refused(f"the intro is longer than {MAX_INTRO} characters")
+    if sum(c.isalpha() for c in text) < 3:
+        return Refused("the intro needs at least 3 letters")
+    if text == content.store.get("intro", DEFAULT_INTRO):
+        return Refused("the intro already says that")
+    before = copy.deepcopy(content.store)
+    content.store["intro"] = text
+    return _touch(before, content.store)
 
 
 def _confirm_selection(content, args, ctx):
@@ -112,4 +135,5 @@ OPS = (
                                    **{v: Arg("text_list", required=False) for v in AVAILABILITY}}, _confirm_selection),
     Op("store.set_address", {"streetAddress": Arg("text", required=False), "town": Arg("text", required=False)},
        _set_address),
+    Op("store.set_intro", {"text": Arg("text")}, _set_intro),
 )

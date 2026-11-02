@@ -41,6 +41,8 @@ RULES = (
     f"One message may hold several ops (at most {MAX_OPS}).",
     "store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, "
     "in the order shown.",
+    "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
+    "or product.add with imageAlt when the owner says it is a new product; never both.",
 )
 
 
