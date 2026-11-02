@@ -21,7 +21,11 @@ env:
 jobs:
   check:
     name: check
-    runs-on: ubuntu-latest
+    # Self-hosted on AgentOrange (operator 2026-11-02). avocado-shack is PRIVATE, so this repo
+    # receives no fork pull requests and needs no same-repo guard; GitHub-hosted minutes are
+    # billable for private repos and were blocked by the account spend limit, which stopped every
+    # check job at 0 steps. Runners agentorange-avo-1/2 carry the avocado-shack label.
+    runs-on: [self-hosted, Linux, X64, avocado-shack]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
