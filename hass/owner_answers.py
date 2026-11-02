@@ -5,7 +5,7 @@ Pure functions over dictionaries the caller has already read (a conversation dra
 Never a change hash, draft hash, file path or commit: the owner only sees what changed and where it is now.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -29,11 +29,14 @@ UNCHANGED = "The website is as it was before"
 
 
 def _when(iso, now) -> str:
-    """`today 09:05` on now's local day, otherwise `Mon Nov 2 09:05`; an unreadable time is `at an unknown time`."""
+    """`today 09:05` on now's local day, otherwise `Mon Nov 2 09:05`; an unreadable time, or a time without a zone, is
+    `at an unknown time` (never read in the host's zone)."""
     try:
-        at = datetime.fromisoformat(iso).astimezone(LOCAL_TZ)
+        at = datetime.fromisoformat(iso)
     except (TypeError, ValueError):
         return "at an unknown time"
+    if at.utcoffset() is None: return "at an unknown time"
+    at, now = at.astimezone(LOCAL_TZ), now if now.utcoffset() is not None else now.replace(tzinfo=timezone.utc)
     if at.date() == now.astimezone(LOCAL_TZ).date(): return f"today {at:%H:%M}"
     return f"{at:%a %b} {at.day} {at:%H:%M}"
 
