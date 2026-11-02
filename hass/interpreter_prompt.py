@@ -30,6 +30,8 @@ CONTRACT = (
     '"revises" may only be a code from the "pending" list in the user message; otherwise it is null.')
 
 RULES = (
+    'A correction to a pending draft resends every op of that draft in full with "revises" set to its code; '
+    'copy each unchanged arg from its "ops" exactly.',
     "Use only the product ids, maker keys, hike ids and route idea ids listed below, exactly as written.",
     "If a product or maker is not clearly one listed entry, ask a question naming the candidates.",
     "Never add organic, origin, local or maker claims the owner did not write.",

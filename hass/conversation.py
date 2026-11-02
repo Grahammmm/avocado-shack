@@ -62,6 +62,7 @@ DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
 TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
             "Send a shorter change.")
+OPS_PENDING_MAX = 4096  # AV0022-03: bytes of a draft's ops_json sent in `pending`; larger -> "opsOmitted": true
 TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
@@ -173,6 +174,12 @@ class Outbox:
 
 def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _pending_ops(ops_json) -> dict:  # AV0022-03 (H05): a waiting draft's ops; too large or unreadable -> opsOmitted
+    try: ops = json.loads(ops_json) if len(ops_json.encode()) <= OPS_PENDING_MAX else None
+    except (TypeError, ValueError, AttributeError, RecursionError): ops = None
+    return {"ops": ops} if isinstance(ops, list) else {"opsOmitted": True}
 
 
 def _answered_at(msg, now: datetime) -> datetime:
@@ -596,7 +603,8 @@ class Conversation:
             self.db.execute(USAGE)
             self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
-                    r["summary"]} for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+                    r["summary"], **_pending_ops(r["ops_json"])}  # AV0022-03: + "ops" or "opsOmitted"
+                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         try:
             result = _checked(self.interpreter.interpret(msg.text, pending))
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
