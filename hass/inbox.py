@@ -7,7 +7,8 @@ in `(received_at, provider_id)` order and only then marks it done, so a crash in
 cannot be decoded into an `Inbound` is marked done as `unreadable` and skipped; its content is not kept. Fixtures only.
 NB-AV-11: a photo that cannot be fetched (`AttachmentPending`) stays pending with a try count and holds every later
 message until its next try (30 s, then 2 min); the 3rd try is handled as the last one and replies once.
-RF1710-3: `python3 hass/inbox.py status --state DIR` prints one JSON line of counts (sqlite mode=ro; no ids or text).
+RF1710-3: `python3 hass/inbox.py status --state DIR` prints one JSON line of counts (sqlite mode=ro; no ids or text;
+clock_behind when a pending row is stamped after now).
 """
 import argparse, contextlib, json, os, re, sqlite3, sys  # noqa: E401
 from dataclasses import asdict
@@ -204,7 +205,10 @@ def status(state_dir, now=None):
             try:
                 times = [parse_aware(t, "enqueued_at") for (t,) in
                          rows("inbound", "SELECT enqueued_at FROM inbound WHERE state = 'pending'")]
-                out["oldest_pending_minutes"] = int(((now or _utc_now()) - min(times)).total_seconds() // 60) if times else None
+                now_ = now or _utc_now()
+                future, past = [t for t in times if t > now_], [t for t in times if t <= now_]
+                out["oldest_pending_minutes"] = int((now_ - min(past)).total_seconds() // 60) if past else (0 if future else None)
+                if future: out["clock_behind"] = True
             except (ValueError, TypeError):
                 out["oldest_pending_minutes"] = "unreadable"
             out["nonces"] = (rows("nonces", "SELECT COUNT(*) FROM nonces") or [(0,)])[0][0]
