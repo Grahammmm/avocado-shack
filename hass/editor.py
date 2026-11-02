@@ -7,7 +7,7 @@ prepare binds typed ops to the content revision; apply (internal caller only) lo
 writes only owned paths, runs the H01 checks and commits signed off. No listener, no push. One JSON object out.
 I/O errors: result io-error, exit 2 (history lists a corrupt change record as state unreadable).
 """
-import argparse, contextlib, copy, fcntl, hashlib, json, os, re, stat, subprocess, sys  # noqa: E401
+import argparse, contextlib, copy, errno, fcntl, hashlib, json, os, re, stat, subprocess, sys  # noqa: E401
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -216,7 +216,15 @@ def prepare(request, *, state=None, registry=None, now=None) -> dict:
 
 @contextlib.contextmanager
 def _writer_lock(sdir: Path):
-    fd = os.open(sdir / "writer.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    bad = UnsafeState("writer lock is not a regular file")  # H20: never a lock created or held through a link
+    try:
+        fd = os.open(sdir / "writer.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, 0o600)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.EISDIR, errno.ENXIO): raise bad from None  # link, folder, FIFO/socket
+        raise
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise bad
     try:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
