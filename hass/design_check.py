@@ -3,11 +3,12 @@
     python3 hass/design_check.py --base REF --head REF
 
 Prints one JSON line {"result": "ok"|"outside", "changed": n, "outside": [...]}
-naming each change that is not an isolated visual change: a path off the design
+naming each change the head made since its merge base with --base (none when
+--head is already merged into --base) that is not an isolated visual change: a path off the design
 surface, a deletion, a symlink, submodule or non-plain (e.g. executable) file,
 or a template changed without its generated page (or the reverse). Paths only,
 never contents. Exit 0 ok,
-1 outside, 2 usage. Read-only git in the current directory; nothing is written.
+1 outside, 2 usage (bad refs, or no common history). Read-only git in the current directory; nothing is written.
 """
 
 from __future__ import annotations
@@ -35,10 +36,10 @@ class Parser(argparse.ArgumentParser):
         raise Usage(message)
 
 
-def git(*args: str) -> str:
+def git(*args: str, empty_ok: bool = False) -> str:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
     out = subprocess.run(["git", "--literal-pathspecs", *args], capture_output=True, env=env)
-    if out.returncode:
+    if out.returncode and not (empty_ok and out.returncode == 1 and not out.stdout.strip()):
         raise Usage(f"git {args[0]} failed")
     return out.stdout.decode("utf-8", "surrogateescape")
 
@@ -49,8 +50,15 @@ def commit(ref: str) -> str:
     return git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
 
 
+def merge_base(base: str, head: str) -> str:
+    found = git("merge-base", base, head, empty_ok=True).strip()  # exit 1, no output: unrelated
+    if not found:
+        raise Usage("no common history between --base and --head")
+    return found
+
+
 def check(base: str, head: str) -> tuple[int, list[str]]:
-    parts = git("diff", "--name-status", "-z", "--no-renames", base, head, "--").split("\0")[:-1]
+    parts = git("diff", "--name-status", "-z", "--no-renames", merge_base(base, head), head, "--").split("\0")[:-1]
     changes = list(zip(parts[0::2], parts[1::2]))  # (status, path)
     modes = {e.split("\t", 1)[1]: e.split(" ", 1)[0]
              for e in git("ls-tree", "-r", "-z", "--full-tree", head).split("\0") if "\t" in e}
