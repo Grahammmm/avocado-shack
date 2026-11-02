@@ -6,6 +6,11 @@ reason is kept only as a short code in `last_error` (never the URL, prompt or ow
 Not wired into any service: the operator names the existing local model; nothing is pulled or changed here.
 """
 import json, urllib.error, urllib.parse, urllib.request  # noqa: E401
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 CHAT_PATH, MAX_BODY, MAX_MODEL = "/api/chat", 256 * 1024, 100
@@ -55,7 +60,7 @@ class LocalInterpreter:
     """The Conversation interpreter contract: interpret(text, pending) -> dict. Transport is
     (url, body_bytes, headers, timeout) -> (status, body_bytes); the default never uses a proxy or follows a redirect."""
 
-    def __init__(self, base_url, model, system_prompt, timeout=30, transport=None):
+    def __init__(self, base_url, model, system_prompt, timeout=30, transport=None, clock=None):
         self.url = check_url(base_url) + CHAT_PATH
         if not (isinstance(model, str) and 0 < len(model) <= MAX_MODEL and not any(c.isspace() for c in model)):
             raise ValueError(f"model must be a name of 1-{MAX_MODEL} characters without spaces")
@@ -63,12 +68,25 @@ class LocalInterpreter:
             raise ValueError("system prompt must be non-empty text")
         if type(timeout) is not int or not 1 <= timeout <= 120:
             raise ValueError("timeout must be a whole number of seconds from 1 to 120")
+        if clock is not None and not callable(clock): raise ValueError("clock must be callable")
         self.model, self.system_prompt, self.timeout = model, system_prompt, timeout
         self.transport = transport or urllib_transport
+        self.clock = clock if clock is not None else (lambda: datetime.now(timezone.utc))
         self.last_error = None
 
+    def _today(self):
+        """(YYYY-MM-DD, weekday) in Pacific time; a raising, naive or non-datetime clock is _Failed("clock")."""
+        try:
+            now = self.clock()
+            if not isinstance(now, datetime) or now.utcoffset() is None: raise ValueError
+            local = now.astimezone(PACIFIC)
+        except Exception:  # noqa: BLE001 - the clock's own error text is never kept
+            raise _Failed("clock") from None
+        return local.date().isoformat(), WEEKDAYS[local.weekday()]
+
     def _request(self, text, pending) -> bytes:
-        user = json.dumps({"message": text, "pending": pending}, ensure_ascii=False)
+        today, weekday = self._today()
+        user = json.dumps({"message": text, "pending": pending, "today": today, "weekday": weekday}, ensure_ascii=False)
         return json.dumps({"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
                                                              {"role": "user", "content": user}],
                            "stream": False, "format": "json", "options": {"temperature": 0}},

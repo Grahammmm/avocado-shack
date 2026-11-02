@@ -43,7 +43,8 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
-FIND_MAX, FIND_USAGE = 10, "Send find and 1–60 characters, e.g. find lion's mane."  # AV1537-04
+FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
+FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. find lion's mane."  # AV1537-04
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
@@ -777,7 +778,7 @@ class Conversation:
             self._reply(HELP_TEXT)
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
-        if verb == "find": return self._find(code) if 1 <= len(code) <= 60 else (self._reply(FIND_USAGE), "find")[1]
+        if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
@@ -865,8 +866,8 @@ class Conversation:
     def _alias(self, msg, name, ident) -> str:
         """`alias <name>: <id>` saves memory alias.<slug> = product:<id> | maker:<key>, only if that record exists now."""
         key, found = "alias." + catalog._fold(name).replace(" ", "-"), []
-        problem = ("alias name must be 1–60 plain letters, digits, spaces, . or -" if not memory_mod._clean(name)
-                   or len(name) > 60 or not memory_mod.KEY_RE.fullmatch(key[6:]) or not memory_mod.KEY_RE.fullmatch(key)
+        problem = (f"alias name must be 1–{ALIAS_NAME_MAX} plain letters, digits, spaces, . or -" if not memory_mod._clean(name)
+                   or len(name) > ALIAS_NAME_MAX or not memory_mod.KEY_RE.fullmatch(key[6:]) or not memory_mod.KEY_RE.fullmatch(key)
                    else "send alias <name>: <product id or maker key>" if not ident else None)
         try:  # the current catalog, read from the writer worktree as _hike_lines does
             content = None if problem else load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")

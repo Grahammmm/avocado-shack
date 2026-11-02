@@ -13,7 +13,8 @@ BOLD_NUMBER_RE = re.compile(r"\*\*\d")
 UNITS = {None: 1, "characters": 1, "MB": 2**20}
 IMAGE_TYPES = ("jpeg", "jpg", "png", "gif", "webp", "heic", "heif", "tiff", "bmp")
 REQUIRED = {"media.MAX_BYTES", "conversation.HISTORY_MAX", "conversation.MEMORY_LIST_MAX", "ops.catalog.MAX_CANDIDATES",
-            "memory.MAX_VALUE", "editor.MAX_OPS"}
+            "memory.MAX_VALUE", "editor.MAX_OPS", "content_model.MAX_HOURS_LINES", "conversation.MAX_OWNER_TEXT",
+            "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX"}  # AV0022-15
 
 
 def claims(doc: str) -> list:
@@ -89,6 +90,19 @@ class LimitsDocTest(unittest.TestCase):
         nested = "**80 characters** <!-- content_model.TEXT_LIMITS[product][name] -->"
         with mock.patch.dict(content_model.TEXT_LIMITS["product"], {"name": 90}):
             self.assertIn("is 90", problems(nested)[0])
+
+    def test_new_limits_go_red_and_replies_keep_their_text(self):  # AV0022-15
+        from hass import conversation
+        lines = {c[4]: c[0] for c in claims(self.doc)}
+        for mod, name, value, said in ((conversation, "FIND_TEXT_MAX", 61, "60 characters"),
+                                       (conversation, "ALIAS_NAME_MAX", 61, "60 characters"),
+                                       (content_model, "MAX_HOURS_LINES", 8, "7")):
+            with self.subTest(name=name), mock.patch.object(mod, name, value):
+                source = f"{mod.__name__.removeprefix('hass.')}.{name}"
+                self.assertEqual(problems(self.doc), [f"line {lines[name]}: doc says {said}, {source} is {value}"])
+        self.assertEqual(conversation.FIND_USAGE, "Send find and 1–60 characters, e.g. find lion's mane.")
+        self.assertEqual(named_image_types(self.doc), {"jpeg", "png"})
+        self.assertIn("upright or sideways", self.doc)
 
     def test_bold_number_without_comment_names_its_line(self):
         self.assertEqual(problems("Intro.\nAt most **7** things."), ["line 2: bold number without a source comment"])

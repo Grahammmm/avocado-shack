@@ -21,6 +21,7 @@ from hass.statebackup import MANIFEST, NAME_RE  # noqa: E402
 
 CONV, INBOX, UNAVAILABLE = "conversation.sqlite3", "inbox.sqlite3", "unavailable"
 MAX_DAYS = 36500  # 100 years
+SIDECAR_MAX = 64 * 1024  # bytes; a longer photo sidecar is undated, never read whole
 
 class Unsafe(Exception): """A path the report refuses to open (exit 2)."""
 
@@ -54,11 +55,15 @@ def _files(folder: Path):
             yield from (e for e in os.scandir(sub.path) if e.is_file(follow_symlinks=False))
 
 def _sidecar_time(path: Path):
+    """received_at of a regular sidecar of at most SIDECAR_MAX bytes: one open, no link followed, a FIFO never waits."""
     try:
-        if not stat.S_ISREG(os.lstat(path).st_mode): return None
-        return _when(json.loads(path.read_bytes().decode("utf-8")).get("received_at"))
-    except (OSError, ValueError, AttributeError):
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try: raw = os.read(fd, SIDECAR_MAX + 1) if stat.S_ISREG(os.fstat(fd).st_mode) else None
+        finally: os.close(fd)
+        doc = None if raw is None or len(raw) > SIDECAR_MAX else json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, RecursionError):  # a short read or too-deep JSON is undated, never a traceback
         return None
+    return _when(doc.get("received_at")) if isinstance(doc, dict) else None
 
 def _shots(folder: Path, cutoff) -> dict:
     """Screenshot PNGs by file mtime (the only class dated that way); no real screenshots dir counts as none."""
