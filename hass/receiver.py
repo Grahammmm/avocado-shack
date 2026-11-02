@@ -89,7 +89,7 @@ class Receiver:
         receive() drains it first (Inbox order; Conversation answers `duplicate` for one it already recorded)."""
         try:
             envelope = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):
             return _result("rejected", REJECTED["shape"])
         try:  # a missing or short secret is a ValueError from bridge: a setup fault, raised, never a message result
             msg = bridge.unseal(envelope, secret, now=now, seen=self.inbox.seen())

@@ -159,7 +159,7 @@ class Inbox:
             try:
                 msg = Inbound(**json.loads(row["payload"]))
                 if msg.provider_id != row["provider_id"]: raise ValueError("payload names another message")
-            except (TypeError, ValueError):  # a poison payload must not block every later message
+            except (TypeError, ValueError, RecursionError):  # a poison payload must not block every later message
                 msg = None
             try:  # last_try only on the last try, so a plain handle(msg) stand-in still works
                 last = row["tries"] + 1 >= MAX_TRIES
