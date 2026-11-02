@@ -16,7 +16,7 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 ## Lists
 
-- `history` shows the last **5** <!-- conversation.HISTORY_MAX --> changes.
+- `history` shows the last **5** <!-- conversation.HISTORY_MAX --> approved changes.
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
 
@@ -31,6 +31,8 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Hiking club: name, organizer and sender **400 characters** <!-- content_model.TEXT_LIMITS[club][clubName] --> each.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->.
 - A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->.
+- A change request: at most **4000 characters** <!-- conversation.MAX_OWNER_TEXT --> in one message. A longer one is
+  not read; send a shorter change.
 
 ## What Hass never does
 

@@ -2,6 +2,7 @@
 
     python3 hass/editor.py init --state DIR --worktree WT | prepare REQUEST.json
     python3 hass/editor.py apply CHANGE_ID --hash DRAFT_HASH | show CHANGE_ID | recover | ops | history [--limit N]
+    python3 hass/editor.py install CHANGE_ID   # separate step: copy an applied commit's site files to site_dir
 prepare binds typed ops to the content revision; apply (internal caller only) locks, re-checks worktree and revision,
 writes only owned paths, runs the H01 checks and commits signed off. No listener, no push. One JSON object out.
 I/O errors: result io-error, exit 2 (history lists a corrupt change record as state unreadable).
@@ -323,39 +324,63 @@ def render_draft(change_id, *, state=None, registry=None, now=None) -> dict:
 
 def history(limit=20, *, state=None) -> dict:
     """Change records newest first: id, state, applied_at, commit, one line per op, revertedBy."""
+    if type(limit) is not int or not 1 <= limit <= 500: raise ValueError("limit must be 1-500")
     sdir, _cfg, _wt = _load(state)
     entries = []
     for path in (sdir / "changes").glob("chg-*.json") if (sdir / "changes").is_dir() else ():
         draft = sdir / "drafts" / path.name
         try:
             rec = _read(path)
+            if not isinstance(rec, dict) or any(not isinstance(rec.get(k), (str, type(None)))
+                                                for k in ("applied_at", "failed_at")):
+                raise ValueError("record of the wrong shape")  # listed unreadable like a corrupt one
         except (OSError, ValueError):  # one corrupt record must not hide the others
             entries.append((("", path.stat().st_mtime_ns), {"change_id": path.stem, "state": "unreadable",
                             "applied_at": None, "commit": None, "revertedBy": None, "ops": []}))
             continue
         try:
-            ops = _read(draft).get("ops", []) if draft.is_file() else []
+            doc = _read(draft) if draft.is_file() else {}
         except (OSError, ValueError):
-            ops = []
+            doc = {}
+        ops = doc.get("ops", []) if isinstance(doc, dict) else []
+        if not isinstance(ops, list) or not all(isinstance(c, dict) and isinstance(c.get("op"), str)
+                                                and isinstance(c.get("args"), dict) for c in ops):
+            ops = []  # a draft of the wrong shape lists like a corrupt one
         entries.append(((rec.get("applied_at") or rec.get("failed_at") or "", path.stat().st_mtime_ns), {
             "change_id": path.stem, "state": rec.get("state"), "applied_at": rec.get("applied_at"),
-            "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"),
+            "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"), "install": install_status(rec),
             "ops": [f"{c['op']} {json.dumps(c['args'], ensure_ascii=False, sort_keys=True)}"[:160] for c in ops]}))
     entries.sort(key=lambda e: e[0], reverse=True)
-    return {"result": "ok", "history": [e for _key, e in entries[:max(0, int(limit))]]}
+    return {"result": "ok", "history": [e for _key, e in entries[:limit]]}
 
 def show(change_id, *, state=None) -> dict:
     sdir, _cfg, _wt = _load(state)
     if not CHANGE_ID_RE.fullmatch(str(change_id)): return {"result": "invalid", "problems": ["malformed change id"]}
     for kind in ("changes", "drafts"):
         if (sdir / kind / f"{change_id}.json").is_file():
-            return {"result": "ok", kind[:-1]: _read(sdir / kind / f"{change_id}.json")}
+            rec = _read(sdir / kind / f"{change_id}.json")
+            if not isinstance(rec, dict):  # valid JSON of the wrong shape: named, never printed or traced
+                return {"result": "unreadable", "key": change_id, "kind": kind[:-1]}
+            return {"result": "ok", kind[:-1]: rec, **({"install": install_status(rec)} if kind == "changes" else {})}
     return {"result": "not-found", "key": change_id}
+
+def install_status(rec: dict) -> str | None:
+    """SHOP-2: whether an applied change reached the running site (`hass/install.py`); None if not applied."""
+    if rec.get("state") != "applied": return None
+    inst = rec.get("install") or {}
+    if inst.get("state") == "installed": return "installed"
+    return "committed, not installed" + (f" (install failed: {inst.get('reason')})" if inst.get("state") else "")
 
 def list_ops(registry=None) -> dict:
     registry = load_registry() if registry is None else registry
     return {"result": "ok", "ops": {name: {arg: asdict(spec) for arg, spec in op.args.items()}
                                     for name, op in sorted(registry.items())}}
+
+def _limit(text):
+    try: n = int(text)
+    except ValueError: n = 0
+    if not 1 <= n <= 500: raise argparse.ArgumentTypeError("must be a whole number from 1 to 500")
+    return n
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/editor.py", description=__doc__,
@@ -364,17 +389,19 @@ def main(argv=None) -> int:
     common.add_argument("--state", help="private state dir (default: HASS_STATE_DIR)")
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, params in (("init", ["--worktree"]), ("prepare", ["request"]), ("apply", ["change_id", "--hash"]),
-                         ("show", ["change_id"]), ("recover", []), ("ops", []), ("history", [])):
+                         ("show", ["change_id"]), ("recover", []), ("ops", []), ("history", []),
+                         ("install", ["change_id"])):
         cmd = sub.add_parser(name, parents=[common])
         for param in params:
             cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
-        if name == "history": cmd.add_argument("--limit", type=int, default=20)
+        if name == "history": cmd.add_argument("--limit", type=_limit, default=20)
     args = parser.parse_args(argv)
     commands = {"ops": lambda: _load(args.state) and list_ops(), "init": lambda: init(args.state, args.worktree),
                 "prepare": lambda: prepare(Path(args.request).read_bytes(), state=args.state),
                 "apply": lambda: apply(args.change_id, args.hash, state=args.state),
                 "show": lambda: show(args.change_id, state=args.state), "recover": lambda: recover(state=args.state),
-                "history": lambda: history(args.limit, state=args.state)}
+                "history": lambda: history(args.limit, state=args.state),
+                "install": lambda: __import__("hass.install").install.install(args.change_id, state=args.state)}
     try:
         out = commands[args.cmd]()
     except UnsafeState as exc:
@@ -385,7 +412,7 @@ def main(argv=None) -> int:
         return 2
     for line in out["history"] if args.cmd == "history" else [out]:  # history: one JSON line per change
         print(json.dumps(line, ensure_ascii=False, sort_keys=True))
-    return 0 if out["result"] in ("ok", "applied", "already-applied") else 1
+    return 0 if out["result"] in ("ok", "applied", "already-applied", "installed", "already_installed") else 1
 
 if __name__ == "__main__":
     sys.exit(main())

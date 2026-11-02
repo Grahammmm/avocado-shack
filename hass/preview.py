@@ -24,12 +24,14 @@ def target_for(record: dict) -> dict:
         return {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
                 "status": after.get("status"), "description": after.get("description")}
     if collection == "makers":
-        return {"kind": "maker", "name": after.get("name", "")}
+        return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
+                "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
         return {"kind": "store", "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", "")}
-    return {"kind": "event", "title": after.get("title", ""),
-            "status": after.get("status") if collection == "events" else None}
+    event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
+    return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
+            "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
 
 
 def _free_port() -> int:
@@ -82,6 +84,18 @@ def _write_overlay(tmp: Path, files: dict) -> None:
 def _last_line(text: str) -> str:
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     return (lines[-1] if lines else "no output")[:200]
+
+
+def _checks(stdout: str) -> dict | None:
+    """The last stdout line's ``checks`` when it is a non-empty object of str -> bool; else None (bad output)."""
+    lines = [line for line in (stdout or "").splitlines() if line.strip()]
+    try:
+        doc = json.loads(lines[-1]) if lines else None
+    except (ValueError, RecursionError):
+        return None
+    checks = doc.get("checks") if isinstance(doc, dict) else None
+    good = isinstance(checks, dict) and checks and all(type(k) is str and type(v) is bool for k, v in checks.items())
+    return checks if good else None
 
 
 class Previewer:
@@ -140,8 +154,9 @@ class Previewer:
                         proc = subprocess.run(["node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
                                               text=True, timeout=CAPTURE_TIMEOUT)
                         ran = not proc.returncode and shot.is_file()
-                        checks = json.loads(proc.stdout.strip().splitlines()[-1]).get("checks", {}) if ran else None
-                        failure = None if ran else _last_line(proc.stderr or proc.stdout)
+                        checks = _checks(proc.stdout) if ran else None
+                        failure = None if checks is not None else (
+                            "bad checks output" if ran else _last_line(proc.stderr or proc.stdout))
                     except Exception as exc:  # noqa: BLE001 - a desktop timeout/crash keeps the phone result
                         if name == "phone":
                             raise

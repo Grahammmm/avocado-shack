@@ -6,6 +6,7 @@ import json, tempfile, unittest  # noqa: E401
 from pathlib import Path
 from unittest import mock
 
+from hass import conversation
 from hass.bridge import Drop, normalize, seal, unseal
 from hass.fixture_chat import FixtureAdapter
 from hass.tests.test_bridge import KEY, NONCE, NOW, OWNER_CHAT, event
@@ -111,8 +112,9 @@ class ReactionConversationTests(ConversationTestCase):
         tapback = variant("reaction", text="desc")
         with mock.patch.object(self.interp, "interpret", wraps=self.interp.interpret) as interpret:
             dispositions = [self.conv.handle(m) for m in self.through_fixture_adapter(tapback, tapback)]
-            self.assertEqual(dispositions, ["edited-ignored", "duplicate"])
-            self.assertEqual((interpret.call_count, self.replies(), self.drafts(), self.commits()), (0, [], [], 0))
+            self.assertEqual(dispositions, ["not-read", "duplicate"])
+            self.assertEqual((interpret.call_count, self.replies(), self.drafts(), self.commits()),
+                             (0, [conversation.NOT_READ_REPLY], [], 0))
             self.assertEqual(self.conv.handle(normalize(event("new-message"))), "proposed")
             self.assertEqual(interpret.call_count, 1)
 

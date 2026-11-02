@@ -58,6 +58,11 @@ class WriterRepo:
             shutil.copyfile(REPO_ROOT / rel, self.main / rel)
         (self.main / "storefront-mockup" / "assets").symlink_to(SITE_DIR / "assets", target_is_directory=True)
         git(tmp, "init", "-q", "-b", "main", str(self.main))
+        # No automatic (detached, background) maintenance: newer Git repacks the
+        # ~250 loose objects after a commit while cleanup is deleting .git/objects,
+        # which made rmtree fail with "Directory not empty" at random in CI.
+        git(self.main, "config", "maintenance.auto", "false")
+        git(self.main, "config", "gc.auto", "0")
         git(self.main, "config", "user.name", "hass-test")
         git(self.main, "config", "user.email", "hass-test@example.invalid")
         git(self.main, "add", "-A")

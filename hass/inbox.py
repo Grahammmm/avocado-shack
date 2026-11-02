@@ -7,9 +7,10 @@ in `(received_at, provider_id)` order and only then marks it done, so a crash in
 cannot be decoded into an `Inbound` is marked done as `unreadable` and skipped; its content is not kept. Fixtures only.
 NB-AV-11: a photo that cannot be fetched (`AttachmentPending`) stays pending with a try count and holds every later
 message until its next try (30 s, then 2 min); the 3rd try is handled as the last one and replies once.
-RF1710-3: `python3 hass/inbox.py status --state DIR` prints one JSON line of counts (sqlite mode=ro; no ids or text).
+RF1710-3: `python3 hass/inbox.py status --state DIR` prints one JSON line of counts (sqlite mode=ro; no ids or text;
+clock_behind when a pending row is stamped after now).
 """
-import argparse, contextlib, json, os, re, sqlite3, sys  # noqa: E401
+import argparse, contextlib, json, os, re, sqlite3, stat, sys  # noqa: E401
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod  # noqa: E402
 from hass.conversation import AttachmentPending, Inbound  # noqa: E402
+from hass.memory import private_db  # noqa: E402
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -76,9 +78,7 @@ class Inbox:
         value. This module never changes a recorded start point."""
         sdir = editor_mod.open_state(state_dir)
         self.clock = clock
-        path = sdir / "inbox.sqlite3"
-        os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
-        os.chmod(path, 0o600)
+        path = private_db(sdir, "inbox.sqlite3")  # RF1520-11: a link, directory or FIFO is UnsafeState, never followed
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         try:
@@ -158,7 +158,7 @@ class Inbox:
             try:
                 msg = Inbound(**json.loads(row["payload"]))
                 if msg.provider_id != row["provider_id"]: raise ValueError("payload names another message")
-            except (TypeError, ValueError):  # a poison payload must not block every later message
+            except (TypeError, ValueError, RecursionError):  # a poison payload must not block every later message
                 msg = None
             try:  # last_try only on the last try, so a plain handle(msg) stand-in still works
                 last = row["tries"] + 1 >= MAX_TRIES
@@ -187,9 +187,11 @@ def status(state_dir, now=None):
     """(report, exit code) for `<state_dir>/inbox.sqlite3` opened mode=ro: never creates it, never shows an id or text."""
     sdir = Path(state_dir)
     if sdir.is_symlink() or not sdir.is_dir(): return {"result": "unsafe", "reason": "missing or a symlink"}, 2
-    if not (path := sdir / "inbox.sqlite3").exists(): return {"result": "ok", "inbox": "none"}, 0
+    try: mode = os.lstat(path := sdir / "inbox.sqlite3").st_mode  # lstat: a planted (even dangling) link is seen
+    except FileNotFoundError: return {"result": "ok", "inbox": "none"}, 0
+    if not stat.S_ISREG(mode): return {"result": "unsafe", "reason": "inbox file is a link or not a regular file"}, 2
     try:
-        with contextlib.closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+        with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
             if db.execute("PRAGMA quick_check").fetchone()[0] != "ok": return {"result": "unreadable"}, 1
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             rows = lambda table, sql: db.execute(sql).fetchall() if table in tables else []  # noqa: E731
@@ -204,7 +206,10 @@ def status(state_dir, now=None):
             try:
                 times = [parse_aware(t, "enqueued_at") for (t,) in
                          rows("inbound", "SELECT enqueued_at FROM inbound WHERE state = 'pending'")]
-                out["oldest_pending_minutes"] = int(((now or _utc_now()) - min(times)).total_seconds() // 60) if times else None
+                now_ = now or _utc_now()
+                future, past = [t for t in times if t > now_], [t for t in times if t <= now_]
+                out["oldest_pending_minutes"] = int((now_ - min(past)).total_seconds() // 60) if past else (0 if future else None)
+                if future: out["clock_behind"] = True
             except (ValueError, TypeError):
                 out["oldest_pending_minutes"] = "unreadable"
             out["nonces"] = (rows("nonces", "SELECT COUNT(*) FROM nonces") or [(0,)])[0][0]

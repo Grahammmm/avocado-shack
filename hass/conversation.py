@@ -13,23 +13,25 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, label_reader, media  # noqa: E402
+from hass import claims, interpret_check, label_reader, media, owner_answers as answers  # noqa: E402
 from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
+NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds good|looks good)(?: ([0-9a-f]{4,12}))?")  # H05
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
-                        r"|(status)|(pause)(?: changes)?|(resume)(?: changes)?|(help|commands|\?)"  # H17
+                        r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
+                        r"|(resume)(?: changes)?|(help|commands|\?)"
                         r"|(find)(?:\s+(.*))?")  # AV1537-04; the query is re-read from the original text to keep its case
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
-    'status - pause state, waiting drafts, hike seats: "status"',
+    'status (or did it work?) - last change, waiting drafts: "status"',
     'history - the last five changes: "history"',
     'undo [code] - draft an undo of an applied change: "undo a1b2"',
-    'pause changes - stop approvals from applying: "pause changes"',
+    'stop changes (or pause changes) - nothing applies: "stop changes"',
     'resume changes - let approvals apply again: "resume changes"',
     'remember <key>: <text> - save a note: "remember parking: back lot"',
     'forget <key> - delete a saved note: "forget parking"',
@@ -40,10 +42,13 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
+HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_MAX, FIND_USAGE = 10, "Send find and 1–60 characters, e.g. find lion's mane."  # AV1537-04
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
+NOT_READ_REPLY = ("I only read new messages, so that reaction or edit changed nothing. "
+                  "Send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
 PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
                   "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
 FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was changed. Please send it again."
@@ -53,6 +58,9 @@ CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEX
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
 DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
                "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
+MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
+TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
+            "Send a shorter change.")
 TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
@@ -60,6 +68,7 @@ INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT);
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
@@ -81,6 +90,17 @@ class TransitionError(Exception): """A draft state change outside the allowed tr
 
 
 class AttachmentPending(Exception): """NB-AV-11 (H16): the photo could not be fetched yet; nothing was recorded."""
+
+
+class _Held(Exception):
+    """handle(apply=False): an owner approval that must roll back unapplied."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+HELD_REPLY = "{code} was not applied: approvals are not acted on until the channel is connected. It still waits."
 
 
 @dataclass(frozen=True)
@@ -158,6 +178,12 @@ def _local(iso: str) -> str:
     return datetime.fromisoformat(iso).astimezone(LOCAL_TZ).strftime("%Y-%m-%d %H:%M %Z")
 
 
+def _hike_time(iso):  # AV1737-07 (H04/H05): `Sat 2026-11-07 09:00 PST`; a bad or naive value is shown raw, never raised
+    try: start = datetime.fromisoformat(iso)
+    except (ValueError, TypeError): return iso
+    return iso if start.tzinfo is None else start.astimezone(LOCAL_TZ).strftime("%a %Y-%m-%d %H:%M %Z")
+
+
 def load_settings(sdir, photos=False) -> dict:
     try:
         settings = json.loads((Path(sdir) / "config.json").read_text("utf-8")).get("settings")
@@ -187,6 +213,13 @@ def parse_keyword(text: str):
     return ("approve" if match[1] in APPROVE else "reject"), match[2]
 
 
+def parse_near(text: str):
+    """AV2022-07 (H05): code or "" when the whole message is a casual yes (ok, go ahead, ...); otherwise None.
+    It never approves anything; Hass only answers with the exact `yes <code>` to send."""
+    match = NEAR_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()).removesuffix(","))
+    return None if not match else match[2] or ""
+
+
 def parse_command(text: str):
     """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
@@ -194,7 +227,9 @@ def parse_command(text: str):
     if not match: return None
     if match[7]: return "help", None
     if match[8]: return "find", re.sub(r"[.!]+$", "", text.strip())[4:].strip()  # ("find", query in its own case)
-    return ("undo", match[3]) if match[2] else (next(v for v in (match[1], match[4], match[5], match[6]) if v), None)
+    if match[2]: return "undo", match[3]
+    found = next(v for v in (match[1], match[4], match[5], match[6]) if v)  # SHOP-4: did it work = status, stop = pause
+    return ("status" if found.startswith("did ") else "pause" if found == "stop" else found), None
 
 
 def parse_memory(text: str):
@@ -259,7 +294,7 @@ def _summary(draft: dict) -> str:
 
 
 def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty fields, sorted, one per line (≤ 40)
-    rows = [(k, v) for k, v in sorted(r["after"].items()) if v not in (None, "", [])]
+    rows = [(k, _hike_time(v) if k == "startsAt" else v) for k, v in sorted(r["after"].items()) if v not in (None, "", [])]
     more = [f"  … and {len(rows) - 40} more fields"] if len(rows) > 40 else []
     return [f"{r['collection']} {r['key']}: new"] + [f"  {k}: " + "\n    ".join(
         (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
@@ -269,7 +304,8 @@ def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False)
     lines = [f"Draft {code}:"]
     for r in draft["records"]:
         lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
-            f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in _changes(r)]
+            f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in (
+                (f, *(map(_hike_time, (b, a)) if f == "startsAt" else (b, a))) for f, b, a in _changes(r))]
     lines += [f"Warning: {w}" for w in draft.get("warnings") or []]
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
@@ -284,9 +320,7 @@ class Conversation:
         self.settings, self.photos = load_settings(sdir, photos is not None), photos  # fetch(provider_id, n) -> [bytes]
         self.editor, self.interpreter, self.clock, self.labels, self._label_job = editor, interpreter, clock, labels, None
         self.sdir, self.previewer = sdir, previewer
-        path = sdir / "conversation.sqlite3"
-        os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
-        os.chmod(path, 0o600)
+        path = memory_mod.private_db(sdir, "conversation.sqlite3")
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
@@ -388,11 +422,20 @@ class Conversation:
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------
-    def handle(self, msg: Inbound, last_try=False) -> str:
-        """Process one inbound message; returns its disposition. Replies are only enqueued (see flush)."""
+    def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
+        """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
+        apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
+        row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
         self._label_job = None
-        with self._tx():
-            disposition, approved = self._handle(msg, last_try)
+        try:
+            with self._tx():
+                disposition, approved = self._handle(msg, last_try)
+                if approved is not None and not apply: raise _Held(approved["code"])
+        except _Held as held:
+            with self._tx():
+                self._reply(HELD_REPLY.format(code=held.code))
+                self._record(msg, "approval-held")
+            return "approval-held"
         if self._label_job: self._read_label(*self._label_job)  # AV1537-15: after the commit, never holding the lock
         if approved is None: return disposition
         out = self.editor.apply(approved["change_id"], approved["draft_hash"])
@@ -404,9 +447,12 @@ class Conversation:
     def _handle(self, msg, last_try=False):
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone():
             return "duplicate", None
-        s = self.settings
-        ignored = "echo" if msg.from_me else "edited-ignored" if msg.kind != "new" else \
-            "ignored" if msg.chat != s["ownerChat"] or msg.sender not in s["ownerSenders"] else None
+        owner = msg.chat == self.settings["ownerChat"] and msg.sender in self.settings["ownerSenders"]
+        if owner and not msg.from_me and msg.kind in ("edited", "reaction"):  # AV1737-03: never read, never approves
+            self._reply(NOT_READ_REPLY)
+            self._record(msg, "not-read")
+            return "not-read", None
+        ignored = "echo" if msg.from_me else "edited-ignored" if msg.kind != "new" else None if owner else "ignored"
         if ignored:
             self._record(msg, ignored, owner=False)
             return ignored, None
@@ -428,6 +474,13 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         keyword = parse_keyword(msg.text)
+        if keyword is None and (near := parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
+            codes = [r["code"] for r in self._drafts("state = 'proposed'")
+                     if self._expiry(r) > now and near in ("", r["code"])]
+            self._reply(f"Nothing was applied. To apply {codes[0]}, reply yes {codes[0]}." if len(codes) == 1 else
+                        f"Nothing was applied. Reply yes <code> with one of: {', '.join(codes)}." if codes else NOTHING)
+            self._record(msg, "near-approval")
+            return "near-approval", None
         if keyword is None:
             disposition = self._request(msg, now)
             self._record(msg, disposition)
@@ -506,6 +559,9 @@ class Conversation:
         return makers if isinstance(makers, dict) else None
 
     def _request(self, msg, now) -> str:
+        if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
+            self._reply(TOO_LONG)
+            return "too-long"
         cap = self.settings["interpreterDailyCap"]
         if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
             day, calls = self._calls(now)
@@ -617,7 +673,7 @@ class Conversation:
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
-            if self.previewer is None: self._reply(f"Applied {row['code']}: {row['summary']}")
+            if self.previewer is None: self._reply(answers.applied_text(row["code"], row["summary"]))  # SHOP-4
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "stale":
             again = self.editor.prepare(json.loads(row["ops_json"]))
@@ -646,7 +702,7 @@ class Conversation:
                         self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
                     else:
                         self._move(row, "failed", reason=INTERRUPTED)
-                        self._reply(f"Not applied: {INTERRUPTED}")
+                        self._reply(answers.recovered_text(row["code"]))  # SHOP-4: apply never touches the website
         self._verify_pending()
         return [self._row(r["row_id"])["state"] for r in rows]
 
@@ -665,9 +721,19 @@ class Conversation:
         change = self.editor.show(row["change_id"]).get("change") or {}
         if not change.get("records"): return None, "no change record"
         files = {p: (wt / p).read_bytes() for p in editor_mod.GENERATED_PATHS}  # the committed files
-        shot = self.previewer.capture(files, preview_mod.target_for(change["records"][0]),
-                                      self.sdir / "screenshots" / f"{row['change_id']}-result.png")
-        return (shot["png"], None) if shot["ok"] else (None, shot["error"])
+        picked, png = [], None  # AV1737-08: each touched record with a distinct target, in order
+        for record in change["records"]:
+            target = preview_mod.target_for(record)
+            if all(target != t for _r, t in picked): picked.append((record, target))
+        for i, (record, target) in enumerate(picked[:VERIFY_MAX], 1):
+            shot = self.previewer.capture(files, target, self.sdir / "screenshots" /
+                                          f"{row['change_id']}-result{'' if i == 1 else f'-{i}'}.png")
+            if not shot["ok"]: return None, f"{record['collection']} {record['key']}: {shot['error']}"
+            png = shot["png"] if i == 1 else png  # the reply keeps the first record's screenshot
+        if picked[VERIFY_MAX:]:
+            print(f"verify {row['change_id']}: over {VERIFY_MAX} records, not checked: "
+                  + ", ".join(f"{r['collection']} {r['key']}" for r, _t in picked[VERIFY_MAX:]), file=sys.stderr)
+        return png, None
 
     def _verify_pending(self):
         if self.previewer is None: return
@@ -676,11 +742,11 @@ class Conversation:
             with self._tx():
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
-                    self._reply(f"Applied and checked {row['code']}: {row['summary']}", [png])
-                else:
+                    self._reply(answers.applied_text(row["code"], row["summary"], checked=True), [png])  # SHOP-4
+                else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
-                    self._reply(f"Applied {row['code']}, but the preview check failed: {error}")
+                    self._reply(answers.applied_text(row["code"], row["summary"], error=error))
 
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":
@@ -689,10 +755,11 @@ class Conversation:
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= 60 else (self._reply(FIND_USAGE), "find")[1]
         if verb == "history":
-            rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT ?", (HISTORY_MAX,)).fetchall()
-            self._reply("\n".join(["Recent changes:"] + [
-                f"{r['code']} {r['state']}: {r['summary']}" + (f" ({r['commit'][:7]})" if r["commit"] else "")
-                for r in rows]) if rows else "No changes yet.")
+            rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
+                                   "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
+            self._reply("\n".join(["Recent changes:"] + [  # SHOP-4: where it is now instead of the commit
+                f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
+                for r in rows]) if rows else "No approved changes yet.")
             return "history"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")
                 if code is None and r["state"] in ("applied", "verified") or r["code"] == code]
@@ -811,17 +878,38 @@ class Conversation:
         row = self.db.execute("SELECT set_at FROM control WHERE name = 'paused'").fetchone()
         return row["set_at"] if row else None
 
+    def _install(self, row):
+        """SHOP-4: the editor change record's SHOP-2 `install` entry for a draft row; None when there is none."""
+        try:
+            return (self.editor.show(row["change_id"]).get("change") or {}).get("install") if row["change_id"] else None
+        except (OSError, ValueError, AttributeError, editor_mod.UnsafeState):
+            return None
+
+    def _queue(self, msg) -> dict:
+        """SHOP-4: drafts waiting for an OK plus inbox messages not read yet (this one excluded; inbox opened
+        read-only as _photo_lines does), and approvals already under way."""
+        unread, path = 0, self.sdir / "inbox.sqlite3"
+        if path.is_file():
+            try:
+                with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=1)) as db:
+                    unread = db.execute("SELECT COUNT(*) FROM inbound WHERE state = 'pending' AND provider_id != ?",
+                                        (msg.provider_id,)).fetchone()[0]
+            except sqlite3.Error:
+                unread = 0
+        waiting = [r for r in self._drafts("state = 'proposed'") if self._expiry(r) > self._now()]
+        return {"waiting": len(waiting) + unread, "applying": [r["code"] for r in self._drafts("state = 'approved'")]}
+
     def _control(self, msg, now, verb) -> str:
         since = self._paused()
         if verb == "status":
             self._reply(self._status(now, since))
         elif verb == "pause" and since:
-            self._reply(f"Changes are already paused (since {_local(since)}).")
+            self._reply(answers.stopped_state(since, self._queue(msg)))
         elif verb == "pause":
             self.db.execute(CONTROL)
             self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('paused', '1', ?, ?)",
                             (_iso(now), msg.provider_id))
-            self._reply("Changes paused. Drafts can still be prepared; nothing is applied until you send resume changes.")
+            self._reply(answers.stopped_state(_iso(now), self._queue(msg)))
         elif not since:
             self._reply("Changes are not paused.")
         else:  # resume never applies anything by itself
@@ -843,13 +931,9 @@ class Conversation:
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
-        if last:
-            text = f"Last change: {last['code']} {last['state']}: {last['summary']}"
-            text += f" ({last['commit'][:7]})" if last["commit"] else ""
-            if last["reason"] and (last["state"] == "failed" or last["state"] == "applied"
-                                   and last["reason"].startswith("not verified: ")):
-                text += f" - {last['reason']}"
-            lines.append(text)
+        if last:  # SHOP-4: did it work, in plain words (whether it is on the website now), never the commit
+            lines.append(f"Last change: {last['code']} {last['summary']} - "
+                         + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
 
     def _photo_lines(self, now) -> list:
@@ -872,13 +956,15 @@ class Conversation:
         return lines + ([f"Photos still downloading: {m}"] if m else [])
 
     def _hike_lines(self, now) -> list:
-        """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed."""
+        """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed.
+        AV1537-07: then scheduled hikes whose start has passed (oldest first, at most 5, no guest counts)."""
         try:
             wt = editor_mod._load(str(self.sdir))[2]
             events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
-            upcoming = sorted(((datetime.fromisoformat(e["startsAt"]), e) for e in events
-                               if e.get("status") == "scheduled"), key=lambda pair: pair[0])
-            upcoming = [e for start, e in upcoming if start > now]
+            scheduled = sorted(((datetime.fromisoformat(e["startsAt"]), e) for e in events
+                                if e.get("status") == "scheduled"), key=lambda pair: pair[0])
+            upcoming = [e for start, e in scheduled if start > now]
+            passed = [e for start, e in scheduled if start <= now]  # the site hides these too (`>` rule)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return ["Hikes: unavailable"]
         path, counts = self.settings.get("guestCountsDb"), None
@@ -889,8 +975,14 @@ class Conversation:
                 counts = None
         lines = []
         for e in upcoming:
-            head = f"Hike {e.get('title')} {_local(e['startsAt'])}: "
+            head = f"Hike {e.get('title')} {_hike_time(e['startsAt'])}: "
             limit = e.get("capacity") if e.get("capacity") is not None else "no limit"
             lines.append(head + ("RSVPs off" if not e.get("rsvpEnabled") else "guest count unavailable" if counts is None
                                  else f"{counts.get(e.get('id'), 0)} confirmed of {limit}"))
+        for e in passed[:5]:
+            title = e.get("title")
+            lines.append(f"Hike {title} {_hike_time(e['startsAt'])} has passed but is still scheduled; "
+                         f'send "complete {title}" or "cancel {title}" in your own words.')
+        if len(passed) > 5:
+            lines.append(f"… and {len(passed) - 5} more past hikes still scheduled.")
         return lines

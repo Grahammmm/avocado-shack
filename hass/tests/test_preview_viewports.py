@@ -90,7 +90,7 @@ class ViewportTests(EditorTestCase):
     def test_desktop_check_not_exactly_true_fails(self):
         result, _calls, _server = self.capture({"phone": {"checks": PASS},
                                                 "desktop": {"checks": {**PASS, "noPosts": "yes"}}})
-        self.assertEqual((result["ok"], result["error"]), (False, "check failed: desktop:noPosts"))
+        self.assertEqual((result["ok"], result["error"]), (False, "desktop: bad checks output"))  # RF0110-5
 
     def test_desktop_process_failure_or_timeout_keeps_the_phone_png(self):
         timeout = f"TimeoutExpired: Command '['node', '{preview.SCRIPT}']' timed out after 4 seconds"

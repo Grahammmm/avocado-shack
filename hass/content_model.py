@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -31,8 +31,10 @@ CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks"
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
 PRODUCT_OPTIONAL_PUBLIC = ("imageAlt",)  # public when present; never required (any status)
-PRODUCT_INTERNAL_FIELDS = ("status", "hold")
+PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available")  # "available": owner-set, absent = not confirmed (SHOP-1)
 PRODUCT_STATUSES = ("active", "hidden", "held")
+AVAILABILITY = ("yes", "limited", "no")
+SHOP_TZ = ZoneInfo("America/Los_Angeles")
 HOLD_FIELDS = ("reason", "source", "evidence", "record")
 
 MAKER_FIELDS = ("name", "place", "story", "url")
@@ -51,6 +53,7 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
+STORE_OPTIONAL = ("selection_checked_on",)  # ISO date of Michael's last selection check; absent until the first one
 MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
 # Maximum length (Python len: code points, so "é" written as e + combining accent counts 2) of every owner-editable
 # text field. Each limit is at least 1.5x the longest current value (test_text_limits checks the real content).
@@ -68,6 +71,7 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 IMAGE_RE = re.compile(r"^assets/products/[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.(webp|jpg|jpeg|png)$")
 # Exact start time with seconds optional and a mandatory offset (matched in full).
 STARTS_AT_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})")
+DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 # Characters never allowed in short display text: markup and currency.
 FORBIDDEN_TEXT = ("<", ">", "$", "{{", "}}")
 # Control, zero-width and direction-changing characters never allowed in any content text.
@@ -94,11 +98,16 @@ class Content:
 
 
 def _read_json(path: Path):
-    with path.open("r", encoding="utf-8") as fh:
-        try:
-            return json.load(fh)
-        except json.JSONDecodeError as exc:
-            raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise ContentError([f"{path.name}: not UTF-8 text"]) from None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
+    except RecursionError:
+        raise ContentError([f"{path.name}: JSON nested too deeply"]) from None
 
 
 def load_content(content_dir: Path = CONTENT_DIR) -> Content:
@@ -199,6 +208,8 @@ def validate_products(problems, products, makers, site_dir: Path | None):
             problems.append(f"{where}: image must be assets/products/<file> ({image!r})")
         if "imageAlt" in rec:
             _text(problems, f"{where}.imageAlt", rec["imageAlt"], limit=limits["imageAlt"])
+        if "available" in rec and rec["available"] not in AVAILABILITY:
+            problems.append(f"{where}.available: must be one of {AVAILABILITY}")
         if status == "held":
             hold = rec.get("hold")
             if _closed_keys(problems, f"{where}.hold", hold, HOLD_FIELDS, ("reason", "source")):
@@ -336,9 +347,31 @@ def validate_community(problems, community):
                 _text(problems, f"{where}.{field}", ev[field], limit=TEXT_LIMITS["event"][field])
 
 
-def validate_store(problems, store):
-    if not _closed_keys(problems, "store", store, STORE_FIELDS, STORE_FIELDS):
+def shop_today(now: datetime | None = None) -> date:
+    """The shop's calendar date (Pacific) at ``now`` (default: the current time)."""
+    return (now or datetime.now(SHOP_TZ)).astimezone(SHOP_TZ).date()
+
+
+def checked_on(store) -> date | None:
+    """The stored selection-check date, or None when absent or not a real YYYY-MM-DD date."""
+    value = store.get("selection_checked_on") if isinstance(store, dict) else None
+    if not isinstance(value, str) or not DATE_RE.fullmatch(value):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def validate_store(problems, store, today: date | None = None):
+    if not _closed_keys(problems, "store", store, STORE_FIELDS + STORE_OPTIONAL, STORE_FIELDS):
         return
+    if "selection_checked_on" in store:
+        day = checked_on(store)
+        if day is None:
+            problems.append("store.selection_checked_on: must be a real date YYYY-MM-DD")
+        elif day > (today or shop_today()):
+            problems.append(f"store.selection_checked_on: {day.isoformat()} is in the future")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):

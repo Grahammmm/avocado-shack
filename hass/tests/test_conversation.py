@@ -114,12 +114,13 @@ class FlowTests(ConversationTestCase):
         self.replies()
         self.propose("desc")
         before = self.drafts()
-        cases = [("duplicate", dict(pid="yes-1")), ("echo", dict(from_me=True)), ("edited-ignored", dict(kind="edited")),
+        cases = [("duplicate", dict(pid="yes-1")), ("echo", dict(from_me=True)), ("not-read", dict(kind="edited")),
                  ("ignored", dict(sender=STRANGER)), ("ignored", dict(chat=GROUP))]
         for disposition, kwargs in cases:
             with self.subTest(case=kwargs):
                 self.assertEqual(self.say("yes", **kwargs), disposition)
-                self.assertEqual((self.replies(), self.commits(), self.drafts()), ([], 1, before))
+                reply = [conversation.NOT_READ_REPLY] if disposition == "not-read" else []
+                self.assertEqual((self.replies(), self.commits(), self.drafts()), (reply, 1, before))
         self.assertEqual(self.say("zqx stranger request", sender=STRANGER), "ignored")
         stored = (self.repo.state / "conversation.sqlite3").read_bytes()
         self.assertNotIn(b"zqx", stored)
@@ -201,7 +202,7 @@ class FlowTests(ConversationTestCase):
         self.replies()
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "proposed"])
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours"])
+        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.commits(), self.drafts()[1]["state"]), (1, "applied"))
 
     def test_stale_approval_redrafts_and_never_writes_old_draft(self):
@@ -230,7 +231,7 @@ class DurabilityTests(ConversationTestCase):
             self.conv.flush(self.out)
         self.assertEqual((self.drafts()[0]["state"], len(self.conv.outbox.unsent()), self.commits()), ("applied", 1, 1))
         self.conv = self.open()
-        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {draft['summary']}"])
+        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {draft['summary']}\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.replies(), self.commits(), self.editor.applies), ([], 1, 1))
 
     def test_recover_fails_interrupted_approval_without_reapplying(self):
@@ -244,7 +245,8 @@ class DurabilityTests(ConversationTestCase):
         row = self.drafts()[0]
         self.assertEqual((row["state"], row["reason"]), ("failed", conversation.INTERRUPTED))
         self.assertEqual((fresh.applies, self.commits()), (0, 0))
-        self.assertEqual(self.replies(), [f"Not applied: {conversation.INTERRUPTED}"])
+        self.assertEqual(self.replies(), [f"{row['code']} was interrupted and not saved. The website is as it was "
+                                          "before; send the change again to make a new draft."])  # SHOP-4 wording
 
     def test_state_file_is_private(self):
         self.assertEqual((self.repo.state / "conversation.sqlite3").stat().st_mode & 0o777, 0o600)
@@ -272,8 +274,8 @@ class ConfigAndCliTests(ConversationTestCase):
                              capture_output=True, text=True, cwd=REPO_ROOT)
         self.assertEqual((run.returncode, run.stderr), (0, ""))
         rows = [json.loads(line) for line in run.stdout.splitlines()]
-        self.assertEqual([(r["chat"], r["attachments"]) for r in rows], [(CHAT, [])] * 3)
-        self.assertEqual([r["text"] for r in rows], ["Which hours should Saturday have?",
+        self.assertEqual([(r["chat"], r["attachments"]) for r in rows], [(CHAT, [])] * 4)
+        self.assertEqual([r["text"] for r in rows], ["Which hours should Saturday have?", conversation.NOT_READ_REPLY,
                                                      conversation.NOTHING, "Sorry, I can't do that yet."])
         self.assertEqual(self.commits(), 0)
 

@@ -11,6 +11,11 @@ from hass.tests.test_support_doc import private_data
 
 UNITS = ("RF1035-7", "RF1058-11", "RF1105-28", "RF1105-29", "RF1105-30", "RF1120-7",
          "RF1105-11", "RF1105-13", "RF1130-5", "RF1130-6", "RF1130-7", "RF1140-7")  # RF1200-8 roll-up
+UNITS += tuple(f"AV1537-{n:02d}" for n in range(1, 16))  # AV1537-16 roll-up
+UNITS += tuple(f"AV1737-{n:02d}" for n in range(1, 16))  # AV1737-16 roll-up
+LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
+WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
+         "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -28,9 +33,14 @@ def problems(text, tests=REPO_ROOT / "hass" / "tests"):
         clean = GIT_HEX.sub("", body := found[0] if len(found) == 1 else "")
         mods = [f"{m}.py" for m in re.findall(r"hass\.tests\.(test_\w+)", body)] + re.findall(r"-p '([^']+)'", body)
         out += [f"{u}: {len(found)} headings"] * (len(found) != 1) + [f"{u}: no merge sha"] * (not SHA.search(body))
-        out += [f"{u}: no test command"] * (not mods) + [f"{u}: missing {m}" for m in mods if not any(tests.glob(m))]
+        site = re.findall(r"storefront-mockup/[\w-]+-qa\.(?:py|cjs)\b", body)  # site units: their QA scripts
+        out += [f"{u}: no test command"] * (not (mods + site)) + [f"{u}: missing {m}" for m in mods if not any(tests.glob(m))]
+        out += [f"{u}: missing {s}" for s in site if not (tests.parents[1] / s).is_file()]
+        out += [f"{u}: limit wording?"] * (not all(s in body for s in WORDS.get(u, ())))
         out += [f"{u}: private data"] * bool(private_data(clean) or PRIVATE.search(clean))
         out += [f"{u}: guests messaged?"] * (u == "RF1130-6" and "warned about in the draft, never messaged" not in body)
+        out += [f"{u}: label facts?"] * (u == "AV1537-15" and not all(s in body for s in LABEL))
+        out += [f"{u}: writer worktree?"] * (u == "AV1537-13" and "never restores onto the writer worktree" not in body)
     return out
 
 
@@ -56,8 +66,26 @@ class LedgerRF1120Tests(unittest.TestCase):
                  "RF1035-7: missing test_inbox_noncez.py": LEDGER.replace("test_inbox_nonces ", "test_inbox_noncez "),
                  "RF1120-7: missing test_nope*.py": LEDGER.replace("'test_statebackup*.py'", "'test_nope*.py'"),
                  "RF1105-30: no test command": LEDGER.replace(last, "## x (RF1105-30)\n" + "f" * 40 + "\n"),
-                 "RF1130-6: guests messaged?": LEDGER.replace("never messaged", "messaged")}
+                 "RF1130-6: guests messaged?": LEDGER.replace("never messaged", "messaged"),
+                 "AV1537-07: 2 headings": LEDGER + "\n" + sections(LEDGER, "AV1537-07")[0],
+                 "AV1537-15: 0 headings": LEDGER.replace("(AV1537-15)", "(AV1537-16)"),
+                 "AV1537-12: no merge sha": LEDGER.replace(SHA.findall(sections(LEDGER, "AV1537-12")[0])[0], "4f33ef9"),
+                 "AV1537-04: missing test_findz.py": LEDGER.replace("hass.tests.test_find ", "hass.tests.test_findz "),
+                 "AV1537-15: label facts?": LEDGER.replace(LABEL[0], "Label facts fill the draft"),
+                 "AV1537-15: label facts?|origin": LEDGER.replace(LABEL[1], "Maker, organic and origin are read"),
+                 "AV1537-13: writer worktree?": LEDGER.replace("never restores onto", "may restore onto")}
+        av = {u: sections(LEDGER, u)[0] for u in ("AV1737-01", "AV1737-09", "AV1737-13")}
+        cases |= {"AV1737-01: 2 headings": LEDGER + "\n" + av["AV1737-01"], "AV1737-15: 0 headings": LEDGER.replace("(AV1737-15)", "(AV1737-150)"),
+                  "AV1737-09: no merge sha": LEDGER.replace(SHA.findall(av["AV1737-09"])[0], "27aa3ef"),
+                  "AV1737-13: no test command": LEDGER.replace(av["AV1737-13"], "## x (AV1737-13)\n" + "a" * 40 + "\n"),
+                  "AV1737-12: missing storefront-mockup/nope-qa.py": LEDGER.replace("community-qa.py`", "nope-qa.py`"),
+                  "AV1737-03: limit wording?": LEDGER.replace("Reactions never approve", "Reactions approve"),
+                  "AV1737-03: limit wording?|edit": LEDGER.replace("Edited text is not read", "Edited text is read"),
+                  "AV1737-14: limit wording?": LEDGER.replace("store name, never a path", "store path"),
+                  "AV1737-15: limit wording?": LEDGER.replace("stays attended", "is automatic"),
+                  "AV1737-07: private data": LEDGER.replace("(AV1737-07)", "(AV1737-07)\nmail owner@example.com")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242", "+155****0777")}
+        cases["AV1537-15: private data"] = LEDGER.replace("(AV1537-15)", "(AV1537-15)\ncall +1 555 123 4567")
         for want, text in cases.items():
             self.assertIn(want.split("|")[0], problems(text), want)

@@ -120,8 +120,8 @@ class OutputHygieneTests(unittest.TestCase):
             run = self.chat(repo, [], *flags, fixture=missing)
             self.assert_clean(run, 2)
             self.assertEqual(run.stdout, "")
-            self.assertIn("FileNotFoundError", run.stderr)
-            self.assertIn(missing.name, run.stderr)
+            self.assertEqual(run.stderr, "fixture_chat: --fixture: unreadable\n")  # RF1510-12: the flag, not the path
+            self.assertNotIn(missing.name, run.stderr)
 
     def test_stuck_outbox_detail_is_count_only(self):
         repo = self.fresh()

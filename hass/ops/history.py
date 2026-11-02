@@ -65,7 +65,7 @@ def _draft_ops(ctx, change_id):
         return []
     try:
         ops = None if path.is_symlink() else json.loads(path.read_text("utf-8")).get("ops")
-    except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+    except (OSError, UnicodeDecodeError, ValueError, AttributeError, RecursionError):
         return False
     return ops if isinstance(ops, list) and all(isinstance(call, dict) for call in ops) else False
 
@@ -87,7 +87,7 @@ def _revert(content, args, ctx):
     change_id = args["changeId"]
     try:
         change = ctx.change(change_id)
-    except (OSError, UnicodeDecodeError, ValueError):
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
         return Refused(f"{change_id} record is unreadable")
     if change is None:
         return Refused(f"unknown change {change_id}")

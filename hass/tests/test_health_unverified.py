@@ -152,7 +152,8 @@ class UndoAfterPreviewTest(H06TestCase):
 
     def test_failed_preview_then_undo_still_counts_inside_the_window(self):
         done = self.apply_then_undo(FailingPreviewer())
-        self.assertEqual((done["state"], done["reason"]), ("applied", "not verified: simulated check failure"))
+        self.assertEqual((done["state"], done["reason"]),
+                         ("applied", "not verified: products photo-product-001: simulated check failure"))
         self.assertEqual(self.unverified(1), [{"check": "unverified", "detail": "1"}])
         self.assertEqual(self.unverified(72), [{"check": "unverified", "detail": "1"}])
         self.assertEqual(self.unverified(73), [])

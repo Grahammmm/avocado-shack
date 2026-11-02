@@ -83,8 +83,8 @@ class OpsAndEditorTests(StoreTestCase):
 
     def test_op_refusals_unchanged(self):
         repo = self.repo()
-        cases = [((SET_HOURS, {"hours": lines(8)}), "at most 7 hours lines"),
-                 ((SET_HOURS, {"hours": ["a" * 61]}), "hours line 0 is longer than 60 characters"),
+        cases = [((SET_HOURS, {"hours": lines(8)}), "at most 7 hours lines (you sent 8)"),
+                 ((SET_HOURS, {"hours": ["a" * 61]}), "hours line 1 is longer than 60 characters"),
                  ((SET_HOURS, {"hours": ["Closed", "Closed"]}), "hours lines 1 and 2 say the same thing"),
                  ((SET_ADDRESS, {"town": "t" * 81}), "town is longer than 80 characters")]
         for op, reason in cases:

@@ -103,7 +103,7 @@ class ConversationFullTextTests(ConversationTestCase):
         self.assertIn(f"{draft['code']} waiting (expires 2026-11-02 09:10 PST): {summary}", status)
         self.assertNotIn(LONG[:60], status)
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {summary}"])
+        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {summary}\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual(self.say("history"), "history")
         [history] = self.replies()
         self.assertIn(f"{draft['code']} applied: {summary}", history)
