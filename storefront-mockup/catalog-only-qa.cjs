@@ -69,6 +69,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await page.locator('#product-search').fill('');await page.locator('[data-filter="all"]').click();await page.locator('#brand-filter').selectOption('');
  a=await addr();assert.equal(a.search,'?utm=x','an unrelated param survives');
  await open('?q=jam');await page.locator('#product-search').fill('');a=await addr();assert.equal(a.search,'');assert.ok(!a.href.includes('?'),'no query string left');
+ // Typed or pasted text past 80 characters is cut in the box as well, so the box, the results and the address agree, and a reload restores the same search.
+ const view=()=>page.evaluate(()=>({box:document.querySelector('#product-search').value,q:new URLSearchParams(location.search).get('q'),ids:filteredProducts().map(p=>p.id)}));
+ const roundTrip=async(enter,want,label)=>{await open('');await page.locator('#product-search').focus();await enter();const live=await view();
+  assert.equal(live.box,want,label+': box');assert.equal(live.q,want,label+': address');
+  await page.reload();await page.waitForSelector('#catalog-grid article, #catalog-sentinel');assert.deepEqual(await view(),live,label+': reload restores the same search');return live};
+ const long=await page.evaluate(()=>catalog.map(p=>`${p.name} ${p.brand} ${maker(p)?.place||''}`).find(t=>[...t].length>80&&!/\s/.test([...t][79])&&!/\s/.test(t[0])));
+ if(long){const head=[...long].slice(0,80).join('');assert.ok((await roundTrip(()=>page.keyboard.type(head+' and more words'),head,'typed')).ids.length>0,'typed: the first 80 characters still find the product');}
+ else{console.log('NOTE: no catalog text over 80 characters; typed check uses filler');await roundTrip(()=>page.keyboard.type('a'.repeat(90)),'a'.repeat(80),'typed');}
+ await roundTrip(()=>page.keyboard.insertText('  '+'\u{1f951}'.repeat(90)),'\u{1f951}'.repeat(80),'pasted');
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
  const result={checkedAt:new Date().toISOString(),all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();

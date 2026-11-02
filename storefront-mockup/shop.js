@@ -11,14 +11,17 @@ function card(p){
 }
 [...new Set(catalog.map(p=>p.brand))].sort().forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=b==='Producer not identified'?'Other market selections':b;$('#brand-filter').append(o)});
 const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\u2018\u2019\u02bc]/g,"'").toLowerCase();
-function filteredProducts(){const term=fold($('#product-search').value.trim()),brand=$('#brand-filter').value;return catalog.filter(p=>(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''}`).includes(term))}
+// One search normalization for filtering, the address and restore: trimmed, at most 80 characters (code points).
+const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
+function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return catalog.filter(p=>(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''}`).includes(term))}
 function renderCatalog(append=false){const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
- set('shelf',activeCategory==='all'?'':activeCategory);set('q',$('#product-search').value.trim().slice(0,80));set('maker',$('#brand-filter').value);
+ set('shelf',activeCategory==='all'?'':activeCategory);set('q',searchText($('#product-search').value));set('maker',$('#brand-filter').value);
  history.replaceState(null,'',location.pathname+(s()?'?'+s():'')+location.hash)}
 function resetCatalog(){limit=12;syncUrl();renderCatalog();scheduleScroll()}
 function loadMore(){if(visibleCount>=filteredProducts().length)return;limit+=12;renderCatalog(true)}
-$('#product-search').oninput=resetCatalog;$('#brand-filter').onchange=resetCatalog;$('#more-products').onclick=loadMore;
+// Typed or pasted text past the limit is cut in the box too, so the box, the results and a shared address agree.
+$('#product-search').oninput=()=>{const box=$('#product-search');if([...box.value.trim()].length>80)box.value=searchText(box.value);resetCatalog()};$('#brand-filter').onchange=resetCatalog;$('#more-products').onclick=loadMore;
 function selectShelf(b){activeCategory=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))})}
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{selectShelf(b);resetCatalog()});
 let scrollFrame=0, sectionNavigation=false, sectionTimer;
@@ -42,7 +45,7 @@ window.addEventListener('hashchange',()=>followSection(location.hash));
 // Restore a shared view from ?shelf=, ?q= and ?maker=; unknown values keep the full catalog. Values never reach HTML.
 // A malformed address must never stop the catalog, so the whole restore is guarded.
 try{const u=new URLSearchParams(location.search),shelf=[...document.querySelectorAll('[data-filter]')].find(x=>x.dataset.filter===u.get('shelf')),mk=u.get('maker');
- if(shelf)selectShelf(shelf);$('#product-search').value=(u.get('q')||'').trim().slice(0,80);$('#brand-filter').value=mk&&[...$('#brand-filter').options].some(o=>o.value===mk)?mk:''}catch(e){}
+ if(shelf)selectShelf(shelf);$('#product-search').value=searchText(u.get('q'));$('#brand-filter').value=mk&&[...$('#brand-filter').options].some(o=>o.value===mk)?mk:''}catch(e){}
 renderCatalog();
 if('IntersectionObserver' in window){
  const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))scheduleScroll()},{rootMargin:'600px 0px'});
