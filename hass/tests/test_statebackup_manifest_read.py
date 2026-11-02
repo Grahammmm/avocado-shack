@@ -139,7 +139,7 @@ class ManifestReadTests(BackupTestCase):
             made = statebackup.create(str(self.repo.state), str(self.bk), now=STAMP)
         backup = Path(made["backup"])
         self.assertEqual(made, {"result": "ok", "backup": str(backup), "files": len(self.files(backup)),
-                                "contentCommit": git(self.repo.wt, "rev-parse", "HEAD")})
+                                "contentCommit": git(self.repo.wt, "rev-parse", "HEAD"), "contentBundle": True})
         self.assertEqual(self.cli("verify", backup), (0, [{"result": "ok", "files": len(self.files(backup))}]))
         with mock.patch.object(statebackup, "_read", side_effect=AssertionError("manifest read uncapped")):
             self.assertIsNotNone(statebackup._manifest(backup))

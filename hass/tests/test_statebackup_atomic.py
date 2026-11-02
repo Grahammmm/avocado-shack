@@ -56,7 +56,7 @@ class AtomicCreateTests(BackupTestCase):
         self.assertEqual((made["result"], made["backup"]), ("ok", str(self.final)), made)
         self.assertEqual(statebackup.verify(str(self.final)), {"result": "ok", "files": made["files"]})
         self.assert_nothing_left([NAME])
-        files = statebackup._scan(self.repo.state)[0]
+        files = statebackup._scan(self.repo.state)[0] + [statebackup.BUNDLE]
         listed = sorted(rel for rel, digest in tree(self.final).items() if digest is not None)
         self.assertEqual(listed, sorted(files + [statebackup.MANIFEST]))
         hashes = {rel: hashlib.sha256((self.final / rel).read_bytes()).hexdigest() for rel in files}

@@ -18,6 +18,8 @@ exit 0 ok, 1 any other result, 2 unsafe dir or usage. list (read-only): a line p
 diff (read-only): files added, removed and changed from OLD to NEW (photo originals as counts), i.e. what a restore of
 OLD would lose. diff reads manifests only; run verify for integrity.
 A new backup's MANIFEST.json also records `contentCommit`, the writer worktree's HEAD (read-only git; null if unreadable).
+With a contentCommit, create also writes content.bundle (a full `git bundle` of that HEAD: site content and committed web
+photos), listed and hashed like any file; verify requires its head to be contentCommit. restore skips it (FAV-08).
 """
 import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timezone
@@ -32,9 +34,11 @@ from hass.editor import UnsafeState  # noqa: E402
 
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
 INBOX = "inbox.sqlite3"  # H16 inbound queue; snapshotted like DB
+BUNDLE = "content.bundle"  # FAV-07: git bundle of the writer worktree's HEAD == contentCommit
 DIRS = ("drafts", "changes", "screenshots")
 ORIG = "media/originals/"  # H10 photo originals <aa>/<sha>.<ext> + <aa>/<sha>.json, aa == sha[:2] (hass/media.py)
-FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
+FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|content\.bundle"
+                     r"|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
                      r"|screenshots/[0-9A-Za-z_-][0-9A-Za-z._-]*\.png"
                      r"|media/originals/(?P<aa>[0-9a-f]{2})/(?P=aa)[0-9a-f]{62}\.(json|%s)"
                      % "|".join(sorted(set(photos.EXT.values()))))
@@ -173,25 +177,38 @@ def create(state, out, now=None, media=None) -> dict:
             hashes[rel] = hashlib.sha256(_read(dest / rel)).hexdigest()
         doc = {"schemaVersion": 1, "createdAt": now.isoformat(), "worktree": cfg["worktree"], "files": hashes}
         commit = _head(Path(cfg["worktree"]))  # inside the writer lock; read-only
-        if commit: doc["contentCommit"] = commit
+        if commit:  # FAV-07: the content itself, made inside the same lock; read-only git
+            doc["contentCommit"] = commit
+            _git_ro(cfg["worktree"], "bundle", "create", str(dest / BUNDLE), "HEAD")
+            if not _bundle_holds(dest / BUNDLE, commit):
+                return {"result": "refused", "problems": ["content bundle does not hold contentCommit"]}
+            os.chmod(dest / BUNDLE, 0o600)
+            hashes[BUNDLE] = hashlib.sha256(_read(dest / BUNDLE)).hexdigest()
         if mroot: doc["media"] = {"originals": len(mfiles) // 2}
         _write_new(dest / (MANIFEST + ".tmp"), json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
         os.replace(dest / (MANIFEST + ".tmp"), dest / MANIFEST)  # last: a backup without it is incomplete
         _rename_noreplace(dest, final)  # a final dir that appeared meanwhile (even empty) is refused, never replaced
         undo.pop_all()  # renamed in: nothing left to clean up
     extra = {"media": len(mfiles) // 2} if mroot else {}  # settled: one sidecar per original
-    return {"result": "ok", "backup": str(final), "files": len(hashes), "contentCommit": commit, **extra}
+    return {"result": "ok", "backup": str(final), "files": len(hashes), "contentCommit": commit,
+            "contentBundle": BUNDLE in hashes, **extra}
 
-def _head(wt: Path):
-    """The worktree's HEAD as 40 lowercase hex, else None (not a repo, unborn HEAD, git missing)."""
+def _git_ro(wt, *args) -> str:
+    """git stdout, or "" if git is missing; read-only callers only."""
     old = os.environ.get("GIT_OPTIONAL_LOCKS")
     os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # this call only: never refresh the writer's index
-    try: out = editor._out(wt, "rev-parse", "HEAD")
-    except OSError: return None
+    try: return editor._out(wt, *args)
+    except OSError: return ""
     finally:
         if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
         else: os.environ["GIT_OPTIONAL_LOCKS"] = old
-    return out if COMMIT_RE.fullmatch(out) else None
+
+def _head(wt: Path):
+    """The worktree's HEAD as 40 lowercase hex, else None (not a repo, unborn HEAD, git missing)."""
+    return out if COMMIT_RE.fullmatch(out := _git_ro(wt, "rev-parse", "HEAD")) else None
+
+def _bundle_holds(path: Path, commit) -> bool:  # `git bundle list-heads` reads the file only: no repository, no write
+    return f"{commit} HEAD" in _git_ro(path.parent, "bundle", "list-heads", str(path)).splitlines()
 
 def _manifest(bdir: Path):
     try:
@@ -244,6 +261,9 @@ def verify(backup) -> dict:
         elif hashlib.sha256(_read(bdir / rel)).hexdigest() != digest: problems.append(f"hash mismatch: {rel}")
         elif rel in (DB, INBOX) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
         elif rel == CONFIG and not _config_ok(bdir / rel): problems.append("config: not a JSON object with a worktree")
+        elif rel == BUNDLE and "contentCommit" not in doc: problems.append("content bundle without contentCommit")
+        elif rel == BUNDLE and not _bundle_holds(bdir / rel, doc["contentCommit"]):
+            problems.append("content bundle: head is not contentCommit")
         elif rel.startswith(ORIG) and not rel.endswith(".json"):  # the content address and the sidecar both hold
             sha, side = rel[19:83], rel[:84] + "json"  # media/originals/<aa>/<sha>.<ext>
             if hashlib.sha256(_read(bdir / rel)).hexdigest() != sha: problems.append(f"content mismatch: {rel}")
@@ -309,7 +329,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
             made.append(mtmp)
             (mtmp / "originals").mkdir(mode=0o700)
         for rel in sorted(doc["files"]):
-            if rel.startswith(ORIG) and not mtmp: continue  # reported below as mediaRestored: false
+            if rel == BUNDLE or rel.startswith(ORIG) and not mtmp: continue  # bundle: FAV-08; media: mediaRestored
             dst = mtmp / rel[len("media/"):] if rel.startswith(ORIG) else tmp / rel
             dst.parent.mkdir(mode=0o700, exist_ok=True)
             if rel != CONFIG:

@@ -60,7 +60,7 @@ class RoundTripTests(InboxBackupTestCase):
         (self.repo.state / INBOX).unlink()
         self.apply("kumquat desc")
         state = self.repo.state
-        expected = {"config.json", "conversation.sqlite3"} | {
+        expected = {"config.json", "conversation.sqlite3", "content.bundle"} | {
             f"{d}/{name}" for d in statebackup.DIRS if (state / d).is_dir() for name in os.listdir(state / d)}
         self.assertEqual(set(self.files(self.backup())), expected)
 

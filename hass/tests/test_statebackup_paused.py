@@ -103,7 +103,7 @@ class PausedRestoreTests(BackupTestCase):
         self.assertEqual((json.loads(line)["result"], json.loads(line)["paused"]), ("ok", True))
         for path in [new, *new.rglob("*")]:
             self.assertEqual(path.stat().st_mode & 0o777, 0o700 if path.is_dir() else 0o600, path)
-        listed = set(self.files(backup))
+        listed = set(self.files(backup)) - {"content.bundle"}  # restore skips the content bundle (FAV-07)
         self.assertEqual(set(tree(new)), listed | {rel.split("/")[0] for rel in listed if "/" in rel})  # no journal
         bad = subprocess.run([sys.executable, str(SCRIPT), "verify", str(backup), "--paused"], capture_output=True)
         self.assertEqual(bad.returncode, 2)  # --paused belongs to restore only
