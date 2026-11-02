@@ -19,6 +19,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod  # noqa: E402
 from hass.conversation import AttachmentPending, Inbound  # noqa: E402
+from hass.memory import private_db  # noqa: E402
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -77,9 +78,7 @@ class Inbox:
         value. This module never changes a recorded start point."""
         sdir = editor_mod.open_state(state_dir)
         self.clock = clock
-        path = sdir / "inbox.sqlite3"
-        os.close(os.open(path, os.O_RDWR | os.O_CREAT, 0o600))
-        os.chmod(path, 0o600)
+        path = private_db(sdir, "inbox.sqlite3")  # RF1520-11: a link, directory or FIFO is UnsafeState, never followed
         self.db = sqlite3.connect(path, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         try:
