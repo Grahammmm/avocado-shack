@@ -121,7 +121,7 @@ class MarginTests(unittest.TestCase):
         tree = ast.parse(Path(margins.__file__).read_text())
         mods = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         mods |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-        self.assertEqual(mods, {"argparse", "json", "sys", "decimal"})
+        self.assertEqual(mods, {"argparse", "json", "re", "sys", "decimal"})
         calls = {n.func.id for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
         self.assertNotIn("open", calls)
 
