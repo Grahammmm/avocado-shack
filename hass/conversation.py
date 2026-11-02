@@ -4,7 +4,7 @@ The interpreter only turns text into typed ops (it never sees approvals or calls
 does every write. handle() stores each result (message id, draft state, reply) before any reply is sent; flush()
 sends. Approval is bound to sender, chat, change id, draft hash, base revision and expiry. Fixture adapter only.
 """
-import contextlib, copy, hashlib, json, os, re, sqlite3, sys  # noqa: E401
+import contextlib, copy, hashlib, json, os, re, sqlite3, stat, sys  # noqa: E401
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -204,10 +204,25 @@ def sender_key(value):
     return value.casefold() if ok else None
 
 
+MAX_CONFIG = 1024 * 1024  # RF1910-2 (H08/H20)
+
+
+def _config_bytes(sdir):
+    """RF1910-2: config.json bytes from a regular, non-link file <= 1 MiB; None when missing; else ConfigError."""
+    path, bad = Path(sdir) / "config.json", ConfigError("config.json must be a regular file up to 1 MiB")
+    try: st = os.lstat(path)
+    except FileNotFoundError: return None
+    if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_CONFIG: raise bad  # link, FIFO, folder, too big: never opened
+    with open(path, "rb") as fh: data = fh.read(MAX_CONFIG + 1)
+    if len(data) > MAX_CONFIG: raise bad  # grew past the cap after lstat; the reason names no path or content
+    return data
+
+
 def load_settings(sdir, photos=False) -> dict:
     try:
-        settings = json.loads((Path(sdir) / "config.json").read_text("utf-8")).get("settings")
-    except (OSError, ValueError, AttributeError):
+        data = _config_bytes(sdir)
+        settings = None if data is None else json.loads(data.decode("utf-8")).get("settings")
+    except (OSError, ValueError, AttributeError, RecursionError, UnicodeDecodeError):
         settings = None
     if not isinstance(settings, dict): raise ConfigError("config.json settings are missing")
     senders, chat, ttl = (settings.get(k) for k in ("ownerSenders", "ownerChat", "approvalTtlSeconds"))
