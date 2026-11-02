@@ -6,6 +6,7 @@ The copy holds the worktree's tracked ``storefront-mockup`` files (assets symlin
 (generated path -> bytes) laid over them. Its own ``community-server.py`` serves it on a free 127.0.0.1 port with a
 fresh empty temp database and a minimal environment; ``hass/screenshot.cjs`` captures and checks the target page.
 The server is always stopped and the copy removed. Screenshots are written 0600; nothing is published or sent.
+A damaged change record gives the target ``{"kind": "unreadable"}``, refused before any copy or server.
 """
 import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
@@ -17,8 +18,27 @@ PASS_THROUGH = ("PLAYWRIGHT_MODULE", "CHROMIUM_PATH")
 START_TIMEOUT, CAPTURE_TIMEOUT = 10.0, 90
 
 
+_FIELDS = {"products": ("name", "status", "description"), "makers": ("name", "place"),
+           "store": ("streetAddress", "town"), "events": ("title", "status", "recap")}
+
+
+def _readable(record) -> bool:
+    """A dict record, a dict/None after, a text/None key and text/None read fields (store hours: a list of text)."""
+    after = record.get("after") if isinstance(record, dict) else []
+    after = {} if after is None else after
+    if not isinstance(after, dict) or not isinstance(record.get("key"), (str, type(None))):
+        return False
+    collection = record.get("collection") if isinstance(record.get("collection"), str) else ""
+    hours = after.get("hours") if collection == "store" else None
+    if not (hours is None or isinstance(hours, list) and all(isinstance(h, str) for h in hours)):
+        return False
+    return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
+
+
 def target_for(record: dict) -> dict:
     """The screenshot target for a touched record (the after value decides what the checks expect)."""
+    if not _readable(record):
+        return {"kind": "unreadable"}
     after, collection = record.get("after") or {}, record.get("collection")
     if collection == "products":
         return {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
@@ -136,6 +156,8 @@ class Previewer:
         return site
 
     def _capture(self, files: dict, target: dict, out_png: Path) -> dict:
+        if target.get("kind") == "unreadable":  # a damaged change record: no copy, no server
+            return {"ok": False, "png": None, "checks": {}, "error": "preview target unreadable"}
         if self.viewports not in (("phone",), VIEWPORTS):
             raise ValueError(f"unsupported viewports {self.viewports!r}"[:80])
         with tempfile.TemporaryDirectory(prefix="hass-preview-") as raw:
