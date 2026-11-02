@@ -6,6 +6,7 @@ Locked: ``id``, ``status`` (always ``idea``), ``rsvpEnabled`` (always false), ``
 not arguments, so the registry refuses them as unknown arguments: a route idea never becomes a dated hike, never takes
 RSVPs and never loses the source link the migration check records. A real event id is refused; use ``hike.update``.
 The change is drafted, approved and applied like every other edit; ``history.revert`` restores the old text.
+A new ``title`` already used by another route idea or a hike (case and spacing ignored) is refused, naming that id.
 """
 
 from __future__ import annotations
@@ -16,6 +17,10 @@ from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 
 ROUTE_EDITABLE = ("title", "place", "character", "distance", "difficulty", "elevation", "elevationLabel", "duration",
                   "routeType", "terrain", "description")
+
+
+def _fold(text):
+    return " ".join(text.split()).casefold()
 
 
 def _route_edit(content, args, ctx):
@@ -31,6 +36,11 @@ def _route_edit(content, args, ctx):
     changes = {f: v for f, v in changes.items() if idea.get(f) != v}
     if not changes:
         return Refused(f"route idea {route_id} already says that")
+    if "title" in changes:
+        others = [i for i in content.community["routeIdeas"] if i.get("id") != route_id] + content.community["events"]
+        for other in others:
+            if isinstance(other.get("title"), str) and _fold(other["title"]) == _fold(changes["title"]):
+                return Refused(f"{other.get('id')} is already called {other['title']}")
     before = copy.deepcopy(idea)
     idea.update(changes)
     return [Touched("routeIdeas", route_id, before, copy.deepcopy(idea))]
