@@ -85,6 +85,18 @@ def _last_line(text: str) -> str:
     return (lines[-1] if lines else "no output")[:200]
 
 
+def _checks(stdout: str) -> dict | None:
+    """The last stdout line's ``checks`` when it is a non-empty object of str -> bool; else None (bad output)."""
+    lines = [line for line in (stdout or "").splitlines() if line.strip()]
+    try:
+        doc = json.loads(lines[-1]) if lines else None
+    except (ValueError, RecursionError):
+        return None
+    checks = doc.get("checks") if isinstance(doc, dict) else None
+    good = isinstance(checks, dict) and checks and all(type(k) is str and type(v) is bool for k, v in checks.items())
+    return checks if good else None
+
+
 class Previewer:
     def __init__(self, worktree, env=None, viewports=VIEWPORTS):
         self.viewports = tuple(viewports)
@@ -141,8 +153,9 @@ class Previewer:
                         proc = subprocess.run(["node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
                                               text=True, timeout=CAPTURE_TIMEOUT)
                         ran = not proc.returncode and shot.is_file()
-                        checks = json.loads(proc.stdout.strip().splitlines()[-1]).get("checks", {}) if ran else None
-                        failure = None if ran else _last_line(proc.stderr or proc.stdout)
+                        checks = _checks(proc.stdout) if ran else None
+                        failure = None if checks is not None else (
+                            "bad checks output" if ran else _last_line(proc.stderr or proc.stdout))
                     except Exception as exc:  # noqa: BLE001 - a desktop timeout/crash keeps the phone result
                         if name == "phone":
                             raise
