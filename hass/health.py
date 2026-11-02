@@ -211,7 +211,7 @@ def _guest_check(sdir, settings, now, problems: list, info: list) -> None:  # AV
         events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
         if any(e.get("status") == "scheduled" and e.get("rsvpEnabled") and datetime.fromisoformat(e["startsAt"]) > now
                for e in events): problems.append(_problem("guest-counts", "unset"))
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, UnsafeState):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, UnsafeState):
         info.append(_problem("guest-counts", "hikes unreadable"))
 
 def _model_get(url, timeout) -> tuple:  # (status, body) via bridge's opener: no env proxy, no redirect, capped read

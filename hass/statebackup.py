@@ -39,11 +39,21 @@ FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|(drafts
                      % "|".join(sorted(set(photos.EXT.values()))))
 HEX_RE = re.compile(r"[0-9a-f]{64}")
 ATTENDED = "restoring onto the recorded writer worktree is an attended operation"
+MANIFEST_MAX, SMALL_MAX = 8 << 20, 64 << 10  # bytes: MANIFEST.json (~80 000 listed files); a sidecar or config.json
 
 def _read(path: Path) -> bytes:
     """Bytes of a regular file; a symlink is never followed."""
     with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as fh:
         return fh.read()
+
+def _read_small(path: Path, limit: int) -> bytes:
+    """Bytes of a regular file of at most `limit` bytes. A symlink, FIFO, folder or device is OSError and a FIFO is
+    opened non-blocking (never waits for a writer); a longer file is ValueError."""
+    with os.fdopen(fd := os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fd).st_mode): raise OSError(errno.EINVAL, "not a regular file", str(path))
+        data = fh.read(limit + 1)
+    if len(data) > limit: raise ValueError(f"over {limit} bytes: {path}")
+    return data
 
 def _write_new(path: Path, data: bytes) -> None:
     with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), "wb") as fh:
@@ -170,12 +180,12 @@ def create(state, out, now=None, media=None) -> dict:
 
 def _manifest(bdir: Path):
     try:
-        doc = json.loads(_read(bdir / MANIFEST).decode("utf-8"))
+        doc = json.loads(_read_small(bdir / MANIFEST, MANIFEST_MAX).decode("utf-8"))
         files = doc["files"]
         valid = doc.get("schemaVersion") == 1 and isinstance(doc.get("worktree"), str) and isinstance(files, dict) \
             and CONFIG in files and all(isinstance(rel, str) and FILE_RE.fullmatch(rel) and isinstance(digest, str)
                                         and HEX_RE.fullmatch(digest) for rel, digest in files.items())
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
         return None
     return doc if valid else None
 
@@ -187,7 +197,7 @@ def _intact(path: Path) -> bool:
         return False
 
 def _config_ok(path: Path) -> bool:  # restore merges it as a dict and rewrites its worktree; never raises
-    try: cfg = json.loads(_read(path).decode("utf-8"))
+    try: cfg = json.loads(_read_small(path, SMALL_MAX).decode("utf-8"))
     except (OSError, ValueError, RecursionError): return False
     return isinstance(cfg, dict) and isinstance(cfg.get("worktree"), str) and cfg["worktree"] != ""
 
@@ -239,8 +249,8 @@ def _pair_problems(doc) -> list:
     return problems
 
 def _sidecar_sha(path: Path):
-    try: return json.loads(_read(path).decode("utf-8")).get("sha256")
-    except (OSError, ValueError, AttributeError): return None
+    try: return json.loads(_read_small(path, SMALL_MAX).decode("utf-8")).get("sha256")
+    except (OSError, ValueError, AttributeError, RecursionError): return None
 
 def _pause(path: Path, now) -> str:  # restore --paused, before the dir appears; an older pause keeps its set_at
     if not path.exists(): _write_new(path, b"")
