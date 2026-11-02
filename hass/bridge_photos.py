@@ -50,6 +50,8 @@ class BlueBubblesPhotos:
             raise ValueError("base_url must be http(s)://127.0.0.1:<port> or http(s)://localhost:<port>")
         self._base = f"{parts.scheme}://{parts.hostname}:{port}"
         self._password_file = _private_file(str(password_file))
+        if not (type(timeout) is int and 1 <= timeout <= 120):  # checked last: URL/password messages keep priority
+            raise ValueError("timeout must be a whole number of seconds from 1 to 120")
         self._transport, self._timeout = transport or _urllib_transport, timeout
 
     def __repr__(self):

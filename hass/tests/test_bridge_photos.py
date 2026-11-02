@@ -147,6 +147,24 @@ class PhotosTests(unittest.TestCase):
         response.read.assert_called_once_with(8)
         self.assertEqual(opened.call_args.args[0].get_method(), "GET")
 
+    def test_timeout_must_be_int_seconds_1_to_120(self):  # RF1500-13
+        message = "timeout must be a whole number of seconds from 1 to 120"
+        for bad in (0, -1, 121, 20.5, "20", None, True, False):
+            with self.subTest(timeout=bad):
+                with self.assertRaises(ValueError) as ctx:
+                    BlueBubblesPhotos(BASE, self.pw, transport=FakeTransport(), timeout=bad)
+                self.assertEqual(str(ctx.exception), message)
+                for leak in ("127.0.0.1", "1234", str(self.pw), "password"):
+                    self.assertNotIn(leak, str(ctx.exception))
+        for good in (1, 120):
+            with self.subTest(timeout=good):
+                fake = FakeTransport()
+                BlueBubblesPhotos(BASE, self.pw, transport=fake, timeout=good).fetch("msg-1", 1)
+                self.assertEqual([c[2] for c in fake.calls], [good, good])
+        with self.assertRaises(ValueError) as ctx:  # bad URL and bad timeout: the URL message wins
+            BlueBubblesPhotos("http://10.0.0.5:1234", self.pw, timeout=0)
+        self.assertIn("base_url", str(ctx.exception))
+
 
 class ConversationWiringTests(unittest.TestCase):
     def setUp(self):
