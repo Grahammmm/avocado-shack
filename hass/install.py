@@ -82,13 +82,24 @@ def _finish(rec_path: Path, rec: dict, change_id: str, result: dict) -> dict:
     editor._write_json(rec_path, {**rec, "install": result})
     return {"result": result["state"], "change_id": change_id, **{k: v for k, v in result.items() if k != "state"}}
 
-def _later_installed(sdir: Path, wt: Path, change_id: str, commit: str) -> str | None:
+def _record(path: Path) -> dict | None:
+    """The change record as a dict, or None if it cannot be read or is not a JSON object (content never logged)."""
+    try: rec = editor._read(path)
+    except (OSError, ValueError, RecursionError): return None
+    return rec if isinstance(rec, dict) else None
+
+def _later_installed(sdir: Path, wt: Path, change_id: str, commit: str) -> tuple[str | None, str | None]:
+    """(stem installed at a descendant commit, stem of a record that cannot tell us) - first in sorted order."""
     for path in sorted((sdir / "changes").glob("chg-*.json")):
-        inst = (editor._read(path) if path.stem != change_id else {}).get("install") or {}
+        if path.stem == change_id: continue
+        if (rec := _record(path)) is None: return None, path.stem
+        inst = {} if rec.get("install") is None else rec["install"]
+        if not isinstance(inst, dict) or inst.get("state") == "installed" and not isinstance(inst.get("commit"), str):
+            return None, path.stem
         other = inst.get("commit") if inst.get("state") == "installed" else None
         if other and other != commit and editor._git(wt, "merge-base", "--is-ancestor", commit, other).returncode == 0:
-            return path.stem
-    return None
+            return path.stem, None
+    return None, None
 
 def install(change_id, *, state=None, now=None) -> dict:
     sdir, cfg, wt = editor._load(state)
@@ -98,7 +109,8 @@ def install(change_id, *, state=None, now=None) -> dict:
 
 def _install_locked(sdir, cfg, wt, change_id, now) -> dict:
     rec_path = sdir / "changes" / f"{change_id}.json"
-    rec = editor._read(rec_path) if rec_path.is_file() else None
+    rec = _record(rec_path) if rec_path.is_file() else None
+    if rec is None and rec_path.is_file(): return {"result": "refused", "reason": "the change record is unreadable"}
     refuse = ("unknown change id" if rec is None and not (sdir / "drafts" / f"{change_id}.json").is_file()
               else "the change is not applied" if rec is None or rec.get("state") != "applied"
               else f"the change was reverted by {rec['revertedBy']}" if rec.get("revertedBy") else None)
@@ -121,10 +133,12 @@ def _install_locked(sdir, cfg, wt, change_id, now) -> dict:
                                                   "failed_at": editor._now(now), "commit": commit})
     prev = {rel: _current(targets[rel]) for rel in paths}
     done = {"commit": commit, "files": len(paths)}
-    if (rec.get("install") or {}).get("state") == "installed" and rec["install"].get("commit") == commit \
-            and all(prev[r] == want[r] for r in paths):
+    own = rec["install"] if isinstance(rec.get("install"), dict) else {}  # a damaged entry is "not installed yet"
+    if own.get("state") == "installed" and own.get("commit") == commit and all(prev[r] == want[r] for r in paths):
         return {"result": "already_installed", "change_id": change_id, **done}
-    if later := _later_installed(sdir, wt, change_id, commit):
+    later, unreadable = _later_installed(sdir, wt, change_id, commit)
+    if unreadable: return {"result": "refused", "reason": f"another change record is unreadable: {unreadable}"}
+    if later:
         return {"result": "refused", "reason": f"a later change is already installed: {later}"}
     modes = {rel: targets[rel].stat().st_mode & 0o777 if prev[rel] is not None else 0o644 for rel in paths}
     reason = None
