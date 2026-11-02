@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TE
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
   reason TEXT, replaced_by TEXT, draft_hash TEXT, base TEXT, ops_json TEXT NOT NULL, summary TEXT NOT NULL,
   sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT,
-  screenshot TEXT, checked_at TEXT);
+  screenshot TEXT, checked_at TEXT, proposed_at TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NULL, chat TEXT NOT NULL,
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
@@ -396,8 +396,14 @@ class Conversation:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
-        for column in ("screenshot", "checked_at"):  # an H05 database gains the H06 columns
+        for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
+        # AVB-03 (H05): an open draft from before proposed_at has no recoverable proposal instant (a filled question
+        # keeps its question's created_at), so it counts as proposed when this store is opened: a yes sent earlier is
+        # refused and the owner re-sends it; it is never judged from created_at or from the current ttl.
+        if self.db.execute("SELECT 1 FROM drafts WHERE proposed_at IS NULL AND state = 'proposed' LIMIT 1").fetchone():
+            self.db.execute("UPDATE drafts SET proposed_at = ? WHERE proposed_at IS NULL AND state = 'proposed'",
+                            (_iso(self._now()),))  # the clock is read only when such a draft exists
         self.outbox = Outbox(self.db, self._now)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.recover()
@@ -433,6 +439,12 @@ class Conversation:
         """H16: a needs-details row stored before expiry existed (expires_at NULL) lapses at created_at + ttl."""
         if row["expires_at"]: return datetime.fromisoformat(row["expires_at"])
         return datetime.fromisoformat(row["created_at"]) + timedelta(seconds=self.settings["approvalTtlSeconds"])
+
+    def _proposed_at(self, row) -> datetime:
+        """AVB-03 (H05): the stored instant the draft was proposed (_propose sets it on insert and on a needs-details
+        fill), so a later approvalTtlSeconds change never moves it. Opening the store stamps an open draft from before
+        the column with the open instant; a proposed row still without one fails closed (now: only a yes sent now)."""
+        return datetime.fromisoformat(row["proposed_at"]) if row["proposed_at"] else self._now()
 
     def _move(self, row, state, **fields):
         current = self._row(row["row_id"])["state"]
@@ -481,15 +493,17 @@ class Conversation:
         """Insert a proposed draft (or fill a needs-details row) bound to the A2 hash, base and expiry."""
         expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))
         fields = dict(change_id=draft["change_id"], draft_hash=draft["draft_hash"], base=draft["base"],
-                      ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires)
+                      ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires,
+                      proposed_at=_iso(now))  # AVB-03: the proposal instant itself, not derived from the current ttl
         if row is not None:
             self._move(row, "proposed", **fields)
             return self._row(row["row_id"])
         cur = self.db.execute(
             "INSERT INTO drafts(change_id, code, state, draft_hash, base, ops_json, summary, sender, chat, created_at,"
-            " expires_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?)",
+            " expires_at, proposed_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (fields["change_id"], self._code(draft["draft_hash"][7:]), fields["draft_hash"], fields["base"],
-             fields["ops_json"], fields["summary"], sender, self.settings["ownerChat"], _iso(now), expires))
+             fields["ops_json"], fields["summary"], sender, self.settings["ownerChat"], _iso(now), expires,
+             fields["proposed_at"]))
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------
@@ -583,6 +597,10 @@ class Conversation:
                         f"Send resume changes, then yes {target['code']}.")
             self._record(msg, "paused")
             return "paused", None
+        if cutoff != now and cutoff < self._proposed_at(target):  # AVB-03 (H05): a yes sent before the draft existed
+            self._reply(f"That yes was sent before {target['code']} was proposed; reply yes {target['code']} to apply it.")
+            self._record(msg, "no-target")
+            return "no-target", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
             self._reply(f"{target['code']} repeats a draft that was closed; reply yes {target['code']} to apply it.")
             self._record(msg, "no-target")
@@ -719,12 +737,23 @@ class Conversation:
         dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
         if dup: return self._reply(f"That photo is already in draft {dup[0]['code']}." + (
             f" {dup[0]['summary']}" if dup[0]["state"] == "needs-details" else "")) or "photo-duplicate"
+        caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
+        try:  # H12: a photo that is an active or hidden product's picture opens no draft; unreadable worktree: as before
+            image = re.compile(rf"assets/products/photo-{sha[:16]}\.(jpg|png)")
+            on = next((p for p in sorted((p for p in load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+                       .products if isinstance(p, dict)), key=lambda p: str(p.get("id")))
+                       if p.get("status") in ("active", "hidden") and isinstance(p.get("image"), str)
+                       and image.fullmatch(p["image"])), None)
+            said = on and f"That photo is already on {on['id']} ({on['name']}). To change that product, say what to change."
+        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): said = None  # no id/name: as unreadable
+        if said:
+            self._reply(said)
+            return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at) VALUES"
                         " (?, 'needs-details', ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
                             [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now)))
         self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
         if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
-        caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
         return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"
 
     def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
