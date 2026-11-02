@@ -2,7 +2,8 @@
 
 LocalInterpreter(base_url, model, system_prompt).interpret(text, pending) sends one `POST /api/chat` to a loopback
 http URL and returns the decoded JSON object the model wrote, or {"unsupported": FAILED} on any failure. The failure
-reason is kept only as a short code in `last_error` (never the URL, prompt or owner text); nothing is logged.
+reason is kept only as a short code in `last_error` (never the URL, prompt or owner text; `request` means the text or
+pending list could not be encoded); nothing is logged.
 Not wired into any service: the operator names the existing local model; nothing is pulled or changed here.
 """
 import json, urllib.error, urllib.parse, urllib.request  # noqa: E401
@@ -86,11 +87,14 @@ class LocalInterpreter:
 
     def _request(self, text, pending) -> bytes:
         today, weekday = self._today()
-        user = json.dumps({"message": text, "pending": pending, "today": today, "weekday": weekday}, ensure_ascii=False)
-        return json.dumps({"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
-                                                             {"role": "user", "content": user}],
-                           "stream": False, "format": "json", "options": {"temperature": 0}},
-                          ensure_ascii=False).encode("utf-8")
+        try:  # a lone surrogate or a non-JSON value is a failed call, never a crash
+            user = json.dumps({"message": text, "pending": pending, "today": today, "weekday": weekday}, ensure_ascii=False)
+            return json.dumps({"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
+                                                                 {"role": "user", "content": user}],
+                               "stream": False, "format": "json", "options": {"temperature": 0}},
+                              ensure_ascii=False).encode("utf-8")
+        except (TypeError, ValueError, UnicodeError, RecursionError):
+            raise _Failed("request") from None
 
     def _call(self, body) -> dict:
         try:
