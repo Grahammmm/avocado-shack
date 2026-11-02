@@ -102,6 +102,23 @@ class PhotoOnProductTests(unittest.TestCase):
                 self.assertEqual(self.say("no"), "rejected")
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected"] * 4)
 
+    def test_matching_product_without_id_or_name_opens_a_draft_as_unreadable(self):
+        self.point(PID)
+        path = self.repo.wt / "hass" / "content" / "products.json"
+        good = path.read_text("utf-8")
+        for field in ("name", "id"):
+            with self.subTest(field):
+                doc = json.loads(good)
+                for product in doc["products"]:
+                    if product["id"] == PID: del product[field]
+                path.write_text(json.dumps(doc, indent=2) + "\n", "utf-8")
+                self.assertEqual(self.say(attachments=1), "photo-draft")
+                self.assertEqual(self.replies(), [f"{PHOTO_QUESTION} Reply with the product and description"
+                                                  f" (draft {self.drafts()[-1]['code']})."])
+                self.assertEqual(self.say("no"), "rejected")
+                self.replies()
+        self.assertEqual([d["state"] for d in self.drafts()], ["rejected"] * 2)
+
     def test_open_draft_duplicate_is_still_answered_first(self):
         self.assertEqual(self.say(attachments=1), "photo-draft")
         self.replies()

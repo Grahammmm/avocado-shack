@@ -709,9 +709,10 @@ class Conversation:
                        .products if isinstance(p, dict)), key=lambda p: str(p.get("id")))
                        if p.get("status") in ("active", "hidden") and isinstance(p.get("image"), str)
                        and image.fullmatch(p["image"])), None)
-        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): on = None
-        if on:
-            self._reply(f"That photo is already on {on['id']} ({on['name']}). To change that product, say what to change.")
+            said = on and f"That photo is already on {on['id']} ({on['name']}). To change that product, say what to change."
+        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): said = None  # no id/name: as unreadable
+        if said:
+            self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at) VALUES"
                         " (?, 'needs-details', ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
