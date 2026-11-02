@@ -3,7 +3,8 @@
 "Remove" means hide: no record is ever deleted. Held products are refused by every op (no op changes ``held`` or
 ``hold``). Ops take only exact ids/keys; resolving a name is always ``lookup`` first. Facts come from arguments only.
 Add and rename refuse a name+brand (product) or name (maker) another record has, case and spacing ignored, naming it.
-Edits drop fields that already have the asked value (exact equality); an edit left with nothing is refused, naming them.
+Edits drop fields that already have the asked value (exact equality, inner spacing ignored); an edit left with nothing
+is refused, naming them.
 A maker ``place`` edit warns with the number of active product cards whose "Based in" line (and town search) it relabels.
 """
 
@@ -56,6 +57,10 @@ def _same(a, b) -> bool:
     return " ".join(str(a).split()).casefold() == " ".join(str(b).split()).casefold()
 
 
+def _spaced(value):
+    return " ".join(value.split()) if isinstance(value, str) else value
+
+
 def _twin(content, name, brand, pid=None):
     """The first product other than ``pid`` with this name and brand (any status), else None."""
     return next((p for p in content.products if p["id"] != pid and _same(p["name"], name) and _same(p["brand"], brand)),
@@ -72,8 +77,9 @@ def _shown(value) -> str:
 
 
 def _drop_unchanged(changes, record, label, more=False):
-    """Keys whose value differs from the record's (exact equality); Refused when all were unchanged and not ``more``."""
-    left = {k: v for k, v in changes.items() if record.get(k) != v}
+    """Keys whose value differs from the record's (exact equality, inner spacing ignored); Refused when all were
+    unchanged and not ``more``."""
+    left = {k: v for k, v in changes.items() if _spaced(record.get(k)) != _spaced(v)}
     if changes and not left and not more:
         return Refused(f"{label} already has " + ", ".join(f"{k}={_shown(v)}" for k, v in changes.items())
                        + "; nothing to change")

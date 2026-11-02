@@ -72,9 +72,9 @@ class UnchangedEditTests(CatalogTestCase):
         self.assertNotIn("imageAlt", rec["after"])
         self.assertEqual(rec["after"]["name"], self.p["name"])
 
-    def test_exact_equality_case_and_space_are_changes(self):
+    def test_exact_equality_case_is_a_change(self):
         pid, name = self.p["id"], self.p["name"]
-        for new in (name.upper() if name.upper() != name else name.lower(), name.replace(" ", "  ", 1)):
+        for new in (name.upper() if name.upper() != name else name.lower(),):
             (rec,) = self.edit_records(("product.edit", {"id": pid, "name": new}))
             self.assertEqual((rec["before"]["name"], rec["after"]["name"]), (name, new))
 
