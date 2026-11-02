@@ -17,7 +17,7 @@ The two note commands are stricter:
 | `yes` alone (or `approve`, `approved`) | Applies the one waiting draft. If more than one is waiting, Hass asks which. | `approve` |
 | `no <code>` (or `cancel <code>`, `reject <code>`) | Cancels that draft or question; nothing changes on the site. | `cancel A1B2` |
 | `no` alone (or `cancel`, `reject`) | Cancels the waiting draft or question; nothing changes. | `no` |
-| `history` | Lists the last five changes with their codes and states, each with where it is now (on the website, not confirmed on the website, undone). | `history` |
+| `history` | Lists the last five approved changes (applied, checked, failed or undone) with their codes and states, each with where it is now (on the website, not confirmed on the website, undone). | `history` |
 | `undo` | Drafts an undo of the most recent applied change. It needs `yes <code>` like any draft. | `undo` |
 | `undo <code>` | Drafts an undo of that applied change. It needs `yes <code>`. | `undo A1B2!` |
 | `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals. With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |

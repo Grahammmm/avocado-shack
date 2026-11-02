@@ -16,7 +16,7 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 ## Lists
 
-- `history` shows the last **5** <!-- conversation.HISTORY_MAX --> changes.
+- `history` shows the last **5** <!-- conversation.HISTORY_MAX --> approved changes.
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
 

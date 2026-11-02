@@ -41,6 +41,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
+HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_MAX, FIND_USAGE = 10, "Send find and 1–60 characters, e.g. find lion's mane."  # AV1537-04
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
@@ -739,10 +740,11 @@ class Conversation:
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= 60 else (self._reply(FIND_USAGE), "find")[1]
         if verb == "history":
-            rows = self.db.execute("SELECT * FROM drafts ORDER BY row_id DESC LIMIT ?", (HISTORY_MAX,)).fetchall()
+            rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
+                                   "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
             self._reply("\n".join(["Recent changes:"] + [  # SHOP-4: where it is now instead of the commit
                 f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
-                for r in rows]) if rows else "No changes yet.")
+                for r in rows]) if rows else "No approved changes yet.")
             return "history"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")
                 if code is None and r["state"] in ("applied", "verified") or r["code"] == code]
