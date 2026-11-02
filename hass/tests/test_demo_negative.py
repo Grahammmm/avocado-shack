@@ -111,10 +111,10 @@ class NegativeDemoTests(unittest.TestCase):
             self.assertTrue(text.startswith(kind) or kind in text, (kind, text))
         a, b = run["db"].execute("SELECT * FROM drafts ORDER BY row_id").fetchall()  # the unclear request opened no draft
         self.assertEqual((a["state"], a["reason"], b["state"]), ("rejected", "owner", "expired"))
-        # ClockedConversation flushes at each row's own time, so no reply is sent late and none carries the AVB-07
-        # (H16) '(Delayed reply ...)' prefix; that prefix is covered by the Outbox tests
+        # ClockedConversation flushes each reply at its own row's time, so no reply is older than DELAYED_AFTER_S and
+        # none carries the AVB-07 (H16) "(Delayed reply, ...)" prefix (that path is covered by the outbox tests)
         self.assertEqual(texts[1], f"Cancelled {a['code']}; nothing changed.")
-        self.assertFalse([t for t in texts if t.startswith("(Delayed reply")], texts)
+        self.assertFalse(any(t.startswith("(Delayed reply") for t in texts), texts)
         self.assertEqual(texts[3], f"{b['code']} expired at 2026-11-02 09:14 PST; nothing changed.")  # 09:04 + 600 s
         self.assertEqual(texts[4], ASK)
         self.assertNotIn(b["code"], "".join(texts[4:]))  # the question and status name no draft code

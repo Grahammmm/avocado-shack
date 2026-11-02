@@ -9,10 +9,12 @@ a short code in `last_error` only; nothing is logged. Not wired into a service: 
 import base64
 import json
 import unicodedata
+from types import SimpleNamespace
 
 from hass import claims
 from hass.content_model import TEXT_LIMITS
 from hass.interpreter_local import LocalInterpreter, _Failed
+from hass.ops import catalog
 
 FIELDS = ("name", "brand", "category")
 PROMPT = ("Read the product label in this photo. Answer only with a JSON object "
@@ -50,11 +52,28 @@ def keep(result, categories) -> dict:
     return {field: value for field, value in found.items() if value is not None}
 
 
-def question(found) -> str:
-    """The confirm line, naming only the parts that were read."""
+def _maker_line(found, makers) -> str:
+    """AVB-10: the one shown maker whose name equals the read brand (catalog rule), else nothing."""
+    if not isinstance(makers, dict) or "brand" not in found: return ""
+    names = [m["name"] for m in makers.values() if isinstance(m, dict) and m.get("hidden") is not True
+             and isinstance(m.get("name"), str) and catalog._same(m["name"], found["brand"])]
+    return f" Maker on file: {names[0]}." if len(names) == 1 else ""
+
+
+def _product_line(found, products) -> str:
+    """AVB-10: the add-time twin (any status but held) of the read name+brand, else nothing."""
+    if not products or "name" not in found or "brand" not in found: return ""
+    shown = SimpleNamespace(products=[p for p in products if isinstance(p, dict) and p.get("status") != "held"])
+    twin = catalog._twin(shown, found["name"], found["brand"])
+    return f" Already listed: {twin['id']} ({twin['name']}); reply with that id to update it instead." if twin else ""
+
+
+def question(found, makers=None, products=None) -> str:
+    """The confirm line, naming only the parts that were read, plus the catalog records they match (never ops)."""
     words = " ".join(found[f] for f in ("brand", "name") if f in found)
     if "category" in found: words = f"{words} ({found['category']})" if words else found["category"]
-    return f"The label looks like: {words}. Is that right? Say which product it is either way."
+    return (f"The label looks like: {words}. Is that right? Say which product it is either way."
+            + _maker_line(found, makers) + _product_line(found, products))
 
 
 class LabelReader(LocalInterpreter):
