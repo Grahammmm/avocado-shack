@@ -174,6 +174,13 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
+def _answered_at(msg, now: datetime) -> datetime:
+    """AV0022-06 (H16): when the owner sent the reply (received_at); empty, naive, bad or future -> now."""
+    try: sent = datetime.fromisoformat(msg.received_at or "")
+    except (TypeError, ValueError): return now
+    return sent if sent.tzinfo is not None and sent <= now else now
+
+
 def _local(iso: str) -> str:
     return datetime.fromisoformat(iso).astimezone(LOCAL_TZ).strftime("%Y-%m-%d %H:%M %Z")
 
@@ -476,7 +483,9 @@ class Conversation:
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
-        expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= now]
+        # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
+        cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
+        expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and command[0] in ("status", "help", "find"): expired = []  # H17: read-only; status hides lapsed drafts
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
@@ -505,7 +514,7 @@ class Conversation:
         states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
         targets = [r for r in self._drafts(f"state IN {states}") if code is None or r["code"] == code]
         asks = [] if verb != "approve" or targets else [self._by_code(code, ("needs-details",))] if code else \
-            [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > now]  # AV1737-05: bare yes
+            [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > cutoff]  # AV1737-05: bare yes
         if asks := [a for a in asks if a is not None]:  # a waiting question is never approved; it is repeated
             self._reply("\n".join(f"{a['code']} still needs details: {a['summary']}" for a in asks))
             self._record(msg, "no-target")
