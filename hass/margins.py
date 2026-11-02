@@ -4,11 +4,13 @@ at the end. Pure (no file, content or network access); a suggestion only, it nev
     python3 hass/margins.py --pack-cost 24.00 --units 12 --shrink 5 --margin 35 [--round-to 0.99] [--json]"""
 import argparse
 import json
+import re
 import sys
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, InvalidOperation, localcontext
 from decimal import Decimal as D
 
 CENT, NOTE = D("0.01"), "Suggestion only. Prices are not on the site; any price change needs your approval."
+PLAIN = re.compile(r"-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?", re.ASCII)  # no _, +, non-ASCII digits
 
 
 class InputError(ValueError):  # a bad input; the message names the field
@@ -23,6 +25,8 @@ def _num(field, raw, lo, hi, places=None, whole=False):
     if not d.is_finite() or (whole and d != d.to_integral_value()) or (places and d.as_tuple().exponent < -places):
         kind = "whole number" if whole else "number" + (f" with at most {places} decimals" if places else "")
         raise InputError(f"{field} must be a finite {kind}")
+    if not PLAIN.fullmatch(str(raw).strip()):
+        raise InputError(f"{field} must be a plain number (digits and one point)")
     if not D(lo) <= d <= D(hi):
         raise InputError(f"{field} must be {lo} to {hi}")
     return d.quantize(CENT) if places else d.normalize() + 0  # 24 / 24.0 / 24.00 all give one value
