@@ -5,6 +5,7 @@
                            [--media DIR] [--min-free-mb MB]   (minutes/hours windows: each 1 to 100 years)
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
+state-db (conversation.sqlite3 or inbox.sqlite3 is a symlink or not a regular file; lstat only, never opened),
 db-integrity, outbox-stuck (unsent replies older than --outbox-minutes), apply-stuck (drafts `approved` over 10 min),
 unverified (applied drafts, undone or not, whose preview check failed within --unverified-hours; count only),
 guest-counts (guestCountsDb set but unreadable, or unset while an upcoming hike takes RSVPs; no path printed),
@@ -23,7 +24,7 @@ check id and short detail only (no message text, sender or number). One JSON lin
 fingerprint; notify only when it changed (else notify = not ok). No send; the only network use is --model's loopback
 GET. Exit 0 ok, 1 problems, 2 unsafe.
 """
-import argparse, contextlib, hashlib, json, os, re, sqlite3, sys, tempfile, urllib.error  # noqa: E401
+import argparse, contextlib, hashlib, json, os, re, sqlite3, stat, sys, tempfile, urllib.error  # noqa: E401
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -59,9 +60,17 @@ def _older(rows, limit: datetime, newer=False) -> int:
             return True
     return sum(old(raw) for (raw,) in rows)
 
+def _regular(path) -> bool | None:  # RF1520-12: lstat only, a link is never followed; None means absent
+    try:
+        return stat.S_ISREG(os.lstat(path).st_mode)
+    except OSError as exc:
+        return None if isinstance(exc, FileNotFoundError) else False
+
 def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, info: list, unverified_hours=72,
                paused_hours=24) -> None:
-    if not (path := sdir / DB).is_file(): return info.append(_problem("conversation", "no conversation yet"))
+    if (kind := _regular(path := sdir / DB)) is None:
+        return info.append(_problem("conversation", "no conversation yet"))
+    if not kind: return problems.append(_problem("state-db", f"{DB} is not a regular file"))
     try:
         with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
             result = [r[0] for r in db.execute("PRAGMA quick_check").fetchall()]
@@ -93,7 +102,8 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
 
 def _inbox_check(sdir: Path, now: datetime, minutes: int, problems: list, unreadable_hours=24) -> None:
     """H16 queue: pending inbound enqueued (this box's clock) over `minutes` ago; no inbox file -> nothing to check."""
-    if not (path := sdir / "inbox.sqlite3").is_file(): return
+    if (kind := _regular(path := sdir / "inbox.sqlite3")) is None: return
+    if not kind: return problems.append(_problem("state-db", "inbox.sqlite3 is not a regular file"))
     try:
         with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
             result = [r[0] for r in db.execute("PRAGMA quick_check").fetchall()]

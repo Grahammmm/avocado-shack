@@ -26,6 +26,12 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 - **Next step:** `pause changes` if the chat still answers; leave the damaged file untouched; run the isolated restore drill (below) to see what the newest good backup holds.
 - **Stop and ask:** always before a live restore, when `db-integrity` repeats on a second run, or before any edit, copy over or deletion of the file.
 
+### `state-db`
+- **Means:** `conversation.sqlite3` or `inbox.sqlite3` in the state dir is a symlink (dangling too), a directory or another non-regular file; health never opened it.
+- **Check first:** `ls -l DIR/conversation.sqlite3 DIR/inbox.sqlite3`.
+- **Next step:** none in the repo: leave the entry and whatever it points at untouched.
+- **Stop and ask:** always; the real database may be elsewhere or gone (before any move, copy or deletion).
+
 ### `outbox-stuck`
 - **Means:** replies have waited unsent longer than `--outbox-minutes`; the detail is the count. The Mac bridge or the sender is failing.
 - **Check first:** the owner sends `status`; if no reply arrives the outbound path is down. Re-run the check after a few minutes to see whether the count moves.
