@@ -31,7 +31,9 @@ def facts(content, today: date) -> dict:
         counts[key] += 1
         if key in names:
             names[key].append(str(p.get("name", "")).strip())
-    return {"checked_on": day.isoformat() if day else None, "stale": day is not None and (today - day).days > STALE_AFTER_DAYS,
+    future = day is not None and day > today  # a wrong clock or a hand-edited store: never a fresh check
+    stale = day is not None and not future and (today - day).days > STALE_AFTER_DAYS
+    return {"checked_on": day.isoformat() if day else None, "stale": stale, "future": future,
             "available": counts["yes"], "limited": counts["limited"], "sold_out": counts["no"],
             "not_confirmed": counts["none"], "limited_names": sorted(names["limited"], key=str.casefold),
             "sold_out_names": sorted(names["no"], key=str.casefold)}
@@ -42,7 +44,8 @@ def render(f: dict) -> str:
     head = "Shelf check: not done yet" if day is None else f"Shelf check: {_day_text(date.fromisoformat(day))}"
     counts = f"Available {f['available']} · Limited {f['limited']} · Sold out {f['sold_out']} · Not confirmed {f['not_confirmed']}"
     for cap in range(MAX_NAMES, -1, -1):  # fewer names, never a longer reply, when names are long
-        lines = [head + (" - more than a week ago" if f["stale"] else ""), counts]
+        suffix = " - dated after today, check the clock" if f["future"] else " - more than a week ago" if f["stale"] else ""
+        lines = [head + suffix, counts]
         for label, found in (("Limited", f["limited_names"]), ("Sold out", f["sold_out_names"])):
             shown = found[:cap] + ([f"+{len(found) - cap} more"] if len(found) > cap else [])
             lines += [f"{label}: {', '.join(shown)}"] if found else []
