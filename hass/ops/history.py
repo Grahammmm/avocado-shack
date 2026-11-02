@@ -61,6 +61,20 @@ def _well_formed(change):
         and "before" in r and "after" in r for r in records)
 
 
+def _before_ok(collection, before):
+    """RF0310-5: a stored ``before`` undo can put back: None, a dict, and for a hike a text status, a text start that
+    parses with its zone and (if present) an int capacity, so the seat and past-start checks never raise."""
+    if before is None or (isinstance(before, dict) and collection != "events"):
+        return True
+    if not isinstance(before, dict) or not isinstance(before.get("status"), str) or (
+            "capacity" in before and type(before["capacity"]) is not int):
+        return False
+    try:
+        return datetime.fromisoformat(before["startsAt"].replace("Z", "+00:00")).utcoffset() is not None
+    except (KeyError, AttributeError, TypeError, ValueError):
+        return False
+
+
 def _draft_ops(ctx, change_id):
     """Ops of ``<state>/drafts/<id>.json`` ([] when absent); False for a symlink or an unreadable/malformed draft."""
     path = Path(ctx.state_dir) / "drafts" / f"{change_id}.json"  # state_dir is set: ctx.change found the record
@@ -116,6 +130,8 @@ def _revert(content, args, ctx):
         last[ref] = record["after"]
     if not first:
         return Refused(f"{change_id} touched no records")
+    if not all(_before_ok(collection, before) for (collection, _), before in first.items()):
+        return Refused(f"{change_id} record is malformed")
     for (collection, key), after in last.items():
         if _current(content, collection, key) != after:
             return Refused(f"conflict: {collection} {key} changed after {change_id}")
