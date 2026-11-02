@@ -12,7 +12,9 @@ messaging-app default name, or a web link is refused before the media store is r
 from __future__ import annotations
 
 import copy
+import os
 import re
+import stat
 from pathlib import Path
 
 from hass import editor, media
@@ -68,9 +70,19 @@ def install(ctx, sha, alt):
         return found
     data, ext = found
     target = f"assets/products/photo-{sha[:16]}.{ext}"
-    path = Path(ctx.site_dir) / target
-    have = ctx.assets.get(target, path.read_bytes() if path.is_file() and not path.is_symlink() else None)
-    if path.is_symlink() or (have is not None and have != data):
+    path, have, link = Path(ctx.site_dir) / target, ctx.assets.get(target), False
+    try:  # read the site file only when not already queued; lstat first so a FIFO is never opened
+        if target not in ctx.assets:
+            mode = os.lstat(path).st_mode
+            link = stat.S_ISLNK(mode)
+            if not (link or stat.S_ISREG(mode)):
+                return Refused("the website photo file cannot be read")
+            have = None if link else path.read_bytes()
+    except FileNotFoundError:
+        pass
+    except OSError:  # fixed reply: no path or exception text
+        return Refused("the website photo file cannot be read")
+    if link or (have is not None and have != data):
         return Refused("a different photo already uses that name")
     if have is None:
         ctx.assets[target] = data
