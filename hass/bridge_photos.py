@@ -7,6 +7,7 @@ error raised here ever carries the URL, the query, the password or a response bo
 REST (docs.bluebubbles.app): GET /api/v1/message/{guid}?with=attachment -> {"data": {"attachments": [{"guid", ...}]}};
 GET /api/v1/attachment/{guid}/download -> raw bytes.
 A download whose length differs from the attachment's declared int totalBytes is refused as size-mismatch.
+Attachments after the first n are never read or checked.
 """
 import json, sys, urllib.error, urllib.parse, urllib.request  # noqa: E401
 from pathlib import Path
@@ -78,10 +79,10 @@ class BlueBubblesPhotos:
             return "not-json", []
         data = doc.get("data") if isinstance(doc, dict) else None
         items = data.get("attachments") if isinstance(data, dict) else None
-        if not isinstance(items, list) or not all(isinstance(a, dict) and isinstance(a.get("guid"), str)
-                                                  and a["guid"] for a in items):
+        if not isinstance(items, list): return "shape", []
+        head = items[:n]  # H10: only these are downloaded or checked; each guid bounded like the message guid, unique
+        if not all(isinstance(a, dict) and isinstance(a.get("guid"), str) and a["guid"] for a in head):
             return "shape", []
-        head = items[:n]  # H10: only these are downloaded; each guid bounded like the message guid, and unique
         if len({a["guid"] for a in head}) < len(head) or any(
                 len(a["guid"]) > MAX_GUID or any(ord(c) < 32 or 127 <= ord(c) < 160 for c in a["guid"])
                 or not (a.get("totalBytes") is None or type(a["totalBytes"]) is int and a["totalBytes"] >= 0)
