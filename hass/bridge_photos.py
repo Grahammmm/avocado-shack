@@ -80,6 +80,12 @@ class BlueBubblesPhotos:
         if not isinstance(items, list) or not all(isinstance(a, dict) and isinstance(a.get("guid"), str)
                                                   and a["guid"] for a in items):
             return "shape", []
+        head = items[:n]  # H10: only these are downloaded; each guid bounded like the message guid, and unique
+        if len({a["guid"] for a in head}) < len(head) or any(
+                len(a["guid"]) > MAX_GUID or any(ord(c) < 32 or 127 <= ord(c) < 160 for c in a["guid"])
+                or not (a.get("totalBytes") is None or type(a["totalBytes"]) is int and a["totalBytes"] >= 0)
+                for a in head):
+            return "shape", []  # a non-int (bool, str, float) or negative totalBytes is a shape error too
         if len(items) < n: return "attachment-count", []
         if any(type(a.get("totalBytes")) is int and a["totalBytes"] > media.MAX_BYTES for a in items[:n]):
             return "too-large", []  # declared too big: refused before any download
