@@ -8,7 +8,7 @@ photo sidecar received_at (none usable: undated, never guessed) and the backup n
 Zone-less or malformed times, and backup stamps that are no real calendar time, count nowhere. No ids, text or file
 names print. SQLite opens mode=ro; nothing is created or written; the owner picks the period (owner action 4). Exit 1:
 a store is missing or unreadable (its keys say "unavailable"); exit 2, before anything opens: bad usage (incl. a
---days reaching before year 1 from --now), or a missing/symlinked dir or symlinked database; else 0.
+--days reaching before year 1 from --now), or a missing/symlinked dir or a symlinked or non-regular database; else 0.
 """
 import argparse, contextlib, json, os, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timedelta, timezone
@@ -101,8 +101,9 @@ def report(state, days: int, media=None, backups=None, now=None) -> dict:
     try: cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=days)
     except OverflowError: raise Unsafe("--days reaches before year 1 from --now") from None
     sdir, mroot, bdir = _dir(state, "state dir"), _dir(media, "media root"), _dir(backups, "backups dir")
-    for name in (CONV, INBOX):
-        if (sdir / name).is_symlink(): raise Unsafe(f"{name} must not be a symlink")
+    for name in (CONV, INBOX):  # lstat only: a FIFO, folder or socket is never opened, a link never followed
+        if os.path.lexists(p := sdir / name) and (p.is_symlink() or not stat.S_ISREG(os.lstat(p).st_mode)):
+            raise Unsafe(f"{name} must be a regular file, not a symlink")
     doc = {"days": days, "cutoff": cutoff.isoformat()}
     try:
         rows = _rows(sdir / INBOX, {"inbox": ("inbound", "SELECT state, received_at FROM inbound")})
