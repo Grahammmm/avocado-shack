@@ -73,14 +73,18 @@ class GeneratedIoTests(unittest.TestCase):
         (self.root / "hass" / "content" / "migration-baseline.json").write_text("{bad", encoding="utf-8")
         self.assertIoError(self.migration(), "migration_check", "JSONDecodeError")
 
-    def test_non_utf8_content_or_template_is_named_io_error(self):
-        for rel in ("hass/content/store.json", "hass/templates/index.html"):
-            with self.subTest(rel=rel):
-                self.repo.cleanup()
-                self.setUp()
-                (self.root / rel).write_bytes(b'{"name": "\xff\xfe"}\n')
-                self.assertIoError(self.sitegen("--check"), "sitegen", "UnicodeDecodeError")
-                self.assertIoError(self.migration(), "migration_check", "UnicodeDecodeError")
+    def test_non_utf8_template_is_named_io_error(self):
+        (self.root / "hass" / "templates" / "index.html").write_bytes(b'{"name": "\xff\xfe"}\n')
+        self.assertIoError(self.sitegen("--check"), "sitegen", "UnicodeDecodeError")
+        self.assertIoError(self.migration(), "migration_check", "UnicodeDecodeError")
+
+    def test_non_utf8_content_is_content_invalid_naming_the_file(self):
+        (self.root / "hass" / "content" / "store.json").write_bytes(b'{"name": "\xff\xfe"}\n')
+        self.assertEqual(self.sitegen("--check"), (2, "", "content invalid:\n  store.json: not UTF-8 text\n"))
+        self.assertEqual(
+            self.migration(),
+            (1, "MIGRATION CHECK FAILED:\n  content invalid: store.json: not UTF-8 text\n", ""),
+        )
 
     def test_invalid_content_json_still_reported_as_content_invalid(self):
         (self.root / "hass" / "content" / "store.json").write_text("{bad", encoding="utf-8")
