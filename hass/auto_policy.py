@@ -13,12 +13,9 @@ _LISTS = ("yes", "limited", "no")
 
 
 def qualifies(ops, opted_in, paused) -> tuple[bool, str]:
-    """``ops`` is a draft's list of ``{"op": name, "args": {...}}``; returns ``(allowed, reason)``.
-
-    Fails closed and never raises: ``paused`` other than ``False`` gives "changes are paused"; ``ops`` that is not a
-    list/tuple, or a ``store.confirm_selection`` whose args are not a dict of str lists, gives "draft unreadable";
-    ``opted_in`` that is not a list/tuple/set of str gives "opt-in list unreadable".
-    """
+    """``ops`` is a draft's list of ``{"op": name, "args": {...}}``; returns ``(allowed, reason)``. Never raises: a
+    pause flag other than ``False`` is "changes are paused", a non-list or misshaped selection draft is "draft
+    unreadable", an opt-in that is not a list/tuple/set of str is "opt-in list unreadable"."""
     if paused is not False:
         return False, "changes are paused"
     if not isinstance(ops, (list, tuple)):
