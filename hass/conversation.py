@@ -24,7 +24,8 @@ NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds g
 COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
                         r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
                         r"|(resume)(?: changes)?|(help|commands|\?)"
-                        r"|(find)(?:\s+(.*))?")  # AV1537-04; the query is re-read from the original text to keep its case
+                        r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
+                        r"|(show)(?:\s+(.*))?")  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -38,6 +39,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'memory - list the saved notes: "memory"',
     'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
     'find <words> - matching products and makers, ids: "find lion\'s mane"',
+    'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
@@ -282,6 +284,7 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
     if match[7]: return "help", None
     if match[8]: return "find", re.sub(r"[.!]+$", "", text.strip())[4:].strip()  # ("find", query in its own case)
     if match[2]: return "undo", match[3]
@@ -364,13 +367,17 @@ def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty
         (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
 
 
-def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False) -> str:
-    lines = [f"Draft {code}:"]
+def _record_lines(draft: dict) -> list:  # AV0022-08: a draft's record and warning lines (proposal_text and show)
+    lines = []
     for r in draft["records"]:
         lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
             f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in (
                 (f, *(map(_hike_time, (b, a)) if f == "startsAt" else (b, a))) for f, b, a in _changes(r))]
-    lines += [f"Warning: {w}" for w in draft.get("warnings") or []]
+    return lines + [f"Warning: {w}" for w in draft.get("warnings") or []]
+
+
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "") -> str:
+    lines = [head or f"Draft {code}:"] + _record_lines(draft)
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
     return "\n".join(lines)
@@ -528,7 +535,7 @@ class Conversation:
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and command[0] in ("status", "help", "find"): expired = []  # H17: read-only; status hides lapsed drafts
+        if command and command[0] in ("status", "help", "find", "show"): expired = []  # H17: read-only, sweeps nothing
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -834,6 +841,7 @@ class Conversation:
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
+        if verb == "show": return self._reply(*self._show(code, now)) or "show"
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
@@ -878,6 +886,30 @@ class Conversation:
             ["… maybe more; add a word."] if capped else []
         self._reply("\n".join(lines[:FIND_MAX] + tail) if lines else f'No product or maker matches "{query}".')
         return "find"
+
+    def _show(self, code, now) -> tuple:
+        """AV0022-08 (H17): (text, attachments) repeating one draft's stored proposal lines and its saved screenshot.
+        Read-only: no state move, no expiry sweep, never prepared or rendered again; works while paused."""
+        if not re.fullmatch(r"[0-9a-f]{4,12}", code): return "Send show and a draft code, e.g. show a1b2.", []
+        if (row := self._by_code(code)) is None: return f"No draft {code}.", []
+        state = row["state"]
+        if state in ("proposed", "needs-details") and self._expiry(row) <= now:  # lapsed, not swept: words it only
+            return self._state_text({**dict(row), "state": "expired", "expires_at": _iso(self._expiry(row))}), []
+        if state == "needs-details": return f"{code} still needs details: {row['summary']}", []
+        if state not in ("proposed", "applied", "verified"): return self._state_text(row), []
+        try:
+            out = self.editor.show(row["change_id"])
+            rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
+            draft = {"records": rec["records"], "warnings": rec.get("warnings")}
+            if state == "proposed":
+                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), f"Draft {code} (waiting):")
+                shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
+            else:
+                sha = f" ({row['commit'][:7]})" if row["commit"] else ""
+                text, shot = "\n".join([f"Applied {code}{sha}:"] + _record_lines(draft)), row["screenshot"]
+            return text, [str(shot)] if shot and Path(shot).is_file() else []
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            return f"{code}: the draft details are not available any more.", []
 
     # -- H15: remember, forget, memory ---------------------------------------------------------------------------
     def _memory(self, msg, verb, key, value) -> str:
