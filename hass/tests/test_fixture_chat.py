@@ -16,6 +16,7 @@ import unittest
 from pathlib import Path
 
 from hass.content_model import REPO_ROOT
+from hass.owner_answers import NOT_LIVE
 from hass.tests.test_conversation import CHAT
 from hass.tests.test_editor import git
 from hass.tests.test_preview import PNG_SIGNATURE, BrowserCase
@@ -68,7 +69,7 @@ class FixtureChatPreviewTests(BrowserCase):
         [row] = self.drafts()
         self.assertEqual([r["attachments"] for r in rows], [[], []])
         self.assertNotIn("Preview unavailable", rows[0]["text"])
-        self.assertEqual(rows[1]["text"], f"Applied {row['code']}: {row['summary']}")
+        self.assertEqual(rows[1]["text"], f"Applied {row['code']}: {row['summary']}\n{NOT_LIVE}")
         self.assertFalse((self.repo.state / "screenshots").exists())
         self.assertEqual((row["state"], self.commits()), ("applied", 1))
 

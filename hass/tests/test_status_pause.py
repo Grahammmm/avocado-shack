@@ -16,7 +16,14 @@ from hass.tests.test_editor import HOURS, NEW_HOURS
 from hass.tests.test_hike_ops import HIKE, HIKE_ID, NOW, SCHEMA as RSVP_SCHEMA, _req
 from hass.tests.test_undo import H06TestCase
 
-PAUSED = "Changes paused. Drafts can still be prepared; nothing is applied until you send resume changes."
+PAUSED = ("Changes are stopped. Nothing new will be applied until you say 'resume'. No requests are waiting. "
+          "Changes already on the website stay there.")  # SHOP-4 wording
+PAUSED_ONE = PAUSED.replace("No requests are waiting.", "1 request is waiting.")
+NOT_ON_SITE = ("Saved, but not confirmed on the website. {why}. If copying it was started and stopped part way, some "
+               "pages may already show it; ask for help to copy it to the website again, which puts every page in place.")
+NOT_COPIED = "Copying it to the website has not been done, or did not finish"
+PAST = ('Hike Past hike Sun 2026-11-01 09:00 PST has passed but is still scheduled; '  # AV1537-07: started before T0
+        'send "complete Past hike" or "cancel Past hike" in your own words.')
 
 
 def gated(code):
@@ -43,7 +50,7 @@ class PauseTests(StoreMixin, ConversationTestCase):
     def test_pause_blocks_apply_until_resume_and_survives_restart(self):
         draft, _reply = self.propose("hours")
         self.assertEqual(self.say("pause changes", pid="p1"), "pause")
-        self.assertEqual(self.replies(), [PAUSED])
+        self.assertEqual(self.replies(), [PAUSED_ONE])  # the waiting draft is counted
         for text in ("yes", f"yes {draft['code']}", "Approve!", "approved."):  # every approval wording is gated
             with self.subTest(text=text):
                 self.assertEqual(self.say(text), "paused")
@@ -70,7 +77,7 @@ class PauseTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.replies(), [PAUSED])
         self.now = T0 + timedelta(minutes=5)
         self.assertEqual(self.say("pause"), "pause")
-        self.assertEqual(self.replies(), ["Changes are already paused (since 2026-11-02 09:00 PST)."])
+        self.assertEqual(self.replies(), [PAUSED])  # already stopped: the same answer, nothing changes
         draft, reply = self.propose("hours")  # proposals still work and say they are paused
         self.assertTrue(reply.endswith("Reply yes to apply, no to cancel, or send a correction.\n"
                                        "Changes are paused; send resume changes before yes."), reply)
@@ -177,7 +184,8 @@ class StatusTests(StoreMixin, H06TestCase):
         self.sent()
         filled = self.drafts()[0]
         self.assertEqual((filled["code"], [d["state"] for d in self.drafts()]), (needs["code"], ["verified"] * 2))
-        last = f"Last change: {filled['code']} verified: {filled['summary']} ({filled['commit'][:7]})"
+        last = f"Last change: {filled['code']} {filled['summary']} - " + NOT_ON_SITE.format(why=NOT_COPIED)
+        self.assertNotIn(filled["commit"][:7], last)
         self.assertEqual(self.status()[1:], [conversation.NOTHING, last])
         self.assertEqual(self.say("need"), "needs-details")
         self.sent()
@@ -191,15 +199,16 @@ class StatusTests(StoreMixin, H06TestCase):
         self.editor = FailingEditor(self.repo.state, self.editor.registry)
         self.conv = self.open()
         failed = self.apply("hours")
-        self.assertEqual(failed["state"], "failed")
-        self.assertEqual(self.status()[-1],
-                         f"Last change: {failed['code']} failed: {failed['summary']} - simulated apply failure")
+        self.assertEqual((failed["state"], failed["reason"]), ("failed", "simulated apply failure"))  # kept in the store
+        self.assertEqual(self.status()[-1], f"Last change: {failed['code']} {failed['summary']} - This was not saved, "
+                                            "and the website is unchanged; send the change again to retry.")
         self.previewer, self.editor = FailingPreviewer(), conversation.Editor(self.repo.state, self.editor.registry)
         self.conv = self.open()
         applied = self.apply("desc")
         self.assertEqual(applied["state"], "applied")
-        self.assertEqual(self.status()[-1], f"Last change: {applied['code']} applied: {applied['summary']} "
-                                            f"({applied['commit'][:7]}) - not verified: simulated check failure")
+        self.assertEqual(self.status()[-1], f"Last change: {applied['code']} {applied['summary']} - " + NOT_ON_SITE.format(
+            why="The preview check failed: the preview could not be checked (products photo-product-001)"))  # SHOP-4
+        self.assertEqual(self.drafts()[-1]["reason"], "not verified: products photo-product-001: simulated check failure")
         self.assertEqual(self.commits(), 1)
 
     def test_undo_while_paused_is_proposed_but_gated(self):
@@ -254,10 +263,11 @@ class GuestTotalTests(StoreMixin, H06TestCase):
         self.use(self.rsvp_db("rsvps.sqlite3", [(HIKE_ID, 2), (HIKE_ID, 3), ("hike-2026-12-01-cancelled-hike", 4),
                                                 ("hike-2026-11-01-past-hike", 6)]))
         lines = self.status()
-        self.assertEqual(lines[-2:], ["Hike Open hike 2026-11-20 09:00 PST: 0 confirmed of no limit",
-                                      "Hike Test hike 2026-12-05 09:00 PST: 5 confirmed of 12"])
+        self.assertEqual(lines[-3:], ["Hike Open hike Fri 2026-11-20 09:00 PST: 0 confirmed of no limit",
+                                      "Hike Test hike Sat 2026-12-05 09:00 PST: 5 confirmed of 12", PAST])
+        self.assertEqual([line for line in lines if "Past hike" in line], [PAST])  # its 6 RSVPs are never shown
         text = "\n".join(lines)
-        for absent in ("Past hike", "Cancelled hike", "example.invalid", "guest1", "Placeholder"):
+        for absent in ("Cancelled hike", "example.invalid", "guest1", "Placeholder"):
             self.assertNotIn(absent, text)
 
     def test_unknown_counts_are_never_guessed(self):
@@ -265,8 +275,9 @@ class GuestTotalTests(StoreMixin, H06TestCase):
         for path in (None, "", str(self.repo.state.parent / "missing.sqlite3"), wrong):
             with self.subTest(path=path):
                 self.use(path)
-                self.assertEqual(self.status()[-2:], ["Hike Open hike 2026-11-20 09:00 PST: guest count unavailable",
-                                                      "Hike Test hike 2026-12-05 09:00 PST: guest count unavailable"])
+                self.assertEqual(self.status()[-3:], ["Hike Open hike Fri 2026-11-20 09:00 PST: guest count unavailable",
+                                                      "Hike Test hike Sat 2026-12-05 09:00 PST: guest count unavailable",
+                                                      PAST])
         self.assertFalse((self.repo.state.parent / "missing.sqlite3").exists())
 
     def test_unreadable_content_gives_one_line(self):

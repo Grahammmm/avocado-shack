@@ -15,12 +15,12 @@ URL_ERROR = "interpreter URL must be loopback http"
 
 
 def check_url(base_url) -> str:
-    """`http://<loopback>[:port]` with no userinfo, query, fragment or path beyond `/`; else ValueError (no URL)."""
+    """`http://<loopback>[:port]` (port 1-65535), no userinfo, query, fragment or path beyond `/`; else ValueError."""
     try:
         if not isinstance(base_url, str) or "?" in base_url or "#" in base_url or "@" in base_url: raise ValueError
         parts = urllib.parse.urlsplit(base_url)
-        parts.port  # noqa: B018 - raises ValueError for a malformed port
-        ok = parts.scheme == "http" and parts.hostname in LOOPBACK and parts.path in ("", "/")
+        port = parts.port  # raises ValueError for a malformed port; 0 is not connectable
+        ok = parts.scheme == "http" and parts.hostname in LOOPBACK and parts.path in ("", "/") and port != 0
     except ValueError:
         ok = False
     if not ok: raise ValueError(URL_ERROR)

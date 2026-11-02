@@ -3,6 +3,9 @@
 // env: PREVIEW_URL (http://127.0.0.1:<port>), TARGET (JSON from hass/preview.py target_for), OUT (png path),
 // PLAYWRIGHT_MODULE / CHROMIUM_PATH as in the storefront QA scripts. Only GET/HEAD to the preview origin is
 // allowed; every other request (any POST, anything off 127.0.0.1) is aborted. Prints {"checks": {...}}.
+// Maker: its place search, then all cards if none names it; card text compared (never a selector built from the name).
+// hidden → makerHidden (no card names it); else makerName + makerPlace; a maker with no active card adds no maker check.
+// Hike: scheduled → eventShown; completed → pastShown (+ recapShown if a recap); cancelled → rsvpGone (no RSVP button).
 'use strict';
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
 if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
@@ -24,6 +27,14 @@ const allowed=req=>{
     if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
       if(target.status==='scheduled')checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
+      else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
+        const recaps=await page.locator('#past-hikes .past-hike').evaluateAll((els,title)=>els.filter(d=>
+          d.querySelector('summary span')?.textContent===title).map(d=>d.querySelector(':scope>p')?.textContent),target.title);
+        checks.pastShown=recaps.length>0;
+        if(target.recap)checks.recapShown=recaps[0]===target.recap;
+      }else if(target.status==='cancelled'){  // the id is compared in page JS, never put into a selector
+        checks.rsvpGone=await page.$$eval('[data-rsvp]',(els,id)=>els.filter(b=>b.dataset.rsvp===id).length,target.id||'')===0;
+      }
     }else{
       await page.goto(base+'/',{waitUntil:'networkidle'});
       if(target.kind==='product'||target.kind==='maker'){
@@ -31,6 +42,22 @@ const allowed=req=>{
         await page.waitForTimeout(200);
         const cards=page.locator('#catalog-grid').first();
         await cards.scrollIntoViewIfNeeded();
+        if(target.kind==='maker'){  // the place search first; if no card names the maker, every card (old place still shown)
+          const count=page.locator('#catalog-count'),sentinel=page.locator('#catalog-sentinel');let places=[];
+          for(const term of [target.place||'','']){
+            await page.locator('#product-search').fill(term);await page.waitForTimeout(200);
+            for(let i=0;i<30&&!/^(\d+) selections · \1 shown$/.test(await count.textContent());i++){
+              await sentinel.scrollIntoViewIfNeeded();await page.waitForTimeout(100);
+            }
+            places=await page.locator('#catalog-grid article').evaluateAll((arts,label)=>arts.filter(a=>[...a.querySelectorAll(
+              '.maker-story summary .sr-only')].some(s=>s.textContent===label)).map(a=>a.querySelector('.origin-label')?.textContent),
+            `: ${target.name}`);
+            if(places.length)break;
+          }
+          if(target.hidden)checks.makerHidden=places.length===0;
+          else if(places.length){checks.makerName=true;checks.makerPlace=places[0]===`Based in ${target.place}`;}
+          await cards.scrollIntoViewIfNeeded();
+        }
         if(target.kind==='product'){
           const card=page.locator(`#catalog-grid article[data-product-id="${target.id}"]`);
           const count=await card.count();

@@ -13,7 +13,7 @@ import copy
 import re
 import unicodedata
 
-from hass.content_model import CATEGORIES
+from hass.content_model import AVAILABILITY, CATEGORIES
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
@@ -93,10 +93,21 @@ def _product_add(content, args, ctx):
     key = args.get("producerKey")
     if refused := _maker_problem(content, key):
         return refused
+    if "image" in args and "photo" in args:
+        return Refused("give image or photo, not both")
+    if "image" not in args and "photo" not in args:
+        return Refused("product.add needs image or photo")
+    if "photo" in args and "imageAlt" not in args:
+        return Refused("imageAlt is required with photo")
+    image = args.get("image")
+    if "photo" in args:
+        from hass.ops import photos  # lazy: photos imports this module
+        if isinstance(image := photos.install(ctx, args["photo"], args["imageAlt"]), Refused):
+            return image
     numbers = [int(m.group(1)) for p in content.products if (m := PRODUCT_ID_RE.fullmatch(p["id"]))]
     record = {"id": "photo-product-%03d" % (max(numbers, default=0) + 1)}
     for field in ("name", "brand", "category", "image", "description"):
-        record[field] = args[field]
+        record[field] = image if field == "image" else args[field]
     record.update(producerKey=key, displayBrand=args["displayBrand"], status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
     content.products.append(record)
@@ -163,6 +174,20 @@ def _product_hide(content, args, ctx):
 
 def _product_restore(content, args, ctx):
     return _set_status(content, args, ctx, expect="hidden", new="active", state_error=lambda s: f"is {s}, not hidden")
+
+
+def _product_set_availability(content, args, ctx):
+    """SHOP-1: mark one active product yes|limited|no. Shown on its card only while the selection check is recent."""
+    product = _product(content, args["id"])
+    if not isinstance(product, dict):
+        return product
+    if product["status"] != "active":
+        return Refused(f"{product['id']} is {product['status']}; restore it before marking it available")
+    if product.get("available") == args["available"]:
+        return Refused(f"{product['id']} is already marked available={args['available']}; nothing to change")
+    before = copy.deepcopy(product)
+    product["available"] = args["available"]
+    return _touch("products", product["id"], before, product)
 
 
 def _maker_add(content, args, ctx):
@@ -269,12 +294,14 @@ _OPTIONAL = {"producerKey": Arg("maker_key", required=False), "imageAlt": Arg("t
 _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 
 OPS = (
-    Op("product.add", {**_PRODUCT_FIELDS, **_OPTIONAL}, _product_add),
+    Op("product.add", {**_PRODUCT_FIELDS, "image": Arg("image", required=False), "photo": Arg("id", required=False),
+                       **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),
                         "clearImageAlt": Arg("bool", required=False)}, _product_edit),
     Op("product.hide", _ID, _product_hide),
     Op("product.restore", _ID, _product_restore),
+    Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
     Op("maker.add", {"key": Arg("text"), **{k: Arg("url" if k == "url" else "text") for k in MAKER_EDITABLE}},
        _maker_add),
     Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE}},

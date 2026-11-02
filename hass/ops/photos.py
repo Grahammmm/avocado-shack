@@ -46,14 +46,12 @@ def _web_bytes(root, sha):
         return Refused(f"photo store is unusable: {exc}")
 
 
-def _set_photo(content, args, ctx):
-    product = _product(content, args["id"])
-    if not isinstance(product, dict):
-        return product
-    sha = args["photo"]
+def install(ctx, sha, alt):
+    """Queue the stored photo's web copy for commit; the site path ``assets/products/photo-<sha16>.<ext>`` or Refused.
+    Shared by product.set_photo and product.add (AV0022-02). Same bytes already there are reused, not rewritten."""
     if not media.SHA_RE.fullmatch(sha):
         return Refused("photo must be a stored photo id")
-    problem = _alt_problem(args["imageAlt"], sha)
+    problem = _alt_problem(alt, sha)
     if problem:
         return Refused(problem)
     root = ctx.settings.get("mediaRoot")
@@ -70,6 +68,16 @@ def _set_photo(content, args, ctx):
         return Refused("a different photo already uses that name")
     if have is None:
         ctx.assets[target] = data
+    return target
+
+
+def _set_photo(content, args, ctx):
+    product = _product(content, args["id"])
+    if not isinstance(product, dict):
+        return product
+    target = install(ctx, args["photo"], args["imageAlt"])
+    if isinstance(target, Refused):
+        return target
     before = copy.deepcopy(product)
     product.update(image=target, imageAlt=args["imageAlt"])
     if product == before:

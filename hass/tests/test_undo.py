@@ -86,7 +86,7 @@ class UndoTests(H06TestCase):
         self.assertEqual(self.say("yes"), "approved")
         [done] = self.sent()
         rev = self.drafts()[-1]
-        self.assertEqual(done["text"], f"Applied and checked {rev['code']}: {rev['summary']}")
+        self.assertEqual(done["text"], f"Applied and checked {rev['code']}: {rev['summary']}\n{conversation.answers.NOT_LIVE}")
         self.assertEqual(self.product("photo-product-001")["description"], ORIGINAL)
         self.assertEqual(self.content("store")["hours"], NEW_HOURS)
         self.assertEqual(self.commits(), 3)

@@ -79,7 +79,8 @@ class PreviewTests(BrowserCase):
         self.assertEqual((result["ok"], result["checks"]["productShown"], result["checks"]["description"]),
                          (True, True, True))
         self.assertEqual((sent["text"], sent["attachments"]),
-                         (f"Applied and checked {row['code']}: {row['summary']}", [row["screenshot"]]))
+                         (f"Applied and checked {row['code']}: {row['summary']}\n{conversation.answers.NOT_LIVE}",
+                          [row["screenshot"]]))
 
 
 @unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")

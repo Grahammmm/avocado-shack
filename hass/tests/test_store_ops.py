@@ -131,9 +131,9 @@ class HoursAndAddressTests(StoreTestCase):
     def test_refusal_messages(self):
         repo = self.repo()
         current = repo.store()
-        self.assertEqual(repo.prepare(_req((SET_HOURS, {"hours": ["a"] * 8})))["reason"], "at most 7 hours lines")
+        self.assertEqual(repo.prepare(_req((SET_HOURS, {"hours": ["a"] * 8})))["reason"], "at most 7 hours lines (you sent 8)")
         self.assertEqual(repo.prepare(_req((SET_HOURS, {"hours": ["ok", "y" * 61]})))["reason"],
-                         "hours line 1 is longer than 60 characters")
+                         "hours line 2 is longer than 60 characters")
         self.assertEqual(repo.prepare(_req((SET_HOURS, {"hours": current["hours"]})))["reason"],
                          "store hours are already " + " / ".join(current["hours"]))
         self.assertEqual(repo.prepare(_req((SET_ADDRESS, {"town": "Morro Bay"})))["reason"],

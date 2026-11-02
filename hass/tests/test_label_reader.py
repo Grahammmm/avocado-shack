@@ -109,6 +109,32 @@ class LabelReaderTests(unittest.TestCase):
         self.assertNotIn("maker", message["content"].lower())
 
 
+    def test_rf1500_11_placeholder_answers_are_dropped_per_field(self):
+        for word in ("null", "NULL", "None", "nil", " N/A ", "na", "Unknown.", "not  printed", "Not visible", "not shown",
+                     "-", "--", "?", "No brand", "no name", "Unbranded", "N/A."):
+            for field in ("name", "brand", "category"):
+                with self.subTest(word=word, field=field):
+                    self.assertEqual(self.read({**LION, field: word}), {k: v for k, v in LION.items() if k != field})
+
+    def test_rf1500_11_a_placeholder_word_inside_a_real_name_is_kept(self):
+        for name in ("Nil's Honey", "Unknown Mortal Jam", "NA Beer Co", "None Such Mincemeat", "Null Island Tea"):
+            with self.subTest(name):
+                self.assertEqual(self.read({**LION, "name": name}), {**LION, "name": name})
+        self.assertEqual(self.read({**LION, "brand": "No Brand Foods"})["brand"], "No Brand Foods")
+
+    def test_rf1500_11_a_brand_that_echoes_the_name_is_offered_once(self):
+        from hass.label_reader import question
+        for brand in ("lion's  mane", "Lion's Mane", "LION\u2019S MANE", "Lion's Mane."):
+            with self.subTest(brand):
+                found = self.read({**LION, "brand": brand})
+                self.assertEqual(found, {"name": "Lion's Mane", "category": "mushrooms"})
+                self.assertEqual(question(found), "The label looks like: Lion's Mane (mushrooms). Is that right? "
+                                                  "Say which product it is either way.")
+        self.assertEqual(self.read({**LION, "brand": "Lion's Mane Co"})["brand"], "Lion's Mane Co")  # not an echo
+        self.assertEqual(self.read({**LION, "name": "N/A", "brand": "Lion's Mane"}), {"brand": "Lion's Mane",
+                                                                                       "category": "mushrooms"})
+
+
 class LabelConversationTests(unittest.TestCase):
     def setUp(self):
         self.fresh()
@@ -218,6 +244,16 @@ class LabelConversationTests(unittest.TestCase):
         self.addCleanup(conv.db.close)
         conv.handle(Inbound("x1", CHAT, OWNER, "", received_at=T0.isoformat(), attachments=1))
         self.assertEqual((conv.labels, self.transport.calls), (None, []))
+
+
+    def test_rf1500_11_all_placeholders_keep_todays_reply(self):
+        for answer in ({"name": "null", "brand": "N/A", "category": "unknown"}, {"name": "Not printed.", "brand": "--"}):
+            with self.subTest(answer):
+                self.fresh()
+                self.open(recorded(answer))
+                self.assertEqual(self.say(), "photo-draft")
+                self.assertEqual(self.replies(), [self.asked()])
+                self.assertEqual(self.drafts()[0]["summary"], PHOTO_QUESTION)
 
 
 if __name__ == "__main__":

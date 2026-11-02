@@ -11,7 +11,8 @@ from hass.content_model import REPO_ROOT
 from hass.tests.test_memory import Clock
 
 PROVIDER = "provider-sentinel-6620"  # source detail after ':'
-CHANGE = "change-sentinel-4417"  # approved_change
+CHANGE = "chg-4417aaaa0000"  # approved_change (RF1650-2: a valid id with an applied record in the test's state dir)
+OTHER = "chg-00000000c001"  # another applied change, for tests that only need some owner-approved row
 
 
 class HistoryTests(unittest.TestCase):
@@ -26,6 +27,11 @@ class HistoryTests(unittest.TestCase):
         self.addCleanup(mem.close)
         return mem
 
+    def applied(self, change_id):
+        """Write an applied change record into this test's state dir, so owner-approved:<change_id> is verified."""
+        (self.state / "changes").mkdir(mode=0o700, exist_ok=True)
+        (self.state / "changes" / f"{change_id}.json").write_text('{"state": "applied"}', "utf-8")
+
     def history(self, *args):
         out = io.StringIO()
         with contextlib.redirect_stdout(out): code = memory.main(["history", "--state", str(self.state), *args])
@@ -38,6 +44,7 @@ class HistoryTests(unittest.TestCase):
 
     def test_remember_correct_correct_forget_keeps_dated_trail_without_values(self):
         mem = self.store()
+        self.applied(CHANGE)
         mem.remember("pickup.day", "Saturday", "fact", f"owner-approved:{CHANGE}", approved_change=CHANGE)
         mem.correct("pickup.day", "Sunday", f"owner-stated:{PROVIDER}")
         mem.correct("pickup.day", "Monday", "operator:fixed typo")
@@ -73,7 +80,8 @@ class HistoryTests(unittest.TestCase):
 
     def test_key_filter_unknown_key_and_order(self):
         mem = self.store()
-        mem.remember("pickup.day", "Saturday", "fact", "owner-approved:c-1")
+        self.applied(OTHER)
+        mem.remember("pickup.day", "Saturday", "fact", f"owner-approved:{OTHER}")
         mem.remember("other.key", "x", "fact", "operator:n")
         mem.correct("pickup.day", "Sunday", "operator:n")
         code, doc, _ = self.history()
@@ -127,7 +135,8 @@ class HistoryTests(unittest.TestCase):
 
     def test_history_is_read_only(self):
         mem = self.store()
-        mem.remember("pickup.day", "Saturday", "fact", "owner-approved:c-1")
+        self.applied(OTHER)
+        mem.remember("pickup.day", "Saturday", "fact", f"owner-approved:{OTHER}")
         mem.forget("pickup.day")
         mem.close()
         os.utime(self.db, ns=(1_000_000_000, 1_000_000_000))
@@ -135,6 +144,49 @@ class HistoryTests(unittest.TestCase):
         for args in ((), ("--values",), ("--key", "pickup.day")):
             self.assertEqual(self.history(*args)[0], 0)
         self.assertEqual((self.db.read_bytes(), self.db.stat().st_mtime_ns, sorted(os.listdir(self.state))), before)
+
+    UNSAFE = {"result": "unsafe", "problem": "conversation file is a link or not a regular file"}
+
+    def other_db(self):
+        """Another state's conversation.sqlite3 holding an active row whose value must never be printed here."""
+        other = self.state.parent / "other"
+        mem = memory.Memory(str(other), Clock())
+        mem.remember("pickup.day", "other-shop-secret-5511", "fact", "operator:n")
+        mem.close()
+        self.state.mkdir(mode=0o700)
+        return other / "conversation.sqlite3"
+
+    def test_symlinked_conversation_file_is_unsafe_and_prints_no_value(self):
+        target = self.other_db()
+        self.db.symlink_to(target)
+        for args in (("--values",), ("--key", "pickup.day", "--values"), ()):
+            with self.subTest(args=args):
+                code, doc, raw = self.history(*args)
+                self.assertEqual((code, doc), (2, self.UNSAFE))
+                for text in ("other-shop-secret-5511", "pickup.day", str(target.parent)): self.assertNotIn(text, raw)
+        run = self.cli("--state", self.state, "--values")
+        self.assertEqual((run.returncode, json.loads(run.stdout), run.stderr), (2, self.UNSAFE, ""))
+        with self.assertRaises(memory.UnsafeFile): memory.history(self.state, None, True)  # no rows returned
+
+    def test_dangling_link_directory_or_fifo_is_unsafe_not_empty(self):
+        self.state.mkdir(mode=0o700)
+        makes = {"dangling link": lambda: self.db.symlink_to(self.state / "gone.sqlite3"), "directory": self.db.mkdir,
+                 "fifo": lambda: os.mkfifo(self.db)}
+        for name, make in makes.items():
+            with self.subTest(kind=name):
+                make()
+                run = self.cli("--state", self.state, "--values")
+                self.assertEqual((run.returncode, json.loads(run.stdout), run.stderr), (2, self.UNSAFE, ""))
+                with self.assertRaises(memory.UnsafeFile): memory.history(self.state)
+                self.db.rmdir() if self.db.is_dir() and not self.db.is_symlink() else self.db.unlink()
+
+    def test_missing_file_and_real_db_still_read(self):
+        target = self.other_db()
+        self.assertEqual(self.history("--values")[:2], (0, {"result": "ok", "rows": [], "keys": 0, "active": 0,
+                                                             "superseded": 0, "forgotten": 0}))
+        run = self.cli("--state", target.parent, "--values")  # the real DB itself still reads as before
+        self.assertEqual((run.returncode, [(r["key"], r["value"]) for r in json.loads(run.stdout)["rows"]]),
+                         (0, [("pickup.day", "other-shop-secret-5511")]))
 
 
 if __name__ == "__main__":

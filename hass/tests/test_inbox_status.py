@@ -160,6 +160,46 @@ class StatusTests(unittest.TestCase):
         self.assertNotIn(TEXT, proc.stdout)
         self.assertEqual(self.snapshot(), before)
 
+    def status_cli(self, *planted):
+        """Run the script with a 30 s cap (a FIFO handed to SQLite would hang); stdout must name no planted path."""
+        proc = subprocess.run([sys.executable, str(REPO / "hass" / "inbox.py"), "status", "--state", str(self.state)],
+                              capture_output=True, text=True, timeout=30, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        self.assertEqual(proc.stderr, "")
+        for p in (self.state, *planted): self.assertNotIn(str(p), proc.stdout)
+        return json.loads(proc.stdout), proc.returncode
+
+    UNSAFE = ({"result": "unsafe", "reason": "inbox file is a link or not a regular file"}, 2)
+
+    def test_symlinked_inbox_file_is_unsafe_and_its_target_never_reported(self):
+        other = self.state.parent / "other"
+        other.mkdir(mode=0o700)
+        box = inbox_mod.Inbox(str(other), T0.isoformat(), clock=lambda: self.clock)
+        self.enqueue(box, PID, f"hours {TEXT}", 1)
+        box.close()
+        target = other / "inbox.sqlite3"
+        self.assertEqual(inbox_mod.status(other, NOW)[0]["pending"], 1)  # the target is a real, readable queue
+        before = (target.read_bytes(), target.stat().st_mtime_ns)
+        self.db.symlink_to(target)
+        self.assertEqual(self.status_cli(target, other), self.UNSAFE)
+        self.assertEqual((target.read_bytes(), target.stat().st_mtime_ns), before)
+        self.db.unlink()
+        self.db.symlink_to(self.state.parent / "no-such.sqlite3")  # dangling: a planted link, not "inbox: none"
+        self.assertEqual(self.status_cli(self.state.parent / "no-such.sqlite3"), self.UNSAFE)
+        self.assertFalse((self.state.parent / "no-such.sqlite3").exists())
+
+    def test_directory_or_fifo_named_inbox_file_is_unsafe_without_opening(self):
+        self.db.mkdir()
+        self.assertEqual(self.status_cli(), self.UNSAFE)
+        self.assertEqual(list(self.db.iterdir()), [])  # SQLite left no journal inside it
+        self.db.rmdir()
+        if not hasattr(os, "mkfifo"): self.skipTest("no os.mkfifo on this platform")
+        os.mkfifo(self.db, 0o600)
+        self.assertEqual(self.status_cli(), self.UNSAFE)  # returns at once: never opened for reading
+        self.db.unlink()
+        self.assertEqual(self.run_status(), ({"result": "ok", "inbox": "none"}, 0))  # no file: as before
+        self.open_inbox()
+        self.assertEqual(self.run_status()[0]["result"], "ok")  # a regular queue file: as before
+
 
 if __name__ == "__main__":
     unittest.main()
