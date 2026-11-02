@@ -80,7 +80,9 @@ class PhotosTests(unittest.TestCase):
     def test_size_cap(self):
         self.fails(FakeTransport(files={"att-1": (200, b"x" * (media.MAX_BYTES + 1))}), "too-large")
         exact = b"x" * media.MAX_BYTES
-        self.assertEqual(self.photos(FakeTransport(files={"att-1": (200, exact)})).fetch("msg-1", 1), [exact])
+        fake = FakeTransport(meta=_meta({"guid": "att-1", "totalBytes": media.MAX_BYTES}),
+                             files={"att-1": (200, exact)})
+        self.assertEqual(self.photos(fake).fetch("msg-1", 1), [exact])
         self.fails(fake := FakeTransport(meta=_meta({"guid": "att-1", "totalBytes": media.MAX_BYTES + 1})), "too-large")
         self.assertEqual(len(fake.calls), 1)
         self.fails(FakeTransport(files={"att-1": (200, b"")}), "empty")

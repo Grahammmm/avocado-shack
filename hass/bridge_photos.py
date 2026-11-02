@@ -6,6 +6,7 @@ password read fresh per call from a private file and sent only in the documented
 error raised here ever carries the URL, the query, the password or a response body.
 REST (docs.bluebubbles.app): GET /api/v1/message/{guid}?with=attachment -> {"data": {"attachments": [{"guid", ...}]}};
 GET /api/v1/attachment/{guid}/download -> raw bytes.
+A download whose length differs from the attachment's declared int totalBytes is refused as size-mismatch.
 """
 import json, sys, urllib.error, urllib.parse, urllib.request  # noqa: E401
 from pathlib import Path
@@ -70,7 +71,7 @@ class BlueBubblesPhotos:
 
     @staticmethod
     def _attachment_ids(meta, n):
-        """(code, ids): the first n attachment guids from the metadata body, or a failure code."""
+        """(code, ids): the first n (guid, declared totalBytes or None) pairs from the metadata, or a failure code."""
         try:
             doc = json.loads(meta.decode("utf-8"))
         except (UnicodeDecodeError, ValueError, RecursionError):
@@ -89,11 +90,12 @@ class BlueBubblesPhotos:
         if len(items) < n: return "attachment-count", []
         if any(type(a.get("totalBytes")) is int and a["totalBytes"] > media.MAX_BYTES for a in items[:n]):
             return "too-large", []  # declared too big: refused before any download
-        return None, [a["guid"] for a in items[:n]]
+        return None, [(a["guid"], a.get("totalBytes")) for a in items[:n]]
 
     def fetch(self, guid, n):
-        if not (isinstance(guid, str) and 0 < len(guid) <= MAX_GUID):
-            raise ValueError(f"guid must be a non-empty str of at most {MAX_GUID} chars")
+        if not (isinstance(guid, str) and 0 < len(guid) <= MAX_GUID) or any(ord(c) < 32 or 127 <= ord(c) < 160
+                                                                         for c in guid):
+            raise ValueError(f"guid must be a non-empty str of at most {MAX_GUID} chars without control characters")
         if type(n) is not int or not 1 <= n <= MAX_COUNT: raise ValueError(f"n must be an int from 1 to {MAX_COUNT}")
         code, status, out = None, None, []
         try:
@@ -106,9 +108,11 @@ class BlueBubblesPhotos:
             query = urllib.parse.urlencode({"password": password})
             code, status, meta = self._get(MESSAGE_PATH.format(_quote(guid)) + query, "application/json", META_LIMIT)
             code, ids = (code, []) if code else self._attachment_ids(meta, n)
-            for aid in ids:
+            for aid, declared in ids:
                 code, status, data = self._get(DOWNLOAD_PATH.format(_quote(aid)) + query, "*/*", media.MAX_BYTES)
                 code = code or (None if data else "empty")
+                if not code and declared is not None and len(data) != declared:
+                    code = "size-mismatch"  # a cut-off or padded download never becomes a photo
                 if code: break
                 out.append(data)
         if code is not None:  # raised outside any except block: no __cause__ or __context__
