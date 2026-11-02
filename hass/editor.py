@@ -330,14 +330,21 @@ def history(limit=20, *, state=None) -> dict:
         draft = sdir / "drafts" / path.name
         try:
             rec = _read(path)
+            if not isinstance(rec, dict) or any(not isinstance(rec.get(k), (str, type(None)))
+                                                for k in ("applied_at", "failed_at")):
+                raise ValueError("record of the wrong shape")  # listed unreadable like a corrupt one
         except (OSError, ValueError):  # one corrupt record must not hide the others
             entries.append((("", path.stat().st_mtime_ns), {"change_id": path.stem, "state": "unreadable",
                             "applied_at": None, "commit": None, "revertedBy": None, "ops": []}))
             continue
         try:
-            ops = _read(draft).get("ops", []) if draft.is_file() else []
+            doc = _read(draft) if draft.is_file() else {}
         except (OSError, ValueError):
-            ops = []
+            doc = {}
+        ops = doc.get("ops", []) if isinstance(doc, dict) else []
+        if not isinstance(ops, list) or not all(isinstance(c, dict) and isinstance(c.get("op"), str)
+                                                and isinstance(c.get("args"), dict) for c in ops):
+            ops = []  # a draft of the wrong shape lists like a corrupt one
         entries.append(((rec.get("applied_at") or rec.get("failed_at") or "", path.stat().st_mtime_ns), {
             "change_id": path.stem, "state": rec.get("state"), "applied_at": rec.get("applied_at"),
             "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"), "install": install_status(rec),

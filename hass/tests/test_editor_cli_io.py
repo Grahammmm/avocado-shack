@@ -98,6 +98,52 @@ class HistoryCorruptRecordTests(CliIoTestCase):
         code, out = self.run_cli("history", "--limit", "1")
         self.assertEqual((code, [json.loads(x)["change_id"] for x in out.splitlines()]), (0, ["chg-000000000002"]))
 
+    UNREADABLE = {"state": "unreadable", "applied_at": None, "commit": None, "revertedBy": None, "ops": []}
+
+    def test_record_that_is_not_an_object_is_unreadable(self):
+        self.good_records()
+        before = self.history()
+        for i, body in enumerate((b"[]", b"null", b'"x"', b"5", b'["' + CANARY + b'"]')):
+            (self.changes / f"chg-00000000001{i}.json").write_bytes(body)
+        after = self.history()
+        self.assertEqual(after[:2], before)  # good ones unchanged, newest first
+        self.assertEqual(sorted(e["change_id"] for e in after[2:]), [f"chg-00000000001{i}" for i in range(5)])
+        for e in after[2:]:
+            self.assertEqual(e, {"change_id": e["change_id"], **self.UNREADABLE})
+        self.assertNotIn("canary", json.dumps(after))
+
+    def test_time_field_of_the_wrong_type_is_unreadable_and_failed_at_string_is_kept(self):
+        self.good_records()
+        for n, extra in ((10, {"applied_at": 5}), (11, {"applied_at": ["x"]}), (12, {"applied_at": None, "failed_at": 7})):
+            editor._write_json(self.changes / f"chg-{n:012x}.json", {**_rec(1), **extra})
+        editor._write_json(self.changes / "chg-00000000000f.json",
+                           {**_rec(1), "state": "failed", "applied_at": None, "failed_at": "2026-10-03T00:00:00+00:00"})
+        entries = self.history()
+        self.assertEqual([(e["change_id"], e["state"], e["applied_at"]) for e in entries[:3]],
+                         [("chg-00000000000f", "failed", None), ("chg-000000000002", "applied", _rec(2)["applied_at"]),
+                          ("chg-000000000001", "applied", _rec(1)["applied_at"])])
+        self.assertEqual({e["change_id"]: e["state"] for e in entries[3:]},
+                         {f"chg-{n:012x}": "unreadable" for n in (10, 11, 12)})
+
+    def test_draft_of_the_wrong_shape_gives_no_ops(self):
+        self.good_records()
+        bad = ([], {"ops": {}}, {"ops": None}, {"ops": [{"op": "product.edit"}]}, {"ops": [{"op": 1, "args": {}}]},
+               {"ops": [{"op": "x.op", "args": {"n": 1}}, "x"]})
+        for draft in bad:
+            with self.subTest(draft=draft):
+                editor._write_json(self.drafts / "chg-000000000001.json", draft)
+                entries = self.history()
+                self.assertEqual([(e["change_id"], e["state"], e["commit"], e["ops"]) for e in entries],
+                                 [("chg-000000000002", "applied", "c2", ['x.op {"n": 2}']),
+                                  ("chg-000000000001", "applied", "c1", [])])
+
+    def test_limit_still_applies_with_wrong_shape_records(self):
+        self.good_records()
+        (self.changes / "chg-00000000000a.json").write_bytes(b"[]")
+        (self.changes / "chg-00000000000b.json").write_bytes(b'{"applied_at": 5}')
+        code, out = self.run_cli("history", "--limit", "1")
+        self.assertEqual((code, [json.loads(x)["change_id"] for x in out.splitlines()]), (0, ["chg-000000000002"]))
+
 
 class ShowCorruptRecordTests(CliIoTestCase):
     def test_show_corrupt_record_is_one_io_error_line(self):
