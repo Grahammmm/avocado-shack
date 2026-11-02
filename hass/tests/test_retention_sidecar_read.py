@@ -114,7 +114,7 @@ class SidecarReadTest(unittest.TestCase):
             '"oldest": null}, "drafts": {"closed": 0, "open": 0}, "approvals": {"rows": 0, "oldest": null}, '
             '"memory": {"forgotten": 0, "superseded": 0, "oldest": null}, "screenshots": {"files": 0, "bytes": 0}, '
             '"media": {"originals": 1, "bytes": 11, "web": 1, "oldest": "2026-10-02", "undated": 1}, "backups": null, '
-            '"deletes": 0}\n'))
+            '"webOrphans": 0, "deletes": 0}\n'))
 
 
 if __name__ == "__main__":
