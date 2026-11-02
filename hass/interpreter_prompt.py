@@ -34,6 +34,8 @@ RULES = (
     "If a product or maker is not clearly one listed entry, ask a question naming the candidates.",
     "Never add organic, origin, local or maker claims the owner did not write.",
     "Never guess dates, times, prices or quantities; ask a question instead.",
+    'The user message gives "today" (Pacific date) and "weekday". Work out words like "next Saturday" or "tomorrow" '
+    "from them and write the exact date; if the day is still unclear, ask.",
     f"One message may hold several ops (at most {MAX_OPS}).",
     "store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, "
     "in the order shown.",

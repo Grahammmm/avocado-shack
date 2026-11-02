@@ -10,6 +10,7 @@ import os
 import unittest
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from unittest import mock
 
 from hass import interpreter_local
@@ -63,6 +64,7 @@ FAILURES = [  # (transport result, reason code)
 class AdapterTests(unittest.TestCase):
     def make(self, result=None, **kw):
         self.fake = FakeTransport() if result is None else FakeTransport(result)
+        kw.setdefault("clock", lambda: datetime(2026, 11, 7, 17, 0, tzinfo=timezone.utc))
         return LocalInterpreter(URL, MODEL, PROMPT, transport=self.fake, **kw)
 
     def test_request_shape(self):
@@ -77,7 +79,8 @@ class AdapterTests(unittest.TestCase):
         system, user = sent["messages"]
         self.assertEqual(system, {"role": "system", "content": PROMPT})
         self.assertEqual(user["role"], "user")
-        self.assertEqual(json.loads(user["content"]), {"message": OWNER_TEXT, "pending": PENDING})
+        self.assertEqual(json.loads(user["content"]),
+                         {"message": OWNER_TEXT, "pending": PENDING, "today": "2026-11-07", "weekday": "Saturday"})
         self.assertIn("señora", user["content"])  # non-ASCII kept, not \u-escaped
         self.assertIn("señora".encode("utf-8"), body)
 
