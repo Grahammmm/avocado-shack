@@ -6,7 +6,13 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 - Send one photo per message, as a JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->. Other picture formats and larger
   files are refused, and nothing is changed.
+- Phone photos taken upright or sideways are fine; the website shows them the way they were taken.
 - Voice notes are not understood yet. Please type the change instead.
+
+## Messages
+
+- A change request: at most **4000 characters** <!-- conversation.MAX_OWNER_TEXT --> in one message. A longer one is
+  not read; send a shorter change.
 
 ## Waiting changes
 
@@ -19,6 +25,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - `history` shows the last **5** <!-- conversation.HISTORY_MAX --> approved changes.
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
+- `find` takes at most **60 characters** <!-- conversation.FIND_TEXT_MAX --> of words to look for.
+- An alias name is at most **60 characters** <!-- conversation.ALIAS_NAME_MAX -->.
 
 ## Text sizes
 
@@ -29,10 +37,8 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Hike: title **80 characters** <!-- content_model.TEXT_LIMITS[event][title] -->, description **800 characters** <!-- content_model.TEXT_LIMITS[event][description] -->, meeting point **160 characters** <!-- content_model.TEXT_LIMITS[event][meetingPoint] -->, recap **2000 characters** <!-- content_model.TEXT_LIMITS[event][recap] -->, other details such as what to bring **400 characters** <!-- content_model.TEXT_LIMITS[event][bring] -->.
 - Route idea: each text field **600 characters** <!-- content_model.TEXT_LIMITS[routeIdea][description] -->.
 - Hiking club: name, organizer and sender **400 characters** <!-- content_model.TEXT_LIMITS[club][clubName] --> each.
-- Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->.
+- Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->, at most **7** <!-- content_model.MAX_HOURS_LINES --> lines of hours.
 - A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->.
-- A change request: at most **4000 characters** <!-- conversation.MAX_OWNER_TEXT --> in one message. A longer one is
-  not read; send a shorter change.
 
 ## What Hass never does
 
