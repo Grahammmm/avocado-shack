@@ -101,7 +101,7 @@ class MorningReportTests(unittest.TestCase):
     def test_json_carries_the_same_facts(self):
         self.content([product("Pears", "no"), product("Figs", "limited"), product("Kale")], checked_days_ago=3)
         self.assertEqual(json.loads(self.report("--json")),
-                         {"checked_on": "2026-10-30", "stale": False, "available": 0, "limited": 1, "sold_out": 1,
+                         {"checked_on": "2026-10-30", "stale": False, "future": False, "available": 0, "limited": 1, "sold_out": 1,
                           "not_confirmed": 1, "limited_names": ["Figs"], "sold_out_names": ["Pears"]})
 
     def test_invalid_today_exits_2_and_prints_no_report(self):

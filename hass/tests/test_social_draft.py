@@ -97,7 +97,7 @@ class SocialDraftTests(unittest.TestCase):
             self.assertNotIn(word, out["caption"].lower())
 
     def test_caption_length_limit(self):
-        base = len(self.build("p1", product("p1", description=""))["caption"])
+        base = len(self.build("p1", product("p1", description="x"))["caption"]) - 1
         self.assertTrue(self.build("p1", product("p1", description="x" * (2200 - base)))["draft"])
         self.assertEqual(self.build("p1", product("p1", description="x" * (2201 - base))),
                          {"draft": False, "reason": "caption too long"})
