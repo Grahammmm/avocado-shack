@@ -19,7 +19,9 @@ REJECTED = {  # bridge.EnvelopeError code -> plain words
     "version": "the envelope version is unknown, so it was not read",
     "mac": "the envelope signature does not match the shared secret, so it was not read",
     "stale": "the envelope time is over 5 minutes off this clock (expired or from the future), so it was not read",
+    "size": "the envelope is larger than 64 KB, so it was not read",
 }
+MAX_ENVELOPE_BYTES = 64 * 1024  # str is measured as UTF-8 bytes; checked before json.loads
 DROPPED = {  # bridge.Drop reason (fixture forwarder side) -> plain words
     "group-or-unknown-chat": "a group or unknown chat; only the owner's one-to-one chat is read",
     "receipt": "a delivered/read receipt, not a message",
@@ -86,7 +88,11 @@ class Receiver:
         drafted | duplicate | history | rejected | ignored | handled (owner message, no new draft) | queued (stored,
         waiting for a photo retry: its own or an earlier message's). draft_id is the new draft's code (None if a
         repeat reused a waiting draft). A crash in drain propagates: the message stays queued and the next
-        receive() drains it first (Inbox order; Conversation answers `duplicate` for one it already recorded)."""
+        receive() drains it first (Inbox order; Conversation answers `duplicate` for one it already recorded).
+        A str/bytes envelope over MAX_ENVELOPE_BYTES is rejected unread (nonce untouched); a dict is not measured."""
+        if isinstance(raw, (str, bytes, bytearray)):
+            size = len(raw.encode("utf-8", "surrogatepass")) if isinstance(raw, str) else len(raw)
+            if size > MAX_ENVELOPE_BYTES: return _result("rejected", REJECTED["size"])
         try:
             envelope = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
         except (ValueError, UnicodeDecodeError, RecursionError):
