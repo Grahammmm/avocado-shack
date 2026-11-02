@@ -69,6 +69,21 @@ class FixtureAdapter:
         self.sent.append({"chat": chat, "text": text, "attachments": list(attachments)})
 
 
+class FixtureConversation(Conversation):
+    """Replay at each row's validated time, in direct or inbox processing order.
+
+    Only this offline adapter trusts fixture timestamps as its processing clock;
+    live conversations still use their injected clock and the H05 approval guard.
+    """
+
+    def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
+        at = datetime.fromisoformat(msg.received_at).astimezone(timezone.utc)
+        # A delayed row cannot turn processing time back before a proposal.
+        self._fixture_at = max(at, getattr(self, "_fixture_at", at))
+        self.clock = lambda: self._fixture_at
+        return super().handle(msg, last_try=last_try, apply=apply)
+
+
 def _load_interpreter(path) -> FixtureInterpreter:  # H09: a failure names the flag, never the file
     try: text = Path(path).read_text("utf-8")
     except (OSError, UnicodeDecodeError): raise ValueError("--interpreter: unreadable") from None
@@ -91,7 +106,7 @@ def main(argv=None) -> int:
         interpreter = _load_interpreter(args.interpreter)
         editor = Editor(args.state)
         previewer = Previewer(editor_mod._load(args.state)[2]) if args.preview else None
-        conversation = Conversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer,
+        conversation = FixtureConversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer,
                                     photos=adapter if args.photos is not None else None)
         inbox = None if args.queue is None else Inbox(args.state, start_at=args.queue)
         counts = {"queued": 0, "duplicate": 0, "history": 0}
