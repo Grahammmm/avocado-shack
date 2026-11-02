@@ -8,6 +8,7 @@ a short code in `last_error` only; nothing is logged. Not wired into a service: 
 """
 import base64
 import json
+import re
 import unicodedata
 from types import SimpleNamespace
 
@@ -24,14 +25,21 @@ PROMPT = ("Read the product label in this photo. Answer only with a JSON object 
 _TERMS = tuple(claims.fold(term).replace("-", " ") for term in claims.TERMS)
 PLACEHOLDERS = frozenset({"null", "none", "nil", "n/a", "na", "unknown", "not printed", "not visible", "not shown",
                           "-", "--", "?", "no brand", "no name", "unbranded"})  # a "not printed" answer, not a value
+AMOUNT_RE = re.compile(r"[$€£]?\s*\d+(?:[.,]\d+)?\s*(?:fl\.?\s*oz|oz|lbs?|g|kg|mg|ml|l|ct|count|pack|pk)?\.?",
+                       re.IGNORECASE)  # a price or a size (amount + unit), not a name
 
 
 def _norm(value) -> str:
     return " ".join(claims.fold(value).split()).rstrip(".")
 
 
+def _has_letter(value) -> bool:
+    return any(unicodedata.category(c).startswith("L") for c in value)
+
+
 def _clean(field, value, categories):
-    """The value to offer for one field, or None when it must not be offered."""
+    """The value to offer for one field, or None when it must not be offered;
+    a name/brand with no letter, or only a price/size, is not a name."""
     if not isinstance(value, str) or not value.strip(): return None
     value = value.strip()
     if any(unicodedata.category(c).startswith("C") for c in value): return None  # control/format characters
@@ -39,6 +47,8 @@ def _clean(field, value, categories):
     folded = claims.fold(value).replace("-", " ")
     if any(term in folded for term in _TERMS): return None  # no organic/origin claim ever comes from a photo
     if _norm(value) in PLACEHOLDERS: return None  # a whole-value placeholder only
+    if field in ("name", "brand") and (not _has_letter(value) or AMOUNT_RE.fullmatch(" ".join(value.split()))):
+        return None  # a barcode, price or bare size
     if field == "category":
         return next((c for c in categories if isinstance(c, str) and c.casefold() == value.casefold()), None)
     return value
