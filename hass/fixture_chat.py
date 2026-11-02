@@ -72,6 +72,32 @@ class FixtureAdapter:
         self.sent.append({"chat": chat, "text": text, "attachments": list(attachments)})
 
 
+class FixtureConversation(Conversation):
+    """Replay at each row's validated time, in direct or inbox processing order.
+
+    Only this offline adapter trusts fixture timestamps as its processing clock;
+    live conversations still use their injected clock and the H05 approval guard.
+    With `sink` (an adapter), each row's replies are sent at that row's own time, as a live run sends them when they
+    are written, so the AVB-07 "(Delayed reply, ...)" prefix is not added just because the transcript is long.
+    A failed per-row send leaves the reply in the outbox; the caller's final flush retries it (and raises).
+    """
+
+    def __init__(self, *args, sink=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sink = sink
+
+    def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
+        at = datetime.fromisoformat(msg.received_at).astimezone(timezone.utc)
+        # A delayed row cannot turn processing time back before a proposal.
+        self._fixture_at = max(at, getattr(self, "_fixture_at", at))
+        self.clock = lambda: self._fixture_at
+        disposition = super().handle(msg, last_try=last_try, apply=apply)
+        if self.sink is not None:
+            try: self.flush(self.sink)
+            except OSError: pass  # still unsent; the final flush retries it at the last row's time
+        return disposition
+
+
 def _load_interpreter(path) -> FixtureInterpreter:  # H09: a failure names the flag, never the file
     try: text = Path(path).read_text("utf-8")
     except (OSError, UnicodeDecodeError): raise ValueError("--interpreter: unreadable") from None
@@ -107,8 +133,9 @@ def main(argv=None) -> int:
         labels = _load_labels(args.labels, args.label_model, args.photos)
         editor = Editor(args.state)
         previewer = Previewer(editor_mod._load(args.state)[2]) if args.preview else None
-        conversation = Conversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer,
-                                    photos=adapter if args.photos is not None else None, labels=labels)
+        conversation = FixtureConversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer,
+                                           photos=adapter if args.photos is not None else None, labels=labels,
+                                           sink=adapter)
         inbox = None if args.queue is None else Inbox(args.state, start_at=args.queue)
         counts = {"queued": 0, "duplicate": 0, "history": 0}
         try:  # the fixture is read once, before any message is handled or stored (H16)

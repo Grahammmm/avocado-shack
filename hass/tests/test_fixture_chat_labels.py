@@ -12,7 +12,7 @@ import unittest
 from unittest import mock
 
 from hass import fixture_chat
-from hass.conversation import PHOTO_QUESTION, Conversation
+from hass.conversation import PHOTO_QUESTION
 from hass.tests.test_conversation import SETTINGS
 from hass.tests.test_demo_transcript_photo import DEMO, MAPPING
 from hass.tests.test_set_photo import FIXTURES as MEDIA, PhotoRepo, _settings
@@ -47,7 +47,7 @@ class FixtureChatLabelTests(unittest.TestCase):
             stack.enter_context(contextlib.redirect_stdout(out))
             stack.enter_context(contextlib.redirect_stderr(err))
             if patched: stack.enter_context(mock.patch.object(fixture_chat, "LabelReader", FakeReader))
-            conv = stack.enter_context(mock.patch.object(fixture_chat, "Conversation", wraps=Conversation))
+            conv = stack.enter_context(mock.patch.object(fixture_chat, "FixtureConversation", wraps=fixture_chat.FixtureConversation))
             code = fixture_chat.main(argv)
         return code, out.getvalue(), err.getvalue(), conv
 
