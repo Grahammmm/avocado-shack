@@ -8,7 +8,8 @@ stored name, description, image, imageAlt and its maker's name and place (captio
 {"draft": false, "reason"}: "cannot read content" | "no such product" | "not on the site" | "no photo on the site" |
 "product record incomplete" (name/description not non-empty text) | "free text has a hashtag or account name" (a # or @
 followed by a letter, digit or _ in name, description or maker name/place; nothing is stripped) | "caption too long".
-A malformed maker is no maker.
+A malformed maker is no maker. A non-text, empty or tagged imageAlt is not used (alt = name); a products
+list that is not a list of records is 'cannot read content'.
 Read-only: nothing is posted, scheduled, written or sent, and the module imports no network code.
 """
 from __future__ import annotations
@@ -40,6 +41,8 @@ def _photo_ok(image, site_dir: Path) -> bool:
 def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     """Return the draft dict, or {"draft": False, "reason": ...}. The id is only matched against loaded products."""
     def refuse(reason): return {"draft": False, "reason": reason}
+    if not isinstance(content.products, list) or not all(isinstance(p, dict) for p in content.products):
+        return refuse("cannot read content")
     product = next((p for p in content.products if p.get("id") == product_id), None)
     if product is None: return refuse("no such product")
     if product.get("status") != "active": return refuse("not on the site")
@@ -56,7 +59,9 @@ def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     tags = ["#AvocadoShack", *([CATEGORY_TAGS[product["category"]]] if product.get("category") in CATEGORY_TAGS else [])]
     caption = "\n".join(lines) + "\n\n" + " ".join(tags)
     if len(caption) > MAX_CAPTION: return refuse("caption too long")
-    return {"draft": True, "image": product["image"], "alt": product.get("imageAlt") or name, "caption": caption}
+    alt = product.get("imageAlt")
+    alt = alt if isinstance(alt, str) and alt.strip() and not _TAG_RE.search(alt) else name
+    return {"draft": True, "image": product["image"], "alt": alt, "caption": caption}
 
 
 def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) -> int:
