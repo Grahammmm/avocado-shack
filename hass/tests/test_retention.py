@@ -165,8 +165,12 @@ class RetentionTest(unittest.TestCase):
 
     def test_module_has_no_delete_or_write_calls(self):
         source = Path(retention.__file__).read_text(encoding="utf-8")
-        for name in ("unlink", "rmtree", "os.remove", "rmdir", "open(", "write_", "rename", "os.replace", "truncate"):
+        for name in ("unlink", "rmtree", "os.remove", "rmdir", "write_", "rename", "os.replace", "truncate"):
             self.assertFalse(name in source, name)
+        # the only open is the read-only sidecar os.open (RF1920-2); no write, create, truncate or append flag anywhere
+        self.assertEqual(source.count("open("), source.count("os.open(path, os.O_RDONLY | "), "an open() other than os.open")
+        self.assertEqual(source.count("open("), 1)
+        for flag in ("O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND"): self.assertNotIn(flag, source)
         self.assertIn("?mode=ro", source)
 
 
