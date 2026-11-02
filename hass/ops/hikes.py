@@ -223,6 +223,13 @@ def _hike_update(content, args, ctx):
             return seats
         if given["capacity"] < seats:
             return Refused(f"capacity {given['capacity']} is below {seats} confirmed guests")
+    if turning_on and "capacity" not in given and "noCapacityLimit" not in given and event.get("capacity") is not None:
+        seats = _seats(ctx, event["id"])  # RSVP rows survive RSVPs off, so the stored capacity may be stale
+        if isinstance(seats, Refused):
+            return seats
+        if event["capacity"] < seats:
+            return Refused(f"stored capacity {event['capacity']} is below {seats} confirmed guests; "
+                           "give a new capacity or noCapacityLimit true")
     if given.get("rsvpEnabled") is False:
         _guest_warning(ctx, event)
     elif "startsAt" in changes and event.get("rsvpEnabled"):
