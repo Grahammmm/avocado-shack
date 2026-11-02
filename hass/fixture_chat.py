@@ -69,6 +69,15 @@ class FixtureAdapter:
         self.sent.append({"chat": chat, "text": text, "attachments": list(attachments)})
 
 
+def _load_interpreter(path) -> FixtureInterpreter:  # H09: a failure names the flag, never the file
+    try: text = Path(path).read_text("utf-8")
+    except (OSError, UnicodeDecodeError): raise ValueError("--interpreter: unreadable") from None
+    try: mapping = json.loads(text)
+    except ValueError: raise ValueError("--interpreter: not JSON") from None
+    if not isinstance(mapping, dict): raise ValueError("--interpreter: not a JSON object")
+    return FixtureInterpreter(mapping)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/fixture_chat.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -79,24 +88,30 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         adapter = FixtureAdapter(args.fixture, photos=args.photos)
-        interpreter = FixtureInterpreter(json.loads(Path(args.interpreter).read_text("utf-8")))
+        interpreter = _load_interpreter(args.interpreter)
         editor = Editor(args.state)
         previewer = Previewer(editor_mod._load(args.state)[2]) if args.preview else None
         conversation = Conversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer,
                                     photos=adapter if args.photos is not None else None)
-        if args.queue is None:
-            for message in adapter.inbound(): conversation.handle(message)
-        else:
-            inbox, counts = Inbox(args.state, start_at=args.queue), {"queued": 0, "duplicate": 0, "history": 0}
-            try:  # store every message before handling any (H16)
-                for message in adapter.inbound(): counts[inbox.enqueue(message)] += 1
+        inbox = None if args.queue is None else Inbox(args.state, start_at=args.queue)
+        counts = {"queued": 0, "duplicate": 0, "history": 0}
+        try:  # the fixture is read once, before any message is handled or stored (H16)
+            try: messages = adapter.inbound()
+            except (OSError, UnicodeDecodeError): raise ValueError("--fixture: unreadable") from None
+            if inbox is None:
+                for message in messages: conversation.handle(message)
+            else:
+                for message in messages: counts[inbox.enqueue(message)] += 1
                 counts["handled"] = len(inbox.drain(conversation))
-            finally:
-                inbox.close()
+        finally:
+            if inbox is not None: inbox.close()
+        if inbox is not None:
             print("fixture_chat: " + " ".join(f"{k}={v}" for k, v in counts.items()), file=sys.stderr)
         conversation.flush(adapter)
     except (ConfigError, UnsafeState, OSError, ValueError, KeyError, TypeError) as exc:
-        detail = str(exc) if str(exc).startswith("fixture line ") else f"{type(exc).__name__}: {exc}"
+        if isinstance(exc, OSError): detail = f"{type(exc).__name__}: {exc.strerror or 'error'}"  # never the path
+        elif str(exc).startswith(("fixture line ", "--")): detail = str(exc)
+        else: detail = f"{type(exc).__name__}: {exc}"
         print(f"fixture_chat: {detail}", file=sys.stderr)
         return 2
     for row in adapter.sent: print(json.dumps(row, ensure_ascii=False, sort_keys=True))
