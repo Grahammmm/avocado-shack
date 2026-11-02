@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
-PENDING = ("proposed", "needs-details", "approved")  # not applied yet: never described as applied (approval gate)
+PENDING = ("proposed", "needs-details")  # not applied yet: never described as applied (approval gate)
+UNDER_WAY = "You said yes; it is still being saved, so nothing has changed on the website yet."  # approved, not saved
 SAVED = ("applied", "verified")
 INSTALL_REASONS = (  # SHOP-2 install failure reasons -> plain words (the file name that follows is dropped)
     ("write failed", "The website files could not be written"),
@@ -51,6 +52,7 @@ def did_it_work(change, install, now) -> str:
     `install` entry (SHOP-2) or None. Returns one plain answer."""
     state, summary = change.get("state"), change.get("summary") or "the change"
     if state in PENDING or state is None: return "Waiting for your OK - nothing has changed yet."
+    if state == "approved": return UNDER_WAY  # an install entry never upgrades an unsaved approval to "Done"
     if state == "reverted": return "That change was undone."
     if state in ("rejected", "expired"): return "That draft was closed, so nothing changed."
     if state not in SAVED:  # failed (or interrupted) before it was saved: the website was never touched
@@ -122,5 +124,5 @@ def history_words(change, install) -> str:
         state = (install if isinstance(install, dict) else {}).get("state")  # same rule as did_it_work
         return "on the website" if state == "installed" else "not on the website yet" if state == "failed" \
             else "not confirmed on the website"
-    return {"reverted": "undone", "failed": "not saved; website unchanged", "rejected": "nothing changed",
-            "expired": "nothing changed"}.get(state, "waiting for your OK")
+    return {"approved": "approved, not saved yet", "reverted": "undone", "failed": "not saved; website unchanged",
+            "rejected": "nothing changed", "expired": "nothing changed"}.get(state, "waiting for your OK")
