@@ -178,7 +178,7 @@ class BlueBubblesSender:
         except (TypeError, ValueError, AttributeError):
             parts, port = None, None
         if parts is None or parts.scheme not in ("http", "https") or parts.hostname not in LOOPBACK \
-                or port is None or parts.username is not None or parts.password is not None \
+                or port is None or port == 0 or parts.username is not None or parts.password is not None \
                 or parts.path not in ("", "/") or parts.query or parts.fragment:
             raise ValueError("base_url must be http(s)://127.0.0.1:<port> or http(s)://localhost:<port>")
         self._base = f"{parts.scheme}://{parts.hostname}:{port}"
