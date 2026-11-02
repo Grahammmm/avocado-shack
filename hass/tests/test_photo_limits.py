@@ -14,7 +14,7 @@ from hass import conversation, media
 from hass.conversation import Inbound
 from hass.fixture_chat import FixtureAdapter
 from hass.tests.test_conversation import CHAT, OWNER, SETTINGS, T0
-from hass.tests.test_media_web import PNG_DATA, PNG_KEPT, SCAN, exif, jpeg, seg
+from hass.tests.test_media_web import PNG_DATA, PNG_KEPT, SCAN, chunk, jpeg, png, seg, tiff
 from hass.tests.test_photo_draft import ANSWER, JPG, PNG, FakePhotos, PhotoInterpreter
 from hass.tests.test_set_photo import PhotoRepo, _settings
 
@@ -43,8 +43,8 @@ CASES = {  # name: (bytes, code, full reply)
     "jpeg comment between scans": (jpeg(scan=SCAN[:-2] + seg(0xFE, b"GPS") + SCAN), "unreadable", UNREADABLE),
     "png bad crc": (media.KINDS["png"] + b"".join(PNG_KEPT) + BAD_IDAT + b"".join(PNG_DATA[1:]), "unreadable",
                     UNREADABLE),
-    "jpeg orientation 6": (jpeg(exif("II", 6)), "needs-rotation", SIDEWAYS),
-    "jpeg orientation 6 big-endian": (jpeg(exif("MM", 6)), "needs-rotation", SIDEWAYS),
+    "png eXIf orientation 8": (png(chunk(b"eXIf", tiff("MM", 8))), "needs-rotation", SIDEWAYS),
+    "png eXIf orientation 6 little-endian": (png(chunk(b"eXIf", tiff("II", 6))), "needs-rotation", SIDEWAYS),
 }
 
 
@@ -91,7 +91,7 @@ class PhotoLimitsTests(unittest.TestCase):
                 self.assertNothingKept()
 
     def test_a_refused_photo_sent_again_or_with_an_approval_caption_is_refused_again(self):
-        self.photos.data = CASES["jpeg orientation 6"][0]
+        self.photos.data = CASES["png eXIf orientation 8"][0]
         for caption in ("", "yes", "approve all", ANSWER):
             with self.subTest(caption=caption):
                 self.assertEqual(self.say(caption), "photo-refused:needs-rotation")
@@ -150,7 +150,7 @@ class CheckPhotoTests(unittest.TestCase):
             self.assertEqual(cm.exception.code, code)
         self.assertFalse((repo.media / "originals").exists())
         # it never ran the web-copy filter: a sideways original is kept, and web_copy is what refuses it
-        sha = repo.store(CASES["jpeg orientation 6"][0])
+        sha = repo.store(CASES["png eXIf orientation 8"][0])
         with self.assertRaises(media.Refused) as cm: media.web_copy(repo.media, sha)
         self.assertEqual(cm.exception.code, "needs-rotation")
 
