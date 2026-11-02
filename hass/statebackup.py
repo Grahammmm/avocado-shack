@@ -17,6 +17,7 @@ repository, the worktrees and the state dir. No network, no Git writes, no delet
 exit 0 ok, 1 any other result, 2 unsafe dir or usage. list (read-only): a line per hass-state-* entry, complete or not.
 diff (read-only): files added, removed and changed from OLD to NEW (photo originals as counts), i.e. what a restore of
 OLD would lose. diff reads manifests only; run verify for integrity.
+A new backup's MANIFEST.json also records `contentCommit`, the writer worktree's HEAD (read-only git; null if unreadable).
 """
 import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timezone
@@ -38,6 +39,7 @@ FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|(drafts
                      r"|media/originals/(?P<aa>[0-9a-f]{2})/(?P=aa)[0-9a-f]{62}\.(json|%s)"
                      % "|".join(sorted(set(photos.EXT.values()))))
 HEX_RE = re.compile(r"[0-9a-f]{64}")
+COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 ATTENDED = "restoring onto the recorded writer worktree is an attended operation"
 MANIFEST_MAX, SMALL_MAX = 8 << 20, 64 << 10  # bytes: MANIFEST.json (~80 000 listed files); a sidecar or config.json
 
@@ -170,19 +172,34 @@ def create(state, out, now=None, media=None) -> dict:
             (_snapshot if rel in (DB, INBOX) else _copy)(src, dest / rel)
             hashes[rel] = hashlib.sha256(_read(dest / rel)).hexdigest()
         doc = {"schemaVersion": 1, "createdAt": now.isoformat(), "worktree": cfg["worktree"], "files": hashes}
+        commit = _head(Path(cfg["worktree"]))  # inside the writer lock; read-only
+        if commit: doc["contentCommit"] = commit
         if mroot: doc["media"] = {"originals": len(mfiles) // 2}
         _write_new(dest / (MANIFEST + ".tmp"), json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
         os.replace(dest / (MANIFEST + ".tmp"), dest / MANIFEST)  # last: a backup without it is incomplete
         _rename_noreplace(dest, final)  # a final dir that appeared meanwhile (even empty) is refused, never replaced
         undo.pop_all()  # renamed in: nothing left to clean up
     extra = {"media": len(mfiles) // 2} if mroot else {}  # settled: one sidecar per original
-    return {"result": "ok", "backup": str(final), "files": len(hashes), **extra}
+    return {"result": "ok", "backup": str(final), "files": len(hashes), "contentCommit": commit, **extra}
+
+def _head(wt: Path):
+    """The worktree's HEAD as 40 lowercase hex, else None (not a repo, unborn HEAD, git missing)."""
+    old = os.environ.get("GIT_OPTIONAL_LOCKS")
+    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # this call only: never refresh the writer's index
+    try: out = editor._out(wt, "rev-parse", "HEAD")
+    except OSError: return None
+    finally:
+        if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
+        else: os.environ["GIT_OPTIONAL_LOCKS"] = old
+    return out if COMMIT_RE.fullmatch(out) else None
 
 def _manifest(bdir: Path):
     try:
         doc = json.loads(_read_small(bdir / MANIFEST, MANIFEST_MAX).decode("utf-8"))
         files = doc["files"]
         valid = doc.get("schemaVersion") == 1 and isinstance(doc.get("worktree"), str) and isinstance(files, dict) \
+            and ("contentCommit" not in doc or isinstance(doc["contentCommit"], str)
+                 and COMMIT_RE.fullmatch(doc["contentCommit"])) \
             and CONFIG in files and all(isinstance(rel, str) and FILE_RE.fullmatch(rel) and isinstance(digest, str)
                                         and HEX_RE.fullmatch(digest) for rel, digest in files.items())
     except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
@@ -311,7 +328,8 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
         for path in made: shutil.rmtree(path, ignore_errors=True)  # only the temp dirs this call created
         raise
     if mrels: extra.update({"mediaRestored": bool(mtarget), "media": len(mrels) // 2})
-    return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]), **extra}
+    return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]),
+            "contentCommit": doc.get("contentCommit"), **extra}
 
 STRUCTURAL = ("state", "settings", "db-integrity", "inbox-integrity")  # a drill fails on these health checks
 
@@ -329,7 +347,7 @@ def drill(backup, into, worktree, media_into=None, now=None) -> dict:
     step = "health" if unsafe or set(ids) & set(STRUCTURAL) else None if hist.get("result") == "ok" else "history"
     return ({"result": "drill-failed", "step": step} if step else {"result": "ok"}) | {
         "state": out["state"], "worktree": out["worktree"], "files": out["files"], "paused": out["paused"],
-        "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
+        "contentCommit": out["contentCommit"], "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
         "history": len(hist.get("history") or []), **{k: out[k] for k in ("media", "mediaRestored") if k in out}}
 
 NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
@@ -350,7 +368,8 @@ def list_backups(out):
         doc, problem = _listed(entry)
         created = (doc or {}).get("createdAt")
         rows.append({"backup": entry.name, "createdAt": created if isinstance(created, str) else None,
-                     "files": len(doc["files"]) if doc else None, "complete": doc is not None, "problem": problem})
+                     "files": len(doc["files"]) if doc else None, "complete": doc is not None, "problem": problem,
+                     "contentCommit": (doc or {}).get("contentCommit")})
     return rows
 
 def diff(old, new) -> dict:
@@ -369,10 +388,12 @@ def diff(old, new) -> dict:
     try: order = {"order": "reversed"} if datetime.fromisoformat(when[0]) > datetime.fromisoformat(when[1]) else {}
     except (TypeError, ValueError): order = {"order": "unknown"}  # missing, odd or naive-vs-aware createdAt
     stamp = [w if isinstance(w, str) else None for w in when]
+    commits = [d.get("contentCommit") for d in docs]
     return {"result": "ok", "added": rels(b, lambda r: r not in a), "removed": rels(a, lambda r: r not in b),
             "changed": rels(a, lambda r: r in b and a[r] != b[r]), "same": sum(a[r] == b.get(r) for r in a),
             "media_added": originals(b, a), "media_removed": originals(a, b), "older": stamp[0], "newer": stamp[1],
-            "worktree_changed": docs[0]["worktree"] != docs[1]["worktree"], **order}
+            "worktree_changed": docs[0]["worktree"] != docs[1]["worktree"], **order,
+            "content_commit_changed": None if None in commits else commits[0] != commits[1]}
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/statebackup.py", description=__doc__,
