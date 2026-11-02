@@ -324,6 +324,7 @@ def render_draft(change_id, *, state=None, registry=None, now=None) -> dict:
 
 def history(limit=20, *, state=None) -> dict:
     """Change records newest first: id, state, applied_at, commit, one line per op, revertedBy."""
+    if type(limit) is not int or not 1 <= limit <= 500: raise ValueError("limit must be 1-500")
     sdir, _cfg, _wt = _load(state)
     entries = []
     for path in (sdir / "changes").glob("chg-*.json") if (sdir / "changes").is_dir() else ():
@@ -350,7 +351,7 @@ def history(limit=20, *, state=None) -> dict:
             "commit": rec.get("commit"), "revertedBy": rec.get("revertedBy"), "install": install_status(rec),
             "ops": [f"{c['op']} {json.dumps(c['args'], ensure_ascii=False, sort_keys=True)}"[:160] for c in ops]}))
     entries.sort(key=lambda e: e[0], reverse=True)
-    return {"result": "ok", "history": [e for _key, e in entries[:max(0, int(limit))]]}
+    return {"result": "ok", "history": [e for _key, e in entries[:limit]]}
 
 def show(change_id, *, state=None) -> dict:
     sdir, _cfg, _wt = _load(state)
@@ -373,6 +374,12 @@ def list_ops(registry=None) -> dict:
     return {"result": "ok", "ops": {name: {arg: asdict(spec) for arg, spec in op.args.items()}
                                     for name, op in sorted(registry.items())}}
 
+def _limit(text):
+    try: n = int(text)
+    except ValueError: n = 0
+    if not 1 <= n <= 500: raise argparse.ArgumentTypeError("must be a whole number from 1 to 500")
+    return n
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/editor.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -385,7 +392,7 @@ def main(argv=None) -> int:
         cmd = sub.add_parser(name, parents=[common])
         for param in params:
             cmd.add_argument(param, **({"required": True} if param.startswith("--") else {}))
-        if name == "history": cmd.add_argument("--limit", type=int, default=20)
+        if name == "history": cmd.add_argument("--limit", type=_limit, default=20)
     args = parser.parse_args(argv)
     commands = {"ops": lambda: _load(args.state) and list_ops(), "init": lambda: init(args.state, args.worktree),
                 "prepare": lambda: prepare(Path(args.request).read_bytes(), state=args.state),
