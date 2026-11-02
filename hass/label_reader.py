@@ -3,7 +3,8 @@
 LabelReader(base_url, model).read(image_bytes, categories) sends one Ollama `POST /api/chat` (loopback http only,
 the NB-AV-02 adapter's checks, transport and reply limits) with the photo's metadata-free web copy, and returns at most
 {"name", "brand", "category"} as printed on the label. Everything else the model says (maker, origin, organic ...) is
-dropped, and so is any value with an organic/origin claim term: a photo never supplies a claim. Any failure is {} with
+dropped, and so is any value with an organic/origin claim term or text the catalog refuses (<, >, $, {{, }}): a photo
+never supplies a claim. Any failure is {} with
 a short code in `last_error` only; nothing is logged. Not wired into a service: the operator names the existing model.
 """
 import base64
@@ -13,7 +14,7 @@ import unicodedata
 from types import SimpleNamespace
 
 from hass import claims
-from hass.content_model import TEXT_LIMITS
+from hass.content_model import FORBIDDEN_TEXT, TEXT_LIMITS
 from hass.interpreter_local import LocalInterpreter, _Failed
 from hass.ops import catalog
 
@@ -43,6 +44,7 @@ def _clean(field, value, categories):
     if not isinstance(value, str) or not value.strip(): return None
     value = value.strip()
     if any(unicodedata.category(c).startswith("C") for c in value): return None  # control/format characters
+    if any(bad in value for bad in FORBIDDEN_TEXT): return None  # the catalog refuses it (content_model._text); never offered
     if len(value) > TEXT_LIMITS["product"][field]: return None
     folded = claims.fold(value).replace("-", " ")
     if any(term in folded for term in _TERMS): return None  # no organic/origin claim ever comes from a photo
