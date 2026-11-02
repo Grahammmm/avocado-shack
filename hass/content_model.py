@@ -58,6 +58,7 @@ STORE_OPTIONAL = ("selection_checked_on", "intro")  # ISO date of Michael's last
 MAX_INTRO = 160  # characters in the optional store.intro (ops/store.py imports this)
 DEFAULT_INTRO = "Good food nourishes more than a body. It brings people together."  # shown when store.intro is absent
 MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
+MAX_EVENT_CAPACITY = 1000  # H14 typo guard on events[].capacity (a sanity ceiling, not a business rule; raise if needed)
 # Maximum length (Python len: code points, so "é" written as e + combining accent counts 2) of every owner-editable
 # text field. Each limit is at least 1.5x the longest current value (test_text_limits checks the real content).
 # Store limits are the constants above, listed here so one table documents every limit.
@@ -372,8 +373,8 @@ def validate_community(problems, community):
             _text(problems, f"{where}.meetingPoint", ev.get("meetingPoint"))
         if "capacity" in ev:
             cap = ev["capacity"]
-            if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
-                problems.append(f"{where}: capacity must be a positive integer")
+            if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= MAX_EVENT_CAPACITY:
+                problems.append(f"{where}: capacity must be a positive integer of at most {MAX_EVENT_CAPACITY}")
         if "trailId" in ev and (not isinstance(ev["trailId"], str) or ev["trailId"] not in idea_ids):
             problems.append(f"{where}: trailId {ev['trailId']!r} is not a route idea")
         for field in EVENT_TEXT_FIELDS:
