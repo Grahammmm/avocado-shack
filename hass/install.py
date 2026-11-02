@@ -127,11 +127,21 @@ def _install_locked(sdir, cfg, wt, change_id, now) -> dict:
     want = {rel: _blob(wt, f"{commit}:{rel}") for rel in paths}
     if None in want.values(): return {"result": "refused", "reason": "the change commit cannot be read"}
     targets = {rel: site / rel[len(PREFIX):] for rel in paths}
-    for rel in paths: sitegen._check_folders(site, rel[len(PREFIX):])
     if odd := [rel[len(PREFIX):] for rel in paths if _not_regular(site, rel[len(PREFIX):])]:
         return _finish(rec_path, rec, change_id, {"state": "failed", "reason": f"site path is not a regular file: {odd[0]}",
                                                   "failed_at": editor._now(now), "commit": commit})
-    prev = {rel: _current(targets[rel]) for rel in paths}
+    prev, modes, sub = {}, {}, ""
+    try:  # every pre-write read: a failure is recorded naming the site path, never the exception text
+        for rel in paths:
+            sub = rel[len(PREFIX):]
+            sitegen._check_folders(site, sub)
+        for rel in paths:
+            sub = rel[len(PREFIX):]
+            prev[rel] = _current(targets[rel])
+            modes[rel] = targets[rel].stat().st_mode & 0o777 if prev[rel] is not None else 0o644
+    except OSError:
+        return _finish(rec_path, rec, change_id, {"state": "failed", "reason": f"site file cannot be read: {sub}",
+                                                  "failed_at": editor._now(now), "commit": commit})
     done = {"commit": commit, "files": len(paths)}
     own = rec["install"] if isinstance(rec.get("install"), dict) else {}  # a damaged entry is "not installed yet"
     if own.get("state") == "installed" and own.get("commit") == commit and all(prev[r] == want[r] for r in paths):
@@ -140,7 +150,6 @@ def _install_locked(sdir, cfg, wt, change_id, now) -> dict:
     if unreadable: return {"result": "refused", "reason": f"another change record is unreadable: {unreadable}"}
     if later:
         return {"result": "refused", "reason": f"a later change is already installed: {later}"}
-    modes = {rel: targets[rel].stat().st_mode & 0o777 if prev[rel] is not None else 0o644 for rel in paths}
     reason = None
     try:
         for rel in paths:
