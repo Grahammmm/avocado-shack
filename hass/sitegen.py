@@ -33,8 +33,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import (  # noqa: E402
-    DEFAULT_INTRO, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError, checked_on,
-    load_and_validate, shop_today,
+    DEFAULT_HEADLINE, DEFAULT_INTRO, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
+    checked_on, load_and_validate, shop_today,
 )
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
@@ -110,12 +110,14 @@ def store_slots(store: dict) -> dict[str, str]:
     """HTML-escaped values for the store-info slots in the page templates."""
     street, town, name = store["streetAddress"], store["town"], store["name"]
     maps = "https://www.google.com/maps/search/?api=1&query=" + quote_plus(f"{name} {street} {town}")
+    first, second = (html.escape(line, quote=False) for line in store.get("headline") or DEFAULT_HEADLINE)
     return {
         "store.addressLine": html.escape(f"{street}, {town}", quote=False),
         "store.addressShort": html.escape(f"{street} · {town}", quote=False),
         "store.hoursHtml": "<br>".join(html.escape(line, quote=False) for line in store["hours"]),
         "store.mapsUrl": html.escape(maps, quote=True),
         "store.introHtml": html.escape(store.get("intro") or DEFAULT_INTRO, quote=False),
+        "store.headlineHtml": f"{first}<br><em>{second}</em>",
     }
 
 

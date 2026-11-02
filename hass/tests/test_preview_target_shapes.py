@@ -30,7 +30,8 @@ class GoodRecordTests(unittest.TestCase):
         cases = [
             (PRODUCT, {"kind": "product", "id": "p-1", "name": "Avocados", "status": "active", "description": "Ripe."}),
             (MAKER, {"kind": "maker", "key": "m-1", "name": "Farm", "place": "Cayucos", "hidden": True}),
-            (STORE, {"kind": "store", "hours": ["Mon 9-5"], "streetAddress": "5 Example St", "town": "Cayucos"}),
+            (STORE, {"kind": "store", "hours": ["Mon 9-5"], "streetAddress": "5 Example St", "town": "Cayucos",
+                     "headline": []}),
             (EVENT, {"kind": "event", "title": "Hike", "status": "completed", "id": "h-1", "recap": "Calm."}),
             (ROUTE, {"kind": "event", "title": "Coast walk", "status": None, "id": "", "recap": ""}),
         ]
@@ -42,7 +43,7 @@ class GoodRecordTests(unittest.TestCase):
         self.assertEqual(preview.target_for({"collection": "products", "key": "p-1", "after": None}),
                          {"kind": "product", "id": "p-1", "name": "", "status": None, "description": None})
         self.assertEqual(preview.target_for(_with(STORE, hours=[])),
-                         {"kind": "store", "hours": [], "streetAddress": "5 Example St", "town": "Cayucos"})
+                         {"kind": "store", "hours": [], "streetAddress": "5 Example St", "town": "Cayucos", "headline": []})
         self.assertEqual(preview.target_for(_with(STORE, hours=None))["hours"], [])
         self.assertEqual(preview.target_for(_with(PRODUCT, name=None, description=None))["name"], None)
 

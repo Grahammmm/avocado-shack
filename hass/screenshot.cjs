@@ -74,6 +74,8 @@ const allowed=req=>{
         checks.hoursShown=lines.length>0&&lines.every(l=>text.includes(l));
         const s=target.streetAddress,t=target.town;
         if(s&&t)checks.addressShown=text.includes(`${s}, ${t}`)&&text.includes(`${s} · ${t}`);
+        const h=target.headline||[];
+        if(h.length===2){const h1=await page.locator('.hero h1').innerText();checks.headlineShown=h.every(l=>h1.includes(l));}
       }
     }
     await page.waitForTimeout(150);
