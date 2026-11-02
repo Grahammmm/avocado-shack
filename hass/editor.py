@@ -367,7 +367,9 @@ def show(change_id, *, state=None) -> dict:
 def install_status(rec: dict) -> str | None:
     """SHOP-2: whether an applied change reached the running site (`hass/install.py`); None if not applied."""
     if rec.get("state") != "applied": return None
-    inst = rec.get("install") or {}
+    inst = {} if rec.get("install") is None else rec.get("install")
+    if not isinstance(inst, dict) or not isinstance(inst.get("state"), (str, type(None))):
+        return "committed, not installed (install record unreadable)"  # RF1750-1: named, never printed or traced
     if inst.get("state") == "installed": return "installed"
     return "committed, not installed" + (f" (install failed: {inst.get('reason')})" if inst.get("state") else "")
 
