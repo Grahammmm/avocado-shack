@@ -46,8 +46,12 @@ def guest_counts_checked(db_path) -> tuple[dict[str, int], set[str]]:
 
 
 def guest_counts(db_path) -> dict[str, int]:
-    """{event_id: confirmed seats}; an event with a bad party_size row is left out (see guest_counts_checked)."""
-    return guest_counts_checked(db_path)[0]
+    """{event_id: confirmed seats}; raises ValueError when any event has a bad party_size row, so callers without
+    per-event handling say "unavailable" (as for an unreadable database) instead of a smaller number."""
+    counts, bad = guest_counts_checked(db_path)
+    if bad:
+        raise ValueError("bad party_size row")
+    return counts
 
 
 def _seats(ctx, event_id):

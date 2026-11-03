@@ -50,7 +50,8 @@ class CheckedCountTests(unittest.TestCase):
             with self.subTest(name):
                 path = self.db([(HIKE_ID, 2), (HIKE_ID, party), (HIKE_ID, 3), (OTHER, 4)])
                 self.assertEqual(hikes.guest_counts_checked(path), ({OTHER: 4}, {HIKE_ID}))
-                self.assertEqual(hikes.guest_counts(path), {OTHER: 4})  # left out, never a smaller number
+                with self.assertRaises(ValueError):  # existing callers fail closed ("unavailable"), never a smaller number
+                    hikes.guest_counts(path)
 
     def test_all_bad_rows_and_bad_rows_on_both_events(self):
         path = self.db([(HIKE_ID, None), (HIKE_ID, None), (OTHER, 0), (OTHER, 6)])
