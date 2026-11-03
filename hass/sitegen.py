@@ -117,7 +117,7 @@ def _community_json(content: Content) -> bytes:
     return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def store_slots(store: dict) -> dict[str, str]:
+def store_slots(store: dict, today=None) -> dict[str, str]:
     """HTML-escaped values for the store-info slots in the page templates."""
     street, town, name = store["streetAddress"], store["town"], store["name"]
     maps = "https://www.google.com/maps/search/?api=1&query=" + quote_plus(f"{name} {street} {town}")
@@ -131,7 +131,17 @@ def store_slots(store: dict) -> dict[str, str]:
         "store.headlineHtml": f"{first}<br><em>{second}</em>",
         "store.storyHtml": html.escape(store.get("story") or DEFAULT_STORY, quote=False),
         "store.heroImageHtml": _hero_image(store.get("homeImage")),
+        **_notice(store.get("notice"), (today or shop_today()).isoformat()),
     }
+
+
+NOTICE_JS = ("<script>document.querySelectorAll('.home-notice').forEach(n=>{if(new Date().toLocaleDateString('en-CA',"
+             "{timeZone:'America/Los_Angeles'})>n.dataset.until)n.hidden=true})</script>\n")  # hides it after until
+
+
+def _notice(n, today: str) -> dict[str, str]:  # no notice, or its last day before the render's today: both slots empty
+    p = f'<p class="home-notice" data-until="{html.escape(n["until"])}" role="status">' if n and n["until"] >= today else ""
+    return {"store.noticeHtml": p and p + html.escape(n["text"], quote=False) + "</p>", "store.noticeScript": p and NOTICE_JS}
 
 
 def _hero_image(home) -> str:  # no store.homeImage: exactly the template's original hero <img>
@@ -160,7 +170,7 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None) -> d
         SITE_PREFIX + "producers.json": _producers_json(content),
         SITE_PREFIX + "community.json": _community_json(content),
     }
-    slots = {**store_slots(content.store), "selection.checkedNote": checked_note(content.store, today)}
+    slots = {**store_slots(content.store, today), "selection.checkedNote": checked_note(content.store, today)}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")
         files[SITE_PREFIX + rel] = render_template(text, slots).encode("utf-8")
