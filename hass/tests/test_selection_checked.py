@@ -42,7 +42,9 @@ class RenderTests(unittest.TestCase):
 
     def test_no_check_says_so_and_shows_no_words_or_clock(self):
         files, page, words = self.render(None, date(2026, 11, 3))
-        self.assertIn(f'<p class="catalog-note selection-checked">{NOT_CHECKED}</p>', page)
+        # AVO-LAUNCH-1: before the first check the page says nothing about it (no pre-launch wording for visitors).
+        self.assertNotIn("selection-checked", page)
+        self.assertNotIn(NOT_CHECKED, page)
         self.assertEqual(set(words.values()), {None})
         for today in (date(2026, 11, 3), date(2027, 2, 14)):
             again = sitegen.render(copy.deepcopy(self.content), today=today)
@@ -157,7 +159,7 @@ class OpTests(CatalogTestCase):
         self.assertEqual(self.r.head(), head)  # draft only
         self.r.run(("product.set_availability", {"id": self.a, "available": "no"}))
         self.assertEqual(self.words()[self.a], None)
-        self.assertIn(NOT_CHECKED, self.r.read(INDEX).decode("utf-8"))
+        self.assertNotIn("selection-checked", self.r.read(INDEX).decode("utf-8"))
         self.r.run(("store.confirm_selection", {}))
         self.assertEqual(self.words()[self.a], "Sold out")
 
