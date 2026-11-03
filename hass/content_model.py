@@ -54,7 +54,8 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro")  # ISO date of Michael's last check; home-page intro line; both absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline")  # last selection check; intro; headline; all absent by default
+MAX_HEADLINE_LINE, DEFAULT_HEADLINE = 40, ("A little market.", "A lot to discover.")  # per line; <h1> when absent
 MAX_INTRO = 160  # characters in the optional store.intro (ops/store.py imports this)
 DEFAULT_INTRO = "Good food nourishes more than a body. It brings people together."  # shown when store.intro is absent
 MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
@@ -411,6 +412,14 @@ def validate_store(problems, store, today: date | None = None):
         _text(problems, "store.intro", store["intro"], limit=MAX_INTRO)
         if isinstance(store["intro"], str) and sum(c.isalpha() for c in store["intro"]) < 3:
             problems.append("store.intro: needs at least 3 letters")
+    if "headline" in store:
+        lines = store["headline"]
+        if not isinstance(lines, list) or len(lines) != 2:
+            problems.append("store.headline: must be a list of exactly 2 lines")
+        for i, line in enumerate(lines if isinstance(lines, list) else []):
+            _text(problems, f"store.headline[{i}]", line, limit=MAX_HEADLINE_LINE)
+            if isinstance(line, str) and sum(c.isalpha() for c in line) < 2:
+                problems.append(f"store.headline[{i}]: needs at least 2 letters")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):

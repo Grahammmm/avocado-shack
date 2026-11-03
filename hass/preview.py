@@ -32,6 +32,9 @@ def _readable(record) -> bool:
     hours = after.get("hours") if collection == "store" else None
     if not (hours is None or isinstance(hours, list) and all(isinstance(h, str) for h in hours)):
         return False
+    headline = after.get("headline") if collection == "store" else None
+    if not (headline is None or isinstance(headline, list) and all(isinstance(h, str) for h in headline)):
+        return False
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
 
 
@@ -48,7 +51,8 @@ def target_for(record: dict) -> dict:
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
         return {"kind": "store", "hours": list(after.get("hours") or []),
-                "streetAddress": after.get("streetAddress", ""), "town": after.get("town", "")}
+                "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
+                "headline": list(after.get("headline") or [])}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
     return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
             "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}

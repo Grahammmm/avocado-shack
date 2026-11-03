@@ -1,0 +1,40 @@
+"""Hass home-page copy ops (H13): ``store.set_headline`` fills the home-page ``<h1>`` slot (``store.headline``),
+through the normal typed-op path (draft, approval, single writer). Only the store record changes.
+
+Usage (request op):
+    {"op": "store.set_headline", "args": {"first": "A little market.", "second": "A lot to discover."}}
+
+The page shows ``first<br><em>second</em>`` (the second line emphasised). Limits: each line at most 40 characters and
+at least 2 letters (the refusal names the line number); text kinds already reject markup, ``$``, ``{{ }}`` and control
+characters. The same words as now (the default when unset; spacing ignored) are refused. Undo restores the default.
+
+Selective-undo limit (as hass/ops/store.py): the store is ONE record, so ``history.revert`` of an older store change
+after a later store change is refused as a conflict. Undo the newest store change first.
+"""
+
+from __future__ import annotations
+
+import copy
+
+from hass.content_model import DEFAULT_HEADLINE, MAX_HEADLINE_LINE
+from hass.ops import Arg, Op, Refused
+from hass.ops.store import _spaced, _touch
+
+
+def _set_headline(content, args, ctx):
+    lines = [args["first"], args["second"]]
+    for i, line in enumerate(lines, 1):
+        if len(line) > MAX_HEADLINE_LINE:
+            return Refused(f"headline line {i} is longer than {MAX_HEADLINE_LINE} characters")
+    for i, line in enumerate(lines, 1):
+        if sum(c.isalpha() for c in line) < 2:
+            return Refused(f"headline line {i} needs at least 2 letters")
+    current = content.store.get("headline") or DEFAULT_HEADLINE
+    if [_spaced(line) for line in lines] == [_spaced(line) for line in current]:
+        return Refused("the headline already says that")
+    before = copy.deepcopy(content.store)
+    content.store["headline"] = lines
+    return _touch(before, content.store)
+
+
+OPS = (Op("store.set_headline", {"first": Arg("text"), "second": Arg("text")}, _set_headline),)
