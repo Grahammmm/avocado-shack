@@ -5,10 +5,11 @@ import contextlib, io, json, os, subprocess  # noqa: E401
 from pathlib import Path
 from unittest import mock
 
-from hass import editor, statebackup
+from hass import editor, media, statebackup
 from hass.tests import test_statebackup_bundle as fav07
 from hass.tests.test_editor import git
-from hass.tests.test_statebackup import BackupTestCase
+from hass.tests.test_media import AT, JPEG
+from hass.tests.test_statebackup import STAMP, BackupTestCase
 
 CONTENT_KEYS = {"contentRestored", "contentCheck"}
 
@@ -119,6 +120,24 @@ class ContentRestoreTests(BackupTestCase):
                                      str(self.drill_wt), "--content-into", str(self.tmp / "c"))
             self.assertEqual((code, got["result"]), (1, "error"))
             self.assertEqual(self.left(), before)  # no state, content or dot-named temp dir left
+
+    def test_an_empty_content_dir_appearing_at_publication_is_kept_and_the_restore_taken_back(self):
+        mroot = self.tmp / "media"
+        mroot.mkdir(mode=0o700)
+        media.store_original(mroot, JPEG, received_at=AT, source="fixture")
+        made = statebackup.create(str(self.repo.state), str(self.bk), now=STAMP, media=str(mroot))
+        self.assertEqual((made["result"], made["contentBundle"]), ("ok", True), made)
+        new, mnew, content, real = self.tmp / "r", self.tmp / "m", self.tmp / "content", statebackup._rename_noreplace
+        def publish(src, dst):  # the content dir appears after every check, just before the kernel rename
+            if dst == content: content.mkdir()
+            return real(src, dst)
+        before = self.left()
+        with mock.patch.object(statebackup, "_rename_noreplace", side_effect=publish), \
+             self.assertRaises(FileExistsError):
+            statebackup.restore(made["backup"], str(new), str(self.drill_wt), media_into=str(mnew),
+                                content_into=str(content))
+        self.assertEqual(os.listdir(content), [])  # the dir that appeared is preserved, not replaced
+        self.assertEqual(self.left(), sorted(before + ["content"]))  # no state, media or dot-named temp dir left
 
     def test_without_content_into_results_carry_no_new_keys(self):
         backup, made = self.make()

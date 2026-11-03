@@ -371,7 +371,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
         if mtmp: os.rename(mtmp, mtarget)
         mrenamed = bool(mtmp)
         if ctmp and os.path.lexists(ctarget): raise FileExistsError(f"content restore dir appeared: {ctarget}")
-        if ctmp: os.rename(ctmp, ctarget)
+        if ctmp: _rename_noreplace(ctmp, ctarget)  # a dir that appeared since (even empty) is refused, never replaced
     except BaseException:
         if renamed: os.rename(target, tmp)  # take back the state dir this call made: leave neither target
         if mrenamed: os.rename(mtarget, mtmp)
