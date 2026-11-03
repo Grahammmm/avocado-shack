@@ -11,6 +11,8 @@ PLAYWRIGHT_MODULE and CHROMIUM_PATH are read from the environment).
 start point and repeats never become commands; stderr gets one counts-only summary line.
 --photos DIR (NB-AV-13): a row's `photos: [name]` become its attachments, read from regular files directly in DIR
 (settings need mediaRoot); without it the field is ignored.
+--labels URL --label-model NAME (H10) give the Conversation a LabelReader (loopback vision model, read on a photo
+only: needs --photos and both flags); without them nothing changes. No model is called while building the reader.
 Exit codes: 0 done, 2 unsafe state dir, missing settings or unreadable input.
 """
 import argparse, json, sys  # noqa: E401
@@ -23,6 +25,7 @@ from hass.conversation import ConfigError, Conversation, Editor, FixtureInterpre
 from hass.editor import UnsafeState  # noqa: E402
 from hass import editor as editor_mod  # noqa: E402
 from hass.inbox import Inbox  # noqa: E402
+from hass.label_reader import LabelReader  # noqa: E402
 from hass.preview import Previewer  # noqa: E402
 
 
@@ -104,6 +107,16 @@ def _load_interpreter(path) -> FixtureInterpreter:  # H09: a failure names the f
     return FixtureInterpreter(mapping)
 
 
+def _load_labels(url, model, photos):  # H10: a failure names the flag, never the URL or the model
+    if url is None and model is None: return None
+    if url is None or model is None: raise ValueError("--labels and --label-model go together")
+    if photos is None: raise ValueError("--labels: needs --photos")
+    try: LabelReader(url, "label-check")  # a known-good model: a failure here is the URL
+    except ValueError: raise ValueError("--labels: not a loopback http URL") from None
+    try: return LabelReader(url, model)
+    except ValueError as exc: raise ValueError(f"--label-model: {exc}") from None
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/fixture_chat.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -111,14 +124,18 @@ def main(argv=None) -> int:
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--queue", metavar="START_AT")
     parser.add_argument("--photos", metavar="DIR")
+    parser.add_argument("--labels", metavar="URL")
+    parser.add_argument("--label-model", metavar="NAME")
     args = parser.parse_args(argv)
     try:
         adapter = FixtureAdapter(args.fixture, photos=args.photos)
         interpreter = _load_interpreter(args.interpreter)
+        labels = _load_labels(args.labels, args.label_model, args.photos)
         editor = Editor(args.state)
         previewer = Previewer(editor_mod._load(args.state)[2]) if args.preview else None
         conversation = FixtureConversation(args.state, editor, interpreter, lambda: datetime.now(timezone.utc), previewer,
-                                           photos=adapter if args.photos is not None else None, sink=adapter)
+                                           photos=adapter if args.photos is not None else None, labels=labels,
+                                           sink=adapter)
         inbox = None if args.queue is None else Inbox(args.state, start_at=args.queue)
         counts = {"queued": 0, "duplicate": 0, "history": 0}
         try:  # the fixture is read once, before any message is handled or stored (H16)
