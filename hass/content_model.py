@@ -54,7 +54,9 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline")  # last selection check; intro; headline; all absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story")  # selection check; intro; headline; story; absent by default
+MAX_STORY = 400  # characters in the optional store.story (the "COME ON IN" paragraph)
+DEFAULT_STORY = "Michael Wolfe brings a produce buyer’s curiosity and long-standing grower relationships to the Shack. The idea is simple: connect friends and neighbors with good food and the people who grow and make it."  # shown when store.story is absent
 MAX_HEADLINE_LINE, DEFAULT_HEADLINE = 40, ("A little market.", "A lot to discover.")  # per line; <h1> when absent
 MAX_INTRO = 160  # characters in the optional store.intro (ops/store.py imports this)
 DEFAULT_INTRO = "Good food nourishes more than a body. It brings people together."  # shown when store.intro is absent
@@ -412,6 +414,10 @@ def validate_store(problems, store, today: date | None = None):
         _text(problems, "store.intro", store["intro"], limit=MAX_INTRO)
         if isinstance(store["intro"], str) and sum(c.isalpha() for c in store["intro"]) < 3:
             problems.append("store.intro: needs at least 3 letters")
+    if "story" in store:
+        _text(problems, "store.story", store["story"], limit=MAX_STORY)
+        if isinstance(store["story"], str) and (sum(c.isalpha() for c in store["story"]) < 20 or len(store["story"].splitlines()) > 1):
+            problems.append("store.story: needs one paragraph with at least 20 letters")
     if "headline" in store:
         lines = store["headline"]
         if not isinstance(lines, list) or len(lines) != 2:

@@ -1,4 +1,5 @@
-"""Hass home-page copy ops (H13): ``store.set_headline`` fills the home-page ``<h1>`` slot (``store.headline``),
+"""Hass home-page copy ops (H13): ``store.set_headline`` fills the home-page ``<h1>`` slot (``store.headline``) and
+``store.set_story`` the first "COME ON IN" paragraph (``store.story``: one paragraph, 20 letters to 400 characters),
 through the normal typed-op path (draft, approval, single writer). Only the store record changes.
 
 Usage (request op):
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 import copy
 
-from hass.content_model import DEFAULT_HEADLINE, MAX_HEADLINE_LINE
+from hass.content_model import DEFAULT_HEADLINE, DEFAULT_STORY, MAX_HEADLINE_LINE, MAX_STORY
 from hass.ops import Arg, Op, Refused
 from hass.ops.store import _spaced, _touch
 
@@ -37,4 +38,20 @@ def _set_headline(content, args, ctx):
     return _touch(before, content.store)
 
 
-OPS = (Op("store.set_headline", {"first": Arg("text"), "second": Arg("text")}, _set_headline),)
+def _set_story(content, args, ctx):
+    text = args["text"]
+    if text.splitlines() != [text]:  # any line or paragraph separator, U+2028/9 too
+        return Refused("the story is one paragraph")
+    if len(text) > MAX_STORY:
+        return Refused(f"the story is longer than {MAX_STORY} characters")
+    if sum(c.isalpha() for c in text) < 20:
+        return Refused("the story needs at least 20 letters")
+    if _spaced(text) == _spaced(content.store.get("story") or DEFAULT_STORY):
+        return Refused("the story already says that")
+    before = copy.deepcopy(content.store)
+    content.store["story"] = text
+    return _touch(before, content.store)
+
+
+OPS = (Op("store.set_headline", {"first": Arg("text"), "second": Arg("text")}, _set_headline),
+       Op("store.set_story", {"text": Arg("text")}, _set_story))
