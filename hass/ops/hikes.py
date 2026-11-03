@@ -25,27 +25,41 @@ MAX_AHEAD_DAYS = 400  # a start further out is a question ("check the year"), ne
 MAX_ID_BASE = 56  # leaves room for a "-NNN" suffix inside the 64-character id limit
 
 
-def guest_counts(db_path) -> dict[str, int]:
-    """{event_id: confirmed seats} from a read-only open of the RSVP database. Never selects email or name."""
+# Seats per event plus a count of rows whose party size is missing, not a stored integer, or below 1 (a SUM over
+# such rows would skip, coerce or subtract them and under-count). Never selects email or name.
+GUEST_QUERY = ("SELECT event_id, SUM(party_size), SUM(party_size IS NULL OR typeof(party_size) != 'integer' "
+               "OR party_size < 1) FROM rsvps GROUP BY event_id")
+
+
+def guest_counts_checked(db_path) -> tuple[dict[str, int], set[str]]:
+    """({event_id: confirmed seats}, {event ids with a bad party_size row}) from a read-only open; bad events are
+    left out of the counts, so a caller can say "unavailable" instead of a smaller number."""
     uri = Path(db_path).resolve().as_uri() + "?mode=ro"
     db = sqlite3.connect(uri, uri=True)
     try:
         db.execute("PRAGMA query_only=ON")
-        rows = db.execute("SELECT event_id, SUM(party_size) FROM rsvps GROUP BY event_id").fetchall()
+        rows = db.execute(GUEST_QUERY).fetchall()
     finally:
         db.close()
-    return {event_id: int(seats) for event_id, seats in rows}
+    bad = {event_id for event_id, _seats, n_bad in rows if n_bad}
+    return {event_id: int(seats) for event_id, seats, _n in rows if event_id not in bad}, bad
+
+
+def guest_counts(db_path) -> dict[str, int]:
+    """{event_id: confirmed seats}; an event with a bad party_size row is left out (see guest_counts_checked)."""
+    return guest_counts_checked(db_path)[0]
 
 
 def _seats(ctx, event_id):
-    """Confirmed guests for the event, or a Refused when the count cannot be read (fail closed)."""
+    """Confirmed guests for the event, or a Refused when the count cannot be read or has a bad row (fail closed)."""
     path = ctx.settings.get("guestCountsDb")
     if not isinstance(path, str) or not path:
         return Refused("guest count unavailable")
     try:
-        return guest_counts(path).get(event_id, 0)
+        counts, bad = guest_counts_checked(path)
     except (sqlite3.Error, OSError, ValueError, TypeError):
         return Refused("guest count unavailable")
+    return Refused("guest count unavailable") if event_id in bad else counts.get(event_id, 0)
 
 
 def _guest_warning(ctx, event):
