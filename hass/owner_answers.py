@@ -12,6 +12,8 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 PENDING = ("proposed", "needs-details")  # not applied yet: never described as applied (approval gate)
 UNDER_WAY = "You said yes; it is still being saved, so nothing has changed on the website yet."  # approved, not saved
 SAVED = ("applied", "verified")
+KNOWN = PENDING + ("approved", "reverted", "rejected", "expired", "failed") + SAVED  # = conversation.TRANSITIONS states
+UNKNOWN_STATE = "I can't read where this change is, so I can't say whether the website changed. Please ask for help."
 INSTALL_REASONS = (  # SHOP-2 install failure reasons -> plain words (the file name that follows is dropped)
     ("write failed", "The website files could not be written"),
     ("readback mismatch", "The website files did not read back as written"),
@@ -52,10 +54,11 @@ def did_it_work(change, install, now) -> str:
     `install` entry (SHOP-2) or None. Returns one plain answer."""
     state, summary = change.get("state"), change.get("summary") or "the change"
     if state in PENDING or state is None: return "Waiting for your OK - nothing has changed yet."
+    if state not in KNOWN: return UNKNOWN_STATE  # RF0910-5: a damaged/unknown state is never called unchanged or done
     if state == "approved": return UNDER_WAY  # an install entry never upgrades an unsaved approval to "Done"
     if state == "reverted": return "That change was undone."
     if state in ("rejected", "expired"): return "That draft was closed, so nothing changed."
-    if state not in SAVED:  # failed (or interrupted) before it was saved: the website was never touched
+    if state not in SAVED:  # failed before it was saved: the website was never touched
         return "This was not saved, and the website is unchanged; send the change again to retry."
     install = install if isinstance(install, dict) else {}
     if install.get("state") == "installed":
@@ -120,6 +123,7 @@ def recovered_text(code) -> str:
 def history_words(change, install) -> str:
     """A short where-is-it phrase for one history line."""
     state = change.get("state")
+    if state not in KNOWN and state is not None: return "state unknown - ask for help"  # RF0910-5
     if state in SAVED:
         state = (install if isinstance(install, dict) else {}).get("state")  # same rule as did_it_work
         return "on the website" if state == "installed" else "not on the website yet" if state == "failed" \

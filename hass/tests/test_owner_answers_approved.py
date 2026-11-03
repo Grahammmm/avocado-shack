@@ -56,7 +56,7 @@ class ApprovedAnswerTests(unittest.TestCase):
     def test_approved_lookalike_states_are_not_under_way(self):  # only the exact state, no wording bypass
         for state in ("Approved", "approved ", "APPROVED"):
             with self.subTest(state=state):
-                self.assertEqual(answers.history_words(row(state), INSTALLED), "waiting for your OK")
+                self.assertEqual(answers.history_words(row(state), INSTALLED), "state unknown - ask for help")
                 self.assertNotEqual(answers.did_it_work(row(state), INSTALLED, NOW), UNDER_WAY)
 
 
