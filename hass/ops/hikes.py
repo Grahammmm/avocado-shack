@@ -192,6 +192,10 @@ _CLEAR_CHECKS = ((lambda n, a: n not in _KNOWN, "clear: {} is not a hike field")
                  (lambda n, a: n in a, "{} cannot be set and cleared together"))
 
 
+def _spaced(v):
+    return " ".join(v.split()) if isinstance(v, str) else v
+
+
 def _hike_update(content, args, ctx):
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
@@ -205,6 +209,10 @@ def _hike_update(content, args, ctx):
     if not given and not clear:
         return NeedsDetails(list(UPDATE_FIELDS), f"What should change on {args['id']}? Give at least one of: "
                             + ", ".join(UPDATE_FIELDS))
+    given = {f: v for f, v in given.items() if not (f in ("title", "meetingPoint") + TEXT_FIELDS
+                                                    and isinstance(event.get(f), str) and _spaced(event[f]) == _spaced(v))}
+    if not given and not clear:  # only spacing differs from the stored text: the page would render it identically
+        return Refused(f"hike {args['id']} already says that")
     if "capacity" in given and "noCapacityLimit" in given:
         return NeedsDetails(["capacity", "noCapacityLimit"], "Give either a new capacity or noCapacityLimit true, not both.")
     turning_on = given.get("rsvpEnabled") is True and not event.get("rsvpEnabled")
