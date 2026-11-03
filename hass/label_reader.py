@@ -43,7 +43,8 @@ def _clean(field, value, categories):
     a name/brand with no letter, or only a price/size, is not a name."""
     if not isinstance(value, str) or not value.strip(): return None
     value = value.strip()
-    if any(unicodedata.category(c).startswith("C") for c in value): return None  # control/format characters
+    if any(unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp") for c in value):
+        return None  # control/format characters and line/paragraph separators
     if any(bad in value for bad in FORBIDDEN_TEXT): return None  # the catalog refuses it (content_model._text); never offered
     if len(value) > TEXT_LIMITS["product"][field]: return None
     folded = claims.fold(value).replace("-", " ")
