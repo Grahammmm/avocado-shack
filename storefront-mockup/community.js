@@ -46,8 +46,15 @@ function render(){
 }
 // The live club service adds RSVP counts; a plain static host has no /api, so fall back to the published
 // community.json (same club, events and route ideas). Without the service nobody can RSVP online.
+// The club service's GET (no visitor data) answers acceptsSubmissions:true; that is the only way a form may POST.
+let serviceProbe;
+async function liveData(){try{
+ const r=await fetch('/api/community',{cache:'no-store'});
+ if(!r.ok||!(r.headers.get('Content-Type')||'').includes('application/json'))return null;
+ const data=await r.json();serviceProbe=Promise.resolve(data?.acceptsSubmissions===true);return data}catch{return null}}
+const liveService=()=>serviceProbe??=liveData().then(d=>d?.acceptsSubmissions===true);
 async function clubData(){
- try{const r=await fetch('/api/community',{cache:'no-store'});if(r.ok)return await r.json()}catch{}
+ const live=await liveData();if(live)return live;
  const r=await fetch('/community.json',{cache:'no-store'});if(!r.ok)throw Error();
  const data=await r.json();data.events=(data.events||[]).map(e=>({...e,confirmedGuests:0,remaining:null,rsvpOpen:false}));return data;
 }
@@ -59,6 +66,8 @@ async function load(){try{
 const SIGNUP_CLOSED='Online signup isn’t open yet, so nothing was sent or saved. Please say hello at the Shack instead.';
 const SIGNUP_UNREACHABLE='We couldn’t reach the signup service, so nothing was saved. Please try again later.';
 async function send(form,path,data){const status=form.querySelector('.form-status'),button=form.querySelector('button[type="submit"]');button.disabled=true;status.textContent='Saving…';try{
+ // Without the club service (the published static site) nothing the visitor typed leaves the browser.
+ if(!await liveService()){status.textContent=SIGNUP_CLOSED;return false}
  let r;try{r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}catch{status.textContent=SIGNUP_UNREACHABLE;return false}
  let result=null;if((r.headers.get('Content-Type')||'').includes('application/json'))result=await r.json().catch(()=>null);
  if(!r.ok||!result||typeof result.message!=='string'){status.textContent=result&&typeof result.error==='string'?result.error:SIGNUP_CLOSED;return false}

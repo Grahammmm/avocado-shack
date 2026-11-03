@@ -36,6 +36,8 @@ server.listen(0,'127.0.0.1',async()=>{
  try{
   const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[],bad=[];
   page.on('pageerror',e=>errors.push(e.message));
+  // Without the club service the forms must not send what visitors typed: no POST at all, and no email in any URL.
+  const sent=[];page.on('request',r=>{if(r.method()!=='GET'||r.postData()||r.url().includes('example.com'))sent.push(r.method()+' '+r.url())});
   page.on('response',r=>{if(r.status()>=400&&!new URL(r.url()).pathname.startsWith('/api/'))bad.push(r.status()+' '+r.url())});
   const routes=htmlPages(root).map(f=>'/'+path.relative(root,f).split(path.sep).join('/').replace(/index\.html$/,''));
   assert.deepEqual(routes.sort(),['/','/hike/']);
@@ -77,8 +79,8 @@ server.listen(0,'127.0.0.1',async()=>{
    const status=page.locator('#hike-updates .form-status');await status.filter({hasText:CLOSED}).waitFor();
    assert.doesNotMatch(await status.innerText(),RAW_ERROR);
   }
-  assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);
-  Object.assign(result,{hikeStatic:true,formsFailGracefully:true,sourcingSentence:true,catalog:170,errors});
+  assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
+  Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,sourcingSentence:true,catalog:170,errors});
   fs.writeFileSync(path.join(out,'static-site-QA.json'),JSON.stringify(result,null,1));
   console.log('Static published site passed');console.log(JSON.stringify(result));
  }finally{await browser.close();server.close()}
