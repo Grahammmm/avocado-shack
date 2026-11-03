@@ -65,9 +65,9 @@ class HikeRecapTests(HikeTestCase):
 
     def test_same_recap_again_changes_nothing(self):
         repo = self.completed_repo(recap=OLD)
-        self.assertEqual(self.reason(repo, recap(OLD)), "the operations change nothing")
+        self.assertEqual(self.reason(repo, recap(OLD)), f"hike {HIKE_ID} already says that")
         repo.run(recap())
-        self.assertEqual(self.reason(repo, recap()), "the operations change nothing")
+        self.assertEqual(self.reason(repo, recap()), f"hike {HIKE_ID} already says that")
 
     def test_missing_or_bad_recap_text_is_rejected(self):
         repo = self.completed_repo(recap=OLD)
