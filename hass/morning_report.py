@@ -1,12 +1,14 @@
 """Morning shelf report from the owner's last confirmed availability (AVB-23): never stock counts. Read-only.
     python3 hass/morning_report.py [--today YYYY-MM-DD] [--json]     (exit 0 ok, 1 content unreadable, 2 bad usage)
 A product record it cannot read is named, exit 1.
+Names are shown with spacing collapsed; products sharing a name (case ignored) are listed once, as "Salt (2)".
 """
 
 import argparse
 import json
 import sys
 from datetime import date
+from itertools import groupby
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -47,7 +49,7 @@ def facts(content, today: date) -> dict:
         key = p.get("available") if day is not None and p.get("available") in ("yes", "limited", "no") else "none"  # no check: none confirmed
         counts[key] += 1
         if key in names:
-            names[key].append(str(p.get("name", "")).strip())
+            names[key].append(" ".join(str(p.get("name", "")).split()))
     future = day is not None and day > today  # a wrong clock or a hand-edited store: never a fresh check
     stale = day is not None and not future and (today - day).days > STALE_AFTER_DAYS
     return {"checked_on": day.isoformat() if day else None, "stale": stale, "future": future,
@@ -60,10 +62,13 @@ def render(f: dict) -> str:
     day = f["checked_on"]
     head = "Shelf check: not done yet" if day is None else f"Shelf check: {_day_text(date.fromisoformat(day))}"
     counts = f"Available {f['available']} · Limited {f['limited']} · Sold out {f['sold_out']} · Not confirmed {f['not_confirmed']}"
+    lists = [(label, [g[0] if len(g) == 1 else f"{g[0]} ({len(g)})"  # one entry per shared name, in sorted order
+                      for g in (list(v) for _, v in groupby(f[key], key=str.casefold))])
+             for label, key in (("Limited", "limited_names"), ("Sold out", "sold_out_names"))]
     for cap in range(MAX_NAMES, -1, -1):  # fewer names, never a longer reply, when names are long
         suffix = " - dated after today, check the clock" if f["future"] else " - more than a week ago" if f["stale"] else ""
         lines = [head + suffix, counts]
-        for label, found in (("Limited", f["limited_names"]), ("Sold out", f["sold_out_names"])):
+        for label, found in lists:
             shown = found[:cap] + ([f"+{len(found) - cap} more"] if len(found) > cap else [])
             lines += [f"{label}: {', '.join(shown)}"] if found else []
         lines.append("These are your last shelf checks, not stock counts.")
