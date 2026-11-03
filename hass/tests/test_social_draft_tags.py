@@ -43,7 +43,7 @@ class SocialDraftTagTests(unittest.TestCase):
 
     def test_hash_or_at_not_followed_by_a_word_character_is_kept_verbatim(self):
         for text in ("Avocados at $3 # each", "email us at shop (at) example", "C# notes", "100% Hass",
-                     "Ask at the counter @", "Full-width \uff03tag and \uff20shop"):  # full-width signs are not # or @ to the check
+                     "Ask at the counter @", "Full-width \uff03 tag and \uff20 shop"):  # a full-width sign before a space is kept, like "# each"
             with self.subTest(text=text):
                 out = self.build("p1", product("p1", description=text))
                 self.assertEqual(out, {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough",
