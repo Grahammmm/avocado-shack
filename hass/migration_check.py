@@ -18,7 +18,7 @@ baseline listing, maker, source link or held exclusion has been lost:
 
 It also reports whether the generated files are still byte-identical to the
 pre-migration files (true at migration; later approved edits may change them).
-A misshaped baseline is a named failure (exit 1), never a traceback.
+A misshaped baseline or storefront file is a named failure (exit 1), never a traceback.
 """
 
 from __future__ import annotations
@@ -62,6 +62,26 @@ def _baseline_problem(baseline) -> str | None:
         if not ok(value):
             return f"baseline {path} {what}"
     return None
+
+
+def _held_ids(held_file) -> list[str] | str:
+    """Sorted ids of storefront-mockup/held-products.json, or what is misshaped about it."""
+    if not isinstance(held_file, dict):
+        return "not an object"
+    if not isinstance(products := held_file.get("products"), list):
+        return "products is not a list"
+    for n, p in enumerate(products, 1):
+        if not isinstance(p, dict) or not isinstance(p.get("id"), str):
+            return f"products entry {n} has no text id"
+    return sorted(p["id"] for p in products)
+
+
+def _sample_ids(preview) -> set | str:
+    if not isinstance(preview, dict):
+        return "not an object"
+    if not isinstance(upcoming := preview.get("upcoming", {}), dict):
+        return "upcoming is not an object"
+    return {upcoming.get("id")} - {None}
 
 
 def run_checks(repo: Path) -> tuple[list[str], dict]:
@@ -118,8 +138,10 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
     catalog_js = files[SITE_PREFIX + "catalog-products.js"].decode("utf-8")
     catalog_ids = {r["id"] for r in json.loads(catalog_js[len("const catalog="):].rstrip("\n").rstrip(";"))}
     held_file = json.loads((repo / "storefront-mockup" / "held-products.json").read_text("utf-8"))
-    held_file_ids = sorted(p["id"] for p in held_file["products"])
-    if held_file_ids != held["ids"] or held_file.get("reason") != held["reason"] \
+    held_file_ids = _held_ids(held_file)
+    if isinstance(held_file_ids, str):
+        failures.append(f"storefront-mockup/held-products.json is misshaped: {held_file_ids}")
+    elif held_file_ids != held["ids"] or held_file.get("reason") != held["reason"] \
             or held_file.get("source") != held["source"]:
         failures.append("storefront-mockup/held-products.json no longer matches the held baseline")
     for hid in held["ids"]:
@@ -136,9 +158,11 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
     preview_path = repo / "storefront-mockup" / "hiking-preview.json"
     if preview_path.is_file():
         preview = json.loads(preview_path.read_text("utf-8"))
-        sample_ids = {preview.get("upcoming", {}).get("id")} - {None}
+        sample_ids = _sample_ids(preview)
         event_ids = {e["id"] for e in content.community["events"]}
-        if sample_ids & event_ids:
+        if isinstance(sample_ids, str):
+            failures.append(f"storefront-mockup/hiking-preview.json is misshaped: {sample_ids}")
+        elif sample_ids & event_ids:
             failures.append(f"sample invitation promoted to a real event: {sorted(sample_ids & event_ids)}")
 
     # Generated files vs repo and vs the pre-migration files.
