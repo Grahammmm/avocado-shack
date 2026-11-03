@@ -8,7 +8,8 @@ naming each change the head made since its merge base with --base (none when
 surface, a deletion, a symlink, submodule or non-plain (e.g. executable) file,
 or a template changed without its generated page (or the reverse). Paths only,
 never contents. Exit 0 ok,
-1 outside, 2 usage (bad refs, or no common history). Read-only git in the current directory; nothing is written.
+1 outside, 2 usage (bad refs, no common history, or not inside a git work tree). Read-only git at the
+repository top level (any folder inside it; `diff.relative` is ignored); nothing is written.
 """
 
 from __future__ import annotations
@@ -36,32 +37,43 @@ class Parser(argparse.ArgumentParser):
         raise Usage(message)
 
 
-def git(*args: str, empty_ok: bool = False) -> str:
+def git(*args: str, empty_ok: bool = False, cwd: str | None = None) -> str:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
-    out = subprocess.run(["git", "--literal-pathspecs", *args], capture_output=True, env=env)
+    out = subprocess.run(["git", "--literal-pathspecs", *args], capture_output=True, env=env, cwd=cwd)
     if out.returncode and not (empty_ok and out.returncode == 1 and not out.stdout.strip()):
         raise Usage(f"git {args[0]} failed")
     return out.stdout.decode("utf-8", "surrogateescape")
 
 
-def commit(ref: str) -> str:
+def toplevel() -> str:
+    try:
+        top = git("rev-parse", "--show-toplevel").strip()
+    except Usage:
+        top = ""
+    if not top:
+        raise Usage("not inside a git work tree")
+    return top
+
+
+def commit(ref: str, top: str) -> str:
     if not ref or ref.startswith("-"):
         raise Usage(f"bad ref {ref!r}")
-    return git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").strip()
+    return git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", cwd=top).strip()
 
 
-def merge_base(base: str, head: str) -> str:
-    found = git("merge-base", base, head, empty_ok=True).strip()  # exit 1, no output: unrelated
+def merge_base(base: str, head: str, top: str) -> str:
+    found = git("merge-base", base, head, empty_ok=True, cwd=top).strip()  # exit 1, no output: unrelated
     if not found:
         raise Usage("no common history between --base and --head")
     return found
 
 
-def check(base: str, head: str) -> tuple[int, list[str]]:
-    parts = git("diff", "--name-status", "-z", "--no-renames", merge_base(base, head), head, "--").split("\0")[:-1]
+def check(base: str, head: str, top: str) -> tuple[int, list[str]]:
+    parts = git("diff", "--no-relative", "--name-status", "-z", "--no-renames", merge_base(base, head, top), head,
+                "--", cwd=top).split("\0")[:-1]
     changes = list(zip(parts[0::2], parts[1::2]))  # (status, path)
     modes = {e.split("\t", 1)[1]: e.split(" ", 1)[0]
-             for e in git("ls-tree", "-r", "-z", "--full-tree", head).split("\0") if "\t" in e}
+             for e in git("ls-tree", "-r", "-z", "--full-tree", head, cwd=top).split("\0") if "\t" in e}
     changed = {p for _, p in changes}
     outside = {f"{s} {p}" for s, p in changes if p not in DESIGN or s == "D" or modes.get(p) != PLAIN_MODE}
     for x, y in PAIRS + tuple(pair[::-1] for pair in PAIRS):
@@ -76,7 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--head", required=True)
     try:
         args = parser.parse_args(argv)
-        changed, outside = check(commit(args.base), commit(args.head))
+        top = toplevel()
+        changed, outside = check(commit(args.base, top), commit(args.head, top), top)
     except Usage as exc:
         print(json.dumps({"result": "usage"}))
         print(f"design_check: {exc}", file=sys.stderr)
