@@ -14,7 +14,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass import claims, interpret_check, label_reader, media, owner_answers as answers  # noqa: E402
-from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
+from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -38,7 +38,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'forget <key> - delete a saved note: "forget parking"',
     'memory - list the saved notes: "memory"',
     'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
-    'find <words> - matching products and makers, ids: "find lion\'s mane"',
+    'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
@@ -885,7 +885,18 @@ class Conversation:
         """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
         try:  # the current catalog, read from the writer worktree as _hike_lines does
             wt = editor_mod._load(str(self.sdir))[2]
-            content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
+            content = load_content(wt / "hass" / "content")
+            try:  # AV1322-04: a malformed event/route idea is worded or skipped below; any other problem is unavailable
+                validate(content, wt / "storefront-mockup")
+            except ContentError as exc:
+                if any(not p.startswith(("events[", "routeIdeas[")) for p in exc.problems): raise
+            shown = []  # the fields a reply line repeats get the validator's text checks: no line break/markup injection
+            for key in ("events", "routeIdeas"):
+                for i, r in enumerate(content.community[key] if isinstance(content.community[key], list) else []):
+                    for field in ("id", "title", "status") if isinstance(r, dict) else ():
+                        if r.get(field) is not None and (field != "title" or isinstance(r[field], str)):
+                            checked_text(shown, f"{key}[{i}].{field}", r[field])
+            if shown: raise ContentError(shown)
             has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
             aliases, lines, capped = self.aliases() if has_memory else {}, [], False
             records = {"product": {p["id"]: (p["name"], p["status"]) for p in content.products},
@@ -896,13 +907,30 @@ class Conversation:
                 capped |= len(ids) >= catalog.MAX_CANDIDATES
                 lines += [f"{kind} {i}: {records[kind][i][0]} ({records[kind][i][1]})"
                           + (" (your alias)" if found.get("via") else "") for i in ids]
+            words = catalog._fold(query).split()  # AV1322-04: hikes by start, then route ideas by title
+            def hits(recs): return [r for r in recs if isinstance(r, dict) and isinstance(r.get("title"), str)
+                                    and words and all(w in catalog._fold(r["title"]) for w in words)]
+            def when(event):  # Pacific start, or None when startsAt does not parse (never raises)
+                try:
+                    at = datetime.fromisoformat(event["startsAt"].replace("Z", "+00:00"))
+                    return at.astimezone(LOCAL_TZ) if at.tzinfo else None
+                except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
+                    return None
+            dated = sorted(((e, when(e)) for e in hits(content.community["events"])),
+                           key=lambda pair: (pair[1] is None, pair[1].timestamp() if pair[1] else 0))
+            lines += [f"hike {e.get('id')}: {e['title']} (" + (f"{at:%A %b} {at.day}, {at.hour % 12 or 12}:{at:%M} "
+                      f"{'am' if at.hour < 12 else 'pm'}" if at else "date unreadable") + f", {e.get('status')})"
+                      for e, at in dated]
+            lines += [f"route {r.get('id')}: {r['title']} ({r.get('status')})"
+                      for r in sorted(hits(content.community["routeIdeas"]), key=lambda r: catalog._fold(r["title"]))]
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             self._reply("Catalog unavailable right now; nothing changed.")
             return "find"
         more = len(lines) - FIND_MAX
         tail = [f"… {more} or more; add a word." if capped else f"… {more} more; add a word."] if more > 0 else \
             ["… maybe more; add a word."] if capped else []
-        self._reply("\n".join(lines[:FIND_MAX] + tail) if lines else f'No product or maker matches "{query}".')
+        self._reply("\n".join(lines[:FIND_MAX] + tail) if lines
+                    else f'No product, maker, hike or route idea matches "{query}".')
         return "find"
 
     def _show(self, code, now) -> tuple:

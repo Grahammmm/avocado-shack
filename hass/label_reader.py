@@ -43,8 +43,9 @@ def _clean(field, value, categories):
     a name/brand with no letter, or only a price/size, is not a name."""
     if not isinstance(value, str) or not value.strip(): return None
     value = value.strip()
-    if any(unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp") for c in value):
-        return None  # control/format characters and line/paragraph separators
+    if any(c != "\t" and (unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp")) for c in value):
+        return None  # line breaks (\n \r \v \f U+0085 U+2028 U+2029) and other control/format characters; a tab is spacing
+    value = " ".join(value.split())  # RF1050-8: inner spaces, tabs and NBSP collapse to one space before every check
     if any(bad in value for bad in FORBIDDEN_TEXT): return None  # the catalog refuses it (content_model._text); never offered
     if len(value) > TEXT_LIMITS["product"][field]: return None
     folded = claims.fold(value).replace("-", " ")
