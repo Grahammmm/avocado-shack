@@ -117,6 +117,24 @@ class FixtureChatQueueTests(unittest.TestCase):
         self.assertEqual((run.returncode, self.summary(run)), (0, "queued=2 duplicate=0 history=0 handled=2"))
         texts = [json.loads(r)["text"] for r in run.stdout.splitlines()]
         self.assertEqual([t.split(" ")[0] for t in texts], ["Draft", "Applied"])
+        proposed, = self.query(repo, "conversation", "SELECT proposed_at FROM drafts")
+        self.assertEqual(proposed[0], "2026-11-02T17:00:00+00:00")
+
+    def test_direct_fixture_refuses_yes_before_proposal(self):
+        repo = self.fresh()
+        early = line("q-2", "yes", "2026-11-02T08:59:00-08:00")
+        run = self.run_cli(repo, [PAIR[0], early, {**PAIR[1], "id": "q-3"}])
+        self.assertEqual((run.returncode, run.stderr), (0, ""))
+        texts = [json.loads(r)["text"] for r in run.stdout.splitlines()]
+        self.assertIn("was sent before", texts[1])
+        self.assertTrue(texts[2].startswith("Applied "), texts)
+
+    def test_fixture_clock_advances_so_late_yes_expires(self):
+        repo = self.fresh()
+        late = line("q-2", "yes", "2026-11-03T09:01:00-08:00")
+        run = self.run_cli(repo, [PAIR[0], late])
+        self.assertEqual((run.returncode, run.stderr), (0, ""))
+        self.assertEqual(self.query(repo, "conversation", "SELECT state FROM drafts"), [("expired",)])
 
     def test_symlinked_unsafe_state_dir_refused_without_inbox(self):
         repo = self.fresh()  # open_state resolves links, so the link points at a group-readable dir
