@@ -33,7 +33,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import (  # noqa: E402
-    DEFAULT_HEADLINE, DEFAULT_INTRO, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
+    DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
     checked_on, load_and_validate, shop_today,
 )
 
@@ -118,6 +118,7 @@ def store_slots(store: dict) -> dict[str, str]:
         "store.mapsUrl": html.escape(maps, quote=True),
         "store.introHtml": html.escape(store.get("intro") or DEFAULT_INTRO, quote=False),
         "store.headlineHtml": f"{first}<br><em>{second}</em>",
+        "store.storyHtml": html.escape(store.get("story") or DEFAULT_STORY, quote=False),
     }
 
 
