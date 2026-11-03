@@ -149,6 +149,14 @@ class HeadlineCaptureTests(StoreTestCase):
         for prefix in ("", "desktop:"):
             self.assertIs(result["checks"][prefix + "headlineShown"], True)
 
+    def test_headline_with_doubled_spaces_is_shown(self):
+        spaced = {"first": "Picked  this   morning.", "second": "Grown  close to home."}
+        self.target = preview.target_for(self.store_repo.run((SET, spaced))["records"][0])
+        self.assertEqual(self.target["headline"], [spaced["first"], spaced["second"]])
+        result = self.capture()
+        self.assertEqual((result["ok"], result["error"]), (True, None), result)
+        self.assertIs(result["checks"]["headlineShown"], True)
+
     def test_old_page_with_new_target_fails(self):
         result = self.capture({INDEX: self.old_index})
         self.assertIs(result["checks"]["headlineShown"], False)
