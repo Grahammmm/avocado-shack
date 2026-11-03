@@ -113,7 +113,7 @@ def _producers_json(content: Content) -> bytes:
 def _community_json(content: Content) -> bytes:
     data = dict(content.community["club"])
     data["events"] = content.community["events"]
-    data["routeIdeas"] = content.community["routeIdeas"]
+    data["routeIdeas"] = [i for i in content.community["routeIdeas"] if i["status"] == "idea"]  # AV1322-03: not hidden
     return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
@@ -130,7 +130,14 @@ def store_slots(store: dict) -> dict[str, str]:
         "store.introHtml": html.escape(store.get("intro") or DEFAULT_INTRO, quote=False),
         "store.headlineHtml": f"{first}<br><em>{second}</em>",
         "store.storyHtml": html.escape(store.get("story") or DEFAULT_STORY, quote=False),
+        "store.heroImageHtml": _hero_image(store.get("homeImage")),
     }
+
+
+def _hero_image(home) -> str:  # no store.homeImage: exactly the template's original hero <img>
+    default = ("assets/store.jpg", "Produce and pantry shelves inside Avocado Shack in Morro Bay")
+    image, alt = (home["image"], home["imageAlt"]) if home else default
+    return f'<img class="hero-image" src="{html.escape(image, quote=True)}" alt="{html.escape(alt, quote=True)}">'
 
 
 def render_template(text: str, slots: dict[str, str]) -> str:
