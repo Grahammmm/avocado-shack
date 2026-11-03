@@ -87,12 +87,12 @@ class DrillTests(BackupTestCase):
         for prefix in ("config.json", "conversation.sqlite3", "drafts/", "changes/", "screenshots/"):
             self.assertTrue(any(rel.startswith(prefix) for rel in listed), prefix)
         for rel in listed:
-            if rel != "config.json":
+            if rel not in ("config.json", "content.bundle"):  # restore skips the content bundle (FAV-07)
                 self.assertEqual((new / rel).read_bytes(), (backup / rel).read_bytes(), rel)
         old_cfg = json.loads((state / "config.json").read_text("utf-8"))
         self.assertEqual(json.loads((new / "config.json").read_text("utf-8")),
                          {**old_cfg, "worktree": str(self.drill_wt.resolve())})
-        self.assertEqual(set(tree(new)), set(listed) | {"drafts", "changes", "screenshots"})
+        self.assertEqual(set(tree(new)), set(listed) - {"content.bundle"} | {"drafts", "changes", "screenshots"})
         for path in [new, *new.rglob("*")]:
             self.assertEqual(path.stat().st_mode & 0o777, 0o700 if path.is_dir() else 0o600, path)
         self.assertEqual((tree(state), tree(self.repo.wt), self.count()), before)

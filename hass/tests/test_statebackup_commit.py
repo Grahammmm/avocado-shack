@@ -28,6 +28,8 @@ class ContentCommitTests(BackupTestCase):
         for key, value in changes.items():
             if value is KeyError: doc.pop(key, None)
             else: doc[key] = value
+        if "contentCommit" not in doc and doc["files"].pop("content.bundle", None):  # an old backup has no bundle
+            (backup / "content.bundle").unlink()
         (backup / statebackup.MANIFEST).write_text(json.dumps(doc, indent=2, sort_keys=True), "utf-8")
 
     def row(self, backup):
