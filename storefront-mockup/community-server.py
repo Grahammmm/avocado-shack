@@ -73,7 +73,7 @@ class Handler(SimpleHTTPRequestHandler):
             e['remaining']=max(0,capacity-counts.get(e['id'],0)) if isinstance(capacity,int) and capacity>0 else None
             e['rsvpOpen']=scheduled(e) and bool(e.get('meetingPoint')) and e.get('rsvpEnabled',False)
             events.append(e)
-        self.reply(200,{'clubName':data.get('clubName','North Coast Hiking Club'),'emailConnected':False,'events':events,'routeIdeas':data.get('routeIdeas',[])})
+        self.reply(200,{'clubName':data.get('clubName','North Coast Hiking Club'),'emailConnected':False,'acceptsSubmissions':True,'events':events,'routeIdeas':data.get('routeIdeas',[])})
     def do_POST(self):
         if self.headers.get('Host') not in [f'localhost:{self.server.server_port}',f'127.0.0.1:{self.server.server_port}']:
             return self.reply(403,{'error':'This is a local sandbox.'})

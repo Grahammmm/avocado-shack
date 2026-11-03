@@ -24,6 +24,9 @@ The catalog is derived from photographed products. It is not live inventory. Ava
 ## Local server
 python3 storefront-mockup/community-server.py --port 3101
 
+## Publishable build (AVO-LAUNCH-1)
+This folder is the working tree, not the website: it also holds the local server, QA scripts, screenshots, research logs with third-party contact details, hold notes and the archived commerce preview. Never point a host at it. `python3 hass/sitegen.py --publish DIR` writes the publishable static site into a new or empty DIR outside the repo: the two pages, their scripts and styles, `hiking-preview.json`, a public `community.json` (no sender address), and only the images the pages and the active catalog use. On a plain static host `/hike` falls back from `/api/community` to `community.json`, and the signup forms say online signup is not open yet. `hass/tests/test_publish.py` and `static-site-qa.cjs DIR` check the published folder itself (every page, not just `/`) for commerce, pre-launch copy, contact data and private files; CI runs both. Building is not publishing: nothing here deploys.
+
 ## Checks
 catalog-only-qa.cjs checks all 170 food listings, no commerce UI/copy, town search, category/producer filters, empty search, expandable maker stories, duplicate-free scrolling, and overflow/color consistency at 320, 375, 390, 768, and 1440 pixels. Results: catalog-only-QA.json. Phone and desktop screenshots are catalog-only-*.png. Earlier commerce tests apply to the archived experience, not this revision.
 

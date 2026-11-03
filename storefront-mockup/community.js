@@ -44,14 +44,37 @@ function render(){
  const form=$('#preview-hike-rsvp');
  if(form)form.onsubmit=e=>{e.preventDefault();const status=form.querySelector('.form-status');status.textContent='That’s how the RSVP will work. No details were saved or sent.';form.reset();status.focus();};
 }
+// The live club service adds RSVP counts; a plain static host has no /api, so fall back to the published
+// community.json (same club, events and route ideas). Without the service nobody can RSVP online.
+// The club service's GET (no visitor data) answers acceptsSubmissions:true; that is the only way a form may POST.
+let serviceProbe;
+async function liveData(){try{
+ const r=await fetch('/api/community',{cache:'no-store'});
+ if(!r.ok||!(r.headers.get('Content-Type')||'').includes('application/json'))return null;
+ const data=await r.json();serviceProbe=Promise.resolve(data?.acceptsSubmissions===true);return data}catch{return null}}
+const liveService=()=>serviceProbe??=liveData().then(d=>d?.acceptsSubmissions===true);
+async function clubData(){
+ const live=await liveData();if(live)return live;
+ const r=await fetch('/community.json',{cache:'no-store'});if(!r.ok)throw Error();
+ const data=await r.json();data.events=(data.events||[]).map(e=>({...e,confirmedGuests:0,remaining:null,rsvpOpen:false}));return data;
+}
 async function load(){try{
- const responses=await Promise.all([fetch('/api/community',{cache:'no-store'}),fetch('/hiking-preview.json',{cache:'no-store'}).catch(()=>null)]);
- if(!responses[0].ok)throw Error();
- club=await responses[0].json();preview=responses[1]?.ok?await responses[1].json().catch(()=>null):null;render();
+ const [data,previewResponse]=await Promise.all([clubData(),fetch('/hiking-preview.json',{cache:'no-store'}).catch(()=>null)]);
+ club=data;preview=previewResponse?.ok?await previewResponse.json().catch(()=>null):null;render();
 }catch{$('#upcoming-hikes').innerHTML='<p>The hike calendar isn’t available right now. Please try again shortly.</p>';$('#past-hikes').innerHTML='<p class="club-small">Past outings will appear when the calendar is available.</p>'}}
-async function send(form,path,data){const status=form.querySelector('.form-status'),button=form.querySelector('button[type="submit"]');button.disabled=true;status.textContent='Saving…';try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw Error(result.error||'We couldn’t save that. Please try again.');status.textContent=result.message;form.reset();return true}catch(e){status.textContent=e.message==='Failed to fetch'?'The local service isn’t available. Please try again.':e.message;return false}finally{button.disabled=false}}
+// Visitors only ever see these sentences or the service's own plain message, never a browser or parser error.
+const SIGNUP_CLOSED='Online signup isn’t open yet, so nothing was sent or saved. Please say hello at the Shack instead.';
+const SIGNUP_UNREACHABLE='We couldn’t reach the signup service, so nothing was saved. Please try again later.';
+async function send(form,path,data){const status=form.querySelector('.form-status'),button=form.querySelector('button[type="submit"]');button.disabled=true;status.textContent='Saving…';try{
+ // Without the club service (the published static site) nothing the visitor typed leaves the browser.
+ if(!await liveService()){status.textContent=SIGNUP_CLOSED;return false}
+ let r;try{r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}catch{status.textContent=SIGNUP_UNREACHABLE;return false}
+ let result=null;if((r.headers.get('Content-Type')||'').includes('application/json'))result=await r.json().catch(()=>null);
+ if(!r.ok||!result||typeof result.message!=='string'){status.textContent=result&&typeof result.error==='string'?result.error:SIGNUP_CLOSED;return false}
+ status.textContent=result.message;form.reset();return true
+}finally{button.disabled=false}}
 if($('#hike-updates'))$('#hike-updates').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:false,hikes:true})};
 if($('#community-newsletter'))$('#community-newsletter').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:true,hikes:e.currentTarget.hikes.checked})};
-if($('#upcoming-hikes'))$('#upcoming-hikes').onclick=e=>{const button=e.target.closest('[data-rsvp]');if(!button)return;const event=club.events.find(x=>x.id===button.dataset.rsvp);if(!event)return;show(`<p class="label">NORTH COAST HIKING CLUB</p><h2>Join the next hike.</h2><h3>${esc(event.title)}</h3><p>${esc(dateLabel(event))}</p>${details(event)}<form id="hike-rsvp"><label for="rsvp-name">Your name</label><input id="rsvp-name" name="name" autocomplete="name" maxlength="120" required><label for="rsvp-email">Email address</label><input id="rsvp-email" name="email" type="email" autocomplete="email" required><label for="rsvp-party">People in your group, including you</label><select id="rsvp-party" name="partySize">${Array.from({length:Math.min(6,event.remaining??6)},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}</select><p class="setup-note">This RSVP is saved in the local sandbox. Email confirmations are not connected.</p><button class="button" type="submit">Save my RSVP ↗</button><p class="form-status" role="status"></p></form>`);$('#hike-rsvp').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const saved=await send(f,'/api/community/rsvps',{eventId:event.id,name:f.elements.name.value,email:f.elements.email.value,partySize:Number(f.elements.partySize.value)});if(saved)load()}};
+if($('#upcoming-hikes'))$('#upcoming-hikes').onclick=e=>{const button=e.target.closest('[data-rsvp]');if(!button)return;const event=club.events.find(x=>x.id===button.dataset.rsvp);if(!event)return;show(`<p class="label">NORTH COAST HIKING CLUB</p><h2>Join the next hike.</h2><h3>${esc(event.title)}</h3><p>${esc(dateLabel(event))}</p>${details(event)}<form id="hike-rsvp"><label for="rsvp-name">Your name</label><input id="rsvp-name" name="name" autocomplete="name" maxlength="120" required><label for="rsvp-email">Email address</label><input id="rsvp-email" name="email" type="email" autocomplete="email" required><label for="rsvp-party">People in your group, including you</label><select id="rsvp-party" name="partySize">${Array.from({length:Math.min(6,event.remaining??6)},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}</select><p class="setup-note">Your RSVP goes on the club’s list. No confirmation email is sent.</p><button class="button" type="submit">Save my RSVP ↗</button><p class="form-status" role="status"></p></form>`);$('#hike-rsvp').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const saved=await send(f,'/api/community/rsvps',{eventId:event.id,name:f.elements.name.value,email:f.elements.email.value,partySize:Number(f.elements.partySize.value)});if(saved)load()}};
 if($('#upcoming-hikes'))load();
 })();
