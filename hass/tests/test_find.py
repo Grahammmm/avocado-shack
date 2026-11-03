@@ -77,11 +77,11 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.assertEqual((len(lines), lines[-1]), (11, "… 10 or more; add a word."))
 
     def test_no_match_and_usage(self):
-        self.assertEqual(self.find("find Zzqx Nothing"), ['No product or maker matches "Zzqx Nothing".'])
+        self.assertEqual(self.find("find Zzqx Nothing"), ['No product, maker, hike or route idea matches "Zzqx Nothing".'])
         for text in ("find", "Find.", "find    ", "find " + "x" * 61):
             with self.subTest(text=text[:12]):
                 self.assertEqual(self.find(text), [conversation.FIND_USAGE])
-        self.assertEqual(self.find("find " + "x" * 60), [f'No product or maker matches "{"x" * 60}".'])
+        self.assertEqual(self.find("find " + "x" * 60), [f'No product, maker, hike or route idea matches "{"x" * 60}".'])
 
     def test_hidden_and_held_records_show_their_status(self):
         def prods(doc):
