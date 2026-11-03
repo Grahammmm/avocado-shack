@@ -1,7 +1,7 @@
 """AVB-24 (F03): private price and margin calculator (percentages to 2 decimals). One purchase line (pack cost, units,
 shrink %, target margin % of price) becomes cost per sellable unit and a suggested price, every step shown, exact
 Decimal cents rounded up only at the end. Pure (no file, content or network access); a suggestion only, it never stores or publishes a price.
-    python3 hass/margins.py --pack-cost 24.00 --units 12 --shrink 5 --margin 35 [--round-to 0.99] [--json]"""
+    python3 hass/margins.py --pack-cost 24.00 --units 12 --shrink 5 [--margin 35 [--round-to 0.99] | --price 3.49] [--json]"""
 import argparse
 import json
 import re
@@ -69,18 +69,38 @@ def compute(pack_cost, units, shrink, margin, round_to=None):
             "sellable_cost": _show(sellable), "price": _show(price), "margin_actual_pct": f"{actual:f}", "note": NOTE}
 
 
+def check(pack_cost, units, shrink, price):  # reverse question: the margin a current shelf price actually gives
+    pack = _num("pack cost", pack_cost, "0.01", "100000.00", places=2)
+    n, s, p = _num("units", units, 1, 10000, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("price", price, "0.01", "100000.00", places=2)
+    with localcontext() as ctx:  # same intermediates and floor as compute's margin_actual
+        ctx.prec, ctx.rounding = 60, ROUND_CEILING
+        sellable = (unit := pack / n) / (1 - s / 100)
+        actual = ((p - sellable) / p * 100).quantize(D("0.1"), ROUND_FLOOR)
+    steps = [{"name": a, "expression": b, "value": _show(c)} for a, b, c in (("unit_cost", f"{_show(pack)} / {n:f}", unit),
+             ("sellable_cost", f"{_show(unit)} / (1 - {s:f}/100)", sellable), ("price", "given", p))]
+    steps.append({"name": "margin_actual", "expression": f"({_show(p)} - {_show(sellable)}) / {_show(p)}", "value": f"{actual:f}%"})
+    return {"inputs": {"pack_cost": _show(pack), "units": f"{n:f}", "shrink_pct": f"{s:f}", "price": _show(p)}, "steps": steps,
+            "unit_cost": _show(unit), "sellable_cost": _show(sellable), "price": _show(p), "margin_actual_pct": f"{actual:f}",
+            "below_cost": p < sellable, "note": NOTE}
+
+
 def render(r):
-    return "\n".join([f"{s['name']} = {s['expression']} = {s['value']}" for s in r["steps"]] + [r["note"]])
+    below = ["below_cost = yes: this price does not cover the cost per sellable unit"] if r.get("below_cost") is True else []
+    return "\n".join([f"{s['name']} = {s['expression']} = {s['value']}" for s in r["steps"]] + below + [r["note"]])
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="margins", description="Private price and margin calculator (suggestion only).")
-    for flag in ("--pack-cost", "--units", "--shrink", "--margin", "--round-to"):
-        ap.add_argument(flag, required=flag != "--round-to")
+    for flag in ("--pack-cost", "--units", "--shrink", "--margin", "--round-to", "--price"):
+        ap.add_argument(flag, required=flag in ("--pack-cost", "--units", "--shrink"))
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+    if (a.margin is None) == (a.price is None):
+        ap.error("give --margin or --price, not both")
+    if a.price is not None and a.round_to is not None:
+        ap.error("--round-to goes with --margin")
     try:
-        r = compute(a.pack_cost, a.units, a.shrink, a.margin, a.round_to)
+        r = compute(a.pack_cost, a.units, a.shrink, a.margin, a.round_to) if a.price is None else check(a.pack_cost, a.units, a.shrink, a.price)
     except InputError as e:
         print(f"margins: error: {e}", file=sys.stderr)
         return 2
