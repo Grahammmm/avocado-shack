@@ -102,7 +102,7 @@ def _producers_json(content: Content) -> bytes:
 def _community_json(content: Content) -> bytes:
     data = dict(content.community["club"])
     data["events"] = content.community["events"]
-    data["routeIdeas"] = content.community["routeIdeas"]
+    data["routeIdeas"] = [i for i in content.community["routeIdeas"] if i["status"] == "idea"]  # AV1322-03: not hidden
     return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
