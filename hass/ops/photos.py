@@ -22,7 +22,8 @@ from hass.ops import Arg, Op, Refused, Touched
 from hass.ops.catalog import _product
 
 _IMAGE_EXT = (".jpg", ".jpeg", ".png", ".heic", ".heif", ".gif", ".webp", ".tif", ".tiff")
-_CAMERA_RE = re.compile(r"^(img|dsc|dscn|pxl|photo|image)[_ -]?\d{2,}")
+_CAMERA_RE = re.compile(r"^(?:(?:img|dsc|dscn|pxl|photo|image)[_ -]?\d{2,}|img[_ -]?e\d{3,}|(?:mvimg|pano)[_ -]?\d{6,}"
+                        r"|_dsc\d{3,}|gopr\d{3,}|g[xh]\d{5,}|dji[_ -]?\d{3,}|p\d{7})")
 _APP_DEFAULT_RE = re.compile(r"^(screenshot|screen shot|screen recording|whatsapp image|signal)[ _-]*\d{4}[-_.]?\d{2}[-_.]?\d{2}")
 _BARE_SCREEN_RE = re.compile(r"^(screenshot|screen shot)( ?\(\d{1,3}\))?$")
 _PLACEHOLDERS = {"photo", "image", "picture", "pic", "img", "product", "product photo", "alt", "n/a", "na", "none", "todo",
