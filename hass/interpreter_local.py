@@ -4,6 +4,7 @@ LocalInterpreter(base_url, model, system_prompt).interpret(text, pending) sends 
 http URL and returns the decoded JSON object the model wrote, or {"unsupported": FAILED} on any failure. The failure
 reason is kept only as a short code in `last_error` (never the URL, prompt or owner text; `request` means the text or
 pending list could not be encoded); nothing is logged.
+RF1240-20: repeated keys and NaN/Infinity in a reply are a failed call (`not-json` in the envelope, `shape` in content).
 Not wired into any service: the operator names the existing local model; nothing is pulled or changed here.
 """
 import json, urllib.error, urllib.parse, urllib.request  # noqa: E401
@@ -55,6 +56,17 @@ def urllib_transport(url, body, headers, timeout):
 
 class _Failed(Exception):
     pass
+
+
+def _pairs(pairs):  # a key repeated in one object is refused, never read as its last value
+    if len({key for key, _ in pairs}) != len(pairs): raise ValueError("repeated key")
+    return dict(pairs)
+
+
+def _constant(name): raise ValueError("non-finite constant")  # noqa: E704 - NaN, Infinity, -Infinity
+
+
+def _strict(text): return json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant)  # noqa: E704
 
 
 class LocalInterpreter:
@@ -109,7 +121,7 @@ class LocalInterpreter:
         if not isinstance(raw, (bytes, bytearray)): raise _Failed("shape")
         if len(raw) > MAX_BODY: raise _Failed("too-large")
         try:
-            reply = json.loads(raw)
+            reply = _strict(raw)
         except (ValueError, RecursionError):
             raise _Failed("not-json") from None
         if not isinstance(reply, dict) or reply.get("done") is not True: raise _Failed("shape")
@@ -117,7 +129,7 @@ class LocalInterpreter:
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str): raise _Failed("shape")
         try:
-            result = json.loads(content)
+            result = _strict(content)
         except (ValueError, RecursionError):
             raise _Failed("shape") from None
         if not isinstance(result, dict): raise _Failed("shape")
