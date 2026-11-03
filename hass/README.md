@@ -158,7 +158,7 @@ Limits: H13 is partial; the home-page headline slot is built (`store.set_headlin
 - Health `--min-free-mb N` reports `disk-low` as `state: <n> MB free` or `backups: <n> MB free`, never a path (AV1737-14). The `inbox-integrity` support entry names the backup's inbox snapshot and the restore drill; live inbox replacement stays attended (AV1737-15).
 - `docs/hass/LIMITS.md` lists the owner-facing limits (photo size and types, things per message, list and text sizes); `hass/tests/test_limits_doc.py` checks every number against its code constant.
 
-Limits: H17 and H14 are partial. The support path for each health problem is `docs/hass/SUPPORT.md`.
+Limits: H17 and H14 are done at fixture level against their Done-when (2026-11-02 audit); live use waits on the owner channel (H07/H08), and H14 guest totals need `guestCountsDb` set to the real RSVP database in the private config. The support path for each health problem is `docs/hass/SUPPORT.md`.
 
 ## H20 prep: private state backup and restore drill
 
@@ -189,7 +189,7 @@ No network, no Git writes, no deletion of source data. Limits: drill on isolated
 - `seal()` / `unseal()`: Mac → Agent Orange envelope `{v, ts, nonce, body, mac}`, HMAC-SHA256 over canonical JSON with a key of at least 32 bytes. `unseal` raises `EnvelopeError` `shape`, `version`, `mac`, `stale` (more than 300 s off) or `replay` (nonce already in `seen`); only a valid envelope adds its nonce (BL-AV-4 persists `seen`).
 - `BlueBubblesSender(base_url, password_file)`: an `Outbox` adapter that POSTs `/api/v1/message/text` (`chatGuid`, fresh `tempGuid`, `message`, `method: apple-script`) to `http(s)://127.0.0.1|localhost:<port>` only, without proxies or redirects. The password file must be a regular 0600-style file (no group/other access) and is read per send. Failures raise `BridgeError(code, status, path)`; no error carries the URL, query string or password. A reply with attachments (the H06 preview PNG) is sent as its text plus one fixed `PICTURE_NOTE` line, so the outbox moves on; the picture is never read or sent and stays in the private state dir. Inbound attachments reach `Conversation` as a count (see `normalize`).
 
-## H16 part: durable inbound queue
+## H16: durable inbound queue
 
 `hass/inbox.py` `Inbox(state_dir, start_at=None)` keeps `<state>/inbox.sqlite3` (0600) next to the conversation store. Every inbound message is written there before any processing; nothing is backfilled as a command.
 
@@ -199,7 +199,7 @@ No network, no Git writes, no deletion of source data. Limits: drill on isolated
 - Payloads are erased once a message is done (history rows never store one); retention periods stay H21.
 - `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart; nonces older than one day are pruned when a new one is recorded.
 
-No worker, timer, CLI or live adapter: fixtures only.
+`hass/receiver.py` and `hass/fixture_chat.py --queue` feed and drain the queue on fixtures (H16 done at fixture level, 2026-11-02 audit). No live adapter or long-running worker exists to restart; that and Mac-offline catch-up are H07/H08/H18.
 
 H10 label reader (`hass/label_reader.py`, loopback local model, not wired into a service): for a new photo question it may add `The label looks like: <brand> <name> (<category>). Is that right?`; it is only a question, ops stay `product.set_photo {photo}`, and maker, organic and origin are never read from a photo.
 
