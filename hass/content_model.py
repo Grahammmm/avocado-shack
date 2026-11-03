@@ -54,7 +54,8 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story")  # selection check; intro; headline; story; absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage")  # all absent by default
+HOME_IMAGE_RE = re.compile(r"^assets/products/photo-[0-9a-f]{16}\.(jpg|png)$")  # the path photos.install writes
 MAX_STORY = 400  # characters in the optional store.story (the "COME ON IN" paragraph)
 DEFAULT_STORY = "Michael Wolfe brings a produce buyer’s curiosity and long-standing grower relationships to the Shack. The idea is simple: connect friends and neighbors with good food and the people who grow and make it."  # shown when store.story is absent
 MAX_HEADLINE_LINE, DEFAULT_HEADLINE = 40, ("A little market.", "A lot to discover.")  # per line; <h1> when absent
@@ -426,6 +427,16 @@ def validate_store(problems, store, today: date | None = None):
             _text(problems, f"store.headline[{i}]", line, limit=MAX_HEADLINE_LINE)
             if isinstance(line, str) and sum(c.isalpha() for c in line) < 2:
                 problems.append(f"store.headline[{i}]: needs at least 2 letters")
+    if "homeImage" in store:
+        home = store["homeImage"]
+        if not isinstance(home, dict) or set(home) != {"image", "imageAlt"}:
+            problems.append("store.homeImage: must be an object with exactly image and imageAlt")
+        elif not isinstance(home["image"], str) or not HOME_IMAGE_RE.fullmatch(home["image"]):
+            problems.append("store.homeImage.image: must be assets/products/photo-<16 hex>.<jpg|png>")
+        if isinstance(home, dict) and "imageAlt" in home:
+            _text(problems, "store.homeImage.imageAlt", home["imageAlt"], limit=TEXT_LIMITS["product"]["imageAlt"])
+            if isinstance(home["imageAlt"], str) and sum(c.isalpha() for c in home["imageAlt"]) < 3:
+                problems.append("store.homeImage.imageAlt: needs at least 3 letters")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):

@@ -141,7 +141,7 @@ export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-124
 - `name` and `schemaVersion` are not arguments (unknown argument → `invalid`). Text kinds reject markup, `$` and control characters as usual.
 - Undo: the store is one record, so `undo` of an older store change after a later one gives `conflict: store store changed after <change_id>`; undo the newest first.
 
-Limits: H13 is partial; the home-page headline slot is built (`store.set_headline` in `hass/ops/home.py`: two lines of at most 40 characters and 2 letters each, the second emphasised; undo restores the default words); other home-page copy and image slots are not built.
+Limits: H13 is partial; the home-page headline slot is built (`store.set_headline` in `hass/ops/home.py`: two lines of at most 40 characters and 2 letters each, the second emphasised; undo restores the default words); the home-page image slot is built (`store.set_home_image`: one hero `<img>` showing a stored photo's metadata-free web copy, `imageAlt` required as for `product.set_photo`; no image keeps today's picture; undo removes it); other home-page copy slots are not built.
 
 ## H17: status, pause and resume (with H14 guest totals)
 
