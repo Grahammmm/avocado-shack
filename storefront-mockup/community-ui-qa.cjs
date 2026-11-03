@@ -9,9 +9,9 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  // Real integration checks are confined to the temporary fixture server.
  // AV1737-11: a full hike says so with no RSVP button; one place left is singular. Only qa-hike's fields are overridden.
  const api=process.env.COMMUNITY_TEST_URL+'/api/community',qaHike=()=>p.locator('.hike-event').filter({hasText:'QA trail fixture'});
- const shown=async fields=>{
+ const shown=async(fields,id='qa-hike')=>{
   await p.unroute(api);
-  await p.route(api,async r=>{const res=await r.fetch(),j=await res.json();Object.assign(j.events.find(e=>e.id==='qa-hike'),fields);await r.fulfill({response:res,json:j})});
+  await p.route(api,async r=>{const res=await r.fetch(),j=await res.json();Object.assign(j.events.find(e=>e.id===id),fields);await r.fulfill({response:res,json:j})});
   await p.goto(process.env.COMMUNITY_TEST_URL+'/hike');await qaHike().waitFor();
   const buttons=qaHike().locator('[data-rsvp]');
   return {text:await qaHike().innerText(),count:await buttons.count(),buttons};
@@ -35,9 +35,31 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  check(await cal.count()===1&&await cal.getAttribute('download')==='qa-hike.ics'&&(await cal.innerText()).trim()==='Add to calendar'&&href.startsWith('data:text/calendar;charset=utf-8,'),'Upcoming hike lacks its calendar link');
  check(flat.includes('\r\nSUMMARY:QA trail fixture Hike\\; bring water\\, snacks\\\\ & hats\r\n')&&flat.includes('\r\nLOCATION:North lot\\nGate 2\r\n')&&/\r\nDTSTART:\d{8}T\d{6}Z\r\n/.test(ics)&&flat.includes(`\r\nURL:${process.env.COMMUNITY_TEST_URL}/hike#qa-hike\r\n`),'Calendar text wrong: '+JSON.stringify(ics));
  check(ics.split('\r\n').every(l=>Buffer.byteLength(l)<=75),'Calendar line over 75 octets');
- check(await p.locator('#upcoming-hikes .hike-event a.hike-ics').count()===3&&await p.locator('#past-hikes a.hike-ics').count()===0,'Calendar links not on exactly the upcoming scheduled hikes');
+ check(await p.locator('#upcoming-hikes .hike-event a.hike-ics').count()===5&&await p.locator('#past-hikes a.hike-ics').count()===0,'Calendar links not on exactly the upcoming scheduled hikes');
  await shown({status:'cancelled'});
  check(await qaHike().locator('.label').innerText()==='CANCELLED'&&await qaHike().locator('a.hike-ics').count()===0,'Cancelled hike offered a calendar link');
+ // AV0207-01: owner-set logistics in a fixed order, escaped, in the card and the RSVP dialog; an unset field shows nothing.
+ const byTitle=t=>p.locator('.hike-event').filter({has:p.locator('h3',{hasText:t})}),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+ const facts=l=>l.evaluate(n=>[...n.querySelectorAll('.hike-facts dt')].map(d=>d.textContent+'='+d.nextElementSibling.textContent));
+ const FULL=['Meet=QA full meeting point','Meet at=8:45 am','Address=QA Road 1, Los Osos · Directions','Start=9:00 am','Back=Around 12:30 pm','Distance=4 miles','Pace / terrain=Easy','Time on trail=3 hours','Bring along=Water and a snack'];
+ await shown({});
+ const full=byTitle('QA all logistics'),bare=byTitle('QA no logistics'),dir=full.locator('.hike-facts a');
+ check(same(await facts(full),FULL),'Full hike rows wrong: '+JSON.stringify(await facts(full)));
+ check(await full.locator('.hike-facts + p.hike-access').count()===1&&(await full.locator('.hike-access').innerText()).trim()==='QA access: no pets.','Access note missing after the facts');
+ check(await dir.count()===1&&await dir.getAttribute('href')==='https://www.google.com/maps/search/?api=1&query=QA%20Road%201%2C%20Los%20Osos'&&await dir.getAttribute('target')==='_blank'&&await dir.getAttribute('rel')==='noopener'&&await dir.getAttribute('class')==='text-link'&&(await dir.innerText()).trim()==='Directions','Directions link wrong');
+ const bareText=await bare.innerText();
+ check(same(await facts(bare),['Meet=QA meeting point','Distance=2 miles','Pace / terrain=Flat','Time on trail=1 hour'])&&await bare.locator('.hike-access').count()===0&&!/Address|Directions|Bring along|Meet at|undefined|null/.test(bareText),'Hike without logistics gained rows: '+bareText);
+ await full.locator('[data-rsvp]').click();await p.locator('#rsvp-name').waitFor();
+ const dlg=p.locator('#dialog-content');
+ check(same(await facts(dlg),FULL)&&await dlg.locator('.hike-facts + p.hike-access').count()===1&&(await dlg.locator('.hike-access').innerText()).trim()==='QA access: no pets.','RSVP dialog lacks the logistics: '+JSON.stringify(await facts(dlg)));
+ await p.keyboard.press('Escape');
+ const addr='QA 1 & 2 <b>Main</b> "St" #5';
+ await shown({bring:'   ',meetTime:'',returnTime:null,walkTime:7,accessNote:' \n ',meetingAddress:addr});
+ const qd=qaHike().locator('.hike-facts a'),qhref=await qd.getAttribute('href')||'';
+ check(same(await facts(qaHike()),['Meet=QA meeting point',`Address=${addr} · Directions`,'Distance=3 miles','Pace / terrain=Gentle pace','Time on trail=2 hours'])&&await qaHike().locator('.hike-facts b').count()===0&&await qaHike().locator('.hike-access').count()===0,'Blank fields shown or address not escaped: '+JSON.stringify(await facts(qaHike())));
+ check(qhref.startsWith('https://www.google.com/maps/search/?api=1&query=')&&new URL(qhref).searchParams.get('query')===addr&&new URL(qhref).hash==='','Directions query does not decode to the address: '+qhref);
+ await shown({status:'cancelled'},'qa-full');
+ check(await full.locator('.label').innerText()==='CANCELLED'&&same(await facts(full),FULL)&&await full.locator('.hike-access').count()===1&&await full.locator('[data-rsvp]').count()===0,'Cancelled hike lost its rows or kept RSVP');
  await p.unroute(api);
  check(!errors.length,'Page errors while overriding places: '+JSON.stringify(errors));
  // AV2022-12: a real hike naming a route idea shows its title and trail link (display only). Fixture payload only.
@@ -98,6 +120,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  check(await p.locator('.trail-journal-entry').count()===2,'Archive examples missing');
  check((await p.locator('#history-context').innerText()).includes('not confirmed'),'Archive appears to be real history');
  check(!await p.locator('.hike-route').count(),'Sample invitation/archive gained a real route line');
+ check(!await p.locator('.hike-facts,.hike-access').count()&&await p.locator('.trail-logistics dt').count()===3,'Sample invitation gained real-hike logistics rows');
  const posts=[];p.on('request',r=>{if(r.method()==='POST')posts.push(r.url())});
  await p.locator('#preview-hike-rsvp button').click();
  check(await p.locator('#preview-rsvp-name').evaluate(e=>!e.validity.valid),'Missing-name validation');
