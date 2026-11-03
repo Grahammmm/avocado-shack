@@ -15,6 +15,7 @@ from hass.tests.test_editor import git
 from hass.tests.test_store_ops import INDEX, REVERT, StoreTestCase, _req
 
 SET, CLEAR, TEXT = "store.set_notice", "store.clear_notice", "Closed Thanksgiving Day"
+STORY, NEW_STORY = "store.set_story", "Michael stocks the shelves with fruit from growers he knows by name."
 STORE = load_content().store
 
 
@@ -101,6 +102,14 @@ class NoticeOpTests(StoreTestCase):
         self.assertEqual(repo.read(INDEX), original)
         self.assertEqual(result(repo, CLEAR, {}), ("refused", "there is no notice"))
 
+    def test_store_edit_after_the_notice_expired_expects_no_notice(self):
+        repo = self.repo()
+        repo.run((SET, {"text": TEXT, "until": day(0)}))
+        record = repo.run((STORY, {"text": NEW_STORY}))["records"][0]
+        self.assertEqual(record["after"]["notice"], {"text": TEXT, "until": day(0)})
+        self.assertEqual(preview.target_for(record)["notice"], TEXT)  # still its last day
+        self.assertIsNone(preview.target_for(record, shop_today() + timedelta(days=1))["notice"])  # sitegen omits it
+
     def test_ampersand_and_quote_render_escaped(self):
         slot = sitegen.store_slots({**STORE, "notice": {"text": 'Salt & "pepper" day', "until": day(0)}})
         self.assertEqual(slot["store.noticeHtml"],
@@ -163,6 +172,16 @@ class NoticeCaptureTests(StoreTestCase):
         self.assertEqual((result["checks"]["noticeShown"], result["error"]), (False, "check failed: noticeShown"))
         stale = self.store_repo.read(INDEX).replace(f'data-until="{day(0)}"'.encode(), f'data-until="{day(-1)}"'.encode())
         self.assertIs(self.capture({INDEX: stale})["checks"]["noticeShown"], False)  # the page script hides it
+
+    def test_store_edit_after_the_notice_expired_passes_without_it(self):
+        record = self.store_repo.run((STORY, {"text": NEW_STORY}))["records"][0]
+        tomorrow = shop_today() + timedelta(days=1)  # setUp's notice ends today
+        self.target = preview.target_for(record, tomorrow)
+        page = sitegen.render(load_content(self.store_repo.wt / "hass" / "content"), today=tomorrow)[INDEX]
+        self.assertNotIn(b'class="home-notice"', page)
+        result = self.capture({INDEX: page})
+        self.assertEqual((result["ok"], result["error"], result["checks"]["storyShown"]), (True, None, True), result)
+        self.assertNotIn("noticeShown", result["checks"])
 
 
 if __name__ == "__main__":

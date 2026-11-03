@@ -11,6 +11,8 @@ A damaged change record gives the target ``{"kind": "unreadable"}``, refused bef
 import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
+from hass.content_model import shop_today
+
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
 VIEWPORTS = ("phone", "desktop")
@@ -46,7 +48,14 @@ def _readable(record) -> bool:
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
 
 
-def target_for(record: dict) -> dict:
+def _live_notice(notice, today) -> str | None:
+    """The notice text sitegen shows: none once its last day is before the shop's today (sitegen._notice)."""
+    notice = notice or {}
+    live = isinstance(notice.get("until"), str) and notice["until"] >= (today or shop_today()).isoformat()
+    return notice.get("text") if live else None
+
+
+def target_for(record: dict, today=None) -> dict:
     """The screenshot target for a touched record (the after value decides what the checks expect)."""
     if not _readable(record):
         return {"kind": "unreadable"}
@@ -61,7 +70,7 @@ def target_for(record: dict) -> dict:
         return {"kind": "store", "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
-                "homeImage": (after.get("homeImage") or {}).get("image"), "notice": (after.get("notice") or {}).get("text")}
+                "homeImage": (after.get("homeImage") or {}).get("image"), "notice": _live_notice(after.get("notice"), today)}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
     return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
             "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
