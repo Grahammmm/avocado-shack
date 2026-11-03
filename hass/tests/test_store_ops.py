@@ -190,7 +190,7 @@ class StoreUndoAndPreviewTests(StoreTestCase):
         repo = self.repo()
         draft = repo.prepare(_req((SET_HOURS, {"hours": NEW_HOURS})))["draft"]
         self.assertEqual(preview.target_for(draft["records"][0]), {"kind": "store", "hours": NEW_HOURS,
-                         "streetAddress": "2190 Main Street", "town": "Morro Bay", "headline": [], "story": None})
+                         "streetAddress": "2190 Main Street", "town": "Morro Bay", "headline": [], "story": None, "homeImage": None})
         address = repo.prepare(_req((SET_ADDRESS, {"town": "Cayucos"})))["draft"]
         self.assertEqual(preview.target_for(address["records"][0])["kind"], "store")
 
