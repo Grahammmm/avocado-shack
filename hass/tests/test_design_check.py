@@ -135,15 +135,18 @@ class DesignCheckTests(unittest.TestCase):
 
         def fake(cmd, **kw):
             calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, 1, b"", b"")
+            return subprocess.CompletedProcess(cmd, 0 if "--show-toplevel" in cmd else 1,
+                                               b"/top\n" if "--show-toplevel" in cmd else b"", b"")
 
+        top = ["git", "--literal-pathspecs", "rev-parse", "--show-toplevel"]
         with mock.patch.object(design_check.subprocess, "run", side_effect=fake), \
                 mock.patch("sys.stdout"), mock.patch("sys.stderr"):
             self.assertEqual(design_check.main(["--base", "--output=x", "--head", "HEAD"]), 2)
             self.assertEqual(design_check.main(["--base=--output=x", "--head", "HEAD"]), 2)
-            self.assertEqual(calls, [])
+            self.assertEqual(calls, [top])
             self.assertEqual(design_check.main(["--base", "nope", "--head", "HEAD"]), 2)
-        self.assertEqual(calls, [["git", "--literal-pathspecs", "rev-parse", "--verify", "--quiet", "nope^{commit}"]])
+        self.assertEqual(calls, [top, top, ["git", "--literal-pathspecs", "rev-parse", "--verify", "--quiet",
+                                            "nope^{commit}"]])
 
 
 if __name__ == "__main__":

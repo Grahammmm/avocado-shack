@@ -71,11 +71,11 @@ class MergeBaseTests(unittest.TestCase):
             with self.subTest(code=code, out=out), mock.patch.object(
                     design_check.subprocess, "run", return_value=subprocess.CompletedProcess([], code, out, b"")):
                 with self.assertRaises(design_check.Usage) as caught:
-                    design_check.merge_base("a" * 40, "b" * 40)
+                    design_check.merge_base("a" * 40, "b" * 40, "/top")
                 self.assertEqual(str(caught.exception), msg)
         with mock.patch.object(design_check.subprocess, "run",
                                return_value=subprocess.CompletedProcess([], 0, b"c" * 40 + b"\n", b"")) as run:
-            self.assertEqual(design_check.merge_base("a", "b"), "c" * 40)
+            self.assertEqual(design_check.merge_base("a", "b", "/top"), "c" * 40)
         self.assertEqual(run.call_args.args[0], ["git", "--literal-pathspecs", "merge-base", "a", "b"])
 
     def test_pair_rule_applies_across_merge_base(self):
