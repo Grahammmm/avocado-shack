@@ -1192,3 +1192,328 @@ Branch rb/av1737-15 from origin/main 125796885c (AV1737-15, PR #133: commit 6c35
 Checks at PR head 6c35a8f (recorded in PR #133): `python3 -m unittest hass.tests.test_support_doc -v` ran 8 tests, OK; full hass discovery ran 950 tests, OK (skipped=10). Pre-push tests passed. CI `check` passed at 6c35a8f.
 
 Limits: no live restore or queue edit; `statebackup.py` and the other support sections are unchanged.
+
+## Catch-up index: units merged to main with no ledger entry (CATCHUP-AVB-21) — November 2, 2026
+
+INCOMPLETE - current as of November 2, 2026, covered 177 of 177 merged units that had no `## ... (<UNIT>)` heading at origin/main 68501fc (PR #278 merge); these are index lines only, not full narratives. Each line gives the unit, its newest merge PR, the merge SHA on main and the branch's own commit subject. No checks were re-run for this index and no CI result is claimed; the PR and its CI record are the evidence. Full per-unit entries (guest/operator effect, checks at the PR head, limits) are still to be written by each unit's owner. Units are grouped by family, and each family heading below names its units in parentheses.
+
+## Catch-up: AV0022 units merged without an entry (AV0022-01, AV0022-02, AV0022-03, AV0022-04, AV0022-06, AV0022-07, AV0022-08, AV0022-13, AV0022-14, AV0022-15, AV0022-16) — November 2, 2026
+
+- AV0022-01 — PR #192, merged 2026-11-01 as 29a0d8089b45cb56f160be3226b61c845017f0d2: [AV0022-01] H10: an upright phone photo with a rotation tag is accepted (fresh Orientation-only EXIF)
+- AV0022-02 — PR #152, merged 2026-11-01 as 76554c679b732fc3cac53ddf3301f9fcbc1ab203: [AV0022-02] H10: product.add can take a stored photo instead of an image file
+- AV0022-03 — PR #209, merged 2026-11-01 as d5e3ba5351fff25fe13cd1fb298e91d1b1a9078a: AV0022-03 H05: pending drafts carry their ops so a correction resends the whole change
+- AV0022-04 — PR #216, merged 2026-11-01 as 8f9eab83bebc2a97b087508af0327d5bbabca7e8: AV0022-04 H12: a photo question answered with a new product becomes product.add with that photo
+- AV0022-06 — PR #194, merged 2026-11-01 as e8b8574e2365843b9a5db171d74fe8f40c4607f2: [AV0022-06] H16: a yes sent in time still approves after a delay
+- AV0022-07 — PR #206, merged 2026-11-01 as 9257731dfb4007b56e0b85d8a50091bc587e1c35: [AV0022-07] H06: a second bare undo drafts the change before, not the undo
+- AV0022-08 — PR #218, merged 2026-11-01 as 28900431cfde142b9a5405ad94b02d444784a4c4: [AV0022-08] H17: show <code> repeats a draft's full text and screenshot
+- AV0022-13 — PR #154, merged 2026-11-01 as a82b8d2f5062ad64be90e680876073c95f300fc7: [AV0022-13] H13: hours refusals number lines from 1 and say how many were sent
+- AV0022-14 — PR #155, merged 2026-11-01 as 1227f0882b327b4459ae7cd9d4a48f2dc7d803a7: [AV0022-14] H19/H21: health --writer names photo copies no product uses (info only)
+- AV0022-15 — PR #196, merged 2026-11-01 as 188d3c640fcf637539c1a34eea86a00a7b036768: [AV0022-15] H25: LIMITS.md names hours, message, find and alias limits and upright photos
+- AV0022-16 — PR #225, merged 2026-11-02 as 7a4850feb321579c5da5db629f1498fe03589bd7: AV0022-16 H09: interpreter eval set v2, 40 cases (routes, recap, clear, full-op revises, photos, claims)
+
+## Catch-up: AV1537 units merged without an entry (AV1537-16) — November 2, 2026
+
+- AV1537-16 — PR #150, merged 2026-11-01 as 973253d6f515edd7d10816a6f739f7ba629d3f7f: [AV1537-16] Ledger: AV1537-01..15 sections, hass/README lines, ledger checker covers the 15 ids
+
+## Catch-up: AV1737 units merged without an entry (AV1737-16) — November 2, 2026
+
+- AV1737-16 — PR #167, merged 2026-11-01 as fe1edacb1725b91c2c35cf807e2cbe57d7e818c9: [AV1737-16] Ledger: AV1737-01..15 sections, README lines, checker ids
+
+## Catch-up: AV2022 units merged without an entry (AV2022-01, AV2022-02, AV2022-03, AV2022-05, AV2022-06, AV2022-07, AV2022-08, AV2022-09, AV2022-10, AV2022-11, AV2022-12, AV2022-13, AV2022-14) — November 2, 2026
+
+- AV2022-01 — PR #137, merged 2026-11-01 as 41ed9e45641165d1a95d18b92727780e0380782a: [AV2022-01] H05: interpreter prompt lists hikes and route ideas
+- AV2022-02 — PR #191, merged 2026-11-01 as 3167b924d4410829b4399a3b92475fbc821fbec9: [AV2022-02] H13: interpreter prompt shows the current store hours and address
+- AV2022-03 — PR #195, merged 2026-11-01 as 21e06aed15dd446743fca7f9bdbae3c4eb0c0c11: [AV2022-03] H04: interpreter knows today's Pacific date
+- AV2022-05 — PR #140, merged 2026-11-01 as 76990116c47e57f4d0c2eaefdb767d6a86811074: [AV2022-05] H12: a voice note gets a 'please type it' reply
+- AV2022-06 — PR #169, merged 2026-11-01 as 341c1469c7d34b8b61112b38774d2d5686927e75: [AV2022-06] H06/H17: history lists the last 5 approved changes only
+- AV2022-07 — PR #179, merged 2026-11-01 as ffdf942c079a4a4855e4169892cf831d46702f28: [AV2022-07] H05: "ok" or "go ahead" asks for yes <code>, never approves
+- AV2022-08 — PR #184, merged 2026-11-01 as c708a99d5240fae5fe0a849fab258e7272879485: [AV2022-08] H08: owner sender match ignores email case and phone punctuation
+- AV2022-09 — PR #141, merged 2026-11-01 as 5370850e8157d594d8c7fbd8f535c75fb484bd8b: [AV2022-09] H10: BlueBubblesPhotos downloads a message's attachments (fake transport)
+- AV2022-10 — PR #170, merged 2026-11-01 as dec67f5bfc0466fa7478334a92e7f14b39ebb858: [AV2022-10] H06: maker result check looks at the maker's product card
+- AV2022-11 — PR #175, merged 2026-11-01 as 81c130c144bb46961f9a1bdff7d7acb7f0219659: [AV2022-11] H06: completed and cancelled hikes get a real result check
+- AV2022-12 — PR #149, merged 2026-11-01 as e4a23a4076aa7725f7f76cab9377e1786121bf41: [AV2022-12] site: a real hike shows its route and trail-information link
+- AV2022-13 — PR #193, merged 2026-11-01 as a8879cb6dc088e0a25a84a0baa6b52f1f1ae4594: [AV2022-13] H21: retention report counts approvals and closed memory rows
+- AV2022-14 — PR #144, merged 2026-11-01 as 2e80eab13e4d84ad0a30088101b7e50885422c09: [AV2022-14] H25: phone guide for the owner, every quoted command parses
+
+## Catch-up: AVB units merged without an entry (AVB-02, AVB-03, AVB-04, AVB-05, AVB-06, AVB-07, AVB-08, AVB-10, AVB-11, AVB-12, AVB-13, AVB-14, AVB-15, AVB-16, AVB-17, AVB-18, AVB-19, AVB-20, AVB-22, AVB-23, AVB-24, AVB-25) — November 2, 2026
+
+- AVB-02 — PR #204, merged 2026-11-01 as 47b7469dbdb3c4a6336fde8cb9a0aefaf1b1ff78: [AVB-02] H08: ownerChat must be the owner's one-to-one chat
+- AVB-03 — PR #207, merged 2026-11-02 as 512d611ff98747d4681a18622b9afb34d835b81e: [AVB-03] H05: a yes sent before a draft existed never approves it
+- AVB-04 — PR #205, merged 2026-11-01 as fc3f748c1ba056e7df0997b6cf3b6f57d8028e2c: [AVB-04] H03: maker and source links are real https web addresses
+- AVB-05 — PR #210, merged 2026-11-01 as a70035e7d6934eec2b0b8629371bc886c3d72f03: [AVB-05] H04: a hike more than 400 days away asks to check the year
+- AVB-06 — PR #214, merged 2026-11-01 as a07af0325c6af3010a26bb87deb6229e6fd2a7d5: [AVB-06] H06: undo re-checks a product it makes active again
+- AVB-07 — PR #213, merged 2026-11-01 as 2ca57110a450b4d6e92963fa72d410091488f1cc: [AVB-07] H16: replies held over 10 minutes are sent marked delayed
+- AVB-08 — PR #215, merged 2026-11-01 as 355865689990904c9033f95a7d36230ea1803eeb: [AVB-08] H09: negative demo transcript, end to end
+- AVB-10 — PR #226, merged 2026-11-02 as 04cf6f9639b01dca4e1ad4fb697526e2067d03cb: [AVB-10] H10: label line names a matching maker and an already-listed product
+- AVB-11 — PR #230, merged 2026-11-02 as 495e3369396d07c25a0d564db2cd55fcf58ebd04: [AVB-11] H11: every common audio format gets the voice-note reply
+- AVB-12 — PR #217, merged 2026-11-02 as b02fc73dec497d193789329575a1b77aba7247c5: [AVB-12] H12: a photo already on a product opens no new draft
+- AVB-13 — PR #219, merged 2026-11-01 as 07758d0134bfa4ce1dc02672d75f438a4abea330: AVB-13: owner-editable home-page intro line (store.set_intro)
+- AVB-14 — PR #260, merged 2026-11-02 as a197f64a1db22f62c354e1342cd6e4fef1d16274: [AVB-14] H14: RSVPs back on re-checks the stored capacity
+- AVB-15 — PR #220, merged 2026-11-02 as bd8561dda8f5cb0a24c1f251d98bed2ebe9c94b9: [AVB-15] H15: re-sending a saved fact changes nothing
+- AVB-16 — PR #261, merged 2026-11-02 as 474052f4cad5ae3858e05f62a9f1beed9fe05256: [AVB-16] H20: backups record the writer worktree's content commit
+- AVB-17 — PR #222, merged 2026-11-02 as 19814994a527a9733759c79a8715cfcefd5240e6: [AVB-17] H19: support doc states service and Mac behaviour
+- AVB-18 — PR #227, merged 2026-11-02 as c6d119f43728c14a028ffb97db98aa9297f91492: [AVB-18] H23: opt-in policy for narrow automatic changes (unwired)
+- AVB-19 — PR #231, merged 2026-11-02 as 374d1f168f91fc60be680a73b66eb96ed7ab016e: [AVB-19] H24: design-change scope checker
+- AVB-20 — PR #285, merged 2026-11-02 as c321154ec16fabb1103e75b95ebba3221bd41b42: [AVB-20] standing acceptance run per H id
+- AVB-22 — PR #221, merged 2026-11-02 as 98430a45ab243166a3c59494dbde03ed82981fe7: [AVB-22] F07: local post draft from a product photo
+- AVB-23 — PR #228, merged 2026-11-02 as e43a1e5e28c45a634408f57e8ff01de7da5ba215: [AVB-23] F04: morning shelf report from confirmed availability
+- AVB-24 — PR #232, merged 2026-11-02 as a32d3b4086f4d389678132321d5e5476ff6e6d15: [AVB-24] F03: private price and margin calculator
+- AVB-25 — PR #229, merged 2026-11-02 as c12b0a4ef2988ac9476c25aac333f2f00834648e: [AVB-25] catalog filters survive reload and can be shared
+
+## Catch-up: FAV units merged without an entry (FAV-03) — November 2, 2026
+
+- FAV-03 — PR #278, merged 2026-11-02 as 68501fcccbd3e1abd22caf5a415aca674015949a: [FAV-03] H10: fixture_chat --labels/--label-model wire the label reader
+
+## Catch-up: RF0050 units merged without an entry (RF0050-1, RF0050-2, RF0050-3) — November 2, 2026
+
+- RF0050-1 — PR #156, merged 2026-11-01 as b12aabffdf2c4089a60825ac92a0ff33709f7ba7: [RF0050-1] H01: sitegen --check flags a symlinked generated file or folder
+- RF0050-2 — PR #160, merged 2026-11-01 as 212a695d9da82554318fa0483f5e96133c84dc0d: [RF0050-2] H19: health refuses a minutes/hours window over 100 years as bad usage
+- RF0050-3 — PR #157, merged 2026-11-01 as 3ec572fae990dea43b5e59a52d965ed122e37ac5: [RF0050-3] H02/H06: history survives a record or draft of the wrong shape
+
+## Catch-up: RF0110 units merged without an entry (RF0110-1, RF0110-2, RF0110-3, RF0110-4, RF0110-5) — November 2, 2026
+
+- RF0110-1 — PR #161, merged 2026-11-01 as 65a8bb5824fbf72e1aeaa455b6544cff2b933065: [RF0110-1] H20: verify refuses a backup whose config.json is not an object naming a worktree
+- RF0110-2 — PR #162, merged 2026-11-01 as fcd8d4b3ed045a75166bc864d2bfd5e312c63977: [RF0110-2] H01: non-UTF-8 or too-deep content JSON is a ContentError
+- RF0110-3 — PR #163, merged 2026-11-01 as 0f8d31bccade1555cb37b011e05dd4e644f3a411: [RF0110-3] H05/H08: loopback URLs refuse port 0
+- RF0110-4 — PR #168, merged 2026-11-01 as 39b2602f31d9b6facc22bd164859348b11ace23c: [RF0110-4] H16: inbox status: no negative pending age; clock_behind
+- RF0110-5 — PR #172, merged 2026-11-01 as f49051c02ae31f5223a96f7b12adfcf15860480b: [RF0110-5] H06: malformed screenshot checks are a named failed run
+
+## Catch-up: RF0140 units merged without an entry (RF0140-3, RF0140-4, RF0140-5, RF0140-6, RF0140-7) — November 2, 2026
+
+- RF0140-3 — PR #239, merged 2026-11-02 as 234201c2e7c4f41f79339243e331109d1aea2c40: [RF0140-3] F07: social draft refuses unreadable content in JSON
+- RF0140-4 — PR #244, merged 2026-11-02 as 42781dffab88ae3d0412d37d0b3d72c893668ae0: [RF0140-4] F07: no free-text hashtags or mentions in a draft
+- RF0140-5 — PR #238, merged 2026-11-02 as b563f497feb076590f3babc72850d7307a475b69: [RF0140-5] F04: a shelf check dated after today is named
+- RF0140-6 — PR #241, merged 2026-11-02 as 45a0945c303fbd5b8784b8978d53239ac31a06b5: [RF0140-6] H10: attachment guids from BlueBubbles are bounded, unique; non-int totalBytes is shape
+- RF0140-7 — PR #240, merged 2026-11-02 as 276df4ab4ff2e039e1c2cb0f20c5e9d329de6ff2: [RF0140-7] H04: route.edit refuses a title another route idea or hike already uses
+
+## Catch-up: RF0250 units merged without an entry (RF0250-1, RF0250-2, RF0250-3, RF0250-4, RF0250-5, RF0250-6) — November 2, 2026
+
+- RF0250-1 — PR #243, merged 2026-11-02 as 4688998cb4a5edd59d10d5d1b6ee37849dcbf053: [RF0250-1] SHOP-2: install records a pre-write read failure naming the site path
+- RF0250-2 — PR #242, merged 2026-11-02 as b289fa613e41637c2552b67aa6e8e4651155d359: [RF0250-2] H05: an unencodable request is a failed call, not a crash
+- RF0250-3 — PR #245, merged 2026-11-02 as 723a9626512e10fa8af0cb907d137cc0e3cf18cc: [RF0250-3] H03/H05: a denied maker is not a named maker
+- RF0250-4 — PR #246, merged 2026-11-02 as 0b56e020b49120c683b049e22e07525dc998c87a: [RF0250-4] H10: label reader drops barcodes, prices and bare sizes as name/brand
+- RF0250-5 — PR #258, merged 2026-11-02 as 96a7c3ebc09e7608eb5e8f258329e8be9e1bdfdd: [RF0250-5] H21: retention report counts web copies without an original (webOrphans)
+- RF0250-6 — PR #247, merged 2026-11-02 as febdb181a718a51329fd9465b7ca9e2e31ece44f: [RF0250-6] H09: eval replies file is owner-only and written whole
+
+## Catch-up: RF0310 units merged without an entry (RF0310-1, RF0310-2, RF0310-3, RF0310-4, RF0310-5, RF0310-6) — November 2, 2026
+
+- RF0310-1 — PR #249, merged 2026-11-02 as 27d7718d107404af0df4f135c4b8f0dbcb9f6491: [RF0310-1] H13: hours and address need real words
+- RF0310-2 — PR #248, merged 2026-11-02 as c3dc86ad1aabbd487869c57b9caec7d7bff0e501: [RF0310-2] H10: placeholder alt text with an article or number is refused
+- RF0310-3 — PR #255, merged 2026-11-02 as 155f5381de2b418a17027588375f08c8d911599e: RF0310-3 H10: an unreadable site photo is a refusal, not an io-error
+- RF0310-4 — PR #250, merged 2026-11-02 as 3932dba14868965b152b1061646424a0700ad6cc: [RF0310-4] H15: memory text refuses hidden and direction characters
+- RF0310-5 — PR #251, merged 2026-11-02 as fa897f390f16b76d6a64655d5a18d584956d9701: [RF0310-5] H06: undo refuses a misshaped stored hike before as record is malformed
+- RF0310-6 — PR #257, merged 2026-11-02 as 49e783426925e800b177fb8c008acf4fc53f109a: [RF0310-6] H06/H10: restoring a product checks its image like setting one
+
+## Catch-up: RF0420 units merged without an entry (RF0420-11, RF0420-12) — November 2, 2026
+
+- RF0420-11 — PR #252, merged 2026-11-02 as 83afeafd44143d742249a42cd7cd19f3cfd6947c: [RF0420-11] margins: plain ASCII numbers only (underscores, non-ASCII digits, leading + refused naming the field)
+- RF0420-12 — PR #253, merged 2026-11-02 as 75888cb5da3d2c3dd8eb87e91fbeaa8ee8fa97d6: [RF0420-12] design check: only plain files on the design surface
+
+## Catch-up: RF0450 units merged without an entry (RF0450-12) — November 2, 2026
+
+- RF0450-12 — PR #254, merged 2026-11-02 as 25bd4f9944fa3638c764b2ce92574c2c0e11cd5a: [RF0450-12] H10: a short photo download is size-mismatch; message guid control chars refused
+
+## Catch-up: RF0550 units merged without an entry (RF0550-1, RF0550-2, RF0550-3, RF0550-4, RF0550-5) — November 2, 2026
+
+- RF0550-1 — PR #256, merged 2026-11-02 as 40ac5623e6d711d32494249e3e7dc35fd77b26e4: [RF0550-1] H06: screenshots written whole via temp+rename, never through a link
+- RF0550-2 — PR #266, merged 2026-11-02 as 97160ec2899f8294d217f17534b175e03c18b516: [RF0550-2] H06: a damaged change record is an unreadable preview target, never a crash
+- RF0550-3 — PR #259, merged 2026-11-02 as ef207d2e940f2395ace8c0dce990be9fb15eaca3: [RF0550-3] SHOP-4: an approved change is not 'waiting for your OK'
+- RF0550-4 — PR #262, merged 2026-11-02 as f2919de67845ad277e1575922505850231a69459: [RF0550-4] H09: eval cases that can never be scored are refused by line
+- RF0550-5 — PR #264, merged 2026-11-02 as 840d5f856dfad46dab5e70511c07a9851e28dd54: [RF0550-5] H24: design check diffs from the merge base
+
+## Catch-up: RF0620 units merged without an entry (RF0620-1, RF0620-2, RF0620-3, RF0620-4, RF0620-5) — November 2, 2026
+
+- RF0620-1 — PR #263, merged 2026-11-02 as da6e2656b73a189cd193bf24dee0e9e27ac74556: [RF0620-1] morning report: misshaped product records named, exit 1
+- RF0620-2 — PR #265, merged 2026-11-02 as 28a345585d8a65f09b1c97f518cbf4160165d75a: [RF0620-2] confirm_selection: a check stale on arrival is refused
+- RF0620-3 — PR #269, merged 2026-11-02 as 68c7f1d984dd3506e13d79160d89b3edb46ae633: [RF0620-3] store ops: a spacing-only change is 'already says that'
+- RF0620-4 — PR #268, merged 2026-11-02 as feebb89301c5a974433140b037be5f538373865b: [RF0620-4] label reader: never offers text the catalog refuses
+- RF0620-5 — PR #267, merged 2026-11-02 as 88d1e23c93bd838feaaa064d1eca7c9b52f9cc97: [RF0620-5] social draft: misshaped products refused; alt text checked
+
+## Catch-up: RF0720 units merged without an entry (RF0720-1, RF0720-2) — November 2, 2026
+
+- RF0720-1 — PR #271, merged 2026-11-02 as 5e3e38764273ca5b90e0b96dd72fa09c41ab2201: [RF0720-1] route.edit: a spacing-only change is 'already says that'
+- RF0720-2 — PR #270, merged 2026-11-02 as 79367397ad42e4eb1d25e911b9c351c5280c2225: [RF0720-2] catalog edits: a spacing-only change is unchanged
+
+## Catch-up: RF0740 units merged without an entry (RF0740-1) — November 2, 2026
+
+- RF0740-1 — PR #274, merged 2026-11-02 as ac9515acbeab5b0955773c3393435c65fd77de37: [RF0740-1] sitegen: every target checked before any write
+
+## Catch-up: RF0805 units merged without an entry (RF0805-6, RF0805-7) — November 2, 2026
+
+- RF0805-6 — PR #22, merged 2026-10-31 as ded64a9c454b45e7845f9c2b6b2d0e362dfca9f1: [RF0805-6] H10: private photo original store (no wiring)
+- RF0805-7 — PR #46, merged 2026-10-31 as 85223ca4834d7130fa918c4fc193647fdd6a119e: [RF0805-7] H10: metadata-free web copy of a stored photo (no wiring)
+
+## Catch-up: RF0835 units merged without an entry (RF0835-4, RF0835-5) — November 2, 2026
+
+- RF0835-4 — PR #26, merged 2026-10-31 as 2eec03d91a5c931855a42d0d560419427102689c: [RF0835-4] H15: remember / forget / memory chat commands
+- RF0835-5 — PR #49, merged 2026-10-31 as 84092357f0a79057b4fb00db8e4c9c53c3295534: [RF0835-5] H12: owner photo/file gets a "not supported yet" reply
+
+## Catch-up: RF0850 units merged without an entry (RF0850-5, RF0850-6) — November 2, 2026
+
+- RF0850-5 — PR #50, merged 2026-10-31 as fc494c3bef657a003cab97cd8194d24ece2071f2: [RF0850-5] H20: backup and restore the photo originals (--media, content-hash verify, --media-into)
+- RF0850-6 — PR #24, merged 2026-10-31 as e0e463410c67c35ac5a2ccc7fef89b621991d4da: [RF0850-6] Ledger: H08 prep bridge adapter (BL-AV-3) and QA-script safety (BL-AV-2)
+
+## Catch-up: RF1005 units merged without an entry (RF1005-5, RF1005-6) — November 2, 2026
+
+- RF1005-5 — PR #31, merged 2026-10-31 as 9320452ef330adf23867622576d0adfb6bcdc8e0: [RF1005-5] Ledger: H16, H19, H15, H09, H20 paused, H10 imageAlt sections
+- RF1005-6 — PR #48, merged 2026-10-31 as 358c9f65e637ccdee66074a5d2df953c6912ebc8: [RF1005-6] Hass: owner command card checked against the parser
+
+## Catch-up: RF1058 units merged without an entry (RF1058-9, RF1058-10, RF1058-12) — November 2, 2026
+
+- RF1058-9 — PR #44, merged 2026-10-31 as 5072a833717b163e97ee4a6b1e9e45cf04b7d414: [RF1058-9] H19: health verifies the newest backup
+- RF1058-10 — PR #45, merged 2026-10-31 as e50279a42307f2e8813240e07f04129db90bce67: [RF1058-10] H13: preview checks a desktop-width page too
+- RF1058-12 — PR #35, merged 2026-10-31 as ba546cb97294e474ef9b1a632ec0dbf7f73b1b1a: [RF1058-12] Ledger: H17 support path, H16 fixture_chat --queue, H20 inbox backup
+
+## Catch-up: RF1105 units merged without an entry (RF1105-12) — November 2, 2026
+
+- RF1105-12 — PR #38, merged 2026-10-31 as d2af3b7b0d44a437d8202377e6fcdc25316e3f93: [RF1105-12] H21: test that no private runtime file is tracked
+
+## Catch-up: RF1120 units merged without an entry (RF1120-8) — November 2, 2026
+
+- RF1120-8 — PR #56, merged 2026-10-31 as f2576fee25132a3704300895ee49e98ec022946f: [RF1120-8] Ledger: bridge nonce pruning, output hygiene, editor/sitegen io errors, fixture line check, backup list
+
+## Catch-up: RF1150 units merged without an entry (RF1150-8, RF1150-9) — November 2, 2026
+
+- RF1150-8 — PR #55, merged 2026-10-31 as 2206cff1bb7cf7c6e82cffd4910296dc7fbf9fe5: [RF1150-8] H19: health --writer reports writer worktree problems apply would refuse
+- RF1150-9 — PR #59, merged 2026-10-31 as 5332f829dbee67c966afc79d38d7a1074a5e4e76: [RF1150-9] H03: product and maker add refuse a duplicate name (candidate; blocked on test_product_alt conflict)
+
+## Catch-up: RF1200 units merged without an entry (RF1200-3, RF1200-4, RF1200-7, RF1200-8) — November 2, 2026
+
+- RF1200-3 — PR #41, merged 2026-10-31 as a987a09bfa2a950a78c819e2f88462228808c070: [RF1200-3] H06: undo refuses an unreadable change record
+- RF1200-4 — PR #61, merged 2026-10-31 as 17b476e3f070df0a569a4449153b7ab00e70ed99: [RF1200-4] H03: product.edit warns when it removes the Organic badge
+- RF1200-7 — PR #42, merged 2026-10-31 as 0d2deff9e4bfd5e9969fc783514a7c6d09eef90d: [RF1200-7] H01/H13: store limits checked by the content validator
+- RF1200-8 — PR #62, merged 2026-10-31 as de3f8149f31bbc45c1b6eaf2c32b7dbe3edded48: [RF1200-8] Ledger: health --seen, atomic backup, RSVP capacity/warnings/status, picture replies
+
+## Catch-up: RF1210 units merged without an entry (RF1210-5) — November 2, 2026
+
+- RF1210-5 — PR #52, merged 2026-10-31 as 8e72326e15e587dc8030c2bc390922224148bf2d: [RF1210-5] H06: preview overlay never writes through the assets link
+
+## Catch-up: RF1230 units merged without an entry (RF1230-8, RF1230-9, RF1230-11) — November 2, 2026
+
+- RF1230-8 — PR #60, merged 2026-10-31 as a1dc396e8bb3d545c98949cba3ee266ede32dd50: [RF1230-8] H16: an unreadable queued message is marked unreadable; the drain continues
+- RF1230-9 — PR #66, merged 2026-10-31 as 983ddd9e13b133073e63a13cb64a9270194d786f: [RF1230-9] H02: image argument refuses a link or a path outside the site folder (candidate; breaks harness-linked assets)
+- RF1230-11 — PR #64, merged 2026-10-31 as c424d897951a49037b231919b138dc3c4cb742bb: [RF1230-11] H19: health reports inbound messages dropped as unreadable (inbox-unreadable)
+
+## Catch-up: RF1239 units merged without an entry (RF1239-3) — November 2, 2026
+
+- RF1239-3 — PR #57, merged 2026-10-31 as e87ca28e1a38469dcf810c8297fc6f8b784b1613: [RF1239-3] H04: hike ids keep accented letters as plain letters
+
+## Catch-up: RF1240 units merged without an entry (RF1240-4, RF1240-5, RF1240-9) — November 2, 2026
+
+- RF1240-4 — PR #65, merged 2026-10-31 as 3a13e27edd00a91b121263d8b4218005ee7f8286: [RF1240-4] H04: moving a hike warns about confirmed guests
+- RF1240-5 — PR #69, merged 2026-10-31 as 9bdcad4ead577caa67369674f14ff86a5b6a4315: [RF1240-5] H04: capacity with RSVPs off is named in the proposal
+- RF1240-9 — PR #63, merged 2026-10-31 as 6a5328b8c15b817beb94466b4ea7137a0208c885: [RF1240-9] H01: generated writes refuse a linked folder
+
+## Catch-up: RF1300 units merged without an entry (RF1300-9, RF1300-10, RF1300-11, RF1300-12) — November 2, 2026
+
+- RF1300-9 — PR #67, merged 2026-10-31 as 92e4c2d941d9ff0f794f657fbb7d2c921b17ccef: [RF1300-9] H01: event startsAt offset must be Pacific time at that moment
+- RF1300-10 — PR #80, merged 2026-10-31 as a82ab1405bcb22770eed8c577c0a58c8677cd370: [RF1300-10] H01: content text refuses control, zero-width and direction characters
+- RF1300-11 — PR #68, merged 2026-10-31 as 7ae191d31c6dcbb5dbe048e93b80f79d3837cfb5: [RF1300-11] H03: edits skip unchanged fields; an edit that changes nothing is refused by name
+- RF1300-12 — PR #71, merged 2026-10-31 as 7b131182f18a57ee02bc1c45e4fcb812d0b459ac: [RF1300-12] H03: lookup ignores accents and curly apostrophes
+
+## Catch-up: RF1500 units merged without an entry (RF1500-9, RF1500-10, RF1500-11, RF1500-12, RF1500-13) — November 2, 2026
+
+- RF1500-9 — PR #164, merged 2026-11-01 as ea74aef7aaf648610da0b707d094c72d79f70630: [RF1500-9] H06: history --limit must be 1 to 500
+- RF1500-10 — PR #165, merged 2026-11-01 as 04bbcb9aef253c41bac91ae429de4794705b6f1a: [RF1500-10] H06/H17: show names a wrong-shape record unreadable
+- RF1500-11 — PR #171, merged 2026-11-01 as 9d361151ddd425c663043c09f97d13e1786afaae: RF1500-11 H10: label reader drops placeholder answers and a brand that only echoes the name
+- RF1500-12 — PR #173, merged 2026-11-01 as 8764e8fbf3571c0628333fe0affa767225b35dcd: [RF1500-12] H10/H19: media verify checks sidecar time, source and byte type
+- RF1500-13 — PR #174, merged 2026-11-01 as 3eb86551f9c950e165ddc2441b4d9ba14da240c7: [RF1500-13] H08/H10: photo source timeout must be 1-120 seconds
+
+## Catch-up: RF1510 units merged without an entry (RF1510-10, RF1510-11, RF1510-12) — November 2, 2026
+
+- RF1510-10 — PR #176, merged 2026-11-01 as 538906f584a0ff5068009e61b6dd61dfa5e9d639: [RF1510-10] H16: inbox status refuses a linked or non-regular queue file
+- RF1510-11 — PR #177, merged 2026-11-01 as 5df72221693c98cebdff157de81ecf43fb87b482: [RF1510-11] H15: memory history refuses a linked conversation file
+- RF1510-12 — PR #178, merged 2026-11-01 as f29be6de1a3c5fb754f3f2040353aea96380412c: [RF1510-12] H09: fixture_chat input errors name the flag, not the path
+
+## Catch-up: RF1520 units merged without an entry (RF1520-8, RF1520-9, RF1520-10, RF1520-11, RF1520-12) — November 2, 2026
+
+- RF1520-8 — PR #180, merged 2026-11-01 as eae5c570e392f44a13c44fee31aa6d9ba5f66a05: [RF1520-8] H16: deeply nested inbound JSON is rejected, not a crash
+- RF1520-9 — PR #166, merged 2026-11-01 as bc13a81209920ca996cef49804488b66620e70cb: [RF1520-9] Refuse unsafe conversation database files
+- RF1520-10 — PR #181, merged 2026-11-01 as 5592411bda1d32c2ccd3af5f932fe361001c4210: [RF1520-10] H06: undo refuses a too-deep record cleanly
+- RF1520-11 — PR #182, merged 2026-11-01 as 0907e4769616ad68a1d6fb89e86cc704275e855e: [RF1520-11] H16: inbox queue file is never opened through a link
+- RF1520-12 — PR #185, merged 2026-11-01 as 87793ee193bd42d07e131c30b51c4b855cbeedfc: [RF1520-12] H19: health names a linked state database (state-db), never opens it
+
+## Catch-up: RF1650 units merged without an entry (RF1650-1, RF1650-2, RF1650-3, RF1650-5, RF1650-8, RF1650-12) — November 2, 2026
+
+- RF1650-1 — PR #92, merged 2026-10-31 as a808bd1d31247cbcdf66be83f1373d3b65d10ea1: [RF1650-1] H04: route.edit changes a route idea's text (id, status, source locked)
+- RF1650-2 — PR #143, merged 2026-11-01 as 8584d68ca2383e68a563ddaa063548980663f3a9: [RF1650-2] H15: owner-approved memory source must name an applied, not-undone change
+- RF1650-3 — PR #104, merged 2026-10-31 as df99c97c6abc286587ba5523f4b96c99b6c69ed9: [RF1650-3] H06: undo of an undo is refused with a plain reason
+- RF1650-5 — PR #101, merged 2026-10-31 as bd2944001349f5717b4805b296e2766ccc96e6dc: [RF1650-5] H10: photo originals need a real, zoned received time
+- RF1650-8 — PR #107, merged 2026-10-31 as dea25e3b8d1314f6231dcf80ca7063c6edad87d1: [RF1650-8] site search: accents and curly apostrophes no longer hide products
+- RF1650-12 — PR #105, merged 2026-10-31 as 8743826d6987b1c2c98a35dd4a04d183901238de: [RF1650-12] H19: health names a long pause (paused-long) + SUPPORT.md
+
+## Catch-up: RF1710 units merged without an entry (RF1710-1, RF1710-2, RF1710-3, RF1710-4, RF1710-5, RF1710-6) — November 2, 2026
+
+- RF1710-1 — PR #109, merged 2026-10-31 as cb771c16531125593359cf4deb3655f7a1dd615a: [RF1710-1] H20: statebackup diff OLD NEW names what changed between two backups
+- RF1710-2 — PR #106, merged 2026-10-31 as e3471acceaf4fdbbdb8a673aa90677a967e43622: [RF1710-2] H10: media verify checks the private photo store (read-only)
+- RF1710-3 — PR #110, merged 2026-10-31 as 97413d91c135ebfaf5bbc0462517872eb2c04352: [RF1710-3] H16: inbox status shows queue counts (read-only)
+- RF1710-4 — PR #112, merged 2026-10-31 as 55b70914b6b53d4112176feea618c97c71f45d21: [RF1710-4] H15: memory.py history shows the audit trail of owner memory (read-only)
+- RF1710-5 — PR #108, merged 2026-10-31 as 90c2c6b2cb6002becaad258e5497a07d0019672f: [RF1710-5] H19: health reports broken owner-memory rules (memory-invariant, count only)
+- RF1710-6 — PR #118, merged 2026-10-31 as c28b394c36bce935d1d2f3b08319867a9d7662e8: [RF1710-6] H19: health --media reports a damaged photo store (media-store, count only)
+
+## Catch-up: RF1720 units merged without an entry (RF1720-4) — November 2, 2026
+
+- RF1720-4 — PR #120, merged 2026-10-31 as e4a8e4946ab4d902e0754f27b7f9f9f3e17e3a32: [RF1720-4] Ledger: RF1720-1..3 sections
+
+## Catch-up: RF1730 units merged without an entry (RF1730-4) — November 2, 2026
+
+- RF1730-4 — PR #125, merged 2026-11-01 as 83f595774e486f9cfa6ca533526ceedb269fffc3: [RF1730-4] Ledger: RF1730-1..3 sections
+
+## Catch-up: RF1750 units merged without an entry (RF1750-1, RF1750-2, RF1750-3, RF1750-4) — November 2, 2026
+
+- RF1750-1 — PR #186, merged 2026-11-01 as b98e73fbda5e41664969b447e52c5d6203aa3be8: [RF1750-1] H06/H17: a wrong-shape install entry is named, never a traceback
+- RF1750-2 — PR #187, merged 2026-11-01 as 3da11bb017a59538de8ba4b5eec48527ab67e418: [RF1750-2] SHOP-2: install refuses by name on an unreadable change record
+- RF1750-3 — PR #183, merged 2026-11-01 as 697370b4348394320017795dadabea9f6f911072: [RF1750-3] H21: retention refuses a database that is not a regular file
+- RF1750-4 — PR #189, merged 2026-11-01 as a0ef8e4c75cdc58b26ebb6f2a0759e255db5e541: [RF1750-4] SHOP-4: a zone-less install time is an unknown time
+
+## Catch-up: RF1800 units merged without an entry (RF1800-1) — November 2, 2026
+
+- RF1800-1 — PR #190, merged 2026-11-01 as a14566096946cd3107ebc04bfba22476754bca8c: [RF1800-1] H06: undo reads only regular, non-link change and draft records
+
+## Catch-up: RF1910 units merged without an entry (RF1910-1, RF1910-2) — November 2, 2026
+
+- RF1910-1 — PR #188, merged 2026-11-01 as bfa0b272a68a3a48b18ec4ad1d863be87cdc9b6e: [RF1910-1] H20: state config is read only as a regular file with a worktree
+- RF1910-2 — PR #200, merged 2026-11-01 as 0a7174fae1fcb77d45c14c657d0678b075df9d54: [RF1910-2] H08: service settings read only from a regular config file
+
+## Catch-up: RF1920 units merged without an entry (RF1920-1, RF1920-2, RF1920-3, RF1920-4, RF1920-5, RF1920-6, RF1920-7, RF1920-8, RF1920-9) — November 2, 2026
+
+- RF1920-1 — PR #198, merged 2026-11-01 as 062008c226feafb16edfc0e5b1f0a9d267820c39: [RF1920-1] H16/H20: writer lock is opened only as a regular file
+- RF1920-2 — PR #197, merged 2026-11-01 as 16bb7947875b55f8cff76ef260742465ce200ad4: [RF1920-2] H21: retention sidecar reads are bounded and never crash
+- RF1920-3 — PR #199, merged 2026-11-01 as be14d4fec111353f3d6866baaa2986b2e3c227c8: [RF1920-3] H19/H20: backup manifest reads never hang or crash
+- RF1920-4 — PR #201, merged 2026-11-01 as 3a6a546df7fbc1462f06353822e0bd58f7d9ea2c: [RF1920-4] too-deep makers.json/community.json is unreadable, never a RecursionError
+- RF1920-5 — PR #202, merged 2026-11-01 as f6175003bfefe888e3b93dbf546312ee16f8cb69: [RF1920-5] H05/H09: prepare refuses deep or huge requests cleanly
+- RF1920-6 — PR #203, merged 2026-11-01 as b742e82d8f5b440bb144dc9831f6dee376322566: [RF1920-6] media verify: oversize or too-deep sidecar is 'sidecar invalid'; _existing opens O_NONBLOCK + fstat
+- RF1920-7 — PR #211, merged 2026-11-01 as 5f0c8098dedd32c9218656743f4df752ea5d5475: [RF1920-7] H16: inbox status never prints or crashes on a bad start_at
+- RF1920-8 — PR #208, merged 2026-11-01 as 0c01867fde4f2bf7a94651e6d850eff57113a140: [RF1920-8] H15: memory history prints only text cells; a BLOB or number key, kind, date or value is 'unreadable'
+- RF1920-9 — PR #212, merged 2026-11-01 as 0179355f21abf51c2caa393ebc32caa60776c547: [RF1920-9] H19: seen-file read is bounded and never follows a swap
+
+## Catch-up: RF2020 units merged without an entry (RF2020-1) — November 2, 2026
+
+- RF2020-1 — PR #132, merged 2026-11-01 as 549c9e189a53358dd872a4ab93b0d48a51e96e6e: [RF2020-1] claims: ask about grade, process and diet claims the owner did not say
+
+## Catch-up: RF2030 units merged without an entry (RF2030-4, RF2030-5, RF2030-6, RF2030-7) — November 2, 2026
+
+- RF2030-4 — PR #139, merged 2026-11-01 as fd37d0df1b588ca8e1c9575489eab05a31b40c8c: [RF2030-4] claims: a negated owner word is not a stated claim
+- RF2030-5 — PR #146, merged 2026-11-01 as 0ac16c3bfebdda8a598c77293562b6a533422ee9: [RF2030-5] claims: list-of-text fields (store hours lines) are checked like text fields
+- RF2030-6 — PR #135, merged 2026-11-01 as 51885699ce2653e831726bb9cacd157f8150ed71: [RF2030-6] retention: --days/--now reaching before year 1 is bad usage (exit 2)
+- RF2030-7 — PR #138, merged 2026-11-01 as 3cf1223afb729674c867cfb1490b78272e084103: [RF2030-7] interpret check: more than 20 changes asks the owner to split them
+
+## Catch-up: RF2310 units merged without an entry (RF2310-11) — November 2, 2026
+
+- RF2310-11 — PR #235, merged 2026-11-02 as 748a6fbfa91276b14544cccdfc20bb39198725d3: [RF2310-11] H14: hike capacity has a sane ceiling (MAX_EVENT_CAPACITY = 1000)
+
+## Catch-up: RF2320 units merged without an entry (RF2320-10, RF2320-11) — November 2, 2026
+
+- RF2320-10 — PR #234, merged 2026-11-02 as 78480b6aa7fae3f98c95b52c4a4c92d789dc7fd1: [RF2320-10] owner answers: damaged install and queue values read as unknown
+- RF2320-11 — PR #233, merged 2026-11-02 as 78cbefd962f556b428ae20463adc330110146c71: [RF2320-11] receiver: envelopes over 64 KiB rejected before parsing
+
+## Catch-up: RF2330 units merged without an entry (RF2330-9) — November 2, 2026
+
+- RF2330-9 — PR #236, merged 2026-11-02 as 8abd941253479ae7b2a29a7f715092b1933a7bd3: [RF2330-9] H10: screenshot and app default names and links are not imageAlt
+
+## Catch-up: SHOP units merged without an entry (SHOP-1, SHOP-2, SHOP-3, SHOP-4) — November 2, 2026
+
+- SHOP-1 — PR #148, merged 2026-11-01 as efc46d8a39cd8ce928042c26b1a081ca9eec45f1: [SHOP-1] catalog shows when Michael last checked the selection and per-item availability
+- SHOP-2 — PR #147, merged 2026-11-01 as 47753fcd71c239d3de0e29e2430909e404e991fc: [SHOP-2] install an applied change into the running site (hass/install.py, editor install verb)
+- SHOP-3 — PR #151, merged 2026-11-01 as eca8b8bd6482d828cb4aea51592470c906eb07fa: [SHOP-3] inbound receiver up to the live connection: sealed envelope -> draft for approval on fixtures; CONNECT.md lists what G must do
+- SHOP-4 — PR #159, merged 2026-11-01 as a04821029723d2bbc67e8364ff97d08599d1e2f9: [SHOP-4] owner answers: did it work?, stop changes, history and recovery say where the change is now
