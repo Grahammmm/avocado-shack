@@ -11,7 +11,7 @@ HARNESS = r"""
 const fs=require('fs'),vm=require('vm'),[site,now,club]=JSON.parse(fs.readFileSync(0,'utf8'));
 const el={'#upcoming-hikes':{innerHTML:''},'#past-hikes':{innerHTML:'',classList:{toggle(){}}},'#history-context':{textContent:''}};
 const ctx=vm.createContext({TextEncoder,location:{origin:'https://club.example'},$:s=>el[s]||null,document:{querySelector:()=>null},
- fetch:async u=>u==='/api/community'?{ok:true,json:async()=>club}:{ok:false}});ctx.window=ctx;
+ fetch:async u=>u==='/api/community'?{ok:true,headers:{get:()=>'application/json'},json:async()=>club}:{ok:false}});ctx.window=ctx;
 vm.runInContext(`{const R=Date,N=Date.parse('${now}');Date=class extends R{constructor(...a){super(...(a.length?a:[N]))}static now(){return N}}}`,ctx);
 vm.runInContext(fs.readFileSync(site+'/script.js','utf8').split('\n')[0],ctx);
 vm.runInContext(fs.readFileSync(site+'/community.js','utf8'),ctx);
