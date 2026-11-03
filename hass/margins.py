@@ -1,6 +1,6 @@
-"""AVB-24 (F03): private price and margin calculator. One purchase line (pack cost, units, shrink %, target margin %
-of price) becomes cost per sellable unit and a suggested price, every step shown, exact Decimal cents rounded up only
-at the end. Pure (no file, content or network access); a suggestion only, it never stores or publishes a price.
+"""AVB-24 (F03): private price and margin calculator (percentages to 2 decimals). One purchase line (pack cost, units,
+shrink %, target margin % of price) becomes cost per sellable unit and a suggested price, every step shown, exact
+Decimal cents rounded up only at the end. Pure (no file, content or network access); a suggestion only, it never stores or publishes a price.
     python3 hass/margins.py --pack-cost 24.00 --units 12 --shrink 5 --margin 35 [--round-to 0.99] [--json]"""
 import argparse
 import json
@@ -17,7 +17,13 @@ class InputError(ValueError):  # a bad input; the message names the field
     pass
 
 
-def _num(field, raw, lo, hi, places=None, whole=False):
+def _decimal_places(d):  # exact meaningful decimals from the digit tuple; no context rounding, trailing zeros ignored
+    _, digits, exp = d.as_tuple()
+    sig = "".join(map(str, digits)).rstrip("0")
+    return 0 if not sig else max(0, -exp - (len(digits) - len(sig)))
+
+
+def _num(field, raw, lo, hi, places=None, whole=False, decimals=None):
     try:
         d = D(str(raw).strip())
     except InvalidOperation:
@@ -25,6 +31,8 @@ def _num(field, raw, lo, hi, places=None, whole=False):
     if not d.is_finite() or (whole and d != d.to_integral_value()) or (places and d.as_tuple().exponent < -places):
         kind = "whole number" if whole else "number" + (f" with at most {places} decimals" if places else "")
         raise InputError(f"{field} must be a finite {kind}")
+    if decimals is not None and _decimal_places(d) > decimals:  # never quantizes: 5 prints as 5
+        raise InputError(f"{field} must be a finite number with at most {decimals} decimals")
     if not PLAIN.fullmatch(str(raw).strip()):
         raise InputError(f"{field} must be a plain number (digits and one point)")
     if not D(lo) <= d <= D(hi):
@@ -39,7 +47,7 @@ def _show(d):  # plain text, never exponent form: cents when exact to the cent, 
 
 def compute(pack_cost, units, shrink, margin, round_to=None):
     pack = _num("pack cost", pack_cost, "0.01", "100000.00", places=2)
-    n, s, m = _num("units", units, 1, 10000, whole=True), _num("shrink", shrink, 0, 90), _num("margin", margin, 0, 90)
+    n, s, m = _num("units", units, 1, 10000, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("margin", margin, 0, 90, decimals=2)
     end = None if round_to is None else _num("round-to", round_to, 0, 1)
     if end is not None and end not in (D("0.49"), D("0.99")):
         raise InputError("round-to must be 0.49 or 0.99")
