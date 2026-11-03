@@ -19,7 +19,7 @@ from unittest import mock
 from hass import conversation
 from hass.conversation import PHOTO_QUESTION
 from hass.content_model import REPO_ROOT
-from hass.fixture_chat import FixtureAdapter
+from hass.fixture_chat import FixtureAdapter, FixtureConversation
 from hass.tests.test_conversation import CHAT, SETTINGS
 from hass.tests.test_set_photo import ALT, FIXTURES as MEDIA, PID, PhotoRepo, _settings
 
@@ -145,7 +145,7 @@ class PhotoDemoTranscriptTests(unittest.TestCase):
         png.write_bytes(b"png")
         previewer = mock.Mock(capture=lambda files, target, out: {"ok": True, "png": str(png), "error": None})
         adapter = FixtureAdapter(self.lines(repo, self.demo_rows()[:4]), photos=str(MEDIA))
-        conv = conversation.Conversation(str(repo.state), conversation.Editor(repo.state),
+        conv = FixtureConversation(str(repo.state), conversation.Editor(repo.state),
                                          conversation.FixtureInterpreter(json.loads(MAPPING.read_text("utf-8"))),
                                          lambda: datetime.now(timezone.utc), previewer, photos=adapter)
         for message in adapter.inbound(): conv.handle(message)
