@@ -14,7 +14,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass import claims, interpret_check, label_reader, media, owner_answers as answers  # noqa: E402
-from hass.content_model import ContentError, load_and_validate, load_content  # noqa: E402
+from hass.content_model import ContentError, load_and_validate, load_content, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -885,7 +885,11 @@ class Conversation:
         """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
         try:  # the current catalog, read from the writer worktree as _hike_lines does
             wt = editor_mod._load(str(self.sdir))[2]
-            content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
+            content = load_content(wt / "hass" / "content")
+            try:  # AV1322-04: a malformed event/route idea is worded or skipped below; any other problem is unavailable
+                validate(content, wt / "storefront-mockup")
+            except ContentError as exc:
+                if any(not p.startswith(("events[", "routeIdeas[")) for p in exc.problems): raise
             has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
             aliases, lines, capped = self.aliases() if has_memory else {}, [], False
             records = {"product": {p["id"]: (p["name"], p["status"]) for p in content.products},

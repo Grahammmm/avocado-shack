@@ -4,11 +4,8 @@ and the same while paused. Synthetic titles in the throwaway writer worktree onl
 Run: python3 -B -m unittest hass.tests.test_find_hikes -v
 """
 
-import copy
-import json
-from unittest import mock
-
 from hass import conversation
+from hass.content_model import ContentError, load_and_validate
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests import test_find
 from hass.tests.test_status_pause import StoreMixin
@@ -69,24 +66,33 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
             "hike hike-2026-10-10: Zzst coast (Saturday Oct 10, 8:00 am, cancelled)"])
 
     def test_unreadable_start_untitled_event_and_hidden_idea(self):
-        """Content that validation would refuse is still never raised on: a bad start is worded, no title is skipped."""
-        real = conversation.load_and_validate
+        """Content that validation refuses, written to community.json and read through the real loader/validator: a bad
+        start is worded, no title is skipped, an odd idea is listed; a problem elsewhere still makes find unavailable."""
+        untitled = event("hike-untitled", "Zzbd", "2026-12-05T09:00:00-08:00")
 
-        def loaded(*args):
-            content = copy.deepcopy(real(*args))
-            untitled = event("hike-untitled", "Zzbd", "2026-12-05T09:00:00-08:00")
-            content.community["events"] = [event("hike-bad", "Zzbd ridge", "bad"), {**untitled, "title": None},
-                                           {k: v for k, v in untitled.items() if k != "title"},
-                                           event("hike-naive", "Zzbd naive", "2026-12-05T09:00:00"),
-                                           event("hike-utc", "Zzbd utc", "2026-12-05T17:00:00Z")]
-            content.community["routeIdeas"].append({"id": "idea-zzbd", "title": "Zzbd hidden", "status": "hidden"})
-            return content
-        with mock.patch.object(conversation, "load_and_validate", loaded):
-            self.assertEqual(self.find("find zzbd"), [  # the two untitled events are skipped
-                "hike hike-utc: Zzbd utc (Saturday Dec 5, 9:00 am, scheduled)",
-                "hike hike-bad: Zzbd ridge (date unreadable, scheduled)",
-                "hike hike-naive: Zzbd naive (date unreadable, scheduled)",
-                "route idea-zzbd: Zzbd hidden (hidden)"])
+        def change(doc):
+            doc["events"] = [event("hike-bad", "Zzbd ridge", "bad"), {**untitled, "title": None},
+                             {k: v for k, v in untitled.items() if k != "title"},
+                             event("hike-naive", "Zzbd naive", "2026-12-05T09:00:00"),
+                             event("hike-utc", "Zzbd utc", "2026-12-05T17:00:00Z")]
+            doc["routeIdeas"].append({"id": "idea-zzbd", "title": "Zzbd hidden", "status": "hidden"})
+        self.edit("community.json", change)
+        with self.assertRaises(ContentError) as refused:  # the real validator does refuse this community.json
+            load_and_validate(self.repo.wt / "hass" / "content", self.repo.wt / "storefront-mockup")
+        self.assertIn("events[0].startsAt: must be an ISO date-time with a UTC offset", refused.exception.problems)
+        self.assertIn("events[2]: missing field 'title'", refused.exception.problems)
+        self.assertEqual(self.find("find zzbd"), [  # the two untitled events are skipped
+            "hike hike-utc: Zzbd utc (Saturday Dec 5, 9:00 am, scheduled)",
+            "hike hike-bad: Zzbd ridge (date unreadable, scheduled)",
+            "hike hike-naive: Zzbd naive (date unreadable, scheduled)",
+            "route idea-zzbd: Zzbd hidden (hidden)"])
+        products = self.repo.wt / "hass" / "content" / "products.json"
+        good = products.read_text("utf-8")
+        self.edit("products.json", lambda doc: doc["products"][0].update(status="bogus"))  # unrelated content still checked
+        self.assertEqual(self.find("find zzbd"), [test_find.UNAVAILABLE])
+        products.write_text(good, "utf-8")
+        self.edit("community.json", lambda doc: doc["club"].update(emailConnected=True))  # so is the rest of community
+        self.assertEqual(self.find("find zzbd"), [test_find.UNAVAILABLE])
 
     def test_paused_gives_the_same_answer_and_changes_nothing(self):
         self.community([event("hike-2026-12-05", "Zzps walk", "2026-12-05T09:00:00-08:00")], [("idea-zzps", "Zzps loop")])
