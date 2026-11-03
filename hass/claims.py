@@ -8,6 +8,7 @@ RF2030-4: an owner word with a negator among the 3 words before it in its clause
 said; fail-closed, so "not only organic but local" leaves "organic" unsaid and the owner gets the claim question.
 RF2030-5: a list-of-text field (store hours lines) is checked as its newline-joined lines; other lists are skipped.
 RF0250-3: a maker key or name the owner only negates is not named.
+RF1230-17: negators also count typed without the apostrophe ("isnt", "dont"); "wont"/"cant" may over-ask (fail-closed).
 """
 import re
 import unicodedata
@@ -37,7 +38,8 @@ _TERM_RES = tuple((term, _pattern(term)) for term in TERMS)
 
 
 NEGATORS = ("not", "no", "never", "nor", "without", "isn't", "aren't", "wasn't", "weren't", "don't", "doesn't", "didn't",
-            "won't", "cannot", "can't")
+            "won't", "cannot", "can't", "isnt", "arent", "wasnt", "werent", "dont", "doesnt", "didnt", "wont", "cant",
+            "hasn't", "haven't", "hadn't", "hasnt", "havent", "hadnt")
 _CLAUSE = re.compile(r"[.!?;:\n]")
 
 
