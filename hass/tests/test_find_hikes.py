@@ -10,7 +10,7 @@ from unittest import mock
 
 from hass import conversation
 from hass.tests.test_conversation import ConversationTestCase
-from hass.tests.test_find import FindTests
+from hass.tests import test_find
 from hass.tests.test_status_pause import StoreMixin
 
 NONE = 'No product, maker, hike or route idea matches "{}".'
@@ -21,7 +21,7 @@ def event(eid, title, starts, status="scheduled"):
 
 
 class FindHikeTests(StoreMixin, ConversationTestCase):
-    find, edit, rename = FindTests.find, FindTests.edit, FindTests.rename
+    find, edit, rename = test_find.FindTests.find, test_find.FindTests.edit, test_find.FindTests.rename
 
     def setUp(self):
         super().setUp()
