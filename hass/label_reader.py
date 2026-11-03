@@ -83,7 +83,9 @@ def _product_line(found, products) -> str:
 
 def question(found, makers=None, products=None) -> str:
     """The confirm line, naming only the parts that were read, plus the catalog records they match (never ops)."""
-    words = " ".join(found[f] for f in ("brand", "name") if f in found)
+    fn, fb = _norm(found.get("name", "")).split(), _norm(found.get("brand", "")).split()
+    skip_brand = bool(fb) and fn[:len(fb)] == fb and len(fn) > len(fb)  # the name already begins with the brand
+    words = " ".join(found[f] for f in ("brand", "name") if f in found and not (f == "brand" and skip_brand))
     if "category" in found: words = f"{words} ({found['category']})" if words else found["category"]
     return (f"The label looks like: {words}. Is that right? Say which product it is either way."
             + _maker_line(found, makers) + _product_line(found, products))

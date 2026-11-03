@@ -107,7 +107,7 @@ class LabelMatchConversationTests(unittest.TestCase):
         self.assertEqual([m["name"] for m in self.repo.makers().values() if m["name"] == "Straus"], ["Straus"])
         self.open({"name": "straus BUTTER", "brand": "STRAUS", "category": "dairy"})
         result, replies, row = self.photo()
-        line = (f"The label looks like: STRAUS straus BUTTER (dairy){TAIL} Maker on file: Straus."
+        line = (f"The label looks like: straus BUTTER (dairy){TAIL} Maker on file: Straus."
                 + listed("photo-product-028", "Straus butter"))
         self.assertEqual(result, "photo-draft")
         self.assertEqual(replies, [f"{PHOTO_QUESTION} Reply with the product and description (draft {SHA[:4]}). {line}"])
