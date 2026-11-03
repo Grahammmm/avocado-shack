@@ -20,7 +20,7 @@ from unittest import mock
 from hass import editor
 from hass.content_model import REPO_ROOT
 from hass.conversation import Conversation, Editor, FixtureInterpreter
-from hass.fixture_chat import FixtureAdapter, main
+from hass.fixture_chat import FixtureAdapter, FixtureConversation, main
 from hass.tests.test_conversation import SETTINGS
 from hass.tests.test_demo_transcript import DEMO, MAPPING
 from hass.tests.test_editor import WriterRepo
@@ -107,7 +107,7 @@ class FixtureChatInputTests(unittest.TestCase):
         run = self.run_cli(cli)
         self.assertEqual((run.returncode, run.stderr), (0, ""))
         adapter = FixtureAdapter(str(DEMO))  # the pre-RF1510-12 main loop, in process
-        conversation = Conversation(str(ref.state), Editor(str(ref.state)),
+        conversation = FixtureConversation(str(ref.state), Editor(str(ref.state)),
                                     FixtureInterpreter(json.loads(MAPPING.read_text("utf-8"))),
                                     lambda: datetime.now(timezone.utc), None, photos=None)
         for message in adapter.inbound(): conversation.handle(message)
