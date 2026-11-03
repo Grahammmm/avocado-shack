@@ -78,6 +78,34 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  if(long){const head=[...long].slice(0,80).join('');assert.ok((await roundTrip(()=>page.keyboard.type(head+' and more words'),head,'typed')).ids.length>0,'typed: the first 80 characters still find the product');}
  else{console.log('NOTE: no catalog text over 80 characters; typed check uses filler');await roundTrip(()=>page.keyboard.type('a'.repeat(90)),'a'.repeat(80),'typed');}
  await roundTrip(()=>page.keyboard.insertText('  '+'\u{1f951}'.repeat(90)),'\u{1f951}'.repeat(80),'pasted');
+ // AV1322-10: each card links to itself; ?item=<id> resets the filters, loads enough cards, scrolls that card into view and focuses it.
+ const shown=()=>page.evaluate(()=>{const g=[...document.querySelectorAll('#catalog-grid article')],f=document.activeElement;
+  return {cards:g.length,ids:g.map(e=>e.dataset.productId),focused:f?.dataset?.productId??null,tabindex:f?.getAttribute('tabindex')??null,pressed:document.querySelector('[data-filter][aria-pressed="true"]').dataset.filter,q:$('#product-search').value,maker:$('#brand-filter').value,y:scrollY}});
+ const inView=id=>page.waitForFunction(id=>{const e=[...document.querySelectorAll('#catalog-grid article')].find(a=>a.dataset.productId===id),r=e?.getBoundingClientRect();return !!r&&r.top<innerHeight/2&&r.bottom>innerHeight/2},id,{timeout:5000});
+ const [first,id40,fruit]=await page.evaluate(()=>[catalog[0].id,catalog[39].id,catalog.find(p=>p.category==='fruit').id]);
+ for(const [width,height] of [[390,844],[1440,900]]){await page.setViewportSize({width,height});
+  await open('');assert.equal(await page.locator('#catalog-grid article').first().locator('a.card-link').getAttribute('href'),'?item='+encodeURIComponent(first)+'#market');
+  assert.equal(await page.locator('#catalog-grid article a.card-link').count(),12,'one link per card');
+  await open('?item='+encodeURIComponent(id40)+'#market');await inView(id40);const s=await shown();
+  assert.equal(s.cards,48,'40th card: 48 shown at '+width);assert.equal(s.focused,id40,'40th card focused at '+width);assert.equal(s.tabindex,'-1');}
+ await page.setViewportSize({width:390,height:844});
+ await open(`?item=${encodeURIComponent(fruit)}&shelf=bread&q=zzz&maker=Etto`);await inView(fruit);let s=await shown();
+ assert.deepEqual([s.focused,s.pressed,s.q,s.maker],[fruit,'all','',''],'?item wins over the filters');assert.ok(s.ids.includes(fruit));
+ await open('');const plain=await shown();
+ for(const v of ['nope','',encodeURIComponent(id40)+'x','a'.repeat(81)]){await open('?item='+v);await page.waitForTimeout(150);s=await shown();
+  assert.deepEqual(s.ids,plain.ids,'unknown item '+v.length);assert.equal(s.focused,null);assert.equal(s.y,plain.y,'nothing scrolls');}
+ await open('?item=nope&shelf=pantry&q=jam');s=await shown();assert.deepEqual([s.pressed,s.q,s.focused],['pantry','jam',null],'unknown item: URL filters apply as before');
+ await open('?item='+encodeURIComponent(id40)+'&utm=x');await page.locator('[data-filter="fruit"]').click();
+ assert.deepEqual((await addr()).params,{utm:'x',shelf:'fruit'},'a filter change drops item');
+ await open('?item='+encodeURIComponent(id40));await page.locator('#product-search').fill('jam');assert.deepEqual((await addr()).params,{q:'jam'},'typing drops item');
+ // Fixture ids: one needing encoding (&, space, ?, #) round-trips through its link; an 81-character real id is ignored.
+ const odd='a&b ?#c',long81='z'.repeat(81),id41=await page.evaluate(()=>catalog[40].id);
+ await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text()).replace(`"id": "${id40}"`,`"id": ${JSON.stringify(odd)}`).replace(`"id": "${id41}"`,`"id": "${long81}"`)})});
+ await open('?item='+encodeURIComponent(odd));await inView(odd);s=await shown();assert.equal(s.focused,odd);
+ const oddHref=await page.locator('#catalog-grid article:focus a.card-link').getAttribute('href');assert.match(oddHref,/^\?item=a%26b%20%3F%23c#market$/);
+ await open('');await open(oddHref);await inView(odd);assert.equal((await shown()).focused,odd,'the encoded link opens the same card');
+ await open('?item='+long81);await page.waitForTimeout(150);s=await shown();assert.deepEqual(s.ids,plain.ids,'81-character id ignored');assert.equal(s.focused,null);
+ await page.unroute('**/catalog-products.js');
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
  const result={checkedAt:new Date().toISOString(),all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
