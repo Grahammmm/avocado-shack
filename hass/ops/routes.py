@@ -8,11 +8,13 @@ not arguments, so the registry refuses them as unknown arguments: a route idea n
 RSVPs and never loses the source link the migration check records. A real event id is refused; use ``hike.update``.
 The change is drafted, approved and applied like every other edit; ``history.revert`` restores the old text.
 A new ``title`` already used by another route idea or a hike (case and spacing ignored) is refused, naming that id.
+Look-alike Unicode forms count as the same title (NFKC); an edit that only re-encodes the text (NFC) already says that.
 """
 
 from __future__ import annotations
 
 import copy
+import unicodedata
 
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 
@@ -21,12 +23,12 @@ ROUTE_EDITABLE = ("title", "place", "character", "distance", "difficulty", "elev
 
 
 def _fold(text):
-    return " ".join(text.split()).casefold()
+    return " ".join(unicodedata.normalize("NFKC", text).split()).casefold()
 
 
 def _spaced(value):
-    """Spacing only; case and characters kept."""
-    return " ".join(value.split()) if isinstance(value, str) else value
+    """Spacing and composed/decomposed forms only; case and characters kept."""
+    return " ".join(unicodedata.normalize("NFC", value).split()) if isinstance(value, str) else value
 
 
 def _route_edit(content, args, ctx):
