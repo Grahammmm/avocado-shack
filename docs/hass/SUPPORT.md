@@ -168,5 +168,7 @@ First pick the backup: `python3 hass/statebackup.py list --out BACKUPS` (read-on
 1. `python3 hass/statebackup.py verify BACKUP` must answer `ok`.
 2. Drill only: `python3 hass/statebackup.py drill BACKUP --into NEWDIR --worktree DRILLWT` verifies, restores into a new state dir that starts with changes paused, runs the health check and the history on it and prints one JSON line (`ok`, or `drill-failed`/`corrupt`/`refused` with the `step`).
    DRILLWT is a separate drill worktree, never the writer worktree; the drill dir is left in place for inspection.
+   Content: add `--content-into NEWCONTENT` to drill/restore; the site content and committed photos come back from the backup's bundle at `contentCommit`, never from the live checkout (detached, no remote; its own `hass/sitegen.py --check` must pass, else `contentCheck: failed` and drill `step: content`).
+   Backups made before FAV-07 have no bundle; for them content comes from Git as before.
 3. Fallback by hand: `python3 hass/statebackup.py restore BACKUP --into NEWDIR --worktree DRILLWT --paused`, then `python3 hass/health.py --state NEWDIR` and `python3 hass/editor.py history --state NEWDIR`.
 4. A live restore onto the writer worktree is an attended operator action; `statebackup.py` refuses it.

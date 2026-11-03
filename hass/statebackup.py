@@ -19,9 +19,10 @@ diff (read-only): files added, removed and changed from OLD to NEW (photo origin
 OLD would lose. diff reads manifests only; run verify for integrity.
 A new backup's MANIFEST.json also records `contentCommit`, the writer worktree's HEAD (read-only git; null if unreadable).
 With a contentCommit, create also writes content.bundle (a full `git bundle` of that HEAD: site content and committed web
-photos), listed and hashed like any file; verify requires its head to be contentCommit. restore skips it (FAV-08).
+photos), listed and hashed like any file; verify requires its head to be contentCommit. Without --content-into DIR
+restore skips it; with it, restore/drill clone it into a NEW dir at contentCommit and run its sitegen --check (FAV-08).
 """
-import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
+import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, subprocess, sys  # noqa: E401
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -299,7 +300,21 @@ def _pause(path: Path, now) -> str:  # restore --paused, before the dir appears;
     os.chmod(path, 0o600)
     return since
 
-def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> dict:
+def _clone_content(bundle: Path, tmp: Path, commit: str) -> None:  # from the backup's bundle alone; no remote kept
+    for cwd, *args in ((tmp.parent, "clone", "--quiet", "--no-checkout", "--no-hardlinks", str(bundle), str(tmp)),
+                       (tmp, "checkout", "--quiet", "--detach", commit), (tmp, "remote", "remove", "origin")):
+        run = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True,
+                             env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
+        if run.returncode: raise OSError(f"git {args[0]} failed: {run.stderr.strip()[-300:]}")  # all-or-nothing
+    if _head(tmp) != commit: raise OSError("content checkout HEAD is not contentCommit")
+
+def _site_check(top: Path) -> str:  # the restored checkout's own sitegen --check, run in it; -B: it stays clean
+    try: code = subprocess.run([sys.executable, "-B", "hass/sitegen.py", "--check"], cwd=top,
+                               capture_output=True).returncode
+    except OSError: return "failed"
+    return "ok" if code == 0 else "failed"
+
+def restore(backup, into, worktree, paused=False, now=None, media_into=None, content_into=None) -> dict:
     checked = verify(backup)
     if checked["result"] != "ok": return {"result": "corrupt", "problems": checked["problems"]}
     bdir = Path(backup).absolute()
@@ -310,6 +325,9 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
     if media_into is not None and (not mrels or os.path.lexists(os.path.abspath(media_into))):
         return {"result": "refused", "problems": ["media restore dir already exists; left untouched" if mrels
                                                   else "no media in backup"]}
+    if content_into is not None and (BUNDLE not in doc["files"] or os.path.lexists(os.path.abspath(content_into))):
+        return {"result": "refused", "problems": ["content restore dir already exists; left untouched"
+                                                  if BUNDLE in doc["files"] else "no content bundle in backup"]}
     target, wt, recorded = Path(into).resolve(), Path(worktree).resolve(), Path(doc["worktree"]).resolve()
     if wt == recorded: return {"result": "refused", "problems": [ATTENDED]}
     if problems := editor.worktree_problems(wt, recovering=True): return {"result": "refused", "problems": problems}
@@ -318,10 +336,14 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
     mtarget = None if media_into is None else Path(media_into).resolve()
     if mtarget and _inside(mtarget, _roots(wt) + [recorded, bdir.resolve(), target]):
         raise UnsafeState("media restore dir must lie outside the backup, the repository, the worktrees and the state")
+    ctarget = None if content_into is None else Path(content_into).resolve()
+    if ctarget and _inside(ctarget, _roots(wt) + [recorded, bdir.resolve(), target] + ([mtarget] if mtarget else [])):
+        raise UnsafeState("content restore dir must lie outside the backup, repository, worktrees, state and media")
     tmp = target.parent / f".{target.name}.restore-{os.getpid()}"
     mtmp = mtarget and mtarget.parent / f".{mtarget.name}.restore-{os.getpid()}"
+    ctmp = ctarget and ctarget.parent / f".{ctarget.name}.restore-{os.getpid()}"
     tmp.mkdir(mode=0o700)
-    made, renamed = [tmp], False
+    made, renamed, mrenamed = [tmp], False, False
     try:
         os.chmod(tmp, 0o700)
         if mtmp:
@@ -337,38 +359,49 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
                 continue
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+        if ctmp:
+            ctmp.mkdir(mode=0o700)
+            made.append(ctmp)
+            _clone_content(bdir / BUNDLE, ctmp, doc["contentCommit"])
         extra = {"paused": True, "pausedSince": _pause(tmp / DB, now)} if paused else {}
         if os.path.lexists(target): raise FileExistsError(f"restore dir appeared during restore: {target}")
         os.rename(tmp, target)
         renamed = True
         if mtmp and os.path.lexists(mtarget): raise FileExistsError(f"media restore dir appeared: {mtarget}")
         if mtmp: os.rename(mtmp, mtarget)
+        mrenamed = bool(mtmp)
+        if ctmp and os.path.lexists(ctarget): raise FileExistsError(f"content restore dir appeared: {ctarget}")
+        if ctmp: _rename_noreplace(ctmp, ctarget)  # a dir that appeared since (even empty) is refused, never replaced
     except BaseException:
         if renamed: os.rename(target, tmp)  # take back the state dir this call made: leave neither target
+        if mrenamed: os.rename(mtarget, mtmp)
         for path in made: shutil.rmtree(path, ignore_errors=True)  # only the temp dirs this call created
         raise
     if mrels: extra.update({"mediaRestored": bool(mtarget), "media": len(mrels) // 2})
+    if ctarget: extra.update({"contentRestored": True, "contentCheck": _site_check(ctarget)})  # failed: dir kept
     return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]),
             "contentCommit": doc.get("contentCommit"), **extra}
 
 STRUCTURAL = ("state", "settings", "db-integrity", "inbox-integrity")  # a drill fails on these health checks
 
-def drill(backup, into, worktree, media_into=None, now=None) -> dict:
+def drill(backup, into, worktree, media_into=None, now=None, content_into=None) -> dict:
     """verify, restore --paused into a NEW dir, then the read-only health check and history on it; ids/counts only."""
     checked = verify(backup)
     if checked["result"] != "ok": return {"result": "corrupt", "step": "verify", "problems": checked["problems"]}
-    out = restore(backup, into, worktree, paused=True, now=now, media_into=media_into)
+    out = restore(backup, into, worktree, paused=True, now=now, media_into=media_into, content_into=content_into)
     if out["result"] != "ok": return {**out, "step": "restore"}
     from hass import health  # lazy: health imports this module at its top
     problems, info, unsafe = health.check(out["state"], now=now)
     ids = sorted({p["check"] for p in problems})
     try: hist = editor.history(5, state=out["state"])
     except UnsafeState: hist = {"result": "unsafe-state"}
-    step = "health" if unsafe or set(ids) & set(STRUCTURAL) else None if hist.get("result") == "ok" else "history"
+    step = "health" if unsafe or set(ids) & set(STRUCTURAL) else "history" if hist.get("result") != "ok" \
+        else "content" if out.get("contentCheck") == "failed" else None
     return ({"result": "drill-failed", "step": step} if step else {"result": "ok"}) | {
         "state": out["state"], "worktree": out["worktree"], "files": out["files"], "paused": out["paused"],
         "contentCommit": out["contentCommit"], "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
-        "history": len(hist.get("history") or []), **{k: out[k] for k in ("media", "mediaRestored") if k in out}}
+        "history": len(hist.get("history") or []),
+        **{k: out[k] for k in ("media", "mediaRestored", "contentRestored", "contentCheck") if k in out}}
 
 NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
 def _listed(entry):  # (manifest doc or None, problem or None); a symlink is never followed
@@ -428,6 +461,7 @@ def main(argv=None) -> int:
     cmd.add_argument("--paused", action="store_true")  # restore only (the last parser)
     cmd.add_argument("--media-into")
     sub.choices["drill"].add_argument("--media-into")
+    for name in ("restore", "drill"): sub.choices[name].add_argument("--content-into")
     sub.choices["create"].add_argument("--media")
     args = parser.parse_args(argv)
     try:
@@ -437,16 +471,16 @@ def main(argv=None) -> int:
             return 2 if isinstance(rows, dict) else 0  # refused: --out missing or a link
         out = create(args.state, args.out, media=args.media) if args.cmd == "create" else verify(args.backup) \
             if args.cmd == "verify" else diff(args.old, args.new) if args.cmd == "diff" \
-            else drill(args.backup, args.into, args.worktree, media_into=args.media_into) \
+            else drill(args.backup, args.into, args.worktree, args.media_into, content_into=args.content_into) \
             if args.cmd == "drill" else restore(args.backup, args.into, args.worktree, paused=args.paused,
-                                                media_into=args.media_into)
+                                                media_into=args.media_into, content_into=args.content_into)
     except UnsafeState as exc:
         print(json.dumps({"result": "unsafe-state", "problems": [str(exc)]}))
         return 2
     except OSError as exc:
         out = {"result": "error", "problems": [f"{type(exc).__name__}: {exc.strerror or exc}"]}
     print(json.dumps(out, ensure_ascii=False, sort_keys=True))
-    return 0 if out["result"] == "ok" else 1
+    return 0 if out["result"] == "ok" and out.get("contentCheck") != "failed" else 1
 
 if __name__ == "__main__":
     sys.exit(main())
