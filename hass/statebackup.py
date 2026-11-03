@@ -471,8 +471,7 @@ def main(argv=None) -> int:
             return 2 if isinstance(rows, dict) else 0  # refused: --out missing or a link
         out = create(args.state, args.out, media=args.media) if args.cmd == "create" else verify(args.backup) \
             if args.cmd == "verify" else diff(args.old, args.new) if args.cmd == "diff" \
-            else drill(args.backup, args.into, args.worktree, media_into=args.media_into,
-                       content_into=args.content_into) \
+            else drill(args.backup, args.into, args.worktree, args.media_into, content_into=args.content_into) \
             if args.cmd == "drill" else restore(args.backup, args.into, args.worktree, paused=args.paused,
                                                 media_into=args.media_into, content_into=args.content_into)
     except UnsafeState as exc:
