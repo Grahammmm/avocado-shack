@@ -210,10 +210,18 @@ def _guest_check(sdir, settings, now, problems: list, info: list) -> None:  # AV
     try:  # unset: a problem only while an upcoming scheduled hike takes RSVPs (the filter status uses)
         if not (wt := editor._load(sdir)[2]).is_dir(): return  # no worktree, no hikes to read: `writer` owns that
         events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
-        if any(e.get("status") == "scheduled" and e.get("rsvpEnabled") and datetime.fromisoformat(e["startsAt"]) > now
-               for e in events): problems.append(_problem("guest-counts", "unset"))
+        if not isinstance(events, list): raise TypeError("events is not a list")
+        found = {_upcoming_rsvp(e, now) for e in events}  # RF1230-25: each event on its own
     except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, UnsafeState):
-        info.append(_problem("guest-counts", "hikes unreadable"))
+        return info.append(_problem("guest-counts", "hikes unreadable"))
+    if True in found: problems.append(_problem("guest-counts", "unset"))  # one bad row never hides a real hike
+    if None in found: info.append(_problem("guest-counts", "hikes unreadable"))
+
+def _upcoming_rsvp(e, now) -> bool | None:  # None = unreadable; the time is read only for a scheduled RSVP hike
+    if not isinstance(e, dict): return None
+    if e.get("status") != "scheduled" or not e.get("rsvpEnabled"): return False
+    try: return datetime.fromisoformat(e["startsAt"]) > now
+    except (KeyError, TypeError, ValueError): return None  # missing, not text, garbled, or zone-less (naive vs aware)
 
 def _model_get(url, timeout) -> tuple:  # (status, body) via bridge's opener: no env proxy, no redirect, capped read
     try:
