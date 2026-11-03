@@ -9,6 +9,9 @@ The page shows ``first<br><em>second</em>`` (the second line emphasised). Limits
 at least 2 letters (the refusal names the line number); text kinds already reject markup, ``$``, ``{{ }}`` and control
 characters. The same words as now (the default when unset; spacing ignored) are refused. Undo restores the default.
 
+``store.set_home_image`` ({"photo": "<sha256>", "imageAlt": "..."}) puts a stored photo's metadata-free web copy in the
+one hero ``<img>`` (``store.homeImage``), through ``photos.install`` exactly as ``product.set_photo``. Undo removes it.
+
 Selective-undo limit (as hass/ops/store.py): the store is ONE record, so ``history.revert`` of an older store change
 after a later store change is refused as a conflict. Undo the newest store change first.
 """
@@ -18,7 +21,7 @@ from __future__ import annotations
 import copy
 
 from hass.content_model import DEFAULT_HEADLINE, DEFAULT_STORY, MAX_HEADLINE_LINE, MAX_STORY
-from hass.ops import Arg, Op, Refused
+from hass.ops import Arg, Op, Refused, photos
 from hass.ops.store import _spaced, _touch
 
 
@@ -53,5 +56,19 @@ def _set_story(content, args, ctx):
     return _touch(before, content.store)
 
 
+def _set_home_image(content, args, ctx):
+    """The one hero image: a stored photo's metadata-free web copy, installed as product.set_photo does."""
+    target = photos.install(ctx, args["photo"], args["imageAlt"])
+    if isinstance(target, Refused):
+        return target
+    home = {"image": target, "imageAlt": args["imageAlt"]}
+    if content.store.get("homeImage") == home:
+        return Refused("the home page already shows that photo with that imageAlt")
+    before = copy.deepcopy(content.store)
+    content.store["homeImage"] = home
+    return _touch(before, content.store)
+
+
 OPS = (Op("store.set_headline", {"first": Arg("text"), "second": Arg("text")}, _set_headline),
-       Op("store.set_story", {"text": Arg("text")}, _set_story))
+       Op("store.set_story", {"text": Arg("text")}, _set_story),
+       Op("store.set_home_image", {"photo": Arg("id"), "imageAlt": Arg("text")}, _set_home_image))

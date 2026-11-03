@@ -5,6 +5,7 @@ Pure functions over dictionaries the caller has already read (a conversation dra
 Never a change hash, draft hash, file path or commit: the owner only sees what changed and where it is now.
 """
 import re
+import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -45,6 +46,13 @@ def _when(iso, now) -> str:
     return f"{at:%a %b} {at.day} {at:%H:%M}"
 
 
+def _summary(value) -> str:  # RF1300-19: one readable line of text, stripped, else "the change"
+    text = value.strip() if isinstance(value, str) else ""
+    if not text or len(text) > 200 or any(unicodedata.category(c) == "Cc" or c in "\u2028\u2029" for c in text):
+        return "the change"
+    return text
+
+
 def _install_reason(reason) -> str:
     text = str(reason or "")
     return next((plain for prefix, plain in INSTALL_REASONS if text.startswith(prefix)), "The copy did not finish")
@@ -57,7 +65,7 @@ def _rollback_failed(install) -> bool:  # SHOP-2 install failed and could not pu
 def did_it_work(change, install, now) -> str:
     """change: a conversation draft row as a dict (state, summary, reason); install: the editor change record's
     `install` entry (SHOP-2) or None. Returns one plain answer."""
-    state, summary = change.get("state"), change.get("summary") or "the change"
+    state, summary = change.get("state"), _summary(change.get("summary"))
     if state in PENDING or state is None: return "Waiting for your OK - nothing has changed yet."
     if state not in KNOWN: return UNKNOWN_STATE  # RF0910-5: a damaged/unknown state is never called unchanged or done
     if state == "approved": return UNDER_WAY  # an install entry never upgrades an unsaved approval to "Done"
@@ -94,7 +102,7 @@ def applied_text(code, summary, checked=False, error=None) -> str:
     """The reply when an approved change is saved (the apply/approve reply point): applying never copies it to the
     website, so the reply says so instead of only 'Applied'."""
     if error is not None: return f"Applied {code}, but the preview check failed: {preview_reason(error)}.\n{NOT_LIVE}"
-    return f"Applied{' and checked' if checked else ''} {code}: {summary}\n{NOT_LIVE}"
+    return f"Applied{' and checked' if checked else ''} {code}: {_summary(summary)}\n{NOT_LIVE}"
 
 
 def _requests(n) -> str:

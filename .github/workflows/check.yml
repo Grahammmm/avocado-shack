@@ -103,6 +103,10 @@ jobs:
           done
           node storefront-mockup/catalog-only-qa.cjs
           python3 storefront-mockup/community-qa.py
+          # AVO-LAUNCH-1: the publishable build (allowlist only) on a plain static host, every page checked.
+          site="$(mktemp -d "$RUNNER_TEMP/published-site.XXXXXX")"
+          python3 hass/sitegen.py --publish "$site"
+          node storefront-mockup/static-site-qa.cjs "$site"
 
       - name: Hass tests (placeholder until hass/tests exists)
         run: |

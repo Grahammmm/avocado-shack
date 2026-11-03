@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, label_reader, media, morning_report, owner_answers as answers  # noqa: E402
+from hass import claims, interpret_check, label_reader, media, morning_report, morning_report as shelf, owner_answers as answers  # noqa: E402
 from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -1100,6 +1100,9 @@ class Conversation:
         lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
         if (cap := self.settings["interpreterDailyCap"]) is not None:
             lines.append(f"Interpreter today: {self._calls(now)[1]} of {cap}")  # H22, only with a cap
+        with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
+            lines.append(shelf.check_line(f, " - more than a week ago, the site says call to confirm"))  # AV1102-05
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]

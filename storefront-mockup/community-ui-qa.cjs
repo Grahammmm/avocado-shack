@@ -29,6 +29,15 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  check(h.text.includes('RSVPs open')&&!/places? available/.test(h.text)&&h.count===1&&await h.buttons.isEnabled(),'Uncapped hike wrong: '+h.text);
  h=await shown({rsvpOpen:false,remaining:0});
  check(h.text.includes('RSVP details will be shared when confirmed.')&&!h.text.includes('This hike is full')&&h.count===0,'Closed RSVP lost to full: '+h.text);
+ // AV1322-09: an upcoming scheduled hike carries one .ics link with escaped text; cancelled and completed hikes carry none.
+ await shown({title:'QA trail fixture Hike; bring water, snacks\\ & hats',meetingPoint:'North lot\nGate 2'});
+ const cal=qaHike().locator('a.hike-ics'),href=await cal.getAttribute('href')||'',ics=decodeURIComponent(href.slice(href.indexOf(',')+1)),flat=ics.replace(/\r\n /g,'');
+ check(await cal.count()===1&&await cal.getAttribute('download')==='qa-hike.ics'&&(await cal.innerText()).trim()==='Add to calendar'&&href.startsWith('data:text/calendar;charset=utf-8,'),'Upcoming hike lacks its calendar link');
+ check(flat.includes('\r\nSUMMARY:QA trail fixture Hike\\; bring water\\, snacks\\\\ & hats\r\n')&&flat.includes('\r\nLOCATION:North lot\\nGate 2\r\n')&&/\r\nDTSTART:\d{8}T\d{6}Z\r\n/.test(ics)&&flat.includes(`\r\nURL:${process.env.COMMUNITY_TEST_URL}/hike#qa-hike\r\n`),'Calendar text wrong: '+JSON.stringify(ics));
+ check(ics.split('\r\n').every(l=>Buffer.byteLength(l)<=75),'Calendar line over 75 octets');
+ check(await p.locator('#upcoming-hikes .hike-event a.hike-ics').count()===3&&await p.locator('#past-hikes a.hike-ics').count()===0,'Calendar links not on exactly the upcoming scheduled hikes');
+ await shown({status:'cancelled'});
+ check(await qaHike().locator('.label').innerText()==='CANCELLED'&&await qaHike().locator('a.hike-ics').count()===0,'Cancelled hike offered a calendar link');
  await p.unroute(api);
  check(!errors.length,'Page errors while overriding places: '+JSON.stringify(errors));
  // AV2022-12: a real hike naming a route idea shows its title and trail link (display only). Fixture payload only.
@@ -138,6 +147,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};
  let v=await view(after,'America/Los_Angeles',[cancelled]);
  check(v.dates['QA trail fixture']===today,'Started hike not listed as Today: '+v.dates['QA trail fixture']);
+ check(!v.cards.find(c=>c.title==='QA trail fixture').text.includes('Add to calendar'),'Started hike offered a calendar link');
  const sentence='This hike is cancelled. Nothing else is needed from you.',cx=v=>v.cards.find(c=>c.title==='Cancelled: QA cancelled fixture');
  // AV1737-12 inverts RF1720-2's same-day check: a hike cancelled earlier today stays listed, marked, with no RSVP, despite rsvpOpen.
  check(cx(v)&&cx(v).rsvp===0&&cx(v).text.includes(sentence)&&cx(v).text.includes(today),'Cancelled hike from earlier today not listed: '+v.up);
