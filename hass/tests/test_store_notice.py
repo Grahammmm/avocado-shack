@@ -1,15 +1,10 @@
 """AV1322-01 (H13): one dated owner notice on the home page (``store.set_notice`` / ``store.clear_notice``, hass/ops/home.py).
 
-Every change goes through ``editor.prepare`` + ``editor.apply`` on a throwaway Git repo (test_store_ops.StoreRepo).
-Capture tests run the real loopback preview server and Chromium; they are skipped when PLAYWRIGHT_MODULE is unset.
+Changes go through editor.prepare + apply on a throwaway repo (test_store_ops.StoreRepo); capture tests need PLAYWRIGHT_MODULE.
 Run: python3 -m unittest hass.tests.test_store_notice -v
 """
 
-import copy
-import os
-import shutil
-import tempfile
-import unittest
+import os, shutil, tempfile, unittest  # noqa: E401
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,8 +14,7 @@ from hass.ops import OpContext, Refused, load_registry
 from hass.tests.test_editor import git
 from hass.tests.test_store_ops import INDEX, REVERT, StoreTestCase, _req
 
-SET, CLEAR = "store.set_notice", "store.clear_notice"
-TEXT = "Closed Thanksgiving Day"
+SET, CLEAR, TEXT = "store.set_notice", "store.clear_notice", "Closed Thanksgiving Day"
 STORE = load_content().store
 
 
@@ -113,25 +107,18 @@ class NoticeOpTests(StoreTestCase):
                          f'<p class="home-notice" data-until="{day(0)}" role="status">Salt &amp; "pepper" day</p>')
 
     def test_pacific_boundary_late_evening_is_still_today(self):
-        apply = load_registry()[SET].apply
-
-        def at(utc):
-            content = load_content()
-            return content, apply(content, {"text": TEXT, "until": "2026-11-26"},
-                                  OpContext(utc, REPO_ROOT / "storefront-mockup", {}))
-        content, out = at(datetime(2026, 11, 27, 7, 30, tzinfo=timezone.utc))  # 23:30 PST on the 26th
-        self.assertNotIsInstance(out, Refused)
+        apply, content = load_registry()[SET].apply, load_content()
+        at = lambda utc: apply(content, {"text": TEXT, "until": "2026-11-26"}, OpContext(utc, REPO_ROOT, {}))  # noqa: E731
+        self.assertNotIsInstance(at(datetime(2026, 11, 27, 7, 30, tzinfo=timezone.utc)), Refused)  # 23:30 PST, 26th
         self.assertEqual(content.store["notice"], {"text": TEXT, "until": "2026-11-26"})
-        _, late = at(datetime(2026, 11, 27, 8, 30, tzinfo=timezone.utc))  # 00:30 PST on the 27th
-        self.assertEqual(late, Refused("the last day 2026-11-26 is already past"))
+        self.assertEqual(at(datetime(2026, 11, 27, 8, 30, tzinfo=timezone.utc)),  # 00:30 PST on the 27th
+                         Refused("the last day 2026-11-26 is already past"))
 
 
 class ValidatorTests(unittest.TestCase):
     def problems(self, notice):
-        store = copy.deepcopy(STORE)
-        store["notice"] = notice
         problems = []
-        validate_store(problems, store)
+        validate_store(problems, {**STORE, "notice": notice})
         return problems
 
     def test_notice_shape(self):
@@ -158,9 +145,7 @@ class NoticeCaptureTests(StoreTestCase):
         git(wt, "add", "-A")
         git(wt, "commit", "-q", "-m", "full site")
         self.old_index = repo.read(INDEX)
-        holder = tempfile.TemporaryDirectory(prefix="hass-av1322-01-")
-        self.addCleanup(holder.cleanup)
-        self.out = Path(holder.name) / "shot.png"
+        self.out = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="hass-av1322-01-"))) / "shot.png"
         self.target = preview.target_for(repo.run((SET, {"text": TEXT, "until": day(0)}))["records"][0])
 
     def capture(self, files=None, viewports=("phone",)):

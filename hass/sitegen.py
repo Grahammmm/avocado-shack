@@ -45,6 +45,8 @@ TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
 SITE_PREFIX = "storefront-mockup/"
 TEMPLATES = ("index.html", "hike/index.html")
 SLOT_RE = re.compile(r"\{\{([a-zA-Z.]+)\}\}")
+NOTICE_JS = ("<script>document.querySelectorAll('.home-notice').forEach(n=>{if(new Date().toLocaleDateString('en-CA',"
+             "{timeZone:'America/Los_Angeles'})>n.dataset.until)n.hidden=true})</script>\n")  # hides a notice after until
 # SHOP-1: freshness words come only from Michael's recorded check (store.selection_checked_on), never from the clock.
 # The generation date is used only to decide whether that stored date is more than STALE_AFTER_DAYS old.
 STALE_AFTER_DAYS = 7
@@ -133,10 +135,6 @@ def store_slots(store: dict, today=None) -> dict[str, str]:
         "store.heroImageHtml": _hero_image(store.get("homeImage")),
         **_notice(store.get("notice"), (today or shop_today()).isoformat()),
     }
-
-
-NOTICE_JS = ("<script>document.querySelectorAll('.home-notice').forEach(n=>{if(new Date().toLocaleDateString('en-CA',"
-             "{timeZone:'America/Los_Angeles'})>n.dataset.until)n.hidden=true})</script>\n")  # hides it after until
 
 
 def _notice(n, today: str) -> dict[str, str]:  # no notice, or its last day before the render's today: both slots empty
