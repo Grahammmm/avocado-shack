@@ -1,6 +1,7 @@
-"""Local Instagram post draft from one product photo (AVB-22, F07 "prepare" half only).
+"""Local Instagram post draft from one product photo (AVB-22), or one hike announcement (F07 "prepare" half only).
 
     python3 hass/social_draft.py PRODUCT_ID
+    python3 hass/social_draft.py --hike EVENT_ID
 
 Prints one JSON object. Success: {"draft": true, "image", "alt", "caption"} built only from the product's
 stored name, description, image, imageAlt and its maker's name and place (caption <= 2200 characters, at most
@@ -12,6 +13,10 @@ where one line is expected; the description may hold a plain \\n) | "free text h
 A malformed maker (incl. blank or control-character name/place) is no maker. A non-text, empty, multi-line,
 control-character or tagged imageAlt is not used (alt = name); a products
 list that is not a list of records is 'cannot read content'.
+--hike prints {"draft": true, "caption"}: title, Pacific weekday date and time, meeting point, linked route idea title,
+then fixed #AvocadoShack #NorthCoastHikingClub. Refusal (exit 1): "cannot read content" | "no such hike" | "hike is
+cancelled" | "hike already happened" (completed, or start before now) | "not scheduled" | "hike record incomplete"
+(title/meeting point not one line, start unreadable) | "free text has a hashtag or account name" | "caption too long".
 Read-only: nothing is posted, scheduled, written or sent, and the module imports no network code.
 """
 from __future__ import annotations
@@ -20,13 +25,16 @@ import argparse
 import json
 import re
 import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import CATEGORIES, CONTENT_DIR, INVISIBLE_RE, SITE_DIR, ContentError, load_content  # noqa: E402
+from hass.ops import hikes  # noqa: E402
 
 MAX_CAPTION = 2200
+HIKE_TAGS = "#AvocadoShack #NorthCoastHikingClub"  # fixed; never from free text
 CATEGORY_TAGS = {c: "#" + c.capitalize() for c in CATEGORIES}  # fixed per category; never from free text
 # a hashtag or @account in free text is refused, never rewritten; marks: # @, full-width U+FF03 U+FF20, small-form U+FE5F U+FE6B
 _TAG_RE = re.compile(r"[#@\uFF03\uFF20\uFE5F\uFE6B]\w")
@@ -75,13 +83,45 @@ def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     return {"draft": True, "image": product["image"], "alt": alt, "caption": caption}
 
 
+def _when(starts_at):  # (aware start, "Saturday, October 17 at 9:00 am (Pacific)"), or None when unreadable
+    try: start, (day, clock) = datetime.fromisoformat(starts_at.replace("Z", "+00:00")), hikes._local_parts(starts_at)
+    except (AttributeError, TypeError, ValueError, OverflowError): return None
+    d, h = date.fromisoformat(day), int(clock[:2])
+    return (start, f"{d:%A, %B} {d.day} at {h % 12 or 12}{clock[2:]} {'am' if h < 12 else 'pm'} (Pacific)") if start.tzinfo else None
+
+
+def build_hike(content, event_id: str, now: datetime) -> dict:
+    """Return {"draft": True, "caption"} for one scheduled future hike, or {"draft": False, "reason": ...}."""
+    def refuse(reason): return {"draft": False, "reason": reason}
+    community = content.community if isinstance(content.community, dict) else {}
+    events, ideas = community.get("events"), community.get("routeIdeas")
+    if not isinstance(events, list) or not all(isinstance(e, dict) for e in events): return refuse("cannot read content")
+    hike = next((e for e in events if e.get("id") == event_id), None)
+    if hike is None: return refuse("no such hike")
+    when, status = _when(hike.get("startsAt")), hike.get("status")
+    if status == "cancelled": return refuse("hike is cancelled")
+    if status == "completed" or (when and when[0] < now): return refuse("hike already happened")
+    if status != "scheduled": return refuse("not scheduled")
+    if not (when and _line(title := hike.get("title")) and _line(meet := hike.get("meetingPoint"))): return refuse("hike record incomplete")
+    trail = hike.get("trailId") if isinstance(ideas, list) else None
+    idea = next((i for i in ideas if isinstance(i, dict) and i.get("id") == trail), None) if isinstance(trail, str) else None
+    route = idea.get("title") if idea and _line(idea.get("title")) else None
+    if any(_TAG_RE.search(t) for t in (title, meet, route or "")): return refuse("free text has a hashtag or account name")
+    caption = "\n".join([title, when[1], f"Meet at {meet}.", *([f"Route: {route}."] if route else [])]) + "\n\n" + HIKE_TAGS
+    return refuse("caption too long") if len(caption) > MAX_CAPTION else {"draft": True, "caption": caption}
+
+
 def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) -> int:
-    parser = argparse.ArgumentParser(description="Print a local DRAFT Instagram post for one active product (posts nothing).")
-    parser.add_argument("product_id")
-    product_id = parser.parse_args(argv).product_id
+    parser = argparse.ArgumentParser(description="Print a local DRAFT Instagram post for one active product or hike (posts nothing).")
+    which = parser.add_mutually_exclusive_group(required=True)
+    which.add_argument("product_id", nargs="?")
+    which.add_argument("--hike", metavar="ID")
+    parser.add_argument("--now", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")), help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)  # --now: tests only
     try: content = load_content(content_dir)
     except (ContentError, OSError): content = None  # missing or invalid content: one JSON refusal, never a traceback
-    result = {"draft": False, "reason": "cannot read content"} if content is None else build(content, product_id, site_dir)
+    result = {"draft": False, "reason": "cannot read content"} if content is None else build(content, args.product_id, site_dir) \
+        if args.hike is None else build_hike(content, args.hike, args.now or datetime.now(timezone.utc))
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["draft"] else 1
 

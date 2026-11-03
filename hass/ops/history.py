@@ -1,7 +1,8 @@
 """Hass history op (H06): ``history.revert`` undoes one applied change as a new, conflict-checked inverse change.
 
 Only the records that change touched are set back, and only when each still holds the value that change wrote, so
-later edits to other records are kept. A record the change created is hidden/cancelled, never deleted. The A2 writer
+later edits to other records are kept. A record the change created is hidden/cancelled, never deleted, except an added
+route idea (no hidden state), which is removed. The A2 writer
 sets ``revertedBy`` on the original change record once the revert is committed.
 An undo of an undo is refused, so the original keeps ``revertedBy``; to bring a change back, ask for it again.
 An undo that cancels a hike, moves its start or turns its RSVPs off carries the forward op's guest warning, never a
@@ -46,7 +47,11 @@ def _put(content, collection, key, value):
         content.makers[key] = value
     else:
         items = _items(content, collection)
-        items[next(i for i, item in enumerate(items) if item.get("id") == key)] = value
+        index = next(i for i, item in enumerate(items) if item.get("id") == key)
+        if value is None:  # only an added route idea (UNDO_ADDITION has no hidden state for it)
+            del items[index]
+        else:
+            items[index] = value
 
 
 def _well_formed(change):
@@ -159,6 +164,8 @@ def _revert(content, args, ctx):
         elif collection in UNDO_ADDITION:
             field, hidden = UNDO_ADDITION[collection]
             value = {**(current or {}), field: hidden}
+        elif collection == "routeIdeas":  # AV1322-02: a route idea has no hidden state, so an added one is removed
+            value = None
         else:
             return Refused(f"undo cannot remove the added {collection} {key}")
         if value != current:
