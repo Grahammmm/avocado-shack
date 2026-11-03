@@ -292,8 +292,10 @@ def _hike_recap(content, args, ctx):
         return Refused(f"{event['id']} is scheduled; use hike.complete with a recap")
     if event["status"] != "completed":
         return Refused(f"{event['id']} is {event['status']}")
+    if isinstance(event.get("recap"), str) and _spaced(event["recap"]) == _spaced(args["recap"]):
+        return Refused(f"hike {args['id']} already says that")
     before = copy.deepcopy(event)
-    event["recap"] = args["recap"]  # the same recap again is left to the editor's "change nothing" refusal
+    event["recap"] = args["recap"]  # an equal recap (spacing ignored) is refused above
     return _touch(before, event)
 
 
