@@ -8,7 +8,7 @@ stored name, description, image, imageAlt and its maker's name and place (captio
 {"draft": false, "reason"}: "cannot read content" | "no such product" | "not on the site" | "no photo on the site" |
 "product record incomplete" (name/description not non-empty text, or blank, or a line break/control character
 where one line is expected; the description may hold a plain \\n) | "free text has a hashtag or account name" (a # or @
-followed by a letter, digit or _ in name, description or maker name/place; nothing is stripped) | "caption too long".
+(full-width and small-form # and @ too) followed by a letter, digit or _ in name, description or maker name/place; nothing is stripped) | "caption too long".
 A malformed maker (incl. blank or control-character name/place) is no maker. A non-text, empty, multi-line,
 control-character or tagged imageAlt is not used (alt = name); a products
 list that is not a list of records is 'cannot read content'.
@@ -28,7 +28,8 @@ from hass.content_model import CATEGORIES, CONTENT_DIR, INVISIBLE_RE, SITE_DIR, 
 
 MAX_CAPTION = 2200
 CATEGORY_TAGS = {c: "#" + c.capitalize() for c in CATEGORIES}  # fixed per category; never from free text
-_TAG_RE = re.compile(r"[#@][\w]", re.UNICODE)  # a hashtag or @account in free text is refused, never rewritten
+# a hashtag or @account in free text is refused, never rewritten; marks: # @, full-width U+FF03 U+FF20, small-form U+FE5F U+FE6B
+_TAG_RE = re.compile(r"[#@\uFF03\uFF20\uFE5F\uFE6B]\w")
 
 
 def _block(v) -> bool:  # non-blank text; a plain \n is its only allowed line break or control character
