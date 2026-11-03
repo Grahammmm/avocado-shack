@@ -318,7 +318,7 @@ def validate_community(problems, community):
         if club.get("emailConnected") is not False:
             problems.append("community.club.emailConnected: email delivery is not connected; must be false")
     ideas = community.get("routeIdeas")
-    idea_ids = set()
+    idea_ids, hidden = set(), []  # hidden: AV1322-03 ideas left out of the generated route list
     if not isinstance(ideas, list):
         problems.append("community.routeIdeas: must be a list")
         ideas = []
@@ -336,8 +336,10 @@ def validate_community(problems, community):
                 _text(problems, f"{where}.{field}", idea.get(field), limit=TEXT_LIMITS["routeIdea"][field])
         _https(problems, f"{where}.sourceUrl", idea.get("sourceUrl"))
         # Route ideas are undated suggestions; they never take RSVPs.
-        if idea.get("status") != "idea":
-            problems.append(f"{where}: status must be 'idea'")
+        if idea.get("status") not in ("idea", "hidden"):
+            problems.append(f"{where}: status must be 'idea' or 'hidden'")
+        elif idea["status"] == "hidden":
+            hidden.append(rid)
         if idea.get("rsvpEnabled") is not False:
             problems.append(f"{where}: rsvpEnabled must be false for a route idea")
     events = community.get("events")
@@ -381,6 +383,8 @@ def validate_community(problems, community):
                 problems.append(f"{where}: capacity must be a positive integer of at most {MAX_EVENT_CAPACITY}")
         if "trailId" in ev and (not isinstance(ev["trailId"], str) or ev["trailId"] not in idea_ids):
             problems.append(f"{where}: trailId {ev['trailId']!r} is not a route idea")
+        elif ev.get("status") == "scheduled" and ev.get("trailId") in hidden:
+            problems.append(f"{where}: trailId {ev['trailId']} is hidden")
         for field in EVENT_TEXT_FIELDS:
             if field in ev:
                 _text(problems, f"{where}.{field}", ev[field], limit=TEXT_LIMITS["event"][field])

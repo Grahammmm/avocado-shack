@@ -156,6 +156,8 @@ def _hike_create(content, args, ctx):
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
+    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
+        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
     twin = _hike_twin(content, args["date"], args["title"])
     if twin is not None:
         return Refused(f"{twin['id']} is already scheduled with this title on {args['date']}; update it instead")
@@ -200,6 +202,8 @@ def _hike_update(content, args, ctx):
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
+    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
+        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
     clear = list(dict.fromkeys(args.get("clear", ())))  # duplicates collapse
     for test, why in _CLEAR_CHECKS:
         bad = next((n for n in clear if test(n, args)), None)
