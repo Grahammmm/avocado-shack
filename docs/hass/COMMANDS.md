@@ -28,7 +28,7 @@ The two note commands are stricter:
 | `forget <key>` | Deletes that saved note. | `forget parking` |
 | `memory` | Lists the saved notes (up to 20). | `memory` |
 | `alias <name>: <id>` | Saves your own name for a product id or maker key that exists now, so a lookup of that name finds it. Send `forget alias.<name with - for spaces>` to remove it. | `alias green jam: photo-product-001` |
-| `find <words>` | Lists up to 10 products and makers whose name matches (your aliases too), each with its id and status, hidden ones included. It changes nothing and works while paused. | `find lion's mane` |
+| `find <words>` | Lists up to 10 matching products, makers, hikes and route ideas, with ids: products and makers whose name matches (your aliases too), then hikes (by start, with the Pacific weekday, date and time) and route ideas whose title contains every word, each with its status, hidden, cancelled and completed ones included. It changes nothing and works while paused. | `find lion's mane` |
 | `show <code>` | Sends that draft again: a waiting draft's full proposal text and its preview screenshot, or an applied change's lines (with its commit) and its checked screenshot. An expired, cancelled or replaced draft is named as such. It changes nothing, expires nothing and works while paused. | `show A1B2` |
 | `help` (or `commands`, `?`) | Replies a short list of every command with one example each. It changes nothing. | `help` |
 

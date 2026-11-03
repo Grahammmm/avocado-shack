@@ -38,7 +38,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'forget <key> - delete a saved note: "forget parking"',
     'memory - list the saved notes: "memory"',
     'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
-    'find <words> - matching products and makers, ids: "find lion\'s mane"',
+    'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
@@ -896,13 +896,30 @@ class Conversation:
                 capped |= len(ids) >= catalog.MAX_CANDIDATES
                 lines += [f"{kind} {i}: {records[kind][i][0]} ({records[kind][i][1]})"
                           + (" (your alias)" if found.get("via") else "") for i in ids]
+            words = catalog._fold(query).split()  # AV1322-04: hikes by start, then route ideas by title
+            def hits(recs): return [r for r in recs if isinstance(r, dict) and isinstance(r.get("title"), str)
+                                    and words and all(w in catalog._fold(r["title"]) for w in words)]
+            def when(event):  # Pacific start, or None when startsAt does not parse (never raises)
+                try:
+                    at = datetime.fromisoformat(event["startsAt"].replace("Z", "+00:00"))
+                    return at.astimezone(LOCAL_TZ) if at.tzinfo else None
+                except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
+                    return None
+            dated = sorted(((e, when(e)) for e in hits(content.community["events"])),
+                           key=lambda pair: (pair[1] is None, pair[1].timestamp() if pair[1] else 0))
+            lines += [f"hike {e.get('id')}: {e['title']} (" + (f"{at:%A %b} {at.day}, {at.hour % 12 or 12}:{at:%M} "
+                      f"{'am' if at.hour < 12 else 'pm'}" if at else "date unreadable") + f", {e.get('status')})"
+                      for e, at in dated]
+            lines += [f"route {r.get('id')}: {r['title']} ({r.get('status')})"
+                      for r in sorted(hits(content.community["routeIdeas"]), key=lambda r: catalog._fold(r["title"]))]
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             self._reply("Catalog unavailable right now; nothing changed.")
             return "find"
         more = len(lines) - FIND_MAX
         tail = [f"… {more} or more; add a word." if capped else f"… {more} more; add a word."] if more > 0 else \
             ["… maybe more; add a word."] if capped else []
-        self._reply("\n".join(lines[:FIND_MAX] + tail) if lines else f'No product or maker matches "{query}".')
+        self._reply("\n".join(lines[:FIND_MAX] + tail) if lines
+                    else f'No product, maker, hike or route idea matches "{query}".')
         return "find"
 
     def _show(self, code, now) -> tuple:
