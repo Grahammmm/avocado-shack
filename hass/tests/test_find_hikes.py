@@ -94,6 +94,26 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
         self.edit("community.json", lambda doc: doc["club"].update(emailConnected=True))  # so is the rest of community
         self.assertEqual(self.find("find zzbd"), [test_find.UNAVAILABLE])
 
+    def test_unsafe_title_id_or_status_cannot_add_reply_lines(self):
+        """A line break, control character or markup in a repeated event/idea field, written to community.json and read
+        through the real loader/validator, makes find unavailable rather than injecting lines past the cap."""
+        forged = "Zzinj walk" + "\nproduct forged: forged record" * 12
+        path = self.repo.wt / "hass" / "content" / "community.json"
+        good = path.read_text("utf-8")
+        for change in (lambda doc: doc.update(events=[event("hike-2026-12-05", forged, "2026-12-05T09:00:00-08:00")]),
+                       lambda doc: doc.update(events=[event("hike-2026-12-05\nproduct x: y", "Zzinj walk", "bad")]),
+                       lambda doc: doc.update(events=[event("hike-2026-12-05", "Zzinj walk", "bad", "x\u202e")]),
+                       lambda doc: doc["routeIdeas"].append({"id": "idea-zzinj", "title": "Zzinj <b>loop</b>"}),
+                       lambda doc: doc["routeIdeas"].append({"id": "idea-zzinj", "title": "Zzinj\rloop"})):
+            path.write_text(good, "utf-8")
+            self.edit("community.json", change)
+            with self.assertRaises(ContentError):  # the real validator refuses each of these
+                load_and_validate(self.repo.wt / "hass" / "content", self.repo.wt / "storefront-mockup")
+            self.assertEqual(self.find("find zzinj"), [test_find.UNAVAILABLE])
+        path.write_text(good, "utf-8")
+        self.community([event("hike-2026-12-05", "Zzinj walk", "bad")])  # the same record, safe fields: listed
+        self.assertEqual(self.find("find zzinj"), ["hike hike-2026-12-05: Zzinj walk (date unreadable, scheduled)"])
+
     def test_paused_gives_the_same_answer_and_changes_nothing(self):
         self.community([event("hike-2026-12-05", "Zzps walk", "2026-12-05T09:00:00-08:00")], [("idea-zzps", "Zzps loop")])
         draft, _reply = self.propose("hours")

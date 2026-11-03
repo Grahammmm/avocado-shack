@@ -14,7 +14,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass import claims, interpret_check, label_reader, media, owner_answers as answers  # noqa: E402
-from hass.content_model import ContentError, load_and_validate, load_content, validate  # noqa: E402
+from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -890,6 +890,13 @@ class Conversation:
                 validate(content, wt / "storefront-mockup")
             except ContentError as exc:
                 if any(not p.startswith(("events[", "routeIdeas[")) for p in exc.problems): raise
+            shown = []  # the fields a reply line repeats get the validator's text checks: no line break/markup injection
+            for key in ("events", "routeIdeas"):
+                for i, r in enumerate(content.community[key] if isinstance(content.community[key], list) else []):
+                    for field in ("id", "title", "status") if isinstance(r, dict) else ():
+                        if r.get(field) is not None and (field != "title" or isinstance(r[field], str)):
+                            checked_text(shown, f"{key}[{i}].{field}", r[field])
+            if shown: raise ContentError(shown)
             has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
             aliases, lines, capped = self.aliases() if has_memory else {}, [], False
             records = {"product": {p["id"]: (p["name"], p["status"]) for p in content.products},
