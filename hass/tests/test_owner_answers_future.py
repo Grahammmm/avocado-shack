@@ -62,6 +62,22 @@ class FutureInstallTimeTests(unittest.TestCase):
         self.check("2026-11-02T17:10:00+00:00", "today 09:10", now=naive_now)
         self.check("2026-11-02T17:00:00+00:00", "today 09:00", now=naive_now)
 
+    def test_dst_fall_back_never_widens_the_slack(self):
+        # 2026-11-01 01:58 PDT (fold=0) = 08:58Z; wall-clock + 5 min would be 02:03 PST = 10:03Z (an hour too wide)
+        pdt = datetime(2026, 11, 1, 1, 58, tzinfo=PT, fold=0)
+        self.check("2026-11-01T09:30:00+00:00", UNKNOWN, now=pdt)  # 32 min ahead
+        self.check("2026-11-01T09:03:00.000001+00:00", UNKNOWN, now=pdt)  # just past now + 5 min
+        self.check("2026-11-01T09:03:00+00:00", "today 01:03", now=pdt)  # exactly now + 5 min (01:03 PST)
+        self.check("2026-11-01T08:50:00+00:00", "today 01:50", now=pdt)  # past (01:50 PDT)
+        pst = datetime(2026, 11, 1, 1, 58, tzinfo=PT, fold=1)  # second 01:58, PST = 09:58Z
+        self.check("2026-11-01T09:30:00+00:00", "today 01:30", now=pst)  # really in the past here
+        self.check("2026-11-01T10:04:00+00:00", UNKNOWN, now=pst)  # 6 min ahead
+
+    def test_dst_spring_forward_keeps_five_minutes(self):
+        now = datetime(2026, 3, 8, 1, 58, tzinfo=PT)  # 01:58 PST = 09:58Z; 02:xx does not exist that day
+        self.check("2026-03-08T10:03:00+00:00", "today 03:03", now=now)  # exactly now + 5 min (03:03 PDT)
+        self.check("2026-03-08T10:04:00+00:00", UNKNOWN, now=now)
+
     def test_zone_less_and_unreadable_install_times_stay_unknown(self):
         for bad in ("2026-11-02T09:00", "2026-11-02T09:11", "2026-11-02", "not a time", None, 5):
             self.check(bad, UNKNOWN)

@@ -43,7 +43,8 @@ def _when(iso, now) -> str:
         return "at an unknown time"
     if at.utcoffset() is None: return "at an unknown time"
     now = now if now.utcoffset() is not None else now.replace(tzinfo=timezone.utc)
-    if at > now + FUTURE_SLACK: return "at an unknown time"  # RF1300-20: never a check time that has not happened
+    if at > now.astimezone(timezone.utc) + FUTURE_SLACK:  # RF1300-20: in UTC, so a DST fall-back never widens the slack
+        return "at an unknown time"  # never a check time that has not happened
     at = at.astimezone(LOCAL_TZ)
     if at.date() == now.astimezone(LOCAL_TZ).date(): return f"today {at:%H:%M}"
     return f"{at:%a %b} {at.day} {at:%H:%M}"
