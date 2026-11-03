@@ -29,6 +29,7 @@ PARTIAL = ("If copying it was started and stopped part way, some pages may alrea
            "to the website again, which puts every page in place")
 NOT_LIVE = "Saved, but not on the website yet: copying it there is a separate step. Ask for help to put it on the website."
 UNCHANGED = "The website is as it was before"
+ROLLBACK_FAILED_WORDS = "install failed, some website files not put back - ask for help"  # RF1230-19
 
 
 def _when(iso, now) -> str:
@@ -49,6 +50,10 @@ def _install_reason(reason) -> str:
     return next((plain for prefix, plain in INSTALL_REASONS if text.startswith(prefix)), "The copy did not finish")
 
 
+def _rollback_failed(install) -> bool:  # SHOP-2 install failed and could not put every file back
+    return isinstance(install, dict) and install.get("state") == "failed" and "rollback failed" in str(install.get("reason"))
+
+
 def did_it_work(change, install, now) -> str:
     """change: a conversation draft row as a dict (state, summary, reason); install: the editor change record's
     `install` entry (SHOP-2) or None. Returns one plain answer."""
@@ -64,7 +69,7 @@ def did_it_work(change, install, now) -> str:
     if install.get("state") == "installed":
         return f"Done. {summary} is on the website now (checked {_when(install.get('installed_at'), now)})."
     if install.get("state") == "failed":
-        if "rollback failed" in str(install.get("reason")):  # SHOP-2 could not put every file back
+        if _rollback_failed(install):  # SHOP-2 could not put every file back
             return (f"This did not reach the website, and some website files could not be put back. "
                     f"{_install_reason(install.get('reason'))}. Please ask for help before more changes.")
         return f"This did not reach the website, and the website is unchanged. {_install_reason(install.get('reason'))}."
@@ -125,6 +130,7 @@ def history_words(change, install) -> str:
     state = change.get("state")
     if state not in KNOWN and state is not None: return "state unknown - ask for help"  # RF0910-5
     if state in SAVED:
+        if _rollback_failed(install): return ROLLBACK_FAILED_WORDS  # RF1230-19: asks for help, as did_it_work does
         state = (install if isinstance(install, dict) else {}).get("state")  # same rule as did_it_work
         return "on the website" if state == "installed" else "not on the website yet" if state == "failed" \
             else "not confirmed on the website"
