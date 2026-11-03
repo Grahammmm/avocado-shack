@@ -202,6 +202,9 @@ No worker, timer, CLI or live adapter: fixtures only.
 
 H10 label reader (`hass/label_reader.py`, loopback local model, not wired into a service): for a new photo question it may add `The label looks like: <brand> <name> (<category>). Is that right?`; it is only a question, ops stay `product.set_photo {photo}`, and maker, organic and origin are never read from a photo.
 
+H10 label eval (`hass/label_eval.py`, FAV-02): `python3 hass/label_eval.py score --cases hass/tests/fixtures/label-eval.jsonl --replies R` prints one JSON line of right / wrong / none per field (name, brand, category) and the wrong case ids (no values, no photo names); exit 2 names the bad line.
+Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.0.0.1:11434 --model M --photos DIR --out FILE` asks the loopback vision model once per photo (a regular file named in the cases, directly in DIR; photos stay outside the repo) and writes the raw replies to a new 0600 FILE outside the repo; score that FILE to show how often the reader is wrong.
+
 ## Retention report (H21)
 
 `python3 hass/retention.py report --state DIR --days N [--media ROOT] [--backups DIR]` prints one JSON line: how many inbox and conversation rows, outbox replies, drafts, screenshots, photo originals (and web copies) and state backups are older than N days, with the oldest kept date of each. `--days` is required (a whole number ≥ 1).

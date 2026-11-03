@@ -1,0 +1,10 @@
+{"id": "l01", "photo": "label-01.jpg", "expected": {"name": "Hass avocado", "brand": "Avocado Shack", "category": "fruit"}}
+{"id": "l02", "photo": "label-02.jpg", "expected": {"name": "Raspberries", "brand": "AG Berries", "category": "fruit"}}
+{"id": "l03", "photo": "label-03.jpg", "expected": {"name": "Spring Greens", "brand": "Jayleaf", "category": "vegetables"}}
+{"id": "l04", "photo": "label-04.jpg", "expected": {"name": "Cal Poly eggs", "brand": "Cal Poly", "category": "eggs"}}
+{"id": "l05", "photo": "label-05.jpg", "expected": {"name": "Straus half-and-half", "brand": "Straus", "category": "dairy"}}
+{"id": "l06", "photo": "label-06.jpg", "expected": {"name": "Rye bread", "brand": "Brian's", "category": "bread"}}
+{"id": "l07", "photo": "label-07.jpg", "expected": {"name": "Linn's blueberry preserves", "brand": "Linn's", "category": "pantry"}}
+{"id": "l08", "photo": "label-08.jpg", "expected": {"name": "Alle-Pia guanciale", "brand": "Alle-Pia", "category": "meat"}}
+{"id": "l09", "photo": "label-09.jpg", "expected": {"name": "Zero non-alcoholic cider", "brand": "SLO Cider", "category": "drinks"}}
+{"id": "l10", "photo": "label-10.jpg", "expected": {"name": "Watermelon", "brand": null, "category": "fruit"}}
