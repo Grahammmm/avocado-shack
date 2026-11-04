@@ -7,6 +7,7 @@ a name can never break a line or a section. Not wired into any service (NB-AV-02
 AV2022-01: a Community section lists every hike (id | title | starts at | status) and route idea (id | title).
 AV2022-02: a last Store section lists the street address, town and every hours line (field | value), because
 store.set_hours replaces the whole list.
+RF1100-7: damaged catalog rows are skipped, like hikes and route ideas (a non-object maker keeps its key, empty name).
 """
 from __future__ import annotations
 
@@ -84,7 +85,8 @@ def _product_lines(products) -> list:
 
 
 def _maker_lines(makers) -> list:
-    rows = [f"{_q(key)} | {_q((makers[key] or {}).get('name'))}" for key in sorted(makers, key=str)]
+    rows = [f"{_q(key)} | {_q(m.get('name') if isinstance(m := makers[key], dict) else None)}"
+            for key in sorted(makers, key=str)]
     return _capped(rows, MAX_MAKERS)
 
 
@@ -116,13 +118,14 @@ def build(registry, content) -> str:
     """The system prompt for ``registry`` (name -> Op) and ``content`` (.products, .makers, .community, .store)."""
     community = getattr(content, "community", None) or {}
     community = community if isinstance(community, dict) else {}
+    makers = content.makers if isinstance(content.makers, dict) else {}
     sections = [
         ROLE,
         CONTRACT,
         "Rules:\n" + "\n".join(f"- {rule}" for rule in RULES),
         "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
-        "Catalog.\nProducts (id | name | status):\n" + "\n".join(_product_lines(content.products or []))
-        + "\nMakers (key | name):\n" + "\n".join(_maker_lines(content.makers or {})),
+        "Catalog.\nProducts (id | name | status):\n" + "\n".join(_product_lines(_dicts(content.products)))
+        + "\nMakers (key | name):\n" + "\n".join(_maker_lines(makers)),
         "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
         + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),
         "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),

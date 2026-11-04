@@ -9,13 +9,15 @@ from pathlib import Path
 from unittest import mock
 
 from hass import statebackup
+from hass.tests.test_editor import git
 from hass.tests.test_statebackup import SCRIPT, STAMP, BackupTestCase, tree
 
-KEYS = ["backup", "createdAt", "files", "complete", "problem"]
+KEYS = ["backup", "createdAt", "files", "complete", "problem", "contentCommit"]
 REFUSED = {"result": "refused", "problems": ["--out must be a folder, not a link"]}
 
 def row(name, problem):
-    return {"backup": name, "createdAt": None, "files": None, "complete": False, "problem": problem}
+    return {"backup": name, "createdAt": None, "files": None, "complete": False, "problem": problem,
+            "contentCommit": None}
 
 def stamps(root):  # path -> mtime of root and everything below it (lstat: a link is never followed)
     return {str(p): os.lstat(p).st_mtime_ns for p in [root, *root.rglob("*")]}
@@ -40,7 +42,8 @@ class ListTests(BackupTestCase):
         old, new = self.make(STAMP), self.make(later := STAMP + timedelta(hours=1))
         def done(path, when):
             count = len(json.loads((path / statebackup.MANIFEST).read_text("utf-8"))["files"])
-            return dict(zip(KEYS, (path.name, when.isoformat(), count, True, None)))
+            return dict(zip(KEYS, (path.name, when.isoformat(), count, True, None,
+                                       git(self.repo.wt, "rev-parse", "HEAD"))))
         code, rows, _ = self.cli(self.bk)
         self.assertEqual((code, rows), (0, [done(new, later), done(old, STAMP)]))
         self.assertEqual([list(r) for r in rows], [KEYS, KEYS])

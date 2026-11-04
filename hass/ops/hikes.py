@@ -25,27 +25,45 @@ MAX_AHEAD_DAYS = 400  # a start further out is a question ("check the year"), ne
 MAX_ID_BASE = 56  # leaves room for a "-NNN" suffix inside the 64-character id limit
 
 
-def guest_counts(db_path) -> dict[str, int]:
-    """{event_id: confirmed seats} from a read-only open of the RSVP database. Never selects email or name."""
+# Seats per event plus a count of rows whose party size is missing, not a stored integer, or below 1 (a SUM over
+# such rows would skip, coerce or subtract them and under-count). Never selects email or name.
+GUEST_QUERY = ("SELECT event_id, SUM(party_size), SUM(party_size IS NULL OR typeof(party_size) != 'integer' "
+               "OR party_size < 1) FROM rsvps GROUP BY event_id")
+
+
+def guest_counts_checked(db_path) -> tuple[dict[str, int], set[str]]:
+    """({event_id: confirmed seats}, {event ids with a bad party_size row}) from a read-only open; bad events are
+    left out of the counts, so a caller can say "unavailable" instead of a smaller number."""
     uri = Path(db_path).resolve().as_uri() + "?mode=ro"
     db = sqlite3.connect(uri, uri=True)
     try:
         db.execute("PRAGMA query_only=ON")
-        rows = db.execute("SELECT event_id, SUM(party_size) FROM rsvps GROUP BY event_id").fetchall()
+        rows = db.execute(GUEST_QUERY).fetchall()
     finally:
         db.close()
-    return {event_id: int(seats) for event_id, seats in rows}
+    bad = {event_id for event_id, _seats, n_bad in rows if n_bad}
+    return {event_id: int(seats) for event_id, seats, _n in rows if event_id not in bad}, bad
+
+
+def guest_counts(db_path) -> dict[str, int]:
+    """{event_id: confirmed seats}; raises ValueError when any event has a bad party_size row, so callers without
+    per-event handling say "unavailable" (as for an unreadable database) instead of a smaller number."""
+    counts, bad = guest_counts_checked(db_path)
+    if bad:
+        raise ValueError("bad party_size row")
+    return counts
 
 
 def _seats(ctx, event_id):
-    """Confirmed guests for the event, or a Refused when the count cannot be read (fail closed)."""
+    """Confirmed guests for the event, or a Refused when the count cannot be read or has a bad row (fail closed)."""
     path = ctx.settings.get("guestCountsDb")
     if not isinstance(path, str) or not path:
         return Refused("guest count unavailable")
     try:
-        return guest_counts(path).get(event_id, 0)
+        counts, bad = guest_counts_checked(path)
     except (sqlite3.Error, OSError, ValueError, TypeError):
         return Refused("guest count unavailable")
+    return Refused("guest count unavailable") if event_id in bad else counts.get(event_id, 0)
 
 
 def _guest_warning(ctx, event):
@@ -132,10 +150,10 @@ def _local_day(event):
         return None
 
 
-def _hike_twin(content, day, title):
-    """The first scheduled event with an equal title on the same local (Pacific) date, else None."""
+def _hike_twin(content, day, title, skip=None):
+    """The first scheduled event, other than id skip, with an equal title on the same local (Pacific) date."""
     return next((e for e in _events(content) if e.get("status") == "scheduled" and _local_day(e) == day
-                 and _same(e.get("title", ""), title)), None)
+                 and e.get("id") != skip and _same(e.get("title", ""), title)), None)
 
 
 def _touch(before, event):
@@ -156,6 +174,8 @@ def _hike_create(content, args, ctx):
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
+    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
+        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
     twin = _hike_twin(content, args["date"], args["title"])
     if twin is not None:
         return Refused(f"{twin['id']} is already scheduled with this title on {args['date']}; update it instead")
@@ -192,10 +212,16 @@ _CLEAR_CHECKS = ((lambda n, a: n not in _KNOWN, "clear: {} is not a hike field")
                  (lambda n, a: n in a, "{} cannot be set and cleared together"))
 
 
+def _spaced(v):
+    return " ".join(v.split()) if isinstance(v, str) else v
+
+
 def _hike_update(content, args, ctx):
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
+    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
+        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
     clear = list(dict.fromkeys(args.get("clear", ())))  # duplicates collapse
     for test, why in _CLEAR_CHECKS:
         bad = next((n for n in clear if test(n, args)), None)
@@ -205,6 +231,10 @@ def _hike_update(content, args, ctx):
     if not given and not clear:
         return NeedsDetails(list(UPDATE_FIELDS), f"What should change on {args['id']}? Give at least one of: "
                             + ", ".join(UPDATE_FIELDS))
+    given = {f: v for f, v in given.items() if not (f in ("title", "meetingPoint") + TEXT_FIELDS
+                                                    and isinstance(event.get(f), str) and _spaced(event[f]) == _spaced(v))}
+    if not given and not clear:  # only spacing differs from the stored text: the page would render it identically
+        return Refused(f"hike {args['id']} already says that")
     if "capacity" in given and "noCapacityLimit" in given:
         return NeedsDetails(["capacity", "noCapacityLimit"], "Give either a new capacity or noCapacityLimit true, not both.")
     turning_on = given.get("rsvpEnabled") is True and not event.get("rsvpEnabled")
@@ -217,12 +247,24 @@ def _hike_update(content, args, ctx):
         if not isinstance(starts, str):
             return starts
         changes["startsAt"] = starts
+    if "title" in given or "date" in given:  # a time-only change cannot move the local day
+        day = given.get("date") or _local_parts(event["startsAt"])[0]
+        twin = _hike_twin(content, day, given.get("title", event.get("title", "")), skip=event["id"])
+        if twin is not None:
+            return Refused(f"{twin['id']} is already scheduled with this title on {day}")
     if "capacity" in given:
         seats = _seats(ctx, event["id"])
         if isinstance(seats, Refused):
             return seats
         if given["capacity"] < seats:
             return Refused(f"capacity {given['capacity']} is below {seats} confirmed guests")
+    if turning_on and "capacity" not in given and "noCapacityLimit" not in given and event.get("capacity") is not None:
+        seats = _seats(ctx, event["id"])  # RSVP rows survive RSVPs off, so the stored capacity may be stale
+        if isinstance(seats, Refused):
+            return seats
+        if event["capacity"] < seats:
+            return Refused(f"stored capacity {event['capacity']} is below {seats} confirmed guests; "
+                           "give a new capacity or noCapacityLimit true")
     if given.get("rsvpEnabled") is False:
         _guest_warning(ctx, event)
     elif "startsAt" in changes and event.get("rsvpEnabled"):
@@ -272,8 +314,10 @@ def _hike_recap(content, args, ctx):
         return Refused(f"{event['id']} is scheduled; use hike.complete with a recap")
     if event["status"] != "completed":
         return Refused(f"{event['id']} is {event['status']}")
+    if isinstance(event.get("recap"), str) and _spaced(event["recap"]) == _spaced(args["recap"]):
+        return Refused(f"hike {args['id']} already says that")
     before = copy.deepcopy(event)
-    event["recap"] = args["recap"]  # the same recap again is left to the editor's "change nothing" refusal
+    event["recap"] = args["recap"]  # an equal recap (spacing ignored) is refused above
     return _touch(before, event)
 
 

@@ -79,8 +79,9 @@ class UnwiredTest(unittest.TestCase):
     def test_only_the_module_and_its_test_mention_it(self):
         out = subprocess.run(["git", "grep", "-l", "auto_policy"], cwd=ROOT, capture_output=True, text=True)
         self.assertIn(out.returncode, (0, 1))
-        self.assertEqual(out.stdout.split(), ["hass/tests/test_auto_policy.py",
-                                              "hass/tests/test_auto_policy_shapes.py"])  # no importer outside tests
+        self.assertEqual(out.stdout.split(), ["hass/acceptance.py", "hass/tests/test_acceptance_runner.py",
+                                              "hass/tests/test_auto_policy.py",
+                                              "hass/tests/test_auto_policy_shapes.py"])  # no importer outside this test
         self.assertIn("UNWIRED", auto_policy.__doc__ or "")
 
 

@@ -1,10 +1,11 @@
 """NB-AV-04 (H09): interpreter eval set and offline scorer. `score --cases C --replies R` prints one JSON summary (ids
 and short reasons, never a case text or reply); exit 0 when every case was scored, even if some failed; 2 for an
-unreadable file, malformed line, duplicate id or a case file without exactly 40 cases. `--live --url U --model M
+unreadable file, malformed line, duplicate id, a case file without exactly 40 cases or an unscorable case (RF0550-4:
+bad/repeated pending code, `revises` naming no pending draft, > MAX_OPS expected ops). `--live --url U --model M
 --out FILE` is OPERATOR ONLY, never run in CI or tests (they inject a fake transport): it builds the NB-AV-03 prompt
 from the real registry and catalog, asks the existing local model (NB-AV-02, loopback only) once per case and writes
 {"id", "reply"} lines to a new FILE outside the repo."""
-import argparse, json, os, re, sys  # noqa: E401
+import argparse, contextlib, json, os, re, sys, tempfile  # noqa: E401
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -54,6 +55,14 @@ def _expect_ok(expect) -> bool:
                     and isinstance(c["args"], dict) for c in expect["ops"]))
 
 
+def _pending_codes(pending, n) -> set:  # each a 1-16 char str without whitespace or control characters, none repeated
+    codes = [p.get("code") for p in pending]
+    if not all(isinstance(c, str) and 1 <= len(c) <= 16 and c.isprintable() and " " not in c for c in codes):
+        raise EvalError(f"cases line {n}: bad pending code")
+    if len(set(codes)) != len(codes): raise EvalError(f"cases line {n}: repeated pending code")
+    return set(codes)
+
+
 def load_cases(path) -> list:
     cases, seen = [], set()
     for n, row in _rows(path, "cases"):
@@ -62,6 +71,10 @@ def load_cases(path) -> list:
                 and isinstance(row["pending"], list) and all(isinstance(p, dict) for p in row["pending"])
                 and _expect_ok(row["expect"])):
             raise EvalError(f"cases line {n}: not a case")
+        codes, expect, most = _pending_codes(row["pending"], n), row["expect"], interpret_check.MAX_OPS
+        if "ops" in expect and expect["revises"] not in (None, *codes):
+            raise EvalError(f"cases line {n}: revises names no pending draft")
+        if len(expect.get("ops", ())) > most: raise EvalError(f"cases line {n}: more than {most} expected ops")
         cases.append(row)
     if len(cases) != CASE_COUNT: raise EvalError(f"cases: {len(cases)} cases, expected {CASE_COUNT}")
     return cases
@@ -106,7 +119,8 @@ def score(cases, replies, registry) -> dict:
 
 
 def live(cases, url, model, out, transport=None, registry=None, content=None) -> dict:
-    """Record one fresh reply per case into a new file ``out`` outside the repository (operator only)."""
+    """Record one fresh reply per case into a new file ``out`` outside the repository (operator only);
+    the replies file is created 0600 and only when complete."""
     target = Path(out).expanduser().resolve()
     if target == REPO or REPO in target.parents: raise EvalError("--out must be outside the repository")
     if os.path.lexists(Path(out).expanduser()) or target.exists(): raise EvalError("--out already exists")
@@ -117,11 +131,21 @@ def live(cases, url, model, out, transport=None, registry=None, content=None) ->
         raise EvalError(str(exc)) from None
     rows = [{"id": c["id"], "reply": model_call.interpret(c["text"], c["pending"]), "failed": model_call.last_error}
             for c in cases]
-    try:
-        with open(target, "x", encoding="utf-8") as fh:
+    tmp = None
+    try:  # a private temp file beside the target (0600 by construction), linked into place only when complete
+        fd, tmp = tempfile.mkstemp(prefix=".interpreter-eval-", suffix=".tmp", dir=target.parent)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.writelines(json.dumps({"id": r["id"], "reply": r["reply"]}) + "\n" for r in rows)  # ASCII lines
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.link(tmp, target)  # never replaces a file another writer made meanwhile
+    except FileExistsError:
+        raise EvalError("--out already exists") from None
     except OSError:
         raise EvalError("--out could not be created") from None
+    finally:
+        if tmp:
+            with contextlib.suppress(OSError): os.unlink(tmp)
     return {"recorded": len(rows), "failedCalls": sum(r["failed"] is not None for r in rows)}
 
 

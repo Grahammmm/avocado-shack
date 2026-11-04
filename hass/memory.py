@@ -25,11 +25,13 @@ SOURCE_KIND = re.compile(r"(owner-approved|owner-stated|operator):")  # history 
 AUDIT = ("key", "kind", "created_at", "superseded_at", "forgotten_at")
 MAX_VALUE = 500
 COLUMNS = ("key", "value", "kind", "source", "approved_change", "created_at")
+HIDDEN_CHARS = re.compile("[\x00-\x1f\x7f-\x9f\u200b\u200e\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
 
 
 def _clean(text) -> bool:
-    """A non-empty str without control characters (below U+0020, or U+007F)."""
-    return isinstance(text, str) and bool(text) and not any(ord(c) < 0x20 or ord(c) == 0x7F for c in text)
+    """A non-empty str without HIDDEN_CHARS: C0/C1 controls and U+007F, U+200B, U+200E/F, U+2028/9, U+202A-E,
+    U+2060-4, U+2066-9 and U+FEFF. U+200C/U+200D stay allowed (emoji ZWJ sequences, Persian/Indic scripts)."""
+    return isinstance(text, str) and bool(text) and not HIDDEN_CHARS.search(text)
 
 
 def _check_key(key) -> None:

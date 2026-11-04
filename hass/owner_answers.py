@@ -5,12 +5,16 @@ Pure functions over dictionaries the caller has already read (a conversation dra
 Never a change hash, draft hash, file path or commit: the owner only sees what changed and where it is now.
 """
 import re
+import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
-PENDING = ("proposed", "needs-details", "approved")  # not applied yet: never described as applied (approval gate)
+PENDING = ("proposed", "needs-details")  # not applied yet: never described as applied (approval gate)
+UNDER_WAY = "You said yes; it is still being saved, so nothing has changed on the website yet."  # approved, not saved
 SAVED = ("applied", "verified")
+KNOWN = PENDING + ("approved", "reverted", "rejected", "expired", "failed") + SAVED  # = conversation.TRANSITIONS states
+UNKNOWN_STATE = "I can't read where this change is, so I can't say whether the website changed. Please ask for help."
 INSTALL_REASONS = (  # SHOP-2 install failure reasons -> plain words (the file name that follows is dropped)
     ("write failed", "The website files could not be written"),
     ("readback mismatch", "The website files did not read back as written"),
@@ -26,6 +30,7 @@ PARTIAL = ("If copying it was started and stopped part way, some pages may alrea
            "to the website again, which puts every page in place")
 NOT_LIVE = "Saved, but not on the website yet: copying it there is a separate step. Ask for help to put it on the website."
 UNCHANGED = "The website is as it was before"
+ROLLBACK_FAILED_WORDS = "install failed, some website files not put back - ask for help"  # RF1230-19
 
 
 def _when(iso, now) -> str:
@@ -41,25 +46,38 @@ def _when(iso, now) -> str:
     return f"{at:%a %b} {at.day} {at:%H:%M}"
 
 
+def _summary(value) -> str:  # RF1300-19: one readable line of text, stripped, else "the change"
+    text = value.strip() if isinstance(value, str) else ""
+    if not text or len(text) > 200 or any(unicodedata.category(c) == "Cc" or c in "\u2028\u2029" for c in text):
+        return "the change"
+    return text
+
+
 def _install_reason(reason) -> str:
     text = str(reason or "")
     return next((plain for prefix, plain in INSTALL_REASONS if text.startswith(prefix)), "The copy did not finish")
 
 
+def _rollback_failed(install) -> bool:  # SHOP-2 install failed and could not put every file back
+    return isinstance(install, dict) and install.get("state") == "failed" and "rollback failed" in str(install.get("reason"))
+
+
 def did_it_work(change, install, now) -> str:
     """change: a conversation draft row as a dict (state, summary, reason); install: the editor change record's
     `install` entry (SHOP-2) or None. Returns one plain answer."""
-    state, summary = change.get("state"), change.get("summary") or "the change"
+    state, summary = change.get("state"), _summary(change.get("summary"))
     if state in PENDING or state is None: return "Waiting for your OK - nothing has changed yet."
+    if state not in KNOWN: return UNKNOWN_STATE  # RF0910-5: a damaged/unknown state is never called unchanged or done
+    if state == "approved": return UNDER_WAY  # an install entry never upgrades an unsaved approval to "Done"
     if state == "reverted": return "That change was undone."
     if state in ("rejected", "expired"): return "That draft was closed, so nothing changed."
-    if state not in SAVED:  # failed (or interrupted) before it was saved: the website was never touched
+    if state not in SAVED:  # failed before it was saved: the website was never touched
         return "This was not saved, and the website is unchanged; send the change again to retry."
     install = install if isinstance(install, dict) else {}
     if install.get("state") == "installed":
         return f"Done. {summary} is on the website now (checked {_when(install.get('installed_at'), now)})."
     if install.get("state") == "failed":
-        if "rollback failed" in str(install.get("reason")):  # SHOP-2 could not put every file back
+        if _rollback_failed(install):  # SHOP-2 could not put every file back
             return (f"This did not reach the website, and some website files could not be put back. "
                     f"{_install_reason(install.get('reason'))}. Please ask for help before more changes.")
         return f"This did not reach the website, and the website is unchanged. {_install_reason(install.get('reason'))}."
@@ -84,7 +102,7 @@ def applied_text(code, summary, checked=False, error=None) -> str:
     """The reply when an approved change is saved (the apply/approve reply point): applying never copies it to the
     website, so the reply says so instead of only 'Applied'."""
     if error is not None: return f"Applied {code}, but the preview check failed: {preview_reason(error)}.\n{NOT_LIVE}"
-    return f"Applied{' and checked' if checked else ''} {code}: {summary}\n{NOT_LIVE}"
+    return f"Applied{' and checked' if checked else ''} {code}: {_summary(summary)}\n{NOT_LIVE}"
 
 
 def _requests(n) -> str:
@@ -95,9 +113,17 @@ def stopped_state(paused, queue) -> str:
     """paused: when changes were stopped (ISO time) or None; queue: {"waiting": requests not applied yet (drafts
     waiting for an OK plus messages not read yet), "applying": codes of approvals already under way}."""
     if not paused: return "Changes are on."
-    lines = ["Changes are stopped. Nothing new will be applied until you say 'resume'.", _requests(queue.get("waiting", 0))]
-    for code in queue.get("applying") or ():
+    queue = queue if isinstance(queue, dict) else {}  # RF2320-10: a damaged queue reads as unknown, never crashes
+    waiting, applying = queue.get("waiting"), queue.get("applying")
+    lines = ["Changes are stopped. Nothing new will be applied until you say 'resume'.",
+             _requests(waiting) if type(waiting) is int and waiting >= 0 else "Waiting requests: unknown."]
+    skipped = 0
+    for code in applying if isinstance(applying, (list, tuple)) else ():
+        if not (isinstance(code, str) and len(code) <= 40 and "/" not in code and code.split() == [code]):
+            skipped += 1
+            continue
         lines.append(f"{code} had already started: {UNCHANGED.lower()}, and nothing is copied to it by itself.")
+    if skipped: lines.append(f"{skipped} more change(s) had already started.")
     lines.append("Changes already on the website stay there.")
     return " ".join(lines)
 
@@ -110,9 +136,11 @@ def recovered_text(code) -> str:
 def history_words(change, install) -> str:
     """A short where-is-it phrase for one history line."""
     state = change.get("state")
+    if state not in KNOWN and state is not None: return "state unknown - ask for help"  # RF0910-5
     if state in SAVED:
-        state = (install or {}).get("state")
+        if _rollback_failed(install): return ROLLBACK_FAILED_WORDS  # RF1230-19: asks for help, as did_it_work does
+        state = (install if isinstance(install, dict) else {}).get("state")  # same rule as did_it_work
         return "on the website" if state == "installed" else "not on the website yet" if state == "failed" \
             else "not confirmed on the website"
-    return {"reverted": "undone", "failed": "not saved; website unchanged", "rejected": "nothing changed",
-            "expired": "nothing changed"}.get(state, "waiting for your OK")
+    return {"approved": "approved, not saved yet", "reverted": "undone", "failed": "not saved; website unchanged",
+            "rejected": "nothing changed", "expired": "nothing changed"}.get(state, "waiting for your OK")

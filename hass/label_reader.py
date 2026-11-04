@@ -3,16 +3,18 @@
 LabelReader(base_url, model).read(image_bytes, categories) sends one Ollama `POST /api/chat` (loopback http only,
 the NB-AV-02 adapter's checks, transport and reply limits) with the photo's metadata-free web copy, and returns at most
 {"name", "brand", "category"} as printed on the label. Everything else the model says (maker, origin, organic ...) is
-dropped, and so is any value with an organic/origin claim term: a photo never supplies a claim. Any failure is {} with
+dropped, and so is any value with an organic/origin claim term or text the catalog refuses (<, >, $, {{, }}): a photo
+never supplies a claim. Any failure is {} with
 a short code in `last_error` only; nothing is logged. Not wired into a service: the operator names the existing model.
 """
 import base64
 import json
+import re
 import unicodedata
 from types import SimpleNamespace
 
 from hass import claims
-from hass.content_model import TEXT_LIMITS
+from hass.content_model import FORBIDDEN_TEXT, TEXT_LIMITS
 from hass.interpreter_local import LocalInterpreter, _Failed
 from hass.ops import catalog
 
@@ -24,21 +26,33 @@ PROMPT = ("Read the product label in this photo. Answer only with a JSON object 
 _TERMS = tuple(claims.fold(term).replace("-", " ") for term in claims.TERMS)
 PLACEHOLDERS = frozenset({"null", "none", "nil", "n/a", "na", "unknown", "not printed", "not visible", "not shown",
                           "-", "--", "?", "no brand", "no name", "unbranded"})  # a "not printed" answer, not a value
+AMOUNT_RE = re.compile(r"[$€£]?\s*\d+(?:[.,]\d+)?\s*(?:fl\.?\s*oz|oz|lbs?|g|kg|mg|ml|l|ct|count|pack|pk)?\.?",
+                       re.IGNORECASE)  # a price or a size (amount + unit), not a name
 
 
 def _norm(value) -> str:
     return " ".join(claims.fold(value).split()).rstrip(".")
 
 
+def _has_letter(value) -> bool:
+    return any(unicodedata.category(c).startswith("L") for c in value)
+
+
 def _clean(field, value, categories):
-    """The value to offer for one field, or None when it must not be offered."""
+    """The value to offer for one field, or None when it must not be offered;
+    a name/brand with no letter, or only a price/size, is not a name."""
     if not isinstance(value, str) or not value.strip(): return None
     value = value.strip()
-    if any(unicodedata.category(c).startswith("C") for c in value): return None  # control/format characters
+    if any(c != "\t" and (unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp")) for c in value):
+        return None  # line breaks (\n \r \v \f U+0085 U+2028 U+2029) and other control/format characters; a tab is spacing
+    value = " ".join(value.split())  # RF1050-8: inner spaces, tabs and NBSP collapse to one space before every check
+    if any(bad in value for bad in FORBIDDEN_TEXT): return None  # the catalog refuses it (content_model._text); never offered
     if len(value) > TEXT_LIMITS["product"][field]: return None
     folded = claims.fold(value).replace("-", " ")
     if any(term in folded for term in _TERMS): return None  # no organic/origin claim ever comes from a photo
     if _norm(value) in PLACEHOLDERS: return None  # a whole-value placeholder only
+    if field in ("name", "brand") and (not _has_letter(value) or AMOUNT_RE.fullmatch(" ".join(value.split()))):
+        return None  # a barcode, price or bare size
     if field == "category":
         return next((c for c in categories if isinstance(c, str) and c.casefold() == value.casefold()), None)
     return value
@@ -70,7 +84,9 @@ def _product_line(found, products) -> str:
 
 def question(found, makers=None, products=None) -> str:
     """The confirm line, naming only the parts that were read, plus the catalog records they match (never ops)."""
-    words = " ".join(found[f] for f in ("brand", "name") if f in found)
+    fn, fb = _norm(found.get("name", "")).split(), _norm(found.get("brand", "")).split()
+    skip_brand = bool(fb) and fn[:len(fb)] == fb and len(fn) > len(fb)  # the name already begins with the brand
+    words = " ".join(found[f] for f in ("brand", "name") if f in found and not (f == "brand" and skip_brand))
     if "category" in found: words = f"{words} ({found['category']})" if words else found["category"]
     return (f"The label looks like: {words}. Is that right? Say which product it is either way."
             + _maker_line(found, makers) + _product_line(found, products))

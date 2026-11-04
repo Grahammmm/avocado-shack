@@ -43,7 +43,7 @@ class DeepConversationTests(StoreMixin, H06TestCase):
         self.assertEqual(valid[-1], ph.passed("Past hike", "Sun 2026-11-01 09:00 PST"))  # 4: main's status
         self.content("community.json").write_text(DEEP, "utf-8")
         deep = self.status_unchanged()
-        self.assertEqual(deep, [x for x in valid if not x.startswith(("Hike", "…"))] + ["Hikes: unavailable"])
+        self.assertEqual(deep, [x for x in valid if not x.startswith(("Hike", "…", "Shelf check"))] + ["Hikes: unavailable"])
         self.assertNotIn("RecursionError", "\n".join(deep))
 
     def test_events_string_is_unavailable(self):  # 5: valid JSON, wrong shape (existing path)

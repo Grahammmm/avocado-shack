@@ -1,8 +1,8 @@
 """H09 negative demo: one fixture transcript through hass/fixture_chat.py in which nothing may reach the site.
 A stranger, an owner `no`, a redelivered message id, a `yes` after the approval window and an unclear request each end
 with no approval and no site write; the writer worktree is byte-identical after the whole run.
-fixture_chat.py reads the real clock, so main() runs in-process with a clock that is each row's own `at` (the gaps
-between rows are the elapsed time) and with Editor.apply armed to fail. fixture_chat.py itself is untouched.
+main() runs in-process with Editor.apply armed to fail. Its FixtureConversation replays on each row's own `at` (the
+gaps between rows are the elapsed time) and sends each row's replies at that time; the test only records dispositions.
 Run: python3 -B -m unittest hass.tests.test_demo_negative -v
 """
 
@@ -35,31 +35,12 @@ class Clock(datetime):
         return cls.current
 
 
-class _Held:  # collects the sends of one row's flush; the real adapter gets them when fixture_chat flushes at the end
-    def __init__(self): self.sent = []
-    def send(self, chat, text, attachments): self.sent.append((chat, text, attachments))
-
-
-class ClockedConversation(conversation.Conversation):
+class ClockedConversation(fixture_chat.FixtureConversation):  # the real fixture replay, recording dispositions
     handled = []
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._held = _Held()
-
     def handle(self, msg, *args, **kwargs):
-        Clock.current = Clock.fromisoformat(msg.received_at)  # the clock moves to the row's own time
         self.handled.append(disposition := super().handle(msg, *args, **kwargs))
-        # AVB-07: Outbox.flush marks a reply older than DELAYED_AFTER_S as delayed. fixture_chat flushes once after the
-        # whole transcript, so a reply from an early row would look 30 minutes old. Flush at this row's own time instead
-        # (the reply is sent when it is written, so it is not delayed); fixture_chat's final flush forwards the sends.
-        super().flush(self._held)
         return disposition
-
-    def flush(self, adapter):
-        for send in self._held.sent: adapter.send(*send)  # the real adapter, in row order
-        self._held.sent.clear()
-        return super().flush(adapter)  # nothing left unless a row's send failed
 
 
 def _tree(root):  # every file of the writer worktree, by relative path and content hash
@@ -78,7 +59,7 @@ class NegativeDemoTests(unittest.TestCase):
         ClockedConversation.handled = []
         out = io.StringIO()
         with mock.patch.object(fixture_chat, "datetime", Clock), \
-                mock.patch.object(fixture_chat, "Conversation", ClockedConversation), \
+                mock.patch.object(fixture_chat, "FixtureConversation", ClockedConversation), \
                 mock.patch.object(conversation.Editor, "apply", side_effect=AssertionError("editor.apply called")) as apply, \
                 contextlib.redirect_stdout(out):
             code = fixture_chat.main(["--state", str(repo.state), "--fixture", str(TRANSCRIPT), "--interpreter", str(MAPPING)])
@@ -111,10 +92,10 @@ class NegativeDemoTests(unittest.TestCase):
             self.assertTrue(text.startswith(kind) or kind in text, (kind, text))
         a, b = run["db"].execute("SELECT * FROM drafts ORDER BY row_id").fetchall()  # the unclear request opened no draft
         self.assertEqual((a["state"], a["reason"], b["state"]), ("rejected", "owner", "expired"))
-        # fixture_chat flushes once, after the last row (09:32): a reply written over DELAYED_AFTER_S earlier carries
-        # the AVB-07 (H16) send-time prefix; the 09:02 cancel is one, the 09:30 expiry reply onwards are not
-        self.assertEqual(texts[1],
-                         f"(Delayed reply, written 2026-11-02 09:02 PST) Cancelled {a['code']}; nothing changed.")
+        # fixture_chat sends each reply at its own row's time, so no reply is older than DELAYED_AFTER_S and
+        # none carries the AVB-07 (H16) "(Delayed reply, ...)" prefix (that path is covered by the outbox tests)
+        self.assertEqual(texts[1], f"Cancelled {a['code']}; nothing changed.")
+        self.assertFalse(any(t.startswith("(Delayed reply") for t in texts), texts)
         self.assertEqual(texts[3], f"{b['code']} expired at 2026-11-02 09:14 PST; nothing changed.")  # 09:04 + 600 s
         self.assertEqual(texts[4], ASK)
         self.assertNotIn(b["code"], "".join(texts[4:]))  # the question and status name no draft code

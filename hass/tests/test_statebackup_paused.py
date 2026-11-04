@@ -62,7 +62,7 @@ class PausedRestoreTests(BackupTestCase):
         plain = statebackup.restore(str(bare), str(self.tmp / "plain"), str(self.drill_wt))
         self.assertEqual((plain["result"], (self.tmp / "plain" / statebackup.DB).exists()), ("ok", False))
         got = statebackup.restore(str(backup), str(self.tmp / "default"), str(self.drill_wt))
-        self.assertEqual(set(got), {"result", "state", "worktree", "files"})  # no paused key without the flag
+        self.assertEqual(set(got), {"result", "state", "worktree", "files", "contentCommit"})  # no paused key without the flag
         self.assertEqual((self.tmp / "default" / statebackup.DB).read_bytes(), (backup / statebackup.DB).read_bytes())
         got = statebackup.restore(str(bare), str(new := self.tmp / "restored"), str(self.drill_wt), paused=True, now=FIXED)
         self.assertEqual((got["paused"], (new / statebackup.DB).stat().st_mode & 0o777), (True, 0o600))
@@ -103,7 +103,7 @@ class PausedRestoreTests(BackupTestCase):
         self.assertEqual((json.loads(line)["result"], json.loads(line)["paused"]), ("ok", True))
         for path in [new, *new.rglob("*")]:
             self.assertEqual(path.stat().st_mode & 0o777, 0o700 if path.is_dir() else 0o600, path)
-        listed = set(self.files(backup))
+        listed = set(self.files(backup)) - {"content.bundle"}  # restore skips the content bundle (FAV-07)
         self.assertEqual(set(tree(new)), listed | {rel.split("/")[0] for rel in listed if "/" in rel})  # no journal
         bad = subprocess.run([sys.executable, str(SCRIPT), "verify", str(backup), "--paused"], capture_output=True)
         self.assertEqual(bad.returncode, 2)  # --paused belongs to restore only

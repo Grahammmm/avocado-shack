@@ -100,7 +100,7 @@ class OutputHygieneTests(unittest.TestCase):
         manifest = (backup / "MANIFEST.json").read_bytes()
         for canary in CANARIES: self.assertNotIn(canary.encode("utf-8"), manifest)
         doc = json.loads(manifest)
-        self.assertEqual(set(doc), {"schemaVersion", "createdAt", "worktree", "files"})
+        self.assertEqual(set(doc), {"schemaVersion", "createdAt", "worktree", "files", "contentCommit"})
         self.assertTrue(doc["files"] and all(not Path(k).is_absolute() and ".." not in Path(k).parts and len(v) == 64
                                              for k, v in doc["files"].items()))
 

@@ -4,11 +4,12 @@ street address / town shown on the site, through the normal typed-op path (draft
 Usage (request ops):
     {"op": "store.set_hours", "args": {"hours": ["Monday–Saturday 9am–6pm", "Closed Sunday"]}}
     {"op": "store.set_address", "args": {"streetAddress": "1023 Example Street"}}   # town kept; give either or both
-    {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}
+    {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}   # an earlier "date" at most 7 days ago
     {"op": "store.set_intro", "args": {"text": "Fresh from the coast."}}   # home-page intro line, at most 160 characters; undo restores the default
 
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
 ignored; the refusal names both line numbers); street and town at most 80 characters.
+Each hours line needs a letter or digit, and street and town each need a letter (the refusal names the line or field).
 Text kinds already reject markup, ``$`` and control characters. ``name`` and ``schemaVersion`` are not editable.
 
 Selective-undo limit: the store is ONE record, so ``history.revert`` of an older store change after a later store
@@ -26,6 +27,7 @@ from hass.content_model import (
 )
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.catalog import _product
+from hass.sitegen import STALE_AFTER_DAYS
 
 
 _DASHES = {c: "-" for c in [*range(0x2010, 0x2016), 0x2212]}
@@ -34,6 +36,11 @@ _DASHES = {c: "-" for c in [*range(0x2010, 0x2016), 0x2212]}
 def _line_key(line):
     """Repeat key for an hours line: case, spacing and dash style ignored; accents kept (never stored)."""
     return " ".join(unicodedata.normalize("NFKC", line).translate(_DASHES).split()).casefold()
+
+
+def _spaced(text):
+    """Already-check key: spacing only; case and characters kept (the page renders runs of spaces as one)."""
+    return " ".join(text.split())
 
 
 def _touch(before, store):
@@ -47,13 +54,16 @@ def _set_hours(content, args, ctx):
     for i, line in enumerate(hours):
         if len(line) > MAX_HOURS_LINE:
             return Refused(f"hours line {i + 1} is longer than {MAX_HOURS_LINE} characters")
+    for i, line in enumerate(hours):
+        if not any(c.isalnum() for c in line):
+            return Refused(f"hours line {i + 1} needs a day or time")
     first_seen = {}
     for i, line in enumerate(hours):
         j = first_seen.setdefault(_line_key(line), i)
         if j != i:
             return Refused(f"hours lines {j + 1} and {i + 1} say the same thing")
-    if hours == content.store["hours"]:
-        return Refused("store hours are already " + " / ".join(hours))
+    if [_spaced(h) for h in hours] == [_spaced(h) for h in content.store["hours"]]:
+        return Refused("store hours are already " + " / ".join(content.store["hours"]))
     before = copy.deepcopy(content.store)
     content.store["hours"] = hours
     return _touch(before, content.store)
@@ -66,8 +76,11 @@ def _set_address(content, args, ctx):
     for field, value in given.items():
         if len(value) > MAX_ADDRESS_PART:
             return Refused(f"{field} is longer than {MAX_ADDRESS_PART} characters")
+    for field, value in given.items():
+        if not any(c.isalpha() for c in value):
+            return Refused(f"{field} needs at least one letter")
     store = content.store
-    if all(store[f] == v for f, v in given.items()):
+    if all(_spaced(store[f]) == _spaced(v) for f, v in given.items()):
         return Refused(f"store address is already {store['streetAddress']}, {store['town']}")
     before = copy.deepcopy(store)
     store.update(given)
@@ -80,7 +93,7 @@ def _set_intro(content, args, ctx):
         return Refused(f"the intro is longer than {MAX_INTRO} characters")
     if sum(c.isalpha() for c in text) < 3:
         return Refused("the intro needs at least 3 letters")
-    if text == content.store.get("intro", DEFAULT_INTRO):
+    if _spaced(text) == _spaced(content.store.get("intro", DEFAULT_INTRO)):
         return Refused("the intro already says that")
     before = copy.deepcopy(content.store)
     content.store["intro"] = text
@@ -94,6 +107,9 @@ def _confirm_selection(content, args, ctx):
     day = date.fromisoformat(args["date"]) if "date" in args else today
     if day > today:
         return Refused(f"{day.isoformat()} is in the future; the selection can only be checked today or earlier")
+    if (today - day).days > STALE_AFTER_DAYS:
+        return Refused(f"{day.isoformat()} is more than {STALE_AFTER_DAYS} days ago, so the site would already call it "
+                       "out of date; check the selection today instead")
     last = checked_on(content.store)
     if last is not None and day < last:
         return Refused(f"the selection was already checked on {last.isoformat()}, after {day.isoformat()}")

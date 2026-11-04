@@ -54,10 +54,15 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro")  # ISO date of Michael's last check; home-page intro line; both absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage")  # all absent by default
+HOME_IMAGE_RE = re.compile(r"^assets/products/photo-[0-9a-f]{16}\.(jpg|png)$")  # the path photos.install writes
+MAX_STORY = 400  # characters in the optional store.story (the "COME ON IN" paragraph)
+DEFAULT_STORY = "Michael Wolfe brings a produce buyer’s curiosity and long-standing grower relationships to the Shack. The idea is simple: connect friends and neighbors with good food and the people who grow and make it."  # shown when store.story is absent
+MAX_HEADLINE_LINE, DEFAULT_HEADLINE = 40, ("A little market.", "A lot to discover.")  # per line; <h1> when absent
 MAX_INTRO = 160  # characters in the optional store.intro (ops/store.py imports this)
 DEFAULT_INTRO = "Good food nourishes more than a body. It brings people together."  # shown when store.intro is absent
 MAX_HOURS_LINES, MAX_HOURS_LINE, MAX_ADDRESS_PART = 7, 60, 80  # H13 store limits (ops/store.py imports these)
+MAX_EVENT_CAPACITY = 1000  # H14 typo guard on events[].capacity (a sanity ceiling, not a business rule; raise if needed)
 # Maximum length (Python len: code points, so "é" written as e + combining accent counts 2) of every owner-editable
 # text field. Each limit is at least 1.5x the longest current value (test_text_limits checks the real content).
 # Store limits are the constants above, listed here so one table documents every limit.
@@ -313,7 +318,7 @@ def validate_community(problems, community):
         if club.get("emailConnected") is not False:
             problems.append("community.club.emailConnected: email delivery is not connected; must be false")
     ideas = community.get("routeIdeas")
-    idea_ids = set()
+    idea_ids, hidden = set(), []  # hidden: AV1322-03 ideas left out of the generated route list
     if not isinstance(ideas, list):
         problems.append("community.routeIdeas: must be a list")
         ideas = []
@@ -331,8 +336,10 @@ def validate_community(problems, community):
                 _text(problems, f"{where}.{field}", idea.get(field), limit=TEXT_LIMITS["routeIdea"][field])
         _https(problems, f"{where}.sourceUrl", idea.get("sourceUrl"))
         # Route ideas are undated suggestions; they never take RSVPs.
-        if idea.get("status") != "idea":
-            problems.append(f"{where}: status must be 'idea'")
+        if idea.get("status") not in ("idea", "hidden"):
+            problems.append(f"{where}: status must be 'idea' or 'hidden'")
+        elif idea["status"] == "hidden":
+            hidden.append(rid)
         if idea.get("rsvpEnabled") is not False:
             problems.append(f"{where}: rsvpEnabled must be false for a route idea")
     events = community.get("events")
@@ -372,10 +379,12 @@ def validate_community(problems, community):
             _text(problems, f"{where}.meetingPoint", ev.get("meetingPoint"))
         if "capacity" in ev:
             cap = ev["capacity"]
-            if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
-                problems.append(f"{where}: capacity must be a positive integer")
+            if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= MAX_EVENT_CAPACITY:
+                problems.append(f"{where}: capacity must be a positive integer of at most {MAX_EVENT_CAPACITY}")
         if "trailId" in ev and (not isinstance(ev["trailId"], str) or ev["trailId"] not in idea_ids):
             problems.append(f"{where}: trailId {ev['trailId']!r} is not a route idea")
+        elif ev.get("status") == "scheduled" and ev.get("trailId") in hidden:
+            problems.append(f"{where}: trailId {ev['trailId']} is hidden")
         for field in EVENT_TEXT_FIELDS:
             if field in ev:
                 _text(problems, f"{where}.{field}", ev[field], limit=TEXT_LIMITS["event"][field])
@@ -410,6 +419,28 @@ def validate_store(problems, store, today: date | None = None):
         _text(problems, "store.intro", store["intro"], limit=MAX_INTRO)
         if isinstance(store["intro"], str) and sum(c.isalpha() for c in store["intro"]) < 3:
             problems.append("store.intro: needs at least 3 letters")
+    if "story" in store:
+        _text(problems, "store.story", store["story"], limit=MAX_STORY)
+        if isinstance(store["story"], str) and (sum(c.isalpha() for c in store["story"]) < 20 or len(store["story"].splitlines()) > 1):
+            problems.append("store.story: needs one paragraph with at least 20 letters")
+    if "headline" in store:
+        lines = store["headline"]
+        if not isinstance(lines, list) or len(lines) != 2:
+            problems.append("store.headline: must be a list of exactly 2 lines")
+        for i, line in enumerate(lines if isinstance(lines, list) else []):
+            _text(problems, f"store.headline[{i}]", line, limit=MAX_HEADLINE_LINE)
+            if isinstance(line, str) and sum(c.isalpha() for c in line) < 2:
+                problems.append(f"store.headline[{i}]: needs at least 2 letters")
+    if "homeImage" in store:
+        home = store["homeImage"]
+        if not isinstance(home, dict) or set(home) != {"image", "imageAlt"}:
+            problems.append("store.homeImage: must be an object with exactly image and imageAlt")
+        elif not isinstance(home["image"], str) or not HOME_IMAGE_RE.fullmatch(home["image"]):
+            problems.append("store.homeImage.image: must be assets/products/photo-<16 hex>.<jpg|png>")
+        if isinstance(home, dict) and "imageAlt" in home:
+            _text(problems, "store.homeImage.imageAlt", home["imageAlt"], limit=TEXT_LIMITS["product"]["imageAlt"])
+            if isinstance(home["imageAlt"], str) and sum(c.isalpha() for c in home["imageAlt"]) < 3:
+                problems.append("store.homeImage.imageAlt: needs at least 3 letters")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):

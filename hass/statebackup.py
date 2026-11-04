@@ -17,8 +17,12 @@ repository, the worktrees and the state dir. No network, no Git writes, no delet
 exit 0 ok, 1 any other result, 2 unsafe dir or usage. list (read-only): a line per hass-state-* entry, complete or not.
 diff (read-only): files added, removed and changed from OLD to NEW (photo originals as counts), i.e. what a restore of
 OLD would lose. diff reads manifests only; run verify for integrity.
+A new backup's MANIFEST.json also records `contentCommit`, the writer worktree's HEAD (read-only git; null if unreadable).
+With a contentCommit, create also writes content.bundle (a full `git bundle` of that HEAD: site content and committed web
+photos), listed and hashed like any file; verify requires its head to be contentCommit. Without --content-into DIR
+restore skips it; with it, restore/drill clone it into a NEW dir at contentCommit and run its sitegen --check (FAV-08).
 """
-import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, sys  # noqa: E401
+import argparse, contextlib, ctypes, errno, hashlib, json, os, re, shutil, sqlite3, stat, subprocess, sys  # noqa: E401
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,13 +35,16 @@ from hass.editor import UnsafeState  # noqa: E402
 
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
 INBOX = "inbox.sqlite3"  # H16 inbound queue; snapshotted like DB
+BUNDLE = "content.bundle"  # FAV-07: git bundle of the writer worktree's HEAD == contentCommit
 DIRS = ("drafts", "changes", "screenshots")
 ORIG = "media/originals/"  # H10 photo originals <aa>/<sha>.<ext> + <aa>/<sha>.json, aa == sha[:2] (hass/media.py)
-FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
+FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|content\.bundle"
+                     r"|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
                      r"|screenshots/[0-9A-Za-z_-][0-9A-Za-z._-]*\.png"
                      r"|media/originals/(?P<aa>[0-9a-f]{2})/(?P=aa)[0-9a-f]{62}\.(json|%s)"
                      % "|".join(sorted(set(photos.EXT.values()))))
 HEX_RE = re.compile(r"[0-9a-f]{64}")
+COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 ATTENDED = "restoring onto the recorded writer worktree is an attended operation"
 MANIFEST_MAX, SMALL_MAX = 8 << 20, 64 << 10  # bytes: MANIFEST.json (~80 000 listed files); a sidecar or config.json
 
@@ -170,19 +177,47 @@ def create(state, out, now=None, media=None) -> dict:
             (_snapshot if rel in (DB, INBOX) else _copy)(src, dest / rel)
             hashes[rel] = hashlib.sha256(_read(dest / rel)).hexdigest()
         doc = {"schemaVersion": 1, "createdAt": now.isoformat(), "worktree": cfg["worktree"], "files": hashes}
+        commit = _head(Path(cfg["worktree"]))  # inside the writer lock; read-only
+        if commit:  # FAV-07: the content itself, made inside the same lock; read-only git
+            doc["contentCommit"] = commit
+            _git_ro(cfg["worktree"], "bundle", "create", str(dest / BUNDLE), "HEAD")
+            if not _bundle_holds(dest / BUNDLE, commit):
+                return {"result": "refused", "problems": ["content bundle does not hold contentCommit"]}
+            os.chmod(dest / BUNDLE, 0o600)
+            hashes[BUNDLE] = hashlib.sha256(_read(dest / BUNDLE)).hexdigest()
         if mroot: doc["media"] = {"originals": len(mfiles) // 2}
         _write_new(dest / (MANIFEST + ".tmp"), json.dumps(doc, indent=2, sort_keys=True).encode("utf-8"))
         os.replace(dest / (MANIFEST + ".tmp"), dest / MANIFEST)  # last: a backup without it is incomplete
         _rename_noreplace(dest, final)  # a final dir that appeared meanwhile (even empty) is refused, never replaced
         undo.pop_all()  # renamed in: nothing left to clean up
     extra = {"media": len(mfiles) // 2} if mroot else {}  # settled: one sidecar per original
-    return {"result": "ok", "backup": str(final), "files": len(hashes), **extra}
+    return {"result": "ok", "backup": str(final), "files": len(hashes), "contentCommit": commit,
+            "contentBundle": BUNDLE in hashes, **extra}
+
+def _git_ro(wt, *args) -> str:
+    """git stdout, or "" if git is missing or its output is not UTF-8 (e.g. a crafted ref name); read-only callers only."""
+    old = os.environ.get("GIT_OPTIONAL_LOCKS")
+    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # this call only: never refresh the writer's index
+    try: return editor._out(wt, *args)
+    except (OSError, UnicodeDecodeError): return ""
+    finally:
+        if old is None: os.environ.pop("GIT_OPTIONAL_LOCKS", None)
+        else: os.environ["GIT_OPTIONAL_LOCKS"] = old
+
+def _head(wt: Path):
+    """The worktree's HEAD as 40 lowercase hex, else None (not a repo, unborn HEAD, git missing)."""
+    return out if COMMIT_RE.fullmatch(out := _git_ro(wt, "rev-parse", "HEAD")) else None
+
+def _bundle_holds(path: Path, commit) -> bool:  # `git bundle list-heads` reads the file only: no repository, no write
+    return f"{commit} HEAD" in _git_ro(path.parent, "bundle", "list-heads", str(path)).splitlines()
 
 def _manifest(bdir: Path):
     try:
         doc = json.loads(_read_small(bdir / MANIFEST, MANIFEST_MAX).decode("utf-8"))
         files = doc["files"]
         valid = doc.get("schemaVersion") == 1 and isinstance(doc.get("worktree"), str) and isinstance(files, dict) \
+            and ("contentCommit" not in doc or isinstance(doc["contentCommit"], str)
+                 and COMMIT_RE.fullmatch(doc["contentCommit"])) \
             and CONFIG in files and all(isinstance(rel, str) and FILE_RE.fullmatch(rel) and isinstance(digest, str)
                                         and HEX_RE.fullmatch(digest) for rel, digest in files.items())
     except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
@@ -227,6 +262,9 @@ def verify(backup) -> dict:
         elif hashlib.sha256(_read(bdir / rel)).hexdigest() != digest: problems.append(f"hash mismatch: {rel}")
         elif rel in (DB, INBOX) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
         elif rel == CONFIG and not _config_ok(bdir / rel): problems.append("config: not a JSON object with a worktree")
+        elif rel == BUNDLE and "contentCommit" not in doc: problems.append("content bundle without contentCommit")
+        elif rel == BUNDLE and not _bundle_holds(bdir / rel, doc["contentCommit"]):
+            problems.append("content bundle: head is not contentCommit")
         elif rel.startswith(ORIG) and not rel.endswith(".json"):  # the content address and the sidecar both hold
             sha, side = rel[19:83], rel[:84] + "json"  # media/originals/<aa>/<sha>.<ext>
             if hashlib.sha256(_read(bdir / rel)).hexdigest() != sha: problems.append(f"content mismatch: {rel}")
@@ -262,7 +300,21 @@ def _pause(path: Path, now) -> str:  # restore --paused, before the dir appears;
     os.chmod(path, 0o600)
     return since
 
-def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> dict:
+def _clone_content(bundle: Path, tmp: Path, commit: str) -> None:  # from the backup's bundle alone; no remote kept
+    for cwd, *args in ((tmp.parent, "clone", "--quiet", "--no-checkout", "--no-hardlinks", str(bundle), str(tmp)),
+                       (tmp, "checkout", "--quiet", "--detach", commit), (tmp, "remote", "remove", "origin")):
+        run = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True,
+                             env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"})
+        if run.returncode: raise OSError(f"git {args[0]} failed: {run.stderr.strip()[-300:]}")  # all-or-nothing
+    if _head(tmp) != commit: raise OSError("content checkout HEAD is not contentCommit")
+
+def _site_check(top: Path) -> str:  # the restored checkout's own sitegen --check, run in it; -B: it stays clean
+    try: code = subprocess.run([sys.executable, "-B", "hass/sitegen.py", "--check"], cwd=top,
+                               capture_output=True).returncode
+    except OSError: return "failed"
+    return "ok" if code == 0 else "failed"
+
+def restore(backup, into, worktree, paused=False, now=None, media_into=None, content_into=None) -> dict:
     checked = verify(backup)
     if checked["result"] != "ok": return {"result": "corrupt", "problems": checked["problems"]}
     bdir = Path(backup).absolute()
@@ -273,6 +325,9 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
     if media_into is not None and (not mrels or os.path.lexists(os.path.abspath(media_into))):
         return {"result": "refused", "problems": ["media restore dir already exists; left untouched" if mrels
                                                   else "no media in backup"]}
+    if content_into is not None and (BUNDLE not in doc["files"] or os.path.lexists(os.path.abspath(content_into))):
+        return {"result": "refused", "problems": ["content restore dir already exists; left untouched"
+                                                  if BUNDLE in doc["files"] else "no content bundle in backup"]}
     target, wt, recorded = Path(into).resolve(), Path(worktree).resolve(), Path(doc["worktree"]).resolve()
     if wt == recorded: return {"result": "refused", "problems": [ATTENDED]}
     if problems := editor.worktree_problems(wt, recovering=True): return {"result": "refused", "problems": problems}
@@ -281,10 +336,14 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
     mtarget = None if media_into is None else Path(media_into).resolve()
     if mtarget and _inside(mtarget, _roots(wt) + [recorded, bdir.resolve(), target]):
         raise UnsafeState("media restore dir must lie outside the backup, the repository, the worktrees and the state")
+    ctarget = None if content_into is None else Path(content_into).resolve()
+    if ctarget and _inside(ctarget, _roots(wt) + [recorded, bdir.resolve(), target] + ([mtarget] if mtarget else [])):
+        raise UnsafeState("content restore dir must lie outside the backup, repository, worktrees, state and media")
     tmp = target.parent / f".{target.name}.restore-{os.getpid()}"
     mtmp = mtarget and mtarget.parent / f".{mtarget.name}.restore-{os.getpid()}"
+    ctmp = ctarget and ctarget.parent / f".{ctarget.name}.restore-{os.getpid()}"
     tmp.mkdir(mode=0o700)
-    made, renamed = [tmp], False
+    made, renamed, mrenamed = [tmp], False, False
     try:
         os.chmod(tmp, 0o700)
         if mtmp:
@@ -292,7 +351,7 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
             made.append(mtmp)
             (mtmp / "originals").mkdir(mode=0o700)
         for rel in sorted(doc["files"]):
-            if rel.startswith(ORIG) and not mtmp: continue  # reported below as mediaRestored: false
+            if rel == BUNDLE or rel.startswith(ORIG) and not mtmp: continue  # bundle: FAV-08; media: mediaRestored
             dst = mtmp / rel[len("media/"):] if rel.startswith(ORIG) else tmp / rel
             dst.parent.mkdir(mode=0o700, exist_ok=True)
             if rel != CONFIG:
@@ -300,37 +359,49 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None) -> 
                 continue
             cfg = {**json.loads(_read(bdir / CONFIG).decode("utf-8")), "worktree": str(wt)}
             _write_new(tmp / CONFIG, json.dumps(cfg, indent=2, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+        if ctmp:
+            ctmp.mkdir(mode=0o700)
+            made.append(ctmp)
+            _clone_content(bdir / BUNDLE, ctmp, doc["contentCommit"])
         extra = {"paused": True, "pausedSince": _pause(tmp / DB, now)} if paused else {}
         if os.path.lexists(target): raise FileExistsError(f"restore dir appeared during restore: {target}")
         os.rename(tmp, target)
         renamed = True
         if mtmp and os.path.lexists(mtarget): raise FileExistsError(f"media restore dir appeared: {mtarget}")
         if mtmp: os.rename(mtmp, mtarget)
+        mrenamed = bool(mtmp)
+        if ctmp and os.path.lexists(ctarget): raise FileExistsError(f"content restore dir appeared: {ctarget}")
+        if ctmp: _rename_noreplace(ctmp, ctarget)  # a dir that appeared since (even empty) is refused, never replaced
     except BaseException:
         if renamed: os.rename(target, tmp)  # take back the state dir this call made: leave neither target
+        if mrenamed: os.rename(mtarget, mtmp)
         for path in made: shutil.rmtree(path, ignore_errors=True)  # only the temp dirs this call created
         raise
     if mrels: extra.update({"mediaRestored": bool(mtarget), "media": len(mrels) // 2})
-    return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]), **extra}
+    if ctarget: extra.update({"contentRestored": True, "contentCheck": _site_check(ctarget)})  # failed: dir kept
+    return {"result": "ok", "state": str(target), "worktree": str(wt), "files": len(doc["files"]),
+            "contentCommit": doc.get("contentCommit"), **extra}
 
 STRUCTURAL = ("state", "settings", "db-integrity", "inbox-integrity")  # a drill fails on these health checks
 
-def drill(backup, into, worktree, media_into=None, now=None) -> dict:
+def drill(backup, into, worktree, media_into=None, now=None, content_into=None) -> dict:
     """verify, restore --paused into a NEW dir, then the read-only health check and history on it; ids/counts only."""
     checked = verify(backup)
     if checked["result"] != "ok": return {"result": "corrupt", "step": "verify", "problems": checked["problems"]}
-    out = restore(backup, into, worktree, paused=True, now=now, media_into=media_into)
+    out = restore(backup, into, worktree, paused=True, now=now, media_into=media_into, content_into=content_into)
     if out["result"] != "ok": return {**out, "step": "restore"}
     from hass import health  # lazy: health imports this module at its top
     problems, info, unsafe = health.check(out["state"], now=now)
     ids = sorted({p["check"] for p in problems})
     try: hist = editor.history(5, state=out["state"])
     except UnsafeState: hist = {"result": "unsafe-state"}
-    step = "health" if unsafe or set(ids) & set(STRUCTURAL) else None if hist.get("result") == "ok" else "history"
+    step = "health" if unsafe or set(ids) & set(STRUCTURAL) else "history" if hist.get("result") != "ok" \
+        else "content" if out.get("contentCheck") == "failed" else None
     return ({"result": "drill-failed", "step": step} if step else {"result": "ok"}) | {
         "state": out["state"], "worktree": out["worktree"], "files": out["files"], "paused": out["paused"],
-        "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
-        "history": len(hist.get("history") or []), **{k: out[k] for k in ("media", "mediaRestored") if k in out}}
+        "contentCommit": out["contentCommit"], "health_problems": ids, "health_info": sorted({p["check"] for p in info}),
+        "history": len(hist.get("history") or []),
+        **{k: out[k] for k in ("media", "mediaRestored", "contentRestored", "contentCheck") if k in out}}
 
 NAME_RE = re.compile(r"hass-state-[0-9]{8}T[0-9]{6}Z")  # create()'s folder name; the name is the UTC time
 def _listed(entry):  # (manifest doc or None, problem or None); a symlink is never followed
@@ -350,7 +421,8 @@ def list_backups(out):
         doc, problem = _listed(entry)
         created = (doc or {}).get("createdAt")
         rows.append({"backup": entry.name, "createdAt": created if isinstance(created, str) else None,
-                     "files": len(doc["files"]) if doc else None, "complete": doc is not None, "problem": problem})
+                     "files": len(doc["files"]) if doc else None, "complete": doc is not None, "problem": problem,
+                     "contentCommit": (doc or {}).get("contentCommit")})
     return rows
 
 def diff(old, new) -> dict:
@@ -369,10 +441,12 @@ def diff(old, new) -> dict:
     try: order = {"order": "reversed"} if datetime.fromisoformat(when[0]) > datetime.fromisoformat(when[1]) else {}
     except (TypeError, ValueError): order = {"order": "unknown"}  # missing, odd or naive-vs-aware createdAt
     stamp = [w if isinstance(w, str) else None for w in when]
+    commits = [d.get("contentCommit") for d in docs]
     return {"result": "ok", "added": rels(b, lambda r: r not in a), "removed": rels(a, lambda r: r not in b),
             "changed": rels(a, lambda r: r in b and a[r] != b[r]), "same": sum(a[r] == b.get(r) for r in a),
             "media_added": originals(b, a), "media_removed": originals(a, b), "older": stamp[0], "newer": stamp[1],
-            "worktree_changed": docs[0]["worktree"] != docs[1]["worktree"], **order}
+            "worktree_changed": docs[0]["worktree"] != docs[1]["worktree"], **order,
+            "content_commit_changed": None if None in commits else commits[0] != commits[1]}
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/statebackup.py", description=__doc__,
@@ -387,6 +461,7 @@ def main(argv=None) -> int:
     cmd.add_argument("--paused", action="store_true")  # restore only (the last parser)
     cmd.add_argument("--media-into")
     sub.choices["drill"].add_argument("--media-into")
+    for name in ("restore", "drill"): sub.choices[name].add_argument("--content-into")
     sub.choices["create"].add_argument("--media")
     args = parser.parse_args(argv)
     try:
@@ -396,16 +471,16 @@ def main(argv=None) -> int:
             return 2 if isinstance(rows, dict) else 0  # refused: --out missing or a link
         out = create(args.state, args.out, media=args.media) if args.cmd == "create" else verify(args.backup) \
             if args.cmd == "verify" else diff(args.old, args.new) if args.cmd == "diff" \
-            else drill(args.backup, args.into, args.worktree, media_into=args.media_into) \
+            else drill(args.backup, args.into, args.worktree, args.media_into, content_into=args.content_into) \
             if args.cmd == "drill" else restore(args.backup, args.into, args.worktree, paused=args.paused,
-                                                media_into=args.media_into)
+                                                media_into=args.media_into, content_into=args.content_into)
     except UnsafeState as exc:
         print(json.dumps({"result": "unsafe-state", "problems": [str(exc)]}))
         return 2
     except OSError as exc:
         out = {"result": "error", "problems": [f"{type(exc).__name__}: {exc.strerror or exc}"]}
     print(json.dumps(out, ensure_ascii=False, sort_keys=True))
-    return 0 if out["result"] == "ok" else 1
+    return 0 if out["result"] == "ok" and out.get("contentCheck") != "failed" else 1
 
 if __name__ == "__main__":
     sys.exit(main())

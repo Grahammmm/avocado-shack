@@ -6,8 +6,9 @@ The copy holds the worktree's tracked ``storefront-mockup`` files (assets symlin
 (generated path -> bytes) laid over them. Its own ``community-server.py`` serves it on a free 127.0.0.1 port with a
 fresh empty temp database and a minimal environment; ``hass/screenshot.cjs`` captures and checks the target page.
 The server is always stopped and the copy removed. Screenshots are written 0600; nothing is published or sent.
+A damaged change record gives the target ``{"kind": "unreadable"}``, refused before any copy or server.
 """
-import http.client, json, os, shutil, socket, subprocess, sys, tempfile, time  # noqa: E401
+import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
@@ -17,8 +18,35 @@ PASS_THROUGH = ("PLAYWRIGHT_MODULE", "CHROMIUM_PATH")
 START_TIMEOUT, CAPTURE_TIMEOUT = 10.0, 90
 
 
+_FIELDS = {"products": ("name", "status", "description"), "makers": ("name", "place"),
+           "store": ("streetAddress", "town"), "events": ("title", "status", "recap")}
+
+
+def _readable(record) -> bool:
+    """A dict record, a dict/None after, a text/None key and text/None read fields (store hours: a list of text)."""
+    after = record.get("after") if isinstance(record, dict) else []
+    after = {} if after is None else after
+    if not isinstance(after, dict) or not isinstance(record.get("key"), (str, type(None))):
+        return False
+    collection = record.get("collection") if isinstance(record.get("collection"), str) else ""
+    hours = after.get("hours") if collection == "store" else None
+    if not (hours is None or isinstance(hours, list) and all(isinstance(h, str) for h in hours)):
+        return False
+    headline = after.get("headline") if collection == "store" else None
+    if not (headline is None or isinstance(headline, list) and all(isinstance(h, str) for h in headline)):
+        return False
+    if collection == "store" and not isinstance(after.get("story"), (str, type(None))):
+        return False
+    home = after.get("homeImage") if collection == "store" else None
+    if not (home is None or isinstance(home, dict) and isinstance(home.get("image"), (str, type(None)))):
+        return False
+    return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
+
+
 def target_for(record: dict) -> dict:
     """The screenshot target for a touched record (the after value decides what the checks expect)."""
+    if not _readable(record):
+        return {"kind": "unreadable"}
     after, collection = record.get("after") or {}, record.get("collection")
     if collection == "products":
         return {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
@@ -28,7 +56,9 @@ def target_for(record: dict) -> dict:
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
         return {"kind": "store", "hours": list(after.get("hours") or []),
-                "streetAddress": after.get("streetAddress", ""), "town": after.get("town", "")}
+                "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
+                "headline": list(after.get("headline") or []), "story": after.get("story"),
+                "homeImage": (after.get("homeImage") or {}).get("image")}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
     return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
             "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
@@ -52,11 +82,21 @@ def _get_ok(port: int) -> bool:
 
 
 def _write_private(path: Path, data: bytes) -> None:
+    """Whole or not at all; a link or folder at the path is refused."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
-    os.chmod(path, 0o600)
+    if os.path.lexists(path) and not stat.S_ISREG(os.lstat(path).st_mode):
+        raise OSError("screenshot path is not a regular file")
+    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.fchmod(handle.fileno(), 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _write_overlay(tmp: Path, files: dict) -> None:
@@ -126,6 +166,8 @@ class Previewer:
         return site
 
     def _capture(self, files: dict, target: dict, out_png: Path) -> dict:
+        if target.get("kind") == "unreadable":  # a damaged change record: no copy, no server
+            return {"ok": False, "png": None, "checks": {}, "error": "preview target unreadable"}
         if self.viewports not in (("phone",), VIEWPORTS):
             raise ValueError(f"unsupported viewports {self.viewports!r}"[:80])
         with tempfile.TemporaryDirectory(prefix="hass-preview-") as raw:

@@ -79,11 +79,13 @@ A CLI read or decode error prints `{"result": "io-error", "problems": ["<ExcName
 
 - The start is the local `date` + `time` in `America/Los_Angeles`, written with its offset (`2026-12-05T09:00:00-08:00`). A time that happens twice (DST ends) or not at all (DST starts) gives `needs-details` on `time`; a start in the past is `refused`. A new `date` keeps the local time, a new `time` keeps the local date.
 - With `rsvpEnabled` true, `hike.create` needs exactly one of `capacity` or `noCapacityLimit: true`, and so does `hike.update` when it turns RSVPs on for an event without a capacity. `hike.update` with `capacity` reads `guest_counts(settings["guestCountsDb"])` (read-only SQLite, seat totals only, no names or emails) and refuses a capacity below the confirmed guests; an unset or unreadable database is refused (`guest count unavailable`). Existing RSVPs are never changed. A `capacity` given while RSVPs are off is kept but adds the draft warning `<id>: RSVPs are off, so capacity N has no effect until RSVPs are turned on`, and turning RSVPs on with a stored capacity (none given) adds `<id>: RSVPs turned on with the stored capacity N`; neither is refused.
+- A hike `capacity` is 1–1000 (a typo guard against misread numbers, not a business rule; change `MAX_EVENT_CAPACITY` in `content_model.py` to raise it): `hike.create`/`hike.update` with a larger one ends `invalid` (`events[i]: capacity must be a positive integer of at most 1000`) and nothing is written.
 - `hike.update` with `clear: [names]` deletes those optional fields (any hike text except `meetingPoint`, or `trailId`) in the same draft as any set fields. A name that is not a hike field (`clear: <name> is not a hike field`), a field that can never be removed (title, date, time, meetingPoint, RSVPs, capacity: `clear: <name> cannot be removed`; use `noCapacityLimit` for capacity) or one also set (`<name> cannot be set and cleared together`) is refused; clearing only absent fields changes nothing.
 - `hike.create` refuses a second scheduled hike with the same title on the same Pacific day (`<id> is already scheduled with this title on <date>; update it instead`); cancelled and completed hikes do not count (AV1737-09).
 - `hike.cancel` and `hike.complete` (only once the start has passed; optional `recap`) work on `scheduled` events; a cancelled or completed event refuses every later op except `hike.recap`. `hike.cancel` or `hike.update` turning RSVPs off on an event with confirmed guests adds the draft warning `<id> has N confirmed guests; nobody is notified automatically` (`<id> guest count unavailable; check RSVPs before approving` when the count cannot be read) and is never refused for it; `hike.update` moving such an event's date or time adds `<id> moves to <YYYY-MM-DD HH:MM> Pacific; N confirmed guests are not told automatically` instead (only the RSVPs-off warning when the same request turns RSVPs off).
 - `hike.recap {id, recap}` sets or corrects the trail-journal recap of a `completed` hike and changes nothing else (undo restores the old text); a scheduled hike is refused (`<id> is scheduled; use hike.complete with a recap`), a cancelled one too (`<id> is cancelled`), and the same recap again changes nothing.
 - `hass/ops/routes.py` adds `route.edit {id, <text fields>}`: it corrects a route idea's wording (title, place, character, distance, difficulty, elevation, elevationLabel, duration, routeType, terrain, description) through the usual draft/approval, and undo restores it; `id`, `status`, `rsvpEnabled`, `sourceUrl` and `sourceName` are locked (not arguments → `invalid`), an unknown id is refused, and an event id is refused (`use hike.update`).
+- `route.add {title, place, description, sourceUrl, sourceName, <other text fields>}` drafts a new undated route idea `idea-<title slug>` (`-2`, `-3` on a clash) with `status` `idea` and RSVPs off. Every text field is required (the content check allows no empty route text); a missing link or source name asks for both. `sourceUrl` must be a public `https://` link (refused without echoing it), and a title already used by a route idea or hike (case and spacing ignored) is refused as in `route.edit`. `status`, `rsvpEnabled` and `id` are not arguments. Undo removes the added idea.
 - No op sends, queues or drafts a message, and `club.emailConnected` stays `false`. Real hikes need the owner's confirmed details; the committed events list stays empty.
 
 ## H05: approval state machine and fixture conversation
@@ -140,7 +142,7 @@ export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-124
 - `name` and `schemaVersion` are not arguments (unknown argument → `invalid`). Text kinds reject markup, `$` and control characters as usual.
 - Undo: the store is one record, so `undo` of an older store change after a later one gives `conflict: store store changed after <change_id>`; undo the newest first.
 
-Limits: H13 is partial; home-page copy and image slots are not built.
+Limits: H13 is partial; the home-page headline slot is built (`store.set_headline` in `hass/ops/home.py`: two lines of at most 40 characters and 2 letters each, the second emphasised; undo restores the default words); the home-page image slot is built (`store.set_home_image`: one hero `<img>` showing a stored photo's metadata-free web copy, `imageAlt` required as for `product.set_photo`; no image keeps today's picture; undo removes it); other home-page copy slots are not built.
 
 ## H17: status, pause and resume (with H14 guest totals)
 
@@ -156,7 +158,7 @@ Limits: H13 is partial; home-page copy and image slots are not built.
 - Health `--min-free-mb N` reports `disk-low` as `state: <n> MB free` or `backups: <n> MB free`, never a path (AV1737-14). The `inbox-integrity` support entry names the backup's inbox snapshot and the restore drill; live inbox replacement stays attended (AV1737-15).
 - `docs/hass/LIMITS.md` lists the owner-facing limits (photo size and types, things per message, list and text sizes); `hass/tests/test_limits_doc.py` checks every number against its code constant.
 
-Limits: H17 and H14 are partial. The support path for each health problem is `docs/hass/SUPPORT.md`.
+Limits: H17 and H14 are done at fixture level against their Done-when (2026-11-02 audit); live use waits on the owner channel (H07/H08), and H14 guest totals need `guestCountsDb` set to the real RSVP database in the private config. The support path for each health problem is `docs/hass/SUPPORT.md`.
 
 ## H20 prep: private state backup and restore drill
 
@@ -187,7 +189,7 @@ No network, no Git writes, no deletion of source data. Limits: drill on isolated
 - `seal()` / `unseal()`: Mac → Agent Orange envelope `{v, ts, nonce, body, mac}`, HMAC-SHA256 over canonical JSON with a key of at least 32 bytes. `unseal` raises `EnvelopeError` `shape`, `version`, `mac`, `stale` (more than 300 s off) or `replay` (nonce already in `seen`); only a valid envelope adds its nonce (BL-AV-4 persists `seen`).
 - `BlueBubblesSender(base_url, password_file)`: an `Outbox` adapter that POSTs `/api/v1/message/text` (`chatGuid`, fresh `tempGuid`, `message`, `method: apple-script`) to `http(s)://127.0.0.1|localhost:<port>` only, without proxies or redirects. The password file must be a regular 0600-style file (no group/other access) and is read per send. Failures raise `BridgeError(code, status, path)`; no error carries the URL, query string or password. A reply with attachments (the H06 preview PNG) is sent as its text plus one fixed `PICTURE_NOTE` line, so the outbox moves on; the picture is never read or sent and stays in the private state dir. Inbound attachments reach `Conversation` as a count (see `normalize`).
 
-## H16 part: durable inbound queue
+## H16: durable inbound queue
 
 `hass/inbox.py` `Inbox(state_dir, start_at=None)` keeps `<state>/inbox.sqlite3` (0600) next to the conversation store. Every inbound message is written there before any processing; nothing is backfilled as a command.
 
@@ -197,9 +199,12 @@ No network, no Git writes, no deletion of source data. Limits: drill on isolated
 - Payloads are erased once a message is done (history rows never store one); retention periods stay H21.
 - `seen()` is the persistent nonce set for the bridge envelope (`bridge.unseal(..., seen=inbox.seen())`), so a replayed envelope is refused after a restart; nonces older than one day are pruned when a new one is recorded.
 
-No worker, timer, CLI or live adapter: fixtures only.
+`hass/receiver.py` and `hass/fixture_chat.py --queue` feed and drain the queue on fixtures (H16 done at fixture level, 2026-11-02 audit). No live adapter or long-running worker exists to restart; that and Mac-offline catch-up are H07/H08/H18.
 
 H10 label reader (`hass/label_reader.py`, loopback local model, not wired into a service): for a new photo question it may add `The label looks like: <brand> <name> (<category>). Is that right?`; it is only a question, ops stay `product.set_photo {photo}`, and maker, organic and origin are never read from a photo.
+
+H10 label eval (`hass/label_eval.py`, FAV-02): `python3 hass/label_eval.py score --cases hass/tests/fixtures/label-eval.jsonl --replies R` prints one JSON line of right / wrong / none per field (name, brand, category) and the wrong case ids (no values, no photo names); exit 2 names the bad line.
+Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.0.0.1:11434 --model M --photos DIR --out FILE` asks the loopback vision model once per photo (a regular file named in the cases, directly in DIR; photos stay outside the repo) and writes the raw replies to a new 0600 FILE outside the repo; score that FILE to show how often the reader is wrong.
 
 ## Retention report (H21)
 

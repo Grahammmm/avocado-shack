@@ -5,6 +5,7 @@ An owner `yes` is held (`approval-held`): rolled back unapplied, the draft stays
 NOT HERE: no listener, socket, daemon, network call, key file, environment read or sign-in. The secret is a parameter.
 Outbound is refused: the default reply raises NotConnected; receive() never sends and never applies a change.
 CONNECTING THE REAL CHANNEL is G's job, step by step in docs/hass/CONNECT.md; no agent does any of it.
+Envelope text with a repeated key or a NaN/Infinity constant is rejected unread (shape, before the MAC; nonce untouched).
 """
 import json, sys  # noqa: E401
 from pathlib import Path
@@ -19,7 +20,9 @@ REJECTED = {  # bridge.EnvelopeError code -> plain words
     "version": "the envelope version is unknown, so it was not read",
     "mac": "the envelope signature does not match the shared secret, so it was not read",
     "stale": "the envelope time is over 5 minutes off this clock (expired or from the future), so it was not read",
+    "size": "the envelope is larger than 64 KB, so it was not read",
 }
+MAX_ENVELOPE_BYTES = 64 * 1024  # str is measured as UTF-8 bytes; checked before json.loads
 DROPPED = {  # bridge.Drop reason (fixture forwarder side) -> plain words
     "group-or-unknown-chat": "a group or unknown chat; only the owner's one-to-one chat is read",
     "receipt": "a delivered/read receipt, not a message",
@@ -49,6 +52,15 @@ def forward(event, secret, *, nonce, now):
     msg = bridge.normalize(event)
     if isinstance(msg, bridge.Drop): return msg
     return json.dumps(bridge.seal(msg, secret, nonce=nonce, now=now), sort_keys=True)
+
+
+def _pairs(pairs):  # object_pairs_hook: a repeated key (at any depth) is not an envelope
+    keys = [k for k, _ in pairs]
+    if len(set(keys)) != len(keys): raise ValueError("repeated key")
+    return dict(pairs)
+
+
+def _no_constant(name): raise ValueError("not JSON")  # parse_constant: NaN, Infinity and -Infinity
 
 
 def _result(result, reason, draft_id=None, disposition=None) -> dict:
@@ -86,9 +98,14 @@ class Receiver:
         drafted | duplicate | history | rejected | ignored | handled (owner message, no new draft) | queued (stored,
         waiting for a photo retry: its own or an earlier message's). draft_id is the new draft's code (None if a
         repeat reused a waiting draft). A crash in drain propagates: the message stays queued and the next
-        receive() drains it first (Inbox order; Conversation answers `duplicate` for one it already recorded)."""
+        receive() drains it first (Inbox order; Conversation answers `duplicate` for one it already recorded).
+        A str/bytes envelope over MAX_ENVELOPE_BYTES is rejected unread (nonce untouched); a dict is not measured."""
+        if isinstance(raw, (str, bytes, bytearray)):
+            size = len(raw.encode("utf-8", "surrogatepass")) if isinstance(raw, str) else len(raw)
+            if size > MAX_ENVELOPE_BYTES: return _result("rejected", REJECTED["size"])
         try:
-            envelope = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+            envelope = (json.loads(raw, object_pairs_hook=_pairs, parse_constant=_no_constant)
+                        if isinstance(raw, (str, bytes, bytearray)) else raw)
         except (ValueError, UnicodeDecodeError, RecursionError):
             return _result("rejected", REJECTED["shape"])
         try:  # a missing or short secret is a ValueError from bridge: a setup fault, raised, never a message result
