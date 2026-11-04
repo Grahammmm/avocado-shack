@@ -137,8 +137,10 @@ class RunnerTest(unittest.TestCase):
     def test_real_map_is_valid_on_disk(self):
         self.assertEqual(acceptance._validate(acceptance.MAP, acceptance._TESTS_DIR,
                                               acceptance.ALL_IDS), [])
-        self.assertEqual({acceptance.MAP[i] for i in ("H07", "H18", "H23", "H24", "H25")},
-                         {"needs Michael's devices", "not built", "release step"})
+        self.assertEqual({acceptance.MAP[i] for i in ("H07", "H18", "H25")},
+                         {"needs Michael's devices", "release step"})
+        self.assertEqual((acceptance.MAP["H23"], acceptance.MAP["H24"][0]),
+                         (("test_auto_policy",), "test_design_check"))
 
 
 if __name__ == "__main__":
