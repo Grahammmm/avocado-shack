@@ -74,7 +74,8 @@ def facts(content, today: date, guests=None) -> dict:
     day = checked_on(content.store)
     names, counts = {"limited": [], "no": []}, {"yes": 0, "limited": 0, "no": 0, "none": 0}
     for p in _products(content):  # hidden and held products never appear
-        key = p.get("available") if day is not None and p.get("available") in ("yes", "limited", "no") else "none"  # no check: none confirmed
+        fresh = day is not None and p.get("available_on") == day.isoformat()  # AV1102-01: confirmed on the latest check
+        key = p.get("available") if fresh and p.get("available") in ("yes", "limited", "no") else "none"
         counts[key] += 1
         if key in names:
             names[key].append(" ".join(str(p.get("name", "")).split()))

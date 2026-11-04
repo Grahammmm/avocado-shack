@@ -128,9 +128,9 @@ def _confirm_selection(content, args, ctx):
             return product
         if product["status"] != "active":
             return Refused(f"{pid} is {product['status']}; restore it before marking it available")
-        if product.get("available") != value:
+        if (product.get("available"), product.get("available_on")) != (value, day.isoformat()):
             before = copy.deepcopy(product)
-            product["available"] = value
+            product["available"], product["available_on"] = value, day.isoformat()  # AV1102-01: word + its day
             touched.append(Touched("products", pid, before, copy.deepcopy(product)))
     if day == last and not touched:
         return Refused(f"the selection was already checked on {day.isoformat()}; nothing to change")

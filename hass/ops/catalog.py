@@ -14,7 +14,7 @@ import copy
 import re
 import unicodedata
 
-from hass.content_model import AVAILABILITY, CATEGORIES
+from hass.content_model import AVAILABILITY, CATEGORIES, checked_on, shop_today
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
 
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
@@ -204,8 +204,11 @@ def _product_set_availability(content, args, ctx):
         return Refused(f"{product['id']} is {product['status']}; restore it before marking it available")
     if product.get("available") == args["available"]:
         return Refused(f"{product['id']} is already marked available={args['available']}; nothing to change")
+    if (day := checked_on(content.store)) != shop_today(ctx.now):  # AV1102-01: only onto today's shelf check
+        return Refused("the selection was not checked today; check the selection first")
     before = copy.deepcopy(product)
     product["available"] = args["available"]
+    product["available_on"] = day.isoformat()
     return _touch("products", product["id"], before, product)
 
 
