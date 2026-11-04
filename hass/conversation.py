@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, label_reader, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
+from hass import claims, interpret_check, label_reader, margins, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
 from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -27,7 +27,8 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
                         r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
                         r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
-                        r"|(post)(?:\s+(\S+))?")  # AV1322-07 (F07): groups 13/14; the id is re-read from the original text to keep its case
+                        r"|(post)(?:\s+(\S+))?"  # AV1322-07 (F07): groups 13/14; the id is re-read from the original text to keep its case
+                        r"|(margin)(?:\s+((?s:.*)))?")  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -44,6 +45,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'report - the morning shelf report: "report"',
     'post <id> - draft a caption, posts nothing: "post photo-product-001"',
+    'margin <cost> for <n> at <m>% - price idea: "margin 24 for 12 at 35%"',  # AV1102-12
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
@@ -54,6 +56,9 @@ FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. 
 POST_USAGE = "Send post and a product id, e.g. post photo-product-001."  # AV1322-07
 POST_REFUSALS = {"no such product": "No product {id}; send find <words> for ids.", "not on the site": "{id} is not on the site.",
                  "no photo on the site": "{id} has no photo on the site."}  # other build() reasons: "Cannot draft a post for <id>: <reason>."
+_NUM = r"[-+]?[0-9.][0-9.,_]*(?:e[-+]?[0-9]+)?"  # AV1102-12: looks like a number; margins.compute is the only validator
+MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")
+MARGIN_USAGE = 'Send: margin <pack cost> for <units> at <margin>% (optional: shrink <S>%), e.g. "margin 24.00 for 12 at 35%".'
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
@@ -304,6 +309,7 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
     if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
     if match[12]: return "report", None  # AV1322-05 (F04)
     if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
@@ -580,7 +586,7 @@ class Conversation:
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and command[0] in ("status", "help", "find", "show", "report", "post"): expired = []  # H17: read-only
+        if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin"): expired = []  # H17: read-only
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -902,6 +908,7 @@ class Conversation:
         if verb == "show": return self._reply(*self._show(code, now)) or "show"
         if verb == "report": return self._report(now)
         if verb == "post": return self._post(code)
+        if verb == "margin": return self._margin(code)
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
@@ -934,6 +941,17 @@ class Conversation:
         waiting = self._waiting_lines(now) + [l for l in self._photo_lines(now) if l.startswith("Photos waiting")]
         self._reply(f"{text}\n\n" + "\n".join(["Waiting for you:"] + waiting if waiting else ["Waiting for you: nothing"]))
         return "report"
+
+    def _margin(self, rest) -> str:
+        """AV1102-12 (F03): margins.render for one purchase line, text in and text out. Read-only: nothing is stored or
+        drafted, no interpreter call or usage count; works while paused."""
+        found = MARGIN_RE.fullmatch(rest)
+        try:
+            text = margins.render(margins.compute(found[1], found[2], found[4] or "0", found[3])) if found else MARGIN_USAGE
+        except margins.InputError as exc:
+            text = f"Not calculated: {exc}."
+        self._reply(text)
+        return "margin"
 
     def _post(self, pid) -> str:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
