@@ -4,10 +4,13 @@ Same setup as test_memory_chat (temp Git repo, private state dir, injected clock
 Run: python3 -m unittest discover -s hass/tests -t . -v
 """
 
-import unittest
+import contextlib, json, sqlite3, tempfile, unittest  # noqa: E401
 from datetime import timedelta
+from pathlib import Path
 
+from hass import memory
 from hass.tests.test_conversation import ConversationTestCase
+from hass.tests.test_memory import Clock
 from hass.tests.test_status_pause import StoreMixin
 
 SAME = "Already saved hours: 9-5; nothing changed."
@@ -56,11 +59,67 @@ class MemoryUnchangedTests(StoreMixin, ConversationTestCase):
         self.chat("remember alias.x: 9-5", "memory-invalid", "Not saved: send alias <name>: <id> to save an alias.")
         self.assertEqual(len(self.rows()), 1)
 
-    def test_alias_path_unchanged(self):
+    def test_alias_same_target_is_refused_and_recorded(self):  # RF1650-4: was an "Updated alias" row (AVB-15 left it)
+        self.chat("alias green jam: photo-product-001", "memory-saved", pid="a1")
+        self.chat("alias green jam: photo-product-001", "memory-invalid", "Not saved: already remembered.", pid="a2")
+        self.assertEqual(len(self.rows()), 1)
+        self.assertEqual(self.disposition("a2"), "memory-invalid")  # the message is recorded, not rolled back
+        self.assertFalse(self.conv.db.in_transaction)
+
+    def test_alias_new_target_still_updates(self):
         self.chat("alias green jam: photo-product-001", "memory-saved")
-        [reply] = self.chat("alias green jam: photo-product-001", "memory-updated")
-        self.assertTrue(reply.startswith("Updated alias green jam (was: product:photo-product-001)"), reply)
+        self.chat("alias green jam: photo-product-002", "memory-updated")
         self.assertEqual(len(self.rows()), 2)
+
+
+class StoreCorrectTests(unittest.TestCase):
+    """Memory.correct with the value already active (temp state dir, no chat)."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.state = Path(tmp.name) / "state"
+        self.mem = memory.Memory(str(self.state), Clock())
+        self.addCleanup(self.mem.close)
+        self.mem.remember("hours.note", "Closed on Thanksgiving", "fact", "operator:seed")
+
+    def rows(self):
+        with contextlib.closing(sqlite3.connect(self.state / "conversation.sqlite3")) as db:
+            db.row_factory = sqlite3.Row
+            return [dict(r) for r in db.execute("SELECT * FROM memory ORDER BY id")]
+
+    def test_same_value_is_refused_and_nothing_changes(self):
+        before = self.rows()
+        with self.assertRaisesRegex(ValueError, "^already remembered$"):
+            self.mem.correct("hours.note", "Closed on Thanksgiving", "operator:again")
+        self.assertEqual(self.rows(), before)  # same count, created_at, superseded_at
+        self.assertEqual(self.mem.get("hours.note"), "Closed on Thanksgiving")
+
+    def test_case_or_spacing_difference_corrects(self):
+        self.mem.correct("hours.note", "closed on Thanksgiving", "operator:a")
+        self.mem.correct("hours.note", "closed  on Thanksgiving", "operator:b")
+        self.assertEqual(len(self.rows()), 3)
+        self.assertEqual(self.mem.get("hours.note"), "closed  on Thanksgiving")
+
+    def test_no_active_row_is_key_error(self):
+        with self.assertRaises(KeyError): self.mem.correct("missing", "x", "operator:a")
+
+    def test_forgotten_key_is_key_error(self):
+        self.mem.forget("hours.note")
+        with self.assertRaises(KeyError): self.mem.correct("hours.note", "Closed on Thanksgiving", "operator:a")
+
+    def test_unverified_source_is_reported_before_equality(self):
+        self.mem.remember("pickup.day", "Sunday", "fact", "operator:seed")
+        before = self.rows()
+        with self.assertRaisesRegex(ValueError, "^unverified source$"):
+            self.mem.correct("pickup.day", "Sunday", "owner-approved:chg-0000000000ff")
+        self.assertEqual(self.rows(), before)
+
+    def test_applied_change_source_same_value_is_refused(self):
+        (self.state / "changes").mkdir(mode=0o700)
+        (self.state / "changes" / "chg-0000000000a1.json").write_text(json.dumps({"state": "applied"}), "utf-8")
+        with self.assertRaisesRegex(ValueError, "^already remembered$"):
+            self.mem.correct("hours.note", "Closed on Thanksgiving", "owner-approved:chg-0000000000a1")
 
 
 if __name__ == "__main__":

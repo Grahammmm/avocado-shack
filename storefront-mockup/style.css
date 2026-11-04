@@ -63,3 +63,4 @@ dialog .close{position:sticky;top:0;right:auto;float:right;width:44px;height:44p
  .catalog-only .maker-story a{font-size:12px}
 }
 @media(max-width:360px){.catalog-only .food-card-top{grid-template-columns:94px minmax(0,1fr);gap:12px}.catalog-only .products h3{font-size:22px}}
+.hero-copy>p.next-hike-line{font-size:14px;line-height:1.5;max-width:440px;margin:-4px 0 14px;overflow-wrap:anywhere}.hero-copy>p.next-hike-line .text-link{min-height:0;font-size:inherit;padding:0}

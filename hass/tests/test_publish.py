@@ -65,7 +65,7 @@ class PublishedSite(unittest.TestCase):
 
     def test_only_the_allowlist_is_published(self):
         images = sorted({p["image"] for p in self.content.active_products()})
-        expected = sorted(set(sitegen.PUBLISH_GENERATED + sitegen.PUBLISH_STATIC + sitegen.PUBLISH_ASSETS)
+        expected = sorted(set(sitegen.PUBLISH_GENERATED + sitegen.PUBLISH_PAGES + sitegen.PUBLISH_STATIC + sitegen.PUBLISH_ASSETS)
                           | set(images) | {"community.json"})
         self.assertEqual(self.files, expected)
         self.assertEqual(sorted(self.written), expected)
@@ -142,8 +142,8 @@ class PublishedSite(unittest.TestCase):
                 path = ref.split("#")[0].split("?")[0]
                 target = path.lstrip("/") if path.startswith("/") else (Path(rel).parent / path).as_posix()
                 target = target.removeprefix("./")
-                if target in ("", "hike"):
-                    target = "index.html" if target == "" else "hike/index.html"
+                if target in ("", "hike") or target.endswith("/"):
+                    target = target + "index.html" if target != "hike" else "hike/index.html"
                 with self.subTest(ref=ref, page=rel):
                     self.assertTrue(target in published, f"{target} is not published")
                 checked += 1

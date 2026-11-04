@@ -84,5 +84,12 @@ async function send(form,path,data){const status=form.querySelector('.form-statu
 if($('#hike-updates'))$('#hike-updates').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:false,hikes:true})};
 if($('#community-newsletter'))$('#community-newsletter').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:true,hikes:e.currentTarget.hikes.checked})};
 if($('#upcoming-hikes'))$('#upcoming-hikes').onclick=e=>{const button=e.target.closest('[data-rsvp]');if(!button)return;const event=club.events.find(x=>x.id===button.dataset.rsvp);if(!event)return;show(`<p class="label">NORTH COAST HIKING CLUB</p><h2>Join the next hike.</h2><h3>${esc(event.title)}</h3><p>${esc(dateLabel(event))}</p>${details(event)}<form id="hike-rsvp"><label for="rsvp-name">Your name</label><input id="rsvp-name" name="name" autocomplete="name" maxlength="120" required><label for="rsvp-email">Email address</label><input id="rsvp-email" name="email" type="email" autocomplete="email" required><label for="rsvp-party">People in your group, including you</label><select id="rsvp-party" name="partySize">${Array.from({length:Math.min(6,event.remaining??6)},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}</select><p class="setup-note">Your RSVP goes on the club’s list. No confirmation email is sent.</p><button class="button" type="submit">Save my RSVP ↗</button><p class="form-status" role="status"></p></form>`);$('#hike-rsvp').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const saved=await send(f,'/api/community/rsvps',{eventId:event.id,name:f.elements.name.value,email:f.elements.email.value,partySize:Number(f.elements.partySize.value)});if(saved)load()}};
-if($('#upcoming-hikes'))load();
+// AV1102-04: the home page's one "Next hike" line. Live /api/community only (never the sample hikes); any failure or no scheduled upcoming hike leaves it hidden.
+async function loadNext(){try{
+ const r=await fetch('/api/community',{cache:'no-store'});if(!r.ok)return;
+ const e=((await r.json()).events||[]).filter(upcoming).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt))[0];if(!e)return;
+ const at=new Date(e.startsAt),tz=e.timezone||'America/Los_Angeles',line=$('#next-hike-line');
+ const when=at.toLocaleDateString('en-US',{timeZone:tz,weekday:'long',month:'long',day:'numeric'})+', '+at.toLocaleTimeString('en-US',{timeZone:tz,hour:'numeric',minute:'2-digit'});
+ line.innerHTML=`<a class="text-link" href="/hike#upcoming-hikes">Next hike: ${esc(when)} - ${esc(e.title)}</a>`;line.hidden=false}catch{}}
+if($('#upcoming-hikes'))load();else if($('#next-hike-line'))loadNext();
 })();

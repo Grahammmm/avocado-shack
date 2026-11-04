@@ -1517,3 +1517,75 @@ INCOMPLETE - current as of November 2, 2026, covered 177 of 177 merged units tha
 - SHOP-2 — PR #147, merged 2026-11-01 as 47753fcd71c239d3de0e29e2430909e404e991fc: [SHOP-2] install an applied change into the running site (hass/install.py, editor install verb)
 - SHOP-3 — PR #151, merged 2026-11-01 as eca8b8bd6482d828cb4aea51592470c906eb07fa: [SHOP-3] inbound receiver up to the live connection: sealed envelope -> draft for approval on fixtures; CONNECT.md lists what G must do
 - SHOP-4 — PR #159, merged 2026-11-01 as a04821029723d2bbc67e8364ff97d08599d1e2f9: [SHOP-4] owner answers: did it work?, stop changes, history and recovery say where the change is now
+
+## H04 route.edit corrects a route idea's wording (RF1650-1) — October 31, 2026
+
+Branch rb/rf1650-1 from origin/main b75fd83 (RF1650-1, PR #92: head 469331d, merged as a808bd1d31247cbcdf66be83f1373d3b65d10ea1). For Michael: `route.edit` changes the wording of a route idea (title, place, character, distance, difficulty, elevation, elevationLabel, duration, routeType, terrain, description) through the usual draft and approval, and `undo` puts the old text back. The id, status, RSVPs and source links of a route idea are not editable (they are not arguments, so the request is `invalid`). Refused: an unknown id, a real hike id (`use hike.update`), values that already match (`already says that`); no field given asks for details. `hass/ops/routes.py`; added `hass/tests/test_route_edit.py`.
+
+Checks at PR head 469331d (recorded in PR #92): `python3 -m unittest hass.tests.test_route_edit hass.tests.test_hike_ops hass.tests.test_undo hass.tests.test_revert_records hass.tests.test_content -v` ran 51 tests, OK. PREPUSH-TESTS PASS.
+
+Limits: no adding or removing route ideas, no turning an idea into a hike, no editing source links, no site script change, no interpreter prompt change.
+
+## H15 an owner-approved memory source must name an applied, not-undone change (RF1650-2) — November 1, 2026
+
+Branch rb/rf1650-2 from origin/main 5370850e (RF1650-2, PR #143: head 6ed6a12, merged as 8584d68ca2383e68a563ddaa063548980663f3a9). For Michael: a remembered or corrected fact with the source `owner-approved:<id>` is stored only when `<id>` looks like `chg-` and 12 hex characters and `<state>/changes/<id>.json` is a regular file (no symlink) whose state is `applied` with no `revertedBy`; anything else is refused with `unverified source` and nothing is written. The change id is kept as `approved_change`. Owner-stated and operator sources are unchanged. `hass/memory.py`; added `hass/tests/test_memory_source.py`; `test_memory.py` and `test_memory_history.py` changed their change-id inputs only (G approved the two-file scope on 2026-11-01).
+
+Checks at PR head 6ed6a12 (recorded in PR #143): `python3 -B -m unittest hass.tests.test_memory_source hass.tests.test_memory hass.tests.test_memory_chat hass.tests.test_memory_history -v` ran 36 tests, OK. PREPUSH-TESTS PASS.
+
+Limits: no chat wiring of approved facts, no alias memory, no retention rule, no schema change.
+
+## H06 undo of an undo is refused with a plain reason (RF1650-3) — October 31, 2026
+
+Branch rb/rf1650-3 (RF1650-3, PR #104: head dfdde7f, merged as df99c97c6abc286587ba5523f4b96c99b6c69ed9). For Michael: `undo` of a change that was itself an undo is refused with `<id> is an undo; to bring the change back, ask for it again`; nothing is drafted and the original stays marked undone. An unreadable, symlinked or malformed draft file is refused as `<id> draft is unreadable`. Every other undo behaves as before. A redo is not offered (ask for the change again). `hass/ops/history.py`; added `hass/tests/test_undo_twice.py`.
+
+Checks at PR head dfdde7f (recorded in PR #104): `python3 -m unittest hass.tests.test_undo_twice hass.tests.test_undo hass.tests.test_revert_records hass.tests.test_conversation -v` ran 38 tests, OK.
+
+Limits: no redo command (a redo is not offered; ask for the change again), `revertedBy` is never cleared, a bare `undo` still picks the same draft, `COMMANDS.md` is unchanged.
+
+## H15 correcting a remembered fact to the same value is refused (RF1650-4) — November 3, 2026
+
+Branch rb/rf1650-4 from origin/main ff87a4c (RF1650-4, PR #340: head b6386d0, merged as 2a13159361bbe35a4aa95f8278c460eea7f1de74). For Michael: `Memory.correct` with exactly the value already remembered raises `already remembered` and writes nothing (no superseded row, no new date); a value that differs only in case or inner spacing still corrects. The alias command catches it and replies `Not saved: already remembered.` (`memory-invalid`). `hass/memory.py`, `hass/conversation.py` (`_alias` only); `hass/tests/test_memory_unchanged.py` extended, and its alias same-target test now expects the refusal instead of an update.
+
+Checks at PR head b6386d0 (recorded in PR #340): `python3 -m unittest hass.tests.test_memory_unchanged hass.tests.test_memory hass.tests.test_memory_chat hass.tests.test_memory_source -v` ran 41 tests, OK. PREPUSH-TESTS NOT-RUN (host busy).
+
+Limits: no value normalisation, `remember` is unchanged, no retention rule, no alias memory change.
+
+## H10 photo originals need a real, zoned received time (RF1650-5) — October 31, 2026
+
+Branch rb/rf1650-5 (RF1650-5, PR #101: head 84fb340, merged as bd2944001349f5717b4805b296e2766ccc96e6dc). For Michael: `media.store_original` refuses a `received_at` that is not a timezone-aware ISO-8601 time (`yesterday`, a date alone, a time with no offset, an empty or non-text value) with `received_at must be a timezone-aware ISO-8601 time`; nothing is created or written. A valid time is stored as given, and a duplicate keeps the first sidecar. `hass/media.py`; added `hass/tests/test_media_time.py`.
+
+Checks at PR head 84fb340 (recorded in PR #101): `python3 -m unittest hass.tests.test_media_time hass.tests.test_media hass.tests.test_media_web hass.tests.test_statebackup_media -v` ran 34 tests, OK.
+
+Limits: existing sidecars are not rewritten, times are not converted to UTC, no retention or deletion, web copies unchanged.
+
+## Site: search finds products despite accents and curly apostrophes (RF1650-8) — October 31, 2026
+
+Branch rb/rf1650-8 from origin/main 422a4a9 (RF1650-8, PR #107: head 53f0b3d929f, merged as dea25e3b8d1314f6231dcf80ca7063c6edad87d1). For guests: the catalog search folds accents and apostrophe shapes and ignores case, so `jalapenos` finds Jalapeños, `chevre` finds Chèvre, and `lion's`, `lion’s` and `lionʼs` all find the two lion’s mane products; `lions` still finds nothing. Brand and category filters, counts and paging are unchanged. `storefront-mockup/shop.js` (one `fold` helper); `storefront-mockup/catalog-only-qa.cjs` adds the assertions.
+
+Checks at PR head 53f0b3d929f (recorded in PR #107): `storefront-mockup/catalog-only-qa.cjs` run with a loopback `community-server.py` exited 0 (the old `shop.js` failed its first new assertion), and the hass unittests ran 765 tests, OK (skipped=5). PREPUSH-TESTS PASS.
+
+Limits: no fuzzy or typo search, no maker-name search, no Hass lookup, the Organic badge rule and layout are unchanged.
+
+## H04 hike.create same-day twin refusal: RF1740-5 is superseded by AV1737-09 (RF1740-5) — November 4, 2026
+
+Nothing was built under RF1740-5 and no PR exists. Its behaviour, `hike.create` refusing a second scheduled hike with the same title on the same Pacific day, already shipped as AV1737-09 (commit b8e2769, merged as 27aa3ef5c1305a752517a276722f2049afd0bdd2; see the AV1737-09 section above). The frozen RF1740-5 design contradicts the merged `hass/tests/test_hike_twin.py`, so building it would have regressed main. The operator closed the RF1740-5 card as superseded on 2026-11-03, and the RF1740-8 acceptance that a `hass/tests/test_hike_create_repeat.py` exists is dropped: that test belongs to the superseded unit and is not created.
+
+Checks: none of its own; the AV1737-09 command stands, `python3 -m unittest hass.tests.test_hike_twin -v`.
+
+Limits: no code, test or behaviour change comes from RF1740-5.
+
+## H04 a bad RSVP party size makes that event's guest count unavailable (RF1740-6) — November 3, 2026
+
+Branch rb/rf1740-6 from origin/main e3602ca (RF1740-6, PR #321: commits af4605a, 75dc1b4, merged as 9a824cda9865182af5f6df74fc9133bada78e083). For Michael: a stored RSVP row whose `party_size` is missing, not a whole number, or under 1 makes that event's guest count unavailable instead of a smaller number. Lowering capacity for that event is refused with `guest count unavailable`, and a cancel carries the `guest count unavailable; check RSVPs before approving` draft warning (the cancel still applies). A bad row on another event does not stop this event being counted. `hass/ops/hikes.py` (`GUEST_QUERY`, new `guest_counts_checked`; `guest_counts` keeps its signature and now raises `ValueError` when any event has a bad row, so every caller says unavailable or unreadable); the query still never selects a name or an email. Added `hass/tests/test_hike_guest_rows.py`.
+
+Checks at PR head 75dc1b4 (recorded in PR #321): `python3 -m unittest hass.tests.test_hike_guest_rows hass.tests.test_hike_guest_warning hass.tests.test_hike_move_warning hass.tests.test_hike_ops -v` ran 32 tests, OK. PREPUSH-TESTS PASS.
+
+Limits: the owner text is unchanged and no existing test was edited; `health` now reports its guest-counts check unreadable for a database holding a bad row (fails closed); no RSVP data is repaired or rewritten.
+
+## H10 product.set_photo refuses a symlinked or non-directory photo folder (RF1740-7) — November 4, 2026
+
+Branch rb/rf1740-7 (RF1740-7, PR #341: head a32fbd3, merged as 96447aa9afd34375e2b7365db527018f6a70cefa). For Michael: `product.set_photo`, and `product.add` with a photo (both go through `photos.install`), refuse with the fixed reply `the site photo folder is unusable` when `assets` or `assets/products` under the site directory is a symlink or not a directory, including a dangling link. The check is an `lstat` of each folder before the site file is read or any asset is queued; nothing is queued and the product is unchanged. `hass/ops/photos.py`; two existing expectations changed (`test_set_photo.py` now expects the new reply, `test_set_photo_site_read.py` expects the two folder lstats first). Added `hass/tests/test_set_photo_folder.py`.
+
+Checks at PR head a32fbd3 (recorded in PR #341): `python3 -m unittest hass.tests.test_set_photo_folder hass.tests.test_set_photo hass.tests.test_undo -v` ran 24 tests, OK.
+
+Limits: missing folders are unchanged (the editor creates them); the media store checks and `editor.py` are unchanged; the reply names no path or sha.

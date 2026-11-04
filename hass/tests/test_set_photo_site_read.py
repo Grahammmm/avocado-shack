@@ -106,7 +106,7 @@ class SiteReadTests(SetPhotoTestCase):
             result = self.repo.prepare(_req(_photo(PID, self.jpg), _photo(OTHER, self.jpg, "Another crate")))
         self.assertEqual(result["result"], "ok", result)
         looked = [Path(c.args[0]).name for c in photos_os.lstat.call_args_list]
-        self.assertEqual(looked, [self.path.name])  # first use only: absent, so queued; second takes ctx.assets
+        self.assertEqual(looked, ["assets", "products", self.path.name])  # first use only; second takes ctx.assets
         self.assertNotIn(self.path.name, reads)
 
 
