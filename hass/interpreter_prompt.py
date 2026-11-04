@@ -80,8 +80,9 @@ def _capped(rows, cap) -> list:
 
 def _product_lines(products) -> list:
     rows = sorted(products, key=lambda p: str(p.get("id", "")))
-    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(p.get('status'))}" for p in rows],
-                   MAX_PRODUCTS)
+    shown = [next((v for v in (p.get("displayBrand"), p.get("brand")) if isinstance(v, str) and v), "") for p in rows]
+    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(brand)} | {_q(p.get('status'))}"
+                    for p, brand in zip(rows, shown)], MAX_PRODUCTS)  # AV1102-06: displayBrand, else brand
 
 
 def _maker_lines(makers) -> list:
@@ -124,7 +125,7 @@ def build(registry, content) -> str:
         CONTRACT,
         "Rules:\n" + "\n".join(f"- {rule}" for rule in RULES),
         "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
-        "Catalog.\nProducts (id | name | status):\n" + "\n".join(_product_lines(_dicts(content.products)))
+        "Catalog.\nProducts (id | name | brand | status):\n" + "\n".join(_product_lines(_dicts(content.products)))
         + "\nMakers (key | name):\n" + "\n".join(_maker_lines(makers)),
         "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
         + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),

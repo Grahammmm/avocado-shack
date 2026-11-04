@@ -24,10 +24,10 @@ test.set_category(id: id, required; category: enum, required, one of fruit|veget
 test.set_maker_story(key: maker_key, required; story: text, required)
 
 Catalog.
-Products (id | name | status):
-"aa-avocado" | "Hass avocado" | "active"
-"mm-eggs" | "Eggs, dozen" | "sold-out"
-"zz-honey" | "Wildflower honey" | "active"
+Products (id | name | brand | status):
+"aa-avocado" | "Hass avocado" | "Avocado Shack" | "active"
+"mm-eggs" | "Eggs, dozen" | "Hen Farm" | "sold-out"
+"zz-honey" | "Wildflower honey" | "Bee Co" | "active"
 Makers (key | name):
 "Etto" | "Etto Pastificio"
 "Stepladder" | "Stepladder Ranch"
