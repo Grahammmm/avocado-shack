@@ -4,6 +4,8 @@ Every event field comes from an argument: nothing is copied from a route idea or
 start is computed from a local date and time in America/Los_Angeles, and capacity never drops below the confirmed
 guests counted (read-only) from an isolated RSVP database. No op notifies anyone or touches ``club.emailConnected``.
 A ``trailId`` that is not a route idea is refused: "unknown route idea <id>" or "<id> is a hike, not a route idea".
+AV1937-05: ``hike.repeat`` drafts a new scheduled hike on a new date and time from a real hike (REPEAT_FIELDS, RSVP
+setting and capacity); never its id, status, recap or guests, and never from a route idea or the sample file.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from hass.claims import REPEAT_FIELDS
 from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
@@ -206,6 +209,23 @@ def _hike_create(content, args, ctx):
     return _touch(None, event)
 
 
+def _hike_repeat(content, args, ctx):
+    """A new scheduled hike on args date/time with the title, text, route link and RSVP settings of a real hike."""
+    source = _event(content, args["id"])
+    if source is None:
+        if any(i["id"] == args["id"] for i in content.community["routeIdeas"]):
+            return Refused(f"{args['id']} is a route idea, not a real hike")
+        return NotFound(args["id"])
+    missing = [f for f in ("meetingPoint", "rsvpEnabled") if f not in source]
+    if missing:  # a legacy hike: nothing is invented for it
+        return NeedsDetails(missing, f"{args['id']} has no {' or '.join(missing)} on record; update that hike first, "
+                                     "then repeat it.")
+    copied = {f: copy.deepcopy(source[f]) for f in (*REPEAT_FIELDS, "rsvpEnabled", "capacity") if f in source}
+    if copied["rsvpEnabled"] and "capacity" not in copied:
+        copied["noCapacityLimit"] = True  # the source had no limit
+    return _hike_create(content, {**copied, "date": args["date"], "time": args["time"]}, ctx)
+
+
 def _scheduled(content, event_id):
     """The scheduled event dict, or NotFound / Refused naming its state."""
     event = _event(content, event_id)
@@ -343,6 +363,7 @@ OPS = (
     Op("hike.create", {"title": Arg("text"), "date": Arg("date"), "time": Arg("time"), "meetingPoint": Arg("text"),
                        "rsvpEnabled": Arg("bool"), **_CAPACITY, "trailId": Arg("id", required=False),
                        **_OPTIONAL_TEXT}, _hike_create),
+    Op("hike.repeat", {**_ID, "date": Arg("date"), "time": Arg("time")}, _hike_repeat),
     Op("hike.update", {**_ID, "title": Arg("text", required=False), "date": Arg("date", required=False),
                        "time": Arg("time", required=False), "meetingPoint": Arg("text", required=False),
                        "rsvpEnabled": Arg("bool", required=False), **_CAPACITY,

@@ -45,6 +45,8 @@ RULES = (
     "in the order shown.",
     "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
     "or product.add with imageAlt when the owner says it is a new product; never both.",
+    "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
+    "is unclear, ask. Never make a route idea or the sample hike into a real hike.",
     "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
     f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
     "route ideas is not a design change.",
