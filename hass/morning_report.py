@@ -10,7 +10,7 @@ import argparse
 import json
 import sqlite3
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from itertools import groupby
 from pathlib import Path
 
@@ -47,13 +47,25 @@ def _products(content) -> list[dict]:
     return content.active_products()
 
 
+def _report_local_parts(starts_at) -> tuple[str, str]:
+    """Pacific (date, HH:MM) of an instant with an explicit UTC offset; a start without one raises ValueError."""
+    if not isinstance(starts_at, str):
+        raise TypeError("start is not text")
+    parsed = datetime.fromisoformat(starts_at.replace("Z", "+00:00"))
+    if parsed.utcoffset() is None:  # date-only or naive: never guess a zone from the host machine
+        raise ValueError("start has no UTC offset")
+    local = parsed.astimezone(hikes.TZ)
+    return local.date().isoformat(), local.strftime("%H:%M")
+
+
 def _hikes(content, today: date, guests) -> list[dict]:
-    """Scheduled hikes starting today or tomorrow (Pacific); confirmed is None unless the guests DB was read (AV1322-06)."""
+    """Scheduled hikes starting today or tomorrow (Pacific); confirmed is None unless the guests DB was read (AV1322-06).
+    Starts without a UTC offset are skipped."""
     events, found = content.community.get("events"), []
     for e in events if isinstance(events, list) else ():
         try:
-            day, clock = hikes._local_parts(e["startsAt"]) if e.get("status") == "scheduled" else (None, None)
-        except (KeyError, TypeError, ValueError, AttributeError):  # an unparseable start is skipped
+            day, clock = _report_local_parts(e["startsAt"]) if e.get("status") == "scheduled" else (None, None)
+        except (KeyError, TypeError, ValueError, AttributeError, OverflowError):  # an unusable start is skipped
             continue
         if day in (today.isoformat(), (today + timedelta(days=1)).isoformat()):
             cap, eid = (e.get("capacity") if type(e.get("capacity")) is int else None), str(e.get("id", ""))
