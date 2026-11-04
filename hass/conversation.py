@@ -80,6 +80,8 @@ INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
 VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
@@ -92,7 +94,7 @@ CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NUL
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS outbox(id INTEGER PRIMARY KEY, chat TEXT NOT NULL, text TEXT NOT NULL,
-  attachments TEXT NOT NULL, created_at TEXT NOT NULL, sent_at TEXT);
+  attachments TEXT NOT NULL, created_at TEXT NOT NULL, sent_at TEXT, reply_to TEXT);
 """
 
 
@@ -166,9 +168,9 @@ class Outbox:
     def __init__(self, db, now):
         self.db, self._now = db, now
 
-    def add(self, chat, text, attachments=()):
-        self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at) VALUES (?, ?, ?, ?)",
-                        (chat, text, json.dumps(list(attachments)), _iso(self._now())))
+    def add(self, chat, text, attachments=(), reply_to=None):
+        self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
+                        (chat, text, json.dumps(list(attachments)), _iso(self._now()), reply_to))
 
     def unsent(self):
         return self.db.execute("SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id").fetchall()
@@ -177,10 +179,21 @@ class Outbox:
         """A raised send error propagates and leaves that row and every later row unsent."""
         sent = 0
         for row in self.unsent():
-            adapter.send(row["chat"], self._delayed(row["created_at"]) + row["text"], json.loads(row["attachments"]))
+            head = self._late(row["reply_to"]) or self._delayed(row["created_at"])  # the longer wait is the one named
+            adapter.send(row["chat"], head + row["text"], json.loads(row["attachments"]))
             self.db.execute("UPDATE outbox SET sent_at = ? WHERE id = ?", (_iso(self._now()), row["id"]))
             sent += 1
         return sent
+
+    def _late(self, reply_to) -> str:
+        """AV0022-10 (H16): send-time heading naming the owner message a reply answers, when sent over LATE_AFTER
+        after it (older than 6 days: its date); empty, naive, bad or future -> ''. The stored text never changes."""
+        try: sent, now = datetime.fromisoformat(reply_to), self._now()
+        except (TypeError, ValueError): return ""
+        if sent.tzinfo is None or now - sent <= LATE_AFTER: return ""
+        at = sent.astimezone(LOCAL_TZ)
+        day = at.strftime("%Y-%m-%d") if now - sent > timedelta(days=6) else WEEKDAYS[at.weekday()]
+        return f"Late reply to your message from {day} {at:%H:%M}:\n"
 
     def _delayed(self, created_at) -> str:
         """AVB-07 (H16): send-time prefix for a reply held over DELAYED_AFTER_S; bad, naive or future -> ''."""
@@ -407,6 +420,8 @@ class Conversation:
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
         for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
+        if "reply_to" not in {r["name"] for r in self.db.execute("PRAGMA table_info(outbox)")}:  # AV0022-10 (H16)
+            self.db.execute("ALTER TABLE outbox ADD COLUMN reply_to TEXT")
         # AVB-03 (H05): an open draft from before proposed_at has no recoverable proposal instant (a filled question
         # keeps its question's created_at), so it counts as proposed when this store is opened: a yes sent earlier is
         # refused and the owner re-sends it; it is never judged from created_at or from the current ttl.
@@ -479,7 +494,7 @@ class Conversation:
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
     def _reply(self, text, attachments=()):
-        self.outbox.add(self.settings["ownerChat"], text, attachments)
+        self.outbox.add(self.settings["ownerChat"], text, attachments, self._answering or None)
 
     def _proposal_reply(self, row, draft, prefix=""):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
@@ -516,7 +531,14 @@ class Conversation:
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------
+    _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
+
     def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
+        self._answering = msg.received_at
+        try: return self._handle_message(msg, last_try, apply)
+        finally: self._answering = None
+
+    def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
         apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
         row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""

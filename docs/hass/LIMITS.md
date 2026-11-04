@@ -19,6 +19,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - A proposal or a question waits for your reply only for the time the operator has set. After that it expires and nothing
   happens; send the change again. The expiry is judged at the time you sent your reply, so a `yes` sent in time still
   counts if the shop computer handles it later.
+- A reply sent more than 15 minutes after the message it answers (queued while the shop computer was offline, or a send that
+  failed and was retried) starts with `Late reply to your message from <day> <time>:` so you know which message it is for.
 - One message can change at most **20** <!-- editor.MAX_OPS --> things. Split bigger jobs into several messages.
 
 ## Lists
