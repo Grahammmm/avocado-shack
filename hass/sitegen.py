@@ -258,13 +258,15 @@ def _public_community_json(content: Content) -> bytes:
 
 def publish_files(content: Content, repo: Path, template_dir: Path | None = None, today=None) -> dict[str, bytes]:
     """{site-relative path: bytes} for the publishable static site: generated pages and scripts, the allowlisted
-    static files, a public community.json, and only the assets the pages and the active catalog use."""
+    static files, a public community.json, and only the assets the pages and the active catalog use (the home
+    photo, when store.homeImage is set, is one of them: it is rendered into index.html)."""
     repo = Path(repo)
     site = repo / SITE_PREFIX
     rendered = render(content, template_dir or repo / "hass" / "templates", today=today)
     files = {rel: rendered[SITE_PREFIX + rel] for rel in PUBLISH_GENERATED}
     files["community.json"] = _public_community_json(content)
-    images = sorted({p["image"] for p in content.active_products()})
+    home = content.store.get("homeImage")
+    images = sorted({p["image"] for p in content.active_products()} | ({home["image"]} if home else set()))
     for rel in PUBLISH_STATIC + PUBLISH_ASSETS + tuple(images):
         if _linked(site, rel) or not (site / rel).is_file():
             raise OSError(errno.ENOENT, f"publish source missing or a symlink: {rel}")
