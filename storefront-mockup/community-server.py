@@ -35,7 +35,8 @@ class FormError(ValueError):
     """A guest-facing form problem whose text is safe to show as-is."""
 
 def email_address(value):
-    value = str(value or '').strip().lower()
+    if not isinstance(value, str): raise FormError('Please enter a valid email address.')
+    value = value.strip().lower()
     if len(value)>254 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
         raise FormError('Please enter a valid email address.')
     return value
@@ -100,7 +101,9 @@ class Handler(SimpleHTTPRequestHandler):
                 event=next((x for x in config().get('events',[]) if x.get('id')==data.get('eventId')),None)
                 if not event or not scheduled(event) or not event.get('rsvpEnabled') or not event.get('meetingPoint'):
                     return self.reply(409,{'error':'This hike is not accepting RSVPs.'})
-                address=email_address(data.get('email')); name=str(data.get('name','')).strip()
+                address=email_address(data.get('email')); name=data.get('name')
+                if not isinstance(name,str): raise FormError('Please enter your name (up to 120 characters).')
+                name=name.strip()
                 if not name or len(name)>120: raise FormError('Please enter your name (up to 120 characters).')
                 party=data.get('partySize',1)
                 if type(party) is not int or not 1<=party<=6: raise FormError('Choose between one and six people.')
