@@ -191,6 +191,17 @@ class OpTests(CatalogTestCase):
             self.r, "refused", ("store.confirm_selection", {"yes": [self.b]}))["reason"])
         self.assertNotIn("selection_checked_on", self.r.store())
 
+    def test_repeat_inside_one_list_names_that_list(self):
+        a, b = self.a, self.b
+        cases = (({"yes": [a, a]}, f"{a} is listed twice in yes"), ({"no": [b, a, b]}, f"{b} is listed twice in no"),
+                 ({"limited": [a, a]}, f"{a} is listed twice in limited"), ({"yes": [a], "no": [a]},
+                  f"{a} is listed twice (yes and no)"), ({"yes": [a, a], "no": [a]}, f"{a} is listed twice in yes"))
+        store, products = self.r.store(), self.r.products()
+        for args, reason in cases:
+            with self.subTest(args=args):
+                self.assertEqual(self.assertRejected(self.r, "refused", ("store.confirm_selection", args))["reason"], reason)
+                self.assertEqual((self.r.store(), self.r.products()), (store, products))
+
     def test_set_availability_refusals_and_wording_bypass(self):
         for bad in ("Yes", "available", "sold out", "maybe"):
             with self.subTest(bad=bad):
