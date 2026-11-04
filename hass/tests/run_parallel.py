@@ -54,7 +54,12 @@ def main():
     for i, g in enumerate(groups):
         log = os.path.join(tmp, f"shard{i}.log")
         f = open(log, "wb")
-        p = subprocess.Popen([sys.executable, "-m", "unittest", "-v", *g],
+        # -u: unbuffered. unittest writes its report to stderr while a test's own print() goes to
+        # stdout; with stdout block-buffered, a test's output can flush between the "=====" rule and
+        # the FAIL:/ERROR: header below it, and bin/mergegate.py then silently drops that failing
+        # test id (observed on main job 126269370693: 4 failures in the log, 3 ids read). Unbuffered
+        # stdout keeps the two streams in real order within a shard.
+        p = subprocess.Popen([sys.executable, "-u", "-m", "unittest", "-v", *g],
                              cwd=str(ROOT), stdout=f, stderr=subprocess.STDOUT)
         procs.append((i, g, p, f, log))
     rc = 0
