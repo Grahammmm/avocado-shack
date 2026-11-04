@@ -52,7 +52,7 @@ class LoadCasesRefusalTests(unittest.TestCase):
         code, out, err = self.run_main(path)
         self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 63))
 
-    def test_real_fixture_loads_55_cases_unchanged(self):
+    def test_real_fixture_loads_63_cases_unchanged(self):
         self.assertEqual(ev.load_cases(CASES), self.rows)
         self.assertEqual(len(self.rows), 63)
 
