@@ -65,7 +65,7 @@ class HomeImagePublish(unittest.TestCase):
 
     def test_no_home_photo_publishes_exactly_the_old_file_set(self):
         files = sitegen.publish_files(self.content(home=False), self.repo)
-        expected = set(sitegen.PUBLISH_GENERATED) | {"community.json"} | set(sitegen.PUBLISH_STATIC)
+        expected = set(sitegen.PUBLISH_GENERATED) | set(sitegen.PUBLISH_PAGES) | {"community.json"} | set(sitegen.PUBLISH_STATIC)
         expected |= set(sitegen.PUBLISH_ASSETS) | {p["image"] for p in self.base.active_products()}
         self.assertEqual(sorted(files), sorted(expected))
         self.assertNotIn(PHOTO, files)
