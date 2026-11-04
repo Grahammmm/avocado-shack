@@ -47,6 +47,12 @@ class GoodRecordTests(unittest.TestCase):
         self.assertEqual(preview.target_for(_with(STORE, hours=None))["hours"], [])
         self.assertEqual(preview.target_for(_with(PRODUCT, name=None, description=None))["name"], None)
 
+    def test_store_before_none_or_dict_preserves_the_target(self):
+        expected = preview.target_for(STORE)
+        for before in (None, {}):
+            with self.subTest(before=before):
+                self.assertEqual(preview.target_for({**STORE, "before": before}), expected)
+
     def test_fields_another_kind_reads_are_not_checked(self):
         self.assertEqual(preview.target_for(_with(PRODUCT, hours="Mon", place=3))["kind"], "product")
         self.assertEqual(preview.target_for(_with(ROUTE, status=5, recap=[1]))["title"], "Coast walk")
@@ -66,6 +72,11 @@ class DamagedRecordTests(unittest.TestCase):
             for after in ([], "Honey", 5, ["name"], "", 0, False):
                 with self.subTest(collection=base["collection"], after=after):
                     self.assertUnreadable({**base, "after": after})
+
+    def test_store_before_must_be_a_dict_or_none(self):
+        for before in ("damaged", ["homeImage"], 5, True, [], "", 0, False):
+            with self.subTest(before=before):
+                self.assertUnreadable({"collection": "store", "before": before, "after": {}})
 
     def test_store_hours_must_be_a_list_of_text(self):
         for hours in ("Mon 9-5", ["Mon 9-5", 7], [None], ("Mon 9-5",), {"Mon": "9-5"}, ""):

@@ -30,6 +30,8 @@ def _readable(record) -> bool:
     if not isinstance(after, dict) or not isinstance(record.get("key"), (str, type(None))):
         return False
     collection = record.get("collection") if isinstance(record.get("collection"), str) else ""
+    if collection == "store" and not isinstance(record.get("before"), (dict, type(None))):
+        return False
     hours = after.get("hours") if collection == "store" else None
     if not (hours is None or isinstance(hours, list) and all(isinstance(h, str) for h in hours)):
         return False
@@ -59,7 +61,8 @@ def target_for(record: dict, today=None) -> dict:
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
-        return {"kind": "store", "hours": list(after.get("hours") or []),
+        cleared = bool((record.get("before") or {}).get("homeImage")) and "homeImage" not in after  # shop photo back
+        return {"kind": "store", **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
                 "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), today)}
