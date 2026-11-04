@@ -40,4 +40,4 @@ Route ideas (id | title):
 
 Store.
 Store (field | value):
-(none)
+"intro (default)" | "Good food nourishes more than a body. It brings people together."
