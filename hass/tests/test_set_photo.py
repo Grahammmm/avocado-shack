@@ -100,8 +100,8 @@ class SetPhotoTests(SetPhotoTestCase):
         result = self.rejected("needs-details", ("product.set_photo", {"id": PID, "photo": self.jpg}))
         self.assertEqual(result["missing"], ["imageAlt"])
         self.assertIn("imageAlt", result["question"])
-        result = self.rejected("invalid", _photo(PID, self.jpg, "a" * 201))
-        self.assertTrue(any("imageAlt: longer than 200 characters" in p for p in result["problems"]), result)
+        result = self.rejected("refused", _photo(PID, self.jpg, "a" * 201))
+        self.assertEqual(result["reason"], "the photo description is longer than 200 characters (it has 201)")
 
     def test_named_refusals_write_nothing(self):
         cases = {"unknown photo": (_photo(PID, "0" * 64), media.REPLIES["not-found"]),

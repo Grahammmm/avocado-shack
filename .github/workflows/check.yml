@@ -88,23 +88,32 @@ jobs:
           tests=$(ls commerce/gateway/*.test.mjs | grep -v '/owner-photo\.test\.mjs$')
           node --test $tests
 
-      # community-ui-qa.cjs also reads the normal site on port 3101 (read-only;
-      # it asserts the sample RSVP makes no POST), so one temp-DB server on 3101
-      # backs both the catalog check and that part of the community check.
+      # community-ui-qa.cjs also reads the normal site at PREVIEW_URL (read-only;
+      # it asserts the sample RSVP makes no POST), so one temp-DB server backs
+      # both the catalog check and that part of the community check.
+      # The self-hosted host may already run a long-lived preview on 3101 (and
+      # other jobs share it), so use the first port nothing answers on, and
+      # stop if our own server is not the one that came up.
       - name: Catalog + community checks (loopback servers, temporary databases)
         run: |
           export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
           export QA_OUT_DIR="$RUNNER_TEMP/qa"
-          export PREVIEW_URL=http://127.0.0.1:3101
+          port=
+          for p in $(seq 3111 3199); do
+            curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$p/" || { port=$p; break; }
+          done
+          test -n "$port"
+          export PREVIEW_URL="http://127.0.0.1:$port"
           mkdir -p "$QA_OUT_DIR"
           AVOSHACK_COMMUNITY_DB="$RUNNER_TEMP/site.sqlite3" \
-            python3 storefront-mockup/community-server.py --port 3101 >"$RUNNER_TEMP/server.log" 2>&1 &
+            python3 storefront-mockup/community-server.py --port "$port" >"$RUNNER_TEMP/server.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           for _ in $(seq 1 50); do
-            curl -fsS http://127.0.0.1:3101/ >/dev/null 2>&1 && break
+            curl -fsS "$PREVIEW_URL/" >/dev/null 2>&1 && break
             sleep 0.2
           done
+          kill -0 "$server_pid" || { cat "$RUNNER_TEMP/server.log"; exit 1; }
           node storefront-mockup/catalog-only-qa.cjs
           python3 storefront-mockup/community-qa.py
           # AVO-LAUNCH-1: the publishable build (allowlist only) on a plain static host, every page checked.
