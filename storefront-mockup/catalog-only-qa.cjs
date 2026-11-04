@@ -101,7 +101,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  // A slow logo must not steal focus back after a filter interaction, or block item navigation indefinitely.
  for(const change of ['shelf','search','maker',null]){
   let release;const held=new Promise(resolve=>{release=resolve});
-  await page.route('**/assets/logo.png',async route=>{await held;await route.continue()});
+  await page.route('**/assets/logo-header.png',async route=>{await held;await route.continue()});
   await page.goto(base+'/?item='+encodeURIComponent(first)+'#market',{waitUntil:'domcontentloaded'});
   assert.notEqual(await page.evaluate(()=>document.readyState),'complete','logo is still pending');
   if(change){
@@ -117,7 +117,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    assert.notEqual(await page.evaluate(()=>document.readyState),'complete','item navigation does not wait for logo');
    release();await page.waitForLoadState('load');await inView(first);
   }
-  await page.unroute('**/assets/logo.png');
+  await page.unroute('**/assets/logo-header.png');
  }
  // Fixture ids: one needing encoding (&, space, ?, #) round-trips through its link; an 81-character real id is ignored.
  const odd='a&b ?#c',long81='z'.repeat(81),id41=await page.evaluate(()=>catalog[40].id);

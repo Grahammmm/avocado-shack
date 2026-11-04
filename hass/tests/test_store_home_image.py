@@ -23,7 +23,7 @@ from hass.tests.test_set_photo import ASSETS, FIXTURES, PhotoRepo, _req, _settin
 
 SET, REVERT, INDEX = "store.set_home_image", "history.revert", "storefront-mockup/index.html"
 ALT = "Crates of ripe avocados by the front door"
-DEFAULT_IMG = '<img class="hero-image" src="assets/store.jpg" alt="Produce and pantry shelves inside Avocado Shack in Morro Bay">'
+DEFAULT_IMG = '<img class="hero-image" src="assets/store.jpg" alt="Produce and pantry shelves inside Avocado Shack in Morro Bay" width="1600" height="900">'
 STORE = load_content().store
 
 
