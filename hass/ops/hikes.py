@@ -197,6 +197,9 @@ def _hike_create(content, args, ctx):
         return problem
     if args["rsvpEnabled"] and ("capacity" in args) == bool(args.get("noCapacityLimit")):
         return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
+    # RF0200-10: with RSVPs off a capacity plus noCapacityLimit true still contradict each other; ask, never pick one.
+    if not args["rsvpEnabled"] and "capacity" in args and args.get("noCapacityLimit") is True:
+        return NeedsDetails(["capacity", "noCapacityLimit"], "Give either a capacity or noCapacityLimit true, not both.")
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
