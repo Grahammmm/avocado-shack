@@ -13,7 +13,11 @@ permissions:
 
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded PR run is worth cancelling; a superseded main run is not. Cancelling main's
+  # check left main with no verdict on 38 of 45 main runs measured 2026-11-02/03, and
+  # bin/mainstate.py reads a cancelled check at HEAD as NO_VERDICT (CANCELMASK-1), which caps
+  # ship-queue at one merge per pass. Same pattern as DeFlock-Campaign-Tool offline.yml.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PLAYWRIGHT_VERSION: "1.64.1"
@@ -108,11 +112,16 @@ jobs:
           python3 hass/sitegen.py --publish "$site"
           node storefront-mockup/static-site-qa.cjs "$site"
 
-      - name: Hass tests (placeholder until hass/tests exists)
+      # This step was 1174s of a 1203s job (97.6%) measured over 14 successful runs on
+      # 2026-11-02/03: 282 modules and 2371 tests run one at a time on a 24-core host.
+      # run_parallel.py runs the same modules in parallel shards, each a real
+      # `python3 -m unittest -v` run whose output is printed whole and never interleaved, so the
+      # "=====" rule stays directly above every FAIL:/ERROR: header that bin/mergegate.py parses.
+      - name: Hass tests
         run: |
           export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
           if [ -d hass/tests ]; then
-            python3 -m unittest discover -s hass/tests -t . -v
+            python3 hass/tests/run_parallel.py --jobs 4
           else
             echo "hass/tests not present yet; nothing to run."
           fi
