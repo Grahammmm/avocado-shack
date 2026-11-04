@@ -9,6 +9,14 @@ The page shows ``first<br><em>second</em>`` (the second line emphasised). Limits
 at least 2 letters (the refusal names the line number); text kinds already reject markup, ``$``, ``{{ }}`` and control
 characters. The same words as now (the default when unset; spacing ignored) are refused. Undo restores the default.
 
+``store.set_home_image`` ({"photo": "<sha256>", "imageAlt": "..."}) puts a stored photo's metadata-free web copy in the
+one hero ``<img>`` (``store.homeImage``), through ``photos.install`` exactly as ``product.set_photo``. Undo removes it.
+
+``store.set_notice`` ({"text": "Closed Thanksgiving Day", "until": "2026-11-26"}) puts one dated notice at the top of the
+home page (``store.notice``; at most 160 characters, 3 letters; last day today to 60 days ahead, Pacific); a second notice
+replaces it and ``store.clear_notice`` removes it. The generated page drops it once ``until`` is past; between
+regenerations a page script hides it after that day, so without JavaScript it stays until the next change regenerates.
+
 Selective-undo limit (as hass/ops/store.py): the store is ONE record, so ``history.revert`` of an older store change
 after a later store change is refused as a conflict. Undo the newest store change first.
 """
@@ -16,9 +24,10 @@ after a later store change is refused as a conflict. Undo the newest store chang
 from __future__ import annotations
 
 import copy
+from datetime import date, timedelta
 
-from hass.content_model import DEFAULT_HEADLINE, DEFAULT_STORY, MAX_HEADLINE_LINE, MAX_STORY
-from hass.ops import Arg, Op, Refused
+from hass.content_model import DEFAULT_HEADLINE, DEFAULT_STORY, MAX_HEADLINE_LINE, MAX_NOTICE, MAX_NOTICE_DAYS, MAX_STORY, shop_today
+from hass.ops import Arg, Op, Refused, photos
 from hass.ops.store import _spaced, _touch
 
 
@@ -53,5 +62,48 @@ def _set_story(content, args, ctx):
     return _touch(before, content.store)
 
 
+def _set_home_image(content, args, ctx):
+    """The one hero image: a stored photo's metadata-free web copy, installed as product.set_photo does."""
+    target = photos.install(ctx, args["photo"], args["imageAlt"])
+    if isinstance(target, Refused):
+        return target
+    home = {"image": target, "imageAlt": args["imageAlt"]}
+    if content.store.get("homeImage") == home:
+        return Refused("the home page already shows that photo with that imageAlt")
+    before = copy.deepcopy(content.store)
+    content.store["homeImage"] = home
+    return _touch(before, content.store)
+
+
+def _set_notice(content, args, ctx):
+    """The one dated owner notice (store.notice); a second notice replaces the first."""
+    text, until, today = args["text"], date.fromisoformat(args["until"]), shop_today(ctx.now)
+    if until < today:
+        return Refused(f"the last day {args['until']} is already past")
+    if until > today + timedelta(days=MAX_NOTICE_DAYS):
+        return Refused(f"the last day is more than {MAX_NOTICE_DAYS} days ahead")
+    if len(text) > MAX_NOTICE:
+        return Refused(f"the notice is longer than {MAX_NOTICE} characters")
+    if sum(c.isalpha() for c in text) < 3:
+        return Refused("the notice needs at least 3 letters")
+    current = content.store.get("notice") or {}
+    if _spaced(text) == _spaced(current.get("text", "")) and args["until"] == current.get("until"):
+        return Refused("the home page already shows that notice")
+    before = copy.deepcopy(content.store)
+    content.store["notice"] = {"text": text, "until": args["until"]}
+    return _touch(before, content.store)
+
+
+def _clear_notice(content, args, ctx):
+    if "notice" not in content.store:
+        return Refused("there is no notice")
+    before = copy.deepcopy(content.store)
+    del content.store["notice"]
+    return _touch(before, content.store)
+
+
 OPS = (Op("store.set_headline", {"first": Arg("text"), "second": Arg("text")}, _set_headline),
-       Op("store.set_story", {"text": Arg("text")}, _set_story))
+       Op("store.set_story", {"text": Arg("text")}, _set_story),
+       Op("store.set_home_image", {"photo": Arg("id"), "imageAlt": Arg("text")}, _set_home_image),
+       Op("store.set_notice", {"text": Arg("text"), "until": Arg("date")}, _set_notice),
+       Op("store.clear_notice", {}, _clear_notice))

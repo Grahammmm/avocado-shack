@@ -20,7 +20,7 @@ The two note commands are stricter:
 | `history` | Lists the last five approved changes (approved (still being saved), applied, checked, failed or undone) with their codes and states, each with where it is now (on the website, not confirmed on the website, undone). | `history` |
 | `undo` | Drafts an undo of the most recent applied change; a bare undo skips undos and takes the change before. It needs `yes <code>` like any draft. | `undo` |
 | `undo <code>` | Drafts an undo of that applied change. It needs `yes <code>`. | `undo A1B2!` |
-| `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals. With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |
+| `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals, and the last shelf check (`Shelf check: <day>`, the same words as the morning report; after a week it adds that the site says call to confirm). With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |
 | `did it work?` (or `did that work?`, `did my change work?`): the same as `status` | Answers "did my change work?" in its `Last change:` line: done and on the website now (with the time it was checked), saved but not confirmed on the website (and why; if copying it stopped part way some pages may already show it, so ask for help to copy it again), did not reach the website (the website is unchanged), or undone. It changes nothing. | `did it work?` |
 | `stop changes` (or `stop`, `pause`, `pause changes`) | Stops any approval from applying and replies how many requests are waiting. Drafts can still be prepared; changes already on the website stay there. | `stop changes` |
 | `resume` or `resume changes` | Lets approvals apply again. It never applies a waiting draft by itself. | `resume changes` |
@@ -49,6 +49,6 @@ Checking the selection (change requests, not commands; each still needs `yes <co
   Michael on <day>." and the named products show "Available today", "Limited" or "Sold out". You may name an
   earlier day you checked, never a future one or a day before the last recorded check.
 - `product.set_availability`: change one product's word ("the eggs are sold out") without a new check date.
-- Until the first check the site says "The selection has not been checked yet." and shows no availability words. If
+- Until the first check the site shows no check line and no availability words. If
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.

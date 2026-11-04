@@ -130,7 +130,8 @@ class ReadOnlyTests(StoreMixin, ConversationTestCase):
         control = lambda: self.conv.db.execute("SELECT * FROM control").fetchall()
         before = (self.drafts(), self.approvals(), control(), self.commits())
         self.assertEqual(before[0][0]["state"], "proposed")
-        self.assertEqual(self.status()[:2], ["Changes: paused since 2026-11-02 09:00 PST", conversation.NOTHING])
+        self.assertEqual(self.status()[:3], ["Changes: paused since 2026-11-02 09:00 PST", "Shelf check: not done yet",
+                                             conversation.NOTHING])
         self.assertEqual((self.drafts(), self.approvals(), control(), self.commits()), before)
         self.assertEqual(self.say("resume changes"), "resume")  # any later message still expires it
         self.assertEqual(self.replies(), ["Changes resumed."])
@@ -175,7 +176,7 @@ class StatusTests(StoreMixin, H06TestCase):
         needs = self.drafts()[-1]
         waiting = self.propose("desc")[0]
         self.assertEqual(self.status(), [  # nothing applied yet: no last-change line; no events: no hike line
-            "Changes: on", f"{needs['code']} needs details: {needs['summary']}",
+            "Changes: on", "Shelf check: not done yet", f"{needs['code']} needs details: {needs['summary']}",
             f"{waiting['code']} waiting (expires 2026-11-02 09:10 PST): {waiting['summary']}"])
         self.assertEqual(self.say(f"yes {waiting['code']}"), "approved")
         self.interp.mapping["fill"] = {**_ops((HOURS, {"hours": NEW_HOURS})), "revises": needs["code"]}
@@ -186,13 +187,13 @@ class StatusTests(StoreMixin, H06TestCase):
         self.assertEqual((filled["code"], [d["state"] for d in self.drafts()]), (needs["code"], ["verified"] * 2))
         last = f"Last change: {filled['code']} {filled['summary']} - " + NOT_ON_SITE.format(why=NOT_COPIED)
         self.assertNotIn(filled["commit"][:7], last)
-        self.assertEqual(self.status()[1:], [conversation.NOTHING, last])
+        self.assertEqual(self.status()[1:], ["Shelf check: not done yet", conversation.NOTHING, last])
         self.assertEqual(self.say("need"), "needs-details")
         self.sent()
         two = self.propose("desc2")[0]
         needs2 = self.drafts()[-2]
         self.assertEqual(self.status(), [
-            "Changes: on", f"{needs2['code']} needs details: {needs2['summary']}",
+            "Changes: on", "Shelf check: not done yet", f"{needs2['code']} needs details: {needs2['summary']}",
             f"{two['code']} waiting (expires 2026-11-02 09:10 PST): {two['summary']}", last])
 
     def test_failed_and_unverified_results(self):

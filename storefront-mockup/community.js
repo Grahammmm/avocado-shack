@@ -10,6 +10,14 @@ const metric=(label,value)=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></
 function attendance(e){const n=Number.isInteger(e.confirmedGuests)&&e.confirmedGuests>=0?e.confirmedGuests:0;return `<p class="hike-attendance"><strong data-confirmed-guests>${n}</strong> confirmed ${n===1?'guest':'guests'}</p>`}
 function details(e){return `<dl class="hike-facts">${[['Meet',e.meetingPoint],['Distance',e.distance],['Pace / terrain',e.difficulty],['Time on trail',e.duration]].filter(x=>x[1]).map(([k,v])=>metric(k,v)).join('')}</dl>`}
 function route(e){const t=e.trailId&&trailById(e.trailId);if(!t)return '';let https=false;try{https=new URL(t.sourceUrl).protocol==='https:'}catch{}return `<p class="hike-route">Route: ${esc(t.title)}${https?` · <a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">${esc(t.sourceName||'Trail information')} <span aria-hidden="true">↗</span></a>`:''}</p>`}
+// AV1322-09: an "Add to calendar" .ics (RFC 5545) built in the page for an upcoming scheduled hike only; no server, no fetch.
+// TEXT escaping: \ ; , escaped, newlines as \n, other control characters dropped; lines folded at 75 octets.
+const icsText=s=>String(s??'').replace(/[\\;,]/g,'\\$&').replace(/\r\n?|\n/g,'\\n').replace(/[\x00-\x1f\x7f]/g,'');
+const utf8=new TextEncoder(),fold=l=>{let o='',n=0;for(const c of l){const b=utf8.encode(c).length;if(n+b>75){o+='\r\n ';n=1}o+=c;n+=b}return o};
+// Content has no end time, so the event length is a fixed, stated two hours (DURATION:PT2H).
+function ics(e){const t=new Date(e.startsAt).toISOString().replace(/[-:]|\.\d+/g,'');return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Avocado Shack//Hiking Club//EN','BEGIN:VEVENT',`UID:${icsText(e.id)}@avocadoshack`,`DTSTAMP:${t}`,`DTSTART:${t}`,'DURATION:PT2H',`SUMMARY:${icsText(e.title)}`,`LOCATION:${icsText(e.meetingPoint)}`,`URL:${location.origin}/hike#${encodeURIComponent(e.id)}`,'END:VEVENT','END:VCALENDAR'].map(fold).join('\r\n')+'\r\n'}
+// Scheduled and not yet started; an unparseable startsAt gives NaN, which is never > now, so no link (and ics() is never called).
+function calendar(e){return e.status==='scheduled'&&Date.parse(e.startsAt)>Date.now()?`<p><a class="text-link hike-ics" download="${esc(e.id)}.ics" href="${esc('data:text/calendar;charset=utf-8,'+encodeURIComponent(ics(e)))}">Add to calendar</a></p>`:''}
 function sampleInvitation(e){
  const t=trailById(e.trailId); if(!t)return '';
  const day=new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:'America/Los_Angeles',weekday:'long',month:'long',day:'numeric',year:'numeric'});
@@ -34,7 +42,7 @@ function sampleHistory(item,index){
 function render(){
  const next=club.events.filter(e=>upcoming(e)||showCancelled(e)).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt));
  const demo=preview?.enabled&&preview.upcoming&&trailById(preview.upcoming.trailId);
- $('#upcoming-hikes').innerHTML=next.length?next.map(e=>{const x=e.status==='cancelled';return `<article class="hike-event${x?' hike-cancelled':''}"><p class="label">${x?'CANCELLED':'THE NEXT HIKE'}</p><p class="hike-date">${esc(hikeDate(e))}</p><h3>${x?'Cancelled: ':''}${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${attendance(e)}${details(e)}${route(e)}${x?'<p class="club-small">This hike is cancelled. Nothing else is needed from you.</p>':e.rsvpOpen?e.remaining===0?'<p class="club-small hike-full">This hike is full.</p>':`<p class="club-small">${e.remaining===null?'RSVPs open':`${e.remaining} place${e.remaining===1?'':'s'} available`}</p><button class="button" data-rsvp="${esc(e.id)}">RSVP to this hike ↗</button>`:'<p class="club-small">RSVP details will be shared when confirmed.</p>'}</article>`}).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h3>The next walk starts here.</h3><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
+ $('#upcoming-hikes').innerHTML=next.length?next.map(e=>{const x=e.status==='cancelled';return `<article class="hike-event${x?' hike-cancelled':''}"><p class="label">${x?'CANCELLED':'THE NEXT HIKE'}</p><p class="hike-date">${esc(hikeDate(e))}</p><h3>${x?'Cancelled: ':''}${esc(e.title)}</h3><p>${esc(e.description||'')}</p>${attendance(e)}${details(e)}${route(e)}${calendar(e)}${x?'<p class="club-small">This hike is cancelled. Nothing else is needed from you.</p>':e.rsvpOpen?e.remaining===0?'<p class="club-small hike-full">This hike is full.</p>':`<p class="club-small">${e.remaining===null?'RSVPs open':`${e.remaining} place${e.remaining===1?'':'s'} available`}</p><button class="button" data-rsvp="${esc(e.id)}">RSVP to this hike ↗</button>`:'<p class="club-small">RSVP details will be shared when confirmed.</p>'}</article>`}).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h3>The next walk starts here.</h3><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
  const past=club.events.filter(e=>e.status==='completed').sort((a,b)=>new Date(b.startsAt)-new Date(a.startsAt));
  const samplePast=!past.length&&preview?.enabled&&(preview.past||[]).some(e=>trailById(e.trailId));
  $('#history-context').textContent=samplePast?'Sample archive · these outings are not confirmed club history.':'Places and memories from our walks together.';
@@ -44,14 +52,44 @@ function render(){
  const form=$('#preview-hike-rsvp');
  if(form)form.onsubmit=e=>{e.preventDefault();const status=form.querySelector('.form-status');status.textContent='That’s how the RSVP will work. No details were saved or sent.';form.reset();status.focus();};
 }
+// The live club service adds RSVP counts; a plain static host has no /api, so fall back to the published
+// community.json (same club, events and route ideas). Without the service nobody can RSVP online.
+// The club service's GET (no visitor data) answers acceptsSubmissions:true; that is the only way a form may POST.
+let serviceProbe;
+async function liveData(){try{
+ const r=await fetch('/api/community',{cache:'no-store'});
+ if(!r.ok||!(r.headers.get('Content-Type')||'').includes('application/json'))return null;
+ const data=await r.json();serviceProbe=Promise.resolve(data?.acceptsSubmissions===true);return data}catch{return null}}
+const liveService=()=>serviceProbe??=liveData().then(d=>d?.acceptsSubmissions===true);
+async function clubData(){
+ const live=await liveData();if(live)return live;
+ const r=await fetch('/community.json',{cache:'no-store'});if(!r.ok)throw Error();
+ const data=await r.json();data.events=(data.events||[]).map(e=>({...e,confirmedGuests:0,remaining:null,rsvpOpen:false}));return data;
+}
 async function load(){try{
- const responses=await Promise.all([fetch('/api/community',{cache:'no-store'}),fetch('/hiking-preview.json',{cache:'no-store'}).catch(()=>null)]);
- if(!responses[0].ok)throw Error();
- club=await responses[0].json();preview=responses[1]?.ok?await responses[1].json().catch(()=>null):null;render();
+ const [data,previewResponse]=await Promise.all([clubData(),fetch('/hiking-preview.json',{cache:'no-store'}).catch(()=>null)]);
+ club=data;preview=previewResponse?.ok?await previewResponse.json().catch(()=>null):null;render();
 }catch{$('#upcoming-hikes').innerHTML='<p>The hike calendar isn’t available right now. Please try again shortly.</p>';$('#past-hikes').innerHTML='<p class="club-small">Past outings will appear when the calendar is available.</p>'}}
-async function send(form,path,data){const status=form.querySelector('.form-status'),button=form.querySelector('button[type="submit"]');button.disabled=true;status.textContent='Saving…';try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw Error(result.error||'We couldn’t save that. Please try again.');status.textContent=result.message;form.reset();return true}catch(e){status.textContent=e.message==='Failed to fetch'?'The local service isn’t available. Please try again.':e.message;return false}finally{button.disabled=false}}
+// Visitors only ever see these sentences or the service's own plain message, never a browser or parser error.
+const SIGNUP_CLOSED='Online signup isn’t open yet, so nothing was sent or saved. Please say hello at the Shack instead.';
+const SIGNUP_UNREACHABLE='We couldn’t reach the signup service, so nothing was saved. Please try again later.';
+async function send(form,path,data){const status=form.querySelector('.form-status'),button=form.querySelector('button[type="submit"]');button.disabled=true;status.textContent='Saving…';try{
+ // Without the club service (the published static site) nothing the visitor typed leaves the browser.
+ if(!await liveService()){status.textContent=SIGNUP_CLOSED;return false}
+ let r;try{r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})}catch{status.textContent=SIGNUP_UNREACHABLE;return false}
+ let result=null;if((r.headers.get('Content-Type')||'').includes('application/json'))result=await r.json().catch(()=>null);
+ if(!r.ok||!result||typeof result.message!=='string'){status.textContent=result&&typeof result.error==='string'?result.error:SIGNUP_CLOSED;return false}
+ status.textContent=result.message;form.reset();return true
+}finally{button.disabled=false}}
 if($('#hike-updates'))$('#hike-updates').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:false,hikes:true})};
 if($('#community-newsletter'))$('#community-newsletter').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:true,hikes:e.currentTarget.hikes.checked})};
-if($('#upcoming-hikes'))$('#upcoming-hikes').onclick=e=>{const button=e.target.closest('[data-rsvp]');if(!button)return;const event=club.events.find(x=>x.id===button.dataset.rsvp);if(!event)return;show(`<p class="label">NORTH COAST HIKING CLUB</p><h2>Join the next hike.</h2><h3>${esc(event.title)}</h3><p>${esc(dateLabel(event))}</p>${details(event)}<form id="hike-rsvp"><label for="rsvp-name">Your name</label><input id="rsvp-name" name="name" autocomplete="name" maxlength="120" required><label for="rsvp-email">Email address</label><input id="rsvp-email" name="email" type="email" autocomplete="email" required><label for="rsvp-party">People in your group, including you</label><select id="rsvp-party" name="partySize">${Array.from({length:Math.min(6,event.remaining??6)},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}</select><p class="setup-note">This RSVP is saved in the local sandbox. Email confirmations are not connected.</p><button class="button" type="submit">Save my RSVP ↗</button><p class="form-status" role="status"></p></form>`);$('#hike-rsvp').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const saved=await send(f,'/api/community/rsvps',{eventId:event.id,name:f.elements.name.value,email:f.elements.email.value,partySize:Number(f.elements.partySize.value)});if(saved)load()}};
-if($('#upcoming-hikes'))load();
+if($('#upcoming-hikes'))$('#upcoming-hikes').onclick=e=>{const button=e.target.closest('[data-rsvp]');if(!button)return;const event=club.events.find(x=>x.id===button.dataset.rsvp);if(!event)return;show(`<p class="label">NORTH COAST HIKING CLUB</p><h2>Join the next hike.</h2><h3>${esc(event.title)}</h3><p>${esc(dateLabel(event))}</p>${details(event)}<form id="hike-rsvp"><label for="rsvp-name">Your name</label><input id="rsvp-name" name="name" autocomplete="name" maxlength="120" required><label for="rsvp-email">Email address</label><input id="rsvp-email" name="email" type="email" autocomplete="email" required><label for="rsvp-party">People in your group, including you</label><select id="rsvp-party" name="partySize">${Array.from({length:Math.min(6,event.remaining??6)},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}</select><p class="setup-note">Your RSVP goes on the club’s list. No confirmation email is sent.</p><button class="button" type="submit">Save my RSVP ↗</button><p class="form-status" role="status"></p></form>`);$('#hike-rsvp').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const saved=await send(f,'/api/community/rsvps',{eventId:event.id,name:f.elements.name.value,email:f.elements.email.value,partySize:Number(f.elements.partySize.value)});if(saved)load()}};
+// AV1102-04: the home page's one "Next hike" line. Live /api/community only (never the sample hikes); any failure or no scheduled upcoming hike leaves it hidden.
+async function loadNext(){try{
+ const r=await fetch('/api/community',{cache:'no-store'});if(!r.ok)return;
+ const e=((await r.json()).events||[]).filter(upcoming).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt))[0];if(!e)return;
+ const at=new Date(e.startsAt),tz=e.timezone||'America/Los_Angeles',line=$('#next-hike-line');
+ const when=at.toLocaleDateString('en-US',{timeZone:tz,weekday:'long',month:'long',day:'numeric'})+', '+at.toLocaleTimeString('en-US',{timeZone:tz,hour:'numeric',minute:'2-digit'});
+ line.innerHTML=`<a class="text-link" href="/hike#upcoming-hikes">Next hike: ${esc(when)} - ${esc(e.title)}</a>`;line.hidden=false}catch{}}
+if($('#upcoming-hikes'))load();else if($('#next-hike-line'))loadNext();
 })();

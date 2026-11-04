@@ -54,7 +54,9 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story")  # selection check; intro; headline; story; absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice")  # all absent by default
+MAX_NOTICE, MAX_NOTICE_DAYS = 160, 60  # store.notice text characters; its last day at most this many days ahead (set)
+HOME_IMAGE_RE = re.compile(r"^assets/products/photo-[0-9a-f]{16}\.(jpg|png)$")  # the path photos.install writes
 MAX_STORY = 400  # characters in the optional store.story (the "COME ON IN" paragraph)
 DEFAULT_STORY = "Michael Wolfe brings a produce buyer’s curiosity and long-standing grower relationships to the Shack. The idea is simple: connect friends and neighbors with good food and the people who grow and make it."  # shown when store.story is absent
 MAX_HEADLINE_LINE, DEFAULT_HEADLINE = 40, ("A little market.", "A lot to discover.")  # per line; <h1> when absent
@@ -317,7 +319,7 @@ def validate_community(problems, community):
         if club.get("emailConnected") is not False:
             problems.append("community.club.emailConnected: email delivery is not connected; must be false")
     ideas = community.get("routeIdeas")
-    idea_ids = set()
+    idea_ids, hidden = set(), []  # hidden: AV1322-03 ideas left out of the generated route list
     if not isinstance(ideas, list):
         problems.append("community.routeIdeas: must be a list")
         ideas = []
@@ -335,8 +337,10 @@ def validate_community(problems, community):
                 _text(problems, f"{where}.{field}", idea.get(field), limit=TEXT_LIMITS["routeIdea"][field])
         _https(problems, f"{where}.sourceUrl", idea.get("sourceUrl"))
         # Route ideas are undated suggestions; they never take RSVPs.
-        if idea.get("status") != "idea":
-            problems.append(f"{where}: status must be 'idea'")
+        if idea.get("status") not in ("idea", "hidden"):
+            problems.append(f"{where}: status must be 'idea' or 'hidden'")
+        elif idea["status"] == "hidden":
+            hidden.append(rid)
         if idea.get("rsvpEnabled") is not False:
             problems.append(f"{where}: rsvpEnabled must be false for a route idea")
     events = community.get("events")
@@ -380,6 +384,8 @@ def validate_community(problems, community):
                 problems.append(f"{where}: capacity must be a positive integer of at most {MAX_EVENT_CAPACITY}")
         if "trailId" in ev and (not isinstance(ev["trailId"], str) or ev["trailId"] not in idea_ids):
             problems.append(f"{where}: trailId {ev['trailId']!r} is not a route idea")
+        elif ev.get("status") == "scheduled" and ev.get("trailId") in hidden:
+            problems.append(f"{where}: trailId {ev['trailId']} is hidden")
         for field in EVENT_TEXT_FIELDS:
             if field in ev:
                 _text(problems, f"{where}.{field}", ev[field], limit=TEXT_LIMITS["event"][field])
@@ -426,6 +432,28 @@ def validate_store(problems, store, today: date | None = None):
             _text(problems, f"store.headline[{i}]", line, limit=MAX_HEADLINE_LINE)
             if isinstance(line, str) and sum(c.isalpha() for c in line) < 2:
                 problems.append(f"store.headline[{i}]: needs at least 2 letters")
+    if "homeImage" in store:
+        home = store["homeImage"]
+        if not isinstance(home, dict) or set(home) != {"image", "imageAlt"}:
+            problems.append("store.homeImage: must be an object with exactly image and imageAlt")
+        elif not isinstance(home["image"], str) or not HOME_IMAGE_RE.fullmatch(home["image"]):
+            problems.append("store.homeImage.image: must be assets/products/photo-<16 hex>.<jpg|png>")
+        if isinstance(home, dict) and "imageAlt" in home:
+            _text(problems, "store.homeImage.imageAlt", home["imageAlt"], limit=TEXT_LIMITS["product"]["imageAlt"])
+            if isinstance(home["imageAlt"], str) and sum(c.isalpha() for c in home["imageAlt"]) < 3:
+                problems.append("store.homeImage.imageAlt: needs at least 3 letters")
+    if "notice" in store:
+        notice = store["notice"]
+        if not isinstance(notice, dict) or set(notice) != {"text", "until"}:
+            problems.append("store.notice: must be an object with exactly text and until")
+        else:
+            _text(problems, "store.notice.text", notice["text"], limit=MAX_NOTICE)
+            if isinstance(notice["text"], str) and sum(c.isalpha() for c in notice["text"]) < 3:
+                problems.append("store.notice.text: needs at least 3 letters")
+            try:  # a real calendar date
+                date.fromisoformat(notice["until"] if DATE_RE.fullmatch(str(notice["until"])) else "")
+            except ValueError:
+                problems.append("store.notice.until: must be a real date YYYY-MM-DD")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):

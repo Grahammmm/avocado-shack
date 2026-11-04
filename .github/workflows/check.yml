@@ -13,7 +13,11 @@ permissions:
 
 concurrency:
   group: check-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded PR run is worth cancelling; a superseded main run is not. Cancelling main's
+  # check left main with no verdict on 38 of 45 main runs measured 2026-11-02/03, and
+  # bin/mainstate.py reads a cancelled check at HEAD as NO_VERDICT (CANCELMASK-1), which caps
+  # ship-queue at one merge per pass. Same pattern as DeFlock-Campaign-Tool offline.yml.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PLAYWRIGHT_VERSION: "1.64.1"
@@ -103,12 +107,31 @@ jobs:
           done
           node storefront-mockup/catalog-only-qa.cjs
           python3 storefront-mockup/community-qa.py
+          # AVO-LAUNCH-1: the publishable build (allowlist only) on a plain static host, every page checked.
+          site="$(mktemp -d "$RUNNER_TEMP/published-site.XXXXXX")"
+          python3 hass/sitegen.py --publish "$site"
+          node storefront-mockup/static-site-qa.cjs "$site"
 
-      - name: Hass tests (placeholder until hass/tests exists)
+      # This step was 1174s of a 1203s job (97.6%) measured over 14 successful runs on
+      # 2026-11-02/03: 282 modules and 2371 tests run one at a time on a 24-core host.
+      # run_parallel.py runs the same modules in parallel shards, each a real
+      # `python3 -m unittest -v` run whose output is printed whole and never interleaved, so the
+      # "=====" rule stays directly above every FAIL:/ERROR: header that bin/mergegate.py parses.
+      - name: Hass tests
+        env:
+          # Shard width x runner count is one budget on one host, so this is tunable without a
+          # code change: set the repo variable HASS_SHARDS to retune. Measured 2026-11-04 on
+          # AgentOrange: four concurrent hass suites were 35.4 MB/s of writes, 74.8% of everything
+          # the box wrote, with the NVMe at 81.4% utilisation and an average queue depth of 16.9.
+          # CPU was idle (7.5 of 24 cores); the cores are idle because the work is blocked on disk.
+          # 4 runners x 4 shards would be 16 concurrent suites against a device already saturated
+          # at 4, which is what produced the 11.2-23.8 min spread in this job. 2 keeps the peak at
+          # 8 and leaves the job far short of timeout-minutes.
+          HASS_SHARDS: ${{ vars.HASS_SHARDS || 2 }}
         run: |
           export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
           if [ -d hass/tests ]; then
-            python3 -m unittest discover -s hass/tests -t . -v
+            python3 hass/tests/run_parallel.py --jobs "${HASS_SHARDS}"
           else
             echo "hass/tests not present yet; nothing to run."
           fi

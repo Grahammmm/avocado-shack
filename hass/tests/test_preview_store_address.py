@@ -27,14 +27,14 @@ class TargetTests(StoreTestCase):
         draft = repo.prepare(_req((SET_ADDRESS, {"streetAddress": NEW_STREET})))["draft"]
         self.assertEqual(preview.target_for(draft["records"][0]),
                          {"kind": "store", "hours": store["hours"], "streetAddress": NEW_STREET, "town": store["town"],
-                          "headline": [], "story": None})
+                          "headline": [], "story": None, "homeImage": None, "notice": None})
         town = repo.prepare(_req((SET_ADDRESS, {"town": "Cayucos"})))["draft"]
         self.assertEqual(preview.target_for(town["records"][0])["town"], "Cayucos")
 
     def test_store_record_without_address_gets_empty_strings(self):
         target = preview.target_for({"collection": "store", "after": {"hours": ["Open daily"]}})
         self.assertEqual(target, {"kind": "store", "hours": ["Open daily"], "streetAddress": "", "town": "",
-                                  "headline": [], "story": None})
+                                  "headline": [], "story": None, "homeImage": None, "notice": None})
         self.assertEqual(preview.target_for({"collection": "store", "after": None})["streetAddress"], "")
 
     def test_other_targets_are_byte_equal_to_before(self):
