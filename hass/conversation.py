@@ -649,6 +649,15 @@ class Conversation:
             return None
         return makers if isinstance(makers, dict) else None
 
+    def _routes(self):
+        """The worktree's route ideas by id (read-only) for the claim check; None when unreadable (owner text only)."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            ideas = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["routeIdeas"]
+            return {i["id"]: i for i in ideas if isinstance(i, dict) and isinstance(i.get("id"), str)} if isinstance(ideas, list) else None
+        except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
+            return None
+
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
             self._reply(TOO_LONG)
@@ -708,7 +717,7 @@ class Conversation:
             self._reply(f"Not drafted: {_reason(out)}")
             return "not-drafted"
         draft = out["draft"]
-        if hits := claims.unstated(draft, msg.text, self._makers()):  # NB-AV-05: an unstated claim asks, never drafts
+        if hits := claims.unstated(draft, msg.text, self._makers(), self._routes()):  # NB-AV-05: an unstated claim asks, never drafts
             self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
             return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]
