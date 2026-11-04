@@ -36,7 +36,7 @@ class SeparatorTests(unittest.TestCase):
     def test_nbsp_and_em_space_are_still_offered(self):
         for name in ("Lion's\u00a0Mane Tea", "Lion's\u2003Mane Tea"):
             with self.subTest(name=repr(name)):
-                self.assertEqual(keep({"name": name, "brand": "Linn's"}, CATS), {"name": name, "brand": "Linn's"})
+                self.assertEqual(keep({"name": name, "brand": "Linn's"}, CATS), {"name": "Lion's Mane Tea", "brand": "Linn's"})
 
     def test_edge_separators_are_trimmed_by_strip_and_value_offered(self):
         self.assertTrue(LS.isspace() and PS.isspace())  # why strip() removes them before the check
