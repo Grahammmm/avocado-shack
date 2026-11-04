@@ -20,7 +20,7 @@ The two note commands are stricter:
 | `history` | Lists the last five approved changes (approved (still being saved), applied, checked, failed or undone) with their codes and states, each with where it is now (on the website, not confirmed on the website, undone). | `history` |
 | `undo` | Drafts an undo of the most recent applied change; a bare undo skips undos and takes the change before. It needs `yes <code>` like any draft. | `undo` |
 | `undo <code>` | Drafts an undo of that applied change. It needs `yes <code>`. | `undo A1B2!` |
-| `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals. With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |
+| `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals, and the last shelf check (`Shelf check: <day>`, the same words as the morning report; after a week it adds that the site says call to confirm). With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |
 | `did it work?` (or `did that work?`, `did my change work?`): the same as `status` | Answers "did my change work?" in its `Last change:` line: done and on the website now (with the time it was checked), saved but not confirmed on the website (and why; if copying it stopped part way some pages may already show it, so ask for help to copy it again), did not reach the website (the website is unchanged), or undone. It changes nothing. | `did it work?` |
 | `stop changes` (or `stop`, `pause`, `pause changes`) | Stops any approval from applying and replies how many requests are waiting. Drafts can still be prepared; changes already on the website stay there. | `stop changes` |
 | `resume` or `resume changes` | Lets approvals apply again. It never applies a waiting draft by itself. | `resume changes` |
@@ -30,6 +30,7 @@ The two note commands are stricter:
 | `alias <name>: <id>` | Saves your own name for a product id or maker key that exists now, so a lookup of that name finds it. Send `forget alias.<name with - for spaces>` to remove it. | `alias green jam: photo-product-001` |
 | `find <words>` | Lists up to 10 matching products, makers, hikes and route ideas, with ids: products and makers whose name matches (your aliases too), then hikes (by start, with the Pacific weekday, date and time) and route ideas whose title contains every word, each with its status, hidden, cancelled and completed ones included. It changes nothing and works while paused. | `find lion's mane` |
 | `show <code>` | Sends that draft again: a waiting draft's full proposal text and its preview screenshot, or an applied change's lines (with its commit) and its checked screenshot. An expired, cancelled or replaced draft is named as such. It changes nothing, expires nothing and works while paused. | `show A1B2` |
+| `report` (or `morning report`) | Replies the morning shelf report from your last shelf check (Pacific today): when you last checked, counts of available, limited, sold out and not confirmed products, the limited and sold-out names, and hikes today or tomorrow. These are shelf checks, not stock counts. It changes nothing, expires nothing and works while paused. | `report` |
 | `help` (or `commands`, `?`) | Replies a short list of every command with one example each. It changes nothing. | `help` |
 
 Saved notes never change the site, and pause does not affect them.
@@ -52,3 +53,7 @@ Checking the selection (change requests, not commands; each still needs `yes <co
 - Until the first check the site shows no check line and no availability words. If
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
+
+Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`, for example "put the old photo back",
+shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when
+no photo of yours is set; `undo` puts your photo back.

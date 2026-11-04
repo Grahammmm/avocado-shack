@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import json
 
-from hass.content_model import MAX_HOURS_LINES
+from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
 
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
 MAX_HIKES, MAX_ROUTES = 60, 60
 PROMPT_MAX_BYTES = 64 * 1024
+DESIGN_UNSUPPORTED = "design changes cannot be made by message yet"  # AV1102-08 (H24): the fixed design-request reply
 _LINE_BREAKS = {"\x85": "\\u0085", "\u2028": "\\u2028", "\u2029": "\\u2029"}  # json.dumps keeps these raw
 
 ROLE = ("You turn one owner text message into typed changes for the Avocado Shack shop site.\n"
@@ -44,6 +45,9 @@ RULES = (
     "in the order shown.",
     "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
     "or product.add with imageAlt when the owner says it is a new product; never both.",
+    "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
+    f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
+    "route ideas is not a design change.",
 )
 
 
@@ -80,8 +84,9 @@ def _capped(rows, cap) -> list:
 
 def _product_lines(products) -> list:
     rows = sorted(products, key=lambda p: str(p.get("id", "")))
-    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(p.get('status'))}" for p in rows],
-                   MAX_PRODUCTS)
+    shown = [next((v for v in (p.get("displayBrand"), p.get("brand")) if isinstance(v, str) and v), "") for p in rows]
+    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(brand)} | {_q(p.get('status'))}"
+                    for p, brand in zip(rows, shown)], MAX_PRODUCTS)  # AV1102-06: displayBrand, else brand
 
 
 def _maker_lines(makers) -> list:
@@ -111,7 +116,21 @@ def _store_lines(store) -> list:
     rows = [f"{_q(key)} | {_q(store[key])}" for key in ("streetAddress", "town") if store.get(key) is not None]
     hours = store.get("hours") if isinstance(store.get("hours"), list) else []
     rows += _capped([f"{_q('hours')} | {_q(line)}" for line in hours], MAX_HOURS_LINES) if hours else []
-    return rows or ["(none)"]
+    return rows + _home_text_lines(store)  # AV1102-07: never empty, the default intro row is always there
+
+
+def _home_text_lines(store) -> list:
+    """The current home-page text, so a partial edit resends the whole value; a wrong type skips that field."""
+    text = lambda v: isinstance(v, str) and bool(v.strip())  # noqa: E731
+    rows = [f"{_q('intro')} | {_q(store['intro'])}" if text(store.get("intro")) else f"{_q('intro (default)')} | {_q(DEFAULT_INTRO)}"]
+    headline = store.get("headline")
+    rows += [f"{_q('headline')} | {_q(line)}" for line in headline if text(line)] if isinstance(headline, list) else []
+    rows += [f"{_q('story')} | {_q(store['story'])}"] if text(store.get("story")) else []
+    notice = store.get("notice") if isinstance(store.get("notice"), dict) else {}
+    if text(notice.get("text")):
+        rows += [f"{_q('notice')} | {_q(notice['text'])}"]
+        rows += [f"{_q('notice last day')} | {_q(notice['until'])}"] if text(notice.get("until")) else []
+    return rows
 
 
 def build(registry, content) -> str:
@@ -124,7 +143,7 @@ def build(registry, content) -> str:
         CONTRACT,
         "Rules:\n" + "\n".join(f"- {rule}" for rule in RULES),
         "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
-        "Catalog.\nProducts (id | name | status):\n" + "\n".join(_product_lines(_dicts(content.products)))
+        "Catalog.\nProducts (id | name | brand | status):\n" + "\n".join(_product_lines(_dicts(content.products)))
         + "\nMakers (key | name):\n" + "\n".join(_maker_lines(makers)),
         "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
         + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),

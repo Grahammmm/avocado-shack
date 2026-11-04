@@ -8,9 +8,11 @@ Run: python3 -B -m unittest hass.tests.test_publish -v
 """
 
 import contextlib
+import hashlib
 import io
 import json
 import re
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,6 +40,7 @@ PRELAUNCH = re.compile(r"sandbox|before (?:a public )?launch|during setup|not be
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE = re.compile(r"(?<!\d)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}(?!\d)")
 PLACEHOLDER_EMAILS = {"you@example.com"}
+LOGO_SHA256 = "f958d2890a56b07894f0f53a2826cc9a57fe9c9fcfcef1a91098e419f0277387"  # assets/logo.png, kept unchanged
 # Hosts a published page may link to or name (outbound links only; nothing is loaded from them).
 SITE_LINK = re.compile(r"""(?:src|href)=["']([^"'#][^"']*)["']""")
 JS_PATH = re.compile(r"""['"`(](/(?:assets/[A-Za-z0-9_./-]+|[A-Za-z0-9_-]+\.json))['"`)]""")
@@ -65,7 +68,7 @@ class PublishedSite(unittest.TestCase):
 
     def test_only_the_allowlist_is_published(self):
         images = sorted({p["image"] for p in self.content.active_products()})
-        expected = sorted(set(sitegen.PUBLISH_GENERATED + sitegen.PUBLISH_STATIC + sitegen.PUBLISH_ASSETS)
+        expected = sorted(set(sitegen.PUBLISH_GENERATED + sitegen.PUBLISH_PAGES + sitegen.PUBLISH_STATIC + sitegen.PUBLISH_ASSETS)
                           | set(images) | {"community.json"})
         self.assertEqual(self.files, expected)
         self.assertEqual(sorted(self.written), expected)
@@ -142,12 +145,38 @@ class PublishedSite(unittest.TestCase):
                 path = ref.split("#")[0].split("?")[0]
                 target = path.lstrip("/") if path.startswith("/") else (Path(rel).parent / path).as_posix()
                 target = target.removeprefix("./")
-                if target in ("", "hike"):
-                    target = "index.html" if target == "" else "hike/index.html"
+                if target in ("", "hike") or target.endswith("/"):
+                    target = target + "index.html" if target != "hike" else "hike/index.html"
                 with self.subTest(ref=ref, page=rel):
                     self.assertTrue(target in published, f"{target} is not published")
                 checked += 1
         self.assertGreater(checked, 15)
+
+    def test_header_logo_and_favicon_are_small_copies_and_logo_png_is_unchanged(self):
+        def ihdr(path):  # width, height from the PNG header, no image library
+            data = path.read_bytes()
+            self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+            return struct.unpack(">II", data[16:24]), len(data)
+        self.assertEqual(ihdr(self.out / "assets/logo-header.png")[0], (148, 116))
+        self.assertLess(ihdr(self.out / "assets/logo-header.png")[1], 40_960)
+        self.assertEqual(ihdr(self.out / "assets/favicon.png")[0], (48, 48))
+        self.assertLess(ihdr(self.out / "assets/favicon.png")[1], 8_192)
+        self.assertEqual(hashlib.sha256((SITE_DIR / "assets/logo.png").read_bytes()).hexdigest(), LOGO_SHA256)
+
+    def test_pages_use_the_header_logo_and_link_one_resolving_favicon(self):
+        self.assertNotIn("assets/logo.png", self.files)
+        pages = [rel for rel in self.files if rel.endswith(".html")]
+        self.assertEqual(sorted(pages), ["404.html", "hike/index.html", "index.html"])
+        for rel in pages:
+            with self.subTest(page=rel):
+                self.assertNotIn("logo.png", self.text[rel])
+                self.assertIn("assets/logo-header.png", self.text[rel])
+                icons = re.findall(r"<link rel=\"icon\"[^>]*>", self.text[rel])
+                self.assertEqual(len(icons), 1)
+                href = re.search(r'href="([^"]+)"', icons[0]).group(1)
+                target = href.lstrip("/") if href.startswith("/") else (Path(rel).parent / href).as_posix()
+                self.assertEqual(target, "assets/favicon.png")
+                self.assertIn(target, self.files)
 
     def test_publish_refuses_a_folder_inside_the_repo_or_one_with_files(self):
         content = load_and_validate()

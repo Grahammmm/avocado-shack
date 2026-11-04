@@ -7,6 +7,7 @@ Usage (request ops):
     {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}   # an earlier "date" at most 7 days ago
     {"op": "store.set_intro", "args": {"text": "Fresh from the coast."}}   # home-page intro line, at most 160 characters; undo restores the default
 
+``store.confirm_selection``: a product may appear once across yes/limited/no.
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
 ignored; the refusal names both line numbers); street and town at most 80 characters.
 Each hours line needs a letter or digit, and street and town each need a letter (the refusal names the line or field).
@@ -117,7 +118,9 @@ def _confirm_selection(content, args, ctx):
     for value in AVAILABILITY:
         for pid in args.get(value, ()):
             if pid in wanted:
-                return Refused(f"{pid} is listed twice ({wanted[pid]} and {value})")
+                same = wanted[pid] == value
+                return Refused(f"{pid} is listed twice in {value}" if same
+                               else f"{pid} is listed twice ({wanted[pid]} and {value})")
             wanted[pid] = value
     for pid, value in wanted.items():
         product = _product(content, pid)

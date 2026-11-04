@@ -73,3 +73,7 @@ The requested community-focused introduction is in place. The origin/local/organ
 ## Planned Hass owner interface — October 30, 2026
 
 The [Hass plan](../docs/hass/README.md) and [feature backlog](../docs/hass/FEATURES.md) describe the next messaging interface. It is not connected yet. Routine edits will use validated content tools and owner approval in the same conversation; the current site and form behavior remain unchanged.
+
+## Logo copies — November 4, 2026
+`assets/logo.png` (1000×787, 223 KB) is kept unchanged as the master art; pages load smaller copies of it. `assets/logo-header.png` is 148×116 (2× the 74 px the header shows it at) and `assets/favicon.png` is the same art fitted into a centred 48×48 transparent square, each linked from every page. Both were made with Python 3 and Pillow (no other tool, no art change beyond the square padding), run from the repo root:
+`img = Image.open("storefront-mockup/assets/logo.png").convert("RGBA")`, then `img.resize((148, 116), Image.LANCZOS).save("storefront-mockup/assets/logo-header.png", optimize=True)`, and for the icon `img.thumbnail((48, 48), Image.LANCZOS)`, paste it centred on `Image.new("RGBA", (48, 48), (0, 0, 0, 0))` and save that as `assets/favicon.png` with `optimize=True`. Results: 22,119 and 3,734 bytes.
