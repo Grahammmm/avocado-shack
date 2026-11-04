@@ -51,6 +51,30 @@ Tip: Hass never makes up trail facts. Give it the real date and meeting point.
 Tip: changed your mind before approving? Cancel the draft and nothing changes.
 Send: `no a1b2`
 
+## Change the home page
+
+1. Change the headline (two lines, up to 40 characters each).
+   Send (plain words): `Set the home page headline: first line "A little market.", second line "A lot to discover."`
+2. Change the story paragraph.
+   Send (plain words): `Change the home page story to: We are a small shop in Morro Bay selling fruit, bread and cheese from people we know.`
+3. Change the big photo: send one photo on its own, then say it is for the home page and describe it.
+   Send (plain words): `Not a product, that one is for the top of the home page. Describe it as: Avocado Shack storefront with a green awning`
+4. Show a notice at the top of the home page through its last day.
+   Send (plain words): `Put a notice on the home page: "Closed Thanksgiving Day", until 2026-11-26.`
+
+Tip: approve each draft with its code. A notice's last day is today or up to 60 days ahead (Pacific); a new notice replaces the old one, and undo removes it.
+
+## Route ideas
+
+1. Add an idea with its source name and link; without a source Hass asks for one.
+   Send (plain words): `Add a route idea "Montana de Oro bluffs" in Los Osos: cliffs and coves, 4 miles, moderate, 250 ft elevation change, about 2 hours, a loop on dirt trail and open bluffs, described as "A loop along the bluffs with views of the coves." Source: "Park trail guide", https://example.com/mdo-bluffs`
+2. Take an idea off the route list.
+   Send (plain words): `Take the Cass Hill walk off the route list.`
+3. Bring it back.
+   Send (plain words): `Put the Cass Hill walk back on the route list.`
+
+Tip: Hass will not hide an idea while a scheduled hike uses it; change that hike first. Approve each draft with its code.
+
 ## Undo a change
 
 1. See the last few changes with their codes.
@@ -74,6 +98,9 @@ Tip: an undo is a draft like any other, so nothing goes back until you say yes.
    Send: `yes a1b2`
 
 Tip: resuming never applies a waiting draft by itself, and drafts that wait too long expire with nothing changed.
+
+More commands, each as its own message: `report` replies your morning shelf report, and `post photo-product-001` replies a
+draft caption with the product's site photo. Neither posts anything.
 
 Forgot a command? Send `help`. For what Hass cannot do yet see [Known limits](LIMITS.md), and for every command see
 [the command card](COMMANDS.md).
