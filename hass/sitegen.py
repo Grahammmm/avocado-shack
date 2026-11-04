@@ -241,6 +241,8 @@ def write_files(files: dict[str, bytes], root: Path, only: list[str] | None = No
 # local server, QA scripts and screenshots, research logs with third-party contact details, hold notes and the
 # archived commerce preview; none of that is copied. Everything published is listed here or derived from content.
 PUBLISH_GENERATED = ("index.html", "hike/index.html", "catalog-products.js", "producers.js")
+# Slot-free pages rendered only for the published site (never by render(): the editor and --check pin its output).
+PUBLISH_PAGES = ("404.html",)
 PUBLISH_STATIC = ("style.css", "hiking.css", "trail-explorer.css", "script.js", "shop.js", "community.js",
                   "trail-explorer.js", "hiking-preview.json")
 PUBLISH_ASSETS = ("assets/logo.png", "assets/store.jpg", "assets/michael.jpg", "assets/trails/point-buchon.json",
@@ -265,6 +267,8 @@ def publish_files(content: Content, repo: Path, template_dir: Path | None = None
     rendered = render(content, template_dir or repo / "hass" / "templates", today=today)
     files = {rel: rendered[SITE_PREFIX + rel] for rel in PUBLISH_GENERATED}
     files["community.json"] = _public_community_json(content)
+    for rel in PUBLISH_PAGES:
+        files[rel] = render_template((Path(template_dir or repo / "hass" / "templates") / rel).read_bytes().decode("utf-8"), {}).encode("utf-8")
     home = content.store.get("homeImage")
     images = sorted({p["image"] for p in content.active_products()} | ({home["image"]} if home else set()))
     for rel in PUBLISH_STATIC + PUBLISH_ASSETS + tuple(images):

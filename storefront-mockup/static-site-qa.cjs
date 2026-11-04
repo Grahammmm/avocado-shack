@@ -14,7 +14,8 @@ const repo=fs.realpathSync(path.resolve(__dirname,'..'));
 if(root===repo||root.startsWith(repo+path.sep))refuse('the published folder must be outside the repository');
 const TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.json':'application/json',
  '.jpg':'image/jpeg','.png':'image/png','.webp':'image/webp'};
-const page404='<!doctype html><title>Not found</title><p>Not found</p>';
+const page404=fs.existsSync(path.join(root,'404.html'))?fs.readFileSync(path.join(root,'404.html')):'<!doctype html><title>Not found</title><p>Not found</p>'; // a static host serves the published 404.html (status 404) for a missing path
+const MISSING=['/no-such-page','/hike/nope/deeper'];
 const server=http.createServer((req,res)=>{
  if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405,{'Content-Type':'text/html'});return res.end('<!doctype html><title>405</title>')}
  let rel=decodeURIComponent(new URL(req.url,'http://x').pathname);let file=path.join(root,rel);
@@ -38,9 +39,9 @@ server.listen(0,'127.0.0.1',async()=>{
   page.on('pageerror',e=>errors.push(e.message));
   // Without the club service the forms must not send what visitors typed: no POST at all, and no email in any URL.
   const sent=[];page.on('request',r=>{if(r.method()!=='GET'||r.postData()||r.url().includes('example.com'))sent.push(r.method()+' '+r.url())});
-  page.on('response',r=>{if(r.status()>=400&&!new URL(r.url()).pathname.startsWith('/api/'))bad.push(r.status()+' '+r.url())});
+  page.on('response',r=>{const p=new URL(r.url()).pathname;if(r.status()>=400&&!p.startsWith('/api/')&&!(r.request().resourceType()==='document'&&MISSING.includes(p)))bad.push(r.status()+' '+r.url())});
   const routes=htmlPages(root).map(f=>'/'+path.relative(root,f).split(path.sep).join('/').replace(/index\.html$/,''));
-  assert.deepEqual(routes.sort(),['/','/hike/']);
+  assert.deepEqual(routes.sort(),['/','/404.html','/hike/']);
   for(const route of [...routes,'/hike']){
    await page.goto(base+route);await page.waitForLoadState('networkidle');
    assert.equal(await page.locator(COMMERCE_SELECTORS).count(),0,route+': commerce markup');
@@ -78,6 +79,16 @@ server.listen(0,'127.0.0.1',async()=>{
    await page.locator('#hike-email').fill('visitor@example.com');await page.locator('#hike-updates button[type=submit]').click();
    const status=page.locator('#hike-updates .form-status');await status.filter({hasText:CLOSED}).waitFor();
    assert.doesNotMatch(await status.innerText(),RAW_ERROR);
+  }
+  for(const missing of MISSING){ // a missing path, at any depth, gets the shop's own 404 page with its stylesheet
+   const res=await page.goto(base+missing);await page.waitForLoadState('networkidle');
+   assert.equal(res.status(),404,missing+': status');assert.equal(await page.locator('h1').innerText(),'That page isn’t here.',missing+': heading');
+   assert.equal(await page.locator('header nav a[href="/hike/"]').count(),1,missing+': header');assert.equal(await page.locator('footer').count(),1,missing+': footer');
+   assert.equal(await page.locator('head meta[name=robots][content=noindex]').count(),1,missing+': noindex');
+   assert.equal(await page.locator('main a[href="/#market"]').count(),1,missing+': food link');assert.equal(await page.locator('main a[href="/hike/"]').count(),1,missing+': club link');
+   assert.equal(await page.locator(COMMERCE_SELECTORS).count(),0,missing+': commerce markup');
+   const t=await page.locator('body').innerText();assert.doesNotMatch(t,COMMERCE_TEXT,missing+': commerce wording');assert.doesNotMatch(t,PRELAUNCH,missing+': pre-launch wording');
+   assert.ok(await page.evaluate(()=>[...document.styleSheets].some(s=>s.cssRules.length>0)),missing+': stylesheet loaded');
   }
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,sourcingSentence:true,catalog:170,errors});
