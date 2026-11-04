@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 
-from hass.content_model import MAX_HOURS_LINES
+from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
 
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
 MAX_HIKES, MAX_ROUTES = 60, 60
@@ -112,7 +112,21 @@ def _store_lines(store) -> list:
     rows = [f"{_q(key)} | {_q(store[key])}" for key in ("streetAddress", "town") if store.get(key) is not None]
     hours = store.get("hours") if isinstance(store.get("hours"), list) else []
     rows += _capped([f"{_q('hours')} | {_q(line)}" for line in hours], MAX_HOURS_LINES) if hours else []
-    return rows or ["(none)"]
+    return rows + _home_text_lines(store)  # AV1102-07: never empty, the default intro row is always there
+
+
+def _home_text_lines(store) -> list:
+    """The current home-page text, so a partial edit resends the whole value; a wrong type skips that field."""
+    text = lambda v: isinstance(v, str) and bool(v.strip())  # noqa: E731
+    rows = [f"{_q('intro')} | {_q(store['intro'])}" if text(store.get("intro")) else f"{_q('intro (default)')} | {_q(DEFAULT_INTRO)}"]
+    headline = store.get("headline")
+    rows += [f"{_q('headline')} | {_q(line)}" for line in headline if text(line)] if isinstance(headline, list) else []
+    rows += [f"{_q('story')} | {_q(store['story'])}"] if text(store.get("story")) else []
+    notice = store.get("notice") if isinstance(store.get("notice"), dict) else {}
+    if text(notice.get("text")):
+        rows += [f"{_q('notice')} | {_q(notice['text'])}"]
+        rows += [f"{_q('notice last day')} | {_q(notice['until'])}"] if text(notice.get("until")) else []
+    return rows
 
 
 def build(registry, content) -> str:
