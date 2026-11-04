@@ -119,12 +119,19 @@ class OpLimitTests(unittest.TestCase):
         self.assertInvalid(repo, "description", ("product.edit", {"id": "photo-product-001", "description": "a" * 601}))
         repo.run(("product.edit", {"id": "photo-product-001", "description": "a" * 600}))
 
+    def assertRefusedLong(self, repo, reason, *ops):
+        head, drafts = repo.head(), repo.drafts()
+        result = repo.prepare(_req(*ops))
+        self.assertEqual((result["result"], result.get("reason")), ("refused", reason), result)
+        self.assertEqual((repo.head(), repo.drafts()), (head, drafts))  # no draft file, no commit
+
     def test_hike_create_title_and_complete_recap(self):
         repo = self.repo(HikeRepo)
-        self.assertInvalid(repo, "title", ("hike.create", {**HIKE, "title": "a" * 81}))
+        self.assertRefusedLong(repo, "title is longer than 80 characters", ("hike.create", {**HIKE, "title": "a" * 81}))
         repo.run(("hike.create", HIKE))
         repo.now = datetime(2026, 12, 5, 12, 0, tzinfo=timezone(timedelta(hours=-8)))
-        self.assertInvalid(repo, "recap", ("hike.complete", {"id": HIKE_ID, "recap": "a" * 2001}))
+        self.assertRefusedLong(repo, "recap is longer than 2000 characters",
+                               ("hike.complete", {"id": HIKE_ID, "recap": "a" * 2001}))
         repo.run(("hike.complete", {"id": HIKE_ID, "recap": "a" * 2000}))
         self.assertEqual(repo.event()["status"], "completed")
 
