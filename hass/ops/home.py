@@ -7,7 +7,8 @@ Usage (request op):
 
 The page shows ``first<br><em>second</em>`` (the second line emphasised). Limits: each line at most 40 characters and
 at least 2 letters (the refusal names the line number); text kinds already reject markup, ``$``, ``{{ }}`` and control
-characters. The same words as now (the default when unset; spacing ignored) are refused. Undo restores the default.
+characters. The two lines must differ (case, spacing and dash style ignored). The same words as now (the default when
+unset; spacing ignored) are refused. Undo restores the default.
 
 ``store.set_home_image`` ({"photo": "<sha256>", "imageAlt": "..."}) puts a stored photo's metadata-free web copy in the
 one hero ``<img>`` (``store.homeImage``), through ``photos.install`` exactly as ``product.set_photo``. Undo removes it.
@@ -31,7 +32,7 @@ from datetime import date, timedelta
 
 from hass.content_model import DEFAULT_HEADLINE, DEFAULT_STORY, MAX_HEADLINE_LINE, MAX_NOTICE, MAX_NOTICE_DAYS, MAX_STORY, shop_today
 from hass.ops import Arg, Op, Refused, photos
-from hass.ops.store import _spaced, _touch
+from hass.ops.store import _line_key, _spaced, _touch
 
 
 def _set_headline(content, args, ctx):
@@ -42,6 +43,8 @@ def _set_headline(content, args, ctx):
     for i, line in enumerate(lines, 1):
         if sum(c.isalpha() for c in line) < 2:
             return Refused(f"headline line {i} needs at least 2 letters")
+    if _line_key(lines[0]) == _line_key(lines[1]):
+        return Refused("headline lines 1 and 2 say the same thing")
     current = content.store.get("headline") or DEFAULT_HEADLINE
     if [_spaced(line) for line in lines] == [_spaced(line) for line in current]:
         return Refused("the headline already says that")
