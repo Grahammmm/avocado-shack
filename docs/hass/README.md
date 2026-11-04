@@ -54,6 +54,7 @@ Planning estimate: allow **1–2 focused development weeks** for the first conne
 
 The [feature list](FEATURES.md) defines the scope of each milestone. [GitHub Issues](https://github.com/Grahammmm/avocado-shack/issues) track delivery; acceptance checks, not elapsed time, decide completion.
 [Known limits](LIMITS.md) lists, in plain words, what Hass cannot do yet and its photo, list and text size limits.
+[Release and handover](HANDOVER.md) lists the release steps and the decisions still open, with their owners.
 [The phone guide](PHONE_GUIDE.md) walks through adding a product or photo, posting a hike, changing hours, undo and pause.
 [The owner trial proposal](TRIAL.md) suggests the H18 trial tasks and a record form; Michael and G have not agreed it yet.
 
