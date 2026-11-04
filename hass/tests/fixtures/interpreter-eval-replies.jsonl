@@ -39,3 +39,18 @@
 {"id": "e38", "reply": {"ops": [{"op": "product.set_photo", "args": {"id": "photo-product-001", "photo": "5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e", "imageAlt": "Avocados in a wooden crate"}}], "revises": null}}
 {"id": "e39", "reply": {"question": "Is the Stepladder honey certified organic? I will only write what you can confirm."}}
 {"id": "e40", "reply": {"question": "Which farm in Cambria grows the fruit for that jam? I will only write an origin you confirm."}}
+{"id": "e41", "reply": {"ops": [{"op": "store.set_headline", "args": {"first": "A little market.", "second": "A lot to discover."}}], "revises": null}}
+{"id": "e42", "reply": {"ops": [{"op": "store.set_headline", "args": {"first": "Fresh from the Central Coast", "second": "Picked this morning"}}], "revises": null}}
+{"id": "e43", "reply": {"ops": [{"op": "store.set_story", "args": {"text": "We are a small shop in Morro Bay selling fruit, bread and cheese from people we know."}}], "revises": null}}
+{"id": "e44", "reply": {"ops": [{"op": "store.set_story", "args": {"text": "We opened this spring and every product on our shelves comes from someone we have met."}}], "revises": null}}
+{"id": "e45", "reply": {"ops": [{"op": "store.set_home_image", "args": {"photo": "5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e5ca1ab1e", "imageAlt": "The shop front in morning light"}}], "revises": null}}
+{"id": "e46", "reply": {"ops": [{"op": "store.set_home_image", "args": {"photo": "feedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0de", "imageAlt": "Avocado Shack storefront with a green awning"}}], "revises": null}}
+{"id": "e47", "reply": {"ops": [{"op": "store.set_notice", "args": {"text": "Closed Thanksgiving Day", "until": "2026-11-26"}}], "revises": null}}
+{"id": "e48", "reply": {"ops": [{"op": "store.set_notice", "args": {"text": "Fresh figs arrive this week", "until": "2026-12-04"}}], "revises": null}}
+{"id": "e49", "reply": {"ops": [{"op": "route.add", "args": {"title": "Montana de Oro bluffs", "place": "Los Osos", "character": "Cliffs and coves", "distance": "4 miles", "difficulty": "Moderate", "elevation": "250 ft", "elevationLabel": "Elevation change", "duration": "2 hours", "routeType": "Loop", "terrain": "Dirt trail and open bluffs", "description": "A loop along the bluffs with views of the coves.", "sourceUrl": "https://example.com/mdo-bluffs", "sourceName": "Park trail guide"}}], "revises": null}}
+{"id": "e50", "reply": {"ops": [{"op": "route.add", "args": {"title": "Hazard Canyon", "place": "Los Osos", "character": "Shade then dunes", "distance": "3 miles", "difficulty": "Easy", "elevation": "150 ft", "elevationLabel": "Elevation change", "duration": "90 minutes", "routeType": "Loop", "terrain": "Shady canyon and sand dunes", "description": "Eucalyptus shade and a short climb to the dunes.", "sourceUrl": "https://example.com/hazard-canyon", "sourceName": "Montana de Oro State Park guide"}}], "revises": null}}
+{"id": "e51", "reply": {"question": "Where does the Elfin Forest boardwalk route come from (link and name)? I will only add a route that has a source link."}}
+{"id": "e52", "reply": {"ops": [{"op": "route.hide", "args": {"id": "idea-cass-hill"}}], "revises": null}}
+{"id": "e53", "reply": {"ops": [{"op": "route.hide", "args": {"id": "idea-fiscalini-bluff"}}], "revises": null}}
+{"id": "e54", "reply": {"ops": [{"op": "route.restore", "args": {"id": "idea-cass-hill"}}], "revises": null}}
+{"id": "e55", "reply": {"ops": [{"op": "route.restore", "args": {"id": "idea-fiscalini-bluff"}}], "revises": null}}
