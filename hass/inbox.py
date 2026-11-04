@@ -4,7 +4,8 @@
 `history` (id and time only) and never becomes a command. `drain()` hands each pending message to `Conversation.handle`
 in `(received_at, provider_id)` order and only then marks it done, so a crash in between re-delivers the message and
 `Conversation` answers `duplicate` without a second write. Payloads are erased once a message is done. A payload that
-cannot be decoded into an `Inbound` is marked done as `unreadable` and skipped; its content is not kept. Fixtures only.
+cannot be decoded into an `Inbound`, or whose fields have the wrong types (RF0220-10), is marked done as `unreadable`
+and skipped; its content is not kept. Fixtures only.
 NB-AV-11: a photo that cannot be fetched (`AttachmentPending`) stays pending with a try count and holds every later
 message until its next try (30 s, then 2 min); the 3rd try is handled as the last one and replies once.
 RF1710-3: `python3 hass/inbox.py status --state DIR` prints one JSON line of counts (sqlite mode=ro; no ids or text;
@@ -52,6 +53,20 @@ def parse_aware(value, what="received_at") -> datetime:
     if dt.tzinfo is None or dt.utcoffset() is None:
         raise ValueError(f"{what} must be a timezone-aware ISO-8601 time")
     return dt
+
+
+_STR_FIELDS = ("provider_id", "chat", "sender", "text", "kind", "received_at")
+
+
+def _decode_payload(payload, provider_id: str) -> Inbound:
+    """RF0220-10: a stored payload as an Inbound with exactly typed fields; anything else is a ValueError (or the
+    TypeError/ValueError/RecursionError of decoding), which drain treats as unreadable. The wording is never shown."""
+    msg = Inbound(**json.loads(payload))
+    if msg.provider_id != provider_id: raise ValueError("payload names another message")
+    if any(type(getattr(msg, f)) is not str for f in _STR_FIELDS) or type(msg.from_me) is not bool \
+            or type(msg.attachments) is not int or msg.attachments < 0:
+        raise ValueError("invalid queued payload")
+    return msg
 
 
 class Nonces:
@@ -156,8 +171,7 @@ class Inbox:
         while (row := self._next()) is not None:
             if row["next_try_at"] is not None and row["next_try_at"] > _iso(self.clock()): break  # order is kept
             try:
-                msg = Inbound(**json.loads(row["payload"]))
-                if msg.provider_id != row["provider_id"]: raise ValueError("payload names another message")
+                msg = _decode_payload(row["payload"], row["provider_id"])
             except (TypeError, ValueError, RecursionError):  # a poison payload must not block every later message
                 msg = None
             try:  # last_try only on the last try, so a plain handle(msg) stand-in still works
