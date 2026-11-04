@@ -43,7 +43,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'report - the morning shelf report: "report"',
-    'post <id> - a draft caption and photo, posts nothing: "post photo-product-001"',
+    'post <id> - draft a caption, posts nothing: "post photo-product-001"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
