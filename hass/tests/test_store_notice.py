@@ -8,7 +8,10 @@ import os, shutil, tempfile, unittest  # noqa: E401
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from hass import preview, sitegen
+from unittest import mock
+
+from hass import editor, preview, sitegen, statebackup
+from hass.conversation import Conversation
 from hass.content_model import REPO_ROOT, load_content, shop_today, validate_store
 from hass.ops import OpContext, Refused, load_registry
 from hass.tests.test_editor import git
@@ -45,6 +48,42 @@ class NoticeOpTests(StoreTestCase):
         after = sitegen.render(content, today=date(2026, 11, 27))[INDEX]
         self.assertEqual(sitegen.store_slots(content.store, date(2026, 11, 27))["store.noticeHtml"], "")
         self.assertEqual(after, (REPO_ROOT / INDEX).read_bytes())
+
+    def test_consistency_across_expiry_and_real_drift(self):
+        from types import SimpleNamespace
+        repo = self.repo()
+        change = repo.run((SET, {"text": TEXT, "until": day(0)}))
+        before = repo.read(INDEX)
+        tomorrow = shop_today() + timedelta(days=1)
+        verifier = SimpleNamespace(sdir=repo.state, editor=SimpleNamespace(show=lambda _: {"change": change}),
+                                   previewer=SimpleNamespace(capture=lambda *a: {"ok": True, "png": "checked.png"}))
+        with mock.patch.object(sitegen, "shop_today", return_value=tomorrow):
+            self.assertEqual(sitegen.main(["--check", "--repo", str(repo.wt)]), 0)
+            self.assertEqual(editor._post_checks(repo.wt), [])
+            self.assertEqual(Conversation.verify(verifier, {"change_id": change["change_id"]}), ("checked.png", None))
+            self.assertEqual(repo.read(INDEX), before)  # checks must not rewrite history
+            (repo.wt / INDEX).write_bytes(before.replace(TEXT.encode(), b"Wrong notice"))
+            self.assertEqual(sitegen.main(["--check", "--repo", str(repo.wt)]), 1)
+            self.assertTrue(editor._post_checks(repo.wt))
+            self.assertIn("out of date", Conversation.verify(verifier, {"change_id": change["change_id"]})[1])
+            sitegen.write_files(sitegen.render(load_content(repo.wt / "hass/content"), repo.wt / "hass/templates"), repo.wt)
+            self.assertNotIn(b'class="home-notice"', repo.read(INDEX))
+            self.assertEqual(editor._post_checks(repo.wt), [])
+
+    def test_historical_checkout_check_after_expiry(self):
+        import json
+        repo = self.repo()
+        content = load_content(repo.wt / "hass/content")
+        yesterday = shop_today() - timedelta(days=1)
+        content.store["notice"] = {"text": TEXT, "until": yesterday.isoformat()}
+        (repo.wt / "hass/content/store.json").write_text(json.dumps(content.store))
+        sitegen.write_files(sitegen.render(content, repo.wt / "hass/templates", today=yesterday), repo.wt)
+        git(repo.wt, "add", "-A")
+        git(repo.wt, "commit", "-qm", "historical notice")
+        self.assertEqual(statebackup._site_check(repo.wt), "ok")
+        self.assertEqual(repo.status(), "")
+        (repo.wt / INDEX).write_bytes(repo.read(INDEX) + b"<!-- corruption -->")
+        self.assertEqual(statebackup._site_check(repo.wt), "failed")
 
     def test_set_then_undo_returns_to_the_identical_default_page(self):
         repo = self.repo()
@@ -122,6 +161,16 @@ class NoticeOpTests(StoreTestCase):
         self.assertEqual(content.store["notice"], {"text": TEXT, "until": "2026-11-26"})
         self.assertEqual(at(datetime(2026, 11, 27, 8, 30, tzinfo=timezone.utc)),  # 00:30 PST on the 27th
                          Refused("the last day 2026-11-26 is already past"))
+
+
+@unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")
+class NoticeClockTests(unittest.TestCase):
+    def test_continuously_open_page_expires_at_pacific_midnight(self):
+        import subprocess
+        result = subprocess.run(["node", str(Path(__file__).with_name("notice_expiry.cjs"))],
+                                input=sitegen.NOTICE_JS, text=True, capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        print(result.stdout.strip())
 
 
 class ValidatorTests(unittest.TestCase):
