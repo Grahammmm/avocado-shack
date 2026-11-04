@@ -8,6 +8,7 @@ Locked: ``id``, ``status`` (``idea``; only ``route.hide``/``route.restore`` chan
 not arguments, so the registry refuses them as unknown arguments: a route idea never becomes a dated hike, never takes
 RSVPs and never loses the source link the migration check records. A real event id is refused; use ``hike.update``.
 The change is drafted, approved and applied like every other edit; ``history.revert`` restores the old text.
+Route texts are at most 600 characters each (``TEXT_LIMITS``); a longer one is refused naming the field and limit.
 A new ``title`` already used by another route idea or a hike (case and spacing ignored) is refused, naming that id.
 Look-alike Unicode forms count as the same title (NFKC); an edit that only re-encodes the text (NFC) already says that.
 ``route.add`` (AV1322-02) drafts a new idea ``idea-<title slug>`` (all fields; public https source); undo removes it.
@@ -20,7 +21,7 @@ import copy
 import re
 import unicodedata
 
-from hass.content_model import _https
+from hass.content_model import TEXT_LIMITS, _https
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.hikes import MAX_ID_BASE
 
@@ -37,6 +38,14 @@ def _spaced(value):
     return " ".join(unicodedata.normalize("NFC", value).split()) if isinstance(value, str) else value
 
 
+def _too_long(args):
+    """Refused naming the first route text (``ROUTE_EDITABLE`` order, then ``sourceName``) over its limit, else None."""
+    limits = TEXT_LIMITS["routeIdea"]
+    for field in (*ROUTE_EDITABLE, "sourceName"):
+        if isinstance(args.get(field), str) and len(args[field]) > limits[field]:
+            return Refused(f"{field} is longer than {limits[field]} characters")  # the text itself is never echoed
+
+
 def _route_edit(content, args, ctx):
     route_id = args["id"]
     if any(e["id"] == route_id for e in content.community["events"]):
@@ -47,6 +56,8 @@ def _route_edit(content, args, ctx):
     changes = {f: args[f] for f in ROUTE_EDITABLE if f in args}
     if not changes:
         return NeedsDetails(list(ROUTE_EDITABLE), "What should change on this route idea?")
+    if long := _too_long(args):
+        return long
     changes = {f: v for f, v in changes.items() if _spaced(idea.get(f)) != _spaced(v)}
     if not changes:
         return Refused(f"route idea {route_id} already says that")
@@ -70,6 +81,8 @@ def _route_add(content, args, ctx):
         return NeedsDetails(["sourceUrl", "sourceName"], "Where does this route come from (link and name)?")
     if missing := [f for f in ROUTE_EDITABLE if f not in args]:  # the validator needs every route text non-empty
         return NeedsDetails(missing, "Please provide: " + ", ".join(missing))
+    if long := _too_long(args):
+        return long
     problems = []
     _https(problems, "sourceUrl", args["sourceUrl"])
     if problems:

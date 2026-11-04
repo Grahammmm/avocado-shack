@@ -31,7 +31,7 @@ class HelpTextTests(unittest.TestCase):
         self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs))  # one line per verb
 
     def test_limits_and_plain_text(self):
-        self.assertLessEqual(len(LINES), 17)  # AV0022-08: + the show line; AV1322-05: + the report line; AV1322-07: + the post line
+        self.assertLessEqual(len(LINES), 18)  # AV0022-08: + the show line; AV1322-05: + the report line; AV1322-07: + the post line; AV1102-12: + the margin line
         for line in LINES:
             self.assertLessEqual(len(line), 70, line)
             self.assertFalse(set(line) & set("*_`#"), line)  # plain text, no markdown

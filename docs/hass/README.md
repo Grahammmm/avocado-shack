@@ -62,10 +62,12 @@ The [feature list](FEATURES.md) defines the scope of each milestone. [GitHub Iss
 
 | Work item | Status at handoff |
 | --- | --- |
-| [#1 — Text-editing demo](https://github.com/Grahammmm/avocado-shack/issues/1) | Ready for content-tool implementation; Mac/account setup pending |
-| [#2 — Photo and voice trial](https://github.com/Grahammmm/avocado-shack/issues/2) | Follows the working demo |
-| [#3 — Dependable daily operation](https://github.com/Grahammmm/avocado-shack/issues/3) | Follows the owner trial |
+| [#1 — Text-editing demo](https://github.com/Grahammmm/avocado-shack/issues/1) | Content tools, approval, preview and undo are built and tested on fixtures (H01–H06). Still open: the live demo over the real channel (Mac/account setup, [CONNECT](CONNECT.md) section 2) and real-channel evidence (H09) |
+| [#2 — Photo and voice trial](https://github.com/Grahammmm/avocado-shack/issues/2) | Photo handling and attachment joining are built on fixtures; voice notes are recognised but not transcribed (see [FEATURES](FEATURES.md) H10–H12). Still open: a photo and voice trial on a real phone with real vision and voice models |
+| [#3 — Dependable daily operation](https://github.com/Grahammmm/avocado-shack/issues/3) | Status, pause, undo and the [support path](SUPPORT.md) exist on fixtures. Still open: the owner trial (H18) and daily operation (H19–H25); see [HANDOVER](HANDOVER.md) |
 | [#4 — Later store-manager integrations](https://github.com/Grahammmm/avocado-shack/issues/4) | Future scope; new integration decisions required |
+
+No issue or milestone is complete. Fixture work is not live evidence. The [commands](COMMANDS.md) list what Hass understands; [known limits](LIMITS.md) lists what it cannot do yet.
 
 ## What is needed from Michael
 
@@ -85,4 +87,4 @@ They are **later projects**. Today's catalog stays free of prices and checkout. 
 
 ## Next action for Hermes
 
-Follow [HERMES_START.md](HERMES_START.md). Begin with the content data and reversible editing tools; run the Mac bridge compatibility check alongside that work when the chosen Mac is accessible. Current code and web images are already in GitHub. Private databases, credentials and original archives remain outside it.
+Follow [HERMES_START.md](HERMES_START.md). The content data and the reversible editing tools (H01–H06) are built on fixtures: inspect current `main` and those tools before adding anything. What remains is G's: choose the Mac and Apple account and connect the live channel ([CONNECT](CONNECT.md) section 2), then run the owner trial. The release steps and the decisions still open are in [HANDOVER](HANDOVER.md). Current code and web images are already in GitHub. Private databases, credentials and original archives remain outside it.

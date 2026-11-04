@@ -6,6 +6,7 @@ guests counted (read-only) from an isolated RSVP database. No op notifies anyone
 A ``trailId`` that is not a route idea is refused: "unknown route idea <id>" or "<id> is a hike, not a route idea".
 AV1937-05: ``hike.repeat`` drafts a new scheduled hike on a new date and time from a real hike (REPEAT_FIELDS, RSVP
 setting and capacity); never its id, status, recap or guests, and never from a route idea or the sample file.
+A text over its content_model.TEXT_LIMITS limit is refused with one reply: "<field> is longer than <n> characters".
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from hass.claims import REPEAT_FIELDS
-from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS
+from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS, TEXT_LIMITS
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -27,6 +28,7 @@ TZ = ZoneInfo("America/Los_Angeles")
 TEXT_FIELDS = tuple(f for f in EVENT_TEXT_FIELDS if f != "recap")
 MAX_AHEAD_DAYS = 400  # a start further out is a question ("check the year"), never a draft
 MAX_ID_BASE = 56  # leaves room for a "-NNN" suffix inside the 64-character id limit
+LIMITED = tuple(dict.fromkeys(("title", "meetingPoint", *TEXT_FIELDS)))  # the order the first over-long text is named
 
 
 # Seats per event plus a count of rows whose party size is missing, not a stored integer, or below 1 (a SUM over
@@ -185,7 +187,17 @@ def _trail_problem(content, trail_id):
     return None
 
 
+def _too_long(args, fields):
+    """Refused naming the first of fields whose string is over its event limit (code points, as the validator
+    counts; the value is never echoed), else None. The validator stays the backstop for hand edits."""
+    limits = TEXT_LIMITS["event"]
+    return next((Refused(f"{f} is longer than {limits[f]} characters") for f in fields
+                 if isinstance(args.get(f), str) and len(args[f]) > limits[f]), None)
+
+
 def _hike_create(content, args, ctx):
+    if (problem := _too_long(args, LIMITED)) is not None:
+        return problem
     if args["rsvpEnabled"] and ("capacity" in args) == bool(args.get("noCapacityLimit")):
         return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
     starts = _start(args["date"], args["time"], ctx.now)
@@ -251,6 +263,8 @@ def _spaced(v):
 
 
 def _hike_update(content, args, ctx):
+    if (problem := _too_long(args, LIMITED)) is not None:
+        return problem
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
@@ -327,6 +341,8 @@ def _hike_cancel(content, args, ctx):
 
 
 def _hike_complete(content, args, ctx):
+    if (problem := _too_long(args, ("recap",))) is not None:
+        return problem
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
@@ -341,6 +357,8 @@ def _hike_complete(content, args, ctx):
 
 def _hike_recap(content, args, ctx):
     """Set or correct the recap of a completed hike; no other field changes."""
+    if (problem := _too_long(args, ("recap",))) is not None:
+        return problem
     event = _event(content, args["id"])
     if event is None:
         return NotFound(args["id"])

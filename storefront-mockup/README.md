@@ -38,7 +38,7 @@ Running checks on Agent Orange (Linux): the active scripts (`catalog-only-qa.cjs
 
 The current QA scripts (`catalog-only-qa.cjs`, `section-navigation-qa.cjs`, `community-ui-qa.cjs`, `community-qa.py`) have no defaults that reach the live service or the committed evidence. `PREVIEW_URL` is required and must be an `http://` loopback address (`127.0.0.1` or `localhost`) with an explicit port; point it at an isolated preview with a temporary database, never the sandbox service. `QA_OUT_DIR`, if set, must be outside the repository; if unset, a fresh temp folder is created and printed as `QA_OUT_DIR=<path>`. Otherwise the script exits 2 with a `QA refused:` line before starting a browser or server.
 
-Older commerce-era QA scripts still hardcode the Mac runtime and are left as historical.
+Older commerce-era QA scripts still hardcode the Mac runtime and are left as historical. Their outputs and screenshots (`shop-QA.json`, `shop-desktop.png`, `shop-mobile.png`, `QA.json`, `hass*.png`, `mobile-function-*`, `mobile-visual-*-boxes/merch.png`) are in `archive/commerce-preview/qa/evidence/`.
 
 
 ## Hiking club and newsletter
