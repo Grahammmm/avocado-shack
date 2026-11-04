@@ -98,6 +98,27 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await open('?item='+encodeURIComponent(id40)+'&utm=x');await page.locator('[data-filter="fruit"]').click();
  assert.deepEqual((await addr()).params,{utm:'x',shelf:'fruit'},'a filter change drops item');
  await open('?item='+encodeURIComponent(id40));await page.locator('#product-search').fill('jam');assert.deepEqual((await addr()).params,{q:'jam'},'typing drops item');
+ // A slow logo must not steal focus back after a filter interaction, or block item navigation indefinitely.
+ for(const change of ['shelf','search','maker',null]){
+  let release;const held=new Promise(resolve=>{release=resolve});
+  await page.route('**/assets/logo.png',async route=>{await held;await route.continue()});
+  await page.goto(base+'/?item='+encodeURIComponent(first)+'#market',{waitUntil:'domcontentloaded'});
+  assert.notEqual(await page.evaluate(()=>document.readyState),'complete','logo is still pending');
+  if(change){
+   const control=page.locator(change==='shelf'?'[data-filter="all"]':change==='search'?'#product-search':'#brand-filter');
+   if(change==='shelf')await control.click();else if(change==='search')await control.fill('jam');else await control.selectOption('Etto');
+   await control.focus();assert.equal((await addr()).params.item,undefined);
+   await page.waitForTimeout(1300);
+   assert.equal(await control.evaluate(e=>document.activeElement===e),true,change+': fallback navigation cancelled');
+   release();await page.waitForLoadState('load');await page.waitForTimeout(100);
+   assert.equal(await control.evaluate(e=>document.activeElement===e),true,change+': deferred navigation cancelled');
+  }else{
+   await page.waitForFunction(id=>document.activeElement?.dataset.productId===id,first,{timeout:3000});
+   assert.notEqual(await page.evaluate(()=>document.readyState),'complete','item navigation does not wait for logo');
+   release();await page.waitForLoadState('load');await inView(first);
+  }
+  await page.unroute('**/assets/logo.png');
+ }
  // Fixture ids: one needing encoding (&, space, ?, #) round-trips through its link; an 81-character real id is ignored.
  const odd='a&b ?#c',long81='z'.repeat(81),id41=await page.evaluate(()=>catalog[40].id);
  await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text()).replace(`"id": "${id40}"`,`"id": ${JSON.stringify(odd)}`).replace(`"id": "${id41}"`,`"id": "${long81}"`)})});

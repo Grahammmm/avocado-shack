@@ -16,7 +16,7 @@ const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return catalog.filter(p=>(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''}`).includes(term))}
 function renderCatalog(append=false){const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
- p.delete('item');  // AV1322-10: a filter change leaves the one-card link, so a later share shows the filters.
+ linkedItem='';p.delete('item');  // A filter change also cancels any pending item scroll/focus.
  set('shelf',activeCategory==='all'?'':activeCategory);set('q',searchText($('#product-search').value));set('maker',$('#brand-filter').value);
  history.replaceState(null,'',location.pathname+(s()?'?'+s():'')+location.hash)}
 function resetCatalog(){limit=12;syncUrl();renderCatalog();scheduleScroll()}
@@ -52,10 +52,15 @@ try{const u=new URLSearchParams(location.search),shelf=[...document.querySelecto
  const item=u.get('item'),i=item&&[...item].length<=80?catalog.findIndex(p=>p.id===item):-1;
  if(i>=0){selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item}}catch(e){}
 renderCatalog();
-// After load, so the browser's own jump to #market (the link's fallback) cannot undo the scroll or take the focus.
+// Prefer load, after the browser's #market jump, but do not wait indefinitely for a nonessential asset.
+let linkedShown=false;
 function showLinked(){const el=[...document.querySelectorAll('#catalog-grid article')].find(a=>a.dataset.productId===linkedItem);
- if(el){el.setAttribute('tabindex','-1');el.scrollIntoView({block:'center'});el.focus({preventScroll:true})}}
-if(linkedItem)document.readyState==='complete'?showLinked():addEventListener('load',()=>requestAnimationFrame(showLinked),{once:true});
+ // A late load may repair the anchor jump only while the visitor has not moved focus elsewhere.
+ if(el&&(!linkedShown||document.activeElement===el)){linkedShown=true;el.setAttribute('tabindex','-1');el.scrollIntoView({block:'center'});el.focus({preventScroll:true})}}
+if(linkedItem){if(document.readyState==='complete')showLinked();else{
+ const fallback=setTimeout(showLinked,1000);
+ addEventListener('load',()=>{clearTimeout(fallback);requestAnimationFrame(showLinked)},{once:true});
+}}
 if('IntersectionObserver' in window){
  const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))scheduleScroll()},{rootMargin:'600px 0px'});
  observer.observe($('#catalog-sentinel'));
