@@ -245,7 +245,7 @@ PUBLISH_GENERATED = ("index.html", "hike/index.html", "catalog-products.js", "pr
 PUBLISH_PAGES = ("404.html",)
 PUBLISH_STATIC = ("style.css", "hiking.css", "trail-explorer.css", "script.js", "shop.js", "community.js",
                   "trail-explorer.js", "hiking-preview.json")
-PUBLISH_ASSETS = ("assets/logo.png", "assets/store.jpg", "assets/michael.jpg", "assets/trails/point-buchon.json",
+PUBLISH_ASSETS = ("assets/logo-header.png", "assets/favicon.png", "assets/store.jpg", "assets/michael.jpg", "assets/trails/point-buchon.json",
                   "assets/trails/point-buchon-coast.webp", "assets/trails/point-buchon-aerial.webp",
                   "assets/trails/point-buchon-topo.webp")
 # The public club file carries what the page reads (and what /api/community returns); not the proposed sender address.
