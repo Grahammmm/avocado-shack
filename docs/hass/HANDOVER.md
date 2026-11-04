@@ -13,7 +13,7 @@ Run the steps in order. Each step names who does it. None of them is a service, 
    `python3 hass/statebackup.py drill BACKUP --into DIR --worktree WT`
    The drill never restores onto the writer worktree. The command list and its limits are in [`hass/README.md` from line 163](../../hass/README.md#L163).
 3. **Hand over the guides (G or the operator, in person).** Give Michael [PHONE_GUIDE.md](PHONE_GUIDE.md) and [LIMITS.md](LIMITS.md). The support path stays in [SUPPORT.md](SUPPORT.md).
-4. **Owner trial (H18).** The trial plan is not in the repo yet, so follow the Done-when of [FEATURES.md row H18](FEATURES.md#L41): Michael tries each agreed task on his own phone. Link a `TRIAL.md` here once one exists.
+4. **Owner trial (H18).** The trial plan is not in the repo yet, so follow the acceptance column of [FEATURES.md row H18](FEATURES.md#L41): Michael tries each listed task on his own phone. Link a `TRIAL.md` here once one exists.
 5. **Private launch only.** A public site needs separate authorization and configured form and privacy behavior ([FEATURES.md row H25](FEATURES.md#L53)).
 
 ## Open decisions
