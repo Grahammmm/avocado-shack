@@ -59,7 +59,8 @@ def target_for(record: dict, today=None) -> dict:
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
-        return {"kind": "store", "hours": list(after.get("hours") or []),
+        cleared = bool((record.get("before") or {}).get("homeImage")) and "homeImage" not in after  # shop photo back
+        return {"kind": "store", **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
                 "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), today)}

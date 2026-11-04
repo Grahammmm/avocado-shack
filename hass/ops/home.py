@@ -11,6 +11,9 @@ characters. The same words as now (the default when unset; spacing ignored) are 
 
 ``store.set_home_image`` ({"photo": "<sha256>", "imageAlt": "..."}) puts a stored photo's metadata-free web copy in the
 one hero ``<img>`` (``store.homeImage``), through ``photos.install`` exactly as ``product.set_photo``. Undo removes it.
+``store.clear_home_image`` ({}) puts the shop's own photo back ("put the old photo back"): it removes ``store.homeImage``
+whatever store changes came after it was set, is refused when no home photo is set, and keeps the committed photo file;
+undo of the clear restores the owner's photo.
 
 ``store.set_notice`` ({"text": "Closed Thanksgiving Day", "until": "2026-11-26"}) puts one dated notice at the top of the
 home page (``store.notice``; at most 160 characters, 3 letters; last day today to 60 days ahead, Pacific); a second notice
@@ -75,6 +78,15 @@ def _set_home_image(content, args, ctx):
     return _touch(before, content.store)
 
 
+def _clear_home_image(content, args, ctx):
+    """Put the shop's own hero photo back; the committed photo file stays (undo and history keep working)."""
+    if "homeImage" not in content.store:
+        return Refused("the home page already shows the shop’s own photo")
+    before = copy.deepcopy(content.store)
+    del content.store["homeImage"]
+    return _touch(before, content.store)
+
+
 def _set_notice(content, args, ctx):
     """The one dated owner notice (store.notice); a second notice replaces the first."""
     text, until, today = args["text"], date.fromisoformat(args["until"]), shop_today(ctx.now)
@@ -105,5 +117,6 @@ def _clear_notice(content, args, ctx):
 OPS = (Op("store.set_headline", {"first": Arg("text"), "second": Arg("text")}, _set_headline),
        Op("store.set_story", {"text": Arg("text")}, _set_story),
        Op("store.set_home_image", {"photo": Arg("id"), "imageAlt": Arg("text")}, _set_home_image),
+       Op("store.clear_home_image", {}, _clear_home_image),
        Op("store.set_notice", {"text": Arg("text"), "until": Arg("date")}, _set_notice),
        Op("store.clear_notice", {}, _clear_notice))
