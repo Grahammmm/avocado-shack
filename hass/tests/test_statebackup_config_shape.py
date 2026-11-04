@@ -41,7 +41,8 @@ class ConfigShapeTests(BackupTestCase):
 
     def test_an_extra_key_or_odd_other_values_still_pass(self):  # only the worktree shape is checked
         backup = self.backup()
-        self.rewrite(backup, json.dumps({"worktree": "/elsewhere", "other": [1, None]}).encode("utf-8"))
+        wt = json.loads((backup / statebackup.MANIFEST).read_text("utf-8"))["worktree"]  # the backup's own worktree
+        self.rewrite(backup, json.dumps({"worktree": wt, "other": [1, None]}).encode("utf-8"))
         self.assertEqual(statebackup.verify(str(backup))["result"], "ok")
 
     def test_a_config_hash_mismatch_reports_only_the_hash(self):
