@@ -29,8 +29,9 @@ class PromptRuleTests(unittest.TestCase):
         rules = _rules(prompt)
         design = [line for line in rules if "design change" in line]
         self.assertEqual(len(design), 1)
-        self.assertEqual(rules[-1], design[0])  # after the photo rule, before Operations
-        self.assertIn("product.set_photo", rules[-2])
+        self.assertEqual(rules[-1], design[0])  # after photo/repeat rules, before Operations
+        self.assertIn("product.set_photo", rules[-3])
+        self.assertIn("hike.repeat", rules[-2])
         self.assertEqual(prompt.count(DESIGN_UNSUPPORTED), 1)
         found = re.search(r"\{\"unsupported\": \"[^\"]*\"\}", design[0])
         self.assertEqual(json.loads(found.group(0)), DESIGN)
@@ -42,7 +43,7 @@ class PromptRuleTests(unittest.TestCase):
         self.assertEqual(prompt, FIXTURE.read_text("utf-8"))
         without = prompt.replace("- " + RULES[-1] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
-        self.assertEqual(len(RULES), 10)
+        self.assertEqual(len(RULES), 11)
         self.assertLess(len(RULES[-1].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 
