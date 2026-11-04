@@ -128,7 +128,9 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await open('?item='+long81);await page.waitForTimeout(150);s=await shown();assert.deepEqual(s.ids,plain.ids,'81-character id ignored');assert.equal(s.focused,null);
  await page.unroute('**/catalog-products.js');
  // AV1102-02: maker cross-links use active-catalog counts, not the brand filter.
- await open('');
+ // Chromium heuristically caches the id-fixture catalog above even after unroute; start again from the real catalog.
+ await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');
+ await open('');assert.equal(await page.evaluate(()=>catalog[39].id),id40,'real catalog restored after the id fixture');
  const makers=await page.evaluate(()=>{const counts=new Map();catalog.forEach(p=>counts.set(p.producerKey,(counts.get(p.producerKey)||0)+1));return [...counts].filter(([k])=>Object.hasOwn(producers,k)).map(([key,n])=>({key,n,name:producers[key].name}))});
  const multi=makers.find(m=>m.n>=2),single=makers.find(m=>m.n===1);assert.ok(multi);assert.ok(single);
  const fromUrl=k=>'?from='+encodeURIComponent(k);
