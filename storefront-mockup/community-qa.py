@@ -15,6 +15,9 @@ else:out=tempfile.mkdtemp(prefix='avoshack-qa-');print('QA_OUT_DIR='+out,file=sy
 future=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=30)).isoformat()
 events=[dict(id='qa-hike',title='QA trail fixture',startsAt=future,status='scheduled',meetingPoint='QA meeting point',distance='3 miles',difficulty='Gentle pace',duration='2 hours',capacity=3,rsvpEnabled=True),dict(id='qa-race',title='QA limited places',startsAt=future,status='scheduled',meetingPoint='QA meeting point',capacity=1,rsvpEnabled=True),dict(id='qa-past',title='QA past outing',startsAt='2025-01-01T10:00:00-08:00',status='completed',meetingPoint='QA meeting point',recap='A test history entry; not a published hike.',rsvpEnabled=False)]
 events.append(dict(id='qa-unlimited',title='QA uncapped event',startsAt=future,status='scheduled',meetingPoint='QA meeting point',rsvpEnabled=True,confirmedGuests=999))
+# AV0207-01: one hike with every owner-set logistics field and one with none (the server must pass them through).
+events.append(dict(id='qa-full',title='QA all logistics',startsAt=future,status='scheduled',meetingPoint='QA full meeting point',meetTime='8:45 am',meetingAddress='QA Road 1, Los Osos',walkTime='9:00 am',returnTime='Around 12:30 pm',distance='4 miles',difficulty='Easy',duration='3 hours',bring='Water and a snack',accessNote='QA access: no pets.',rsvpEnabled=True))
+events.append(dict(id='qa-bare',title='QA no logistics',startsAt=future,status='scheduled',meetingPoint='QA meeting point',distance='2 miles',difficulty='Flat',duration='1 hour',rsvpEnabled=True))
 with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
  config=Path(t)/'community.json';dbpath=Path(t)/'community.sqlite3';config.write_text(json.dumps({'events':events}))
  # Bind port 0 atomically: concurrent CI jobs must never share a fixture server.

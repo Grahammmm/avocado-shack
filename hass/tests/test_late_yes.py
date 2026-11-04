@@ -14,6 +14,7 @@ from hass.tests.test_editor import DESC, _req
 
 EXPIRES = T0 + timedelta(seconds=600)  # SETTINGS approvalTtlSeconds is 600: the draft expires 09:10 PST
 LATE = T0 + timedelta(minutes=40)  # the service handles the queued reply at 09:40 PST
+LATE_HEAD = "Late reply to your message from Monday 09:09:\n"  # AV0022-10: a reply sent over 15 min after the message
 
 
 class LateYesTests(ConversationTestCase):
@@ -35,15 +36,15 @@ class LateYesTests(ConversationTestCase):
     def state(self):
         return self.drafts()[0]["state"]
 
-    def assert_expired(self, received_at, text="yes"):
+    def assert_expired(self, received_at, text="yes", head=""):
         self.assertEqual(self.late(text, received_at), "no-target")
-        self.assertEqual(self.replies(), [self.expired_reply])
+        self.assertEqual(self.replies(), [head + self.expired_reply])
         self.assertEqual((self.state(), self.approvals(), self.commits()), ("expired", [], 0))
 
     def test_yes_sent_in_time_and_handled_late_approves_on_the_handling_clock(self):
         self.assertEqual(self.late("yes", (EXPIRES - timedelta(seconds=1)).isoformat()), "approved")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Applied {self.draft['code']}:"), reply)
+        self.assertTrue(reply.startswith(LATE_HEAD + f"Applied {self.draft['code']}:"), reply)
         self.assertEqual((self.state(), self.commits()), ("applied", 1))
         [row] = self.approvals()
         self.assertEqual((row["approved_at"], row["expires_at"]), (conversation._iso(LATE), self.draft["expires_at"]))
@@ -54,7 +55,7 @@ class LateYesTests(ConversationTestCase):
         self.assertEqual((self.state(), self.commits()), ("applied", 1))
 
     def test_yes_sent_exactly_at_expiry_is_expired(self):
-        self.assert_expired(EXPIRES.isoformat())
+        self.assert_expired(EXPIRES.isoformat(), head="Late reply to your message from Monday 09:10:\n")
 
     def test_received_at_in_the_future_is_judged_at_now(self):
         self.assert_expired((LATE + timedelta(minutes=20)).isoformat())
@@ -69,7 +70,7 @@ class LateYesTests(ConversationTestCase):
 
     def test_no_sent_in_time_and_handled_late_cancels(self):
         self.assertEqual(self.late("no", (EXPIRES - timedelta(seconds=1)).isoformat()), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {self.draft['code']}; nothing changed."])
+        self.assertEqual(self.replies(), [LATE_HEAD + f"Cancelled {self.draft['code']}; nothing changed."])
         self.assertEqual((self.state(), self.drafts()[0]["reason"], self.commits()), ("rejected", "owner", 0))
 
     def test_text_correction_sent_in_time_is_still_swept_at_now(self):
@@ -96,7 +97,7 @@ class LateYesTests(ConversationTestCase):
         self.replies()
         code = self.draft["code"]
         self.assertEqual(self.late("yes", (EXPIRES - timedelta(seconds=1)).isoformat()), "paused")
-        self.assertEqual(self.replies(), [f"Changes are paused; {code} was not applied. "
+        self.assertEqual(self.replies(), [LATE_HEAD + f"Changes are paused; {code} was not applied. "
                                           f"Send resume changes, then yes {code}."])
         self.assertEqual((self.state(), self.approvals(), self.commits()), ("proposed", [], 0))
         self.assertEqual(self.late("resume changes", LATE.isoformat()), "resume")  # the next message sweeps it
@@ -112,7 +113,7 @@ class LateYesTests(ConversationTestCase):
         stale, new = self.drafts()
         self.assertEqual((stale["state"], stale["reason"], self.commits()), ("rejected", "stale", 0))
         self.assertEqual(new["state"], "proposed")
-        self.assertTrue(reply.startswith(f"The site changed since {self.draft['code']}; please approve {new['code']}."))
+        self.assertTrue(reply.startswith(LATE_HEAD + f"The site changed since {self.draft['code']}; please approve {new['code']}."))
 
 
 if __name__ == "__main__":

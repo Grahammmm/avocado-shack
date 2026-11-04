@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, label_reader, media, morning_report, morning_report as shelf, owner_answers as answers  # noqa: E402
+from hass import claims, interpret_check, label_reader, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
 from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -26,7 +26,8 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
                         r"|(resume)(?: changes)?|(help|commands|\?)"
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
                         r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
-                        r"|((?:morning )?report)")  # AV1322-05 (F04): new last group 12; groups 1-11 keep their indices
+                        r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
+                        r"|(post)(?:\s+(\S+))?")  # AV1322-07 (F07): groups 13/14; the id is re-read from the original text to keep its case
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -42,6 +43,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'report - the morning shelf report: "report"',
+    'post <id> - draft a caption, posts nothing: "post photo-product-001"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
@@ -49,6 +51,9 @@ MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states th
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
 FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. find lion's mane."  # AV1537-04
+POST_USAGE = "Send post and a product id, e.g. post photo-product-001."  # AV1322-07
+POST_REFUSALS = {"no such product": "No product {id}; send find <words> for ids.", "not on the site": "{id} is not on the site.",
+                 "no photo on the site": "{id} has no photo on the site."}  # other build() reasons: "Cannot draft a post for <id>: <reason>."
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
@@ -76,6 +81,8 @@ INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
 VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
@@ -88,7 +95,7 @@ CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NUL
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS outbox(id INTEGER PRIMARY KEY, chat TEXT NOT NULL, text TEXT NOT NULL,
-  attachments TEXT NOT NULL, created_at TEXT NOT NULL, sent_at TEXT);
+  attachments TEXT NOT NULL, created_at TEXT NOT NULL, sent_at TEXT, reply_to TEXT);
 """
 
 
@@ -162,9 +169,9 @@ class Outbox:
     def __init__(self, db, now):
         self.db, self._now = db, now
 
-    def add(self, chat, text, attachments=()):
-        self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at) VALUES (?, ?, ?, ?)",
-                        (chat, text, json.dumps(list(attachments)), _iso(self._now())))
+    def add(self, chat, text, attachments=(), reply_to=None):
+        self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
+                        (chat, text, json.dumps(list(attachments)), _iso(self._now()), reply_to))
 
     def unsent(self):
         return self.db.execute("SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id").fetchall()
@@ -173,10 +180,21 @@ class Outbox:
         """A raised send error propagates and leaves that row and every later row unsent."""
         sent = 0
         for row in self.unsent():
-            adapter.send(row["chat"], self._delayed(row["created_at"]) + row["text"], json.loads(row["attachments"]))
+            head = self._late(row["reply_to"]) or self._delayed(row["created_at"])  # the longer wait is the one named
+            adapter.send(row["chat"], head + row["text"], json.loads(row["attachments"]))
             self.db.execute("UPDATE outbox SET sent_at = ? WHERE id = ?", (_iso(self._now()), row["id"]))
             sent += 1
         return sent
+
+    def _late(self, reply_to) -> str:
+        """AV0022-10 (H16): send-time heading naming the owner message a reply answers, when sent over LATE_AFTER
+        after it (older than 6 days: its date); empty, naive, bad or future -> ''. The stored text never changes."""
+        try: sent, now = datetime.fromisoformat(reply_to), self._now()
+        except (TypeError, ValueError): return ""
+        if sent.tzinfo is None or now - sent <= LATE_AFTER: return ""
+        at = sent.astimezone(LOCAL_TZ)
+        day = at.strftime("%Y-%m-%d") if now - sent > timedelta(days=6) else WEEKDAYS[at.weekday()]
+        return f"Late reply to your message from {day} {at:%H:%M}:\n"
 
     def _delayed(self, created_at) -> str:
         """AVB-07 (H16): send-time prefix for a reply held over DELAYED_AFTER_S; bad, naive or future -> ''."""
@@ -287,6 +305,7 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
     if match[12]: return "report", None  # AV1322-05 (F04)
     if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
     if match[7]: return "help", None
@@ -402,6 +421,8 @@ class Conversation:
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
         for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
+        if "reply_to" not in {r["name"] for r in self.db.execute("PRAGMA table_info(outbox)")}:  # AV0022-10 (H16)
+            self.db.execute("ALTER TABLE outbox ADD COLUMN reply_to TEXT")
         # AVB-03 (H05): an open draft from before proposed_at has no recoverable proposal instant (a filled question
         # keeps its question's created_at), so it counts as proposed when this store is opened: a yes sent earlier is
         # refused and the owner re-sends it; it is never judged from created_at or from the current ttl.
@@ -474,7 +495,7 @@ class Conversation:
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
     def _reply(self, text, attachments=()):
-        self.outbox.add(self.settings["ownerChat"], text, attachments)
+        self.outbox.add(self.settings["ownerChat"], text, attachments, self._answering or None)
 
     def _proposal_reply(self, row, draft, prefix=""):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
@@ -511,7 +532,14 @@ class Conversation:
         return self._row(cur.lastrowid)
 
     # -- message handling ----------------------------------------------------------------------------------------
+    _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
+
     def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
+        self._answering = msg.received_at
+        try: return self._handle_message(msg, last_try, apply)
+        finally: self._answering = None
+
+    def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
         apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
         row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
@@ -553,7 +581,7 @@ class Conversation:
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and command[0] in ("status", "help", "find", "show", "report"): expired = []  # H17: read-only
+        if command and command[0] in ("status", "help", "find", "show", "report", "post"): expired = []  # H17: read-only
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -887,6 +915,7 @@ class Conversation:
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
         if verb == "show": return self._reply(*self._show(code, now)) or "show"
         if verb == "report": return self._report(now)
+        if verb == "post": return self._post(code)
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
@@ -918,6 +947,28 @@ class Conversation:
             text = "Shelf report unavailable right now; nothing changed."
         self._reply(text)
         return "report"
+
+    def _post(self, pid) -> str:
+        """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
+        writer worktree content. Read-only: nothing is posted, scheduled, written or drafted; works while paused."""
+        photo = None
+        try:
+            if not pid: raise LookupError
+            wt = editor_mod._load(str(self.sdir))[2]
+            out = social_draft.build(load_content(wt / "hass" / "content"), pid, wt / "storefront-mockup")
+            if out["draft"] and stat.S_ISREG(os.lstat(photo := wt / "storefront-mockup" / out["image"]).st_mode):
+                text = f"Draft post (not posted):\n{out['caption']}\nPhoto description: {out['alt']}"
+            else:  # a refusal, or a photo that is itself a link: never attached
+                reason = out.get("reason", "no photo on the site")
+                text = POST_REFUSALS[reason].format(id=pid) if reason in POST_REFUSALS else f"Cannot draft a post for {pid}: {reason}."
+                photo = None
+                if reason == "cannot read content": raise OSError
+        except LookupError:
+            text = POST_USAGE
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            text, photo = "Catalog unavailable right now; nothing changed.", None
+        self._reply(text, [str(photo)] if photo else [])
+        return "post"
 
     def _find(self, query) -> str:
         """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
