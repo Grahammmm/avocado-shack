@@ -56,6 +56,21 @@ def _web_bytes(root, sha):
         return Refused(f"photo store is unusable: {exc}")
 
 
+def _folder_unusable(site_dir):
+    """True when ``assets`` or ``assets/products`` under the site exists as a symlink or non-directory (never followed).
+    Missing folders are fine: the editor creates them."""
+    for folder in ("assets", "assets/products"):
+        try:
+            mode = os.lstat(Path(site_dir) / folder).st_mode
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if not stat.S_ISDIR(mode):
+            return True
+    return False
+
+
 def install(ctx, sha, alt):
     """Queue the stored photo's web copy for commit; the site path ``assets/products/photo-<sha16>.<ext>`` or Refused.
     Shared by product.set_photo and product.add (AV0022-02). Same bytes already there are reused, not rewritten."""
@@ -71,19 +86,12 @@ def install(ctx, sha, alt):
     if isinstance(found, Refused):
         return found
     data, ext = found
-    for folder in ("assets", "assets/products"):  # a symlinked or non-directory folder is never followed
-        try:
-            mode = os.lstat(Path(ctx.site_dir) / folder).st_mode
-        except FileNotFoundError:
-            break  # missing folders are created by the editor
-        except OSError:
-            return Refused(FOLDER_REPLY)
-        if not stat.S_ISDIR(mode):
-            return Refused(FOLDER_REPLY)
     target = f"assets/products/photo-{sha[:16]}.{ext}"
     path, have, link = Path(ctx.site_dir) / target, ctx.assets.get(target), False
     try:  # read the site file only when not already queued; lstat first so a FIFO is never opened
         if target not in ctx.assets:
+            if _folder_unusable(ctx.site_dir):
+                return Refused(FOLDER_REPLY)
             mode = os.lstat(path).st_mode
             link = stat.S_ISLNK(mode)
             if not (link or stat.S_ISREG(mode)):
