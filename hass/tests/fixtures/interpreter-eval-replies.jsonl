@@ -54,3 +54,11 @@
 {"id": "e53", "reply": {"ops": [{"op": "route.hide", "args": {"id": "idea-fiscalini-bluff"}}], "revises": null}}
 {"id": "e54", "reply": {"ops": [{"op": "route.restore", "args": {"id": "idea-cass-hill"}}], "revises": null}}
 {"id": "e55", "reply": {"ops": [{"op": "route.restore", "args": {"id": "idea-fiscalini-bluff"}}], "revises": null}}
+{"id": "e56", "reply": {"ops": [{"op": "product.hide", "args": {"id": "photo-product-087"}}], "revises": null}}
+{"id": "e57", "reply": {"question": "Which Jayleaf product do you mean, Spring Greens or Wild Arugula?"}}
+{"id": "e58", "reply": {"ops": [{"op": "store.set_headline", "args": {"first": "A small market.", "second": "A lot to discover."}}], "revises": null}}
+{"id": "e59", "reply": {"question": "What should the story say instead? Send the new words and I will change it."}}
+{"id": "e60", "reply": {"unsupported": "design changes cannot be made by message yet"}}
+{"id": "e61", "reply": {"unsupported": "design changes cannot be made by message yet"}}
+{"id": "e62", "reply": {"ops": [{"op": "product.add", "args": {"name": "Fuyu persimmons", "category": "fruit"}}], "revises": null}}
+{"id": "e63", "reply": {"ops": [{"op": "product.add", "args": {"name": "Bacon avocados", "category": "fruit"}}], "revises": null}}
