@@ -6,7 +6,8 @@ metadata-free web copy (``media.web_copy``), points the product's ``image`` at
 content change. Undo restores the old image; the committed photo file stays, unreferenced. No resizing, conversion or
 deletion of old photo files. ``imageAlt`` must say what the photo shows: a file name, camera default name, placeholder
 word, a placeholder word with only an article or number, the photo id, fewer than 3 letters, a screenshot or
-messaging-app default name, or a web link is refused before the media store is read.
+messaging-app default name, or a web link is refused before the media store is read; so is one over 200 characters
+(``MAX_ALT``, the content-model limit).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import stat
 from pathlib import Path
 
 from hass import editor, media
+from hass.content_model import TEXT_LIMITS
 from hass.ops import Arg, Op, Refused, Touched
 from hass.ops.catalog import _product
 
@@ -29,6 +31,7 @@ _BARE_SCREEN_RE = re.compile(r"^(screenshot|screen shot)( ?\(\d{1,3}\))?$")
 _PLACEHOLDERS = {"photo", "image", "picture", "pic", "img", "product", "product photo", "alt", "n/a", "na", "none", "todo",
                  "tbd"}
 _PLACEHOLDER_RE = re.compile(r"^(?:(?:a|an|the|my|our|this)\s+)?(?:product\s+)?(?:photo|image|picture|pic|img|product)(?:\s*(?:#|no\.?)?\s*\d{1,3})?[\s.!]*$")  # noqa: E501
+MAX_ALT = TEXT_LIMITS["product"]["imageAlt"]
 FOLDER_REPLY = "the site photo folder is unusable"
 ALT_REPLY = ("imageAlt should say what the photo shows (for example \"Hass avocados in a wooden crate\"), "
              "not a file name or placeholder")
@@ -76,6 +79,8 @@ def install(ctx, sha, alt):
     Shared by product.set_photo and product.add (AV0022-02). Same bytes already there are reused, not rewritten."""
     if not media.SHA_RE.fullmatch(sha):
         return Refused("photo must be a stored photo id")
+    if len(alt) > MAX_ALT:  # before _alt_problem: one reply; counts characters, same limit as the content model
+        return Refused(f"the photo description is longer than {MAX_ALT} characters (it has {len(alt)})")
     problem = _alt_problem(alt, sha)
     if problem:
         return Refused(problem)
