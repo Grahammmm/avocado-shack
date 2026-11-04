@@ -6,6 +6,7 @@ import contextlib, io, json, tempfile, unittest  # noqa: E401
 from pathlib import Path
 
 from hass import interpret_check, interpreter_eval as ev
+from hass.tests import test_interpreter_eval as base  # module import: its test classes are not collected twice
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 CASES, REPLIES = FIXTURES / "interpreter-eval.jsonl", FIXTURES / "interpreter-eval-replies.jsonl"
@@ -47,13 +48,13 @@ class LoadCasesRefusalTests(unittest.TestCase):
         with self.assertRaises(ev.EvalError): ev.load_cases(path)
 
     def assertLoads(self, path):
-        self.assertEqual(len(ev.load_cases(path)), 55)
+        self.assertEqual(len(ev.load_cases(path)), 63)
         code, out, err = self.run_main(path)
-        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 55))
+        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 63))
 
     def test_real_fixture_loads_55_cases_unchanged(self):
         self.assertEqual(ev.load_cases(CASES), self.rows)
-        self.assertEqual(len(self.rows), 55)
+        self.assertEqual(len(self.rows), 63)
 
     def test_bad_pending_code_refused(self):
         bad = [{"code": ["a"]}, {"code": 7}, {"code": ""}, {"code": "a b"}, {"code": "x" * 17}, {},
@@ -108,6 +109,79 @@ class LoadCasesRefusalTests(unittest.TestCase):
         path = self.tmp / "two.jsonl"
         path.write_text("".join(json.dumps(r) + "\n" for r in rows), "utf-8")
         self.assertEqual(self.run_main(path)[2], "interpreter_eval: cases line 5: bad pending code\n")
+
+
+class V4NotesTests(base.EvalTestCase):
+    """AV1102-10: the v4 cases, the optional `notes` on a case, and how live() and the scorer treat them."""
+
+    def notes_file(self, notes, case_id="e62"):
+        rows = [dict(r, text=TEXT) if r["id"] == case_id else r for r in self.cases]
+        next(r for r in rows if r["id"] == case_id)["notes"] = notes
+        path = self.tmp / "notes.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), "utf-8")
+        return path, 1 + [r["id"] for r in rows].index(case_id)
+
+    def test_real_fixture_has_8_new_unique_cases_and_two_with_notes(self):
+        ids = [c["id"] for c in self.cases]
+        self.assertEqual((ids[55:], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 63))
+        self.assertTrue(all(ev.ID_RE.fullmatch(i) for i in ids))
+        self.assertEqual({c["id"] for c in self.cases if "notes" in c}, {"e62", "e63"})
+        self.assertEqual([c["expect"] for c in self.cases[56:61:2]][:1], [{"question": True}])
+        self.assertEqual([c["expect"] for c in self.cases[59:61]], [{"unsupported": True}] * 2)
+
+    def test_bad_notes_exit_2_naming_the_line_never_the_text(self):
+        good = {"key": "tone", "text": "short"}
+        bad = ["x", {}, "", None, [good, "x"], [good] * 21, [dict(good, extra="y")], [{"key": "tone"}],
+               [{"key": 1, "text": "a"}], [{"key": "k", "text": ["a"]}], {"key": "k", "text": "t"}]
+        for notes in bad:
+            with self.subTest(notes=notes):
+                path, line = self.notes_file(notes)
+                code, out, err = LoadCasesRefusalTests.run_main(self, path)
+                self.assertEqual((code, out, err), (2, "", f"interpreter_eval: cases line {line}: bad notes\n"))
+                self.assertNotIn(TEXT, err)
+
+    def test_up_to_20_notes_or_none_load(self):
+        for notes in ([], [{"key": "k", "text": "t"}] * 20):
+            with self.subTest(n=len(notes)):
+                path, _ = self.notes_file(notes)
+                self.assertEqual(len(ev.load_cases(path)), 63)
+
+    def captured_requests(self):
+        bodies = []
+
+        def transport(url, body, headers, timeout):
+            bodies.append(json.loads(json.loads(body)["messages"][1]["content"]))
+            return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
+        out = self.tmp / "fresh.jsonl"
+        code, _, _ = base.run("--live", "--url", base.URL, "--model", "m", "--out", out, transport=transport)
+        self.assertEqual((code, len(bodies)), (0, 63))
+        return bodies
+
+    def test_live_sends_notes_only_for_cases_that_have_them(self):
+        for case, sent in zip(self.cases, self.captured_requests()):
+            with self.subTest(case=case["id"]):
+                self.assertEqual((sent["message"], sent["pending"]), (case["text"], case["pending"]))
+                if case.get("notes"):
+                    self.assertEqual(sent["notes"], case["notes"])
+                else:  # exactly the four fields a no-notes request has today
+                    self.assertEqual(set(sent), {"message", "pending", "today", "weekday"})
+
+    def test_organic_claim_on_the_farm_note_case_fails_by_the_existing_rule(self):
+        args = self.replies["e63"]["ops"][0]["args"]
+        maker = {"ops": [{"op": "product.add", "args": {**args, "producerKey": "Etto"}}], "revises": None}
+        self.assertEqual(self.why("e63", maker), ["op 1 product.add: unexpected claim arg producerKey"])
+        organic = {"ops": [{"op": "product.add", "args": {**args, "organic": True}}], "revises": None}  # not an arg
+        self.assertEqual(self.why("e63", organic), ["expected ops, got question"])
+        self.assertEqual(self.why("e63", self.replies["e63"]), [])
+        self.assertEqual(self.why("e62", self.replies["e62"]), [])
+
+    def test_replies_file_missing_a_new_id_scores_it_failed_and_exits_0(self):
+        rows = [json.dumps({"id": k, "reply": v}) for k, v in self.replies.items() if k != "e62"]
+        path = self.tmp / "r.jsonl"
+        path.write_text("\n".join(rows) + "\n", "utf-8")
+        code, out, err = base.scored(CASES, path)
+        summary = json.loads(out)
+        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 59))
 
 
 if __name__ == "__main__":
