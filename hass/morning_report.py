@@ -86,9 +86,14 @@ def facts(content, today: date, guests=None) -> dict:
             "sold_out_names": sorted(names["no"], key=str.casefold)} | ({"hikes": found} if found else {})
 
 
-def render(f: dict) -> str:
+def check_line(f: dict, stale_tail: str = " - more than a week ago") -> str:
+    """The 'Shelf check: ...' line from facts(); `status` passes its own stale tail (AV1102-05)."""
     day = f["checked_on"]
     head = "Shelf check: not done yet" if day is None else f"Shelf check: {_day_text(date.fromisoformat(day))}"
+    return head + (" - dated after today, check the clock" if f["future"] else stale_tail if f["stale"] else "")
+
+
+def render(f: dict) -> str:
     counts = f"Available {f['available']} · Limited {f['limited']} · Sold out {f['sold_out']} · Not confirmed {f['not_confirmed']}"
     lists = [(label, [g[0] if len(g) == 1 else f"{g[0]} ({len(g)})"  # one entry per shared name, in sorted order
                       for g in (list(v) for _, v in groupby(f[key], key=str.casefold))])
@@ -96,8 +101,7 @@ def render(f: dict) -> str:
     hike_list, cuts = f.get("hikes", []), (TEXT_LIMITS["event"]["title"], 40, 20, 8)
     steps = [(MAX_NAMES, c) for c in cuts] + [(cap, cuts[-1]) for cap in range(MAX_NAMES - 1, -1, -1)]
     for cap, cut in steps:  # hike titles cut with … first, then fewer names and hikes, never a longer reply
-        suffix = " - dated after today, check the clock" if f["future"] else " - more than a week ago" if f["stale"] else ""
-        lines = [head + suffix, counts]
+        lines = [check_line(f), counts]
         for label, found, sep in [(label, found, ", ") for label, found in lists] + [
                 ("Hikes", [_hike_text(h, cut) for h in hike_list], "; ")]:
             shown = found[:cap] + ([f"+{len(found) - cap} more"] if len(found) > cap else [])
