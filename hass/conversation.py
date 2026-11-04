@@ -818,7 +818,7 @@ class Conversation:
         wt = editor_mod._load(str(self.sdir))[2]
         try:
             content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
-            stale = sitegen.diff_paths(sitegen.render(content, wt / "hass" / "templates"), wt)
+            stale = sitegen.stale_paths(content, wt)
         except ContentError as exc:
             return None, "; ".join(exc.problems)
         problems = [f"generated file out of date: {p}" for p in stale] + migration_check.run_checks(wt)[0]
