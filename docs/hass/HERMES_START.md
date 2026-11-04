@@ -1,6 +1,6 @@
 # Hermes: next assignment for Avocado Shack
 
-Build the Hass messaging interface described in this repository, beginning with the private text-editing demo. **Do not start by rebuilding the website or reactivating the old commerce prototype.** The owner wants to manage the existing catalog, hiking page and store information through one conversation using text, photos and voice notes.
+Continue the Hass messaging interface described in this repository. The private text-editing tools are built on fixtures; the live demo and everything after it are still open. **Do not start by rebuilding the website or reactivating the old commerce prototype.** The owner wants to manage the existing catalog, hiking page and store information through one conversation using text, photos and voice notes.
 
 ## Read in this order
 
@@ -11,20 +11,24 @@ Build the Hass messaging interface described in this repository, beginning with 
 
 ## Start with an accurate baseline
 
-- Work from `/home/user/repos/avocado-shack` on Agent Orange. Fetch GitHub, inspect status and preserve any uncommitted work. Use a new `codex/` branch/worktree; no force resets or force pushes.
+- Work from `/home/user/repos/avocado-shack` on Agent Orange. Fetch GitHub, inspect status and preserve any uncommitted work. Inspect current `main` and the existing tools under `hass/` before writing new code. Use a new `codex/` branch/worktree; no force resets or force pushes.
 - GitHub is `Grahammmm/avocado-shack`, private. Existing deploy-key access is repository-scoped. Do not copy account-wide credentials into it.
-- Verify the current service and content before editing. The last pre-plan source check was clean main `0d29ba0e5d108b3513e1a9b92ca37bc592371c3b`; fetch the newer plan commit and any subsequent work rather than resetting to that baseline.
+- Verify the current service and content before editing. Work from the latest `main`; do not reset to an old baseline commit.
 - The live private community DB is outside the repository. Use a separate temporary database/config for tests. Preserve the original Mac project and dated backup.
 
 ## First implementation slice
 
-1. Implement H01–H02: one validated source for catalog/maker/event content and narrow private editing tools. Keep all 170 existing listings, 26 maker profiles, photos, source links and held exclusions intact.
-2. Implement H03–H06 using a fixture conversation adapter: add/edit/hide/restore, a real-hike draft, version-bound approval, screenshot, history and selective undo. A fixture is not a completed iMessage integration.
+**Steps 1 and 2 are done on fixtures** (H01–H06 are marked Done in [FEATURES.md](FEATURES.md)). Steps 3–5 are still open, and 3 and 4 need G; see the end of this section.
+
+1. Done: H01–H02: one validated source for catalog/maker/event content and narrow private editing tools. Keep all 170 existing listings, 26 maker profiles, photos, source links and held exclusions intact.
+2. Done: H03–H06 using a fixture conversation adapter: add/edit/hide/restore, a real-hike draft, version-bound approval, screenshot, history and selective undo. A fixture is not a completed iMessage integration.
 3. Run H07 on the chosen spare Mac when the owner has supplied its identity/access and signed into the dedicated account. Prove basic BlueBubbles text/attachment support with SIP enabled. Do not read another user's personal Messages to shortcut setup.
 4. Connect H08 and complete H09. Demonstrate an approved owner text modifying only the private preview, with rejection, duplicate, stale-approval and undo checks.
 5. Continue to photo/voice and the owner trial only after the demo checks pass. Keep the future commerce/social/accounting backlog separate.
 
 The user confirms a spare Mac is available. Its model, operating system, account and permissions are not yet recorded. `hello@example.com` is a proposed contact, not a provisioned mailbox or Apple account. Account login, permission dialogs, credentials and spending decisions still need the owner; continue independent fixture/content work while waiting.
+
+**Open G steps.** H07 and H08 (the Mac, the Apple account and the live channel) are G's, listed in [CONNECT](CONNECT.md) section 2; no agent signs in or connects them. H09 real-channel evidence and the H18 owner trial stay open until they run over that channel. The release steps and the decisions still open (H07, H19, H21, H22, H23) are in [HANDOVER](HANDOVER.md). Nothing here is deployed, published or signed off.
 
 ## Definition of the first successful demo
 
