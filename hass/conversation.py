@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, label_reader, media, morning_report, morning_report as shelf, owner_answers as answers  # noqa: E402
+from hass import claims, interpret_check, label_reader, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
 from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -26,7 +26,8 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
                         r"|(resume)(?: changes)?|(help|commands|\?)"
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
                         r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
-                        r"|((?:morning )?report)")  # AV1322-05 (F04): new last group 12; groups 1-11 keep their indices
+                        r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
+                        r"|(post)(?:\s+(\S+))?")  # AV1322-07 (F07): groups 13/14; the id is re-read from the original text to keep its case
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -42,6 +43,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'report - the morning shelf report: "report"',
+    'post <id> - draft a caption, posts nothing: "post photo-product-001"',
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
@@ -49,6 +51,9 @@ MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states th
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
 FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. find lion's mane."  # AV1537-04
+POST_USAGE = "Send post and a product id, e.g. post photo-product-001."  # AV1322-07
+POST_REFUSALS = {"no such product": "No product {id}; send find <words> for ids.", "not on the site": "{id} is not on the site.",
+                 "no photo on the site": "{id} has no photo on the site."}  # other build() reasons: "Cannot draft a post for <id>: <reason>."
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
                     "Please send the change as text.")
@@ -286,6 +291,7 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
     if match[12]: return "report", None  # AV1322-05 (F04)
     if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
     if match[7]: return "help", None
@@ -552,7 +558,7 @@ class Conversation:
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and command[0] in ("status", "help", "find", "show", "report"): expired = []  # H17: read-only
+        if command and command[0] in ("status", "help", "find", "show", "report", "post"): expired = []  # H17: read-only
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -873,6 +879,7 @@ class Conversation:
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
         if verb == "show": return self._reply(*self._show(code, now)) or "show"
         if verb == "report": return self._report(now)
+        if verb == "post": return self._post(code)
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
@@ -904,6 +911,28 @@ class Conversation:
             text = "Shelf report unavailable right now; nothing changed."
         self._reply(text)
         return "report"
+
+    def _post(self, pid) -> str:
+        """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
+        writer worktree content. Read-only: nothing is posted, scheduled, written or drafted; works while paused."""
+        photo = None
+        try:
+            if not pid: raise LookupError
+            wt = editor_mod._load(str(self.sdir))[2]
+            out = social_draft.build(load_content(wt / "hass" / "content"), pid, wt / "storefront-mockup")
+            if out["draft"] and stat.S_ISREG(os.lstat(photo := wt / "storefront-mockup" / out["image"]).st_mode):
+                text = f"Draft post (not posted):\n{out['caption']}\nPhoto description: {out['alt']}"
+            else:  # a refusal, or a photo that is itself a link: never attached
+                reason = out.get("reason", "no photo on the site")
+                text = POST_REFUSALS[reason].format(id=pid) if reason in POST_REFUSALS else f"Cannot draft a post for {pid}: {reason}."
+                photo = None
+                if reason == "cannot read content": raise OSError
+        except LookupError:
+            text = POST_USAGE
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            text, photo = "Catalog unavailable right now; nothing changed.", None
+        self._reply(text, [str(photo)] if photo else [])
+        return "post"
 
     def _find(self, query) -> str:
         """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
