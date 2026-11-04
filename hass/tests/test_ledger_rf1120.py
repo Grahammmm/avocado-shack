@@ -13,9 +13,11 @@ UNITS = ("RF1035-7", "RF1058-11", "RF1105-28", "RF1105-29", "RF1105-30", "RF1120
          "RF1105-11", "RF1105-13", "RF1130-5", "RF1130-6", "RF1130-7", "RF1140-7")  # RF1200-8 roll-up
 UNITS += tuple(f"AV1537-{n:02d}" for n in range(1, 16))  # AV1537-16 roll-up
 UNITS += tuple(f"AV1737-{n:02d}" for n in range(1, 16))  # AV1737-16 roll-up
+UNITS += tuple(f"RF1650-{n}" for n in (1, 2, 3, 4, 5, 8))  # RF1650-9 roll-up
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
+WORDS |= {"RF1650-1": ("are not editable",), "RF1650-3": ("a redo is not offered",)}  # RF1650-9 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -84,6 +86,10 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "AV1737-14: limit wording?": LEDGER.replace("store name, never a path", "store path"),
                   "AV1737-15: limit wording?": LEDGER.replace("stays attended", "is automatic"),
                   "AV1737-07: private data": LEDGER.replace("(AV1737-07)", "(AV1737-07)\nmail owner@example.com")}
+        cases |= {"RF1650-1: 2 headings": LEDGER + "\n" + sections(LEDGER, "RF1650-1")[0], "RF1650-4: 0 headings": LEDGER.replace("(RF1650-4)", "(RF1650-40)"),
+                  "RF1650-8: no merge sha": LEDGER.replace(SHA.findall(sections(LEDGER, "RF1650-8")[0])[0], "dea25e3"),
+                  "RF1650-5: missing test_media_timez.py": LEDGER.replace("hass.tests.test_media_time ", "hass.tests.test_media_timez "),
+                  "RF1650-1: limit wording?": LEDGER.replace("are not editable", "are editable"), "RF1650-3: limit wording?": LEDGER.replace("a redo is not offered", "a redo is offered")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242", "+15550100777")}
         cases["AV1537-15: private data"] = LEDGER.replace("(AV1537-15)", "(AV1537-15)\ncall +1 555 123 4567")
