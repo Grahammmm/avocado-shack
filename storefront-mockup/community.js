@@ -6,9 +6,12 @@ const upcoming=e=>e.status==='scheduled'&&(new Date(e.startsAt)>new Date()||paci
 const showCancelled=e=>e.status==='cancelled'&&pacificDay(e.startsAt)>=pacificDay(Date.now());
 const hikeDate=e=>new Date(e.startsAt)<=new Date()?`Today — started ${new Date(e.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})}`:dateLabel(e);
 const trailById=id=>(club.routeIdeas||[]).find(t=>t.id===id);
-const metric=(label,value)=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`;
+const metric=(label,value,link='')=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}${link}</dd></div>`;
+// AV0207-01: a set field is a non-empty string after trim; the Directions URL is encodeURIComponent'd, then esc()'d.
+const set=v=>typeof v==='string'&&v.trim()!=='';
+const directions=a=>` · <a class="text-link" href="${esc('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(a))}" target="_blank" rel="noopener">Directions</a>`;
 function attendance(e){const n=Number.isInteger(e.confirmedGuests)&&e.confirmedGuests>=0?e.confirmedGuests:0;return `<p class="hike-attendance"><strong data-confirmed-guests>${n}</strong> confirmed ${n===1?'guest':'guests'}</p>`}
-function details(e){return `<dl class="hike-facts">${[['Meet',e.meetingPoint],['Distance',e.distance],['Pace / terrain',e.difficulty],['Time on trail',e.duration]].filter(x=>x[1]).map(([k,v])=>metric(k,v)).join('')}</dl>`}
+function details(e){return `<dl class="hike-facts">${[['Meet',e.meetingPoint],['Meet at',e.meetTime],['Address',e.meetingAddress],['Start',e.walkTime],['Back',e.returnTime],['Distance',e.distance],['Pace / terrain',e.difficulty],['Time on trail',e.duration],['Bring along',e.bring]].filter(x=>set(x[1])).map(([k,v])=>metric(k,v,k==='Address'?directions(v):'')).join('')}</dl>${set(e.accessNote)?`<p class="hike-access">${esc(e.accessNote)}</p>`:''}`}
 function route(e){const t=e.trailId&&trailById(e.trailId);if(!t)return '';let https=false;try{https=new URL(t.sourceUrl).protocol==='https:'}catch{}return `<p class="hike-route">Route: ${esc(t.title)}${https?` · <a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">${esc(t.sourceName||'Trail information')} <span aria-hidden="true">↗</span></a>`:''}</p>`}
 // AV1322-09: an "Add to calendar" .ics (RFC 5545) built in the page for an upcoming scheduled hike only; no server, no fetch.
 // TEXT escaping: \ ; , escaped, newlines as \n, other control characters dropped; lines folded at 75 octets.
