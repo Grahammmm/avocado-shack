@@ -136,10 +136,11 @@ def store_slots(store: dict, today=None) -> dict[str, str]:
     }
 
 
-def _hero_image(home) -> str:  # no store.homeImage: exactly the template's original hero <img>
+def _hero_image(home) -> str:  # default store.jpg carries its 1600x900 size; an owner photo's size is not stored
     default = ("assets/store.jpg", "Produce and pantry shelves inside Avocado Shack in Morro Bay")
     image, alt = (home["image"], home["imageAlt"]) if home else default
-    return f'<img class="hero-image" src="{html.escape(image, quote=True)}" alt="{html.escape(alt, quote=True)}">'
+    size = "" if home else ' width="1600" height="900"'
+    return f'<img class="hero-image" src="{html.escape(image, quote=True)}" alt="{html.escape(alt, quote=True)}"{size}>'
 
 
 def render_template(text: str, slots: dict[str, str]) -> str:
