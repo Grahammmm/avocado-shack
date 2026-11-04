@@ -72,6 +72,33 @@ class SaveAndMarginTests(CostTestCase):
         self.assertEqual(self.chat(f"margin {AVO} at 95%", "margin"), "Not calculated: margin must be 0 to 90.")
         self.assertTrue(self.chat(f"margin {AVO} at 35% shrink 95%", "margin").startswith("Not calculated: shrink"))
 
+    def test_full_length_product_ids_support_cost_update_margin_and_forget(self):
+        path = self.repo.wt / "hass" / "content" / "products.json"
+        doc = json.loads(path.read_text())
+        for size in range(59, 65):
+            with self.subTest(size=size):
+                ident = "p" * size
+                doc["products"][0]["id"] = ident
+                path.write_text(json.dumps(doc))
+                key = f"cost.{ident}"
+                self.chat(f"cost {ident}: 24 for 12", "memory-saved")
+                self.chat(f"cost {ident}: 24 for 12", "memory-unchanged")
+                self.chat(f"cost {ident}: 30 for 12", "memory-updated")
+                assert self.conv.memory is not None
+                self.assertEqual(self.conv.memory.get(key), "30.00 for 12")
+                self.assertEqual(self.chat(f"margin {ident} at 35%", "margin"),
+                                 "Using cost from 2026-11-02: 30.00 for 12.\n" +
+                                 margins.render(margins.compute("30", "12", "0", "35")))
+                self.assertNotIn(key, [n["key"] for n in self.conv._notes()])
+                self.chat(f"remember {key}: 5 for 1", "memory-invalid", HINT)
+                self.chat(f"forget {key}", "memory-forgot", f"Forgot {key}.")
+                self.assertEqual({r["value"] for r in self.rows(key)}, {""})
+                self.assertTrue(self.chat(f"margin {ident} at 35%", "margin").startswith("No cost saved"))
+        assert self.conv.memory is not None
+        for key in ("p" * 65, "cost." + "p" * 65, "cost." + "p" * 59 + "."):
+            with self.subTest(invalid_key=key), self.assertRaisesRegex(ValueError, "invalid key"):
+                self.conv.memory.get(key)
+
     def test_hidden_product_can_have_a_cost(self):
         self.chat("cost photo-product-040: 8 for 4", "memory-saved",
                   "Saved cost for photo-product-040 (Raw milk white cheddar): 8.00 for 4 (private; never on the website). "
