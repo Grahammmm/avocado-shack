@@ -80,6 +80,20 @@ server.listen(0,'127.0.0.1',async()=>{
    const status=page.locator('#hike-updates .form-status');await status.filter({hasText:CLOSED}).waitFor();
    assert.doesNotMatch(await status.innerText(),RAW_ERROR);
   }
+  // AV1422-05: a fixed clock decides whether the sample invitation (startsAt 2026-11-08 09:00 Pacific) shows its date or "Date to be confirmed".
+  const sample=JSON.parse(fs.readFileSync(path.join(root,'hiking-preview.json'),'utf8')),json=body=>({contentType:'application/json',body:JSON.stringify(body)});
+  const hikeAt=async(iso,{startsAt=sample.upcoming.startsAt,events}={})=>{const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));
+   await p.clock.setFixedTime(new Date(iso));await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,upcoming:{...sample.upcoming,startsAt}})));
+   if(events)await p.route('**/community.json',r=>r.fulfill(json({events,routeIdeas:[]})));
+   await p.goto(base+'/hike/');await p.locator('#upcoming-hikes article').first().waitFor();
+   const r={errs,body:await p.locator('body').innerText(),times:await p.locator('.trail-invitation-date time').count(),dateLine:await p.locator('.trail-invitation-date').allInnerTexts(),label:await p.getByText('Sample invitation · plans to be confirmed').count()};await ctx.close();return r};
+  for(const [when,iso] of [['the day before','2026-11-07T20:00:00Z'],['the same Pacific day','2026-11-08T20:00:00Z'],['UTC next day, still the 8th in Pacific','2026-11-09T06:00:00Z']]){
+   const r=await hikeAt(iso);assert.equal(r.times,1,when+': <time> shown');assert.match(r.dateLine[0],/^Sunday, November 8, 2026 · 9:00 am$/,when);assert.equal(r.label,1,when+': sample label');assert.deepEqual(r.errs,[]);}
+  for(const [when,iso,startsAt] of [['next Pacific day','2026-11-09T08:30:00Z'],['garbage startsAt','2026-11-08T20:00:00Z','not a date'],['missing startsAt','2026-11-08T20:00:00Z',null]]){
+   const r=await hikeAt(iso,startsAt===undefined?{}:{startsAt});assert.deepEqual(r.dateLine,['Date to be confirmed'],when);assert.equal(r.times,0,when+': no <time>');
+   assert.equal(r.label,1,when+': sample label stays');assert.doesNotMatch(r.body,/Invalid Date/);assert.deepEqual(r.errs,[],when+': page errors');}
+  const real=await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'real-1',title:'Real hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'}]});
+  assert.match(real.body,/Sunday, December 6, 2026/);assert.doesNotMatch(real.body,/Date to be confirmed/);assert.equal(real.label,0,'a real hike replaces the sample invitation');assert.deepEqual(real.errs,[]);
   for(const missing of MISSING){ // a missing path, at any depth, gets the shop's own 404 page with its stylesheet
    const res=await page.goto(base+missing);await page.waitForLoadState('networkidle');
    assert.equal(res.status(),404,missing+': status');assert.equal(await page.locator('h1').innerText(),'That page isn’t here.',missing+': heading');
