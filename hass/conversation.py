@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
-from hass import claims, interpret_check, label_reader, media, owner_answers as answers  # noqa: E402
+from hass import claims, interpret_check, label_reader, media, morning_report as shelf, owner_answers as answers  # noqa: E402
 from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
@@ -818,7 +818,7 @@ class Conversation:
         wt = editor_mod._load(str(self.sdir))[2]
         try:
             content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
-            stale = sitegen.diff_paths(sitegen.render(content, wt / "hass" / "templates"), wt)
+            stale = sitegen.stale_paths(content, wt)
         except ContentError as exc:
             return None, "; ".join(exc.problems)
         problems = [f"generated file out of date: {p}" for p in stale] + migration_check.run_checks(wt)[0]
@@ -1017,7 +1017,10 @@ class Conversation:
             self._reply(f"Not saved: {problem}.")
             return "memory-invalid"
         old, value, source = self.memory.get(key), f"{found[0][0]}:{ident}", f"owner-stated:{msg.provider_id}"
-        self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
+        try: self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
+        except ValueError as exc:
+            self._reply(f"Not saved: {exc}.")
+            return "memory-invalid"
         kind, rec, status = found[0]
         target = f"{kind} {ident} ({rec['name']}" + ("" if status in ("active", "visible") else f", {status}") + ")"
         self._reply((f"Saved alias {name} → " if old is None else f"Updated alias {name} (was: {old}) → ")
@@ -1085,6 +1088,9 @@ class Conversation:
         lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
         if (cap := self.settings["interpreterDailyCap"]) is not None:
             lines.append(f"Interpreter today: {self._calls(now)[1]} of {cap}")  # H22, only with a cap
+        with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
+            lines.append(shelf.check_line(f, " - more than a week ago, the site says call to confirm"))  # AV1102-05
         lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
                   else f"{r['code']} needs details: {r['summary']}"
                   for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]

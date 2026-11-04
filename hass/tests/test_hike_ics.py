@@ -1,6 +1,8 @@
 """AV1322-09: storefront-mockup/community.js renders an "Add to calendar" .ics link for an upcoming scheduled hike
 only. The real script runs under node (vm sandbox, fixed clock, fixture club payload, no network, no browser);
-skipped when node is absent. Each case reads the rendered #upcoming-hikes HTML and decodes the data: href."""
+skipped when node is absent. Each case reads the rendered #upcoming-hikes HTML and decodes the data: href.
+The stubbed fetch answers like a real Response (ok, headers.get, json), because liveData() inspects Content-Type.
+A stub missing headers makes liveData() throw, so render() shows its fallback and every assertion below is moot."""
 import html, json, re, shutil, subprocess, unittest, urllib.parse
 from pathlib import Path
 
@@ -11,7 +13,7 @@ HARNESS = r"""
 const fs=require('fs'),vm=require('vm'),[site,now,club]=JSON.parse(fs.readFileSync(0,'utf8'));
 const el={'#upcoming-hikes':{innerHTML:''},'#past-hikes':{innerHTML:'',classList:{toggle(){}}},'#history-context':{textContent:''}};
 const ctx=vm.createContext({TextEncoder,location:{origin:'https://club.example'},$:s=>el[s]||null,document:{querySelector:()=>null},
- fetch:async u=>u==='/api/community'?{ok:true,json:async()=>club}:{ok:false}});ctx.window=ctx;
+ fetch:async u=>u==='/api/community'?{ok:true,headers:{get:h=>h.toLowerCase()==='content-type'?'application/json':null},json:async()=>club}:{ok:false,headers:{get:()=>null}}});ctx.window=ctx;
 vm.runInContext(`{const R=Date,N=Date.parse('${now}');Date=class extends R{constructor(...a){super(...(a.length?a:[N]))}static now(){return N}}}`,ctx);
 vm.runInContext(fs.readFileSync(site+'/script.js','utf8').split('\n')[0],ctx);
 vm.runInContext(fs.readFileSync(site+'/community.js','utf8'),ctx);

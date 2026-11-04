@@ -109,6 +109,7 @@ python3 hass/fixture_chat.py --state DIR --fixture hass/tests/fixtures/conversat
 Prints the outbox as JSON lines (sends nothing anywhere); exit 2 for an unsafe state dir or missing settings.
 Every fixture line is checked before anything is handled or queued: a bad line exits 2 with `fixture_chat: fixture line <n>: <field> <rule>`, naming the field, never its value.
 H09 demo v2 (NB-AV-13): `--photos hass/tests/fixtures/media` with `conversation-demo-photo.jsonl` and its `-interpreter.json` runs photo → question → filled → `yes` → `history` → `undo` → `yes`; a row's `photos: [name]` must be regular files directly in that folder (no `..`, no symlink) or the run exits 2 first. Checked by `hass/tests/test_demo_transcript_photo.py`.
+RF1650 owner-visible rules: a memory source `owner-approved:<id>` is accepted only for an applied, not-undone change record, else `unverified source` (RF1650-2); correcting a fact to the value already remembered is refused with `already remembered`, and nothing is written (RF1650-4); `media.store_original` refuses a `received_at` that is not a timezone-aware ISO-8601 time (RF1650-5); the site search ignores accents, case and curly apostrophes (`storefront-mockup/shop.js`, RF1650-8).
 
 ## H06: preview, history and undo
 
@@ -120,6 +121,7 @@ H09 demo v2 (NB-AV-13): `--photos hass/tests/fixtures/media` with `conversation-
 - A change record that cannot be read is listed by `editor.py history` as `state` `unreadable` with `ops: []`; the other records are unchanged.
 - `undo` (newest applied draft) or `undo <code>` proposes `history.revert`, which needs its own `yes`. It sets back only that change's records, and only while each still holds the value the change wrote (else `conflict: <collection> <key> changed after <change_id>`, no draft). An added product/maker/hike is hidden/cancelled, never deleted. The editor then sets `revertedBy` and the original draft becomes `reverted`. No repository reset, no `git revert`, no community-DB restore.
 - An undo that cancels a hike, moves its start or turns RSVPs off carries the forward op's guest warning and is never refused for it (AV1737-10).
+- Undoing an undo is refused (`<id> is an undo; to bring the change back, ask for it again`); there is no redo, and an unreadable or symlinked draft file is refused too (RF1650-3).
 
 Browser tests (`hass/tests/test_preview.py`) skip only when `PLAYWRIGHT_MODULE` is unset. On Agent Orange:
 
@@ -142,7 +144,7 @@ export CHROMIUM_PATH=/home/user/.cache/ms-playwright/chromium_headless_shell-124
 - `name` and `schemaVersion` are not arguments (unknown argument → `invalid`). Text kinds reject markup, `$` and control characters as usual.
 - Undo: the store is one record, so `undo` of an older store change after a later one gives `conflict: store store changed after <change_id>`; undo the newest first.
 
-Limits: H13 is partial; the home-page headline slot is built (`store.set_headline` in `hass/ops/home.py`: two lines of at most 40 characters and 2 letters each, the second emphasised; undo restores the default words); the home-page image slot is built (`store.set_home_image`: one hero `<img>` showing a stored photo's metadata-free web copy, `imageAlt` required as for `product.set_photo`; no image keeps today's picture; undo removes it); other home-page copy slots are not built.
+Limits: H13 is partial; the home-page headline slot is built (`store.set_headline` in `hass/ops/home.py`: two lines of at most 40 characters and 2 letters each, the second emphasised; undo restores the default words); the home-page image slot is built (`store.set_home_image`: one hero `<img>` showing a stored photo's metadata-free web copy, `imageAlt` required as for `product.set_photo`; no image keeps today's picture; undo removes it); one dated home-page notice is built (`store.set_notice` `{"text", "until"}`: at most 160 characters and 3 letters, last day from today to 60 days ahead (Pacific); shown at the top of the home page through that day and not after (a page script hides it after `until`; without JavaScript it stays until the next regeneration); a second notice replaces the first, `store.clear_notice` or undo removes it; no notice keeps today's page byte-identical); other home-page copy slots are not built.
 
 ## H17: status, pause and resume (with H14 guest totals)
 
