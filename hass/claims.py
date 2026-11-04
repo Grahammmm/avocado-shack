@@ -14,6 +14,8 @@ AV2022-04: a changed product brand/displayBrand or maker place must share a word
 AV0022-11: events and routeIdeas text is also scanned for ACCESS_TERMS (dogs, wheelchair, permit, parking); longest term wins.
 AV0022-12: an events number with a unit (mi, km, ft, hours, min; ranges give both ends) a draft adds must be in the owner's
 text or in the text of the route idea the hike's trailId names; "3.20 miles" is "3.2 mi", "3,2" is 3.2; "5k", "10h" are not.
+RF0220-11: a store record's notice.text and homeImage.imageAlt strings are checked like any text field (labels "notice.text",
+"homeImage.imageAlt"); no other dictionary is scanned, and a leaf that is not a string is skipped.
 """
 import re
 import unicodedata
@@ -128,6 +130,24 @@ def _said(phrase, lines: str) -> bool:
     return bool(isinstance(phrase, str) and phrase.strip() and _affirmed(_pattern(phrase), lines))
 
 
+NESTED_TEXT = {"homeImage": ("imageAlt",), "notice": ("text",)}  # RF0220-11: the only dict-valued store slots with free text
+
+
+def _fields(r: dict, before: dict, after: dict):
+    """(label, new, old) per changed-field candidate of a record, top-level fields sorted. A store record's notice and
+    homeImage dicts give only their NESTED_TEXT leaves, labelled "notice.text"; an old container or leaf that is not a
+    dict or string counts as empty, a new one that is not a dict is handled as any top-level value. Other dicts: skipped."""
+    for field in sorted(after):
+        new, old = after[field], before.get(field)
+        if r.get("collection") == "store" and field in NESTED_TEXT and isinstance(new, dict):
+            old = old if isinstance(old, dict) else {}
+            for leaf in NESTED_TEXT[field]:
+                if isinstance(new.get(leaf), str):
+                    yield f"{field}.{leaf}", new[leaf], old.get(leaf)
+        else:
+            yield field, new, old
+
+
 def unstated(draft: dict, owner_text, makers, routes=None) -> list:
     """[(where, term)] for claims the draft adds that the owner's text does not contain; where = collection key field.
     makers: {key: maker} from the content (None when unreadable: every producerKey change is then unstated).
@@ -143,8 +163,7 @@ def unstated(draft: dict, owner_text, makers, routes=None) -> list:
     for r in records:
         before = r.get("before") if isinstance(r.get("before"), dict) else {}
         after = r.get("after") if isinstance(r.get("after"), dict) else {}
-        for field in sorted(after):
-            new, old = after[field], before.get(field)
+        for field, new, old in _fields(r, before, after):
             if _lines(new):  # RF2030-5: a list of text (store hours) is checked as its newline-joined lines
                 new, old = "\n".join(new), "\n".join(old) if _lines(old) else ""
             if not isinstance(new, str) or new == old: continue
