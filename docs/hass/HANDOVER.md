@@ -13,7 +13,7 @@ Run the steps in order. Each step names who does it. None of them is a service, 
    `python3 hass/statebackup.py drill BACKUP --into DIR --worktree WT`
    The drill never restores onto the writer worktree. The command list and its limits are in [`hass/README.md` from line 163](../../hass/README.md#L163).
 3. **Hand over the guides (G or the operator, in person).** Give Michael [PHONE_GUIDE.md](PHONE_GUIDE.md) and [LIMITS.md](LIMITS.md). The support path stays in [SUPPORT.md](SUPPORT.md).
-4. **Owner trial (H18).** The trial plan is not in the repo yet, so follow the acceptance column of [FEATURES.md row H18](FEATURES.md#L41): Michael tries each listed task on his own phone. Link a `TRIAL.md` here once one exists.
+4. **Owner trial (H18).** [TRIAL.md](TRIAL.md) is a proposal that Michael and G still have to agree, and nothing in it has been tried on a phone. Follow the acceptance column of [FEATURES.md row H18](FEATURES.md#L41): Michael tries each agreed task on his own phone.
 5. **Private launch only.** A public site needs separate authorization and configured form and privacy behavior ([FEATURES.md row H25](FEATURES.md#L53)).
 
 ## Open decisions
@@ -27,6 +27,9 @@ Each row stays open until its owner records an answer. Source links go to the ro
 | H21 | Message and media retention periods | Owner / G | [FEATURES.md line 49](FEATURES.md#L49) |
 | H22 | Usage and spending limit; support, recovery and account record kept privately | Owner / G | [FEATURES.md line 50](FEATURES.md#L50), [SUPPORT.md line 7](SUPPORT.md#L7) |
 | H23 | Which action types, if any, Michael opts into | Michael | [FEATURES.md line 51](FEATURES.md#L51) |
+| H25-domain | Which domain and host a public site would use, and whether and when a public site is authorized (the older trial host is separate and is not a chosen destination) | Owner / G (the operator may advise on hosting) | [FEATURES.md line 53](FEATURES.md#L53), [HERMES_HANDOFF.txt line 50](../../HERMES_HANDOFF.txt#L50), [line 129](../../HERMES_HANDOFF.txt#L129) |
+| H25-forms | What the signup forms send to, how delivery and unsubscribe are handled, and the matching privacy text | Owner / G | [storefront-mockup/README.md line 47](../../storefront-mockup/README.md#L47), [line 49](../../storefront-mockup/README.md#L49), [FEATURES.md line 53](FEATURES.md#L53) |
+| H25-logo | Which logo is the final one | Owner / G | [HERMES_HANDOFF.txt line 47](../../HERMES_HANDOFF.txt#L47) |
 
 ## Not in this page
 
