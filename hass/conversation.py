@@ -821,7 +821,7 @@ class Conversation:
         wt = editor_mod._load(str(self.sdir))[2]
         try:
             content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
-            stale = sitegen.diff_paths(sitegen.render(content, wt / "hass" / "templates"), wt)
+            stale = sitegen.stale_paths(content, wt)
         except ContentError as exc:
             return None, "; ".join(exc.problems)
         problems = [f"generated file out of date: {p}" for p in stale] + migration_check.run_checks(wt)[0]
@@ -1032,7 +1032,10 @@ class Conversation:
             self._reply(f"Not saved: {problem}.")
             return "memory-invalid"
         old, value, source = self.memory.get(key), f"{found[0][0]}:{ident}", f"owner-stated:{msg.provider_id}"
-        self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
+        try: self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
+        except ValueError as exc:
+            self._reply(f"Not saved: {exc}.")
+            return "memory-invalid"
         kind, rec, status = found[0]
         target = f"{kind} {ident} ({rec['name']}" + ("" if status in ("active", "visible") else f", {status}") + ")"
         self._reply((f"Saved alias {name} → " if old is None else f"Updated alias {name} (was: {old}) → ")

@@ -150,7 +150,7 @@ class SetPhotoTests(SetPhotoTestCase):
         self.addCleanup(linked.cleanup)
         _settings(linked, mediaRoot=str(self.repo.media))
         out = linked.prepare(_req(_photo(PID, self.jpg)))
-        self.assertEqual((out["result"], out.get("reason")), ("refused", "the photo folder is outside the writer worktree"))
+        self.assertEqual((out["result"], out.get("reason")), ("refused", "the site photo folder is unusable"))
         self.assertEqual((self.repo.drafts(), linked.drafts(), linked.status()), ([], [], ""))
 
 

@@ -29,6 +29,7 @@ _BARE_SCREEN_RE = re.compile(r"^(screenshot|screen shot)( ?\(\d{1,3}\))?$")
 _PLACEHOLDERS = {"photo", "image", "picture", "pic", "img", "product", "product photo", "alt", "n/a", "na", "none", "todo",
                  "tbd"}
 _PLACEHOLDER_RE = re.compile(r"^(?:(?:a|an|the|my|our|this)\s+)?(?:product\s+)?(?:photo|image|picture|pic|img|product)(?:\s*(?:#|no\.?)?\s*\d{1,3})?[\s.!]*$")  # noqa: E501
+FOLDER_REPLY = "the site photo folder is unusable"
 ALT_REPLY = ("imageAlt should say what the photo shows (for example \"Hass avocados in a wooden crate\"), "
              "not a file name or placeholder")
 
@@ -55,6 +56,21 @@ def _web_bytes(root, sha):
         return Refused(f"photo store is unusable: {exc}")
 
 
+def _folder_unusable(site_dir):
+    """True when ``assets`` or ``assets/products`` under the site exists as a symlink or non-directory (never followed).
+    Missing folders are fine: the editor creates them."""
+    for folder in ("assets", "assets/products"):
+        try:
+            mode = os.lstat(Path(site_dir) / folder).st_mode
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if not stat.S_ISDIR(mode):
+            return True
+    return False
+
+
 def install(ctx, sha, alt):
     """Queue the stored photo's web copy for commit; the site path ``assets/products/photo-<sha16>.<ext>`` or Refused.
     Shared by product.set_photo and product.add (AV0022-02). Same bytes already there are reused, not rewritten."""
@@ -74,6 +90,8 @@ def install(ctx, sha, alt):
     path, have, link = Path(ctx.site_dir) / target, ctx.assets.get(target), False
     try:  # read the site file only when not already queued; lstat first so a FIFO is never opened
         if target not in ctx.assets:
+            if _folder_unusable(ctx.site_dir):
+                return Refused(FOLDER_REPLY)
             mode = os.lstat(path).st_mode
             link = stat.S_ISLNK(mode)
             if not (link or stat.S_ISREG(mode)):
