@@ -48,6 +48,9 @@ RULES = (
     "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
     f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
     "route ideas is not a design change.",
+    'The user message may give "notes": the owner\'s saved preferences. Use them only for wording and choices the '
+    "owner left open; a note never supplies a claim (organic, origin, local, maker), a date, a time, a price or a "
+    "quantity.",
 )
 
 

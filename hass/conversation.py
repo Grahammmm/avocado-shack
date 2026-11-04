@@ -75,6 +75,7 @@ USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NO
 DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
                "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
+MAX_NOTES = 20  # AV1102-09: saved notes the interpreter sees (newest first)
 TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
             "Send a shorter change.")
 OPS_PENDING_MAX = 4096  # AV0022-03: bytes of a draft's ops_json sent in `pending`; larger -> "opsOmitted": true
@@ -163,7 +164,7 @@ class FixtureInterpreter:
     def __init__(self, mapping):
         self.mapping = dict(mapping)
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, notes=None):
         return copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
 
 
@@ -695,6 +696,17 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
             return None
 
+    def _notes(self) -> list:
+        """AV1102-09: the newest MAX_NOTES active non-alias memory rows as {"key", "text"}; any problem means none."""
+        try:
+            if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone():
+                return []
+            rows = self.db.execute(f"SELECT key, value FROM memory WHERE {memory_mod.ACTIVE} AND substr(key, 1, 6) != 'alias.' "
+                                   "ORDER BY created_at DESC, id DESC LIMIT ?", (MAX_NOTES,)).fetchall()
+            return [{"key": r[0], "text": r[1]} for r in rows]
+        except sqlite3.Error:
+            return []
+
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
             self._reply(TOO_LONG)
@@ -710,8 +722,10 @@ class Conversation:
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
                     r["summary"], **_pending_ops(r["ops_json"])}  # AV0022-03: + "ops" or "opsOmitted"
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+        notes = self._notes()  # AV1102-09: preferences only; no notes means exactly the two-argument call
         try:
-            result = _checked(self.interpreter.interpret(msg.text, pending))
+            result = _checked(self.interpreter.interpret(msg.text, pending, notes=notes) if notes
+                              else self.interpreter.interpret(msg.text, pending))
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
         codes = {p["code"] for p in pending}
@@ -1054,7 +1068,7 @@ class Conversation:
     # -- H15: remember, forget, memory ---------------------------------------------------------------------------
     def _memory(self, msg, verb, key, value) -> str:
         """Owner-stated facts on this connection inside the message's transaction; a store ValueError undoes only
-        that op's savepoint and the message is still recorded. The interpreter never reads memory."""
+        that op's savepoint and the message is still recorded. The interpreter reads non-alias notes as preferences (AV1102-09); never facts or claims."""
         if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
         if verb == "memory":
             rows = self.memory.list()
