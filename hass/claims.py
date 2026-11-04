@@ -8,6 +8,7 @@ RF2030-4: an owner word with a negator among the 3 words before it in its clause
 said; fail-closed, so "not only organic but local" leaves "organic" unsaid and the owner gets the claim question.
 RF2030-5: a list-of-text field (store hours lines) is checked as its newline-joined lines; other lists are skipped.
 RF0250-3: a maker key or name the owner only negates is not named.
+RF2330-12: fair-trade, animal-welfare and farming-method claims also need the owner's words.
 RF1230-17: negators also count typed without the apostrophe ("isnt", "dont"); "wont"/"cant" may over-ask (fail-closed).
 AV2022-04: a changed product brand/displayBrand or maker place must share a word with the owner's text; a maker url's host.
 AV0022-11: events and routeIdeas text is also scanned for ACCESS_TERMS (dogs, wheelchair, permit, parking); longest term wins.
@@ -40,7 +41,9 @@ def _pattern(phrase: str):
     return re.compile(r"(?<!\w)" + r"[-\s]".join(re.escape(w) for w in words) + r"(?!\w)")
 
 
-_TERM_RES = tuple((term, _pattern(term)) for term in TERMS)
+FARM_TERMS = ("fair trade", "fairtrade", "free-range", "cage-free", "hormone-free", "antibiotic-free", "biodynamic",
+              "regenerative", "chemical-free", "unsprayed")
+_TERM_RES = tuple((term, _pattern(term)) for term in TERMS + FARM_TERMS)
 ACCESS_TERMS = ("dogs allowed", "dogs welcome", "dog friendly", "dog-friendly", "pet friendly", "leashed dogs",
                 "wheelchair accessible", "wheelchair friendly", "ada accessible", "stroller friendly", "no permit",
                 "no permit needed", "permit not required", "free parking", "parking available", "open to the public",
