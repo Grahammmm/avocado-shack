@@ -46,7 +46,7 @@ class H06TestCase(ConversationTestCase):
         super().setUp()
         self.interp.mapping.update({
             "desc2": _ops((DESC, {"id": "photo-product-001", "description": "Buttery."})),
-            "add": _ops(("product.add", NEW_PRODUCT))})
+            "add Avocado Shack quince": _ops(("product.add", NEW_PRODUCT))})
         self.editor = conversation.Editor(self.repo.state, {**fixture_ops.registry(), **load_registry()})
         self.previewer = self.make_previewer()
         self.conv = self.open()
@@ -127,7 +127,7 @@ class UndoTests(H06TestCase):
         self.assertEqual((self.sent(), self.commits()), ([], 1))
 
     def test_undo_of_an_addition_hides_it(self):
-        added = self.apply("add")
+        added = self.apply("add Avocado Shack quince")
         [record] = editor.show(added["change_id"], state=str(self.repo.state))["change"]["records"]
         self.assertEqual(self.say("undo"), "proposed")
         self.replies()
