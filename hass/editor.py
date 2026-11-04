@@ -278,7 +278,7 @@ def recover(*, state=None, now=None) -> dict:
 def _post_checks(wt: Path) -> list[str]:
     try:
         content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
-        stale = sitegen.diff_paths(sitegen.render(content, wt / "hass" / "templates"), wt)
+        stale = sitegen.stale_paths(content, wt)
     except ContentError as exc:
         return list(exc.problems)
     return [f"generated file out of date: {p}" for p in stale] + migration_check.run_checks(wt)[0]

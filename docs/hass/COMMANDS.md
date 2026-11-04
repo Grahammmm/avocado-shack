@@ -52,3 +52,7 @@ Checking the selection (change requests, not commands; each still needs `yes <co
 - Until the first check the site shows no check line and no availability words. If
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
+
+Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`, for example "put the old photo back",
+shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when
+no photo of yours is set; `undo` puts your photo back.

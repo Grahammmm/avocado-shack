@@ -33,7 +33,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import REPO_ROOT, ContentError, load_and_validate  # noqa: E402
-from hass.sitegen import SITE_PREFIX, diff_paths, render  # noqa: E402
+from hass.sitegen import SITE_PREFIX, render, stale_paths  # noqa: E402
 
 
 _OBJ = (lambda v: isinstance(v, dict), "is missing or not an object")
@@ -166,7 +166,7 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
             failures.append(f"sample invitation promoted to a real event: {sorted(sample_ids & event_ids)}")
 
     # Generated files vs repo and vs the pre-migration files.
-    out_of_date = diff_paths(files, repo)
+    out_of_date = stale_paths(content, repo)
     if out_of_date:
         failures.append(f"committed site files differ from generated output: {out_of_date}")
     pre = baseline["siteFileSha256"]

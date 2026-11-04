@@ -106,6 +106,19 @@ class HeadlineOpTests(StoreTestCase):
         swapped = repo.prepare(_req((SET, {"first": NEW["second"], "second": NEW["first"]})))
         self.assertEqual(swapped["result"], "ok", swapped)
 
+    def test_two_lines_that_say_the_same_thing_are_refused(self):
+        repo = self.repo()
+        before, head = repo.store(), repo.head()
+        same = "headline lines 1 and 2 say the same thing"
+        cases = ((("Fresh food", "Fresh food"), same), (("Fresh food", "fresh  FOOD"), same),
+                 (("Farm\u2013to\u2013table", "farm-to-table"), same), (("a" * 41, "a" * 41), "headline line 1 is longer than 40 characters"),
+                 (("Fresh food", "Fresh foods"), None), (("Fresh food.", "Fresh food"), None))
+        for (first, second), reason in cases:
+            with self.subTest(first=first, second=second):
+                result = repo.prepare(_req((SET, {"first": first, "second": second})))
+                self.assertEqual((result["result"], result.get("reason")), ("refused", reason) if reason else ("ok", None), result)
+        self.assertEqual((repo.store(), repo.head(), repo.status()), (before, head, ""))
+
 
 class ValidatorTests(unittest.TestCase):
     def test_headline_shape_and_limits(self):

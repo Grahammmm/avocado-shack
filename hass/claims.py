@@ -9,6 +9,8 @@ said; fail-closed, so "not only organic but local" leaves "organic" unsaid and t
 RF2030-5: a list-of-text field (store hours lines) is checked as its newline-joined lines; other lists are skipped.
 RF0250-3: a maker key or name the owner only negates is not named.
 RF1230-17: negators also count typed without the apostrophe ("isnt", "dont"); "wont"/"cant" may over-ask (fail-closed).
+AV2022-04: a changed product brand/displayBrand or maker place must share a word with the owner's text; a maker url's host.
+AV0022-11: events and routeIdeas text is also scanned for ACCESS_TERMS (dogs, wheelchair, permit, parking); longest term wins.
 """
 import re
 import unicodedata
@@ -35,6 +37,19 @@ def _pattern(phrase: str):
 
 
 _TERM_RES = tuple((term, _pattern(term)) for term in TERMS)
+ACCESS_TERMS = ("dogs allowed", "dogs welcome", "dog friendly", "dog-friendly", "pet friendly", "leashed dogs",
+                "wheelchair accessible", "wheelchair friendly", "ada accessible", "stroller friendly", "no permit",
+                "no permit needed", "permit not required", "free parking", "parking available", "open to the public",
+                "public access", "kid friendly", "family friendly", "safe for kids", "restrooms", "drinking water")
+_ACCESS_RES = tuple((t, _pattern(t)) for i, t in enumerate(ACCESS_TERMS)  # one entry per spelling (hyphen = space)
+                    if _pattern(t) not in [_pattern(u) for u in ACCESS_TERMS[:i]])
+
+
+def _access_counts(text: str) -> dict:
+    """{term: matches} in folded text, a match inside a longer term's match (\"no permit\" in \"no permit needed\") left out."""
+    found = [(m.span(), term) for term, rx in _ACCESS_RES for m in rx.finditer(text)]
+    kept = [(sp, t) for sp, t in found if not any(o != sp and o[0] <= sp[0] and sp[1] <= o[1] for o, _t in found)]
+    return {term: sum(t == term for _s, t in kept) for term, _rx in _ACCESS_RES}
 
 
 NEGATORS = ("not", "no", "never", "nor", "without", "isn't", "aren't", "wasn't", "weren't", "don't", "doesn't", "didn't",
@@ -52,6 +67,33 @@ def _affirmed(rx, owner: str) -> bool:
             if not set(words[-3:]) & set(NEGATORS):
                 return True
     return False
+
+
+SOURCE_FIELDS = {"products": ("brand", "displayBrand"), "makers": ("place", "url")}
+STOP = {"the", "and", "of", "a", "an", "co", "inc", "llc", "company"}
+PLACEHOLDER = "Producer not identified"
+
+
+def _words(value) -> set:
+    """Folded words of value, stop words and single characters dropped."""
+    return {w for w in re.findall(r"\w+", fold(value)) if w not in STOP and len(w) > 1}
+
+
+def _host(url) -> str:
+    """Folded host of url (scheme and user part skipped, port dropped), leading "www." removed; "" when there is none."""
+    m = re.match(r"(?:[a-z][a-z0-9+.-]*://)?(?:[^@/?#\s]*@)?([^/:?#\s]*)", fold(url))
+    host = m.group(1).strip(".") if m else ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def _source_hit(field: str, new: str, owner: str) -> bool:
+    """True when a source field's new value is not backed by the owner's (folded) text."""
+    if new == PLACEHOLDER: return False
+    if field == "url":
+        host = _host(new)
+        return not host or not re.search(r"(?<![\w.-])(?:www\.)?" + re.escape(host) + r"(?![\w-]|\.\w)", owner)
+    words = _words(new)
+    return bool(words) and not words & set(re.findall(r"\w+", owner))
 
 
 def _lines(value) -> bool:
@@ -87,9 +129,15 @@ def unstated(draft: dict, owner_text, makers) -> list:
                 name = maker.get("name") if isinstance(maker, dict) else None
                 if makers is None or not (_said(new, lines) or _said(name, lines)): hits.append((where, "maker"))
                 continue
+            if field in SOURCE_FIELDS.get(r.get("collection"), ()) and new.strip() and _source_hit(field, new, lines):
+                hits.append((where, "link" if field == "url" else field))  # AV2022-04; the term scan still runs
             text, was = fold(new), fold(old if isinstance(old, str) else "")
             hits += [(where, term) for term, rx in _TERM_RES
                      if len(rx.findall(text)) > len(rx.findall(was)) and not _affirmed(rx, lines)]
+            if r.get("collection") in ("events", "routeIdeas"):  # AV0022-11
+                now_n, was_n = _access_counts(text), _access_counts(was)
+                hits += [(where, term) for term, rx in _ACCESS_RES
+                         if now_n[term] > was_n[term] and not _affirmed(rx, lines)]
     return hits
 
 
