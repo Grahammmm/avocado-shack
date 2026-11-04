@@ -29,6 +29,7 @@ _BARE_SCREEN_RE = re.compile(r"^(screenshot|screen shot)( ?\(\d{1,3}\))?$")
 _PLACEHOLDERS = {"photo", "image", "picture", "pic", "img", "product", "product photo", "alt", "n/a", "na", "none", "todo",
                  "tbd"}
 _PLACEHOLDER_RE = re.compile(r"^(?:(?:a|an|the|my|our|this)\s+)?(?:product\s+)?(?:photo|image|picture|pic|img|product)(?:\s*(?:#|no\.?)?\s*\d{1,3})?[\s.!]*$")  # noqa: E501
+FOLDER_REPLY = "the site photo folder is unusable"
 ALT_REPLY = ("imageAlt should say what the photo shows (for example \"Hass avocados in a wooden crate\"), "
              "not a file name or placeholder")
 
@@ -70,6 +71,15 @@ def install(ctx, sha, alt):
     if isinstance(found, Refused):
         return found
     data, ext = found
+    for folder in ("assets", "assets/products"):  # a symlinked or non-directory folder is never followed
+        try:
+            mode = os.lstat(Path(ctx.site_dir) / folder).st_mode
+        except FileNotFoundError:
+            break  # missing folders are created by the editor
+        except OSError:
+            return Refused(FOLDER_REPLY)
+        if not stat.S_ISDIR(mode):
+            return Refused(FOLDER_REPLY)
     target = f"assets/products/photo-{sha[:16]}.{ext}"
     path, have, link = Path(ctx.site_dir) / target, ctx.assets.get(target), False
     try:  # read the site file only when not already queued; lstat first so a FIFO is never opened
