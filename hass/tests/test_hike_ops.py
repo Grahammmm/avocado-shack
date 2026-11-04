@@ -208,7 +208,7 @@ class SamplesStayAsSamplesTests(HikeTestCase):
             self.assertNotIn(field, event)
         self.assertRejected(repo, "invalid", ("hike.create", {**HIKE, "id": "idea-point-buchon"}))
         self.assertRejected(repo, "invalid", ("hike.create", {**HIKE, "id": "preview-point-buchon"}))
-        self.assertRejected(repo, "invalid", ("hike.create", {**HIKE, "title": "Other hike", "trailId": "preview-point-buchon"}))
+        self.assertRejected(repo, "refused", ("hike.create", {**HIKE, "title": "Other hike", "trailId": "preview-point-buchon"}))
 
 
 if __name__ == "__main__":

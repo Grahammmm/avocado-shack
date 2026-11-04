@@ -3,6 +3,7 @@
 Every event field comes from an argument: nothing is copied from a route idea or the labelled sample file, the
 start is computed from a local date and time in America/Los_Angeles, and capacity never drops below the confirmed
 guests counted (read-only) from an isolated RSVP database. No op notifies anyone or touches ``club.emailConnected``.
+A ``trailId`` that is not a route idea is refused: "unknown route idea <id>" or "<id> is a hike, not a route idea".
 """
 
 from __future__ import annotations
@@ -168,14 +169,27 @@ def _off_capacity(event_id, capacity):  # a capacity stored on an event that tak
     return f"{event_id}: RSVPs are off, so capacity {capacity} has no effect until RSVPs are turned on"
 
 
+def _trail_problem(content, trail_id):
+    """Refused when trailId is a hidden idea (AV1322-03), a hike or no route idea at all (RF1530-3), else None."""
+    if trail_id is None:
+        return None
+    if trail_id in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
+        return Refused(f"route idea {trail_id} is hidden; restore it first")
+    if any(e["id"] == trail_id for e in _events(content)):
+        return Refused(f"{trail_id} is a hike, not a route idea")
+    if all(i["id"] != trail_id for i in content.community["routeIdeas"]):
+        return Refused(f"unknown route idea {trail_id}")
+    return None
+
+
 def _hike_create(content, args, ctx):
     if args["rsvpEnabled"] and ("capacity" in args) == bool(args.get("noCapacityLimit")):
         return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
-    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
-        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
+    if (problem := _trail_problem(content, args.get("trailId"))) is not None:
+        return problem
     twin = _hike_twin(content, args["date"], args["title"])
     if twin is not None:
         return Refused(f"{twin['id']} is already scheduled with this title on {args['date']}; update it instead")
@@ -220,8 +234,8 @@ def _hike_update(content, args, ctx):
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
-    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
-        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
+    if (problem := _trail_problem(content, args.get("trailId"))) is not None:
+        return problem
     clear = list(dict.fromkeys(args.get("clear", ())))  # duplicates collapse
     for test, why in _CLEAR_CHECKS:
         bad = next((n for n in clear if test(n, args)), None)
