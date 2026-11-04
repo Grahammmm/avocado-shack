@@ -1565,3 +1565,27 @@ Branch rb/rf1650-8 from origin/main 422a4a9 (RF1650-8, PR #107: head 53f0b3d929f
 Checks at PR head 53f0b3d929f (recorded in PR #107): `storefront-mockup/catalog-only-qa.cjs` run with a loopback `community-server.py` exited 0 (the old `shop.js` failed its first new assertion), and the hass unittests ran 765 tests, OK (skipped=5). PREPUSH-TESTS PASS.
 
 Limits: no fuzzy or typo search, no maker-name search, no Hass lookup, the Organic badge rule and layout are unchanged.
+
+## H04 hike.create same-day twin refusal: RF1740-5 is superseded by AV1737-09 (RF1740-5) — November 4, 2026
+
+Nothing was built under RF1740-5 and no PR exists. Its behaviour, `hike.create` refusing a second scheduled hike with the same title on the same Pacific day, already shipped as AV1737-09 (commit b8e2769, merged as 27aa3ef5c1305a752517a276722f2049afd0bdd2; see the AV1737-09 section above). The frozen RF1740-5 design contradicts the merged `hass/tests/test_hike_twin.py`, so building it would have regressed main. The operator closed the RF1740-5 card as superseded on 2026-11-03, and the RF1740-8 acceptance that a `hass/tests/test_hike_create_repeat.py` exists is dropped: that test belongs to the superseded unit and is not created.
+
+Checks: none of its own; the AV1737-09 command stands, `python3 -m unittest hass.tests.test_hike_twin -v`.
+
+Limits: no code, test or behaviour change comes from RF1740-5.
+
+## H04 a bad RSVP party size makes that event's guest count unavailable (RF1740-6) — November 3, 2026
+
+Branch rb/rf1740-6 from origin/main e3602ca (RF1740-6, PR #321: commits af4605a, 75dc1b4, merged as 9a824cda9865182af5f6df74fc9133bada78e083). For Michael: a stored RSVP row whose `party_size` is missing, not a whole number, or under 1 makes that event's guest count unavailable instead of a smaller number. Lowering capacity for that event is refused with `guest count unavailable`, and a cancel carries the `guest count unavailable; check RSVPs before approving` draft warning (the cancel still applies). A bad row on another event does not stop this event being counted. `hass/ops/hikes.py` (`GUEST_QUERY`, new `guest_counts_checked`; `guest_counts` keeps its signature and now raises `ValueError` when any event has a bad row, so every caller says unavailable or unreadable); the query still never selects a name or an email. Added `hass/tests/test_hike_guest_rows.py`.
+
+Checks at PR head 75dc1b4 (recorded in PR #321): `python3 -m unittest hass.tests.test_hike_guest_rows hass.tests.test_hike_guest_warning hass.tests.test_hike_move_warning hass.tests.test_hike_ops -v` ran 32 tests, OK. PREPUSH-TESTS PASS.
+
+Limits: the owner text is unchanged and no existing test was edited; `health` now reports its guest-counts check unreadable for a database holding a bad row (fails closed); no RSVP data is repaired or rewritten.
+
+## H10 product.set_photo refuses a symlinked or non-directory photo folder (RF1740-7) — November 4, 2026
+
+Branch rb/rf1740-7 (RF1740-7, PR #341: head a32fbd3, merged as 96447aa9afd34375e2b7365db527018f6a70cefa). For Michael: `product.set_photo`, and `product.add` with a photo (both go through `photos.install`), refuse with the fixed reply `the site photo folder is unusable` when `assets` or `assets/products` under the site directory is a symlink or not a directory, including a dangling link. The check is an `lstat` of each folder before the site file is read or any asset is queued; nothing is queued and the product is unchanged. `hass/ops/photos.py`; two existing expectations changed (`test_set_photo.py` now expects the new reply, `test_set_photo_site_read.py` expects the two folder lstats first). Added `hass/tests/test_set_photo_folder.py`.
+
+Checks at PR head a32fbd3 (recorded in PR #341): `python3 -m unittest hass.tests.test_set_photo_folder hass.tests.test_set_photo hass.tests.test_undo -v` ran 24 tests, OK.
+
+Limits: missing folders are unchanged (the editor creates them); the media store checks and `editor.py` are unchanged; the reply names no path or sha.

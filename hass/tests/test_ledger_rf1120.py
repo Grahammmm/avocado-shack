@@ -14,10 +14,12 @@ UNITS = ("RF1035-7", "RF1058-11", "RF1105-28", "RF1105-29", "RF1105-30", "RF1120
 UNITS += tuple(f"AV1537-{n:02d}" for n in range(1, 16))  # AV1537-16 roll-up
 UNITS += tuple(f"AV1737-{n:02d}" for n in range(1, 16))  # AV1737-16 roll-up
 UNITS += tuple(f"RF1650-{n}" for n in (1, 2, 3, 4, 5, 8))  # RF1650-9 roll-up
+UNITS += ("RF1740-6", "RF1740-7")  # RF1740-8 roll-up (RF1740-5 is superseded: no merge, see test_superseded_unit_has_no_merge)
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
 WORDS |= {"RF1650-1": ("are not editable",), "RF1650-3": ("a redo is not offered",)}  # RF1650-9 edge path 5
+WORDS |= {"RF1740-6": ("fails closed",), "RF1740-7": ("names no path or sha",)}  # RF1740-8 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -90,8 +92,23 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "RF1650-8: no merge sha": LEDGER.replace(SHA.findall(sections(LEDGER, "RF1650-8")[0])[0], "dea25e3"),
                   "RF1650-5: missing test_media_timez.py": LEDGER.replace("hass.tests.test_media_time ", "hass.tests.test_media_timez "),
                   "RF1650-1: limit wording?": LEDGER.replace("are not editable", "are editable"), "RF1650-3: limit wording?": LEDGER.replace("a redo is not offered", "a redo is offered")}
+        cases |= {"RF1740-6: 2 headings": LEDGER + "\n" + sections(LEDGER, "RF1740-6")[0], "RF1740-7: 0 headings": LEDGER.replace("(RF1740-7)", "(RF1740-70)"),
+                  "RF1740-6: no merge sha": LEDGER.replace(SHA.findall(sections(LEDGER, "RF1740-6")[0])[0], "9a824cd"),
+                  "RF1740-7: missing test_set_photo_folderz.py": LEDGER.replace("hass.tests.test_set_photo_folder ", "hass.tests.test_set_photo_folderz "),
+                  "RF1740-6: limit wording?": LEDGER.replace("fails closed", "fails open"), "RF1740-7: limit wording?": LEDGER.replace("names no path or sha", "names the path"),
+                  "RF1740-7: private data": LEDGER.replace("(RF1740-7)", "(RF1740-7)\nmail owner@example.com")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242", "+15550100777")}
         cases["AV1537-15: private data"] = LEDGER.replace("(AV1537-15)", "(AV1537-15)\ncall +1 555 123 4567")
         for want, text in cases.items():
             self.assertIn(want.split("|")[0], problems(text), want)
+
+    def test_superseded_unit_has_no_merge(self):
+        found = sections(LEDGER, "RF1740-5")
+        self.assertEqual(len(found), 1)
+        self.assertIn("SUPERSEDED".lower(), found[0].lower())
+        self.assertIn("AV1737-09", found[0])
+        self.assertIn("b8e2769", found[0])
+        self.assertIn("no PR exists", found[0])
+        self.assertFalse(SHA.search(found[0].replace("27aa3ef5c1305a752517a276722f2049afd0bdd2", "")), "RF1740-5 has no merge of its own")
+        self.assertFalse((REPO_ROOT / "hass" / "tests" / "test_hike_create_repeat.py").exists())
