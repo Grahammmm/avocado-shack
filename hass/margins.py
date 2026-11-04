@@ -6,7 +6,7 @@ import argparse
 import json
 import re
 import sys
-from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, InvalidOperation, localcontext
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Context, DivisionByZero, InvalidOperation, Overflow, localcontext
 from decimal import Decimal as D
 
 CENT, NOTE = D("0.01"), "Suggestion only. Prices are not on the site; any price change needs your approval."
@@ -45,7 +45,17 @@ def _show(d):  # plain text, never exponent form: cents when exact to the cent, 
     return format(d.quantize(CENT), "f") if d == d.quantize(CENT) else format(six, "f") + ("" if six == d else "...")
 
 
+def _outer():  # fixed context for validation, formatting and comparisons: never the caller's precision, traps or rounding
+    return Context(prec=28, rounding=ROUND_HALF_EVEN, Emin=-999999, Emax=999999, capitals=1, clamp=0, flags=[],
+                   traps=[InvalidOperation, DivisionByZero, Overflow])
+
+
 def compute(pack_cost, units, shrink, margin, round_to=None):
+    with localcontext(_outer()):  # a copy: the caller's context, settings and flags stay untouched, even on error
+        return _compute(pack_cost, units, shrink, margin, round_to)
+
+
+def _compute(pack_cost, units, shrink, margin, round_to):
     pack = _num("pack cost", pack_cost, "0.01", "100000.00", places=2)
     n, s, m = _num("units", units, 1, 10000, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("margin", margin, 0, 90, decimals=2)
     end = None if round_to is None else _num("round-to", round_to, 0, 1)
@@ -70,6 +80,11 @@ def compute(pack_cost, units, shrink, margin, round_to=None):
 
 
 def check(pack_cost, units, shrink, price):  # reverse question: the margin a current shelf price actually gives
+    with localcontext(_outer()):
+        return _check(pack_cost, units, shrink, price)
+
+
+def _check(pack_cost, units, shrink, price):
     pack = _num("pack cost", pack_cost, "0.01", "100000.00", places=2)
     n, s, p = _num("units", units, 1, 10000, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("price", price, "0.01", "100000.00", places=2)
     with localcontext() as ctx:  # same intermediates and floor as compute's margin_actual
