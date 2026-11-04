@@ -6,6 +6,7 @@ WriterRepo harness (temp Git repo + linked writer worktree) whose assets/product
 
 import json
 import os
+import shutil
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -34,7 +35,9 @@ class PhotoRepo(CatalogRepo):
         assets.unlink()
         (assets / "products").mkdir(parents=True)
         for entry in [*(SITE_DIR / "assets").iterdir(), *(SITE_DIR / "assets" / "products").iterdir()]:
-            if entry.name != "products":
+            if entry.parent.name == "products":  # AVB-09: a listing image must be a regular file, not a symlink
+                shutil.copyfile(entry, assets / entry.relative_to(SITE_DIR / "assets"))
+            elif entry.name != "products":
                 (assets / entry.relative_to(SITE_DIR / "assets")).symlink_to(entry)
         git(self.wt, "add", "-A")
         git(self.wt, "commit", "-q", "-s", "-m", "real assets/products folder")

@@ -8,6 +8,8 @@ baseline listing, maker, source link or held exclusion has been lost:
 
   * every baseline listing id still exists as an active or hidden product
     ("remove" means hide; records are never deleted);
+  * every active or hidden baseline listing names an image that is a regular
+    file under storefront-mockup/ (a symlink or folder counts as missing);
   * every baseline maker still exists with an https source link;
   * every baseline source URL (maker links, route-idea sources, hold source) is
     still recorded in the content;
@@ -26,13 +28,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import stat
 import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass.content_model import REPO_ROOT, ContentError, load_and_validate  # noqa: E402
+from hass.content_model import IMAGE_RE, REPO_ROOT, ContentError, load_and_validate  # noqa: E402
 from hass.sitegen import SITE_PREFIX, render, stale_paths  # noqa: E402
 
 
@@ -84,6 +88,16 @@ def _sample_ids(preview) -> set | str:
     return {upcoming.get("id")} - {None}
 
 
+def _image_present(repo: Path, image) -> bool:
+    """A listing image is a regular file (not a symlink or folder) under storefront-mockup/."""
+    if not isinstance(image, str) or not IMAGE_RE.fullmatch(image):
+        return False
+    try:
+        return stat.S_ISREG(os.lstat(repo / "storefront-mockup" / image).st_mode)
+    except OSError:
+        return False
+
+
 def run_checks(repo: Path) -> tuple[list[str], dict]:
     """Return (failures, report). No files are written."""
     repo = Path(repo)
@@ -113,6 +127,12 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
     if wrong:
         failures.append(f"baseline listings no longer active/hidden: {wrong[:10]}")
     preserved = len(base_ids) - len(missing) - len(wrong)
+
+    # Listing images (assets): held products are not published, so only active/hidden are checked.
+    checked = [i for i in base_ids if i in by_id and by_id[i]["status"] in ("active", "hidden")]
+    lost_images = [i for i in checked if not _image_present(repo, by_id[i].get("image"))]
+    if lost_images:
+        failures.append(f"{len(lost_images)} baseline listings lost their image: {lost_images[:10]}")
 
     # Makers and sources.
     base_makers = baseline["makers"]["keys"]
@@ -176,6 +196,7 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
         "baseCommit": baseline["baseCommit"],
         "baselineListings": len(base_ids),
         "baselineListingsPreserved": preserved,
+        "baselineImagesPresent": f"{len(checked) - len(lost_images)}/{len(checked)}",
         "activeProducts": status_counts.get("active", 0),
         "hiddenProducts": status_counts.get("hidden", 0),
         "heldProducts": status_counts.get("held", 0),
