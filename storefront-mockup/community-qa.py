@@ -1,7 +1,6 @@
-import concurrent.futures, datetime, json, os, sqlite3, subprocess, sys, tempfile, time, urllib.parse, urllib.request, urllib.error
+import concurrent.futures, datetime, importlib.util, json, os, sqlite3, subprocess, sys, tempfile, threading, urllib.parse, urllib.request, urllib.error
 from pathlib import Path
 root=Path(__file__).resolve().parent
-base='http://127.0.0.1:3102'
 def refuse(m):print('QA refused: '+m,file=sys.stderr);sys.exit(2)
 try:u=urllib.parse.urlsplit(os.environ.get('PREVIEW_URL',''));loop=u.scheme=='http' and u.hostname in('127.0.0.1','localhost') and u.port is not None and u.username is None
 except ValueError:loop=False
@@ -18,8 +17,13 @@ events=[dict(id='qa-hike',title='QA trail fixture',startsAt=future,status='sched
 events.append(dict(id='qa-unlimited',title='QA uncapped event',startsAt=future,status='scheduled',meetingPoint='QA meeting point',rsvpEnabled=True,confirmedGuests=999))
 with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
  config=Path(t)/'community.json';dbpath=Path(t)/'community.sqlite3';config.write_text(json.dumps({'events':events}))
- env={**os.environ,'AVOSHACK_COMMUNITY_CONFIG':str(config),'AVOSHACK_COMMUNITY_DB':str(dbpath)}
- proc=subprocess.Popen(['python3',str(root/'community-server.py'),'--port','3102'],env=env,stdout=subprocess.DEVNULL)
+ # Bind port 0 atomically: concurrent CI jobs must never share a fixture server.
+ spec=importlib.util.spec_from_file_location('community_qa_server',root/'community-server.py')
+ fixture=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixture)
+ fixture.CONFIG=config;fixture.DB=dbpath;fixture.connect().close()
+ server=fixture.ThreadingHTTPServer(('127.0.0.1',0),fixture.Handler)
+ base=f'http://127.0.0.1:{server.server_port}'
+ worker=threading.Thread(target=server.serve_forever,daemon=True);worker.start()
  def request(path,data=None,origin=None):
   headers={'Content-Type':'application/json'}
   if origin:headers['Origin']=origin
@@ -28,9 +32,6 @@ with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
    with urllib.request.urlopen(r,timeout=5) as x:return x.status,json.load(x)
   except urllib.error.HTTPError as x:return x.code,json.load(x)
  try:
-  for i in range(40):
-   try:request('/api/community');break
-   except OSError:time.sleep(.1)
   assert request('/api/community/subscriptions',{'email':'not valid','newsletter':True})[0]==400
   assert request('/api/community/subscriptions',{'email':'qa@example.invalid','newsletter':True},'https://unrelated.example')[0]==403
   assert request('/api/community/subscriptions',{'email':'Qa@Example.invalid','newsletter':True})[0]==200
@@ -79,4 +80,4 @@ with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
   subprocess.run([node,str(root/'community-ui-qa.cjs')],env={**os.environ,'COMMUNITY_TEST_URL':base,'QA_OUT_DIR':out},check=True)
   result={'subscriptionsPersisted':True,'consentMerge':True,'invalidEmailRejected':True,'crossOriginRejected':True,'duplicateRSVPPrevented':True,'capacityEnforced':True,'concurrentCapacitySafe':True,'pastRSVPRejected':True,'noPersonalDataInPublicAPI':True,'noExternalEmailSent':True,'fixtureDataIsolated':True,'guestCountIncludesPartySize':True,'duplicateGuestCountStable':True,'uncappedGuestCount':True,'configuredCountCannotOverrideDatabase':True}
   (Path(out)/'community-api-QA.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
- finally:proc.terminate();proc.wait(timeout=5)
+ finally:server.shutdown();server.server_close();worker.join(timeout=5)

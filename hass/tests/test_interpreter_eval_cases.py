@@ -23,7 +23,7 @@ class LoadCasesRefusalTests(unittest.TestCase):
         return next(n for n, r in enumerate(self.rows, 1) if r["expect"] == {kind: True})
 
     def case_file(self, line, pending=None, expect=None):
-        """The real 40 cases with only ``line`` edited (planted text and summaries)."""
+        """The real cases with only ``line`` edited (planted text and summaries)."""
         rows = [dict(r) for r in self.rows]
         row = rows[line - 1]
         row["text"] = TEXT
@@ -47,13 +47,13 @@ class LoadCasesRefusalTests(unittest.TestCase):
         with self.assertRaises(ev.EvalError): ev.load_cases(path)
 
     def assertLoads(self, path):
-        self.assertEqual(len(ev.load_cases(path)), 40)
+        self.assertEqual(len(ev.load_cases(path)), 55)
         code, out, err = self.run_main(path)
-        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 40))
+        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 55))
 
-    def test_real_fixture_loads_40_cases_unchanged(self):
+    def test_real_fixture_loads_55_cases_unchanged(self):
         self.assertEqual(ev.load_cases(CASES), self.rows)
-        self.assertEqual(len(self.rows), 40)
+        self.assertEqual(len(self.rows), 55)
 
     def test_bad_pending_code_refused(self):
         bad = [{"code": ["a"]}, {"code": 7}, {"code": ""}, {"code": "a b"}, {"code": "x" * 17}, {},
