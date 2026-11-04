@@ -41,6 +41,15 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->, at most **7** <!-- content_model.MAX_HOURS_LINES --> lines of hours.
 - A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->.
 
+## Home page
+
+- Intro: at most **160 characters** <!-- content_model.MAX_INTRO -->.
+- Headline: each line at most **40 characters** <!-- content_model.MAX_HEADLINE_LINE -->.
+- Story: at most **400 characters** <!-- content_model.MAX_STORY -->.
+- Notice: at most **160 characters** <!-- content_model.MAX_NOTICE -->; its last day can be today or up to **60** <!-- content_model.MAX_NOTICE_DAYS --> days ahead.
+- Home photo: JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->.
+- The home photo needs a real description of at least three letters; a file name like IMG_1234 is refused.
+
 ## What Hass never does
 
 - Send messages to guests or customers.
