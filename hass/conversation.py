@@ -931,7 +931,8 @@ class Conversation:
             text = morning_report.render(morning_report.facts(content, shop_today(now)))
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             text = "Shelf report unavailable right now; nothing changed."
-        self._reply(text)
+        waiting = self._waiting_lines(now) + [l for l in self._photo_lines(now) if l.startswith("Photos waiting")]
+        self._reply(f"{text}\n\n" + "\n".join(["Waiting for you:"] + waiting if waiting else ["Waiting for you: nothing"]))
         return "report"
 
     def _post(self, pid) -> str:
@@ -1166,9 +1167,7 @@ class Conversation:
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
             lines.append(shelf.check_line(f, " - more than a week ago, the site says call to confirm"))  # AV1102-05
-        lines += [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
-                  else f"{r['code']} needs details: {r['summary']}"
-                  for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now] or [NOTHING]
+        lines += self._waiting_lines(now) or [NOTHING]
         lines += self._photo_lines(now)  # NB-AV-12: counts only, before Last change
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
@@ -1177,6 +1176,12 @@ class Conversation:
             lines.append(f"Last change: {last['code']} {last['summary']} - "
                          + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
+
+    def _waiting_lines(self, now) -> list:
+        """AV1102-11: one line per unexpired draft waiting for yes or for details; `status` and `report` share it."""
+        return [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
+                else f"{r['code']} needs details: {r['summary']}"
+                for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
 
     def _photo_lines(self, now) -> list:
         """NB-AV-12: waiting photo drafts (every op product.set_photo) and pending inbox messages with tries > 0.
