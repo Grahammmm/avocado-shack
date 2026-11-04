@@ -71,6 +71,11 @@ def _maker_twin(content, name, key=None):
     return next((k for k, m in content.makers.items() if k != key and _same(m.get("name", ""), name)), None)
 
 
+def _key_fold(key) -> str:
+    """Maker key compared ignoring case, spacing and look-alike Unicode forms (NFKC)."""
+    return " ".join(unicodedata.normalize("NFKC", key).split()).casefold()
+
+
 def _shown(value) -> str:
     text = "none" if value is None else str(value)
     return text if len(text) <= 40 else text[:40] + "…"
@@ -208,8 +213,9 @@ def _maker_add(content, args, ctx):
     key = args["key"]
     if len(key) > MAX_KEY:
         return Refused(f"maker key is longer than {MAX_KEY} characters")
-    if key in content.makers:
-        return Refused(f"maker {key} already exists")
+    if (same := next((k for k in content.makers if _key_fold(k) == _key_fold(key)), None)) is not None:
+        hidden = content.makers[same].get("hidden") is True
+        return Refused(f"maker {same} already exists" + ("; restore it instead" if hidden else ""))
     if twin := _maker_twin(content, args["name"]):
         verb = "restore" if content.makers[twin].get("hidden") is True else "edit"
         return Refused(f"maker {twin} already has this name; {verb} it instead")
