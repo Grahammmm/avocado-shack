@@ -15,7 +15,8 @@ from hass.tests.test_conversation import T0, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS, NEW_HOURS
 from hass.tests.test_status_pause import StoreMixin
 
-UNAVAILABLE = "Shelf report unavailable right now; nothing changed."
+NOTHING_WAITING = "\n\nWaiting for you: nothing"  # AV1102-11: the block every report now ends with
+UNAVAILABLE = "Shelf report unavailable right now; nothing changed." + NOTHING_WAITING
 
 
 class ReportParseTests(unittest.TestCase):
@@ -44,7 +45,8 @@ class ReportTests(StoreMixin, ConversationTestCase):
         path.write_text(json.dumps(doc), "utf-8")
 
     def expected(self, day):
-        return morning_report.render(morning_report.facts(load_content(self.repo.wt / "hass" / "content"), day))
+        content = load_content(self.repo.wt / "hass" / "content")
+        return morning_report.render(morning_report.facts(content, day)) + NOTHING_WAITING
 
     def report(self, text="report"):
         self.assertEqual(self.say(text), "report")
