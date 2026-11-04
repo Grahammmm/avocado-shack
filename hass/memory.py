@@ -5,7 +5,7 @@ state backup covers it unchanged). Every row records its source and dates. A fac
 chat history, model output or repetition is never proof. correct() supersedes in one transaction; forget() blanks the
 text of every row of the key and keeps only the audit dates. Store only, plus a read-only history command: no chat
 commands, interpreter or network. An owner-approved:<change id> source must name a change whose record in this state
-dir is applied and not undone (RF1650-2); anything else is the same "unverified source".
+dir is applied and not undone (RF1650-2); anything else is the same "unverified source". correct() with the exact value already active is refused (RF1650-4).
 """
 import argparse, contextlib, errno, json, os, re, sqlite3, stat, sys  # noqa: E401
 from pathlib import Path
@@ -142,7 +142,8 @@ class Memory:
             self._insert(key, value, kind, source, approved_change if change_id is None else change_id)
 
     def correct(self, key, value, source) -> None:
-        """Supersede the active row with a new value (same kind) in one transaction; KeyError if none is active."""
+        """Supersede the active row with a new value (same kind) in one transaction; KeyError if none is active,
+        ValueError("already remembered") if the value is exactly the active one."""
         _check_key(key)
         _check_value(value)
         _check_source(source)
@@ -150,6 +151,7 @@ class Memory:
             old = self._active(key)
             if old is None: raise KeyError(key)
             change_id = self._check_approved(source)  # before any write: a refusal leaves the active row as it was
+            if old["value"] == value: raise ValueError("already remembered")  # exact text: no new row, the date stays
             self.db.execute("UPDATE memory SET superseded_at = ? WHERE id = ?", (self._now(), old["id"]))
             self._insert(key, value, old["kind"], source, change_id)
 
