@@ -18,6 +18,7 @@ from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
 MAX_HIKES, MAX_ROUTES = 60, 60
 PROMPT_MAX_BYTES = 64 * 1024
+DESIGN_UNSUPPORTED = "design changes cannot be made by message yet"  # AV1102-08 (H24): the fixed design-request reply
 _LINE_BREAKS = {"\x85": "\\u0085", "\u2028": "\\u2028", "\u2029": "\\u2029"}  # json.dumps keeps these raw
 
 ROLE = ("You turn one owner text message into typed changes for the Avocado Shack shop site.\n"
@@ -44,6 +45,9 @@ RULES = (
     "in the order shown.",
     "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
     "or product.add with imageAlt when the owner says it is a new product; never both.",
+    "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
+    f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
+    "route ideas is not a design change.",
 )
 
 
