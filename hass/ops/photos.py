@@ -7,7 +7,8 @@ content change. Undo restores the old image; the committed photo file stays, unr
 deletion of old photo files. ``imageAlt`` must say what the photo shows: a file name, camera default name, placeholder
 word, a placeholder word with only an article or number, the photo id, fewer than 3 letters, a screenshot or
 messaging-app default name, or a web link is refused before the media store is read; so is one over 200 characters
-(``MAX_ALT``, the content-model limit).
+(``MAX_ALT``, the content-model limit). A file-system error (``OSError``) making or reading the stored photo's web
+copy gives the one fixed reply ``STORE_UNREADABLE`` and writes nothing.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ _PLACEHOLDERS = {"photo", "image", "picture", "pic", "img", "product", "product 
 _PLACEHOLDER_RE = re.compile(r"^(?:(?:a|an|the|my|our|this)\s+)?(?:product\s+)?(?:photo|image|picture|pic|img|product)(?:\s*(?:#|no\.?)?\s*\d{1,3})?[\s.!]*$")  # noqa: E501
 MAX_ALT = TEXT_LIMITS["product"]["imageAlt"]
 FOLDER_REPLY = "the site photo folder is unusable"
+STORE_UNREADABLE = "the stored photo cannot be read right now; nothing was changed"
 ALT_REPLY = ("imageAlt should say what the photo shows (for example \"Hass avocados in a wooden crate\"), "
              "not a file name or placeholder")
 
@@ -57,6 +59,8 @@ def _web_bytes(root, sha):
         return Refused(exc.reply)
     except editor.UnsafeState as exc:  # fixed messages only: no path in them
         return Refused(f"photo store is unusable: {exc}")
+    except OSError:  # web copy not writable or readable: one fixed reply, no path, errno text or photo id
+        return Refused(STORE_UNREADABLE)
 
 
 def _folder_unusable(site_dir):
