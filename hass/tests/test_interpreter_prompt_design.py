@@ -24,27 +24,29 @@ def _rules(prompt):
 
 
 class PromptRuleTests(unittest.TestCase):
-    def test_rule_is_last_once_and_its_reply_is_json(self):
+    def test_rule_precedes_notes_once_and_its_reply_is_json(self):
         prompt = build(TEST_REGISTRY, tiny_content())
         rules = _rules(prompt)
         design = [line for line in rules if "design change" in line]
         self.assertEqual(len(design), 1)
-        self.assertEqual(rules[-1], design[0])  # after photo/repeat rules, before Operations
-        self.assertIn("product.set_photo", rules[-3])
-        self.assertIn("hike.repeat", rules[-2])
+        self.assertEqual(rules[-2], design[0])  # after photo/repeat rules, before the notes rule
+        self.assertIn("product.set_photo", rules[-4])
+        self.assertIn("hike.repeat", rules[-3])
+        self.assertIn('"notes"', rules[-1])
         self.assertEqual(prompt.count(DESIGN_UNSUPPORTED), 1)
         found = re.search(r"\{\"unsupported\": \"[^\"]*\"\}", design[0])
         self.assertEqual(json.loads(found.group(0)), DESIGN)
         for words in ("layout", "colours", "fonts", "page structure", "new section or page", "words, hours, photos, hikes"):
             self.assertIn(words, design[0])
 
-    def test_rule_is_the_only_change_to_the_snapshot_and_stays_small(self):
+    def test_rule_matches_the_snapshot_and_stays_small(self):
         prompt = build(TEST_REGISTRY, tiny_content())
         self.assertEqual(prompt, FIXTURE.read_text("utf-8"))
-        without = prompt.replace("- " + RULES[-1] + "\n", "", 1)
+        without = prompt.replace("- " + RULES[-2] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
-        self.assertEqual(len(RULES), 11)
-        self.assertLess(len(RULES[-1].encode("utf-8")), 300)
+        self.assertNotIn(DESIGN_UNSUPPORTED, without)
+        self.assertEqual(len(RULES), 12)
+        self.assertLess(len(RULES[-2].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 
     def test_empty_catalog_and_store_still_build(self):
