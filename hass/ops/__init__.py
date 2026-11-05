@@ -18,7 +18,7 @@ KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "
 # clocks are ASCII HH:MM (consumed by time.fromisoformat); \d would also match Unicode digits
 TIME_RE = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
-COLLECTIONS = ("products", "makers", "events", "routeIdeas", "store")
+COLLECTIONS = ("products", "makers", "events", "routeIdeas", "store", "club")
 CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
 
 
