@@ -16,7 +16,7 @@ USAGE = 'Send: margin <pack cost> for <units> at <margin>% (optional: shrink <S>
 class CountingInterpreter(conversation.FixtureInterpreter):
     calls = 0
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         CountingInterpreter.calls += 1
         return super().interpret(text, pending)
 
