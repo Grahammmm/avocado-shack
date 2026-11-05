@@ -1,7 +1,7 @@
 # Product description claims — recorded sources (AV1104-11)
 
 - Report date: 2026-11-05
-- Audited main SHA: `72dbe74448537346c4fcc81768ec034267177ca8` (full)
+- Audited main SHA: `cb5a8f5e2e7879cfcf2ec1910708a82273c0be55` (full)
 - Canonical inputs: `hass/content/products.json` (active records only); recorded-source families: `storefront-mockup/producer-research-log.json`, `hass/content/makers.json` (maker key and place), `storefront-mockup/new-products.json` and `storefront-mockup/completion-new-products.json` (matching stable ids).
 - Selection rule: every sentence of an active product description that asserts a product-specific checkable fact: a maker, farm or town; a family operation; raw, cultured or aged state; manufacture or process; an ingredient or composition; organic status in prose; or alcohol/caffeine absence. Taste, texture, metaphor, cooking and serving suggestions are excluded unless they also assert such a fact (“Eat one raw” is advice; “Raw and unfiltered” is a claim). A sentence that mixes advice with a statement of what the product is, its state or its ingredients is included, and only its factual clauses are assessed (“Dried mushrooms are a pantry shortcut…” states the dried state; “Blueberry preserves for buttered toast…” states the product type and fruit); a bare restatement of the product name inside pure advice, or a quality word such as “fresh”, is not. Every excluded description was re-read against this rule in the fix round for the review RETURN. A place inside a blend name is not treated as production origin.
 - Order rule: the nine shelves in the site’s filter-button order (Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers, from `storefront-mockup/index.html` L23); within a shelf, the canonical active-record order of `products.json`, never alphabetical. A product sits on the shelf of its `category`, so some products sit on a shelf their name does not suggest (for example tortilla chips and cantaloupe are on Vegetables, Gouda is on Dairy).
@@ -13,9 +13,9 @@
 
 - Active products reviewed: 170 (all; “about 49” in the card is a discovery estimate, not a target)
 - Active products with at least one qualifying sentence: 88
-- Qualifying sentences: 89
-- Checkable clauses assessed: 155
-- Unsupported clauses (verdict starts “no source found”): 93
+- Qualifying sentences: 91
+- Checkable clauses assessed: 159
+- Unsupported clauses (verdict starts “no source found”): 97
 - Clauses with recorded support: 32; partial support: 30
 
 | Shelf | Active products | With qualifying sentence | Qualifying sentences |
@@ -25,8 +25,8 @@
 | Dairy & cheese | 20 | 18 | 18 |
 | Eggs | 1 | 0 | 0 |
 | Meat | 3 | 3 | 3 |
-| Pantry | 61 | 47 | 48 |
-| Drinks & coffee | 15 | 15 | 15 |
+| Pantry | 61 | 47 | 49 |
+| Drinks & coffee | 15 | 15 | 16 |
 | Bread | 4 | 4 | 4 |
 | Flowers | 1 | 0 | 0 |
 
@@ -62,17 +62,21 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 
 - Shelf: Dairy & cheese. Locator: `hass/content/products.json` L736 (`id` photo-product-025, field `description`). Maker key: “Straus”.
 - **S1** “Enough cream to give the coffee some body.”
-  - Clause: cream product (half-and-half) made by Straus — **partial support**
+  - Clause: Straus makes cream (maker context, not this product) — **partial support**
     - secondary context only (maker story, not independent): `hass/content/makers.json` L37, maker "Straus": “The creamery carries that commitment into its milk, cream and cultured products.”
-    - Note: Secondary context only; no Straus query exists in the research log, and the story does not name half-and-half.
+    - Note: Secondary context only; no Straus query exists in the research log.
+  - Clause: this product is half-and-half made by Straus (specific product) — **no source found (maker context only)**
+    - Note: The only Straus record is the generic maker story above, which says “cream” and does not name half-and-half or this product.
 
 #### photo-product-026 — Straus heavy whipping cream
 
 - Shelf: Dairy & cheese. Locator: `hass/content/products.json` L747 (`id` photo-product-026, field `description`). Maker key: “Straus”.
 - **S1** “For a sauce that needs richness or a dessert that needs nothing more than a spoonful of cream.”
-  - Clause: cream (heavy whipping) made by Straus — **partial support**
+  - Clause: Straus makes cream (maker context, not this product) — **partial support**
     - secondary context only (maker story, not independent): `hass/content/makers.json` L37, maker "Straus": “The creamery carries that commitment into its milk, cream and cultured products.”
     - Note: Secondary context only; no Straus query exists in the research log.
+  - Clause: this product is heavy whipping cream made by Straus (specific product) — **no source found (maker context only)**
+    - Note: The generic maker story does not name heavy whipping cream or this product.
 
 #### photo-product-027 — Organic whole milk
 
@@ -555,6 +559,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
     - secondary context only (maker story, not independent): `hass/content/makers.json` L55, maker "Joebella / Avocado Shack": “The Shack’s coffee selection puts that nearby craft within reach of your own morning routine.”
     - Note: The description names only Avocado Shack; the maker key reads “Joebella / Avocado Shack”. Nothing recorded states who roasted this product.
+- **S2** “Grind it fresh, make a cup, and sit down before the day gets away from you.”
+  - Clause: sold as whole-bean coffee (state: “grind it fresh”) — **no source found**
+    - Note: The sentence is mostly advice, but “grind it fresh” states or implies whole beans; no record states the grind or bean form of this product.
 
 #### photo-product-105 — Sunshine Peach preserves
 
@@ -590,9 +597,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - Note: Maker-level: the extract names Linn’s fruit preserves but not this flavour or jar.
   - Clause: apricot as the fruit ingredient — **no source found**
     - Note: No record names this fruit for Linn’s.
-  - Clause: apricots from California (origin) — **partial support**
+  - Clause: apricots grown in California (origin of the fruit) — **no source found (maker address only)**
     - maker-location record: `hass/content/makers.json` L30, maker "Linn's", place "Cambria, California"
-    - Note: Maker location is Cambria, California; the origin of the apricots is not recorded.
+    - Note: The only record is the maker’s own Cambria, California address, which says where Linn’s is, not where these apricots were grown. No record states the apricot origin.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L41: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9707.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
 
 #### photo-product-108 — Blood Orange marmalade
@@ -853,6 +860,10 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
   - Clause: decaffeinated — **no source found**
     - checked absence: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”) does not contain “decaf”
     - Note: The word comes from the product name only.
+- **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
+  - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
+    - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
+    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
 
 #### photo-product-086 — Peace Be With You Blend
 
@@ -1062,7 +1073,7 @@ Every active product exactly once, in shelf and site order.
 | Pantry | photo-product-089 | Oaxacan Chocolate granola | included | S1 |
 | Pantry | photo-product-090 | Lemon Blueberry granola | included | S1 |
 | Pantry | photo-product-091 | Turmeric Goji Berry granola | included | S1 |
-| Pantry | photo-product-093 | Avocado Shack (Hands) | included | S1 |
+| Pantry | photo-product-093 | Avocado Shack (Hands) | included | S1, S2 |
 | Pantry | photo-product-105 | Sunshine Peach preserves | included | S1 |
 | Pantry | photo-product-106 | Strawberry preserves | included | S1 |
 | Pantry | photo-product-107 | California Apricot preserves | included | S1 |
@@ -1104,7 +1115,7 @@ Every active product exactly once, in shelf and site order.
 | Drinks & coffee | photo-product-051 | Ginger black tea | included | S1 |
 | Drinks & coffee | photo-product-083 | Albino Coast Redwood Blend | included | S2 |
 | Drinks & coffee | photo-product-084 | Cone Peak Blend | included | S2 |
-| Drinks & coffee | photo-product-085 | Dream Girl Decaf | included | S1 |
+| Drinks & coffee | photo-product-085 | Dream Girl Decaf | included | S1, S2 |
 | Drinks & coffee | photo-product-086 | Peace Be With You Blend | included | S2 |
 | Drinks & coffee | photo-product-087 | Packer’s Blend coffee bags | included | S2 |
 | Drinks & coffee | photo-product-092 | Avocado Shack Blend (Hut) | included | S2 |
@@ -1115,6 +1126,114 @@ Every active product exactly once, in shelf and site order.
 | Bread | photo-product-123 | Rosemary Sourdough with Olive Oil | included | S1 |
 | Bread | photo-product-124 | Cracked Wheat Sourdough | included | S1 |
 | Flowers | photo-product-006 | Mixed flower bouquet | excluded | taste, texture or cooking/serving suggestion only |
+
+## Unselected sentences of included products
+
+Every sentence of an included product that is not assessed above, with the reason, so no qualifying sentence is skipped silently (101 sentences on 88 products). Added in the second fix round after the RETURN found photo-product-085 S2.
+
+| Product id | Name | Sentence | Text | Reason not assessed |
+|---|---|---|---|---|
+| photo-product-018 | Montaña de Oro Sea Salt tortilla chips | S2 | Open the bag when the guacamole is ready. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-018 | Montaña de Oro Sea Salt tortilla chips | S3 | Nobody needs a more complicated plan. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-025 | Straus half-and-half | S2 | Pour a little, taste, and let the cup tell you whether it needs more. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-026 | Straus heavy whipping cream | S2 | An ingredient that earns its keep. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-027 | Organic whole milk | S1 | Pour a cold glass, warm it for coffee, or put it to work in the kitchen. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-029 | Ragged Point cheese | S2 | Put it beside bread and seasonal fruit, taste it on its own, and let the conversation find its way to the farm. | figurative serving advice (“the farm”); names no farm, maker or process |
+| photo-product-030 | Stepladder cultured butter | S2 | Warm bread is an excellent place to start. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-033 | Stepladder Rocky Butte cheese | S2 | Put it beside bread and seasonal fruit, taste it on its own, and let the conversation find its way to the farm. | figurative serving advice (“the farm”); names no farm, maker or process |
+| photo-product-034 | Stepladder Bixby cheese | S2 | Put it beside bread and seasonal fruit, taste it on its own, and let the conversation find its way to the farm. | figurative serving advice (“the farm”); names no farm, maker or process |
+| photo-product-035 | Chèvre | S2 | Spread it on toast, crumble it over tomatoes, or put it beside honey and let everyone help themselves. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-037 | Cal Poly chipotle cheddar | S2 | Cut a slice before making the sandwich. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-037 | Cal Poly chipotle cheddar | S3 | A cheese worth eating deserves to be tasted before it disappears into lunch. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-038 | Cal Poly white cheddar | S2 | Cut a slice before making the sandwich. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-038 | Cal Poly white cheddar | S3 | A cheese worth eating deserves to be tasted before it disappears into lunch. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-039 | Cal Poly Highland cheddar | S2 | Cut a slice before making the sandwich. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-039 | Cal Poly Highland cheddar | S3 | A cheese worth eating deserves to be tasted before it disappears into lunch. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-125 | Whole Milk Plain European Style yogurt | S2 | Add fruit or honey if you want; keep a little for a dressing or a cool spoonful beside something spicy. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-127 | Sour cream | S2 | Put a spoonful beside tacos, fold into a sauce, or give a baked potato a proper finish. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-128 | Big Sur cheese | S2 | Put it beside bread and seasonal fruit, taste it on its own, and let the conversation find its way to the farm. | figurative serving advice (“the farm”); names no farm, maker or process |
+| photo-product-129 | Marinated Fromage Blanc | S2 | Bring out the bread and make room on the table. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-129 | Marinated Fromage Blanc | S3 | A soft cheese can turn a few vegetables into lunch. | generic remark about soft cheese; the product identity is assessed under the included S1 |
+| photo-product-130 | Gouda | S2 | Slice it for a sandwich or let it meet a piece of fruit and a loaf of good bread. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-131 | Hatch Chile Sierra Jack | S2 | Melt it into a quesadilla, fold it into eggs, or cut a slice and try it before the cooking starts. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-132 | Habanero Sierra Jack | S2 | A little goes a long way in a sandwich or a quesadilla. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-132 | Habanero Sierra Jack | S3 | Taste first, then build dinner. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-015 | Brian's sourdough bread | S2 | A crust worth tearing, a loaf that belongs beside soup. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-015 | Brian's sourdough bread | S3 | Butter is enough; the rest is optional. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-122 | Rye bread | S2 | Cut a proper slice for cheese, smoked fish, or a sandwich that needs more character than a soft white loaf. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-123 | Rosemary Sourdough with Olive Oil | S2 | Warm a slice, pour the soup, and let the bread take care of the last spoonful in the bowl. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-124 | Cracked Wheat Sourdough | S2 | Slice it for breakfast or a substantial sandwich, and keep the heel for something good to soak up. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-002 | Linn's triple berry preserves | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-003 | Linn's blueberry preserves | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-004 | Linn's boysenberry preserves | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-005 | Linn's orange marmalade | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-008 | Cal Poly strawberry jam | S2 | Butter the toast first. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-008 | Cal Poly strawberry jam | S3 | Then add a spoonful and give breakfast a little more attention. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-009 | Cal Poly raspberry jam | S2 | Butter the toast first. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-009 | Cal Poly raspberry jam | S3 | Then add a spoonful and give breakfast a little more attention. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-010 | Cal Poly blackberry jam | S2 | Butter the toast first. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-010 | Cal Poly blackberry jam | S3 | Then add a spoonful and give breakfast a little more attention. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-011 | Sweet Hickory BBQ sauce | S2 | Brush it onto the food near the end of cooking, then let the grill do the last bit of work. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-012 | Cal Poly chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-013 | Original hot sauce | S2 | A few drops on eggs or a taco can change the whole conversation. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-041 | Stepladder avocado blossom honey | S2 | Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-042 | Big Sur Honey Company honey | S3 | Start with a spoonful, then bring out the bread. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-043 | Sunshine Estate olive oil | S2 | Dress a tomato, finish a bowl of beans, or pour a little onto a plate and tear the bread by hand. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-044 | Dried mushrooms | S2 | Soak them, strain the liquid, and use both in rice, soup, or a slow sauce. | preparation advice; the dried state is assessed under the included S1 |
+| photo-product-045 | Sunshine Olive Spanish Oaks Picual olive oil | S2 | Use it where you can actually taste it: over vegetables, a bowl of beans, or good bread. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-046 | Dried lion’s mane mushrooms | S2 | Rehydrate before cooking, and save the strained soaking liquid for the pot. | preparation advice; the dried state is assessed under the included S1 |
+| photo-product-047 | Dried maitake mushrooms | S2 | Rehydrate and give a soup or a pan of rice another layer of mushroom flavor. | preparation advice; the dried state is assessed under the included S1 |
+| photo-product-052 | Maple Valley dark and robust maple syrup | S2 | This is a place for pancakes, yes, but also oatmeal and a warm slice of cornbread. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-053 | Sean's muesli munch | S2 | Keep it close for the hungry stretch between breakfast and lunch, or add a handful to yogurt and call it a meal. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-054 | Massa Organics brown rice | S2 | Cook a pot and build dinner around it: vegetables, mushrooms, a spoonful of sauce. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-054 | Massa Organics brown rice | S3 | The grain deserves attention too. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-088 | Cranberry Orange granola | S2 | A bowl of yogurt and fresh fruit is enough to turn this into breakfast worth sitting down for. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-089 | Oaxacan Chocolate granola | S2 | A bowl of yogurt and fresh fruit is enough to turn this into breakfast worth sitting down for. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-090 | Lemon Blueberry granola | S2 | A bowl of yogurt and fresh fruit is enough to turn this into breakfast worth sitting down for. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-091 | Turmeric Goji Berry granola | S2 | A bowl of yogurt and fresh fruit is enough to turn this into breakfast worth sitting down for. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-105 | Sunshine Peach preserves | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-106 | Strawberry preserves | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-107 | California Apricot preserves | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-108 | Blood Orange marmalade | S2 | Keep a jar where breakfast happens. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-109 | Peppermint Crunch chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-110 | Cookies and Cream chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-111 | Zesty Orange chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-112 | Dark chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-113 | Milk chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-114 | Lemon Bar white chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-115 | Habanero chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-116 | S’mores chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-117 | Lemon Lavender white chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-118 | Birthday Cake chocolate | S2 | Break off a piece after dinner, pour the coffee, and let the conversation keep going. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-119 | Mustang Kick BBQ sauce | S2 | Start with a little, taste, and let the sauce earn its place on the next bite. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-120 | Carrot Habanero hot sauce | S2 | Try a little on roasted vegetables or tacos before deciding how brave you feel. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-121 | Green hot sauce | S2 | Keep it beside the eggs, the tacos, and the last slice of whatever came off the grill. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-134 | Dried morels | S2 | Rehydrate, rinse carefully, and cook thoroughly. | preparation advice; the dried state is assessed under the included S1 |
+| photo-product-134 | Dried morels | S3 | Butter, shallots, and a little patience make good company. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-135 | Dried shiitake | S2 | Soak until tender, save the strained liquid, and bring both into a broth or a pot of rice. | preparation advice; the dried state is assessed under the included S1 |
+| photo-product-136 | Dried king oyster mushrooms | S2 | Rehydrate before cooking; the pantry can still deliver a mushroom dinner. | preparation advice; the dried state is assessed under the included S1 |
+| photo-product-137 | Mushroom Umami Sauce | S2 | Taste a little before adding it to noodles, vegetables, or a pan sauce. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-137 | Mushroom Umami Sauce | S3 | Let the food tell you how much. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-138 | Crimson lentils | S2 | Toast a few spices in oil before the lentils meet the pot. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-021 | Alle-Pia Calabrese salamini | S2 | Slice thin, bring out bread and cheese, and let the table fill up slowly. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-022 | Alle-Pia guanciale | S2 | Render it gently and let the fat become part of the sauce. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-022 | Alle-Pia guanciale | S3 | Pasta is waiting. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-023 | Alle-Pia mortadella | S2 | Thin slices in a good roll, or folded onto a plate beside pickles and bread. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-023 | Alle-Pia mortadella | S3 | Lunch does not need much else. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-007 | Fair Hills Farm apple juice | S2 | Pour it cold with breakfast: the orchard belongs at the table as much as the toast does. | metaphor (“the orchard belongs at the table”); no origin or process stated beyond the included S1 |
+| photo-product-014 | Zero non-alcoholic cider | S2 | Chill it properly, open something salty, and stay for the meal. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-019 | Organic beet juice | S2 | Serve it cold; a squeeze of citrus makes a good companion. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-048 | Fair Hills Farm chamomile tea | S2 | A quiet glass for the end of a long day, when dinner is done and there is nowhere else to be. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-049 | Fair Hills Farm black tea | S2 | Chill it for lunch and give the ordinary afternoon something better to drink. | serving advice (chill); no process or ingredient stated |
+| photo-product-050 | Fair Hills Farm cinnamon black tea | S2 | A glass with a little warmth in its character, even served cold. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-051 | Ginger black tea | S2 | Serve chilled with lunch, particularly when there is something rich on the plate. | taste, texture or cooking/serving advice only; no product-specific fact |
+| photo-product-083 | Albino Coast Redwood Blend | S1 | Albino Coast Redwood Blend. | product name restated; no origin, roast, process or ingredient stated |
+| photo-product-084 | Cone Peak Blend | S1 | Cone Peak Blend. | product name restated; no origin, roast, process or ingredient stated |
+| photo-product-086 | Peace Be With You Blend | S1 | Peace Be With You Blend. | product name restated; no origin, roast, process or ingredient stated |
+| photo-product-087 | Packer’s Blend coffee bags | S1 | Packer’s Blend coffee bags. | product name restated; no origin, roast, process or ingredient stated |
+| photo-product-092 | Avocado Shack Blend (Hut) | S1 | Avocado Shack Blend (Hut). | product name restated; no origin, roast, process or ingredient stated |
+| photo-product-094 | Cass Hill Blend | S1 | Cass Hill Blend. | product name restated; no origin, roast, process or ingredient stated |
+| photo-product-095 | Cambria Blend | S1 | Cambria Blend. | product name restated; no origin, roast, process or ingredient stated |
 
 ## Local review checks (named in the card, run on this report before the PR)
 
@@ -1133,3 +1252,4 @@ The owner decides each of these; nothing here is a proposed rewrite or an approv
 2. Sean’s Muesli Munch (“from San Luis Obispo”): decide whether the San Luis Obispo place in `makers.json` is enough, because the research result for that query belongs to unrelated Munch businesses.
 3. Dream Girl Decaf, Zero non-alcoholic cider, Rye bread and Mortadella: decide what evidence is wanted for decaffeinated, non-alcoholic, rye and mortadella.
 4. Maple Valley syrup (“from a Wisconsin cooperative”) and Joebella / Avocado Shack coffee: decide whether maker-level records are enough for a product-level sentence.
+5. Straus half-and-half and heavy whipping cream, and the “California” apricot origin of Linn’s apricot preserves: the records hold only a generic Straus maker story and Linn’s own Cambria address, so the product-level assertions are marked no source found; decide what evidence is wanted.
