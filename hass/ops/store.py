@@ -29,7 +29,7 @@ import unicodedata
 from datetime import date
 
 from hass.content_model import (
-    AVAILABILITY, DEFAULT_INTRO, PHONE_RE, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, MAX_INTRO, checked_on, shop_today,
+    AVAILABILITY, DEFAULT_INTRO, PHONE_DIGITS, PHONE_RE, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, MAX_INTRO, checked_on, shop_today,
 )
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.catalog import _product
@@ -113,7 +113,7 @@ def _set_phone(content, args, ctx):
     elif len(digits) == 11 and digits.startswith("1"):
         digits = digits[1:]
     if not PHONE_RE.fullmatch(digits):
-        return Refused("the phone number needs 10 digits, like 805 555 0123")
+        return Refused(f"the phone number needs {PHONE_DIGITS} digits, like 805 555 0123")
     if content.store.get("phone") == digits:
         return Refused("the phone number already says that")
     before = copy.deepcopy(content.store)

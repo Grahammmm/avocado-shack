@@ -1,6 +1,6 @@
 """NB-AV-04 tests: the interpreter eval set and offline scorer. No model, no socket: --live uses a fake transport."""
 
-import contextlib, io, json, os, tempfile, unittest  # noqa: E401
+import contextlib, dataclasses, io, json, os, tempfile, unittest  # noqa: E401
 from collections import Counter
 from pathlib import Path
 
@@ -44,7 +44,7 @@ class ScoreTests(EvalTestCase):
         code, out, err = scored(CASES, REPLIES)
         summary = json.loads(out)
         self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
-                         (0, "", {"cases": 63, "passed": 60, "missing": [], "extra": []}))
+                         (0, "", {"cases": 69, "passed": 66, "missing": [], "extra": []}))
         self.assertEqual(summary["failed"], [
             {"id": "e06", "why": "ops product.restore but expected product.hide"},  # wrong op
             {"id": "e13", "why": "op 1 hike.create: missing arg capacity"},  # missing arg
@@ -83,27 +83,27 @@ class ScoreTests(EvalTestCase):
                 if "trailId" in args: self.assertIn(args["trailId"], trails)
                 if op == "route.edit": self.assertIn(args["id"], trails, case["id"])
                 if "photo" in args: self.assertRegex(args["photo"], r"\A[0-9a-f]{64}\Z", case["id"])
-        self.assertEqual(kinds, {"product": 13, "maker": 4, "hike": 8, "store": 12, "route": 8, "revises": 5,
-                                 "question": 8, "unsupported": 5})
+        self.assertEqual(kinds, {"product": 13, "maker": 4, "hike": 11, "store": 14, "route": 8, "revises": 5,
+                                 "question": 9, "unsupported": 5})
 
     def test_missing_and_extra_ids(self):
         replies = {k: v for k, v in self.replies.items() if k != "e05"} | {"e99": {"question": "?"}}
         path = self.write("r.jsonl", [{"id": k, "reply": v} for k, v in replies.items()])
         code, out, _ = scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 59))
+        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 65))
 
     def test_duplicate_id_in_either_file_exits_2(self):
-        dup_cases = self.write("c.jsonl", self.rows[:62] + [self.rows[0]])
+        dup_cases = self.write("c.jsonl", self.rows[:68] + [self.rows[0]])
         dup_replies = self.write("r.jsonl", [{"_note": "x"}, {"id": "e01", "reply": {}}, {"id": "e01", "reply": {}}])
-        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 63: duplicate id"))
+        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 69: duplicate id"))
         self.assertEqual(scored(CASES, dup_replies), (2, "", "replies line 3: duplicate id"))
 
     def test_malformed_line_or_62_cases_exits_2_naming_only_the_line(self):
         broken = self.write("c.jsonl", self.rows[:3] + ['{"id": "e04", "text": "owner words"'] + self.rows[4:])
         self.assertEqual(scored(broken, REPLIES), (2, "", "cases line 4: not valid JSON"))
-        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:62]), REPLIES),
-                         (2, "", "cases: 62 cases, expected 63"))
+        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:68]), REPLIES),
+                         (2, "", "cases: 68 cases, expected 69"))
         self.assertEqual(scored(CASES, self.tmp / "absent.jsonl"), (2, "", "replies: unreadable"))
 
     def test_unknown_op_scores_as_question(self):
@@ -183,10 +183,29 @@ class LiveTests(EvalTestCase):
     def test_live_records_one_reply_per_case_that_score_reads(self):
         calls, out = [], self.tmp / "fresh.jsonl"
         code, stdout, _ = run("--live", "--url", URL, "--model", "m", "--out", out, transport=self.fake(calls))
-        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 63}, 63))
+        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 69}, 69))
         replies = ev.load_replies(out)
         self.assertEqual(list(replies), [c["id"] for c in self.cases])
-        self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 8)  # only the 8 must-ask cases pass
+        self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 9)  # only the 9 must-ask cases pass
+
+    def test_fixture_hikes_survive_the_prompt_caps_when_the_content_is_full(self):
+        real = [{"id": f"hike-{n:02d}", "title": "t", "startsAt": f"2026-0{1 + n % 9}-01T08:00:00-08:00", "status": "scheduled",
+                 "bring": f"real bring {n}", "accessNote": "a", "meetingPoint": "m", "capacity": 5} for n in range(15)]
+        real += [{"id": f"old-{n:02d}", "title": "t", "startsAt": f"2025-01-{1 + n % 28:02d}T08:00:00-08:00", "status": "cancelled"}
+                 for n in range(80)]
+        content = dataclasses.replace(load_content(), community={"events": real, "routeIdeas": []})
+        bodies = []
+
+        def transport(url, body, headers, timeout):
+            bodies.append(body)
+            return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
+        out = self.tmp / "full.jsonl"
+        ev.live(self.cases[:1], URL, "m", out, transport=transport, content=content)
+        prompt = json.loads(bodies[0])["messages"][0]["content"]
+        for hike in json.loads(ev.EVENTS.read_text("utf-8")):
+            self.assertIn(hike["id"], prompt.split("Scheduled hike details (id")[-1])
+            self.assertIn(hike["bring"], prompt)
+            self.assertIn(hike["accessNote"], prompt)
 
 
 if __name__ == "__main__":

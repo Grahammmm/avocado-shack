@@ -61,3 +61,9 @@
 {"id": "e61", "text": "Add a reviews section to the home page.", "pending": [], "expect": {"unsupported": true}}
 {"id": "e62", "text": "Add Fuyu persimmons, category fruit.", "pending": [], "expect": {"ops": [{"op": "product.add", "args": {"name": "Fuyu persimmons", "category": "fruit"}}], "revises": null}, "notes": [{"key": "tone", "text": "short and friendly"}]}
 {"id": "e63", "text": "Add Bacon avocados, category fruit.", "pending": [], "expect": {"ops": [{"op": "product.add", "args": {"name": "Bacon avocados", "category": "fruit"}}], "revises": null}, "notes": [{"key": "farm", "text": "all our avocados are organic"}]}
+{"id": "e64", "text": "Our phone number is 805 555 0123", "pending": [], "expect": {"ops": [{"op": "store.set_phone", "args": {"phone": "805 555 0123"}}], "revises": null}}
+{"id": "e65", "text": "Take the phone number off the site", "pending": [], "expect": {"ops": [{"op": "store.clear_phone", "args": {}}], "revises": null}}
+{"id": "e66", "text": "Our phone is 555 0123", "pending": [], "expect": {"question": true}}
+{"id": "e67", "text": "Also bring sunscreen for the Point Buchon hike", "pending": [], "expect": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "bring": "Water, sturdy shoes, a hat, sunscreen"}}], "revises": null}}
+{"id": "e68", "text": "Add to the access note that the gate opens at 8", "pending": [], "expect": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "accessNote": "Park at the Point Buchon trailhead; the gate is locked overnight. The gate opens at 8."}}], "revises": null}}
+{"id": "e69", "text": "Meet at the north lot instead of the shop", "pending": [], "expect": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "meetingPoint": "The north lot"}}], "revises": null}}

@@ -43,6 +43,11 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->, at most **7** <!-- content_model.MAX_HOURS_LINES --> lines of hours.
 - A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->.
 
+## Phone and prices
+
+- The store phone is a US number of **10 digits** <!-- ops.store.PHONE_DIGITS --> (spaces, dashes and brackets are fine); anything else is refused.
+- A purchase cost (`cost`, `margin`) is private and up to **100000 dollars** <!-- margins.PACK_COST_MAX --> for **1** <!-- margins.UNITS_MIN -->–**10000** <!-- margins.UNITS_MAX --> units.
+
 ## Home page
 
 - Intro: at most **160 characters** <!-- content_model.MAX_INTRO -->.

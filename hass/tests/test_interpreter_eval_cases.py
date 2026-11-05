@@ -2,10 +2,11 @@
 never be scored (bad or repeated pending code, revises naming no pending draft, more than MAX_OPS expected ops); exit 2
 from main, never a traceback. The real fixture and every valid case load as before. No model call; --live never run."""
 
-import contextlib, io, json, tempfile, unittest  # noqa: E401
+import contextlib, io, json, re, tempfile, unittest, unittest.mock  # noqa: E401
 from pathlib import Path
 
 from hass import interpret_check, interpreter_eval as ev
+from hass.content_model import load_content
 from hass.tests import test_interpreter_eval as base  # module import: its test classes are not collected twice
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -48,13 +49,13 @@ class LoadCasesRefusalTests(unittest.TestCase):
         with self.assertRaises(ev.EvalError): ev.load_cases(path)
 
     def assertLoads(self, path):
-        self.assertEqual(len(ev.load_cases(path)), 63)
+        self.assertEqual(len(ev.load_cases(path)), 69)
         code, out, err = self.run_main(path)
-        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 63))
+        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 69))
 
     def test_real_fixture_loads_63_cases_unchanged(self):
         self.assertEqual(ev.load_cases(CASES), self.rows)
-        self.assertEqual(len(self.rows), 63)
+        self.assertEqual(len(self.rows), 69)
 
     def test_bad_pending_code_refused(self):
         bad = [{"code": ["a"]}, {"code": 7}, {"code": ""}, {"code": "a b"}, {"code": "x" * 17}, {},
@@ -123,7 +124,7 @@ class V4NotesTests(base.EvalTestCase):
 
     def test_real_fixture_has_8_new_unique_cases_and_two_with_notes(self):
         ids = [c["id"] for c in self.cases]
-        self.assertEqual((ids[55:], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 63))
+        self.assertEqual((ids[55:63], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 69))
         self.assertTrue(all(ev.ID_RE.fullmatch(i) for i in ids))
         self.assertEqual({c["id"] for c in self.cases if "notes" in c}, {"e62", "e63"})
         self.assertEqual([c["expect"] for c in self.cases[56:61:2]][:1], [{"question": True}])
@@ -144,7 +145,7 @@ class V4NotesTests(base.EvalTestCase):
         for notes in ([], [{"key": "k", "text": "t"}] * 20):
             with self.subTest(n=len(notes)):
                 path, _ = self.notes_file(notes)
-                self.assertEqual(len(ev.load_cases(path)), 63)
+                self.assertEqual(len(ev.load_cases(path)), 69)
 
     def captured_requests(self):
         bodies = []
@@ -154,7 +155,7 @@ class V4NotesTests(base.EvalTestCase):
             return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
         out = self.tmp / "fresh.jsonl"
         code, _, _ = base.run("--live", "--url", base.URL, "--model", "m", "--out", out, transport=transport)
-        self.assertEqual((code, len(bodies)), (0, 63))
+        self.assertEqual((code, len(bodies)), (0, 69))
         return bodies
 
     def test_live_sends_notes_only_for_cases_that_have_them(self):
@@ -181,7 +182,75 @@ class V4NotesTests(base.EvalTestCase):
         path.write_text("\n".join(rows) + "\n", "utf-8")
         code, out, err = base.scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 59))
+        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 65))
+
+
+class V5PhoneAndHikeTextTests(base.EvalTestCase):
+    """AV1222-09: the 6 v5 cases (store phone, partial hike text edits) and the hike overlay that live() lays over the content."""
+
+    def prompts(self, **kw):
+        bodies = []
+
+        def transport(url, body, headers, timeout):
+            bodies.append(json.loads(body)["messages"][0]["content"])
+            return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
+        code, _, err = base.run("--live", "--url", base.URL, "--model", "m", "--out", self.tmp / "o.jsonl", transport=transport)
+        return code, err, bodies
+
+    def test_six_new_cases_follow_the_v4_ones_and_are_valid_for_the_registry(self):
+        new = self.cases[63:]
+        self.assertEqual([c["id"] for c in new], [f"e{n}" for n in range(64, 70)])
+        self.assertEqual([c["expect"].get("ops", [{}])[0].get("op") for c in new],
+                         ["store.set_phone", "store.clear_phone", None, "hike.update", "hike.update", "hike.update"])
+        self.assertEqual(new[2]["expect"], {"question": True})
+        for case in new:  # the existing scorability rule: op names exist and args are valid for the op
+            if "ops" in case["expect"]:
+                result = {"ops": case["expect"]["ops"], "revises": None}
+                self.assertIs(interpret_check.check(result, base.REGISTRY, set()), result, case["id"])
+        self.assertEqual(self.why("e64", self.replies["e64"]), [])
+
+    def test_partial_edit_expectations_are_the_whole_fixture_text_plus_the_change(self):
+        hike = json.loads(ev.EVENTS.read_text("utf-8"))[0]
+        args = {c["id"]: c["expect"]["ops"][0]["args"] for c in self.cases[66:]}
+        self.assertEqual(args["e67"]["bring"], hike["bring"] + ", sunscreen")
+        self.assertTrue(args["e68"]["accessNote"].startswith(hike["accessNote"]))
+        self.assertNotEqual(args["e69"]["meetingPoint"], hike["meetingPoint"])
+        self.assertEqual({a["id"] for a in args.values()}, {hike["id"]})
+
+    def test_a_resend_of_only_the_new_part_or_a_short_number_fails_by_name(self):
+        part = {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "bring": "sunscreen"}}], "revises": None}
+        self.assertEqual(self.why("e67", part), ["op 1 hike.update: arg bring differs"])
+        self.assertEqual(self.why("e66", self.replies["e64"]), ["expected question, got ops"])
+        self.assertEqual(self.why("e64", self.replies["e66"]), ["expected ops, got question"])
+
+    def test_live_prompt_lists_the_fixture_hike_details_and_content_files_stay_unchanged(self):
+        watched = [p for p in (ev.REPO / "hass" / "content").rglob("*") if p.is_file()]
+        before = {p: p.read_bytes() for p in watched}
+        code, err, bodies = self.prompts()
+        self.assertEqual((code, err, len(bodies)), (0, "", 69))
+        hike = json.loads(ev.EVENTS.read_text("utf-8"))[0]
+        row = " | ".join(json.dumps(str(hike[k]), ensure_ascii=False) for k in ("id", "meetingPoint", "capacity", "bring", "accessNote"))
+        self.assertTrue(row in bodies[0], "fixture hike details row missing from the live prompt")
+        self.assertEqual({p: p.read_bytes() for p in watched}, before)
+
+    def test_overlay_id_already_in_the_content_is_refused_naming_it(self):
+        events = self.tmp / "events.json"
+        events.write_text(json.dumps([{"id": "dup-1", "status": "scheduled"}]), "utf-8")
+        content = load_content()
+        content.community["events"] = [{"id": "dup-1", "title": "T", "status": "scheduled"}]
+        with unittest.mock.patch.object(ev, "EVENTS", events):
+            with self.assertRaisesRegex(ev.EvalError, "dup-1"):
+                ev.live(self.cases, base.URL, "m", self.tmp / "o.jsonl", content=content)
+        self.assertFalse((self.tmp / "o.jsonl").exists())
+
+    def test_no_case_text_holds_an_email_or_a_phone_outside_555_01xx(self):
+        for case in self.cases:
+            text = json.dumps(case)
+            self.assertNotRegex(text, r"@\S+\.\S+", case["id"])
+            for number in re.findall(r"\d{3}\D{0,2}\d{4}", text):
+                self.assertRegex(number, r"^555\D{0,2}01\d\d$|^555\D{0,2}0123$", (case["id"], number))
+        for line in ev.EVENTS.read_text("utf-8").splitlines():
+            self.assertNotRegex(line, r"@\S+\.\S+")
 
 
 if __name__ == "__main__":
