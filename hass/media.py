@@ -63,7 +63,16 @@ def is_audio(data: bytes) -> bool:
     if data.startswith((b"caff", b"#!AMR", b"ID3", b"OggS", b"fLaC")): return True
     if data[:4] == b"RIFF" and data[8:12] == b"WAVE": return True
     if len(data) >= 2 and data[0] == 0xFF and data[1] & 0xE6 in (0xE2, 0xE4, 0xE6): return True
-    return data[4:8] == b"ftyp" and data[8:12] in AUDIO_BRANDS
+    return (data[4:8] == b"ftyp" and data[8:12] in AUDIO_BRANDS) or _compatible_audio_brand(data)
+
+def _compatible_audio_brand(data: bytes) -> bool:
+    """RF1050-23: True when a bounded ftyp box at byte 0 lists an AUDIO_BRANDS entry among its aligned compatible
+    brands (offsets 16, 20, ... below the declared end). Size 0/1, a bad size or alignment, minor-version bytes and
+    anything after the box never match."""
+    if len(data) < 16 or data[4:8] != b"ftyp": return False
+    size = int.from_bytes(data[:4], "big")
+    if size < 16 or size > len(data) or (size - 16) % 4: return False
+    return any(data[i:i + 4] in AUDIO_BRANDS for i in range(16, size, 4))
 
 def _unknown(data: bytes) -> str:
     return "truncated" if _prefix(data) else "audio" if is_audio(data) else "unsupported-type"
