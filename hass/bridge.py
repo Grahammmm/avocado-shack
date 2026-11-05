@@ -11,7 +11,7 @@ Field names follow docs.bluebubbles.app (REST API & Webhooks, its Postman collec
 """
 import hashlib, hmac, json, os, re, stat, sys, urllib.error, urllib.parse, urllib.request, uuid  # noqa: E401
 from dataclasses import asdict, dataclass, fields
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -51,7 +51,10 @@ class BridgeError(Exception):
 
 
 def _utc(ms):
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat(timespec="seconds")
+    """Integer provider milliseconds -> UTC ISO text: whole seconds as before, else exactly three fractional digits.
+    Integer arithmetic only (no float round trip), so a sub-second time keeps its cutoff and drain order."""
+    dt = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(milliseconds=ms)
+    return dt.isoformat(timespec="seconds" if ms % 1000 == 0 else "milliseconds")
 
 
 def normalize(event):

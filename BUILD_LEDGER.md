@@ -1598,6 +1598,22 @@ Checks: `python3 -B -m unittest hass.tests.test_inbox_payload_types` ran 5 tests
 
 Limits: fixture data only; no enqueue validation, schema, receiver, status output, retention or conversation code changed; no timestamp parsing or string-content rules added.
 
+## H10/H12/H16 photo GUIDs with surrogate code points are refused before any URL is built (RF1100-21) — November 5, 2026
+
+Branch rb/rf1100-21 from origin/main a4435ca (RF1100-21). For Michael: a message or attachment GUID holding a lone surrogate code point (U+D800-U+DFFF, which UTF-8 cannot encode) used to escape as an uncaught `UnicodeEncodeError` while the photo URL was built. A direct `BlueBubblesPhotos.fetch` call now raises the fixed `ValueError` before the password file or any transport is touched; a surrogate in the first n attachment GUIDs of the provider metadata is the normal `shape` refusal, raised before any download (even of valid earlier items). `hass/bridge_photos.py` (new private `_valid_guid`, used for both guards; docstring updated). Real non-ASCII text (accents, NBSP, emoji), a JSON-escaped surrogate pair that decodes to one emoji, the 200-code-point limit and attachments after the first n behave as before. Added `hass/tests/test_bridge_photos_unicode.py`.
+
+Checks: `python3 -B -m unittest hass.tests.test_bridge_photos hass.tests.test_bridge_photos_ids hass.tests.test_bridge_photos_size hass.tests.test_bridge_photos_tail hass.tests.test_bridge_photos_unicode hass.tests.test_ledger_rf1120`.
+
+Limits: fixture transports only; `bridge.py`, URL/password policy, duplicate-key and count handling are unchanged. The fixed ValueError text now ends with "or surrogate code points" (the existing size test uses assertIn on an earlier part).
+
+## H20 state and media restore publish with atomic no-replace (RF1100-19) — November 5, 2026
+
+Branch rb/rf1100-19. For Michael: `statebackup restore` and `drill` now publish the restored state and media directories with the same kernel no-replace rename the content restore already used, so a directory created by someone else at that moment (even an empty one) is kept instead of silently replaced. The call fails with the existing one-line error JSON (exit 1), takes back only the state/staging trees it made itself, and leaves the backup untouched. `hass/statebackup.py` (two call replacements); added `hass/tests/test_statebackup_restore_atomic.py` (5 tests; all 5 fail on the old code).
+
+Checks: `python3 -B -m unittest hass.tests.test_statebackup_restore_atomic` ran 5 tests, OK; wider statebackup list in the PR body.
+
+Limits: fixture data only; rollback moves, preflight refusals and wording, the helper and the manifest are unchanged; no lock service or symlink-race redesign.
+
 ## H21 retention counts only completed .png screenshots (RF1100-18) — November 5, 2026
 
 Branch rb/rf1100-18 (RF1100-18). For Michael: the read-only retention report counts a screenshot only when it is a regular file whose name ends in lowercase .png; notes, .json, extensionless files, .png.tmp temp files, .PNG, links, FIFOs and folders no longer add to the screenshot files or bytes. `hass/retention.py` (_shots filter); added `hass/tests/test_retention_screenshots.py` (5 tests; 2 fail on the old code).

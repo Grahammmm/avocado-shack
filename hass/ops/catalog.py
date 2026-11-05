@@ -283,17 +283,24 @@ def _maker_edit(content, args, ctx):
 
 
 def _maker_hide(content, args, ctx):
+    """Hide a maker; ``withProducts`` also hides its active products in the same change (maker first, then by id)."""
     maker = _maker(content, args["key"])
     if not isinstance(maker, dict):
         return maker
     if maker.get("hidden") is True:
         return Refused(f"maker {args['key']} is already hidden")
-    ids = [p["id"] for p in content.active_products() if p.get("producerKey") == args["key"]]
-    if ids:
-        return Refused(f"maker {args['key']} still has active products: " + ", ".join(ids))
+    active = sorted((p for p in content.active_products() if p.get("producerKey") == args["key"]),
+                    key=lambda p: p["id"])
+    if active and args.get("withProducts") is not True:
+        return Refused(f"maker {args['key']} still has active products: " + ", ".join(p["id"] for p in active))
     before = copy.deepcopy(maker)
     maker["hidden"] = True
-    return _touch("makers", args["key"], before, maker)
+    touched = _touch("makers", args["key"], before, maker)
+    for product in active:
+        was = copy.deepcopy(product)
+        product["status"] = "hidden"
+        touched += _touch("products", product["id"], was, product)
+    return touched
 
 
 def _maker_restore(content, args, ctx):
@@ -363,6 +370,6 @@ OPS = (
        _maker_add),
     Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE}},
        _maker_edit),
-    Op("maker.hide", _KEY, _maker_hide),
+    Op("maker.hide", {**_KEY, "withProducts": Arg("bool", required=False)}, _maker_hide),
     Op("maker.restore", _KEY, _maker_restore),
 )

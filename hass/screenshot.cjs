@@ -26,7 +26,7 @@ const allowed=req=>{
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
     if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
-      if(target.status==='scheduled')checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
+      if(target.status==='scheduled')checks.eventShown=await page.locator('h2',{hasText:target.title}).count()>0;
       else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
         const recaps=await page.locator('#past-hikes .past-hike').evaluateAll((els,title)=>els.filter(d=>
           d.querySelector('summary span')?.textContent===title).map(d=>d.querySelector(':scope>p')?.textContent),target.title);
@@ -82,6 +82,8 @@ const allowed=req=>{
         const h=target.headline||[];
         const ws=v=>String(v).replace(/\s+/g,' ').trim();  // HTML collapses runs of spaces; compare both sides the same way
         if(h.length===2){const h1=ws(await page.locator('.hero h1').innerText());checks.headlineShown=h.every(l=>h1.includes(ws(l)));}
+        if('phone' in target){const a=page.locator('.visit-phone a'),d=String(target.phone||'').replace(/\D/g,'');
+          checks.phoneShown=target.phone?await a.count()===1&&ws(await a.textContent())===target.phone&&await a.getAttribute('href')==='tel:+1'+d:await page.locator('.visit-phone').count()===0;}
         const intro=ws(await page.locator('.hero-intro').first().textContent());checks.introShown=intro===ws(target.intro||target.defaultIntro);
         if(target.selectionLine){checks.selectionShown=ws(await page.locator('.selection-checked').first().textContent().catch(()=>''))===ws(target.selectionLine);}
         if(typeof target.story==='string'){const p=page.locator('#visit > div > p:not(.signature):not(.label)').first();checks.storyShown=ws(await p.textContent())===ws(target.story);}

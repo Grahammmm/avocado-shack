@@ -6,10 +6,11 @@ Never a change hash, draft hash, file path or commit: the owner only sees what c
 """
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
+FUTURE_SLACK = timedelta(minutes=5)  # RF1300-20: clock-skew allowance for an install time after now
 PENDING = ("proposed", "needs-details")  # not applied yet: never described as applied (approval gate)
 UNDER_WAY = "You said yes; it is still being saved, so nothing has changed on the website yet."  # approved, not saved
 SAVED = ("applied", "verified")
@@ -30,7 +31,8 @@ CHECK_WORDS = {  # AV1222-03: result-check key -> plain words (an unknown key is
     "headlineShown": "the home-page headline", "storyShown": "the shop story", "introShown": "the home-page intro",
     "selectionShown": "the selection checked line", "eventShown": "the hike", "pastShown": "the past hike",
     "recapShown": "the hike recap", "rsvpGone": "the sign-up button", "makerName": "the maker's name",
-    "makerPlace": "the maker's place", "makerHidden": "the hidden maker"}
+    "makerPlace": "the maker's place", "makerHidden": "the hidden maker",
+    "phoneShown": "the phone number"}
 RECORD_RE = re.compile(r"([a-z][a-z0-9_-]{0,40}) ([A-Za-z0-9][A-Za-z0-9._-]{0,80}): (.*)", re.S)  # no path characters
 NOT_COPIED = "Copying it to the website has not been done, or did not finish"
 PARTIAL = ("If copying it was started and stopped part way, some pages may already show it; ask for help to copy it "
@@ -48,7 +50,10 @@ def _when(iso, now) -> str:
     except (TypeError, ValueError):
         return "at an unknown time"
     if at.utcoffset() is None: return "at an unknown time"
-    at, now = at.astimezone(LOCAL_TZ), now if now.utcoffset() is not None else now.replace(tzinfo=timezone.utc)
+    now = now if now.utcoffset() is not None else now.replace(tzinfo=timezone.utc)
+    if at > now.astimezone(timezone.utc) + FUTURE_SLACK:  # RF1300-20: in UTC, so a DST fall-back never widens the slack
+        return "at an unknown time"  # never a check time that has not happened
+    at = at.astimezone(LOCAL_TZ)
     if at.date() == now.astimezone(LOCAL_TZ).date(): return f"today {at:%H:%M}"
     return f"{at:%a %b} {at.day} {at:%H:%M}"
 

@@ -71,3 +71,8 @@ Checking the selection (change requests, not commands; each still needs `yes <co
 Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`, for example "put the old photo back",
 shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when
 no photo of yours is set; `undo` puts your photo back.
+
+Stop carrying a maker (a change request, needs `yes <code>`): `maker.hide` with `withProducts: true`, for example "we stopped
+carrying Etto", hides the maker and all of its active products in one change. The proposal lists the maker and every
+product id it will hide. Hidden and held products are left exactly as they are. Without `withProducts`, a maker that
+still has active products is refused and the reply names them. `undo` brings the maker and every product back together.

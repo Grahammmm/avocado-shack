@@ -178,15 +178,15 @@ class MediaBackupTests(BackupTestCase):
         self.assertEqual((tree(taken), (self.tmp / "r2").exists()), (kept, False))
         for unsafe in (backup / "m", self.tmp / "r3" / "m", self.repo.main / "m"):
             with self.subTest(unsafe=str(unsafe)), self.assertRaises(UnsafeState): self.restore(backup, unsafe, "r3")
-        real_copy, real_rename, names = statebackup._copy, os.rename, sorted(os.listdir(self.tmp))
+        real_copy, real_rename, names = statebackup._copy, statebackup._rename_noreplace, sorted(os.listdir(self.tmp))
         def copy(src, dst):  # the media copy fails
             if "originals" in str(dst): raise OSError(28, "No space left on device")
             real_copy(src, dst)
         def rename(src, dst):  # the state rename, or the media rename after it, fails
             if str(dst) == fail: raise OSError(28, "No space left on device")
             real_rename(src, dst)
-        for owner, name, fake, fail in ((statebackup, "_copy", copy, ""), (os, "rename", rename, str(self.tmp / "r4")),
-                                        (os, "rename", rename, str(self.tmp / "m4"))):
+        for owner, name, fake, fail in ((statebackup, "_copy", copy, ""), (statebackup, "_rename_noreplace", rename, str(self.tmp / "r4")),
+                                        (statebackup, "_rename_noreplace", rename, str(self.tmp / "m4"))):
             with self.subTest(fail=fail or name), mock.patch.object(owner, name, side_effect=fake), \
                     self.assertRaises(OSError):
                 self.restore(backup, self.tmp / "m4", "r4")
