@@ -1,7 +1,8 @@
 """Interpreter output checked against the ops registry (NB-AV-01) before anything reaches the editor.
 
 check() is pure: an op, argument name or value type the registry does not allow, or a ``revises`` code that is not
-waiting, becomes one owner question naming the field. Value checks (real dates, makers, files) stay in the editor.
+waiting, becomes one owner question naming the field. An enum value that is not one of the op's choices is asked about
+in site words (shelf, availability) before the editor (AV0222-02). Other value checks (real dates, makers, files) stay in the editor.
 Names shown to the owner contain only visible characters (no controls, zero-width, direction or line-separator marks).
 The same change listed twice (same op, equal args in any key order, spacing ignored) becomes one question naming the first repeated
 pair; it is checked after the shape check and before op/field checks, so a repeated unknown op is reported as a repeat.
@@ -10,6 +11,7 @@ pair; it is checked after the shape check and before op/field checks, so a repea
 import json
 import unicodedata
 
+from hass.content_model import AVAILABILITY, CATEGORIES, SHELF_LABELS
 from hass.editor import MAX_OPS
 
 HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
@@ -37,6 +39,19 @@ def _kind_ok(kind: str, value) -> bool:
     if kind == "bool": return isinstance(value, bool)
     if kind == "int": return isinstance(value, int) and not isinstance(value, bool)
     return False  # a kind this check does not know is never passed through
+
+
+def _enum_question(op_name: str, arg_name: str, value, choices) -> str:
+    """One question for an enum value outside the op's choices; site words only for the canonical shelf/availability args."""
+    choices = tuple(choices or ())
+    if op_name in ("product.add", "product.edit") and arg_name == "category" and choices == CATEGORIES:
+        shelves = [SHELF_LABELS[c] for c in CATEGORIES]
+        return f"There is no {_clean(value)} shelf. Which shelf: {', '.join(shelves[:-1])} or {shelves[-1]}?"
+    if op_name == "product.set_availability" and arg_name == "available" and choices == AVAILABILITY:
+        return "Should it say Available today, Limited or Sold out?"
+    label = f"{_clean(op_name)}.{_clean(arg_name)}"
+    if not choices: return f"{label} has no available choices. {AGAIN}"
+    return f"{label} should be one of: {', '.join(_clean(c) for c in choices)}. {AGAIN}"
 
 
 def _problem(result: dict, registry, pending_codes):
@@ -68,6 +83,8 @@ def _problem(result: dict, registry, pending_codes):
                 return f'I could not turn that into a change I know (unknown field "{label}"). {AGAIN}'
             if not _kind_ok(arg.kind, value):
                 return f"{label} should be {WANTS.get(arg.kind, 'text')}. {AGAIN}"
+            if arg.kind == "enum" and value not in (arg.choices or ()):
+                return _enum_question(call["op"], name, value, arg.choices)
     code = result["revises"]
     if code is not None and code not in pending_codes:
         return f"I could not find draft {_clean(code)} waiting; reply with the change again."
