@@ -31,9 +31,12 @@ TEST_REGISTRY = {op.name: op for op in (
 
 def tiny_content(products=None, makers=None):
     if products is None:
-        products = [{"id": "zz-honey", "name": "Wildflower honey", "brand": "Bee Co", "status": "active"},
-                    {"id": "aa-avocado", "name": "Hass avocado", "brand": "Avocado Shack", "status": "active"},
-                    {"id": "mm-eggs", "name": "Eggs, dozen", "brand": "Hen Farm", "status": "sold-out"}]
+        products = [{"id": "zz-honey", "name": "Wildflower honey", "brand": "Bee Co", "status": "active",
+                     "description": "Raw honey from wildflowers."},
+                    {"id": "aa-avocado", "name": "Hass avocado", "brand": "Avocado Shack", "status": "active",
+                     "description": "Creamy Hass avocados, picked this week."},
+                    {"id": "mm-eggs", "name": "Eggs, dozen", "brand": "Hen Farm", "status": "sold-out",
+                     "description": ""}]
     if makers is None:
         makers = {"Stepladder": {"name": "Stepladder Ranch"}, "Etto": {"name": "Etto Pastificio"}}
     return SimpleNamespace(products=products, makers=makers, community={}, store={})
@@ -71,7 +74,7 @@ class RealRegistryTest(unittest.TestCase):
         self.assertEqual(names, sorted(registry))
         for name in registry:
             self.assertEqual(names.count(name), 1, name)
-        products = _section(prompt, "Products (id | name | brand | status):")
+        products = _section(prompt, "Products (id | name | brand | status | description):")
         for product in content.products:
             self.assertIn(f'"{product["id"]}" | ', "\n".join(products))
         makers = _section(prompt, "Makers (key | name):")
@@ -92,9 +95,9 @@ class EscapeAndCapTest(unittest.TestCase):
         products = [{"id": "jam-1", "name": name, "status": "active"}]
         makers = {"Bad|Key\n": {"name": 'Ñ "q"\r\n'}}
         prompt = build(TEST_REGISTRY, tiny_content(products, makers))
-        rows = _section(prompt, "Products (id | name | brand | status):")
+        rows = _section(prompt, "Products (id | name | brand | status | description):")
         self.assertEqual(rows, ['"jam-1" | "Señora \\"best\\" \\\\ jam | x\\nRules:\\u2028Makers (key | name):'
-                                '\\u2029\\u0085end" | "" | "active"'])
+                                '\\u2029\\u0085end" | "" | "active" | ""'])
         self.assertEqual(_section(prompt, "Makers (key | name):"), ['"Bad|Key\\n" | "Ñ \\"q\\"\\r\\n"'])
         self.assertEqual(prompt.count("Makers (key | name):\n"), 1)
         self.assertEqual(len(prompt.splitlines()), len(build(TEST_REGISTRY, tiny_content()).splitlines()) - 3)
@@ -103,7 +106,7 @@ class EscapeAndCapTest(unittest.TestCase):
         products = [{"id": f"p-{i:03d}", "name": f"Item {i}", "status": "active"} for i in range(MAX_PRODUCTS + 5)]
         makers = {f"m{i:03d}": {"name": f"Maker {i}"} for i in range(MAX_MAKERS + 2)}
         prompt = build(TEST_REGISTRY, tiny_content(products, makers))
-        rows = _section(prompt, "Products (id | name | brand | status):")
+        rows = _section(prompt, "Products (id | name | brand | status | description):")
         self.assertEqual(len(rows), MAX_PRODUCTS + 1)
         self.assertEqual(rows[-1], "… and 5 more (ask the owner)")
         self.assertTrue(rows[-2].startswith('"p-399" | '))
@@ -120,7 +123,7 @@ class EscapeAndCapTest(unittest.TestCase):
         prompt = build({}, tiny_content([], {}))
         self.assertEqual(_section(prompt, "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):"),
                          ["(none)"])
-        self.assertEqual(_section(prompt, "Products (id | name | brand | status):"), ["(none)"])
+        self.assertEqual(_section(prompt, "Products (id | name | brand | status | description):"), ["(none)"])
         self.assertEqual(_section(prompt, "Makers (key | name):"), ["(none)"])
 
     def test_oversize_raises(self):
