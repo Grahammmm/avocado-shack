@@ -29,11 +29,12 @@ class PromptRuleTests(unittest.TestCase):
         rules = _rules(prompt)
         design = [line for line in rules if "design change" in line]
         self.assertEqual(len(design), 1)
-        self.assertEqual(rules[-2], design[0])  # after photo/repeat rules, before the notes rule
-        self.assertIn("product.set_photo", rules[-5])
-        self.assertIn('"missing" list', rules[-4])
-        self.assertIn("hike.repeat", rules[-3])
-        self.assertIn('"notes"', rules[-1])
+        self.assertEqual(rules[-3], design[0])  # after photo/missing/repeat rules, before the notes and aliases rules
+        self.assertIn("product.set_photo", rules[-6])
+        self.assertIn('"missing" list', rules[-5])
+        self.assertIn("hike.repeat", rules[-4])
+        self.assertIn('"notes"', rules[-2])
+        self.assertIn('"aliases"', rules[-1])
         self.assertEqual(prompt.count(DESIGN_UNSUPPORTED), 1)
         found = re.search(r"\{\"unsupported\": \"[^\"]*\"\}", design[0])
         self.assertEqual(json.loads(found.group(0)), DESIGN)
@@ -43,12 +44,12 @@ class PromptRuleTests(unittest.TestCase):
     def test_rule_matches_the_snapshot_and_stays_small(self):
         prompt = build(TEST_REGISTRY, tiny_content())
         self.assertEqual(prompt, FIXTURE.read_text("utf-8"))
-        without = prompt.replace("- " + RULES[-2] + "\n", "", 1)
+        without = prompt.replace("- " + RULES[-3] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
         self.assertNotIn(DESIGN_UNSUPPORTED, without)
-        self.assertEqual(len(RULES), 15)  # AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule;
-        # AV0007-03 the pending-question "missing" ids rule
-        self.assertLess(len(RULES[-2].encode("utf-8")), 300)
+        self.assertEqual(len(RULES), 16)  # AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule;
+        # AV0007-03 the pending-question "missing" ids rule; AV0007-06 the aliases rule
+        self.assertLess(len(RULES[-3].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 
     def test_empty_catalog_and_store_still_build(self):

@@ -20,9 +20,9 @@ class CountingInterpreter(conversation.FixtureInterpreter):
         super().__init__(mapping)
         self.calls = 0
 
-    def interpret(self, text, pending, notes=None, *, sent_at=None):
+    def interpret(self, text, pending, *, sent_at=None):
         self.calls += 1
-        return super().interpret(text, pending, notes, sent_at=sent_at)
+        return super().interpret(text, pending)
 
 
 class UnknownCodeTestCase(ConversationTestCase):

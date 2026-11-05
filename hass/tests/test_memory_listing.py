@@ -24,7 +24,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
         self.calls = []
         for obj, name in ((self.interp, "interpret"), (self.editor, "prepare"), (self.editor, "apply")):
             real = getattr(obj, name)
-            setattr(obj, name, lambda *a, _r=real, _n=name, **k: (self.calls.append(_n), _r(*a, **k))[1])
+            setattr(obj, name, lambda *a, _r=real, _n=name, **kw: (self.calls.append(_n), _r(*a, **kw))[1])
 
     def listing(self, pid=None):
         self.assertEqual(self.say("memory", pid=pid), "memory-list")

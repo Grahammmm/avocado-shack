@@ -33,7 +33,7 @@ class GoodRecordTests(unittest.TestCase):
             (STORE, {"kind": "store", "hours": ["Mon 9-5"], "streetAddress": "5 Example St", "town": "Cayucos",
                      "headline": [], "story": None, "intro": None, "homeImage": None, "notice": None}),
             (EVENT, {"kind": "event", "title": "Hike", "status": "completed", "id": "h-1", "recap": "Calm."}),
-            (ROUTE, {"kind": "event", "title": "Coast walk", "status": None, "id": "", "recap": ""}),
+            (ROUTE, {"kind": "route", "id": "r-1", "title": "Coast walk", "hidden": False}),
         ]
         for record, expected in cases:
             with self.subTest(collection=record["collection"]):
