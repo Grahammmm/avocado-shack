@@ -29,8 +29,9 @@ class PromptRuleTests(unittest.TestCase):
         rules = _rules(prompt)
         design = [line for line in rules if "design change" in line]
         self.assertEqual(len(design), 1)
-        self.assertEqual(rules[-3], design[0])  # after photo/repeat rules, before the notes and aliases rules
-        self.assertIn("product.set_photo", rules[-5])
+        self.assertEqual(rules[-3], design[0])  # after photo/missing/repeat rules, before the notes and aliases rules
+        self.assertIn("product.set_photo", rules[-6])
+        self.assertIn('"missing" list', rules[-5])
         self.assertIn("hike.repeat", rules[-4])
         self.assertIn('"notes"', rules[-2])
         self.assertIn('"aliases"', rules[-1])
@@ -46,7 +47,8 @@ class PromptRuleTests(unittest.TestCase):
         without = prompt.replace("- " + RULES[-3] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
         self.assertNotIn(DESIGN_UNSUPPORTED, without)
-        self.assertEqual(len(RULES), 15)  # AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule; AV0007-06 the aliases rule
+        self.assertEqual(len(RULES), 16)  # AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule;
+        # AV0007-03 the pending-question "missing" ids rule; AV0007-06 the aliases rule
         self.assertLess(len(RULES[-3].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 

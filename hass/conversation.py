@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TE
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
   reason TEXT, replaced_by TEXT, draft_hash TEXT, base TEXT, ops_json TEXT NOT NULL, summary TEXT NOT NULL,
   sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT,
-  screenshot TEXT, checked_at TEXT, proposed_at TEXT);
+  screenshot TEXT, checked_at TEXT, proposed_at TEXT, missing_json TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NULL, chat TEXT NOT NULL,
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
@@ -185,7 +185,7 @@ class FixtureInterpreter:
     def __init__(self, mapping):
         self.mapping = dict(mapping)
 
-    def interpret(self, text, pending, notes=None, aliases=None):
+    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None):
         return copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
 
 
@@ -237,6 +237,16 @@ def _pending_ops(ops_json) -> dict:  # AV0022-03 (H05): a waiting draft's ops; t
     try: ops = json.loads(ops_json) if len(ops_json.encode()) <= OPS_PENDING_MAX else None
     except (TypeError, ValueError, AttributeError, RecursionError): ops = None
     return {"ops": ops} if isinstance(ops, list) else {"opsOmitted": True}
+
+
+def _missing_ids(missing_json) -> list:  # AV0007-03: stored argument ids of a question; anything unreadable -> []
+    try: ids = json.loads(missing_json) if missing_json else []
+    except (TypeError, ValueError, RecursionError): return []
+    out = []
+    for i in ids if isinstance(ids, list) else []:
+        if not isinstance(i, str): return []
+        if i and i not in out: out.append(i)
+    return out
 
 
 def _answered_at(msg, now: datetime) -> datetime:
@@ -317,6 +327,30 @@ def parse_keyword(text: str):
     match = KEYWORD_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
     return ("approve" if match[1] in APPROVE else "reject"), match[2]
+
+
+COURTESY = {"please", "thanks", "ok", "okay"}
+
+
+def parse_phone(text: str):
+    """AV1352-04 (H05): (verb or None, code or None, question) when, after dropping punctuation other than ?, emoji and
+    the courtesy words (please, thanks, thank you, ok, okay), the whole message is one approve/cancel word and one code in
+    either order, or one code alone, or (with a ?) one such word alone; otherwise None. `question` is True when the
+    original text held a ?. Only the candidate is normalised, never the message; a ? is never stripped into an answer."""
+    question = "?" in text
+    words = "".join(c if c.isalnum() else " " for c in text.lower()).split()
+    kept, i = [], 0
+    while i < len(words):
+        if words[i] == "thank" and words[i + 1:i + 2] == ["you"]: i += 2
+        else:
+            if words[i] not in COURTESY: kept.append(words[i])
+            i += 1
+    verbs = [w for w in kept if w in APPROVE or w in REJECT]
+    codes = [w for w in kept if re.fullmatch(r"[0-9a-f]{4,12}", w)]
+    if not kept or len(verbs) + len(codes) != len(kept) or len(verbs) > 1 or len(codes) > 1: return None
+    if not verbs: return None, codes[0], question  # a lone code is only ever a hint
+    if not codes and not question: return None  # courtesy never makes a new bare yes/no
+    return ("approve" if verbs[0] in APPROVE else "reject"), (codes[0] if codes else None), question
 
 
 def parse_near(text: str):
@@ -451,7 +485,7 @@ class Conversation:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
-        for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
+        for column in ("screenshot", "checked_at", "proposed_at", "missing_json"):  # an H05 database gains the H06 + AVB-03 + AV0007-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
         if "reply_to" not in {r["name"] for r in self.db.execute("PRAGMA table_info(outbox)")}:  # AV0022-10 (H16)
             self.db.execute("ALTER TABLE outbox ADD COLUMN reply_to TEXT")
@@ -552,7 +586,7 @@ class Conversation:
         expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))
         fields = dict(change_id=draft["change_id"], draft_hash=draft["draft_hash"], base=draft["base"],
                       ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires,
-                      proposed_at=_iso(now))  # AVB-03: the proposal instant itself, not derived from the current ttl
+                      proposed_at=_iso(now), missing_json=None)  # AVB-03: the proposal instant itself; a filled question has nothing missing
         if row is not None:
             self._move(row, "proposed", **fields)
             return self._row(row["row_id"])
@@ -612,7 +646,9 @@ class Conversation:
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
-        cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
+        phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
+        coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
+        cutoff = _answered_at(msg, now) if msg.attachments <= 0 and (parse_keyword(msg.text) or coded) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"): expired = []  # H17: read-only
         memory = None if command or msg.attachments > 0 else parse_memory(msg.text)
@@ -626,7 +662,7 @@ class Conversation:
             disposition = self._memory(msg, *memory)
             self._record(msg, disposition)
             return disposition, None
-        keyword = parse_keyword(msg.text)
+        keyword = parse_keyword(msg.text) or coded
         if keyword is None and (near := parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
             codes = [r["code"] for r in self._drafts("state = 'proposed'")
                      if self._expiry(r) > now and near in ("", r["code"])]
@@ -634,6 +670,14 @@ class Conversation:
                         f"Nothing was applied. Reply yes <code> with one of: {', '.join(codes)}." if codes else NOTHING)
             self._record(msg, "near-approval")
             return "near-approval", None
+        if keyword is None and phone is not None:  # AV1352-04: a question or a lone code is never an answer
+            live = [r["code"] for r in self._drafts("state = 'proposed'") if self._expiry(r) > now]
+            if phone[0] is not None or phone[1] in live:
+                one = phone[1] if phone[1] in live else live[0] if len(live) == 1 else None
+                self._reply(f"Nothing was changed. To apply {one}, reply yes {one}; to cancel it, no {one}." if one else
+                            f"Nothing was changed. Reply yes <code> or no <code> with one of: {', '.join(live)}." if live else NOTHING)
+                self._record(msg, "near-approval")
+                return "near-approval", None
         if keyword is None:
             disposition = self._request(msg, now)
             self._record(msg, disposition)
@@ -684,6 +728,10 @@ class Conversation:
             return "\n".join(["Which draft do you mean?"] + [f"{r['code']}: " + ("needs details: " if r["state"] ==
                              "needs-details" else "") + r["summary"] for r in targets]
                              + ["Reply yes <code> or no <code>."])
+        if code and self._by_code(code) is None:  # AV2152-01 (H05/H17): a code that matches no draft; never guessed
+            waiting = self._drafts("state = 'proposed'")
+            return "\n".join([f"No draft {code}."] + (["Waiting drafts:"] + [
+                f"{r['code']}: {r['summary']}; reply yes {r['code']}." for r in waiting] if waiting else []))
         named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired]
         return "\n".join(self._state_text(r) for r in named if r is not None) or NOTHING
 
@@ -780,12 +828,14 @@ class Conversation:
             self.db.execute(USAGE)
             self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
-                    r["summary"], **_pending_ops(r["ops_json"])}  # AV0022-03: + "ops" or "opsOmitted"
+                    r["summary"], **_pending_ops(r["ops_json"]),  # AV0022-03: + "ops" or "opsOmitted"
+                    **({"missing": _missing_ids(r["missing_json"])} if r["state"] == "needs-details" else {})}  # AV0007-03
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
-        notes = self._notes()  # AV1102-09: preferences only; no notes means exactly the two-argument call
+        notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
         context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases())) if v}  # AV0007-06
+        sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
         try:
-            result = _checked(self.interpreter.interpret(msg.text, pending, **context))
+            result = _checked(self.interpreter.interpret(msg.text, pending, **context, sent_at=sent_at))
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
         codes = {p["code"] for p in pending}
@@ -811,15 +861,16 @@ class Conversation:
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
             expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))  # H16: questions lapse too
+            missing_json = json.dumps(out.get("missing", []))  # AV0007-03: stored with the question, same transaction
             if revised is not None and revised["state"] == "needs-details":  # the owner just answered: refresh
-                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ?, expires_at = ? WHERE row_id = ?",
-                                (ops_json, out["question"], expires, revised["row_id"]))
+                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ?, expires_at = ?, missing_json = ? WHERE row_id = ?",
+                                (ops_json, out["question"], expires, missing_json, revised["row_id"]))
             else:
                 code = self._code(hashlib.sha256(msg.provider_id.encode()).hexdigest())
                 self.db.execute(
-                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at)"
-                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?, ?)",
-                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now), expires))
+                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at, missing_json)"
+                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?, ?, ?)",
+                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now), expires, missing_json))
                 # An incomplete correction still supersedes the proposal it names: it can no longer be approved.
                 if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
@@ -869,9 +920,10 @@ class Conversation:
         if said:
             self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
-        self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at) VALUES"
-                        " (?, 'needs-details', ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
-                            [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now)))
+        self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, missing_json) VALUES"
+                        " (?, 'needs-details', ?, ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
+                            [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now),
+                            json.dumps(["id", "imageAlt"])))  # AV0007-03: set_photo's required args besides the photo
         self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
         if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
         return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"

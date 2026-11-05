@@ -21,7 +21,7 @@ class TextInterpreter(conversation.FixtureInterpreter):
         super().__init__(mapping)
         self.texts = []
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         self.texts.append(text)
         return super().interpret(text, pending)
 

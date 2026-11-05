@@ -126,7 +126,7 @@ class LateReplyConversationTest(ConversationTestCase):
         self.assertTrue(reply.startswith("Draft "), reply)
 
     def test_a_failed_handling_still_clears_the_answering_time(self):
-        self.interp.interpret = lambda text, pending: 1 / 0
+        self.interp.interpret = lambda text, pending, **kw: 1 / 0
         with self.assertRaises(ZeroDivisionError): self.say("hours")
         self.assertIsNone(self.conv._answering)
 

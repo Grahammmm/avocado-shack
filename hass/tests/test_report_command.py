@@ -34,7 +34,7 @@ class ReportTests(StoreMixin, ConversationTestCase):
         self.calls = []
         for obj, name in ((self.interp, "interpret"), (self.editor, "prepare"), (self.editor, "apply")):
             real = getattr(obj, name)
-            setattr(obj, name, lambda *a, _r=real, _n=name: (self.calls.append(_n), _r(*a))[1])
+            setattr(obj, name, lambda *a, _r=real, _n=name, **k: (self.calls.append(_n), _r(*a, **k))[1])
         # 7 days before T0's Pacific date (not stale) but 8 before the UTC date (stale): the date used shows
         self.edit("store.json", lambda doc: doc.update(selection_checked_on="2026-10-26"))
 

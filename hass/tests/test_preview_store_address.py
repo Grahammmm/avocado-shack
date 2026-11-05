@@ -45,7 +45,8 @@ class TargetTests(StoreTestCase):
             ({"collection": "makers", "key": "m-1", "after": {"name": "Farm", "town": "Cayucos"}},
              {"kind": "maker", "key": "m-1", "name": "Farm", "place": "", "hidden": False}),
             ({"collection": "events", "after": {"title": "Hike", "status": "scheduled", "town": "Cayucos"}},
-             {"kind": "event", "title": "Hike", "status": "scheduled", "id": "", "recap": ""}),
+             {"kind": "event", "title": "Hike", "status": "scheduled", "id": "", "recap": "",  # AV1222-05 card fields
+              "startsAt": None, "meetingPoint": "", "capacity": None, "rsvpEnabled": False, "changed": {}}),
             ({"collection": "community", "after": {"title": "Club"}},
              {"kind": "event", "title": "Club", "status": None, "id": "", "recap": ""}),
         ]

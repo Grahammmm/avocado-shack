@@ -34,7 +34,7 @@ class NewProductInterpreter:
     def __init__(self):
         self.mapping = {}
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         if text not in self.mapping: return {"unsupported": "Sorry, I can't do that yet."}
         ops, revises = self.mapping[text]
         waiting = [p["code"] for p in pending if p["state"] == "needs-details"]
@@ -121,11 +121,11 @@ class PhotoNewProductTests(unittest.TestCase):
 
     def test_add_that_revises_no_photo_draft_gets_no_photo(self):
         self.assertEqual(self.say("add Test quince", ops=[_op("product.add", **ADD)]), "not-drafted")
-        self.assertEqual(self.replies(), ["Not drafted: product.add needs image or photo"])
+        self.assertEqual(self.replies(), ["Not drafted: Send the photo with the product name as its caption."])
         self.assertEqual(self.drafts(), [])
         before = self.photo_draft()  # a waiting photo question is not filled by an add that does not revise it
         self.assertRefused("add Test quince again", [_op("product.add", **ADD)], "not-drafted",
-                           "Not drafted: product.add needs image or photo", before, revises=False)
+                           "Not drafted: Send the photo with the product name as its caption.", before, revises=False)
 
     def test_prompt_snapshot_holds_the_new_vs_existing_rule_once(self):
         rule = ("- When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a "

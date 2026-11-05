@@ -22,7 +22,7 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         self.calls = []
         for obj, name in ((self.interp, "interpret"), (self.editor, "prepare"), (self.editor, "apply")):
             real = getattr(obj, name)
-            setattr(obj, name, lambda *a, _r=real, _n=name: (self.calls.append(_n), _r(*a))[1])
+            setattr(obj, name, lambda *a, _r=real, _n=name, **k: (self.calls.append(_n), _r(*a, **k))[1])
 
     def rows(self):
         return [dict(r) for r in self.conv.db.execute("SELECT * FROM memory ORDER BY id")]

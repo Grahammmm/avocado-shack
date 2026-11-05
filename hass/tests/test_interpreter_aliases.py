@@ -25,7 +25,7 @@ class Recorder(conversation.FixtureInterpreter):
         super().__init__(mapping)
         self.seen = []
 
-    def interpret(self, text, pending, **kw):
+    def interpret(self, text, pending, *, sent_at=None, **kw):  # AV1352-06's sent_at is always sent; checked elsewhere
         self.seen.append(((text, pending), kw))
         return super().interpret(text, pending)
 
@@ -105,7 +105,7 @@ class SentAliasesTests(AliasCase):
 
     def test_two_parameter_double_still_works_with_aliases_absent(self):
         class Old(conversation.FixtureInterpreter):
-            def interpret(self, text, pending):
+            def interpret(self, text, pending, *, sent_at=None):
                 return super().interpret(text, pending)
         self.interp = Old(self.interp.mapping)
         self.conv = self.open()

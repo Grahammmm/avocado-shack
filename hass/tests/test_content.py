@@ -99,7 +99,7 @@ class GeneratorTests(unittest.TestCase):
         content.products[0]["status"] = "hidden"
         hidden_id = content.products[0]["id"]
         catalog = sitegen.render(content)[sitegen.SITE_PREFIX + "catalog-products.js"].decode("utf-8")
-        records = json.loads(catalog[len("const catalog="):].rstrip("\n").rstrip(";"))
+        records = json.loads(catalog.split("\n", 1)[0][len("const catalog="):].rstrip(";"))
         ids = {r["id"] for r in records}
         self.assertEqual(len(records), 169)
         self.assertNotIn(hidden_id, ids)

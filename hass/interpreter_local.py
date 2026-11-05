@@ -87,18 +87,19 @@ class LocalInterpreter:
         self.clock = clock if clock is not None else (lambda: datetime.now(timezone.utc))
         self.last_error = None
 
-    def _today(self):
-        """(YYYY-MM-DD, weekday) in Pacific time; a raising, naive or non-datetime clock is _Failed("clock")."""
+    def _today(self, sent_at=None):
+        """(YYYY-MM-DD, weekday) in Pacific time; a raising, naive or non-datetime clock (or an explicit sent_at that is
+        naive or not a datetime, AV1352-06) is _Failed("clock"). A supplied sent_at replaces the clock read."""
         try:
-            now = self.clock()
+            now = self.clock() if sent_at is None else sent_at
             if not isinstance(now, datetime) or now.utcoffset() is None: raise ValueError
             local = now.astimezone(PACIFIC)
         except Exception:  # noqa: BLE001 - the clock's own error text is never kept
             raise _Failed("clock") from None
         return local.date().isoformat(), WEEKDAYS[local.weekday()]
 
-    def _request(self, text, pending, notes=None, aliases=None) -> bytes:
-        today, weekday = self._today()
+    def _request(self, text, pending, notes=None, aliases=None, sent_at=None) -> bytes:
+        today, weekday = self._today(sent_at)
         try:  # a lone surrogate or a non-JSON value is a failed call, never a crash
             fields = {"message": text, "pending": pending, "today": today, "weekday": weekday}
             if isinstance(notes, list) and notes: fields["notes"] = notes  # AV1102-09: owner preferences, never claims
@@ -138,12 +139,12 @@ class LocalInterpreter:
         if not isinstance(result, dict): raise _Failed("shape")
         return result
 
-    def interpret(self, text, pending, notes=None, aliases=None) -> dict:
-        """The model's decoded JSON object as-is (Conversation's checks decide if it is usable), else the fixed
+    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None) -> dict:
+        """AV1352-06: sent_at (aware, from Conversation) is the day 'today' means; None reads the clock. The model's decoded JSON object as-is (Conversation's checks decide if it is usable), else the fixed
         unsupported reply with the reason code in last_error."""
         self.last_error = None
         try:
-            return self._call(self._request(text, pending, notes, aliases))
+            return self._call(self._request(text, pending, notes, aliases, sent_at))
         except _Failed as failure:
             self.last_error = failure.args[0]
             return {"unsupported": FAILED}

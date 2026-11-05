@@ -11,6 +11,10 @@ The two note commands are stricter:
 - `forget <key>` ignores a trailing `!` but not a `.`, because a key may contain `.`: `forget parking.` looks for a
   note called `parking.` and leaves the `parking` note alone. Send `forget parking` with no full stop.
 
+A yes or no with its code works in either order and survives everyday phone typing: commas and other punctuation, emoji and the words please, thanks, thank you, ok and okay are ignored, so `Yes, a1b2`, `yes a1b2 thanks`, `A1B2 yes` and `no a1b2 please` act as `yes a1b2` and `no a1b2`. Any other word keeps its meaning: `yes but make it 10am` and `no, 5pm` are still change requests.
+
+A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b2 yes?`, `yes?`, `no?`, a waiting code on its own (`a1b2` or `a1b2?`) and similar forms apply nothing, cancel nothing, record no approval and make no interpreter call. Hass replies `Nothing was changed. To apply a1b2, reply yes a1b2; to cancel it, no a1b2.` (with no or an unknown code, it lists the waiting codes).
+
 | Send | What happens | Example |
 | --- | --- | --- |
 | `yes <code>` (or `approve <code>`, `approved <code>`) | Applies that draft, then replies when it is done and checked. The reply says the change is saved but not on the website yet, because copying it to the website is a separate step. | `YES A1B2` |
