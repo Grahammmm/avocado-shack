@@ -9,12 +9,21 @@ const control=(action,label,symbol)=>`<button type="button" data-map-action="${a
 function node(tag,attrs={}){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;}
 
 // Callers may defer mount (community.js loads the map only near view); mount itself is unchanged.
+const UNAVAILABLE='<p class="trail-map-unavailable">The interactive map couldn’t load. <a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">View the official trail guide ↗</a></p>';
 async function mount(host){
  if(!host||host.dataset.mounted)return;
  host.dataset.mounted='true';
+ if(host.dataset.ready==='error')host.innerHTML='<p class="trail-map-unavailable">Loading the trail map…</p>';
+ delete host.dataset.ready;
  try{
-  const response=await fetch('/assets/trails/point-buchon.json');if(!response.ok)throw Error('Trail data unavailable');
-  const d=await response.json();if(!host.isConnected)return;
+  let d;
+  try{const response=await fetch('/assets/trails/point-buchon.json');if(!response.ok)throw Error('Trail data unavailable');d=await response.json();}
+  catch(error){
+   delete host.dataset.mounted;if(!host.isConnected)return;
+   host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';
+   host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});return;
+  }
+  if(!host.isConnected){delete host.dataset.mounted;return;}
   const miles=mi(d.distanceMeters).toFixed(1),gain=roundedGain(d.gainMeters),loss=roundedGain(d.lossMeters);
   const wrapper=document.createElement('section');wrapper.className='trail-explorer';wrapper.setAttribute('aria-labelledby','trail-explorer-heading');wrapper.setAttribute('aria-live','off');
   wrapper.innerHTML=`<div class="trail-explorer-heading"><div><p class="trail-eyebrow">A CLOSER LOOK</p><h4 id="trail-explorer-heading">Follow the coastline.</h4><p>${miles} miles out &amp; back · from Coon Creek parking</p></div><div class="trail-layer-switch" role="group" aria-label="Map view"><button type="button" data-map-layer="aerial" aria-pressed="true">Aerial</button><button type="button" data-map-layer="topo" aria-pressed="false">Topo</button></div></div>
@@ -118,7 +127,7 @@ async function mount(host){
   fit();drawProfile();updatePosition(0);
   const stats=host.closest('.trail-invitation')?.querySelectorAll('.trail-stats dd');if(stats?.length===4){stats[0].textContent=`${miles} miles`;stats[2].textContent=`~${gain} ft`;stats[2].previousElementSibling.textContent='Est. elevation gain';}
   host.dataset.ready='true';
- }catch(error){host.innerHTML='<p class="trail-map-unavailable">The interactive map couldn’t load. <a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">View the official trail guide ↗</a></p>';host.dataset.ready='error';}
+ }catch(error){host.innerHTML=UNAVAILABLE;host.dataset.ready='error';}
 }
 window.AvoshackTrailExplorer={mount};
 })();
