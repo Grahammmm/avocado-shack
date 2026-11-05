@@ -31,6 +31,9 @@ class MorningReportTests(unittest.TestCase):
     def content(self, products, checked_days_ago=None):
         store = {"schemaVersion": 1} | ({} if checked_days_ago is None else
                                         {"selection_checked_on": (TODAY - timedelta(days=checked_days_ago)).isoformat()})
+        if "selection_checked_on" in store and isinstance(products, list):  # AV1102-01: each word was set on that check
+            products = [p | {"available_on": store["selection_checked_on"]} if isinstance(p, dict) and "available" in p
+                        else p for p in products]
         for name, doc in (("products", {"schemaVersion": 1, "products": products}),
                           ("makers", {"schemaVersion": 1, "makers": {}}), ("community", {"schemaVersion": 1}),
                           ("store", store)):

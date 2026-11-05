@@ -18,6 +18,7 @@ RF0220-11: a store record's notice.text and homeImage.imageAlt strings are check
 "homeImage.imageAlt"); no other dictionary is scanned, and a leaf that is not a string is skipped.
 AV1937-05: a hike.repeat copies title, trailId and the event text (never the recap) from a real hike; a copied value that
 equals the same field of that source hike (read from the content by the conversation) is not checked again.
+AV2152-10: health and award terms (HEALTH_AWARD_TERMS) a draft adds also need the owner's words; treat and best are not terms.
 """
 import re
 import unicodedata
@@ -49,7 +50,10 @@ def _pattern(phrase: str):
 
 FARM_TERMS = ("fair trade", "fairtrade", "free-range", "cage-free", "hormone-free", "antibiotic-free", "biodynamic",
               "regenerative", "chemical-free", "unsprayed")
-_TERM_RES = tuple((term, _pattern(term)) for term in TERMS + FARM_TERMS)
+HEALTH_AWARD_TERMS = ("cures", "heals", "prevents", "immune", "immunity", "detox", "anti-inflammatory", "antioxidant",
+                      "probiotic", "superfood", "medicinal", "lowers cholesterol", "weight loss", "award-winning",
+                      "prize-winning", "gold medal")  # AV2152-10; kept apart from TERMS (its pin)
+_TERM_RES = tuple((term, _pattern(term)) for term in TERMS + FARM_TERMS + HEALTH_AWARD_TERMS)
 ACCESS_TERMS = ("dogs allowed", "dogs welcome", "dog friendly", "dog-friendly", "pet friendly", "leashed dogs",
                 "wheelchair accessible", "wheelchair friendly", "ada accessible", "stroller friendly", "no permit",
                 "no permit needed", "permit not required", "free parking", "parking available", "open to the public",
