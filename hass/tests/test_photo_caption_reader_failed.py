@@ -6,7 +6,8 @@ Run: python3 -m unittest hass.tests.test_photo_caption_reader_failed -v
 
 import unittest
 
-from hass.tests.test_photo_draft import ANSWER, PhotoDraftTests, PhotoInterpreter
+from hass.tests import test_photo_draft as base
+from hass.tests.test_photo_draft import ANSWER, PhotoInterpreter
 
 
 class FailingReader(PhotoInterpreter):
@@ -24,11 +25,11 @@ class FailingReader(PhotoInterpreter):
 
 
 class PhotoCaptionReaderFailedTests(unittest.TestCase):
-    open, say, replies, drafts = (PhotoDraftTests.open, PhotoDraftTests.say, PhotoDraftTests.replies,
-                                  PhotoDraftTests.drafts)
+    open, say, replies, drafts = (base.PhotoDraftTests.open, base.PhotoDraftTests.say, base.PhotoDraftTests.replies,
+                                  base.PhotoDraftTests.drafts)
 
     def setUp(self):
-        PhotoDraftTests.setUp(self)
+        base.PhotoDraftTests.setUp(self)
         self.interp = FailingReader()
         self.conv = self.open()
 
