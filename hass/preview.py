@@ -11,6 +11,7 @@ A damaged change record gives the target ``{"kind": "unreadable"}``, refused bef
 import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
+from hass.content_model import shop_today
 from hass.notice import live_text
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
@@ -49,14 +50,23 @@ def _readable(record) -> bool:
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
 
 
-def target_for(record: dict, today=None) -> dict:
-    """The screenshot target for a touched record (the after value decides what the checks expect)."""
+def target_for(record: dict, store=None, today=None) -> dict:
+    """The screenshot target for a touched record (the after value decides what the checks expect).
+    AV1222-02: with ``store`` an active product also expects sitegen's own availability word (str or None) and a
+    changed photo expects its new src; ``today`` is the generation date of the files being checked."""
     if not _readable(record):
         return {"kind": "unreadable"}
     after, collection = record.get("after") or {}, record.get("collection")
     if collection == "products":
-        return {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
-                "status": after.get("status"), "description": after.get("description")}
+        target = {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
+                  "status": after.get("status"), "description": after.get("description")}
+        if store is not None and after.get("status") == "active":
+            from hass.sitegen import availability_label  # the one place the word and the stale rule live
+            target["availability"] = availability_label(after, store, today or shop_today())
+        before = record.get("before")
+        if isinstance(before, dict) and before.get("image") != after.get("image") and isinstance(after.get("image"), str):
+            target["image"] = after["image"]
+        return target
     if collection == "makers":
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
                 "place": after.get("place") or "", "hidden": "hidden" in after}
