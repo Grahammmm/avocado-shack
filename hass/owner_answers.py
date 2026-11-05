@@ -39,6 +39,7 @@ PARTIAL = ("If copying it was started and stopped part way, some pages may alrea
            "to the website again, which puts every page in place")
 NOT_LIVE = "Saved, but not on the website yet: copying it there is a separate step. Ask for help to put it on the website."
 UNCHANGED = "The website is as it was before"
+ROUTE_UNSHOWN = "The route idea is not shown on the site right now, so there was nothing to check."  # AV1222-06
 ROLLBACK_FAILED_WORDS = "install failed, some website files not put back - ask for help"  # RF1230-19
 
 

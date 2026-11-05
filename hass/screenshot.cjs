@@ -23,7 +23,7 @@ const allowed=req=>{
   if(!base||new URL(base).hostname!=='127.0.0.1')throw new Error('PREVIEW_URL must be a 127.0.0.1 address');
   const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
   try{
-    const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};
+    const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};let unshown=false;
     page.on('pageerror',e=>errors.push(e.message));
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
     if(target.kind==='design'){  // pageLoaded: HTTP 200 and the page's own heading visible; noHorizontalOverflow at this viewport
@@ -72,6 +72,20 @@ const allowed=req=>{
       }else if(target.status==='cancelled'){  // the id is compared in page JS, never put into a selector
         checks.rsvpGone=await page.$$eval('[data-rsvp]',(els,id)=>els.filter(b=>b.dataset.rsvp===id).length,target.id||'')===0;
       }
+    }else if(target.kind==='route'){  // AV1222-06: every place /hike shows this route (linked hike cards' Route line, the sample invitation) reads the title; compared as text in page JS
+      await page.goto(base+'/hike',{waitUntil:'networkidle'});
+      const got=await page.evaluate(async id=>{
+        const get=async p=>{try{const r=await fetch(p,{cache:'no-store'});return r.ok&&(r.headers.get('Content-Type')||'').includes('json')?await r.json():null}catch{return null}};
+        const club=(await get('/api/community'))||(await get('/community.json'))||{},pv=await get('/hiking-preview.json'),linked=(club.events||[]).filter(e=>e.trailId===id),ws=v=>String(v).replace(/\s+/g,' ').trim();
+        const lines=[...document.querySelectorAll('#upcoming-hikes .hike-event')].filter(c=>{const key=[c.id,c.querySelector('[data-rsvp]')?.dataset.rsvp].filter(Boolean),h=c.querySelector('h2')?.textContent;
+          return linked.some(e=>key.length?key.includes(e.id):h===e.title||h==='Cancelled: '+e.title);}).map(c=>c.querySelector('.hike-route')).filter(Boolean).map(r=>ws(r.textContent));
+        const t=document.querySelector('#featured-hike-title');
+        return {lines,sample:t&&pv?.upcoming?.trailId===id?ws(t.childNodes[0]?.textContent):null};
+      },target.id||'');
+      const ws=v=>String(v).replace(/\s+/g,' ').trim(),title=ws(target.title),places=got.lines.length+(got.sample===null?0:1);
+      if(target.hidden)checks.routeGone=places===0;
+      else if(places>0)checks.routeShown=got.lines.every(l=>l===`Route: ${title}`||l.startsWith(`Route: ${title} · `))&&(got.sample===null||got.sample===title);
+      else unshown=true;
     }else{
       await page.goto(base+'/',{waitUntil:'networkidle'});
       if(target.kind==='product'||target.kind==='maker'){
@@ -136,6 +150,6 @@ const allowed=req=>{
     await page.screenshot({path:out});
     checks.noPageErrors=errors.length===0;
     checks.noPosts=!blocked.some(m=>m!=='GET'&&m!=='HEAD');
-    console.log(JSON.stringify({checks,blockedRequests:blocked.length}));
+    console.log(JSON.stringify({checks,blockedRequests:blocked.length,...(unshown?{unshown:true}:{})}));
   }finally{await browser.close();}
 })().catch(e=>{console.error(String((e&&e.message)||e).split('\n')[0]);process.exit(1);});

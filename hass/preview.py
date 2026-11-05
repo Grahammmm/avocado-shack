@@ -84,6 +84,8 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
                 "intro": after.get("intro"), **line,
                 "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), today)}
+    if collection == "routeIdeas":  # AV1222-06: /hike shows a route title only on a linked hike's Route line or the sample invitation
+        return {"kind": "route", "id": record.get("key") or "", "title": after.get("title", ""), "hidden": after.get("status") == "hidden"}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
     target = {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
               "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
@@ -205,6 +207,15 @@ def _checks(stdout: str) -> dict | None:
     return checks if good else None
 
 
+def _unshown(stdout: str) -> bool:
+    """AV1222-06: the last stdout line says the route is shown nowhere on /hike (nothing was checked)."""
+    lines = [line for line in (stdout or "").splitlines() if line.strip()]
+    try:
+        return json.loads(lines[-1]).get("unshown") is True if lines else False
+    except (ValueError, RecursionError, AttributeError):
+        return False
+
+
 class Previewer:
     def __init__(self, worktree, env=None, viewports=VIEWPORTS):
         self.viewports = tuple(viewports)
@@ -252,6 +263,7 @@ class Previewer:
                                       cwd=tmp, env=server_env, stdin=subprocess.DEVNULL,
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.last_server = {"pid": server.pid, "port": port}
+            unshown = False
             runs = []  # (viewport, shot, checks or None when the run failed, failure text); phone first
             try:
                 deadline = time.monotonic() + START_TIMEOUT
@@ -269,6 +281,7 @@ class Previewer:
                                               text=True, timeout=CAPTURE_TIMEOUT)
                         ran = not proc.returncode and shot.is_file()
                         checks = _checks(proc.stdout) if ran else None
+                        unshown = unshown or (name == "phone" and ran and _unshown(proc.stdout))
                         failure = None if checks is not None else (
                             "bad checks output" if ran else _last_line(proc.stderr or proc.stdout))
                     except Exception as exc:  # noqa: BLE001 - a desktop timeout/crash keeps the phone result
@@ -299,4 +312,5 @@ class Previewer:
                 checks = {**checks, **{f"desktop:{key}": passed for key, passed in more.items()}}
         failed = sorted(name for name, passed in checks.items() if passed is not True)
         error = error or (("check failed: " + ", ".join(failed)) if failed else None)
-        return {"ok": error is None, "png": str(out_png), "checks": checks, "error": error, **extra}
+        return {"ok": error is None, "png": str(out_png), "checks": checks, "error": error, **extra,
+                **({"unshown": True} if unshown and error is None else {})}

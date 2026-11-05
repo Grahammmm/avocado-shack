@@ -963,7 +963,7 @@ class Conversation:
         change = self.editor.show(row["change_id"]).get("change") or {}
         if not change.get("records"): return None, "no change record"
         files = {p: (wt / p).read_bytes() for p in editor_mod.GENERATED_PATHS}  # the committed files
-        picked, png = [], None  # AV1737-08: each touched record with a distinct target, in order
+        picked, png, unshown = [], None, []  # AV1737-08: each touched record with a distinct target, in order
         for record in change["records"]:
             target = preview_mod.target_for(record, shop_today(), store=content.store)  # the store the committed files were generated from
             if all(target != t for _r, t in picked): picked.append((record, target))
@@ -972,19 +972,22 @@ class Conversation:
                                           f"{row['change_id']}-result{'' if i == 1 else f'-{i}'}.png")
             if not shot["ok"]: return None, f"{record['collection']} {record['key']}: {shot['error']}"
             png = shot["png"] if i == 1 else png  # the reply keeps the first record's screenshot
+            unshown.append(bool(shot.get("unshown")))  # AV1222-06: a route /hike does not show was not checked
         if picked[VERIFY_MAX:]:
             print(f"verify {row['change_id']}: over {VERIFY_MAX} records, not checked: "
                   + ", ".join(f"{r['collection']} {r['key']}" for r, _t in picked[VERIFY_MAX:]), file=sys.stderr)
-        return png, None
+        return png, None, unshown
 
     def _verify_pending(self):
         if self.previewer is None: return
         for row in self._drafts("state = 'applied' AND checked_at IS NULL"):
-            png, error = self.verify(row)  # outside the transaction; the result and reply are stored together
+            png, error, *flags = self.verify(row)  # outside the transaction; the result and reply are stored together
+            unshown = flags[0] if flags else []
             with self._tx():
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
-                    self._reply(answers.applied_text(row["code"], row["summary"], checked=True), [png])  # SHOP-4
+                    text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)))  # SHOP-4
+                    self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
                 else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
