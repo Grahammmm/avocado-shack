@@ -1597,3 +1597,11 @@ Branch rb/rf0220-10 from origin/main 8108de8 (RF0220-10). For Michael: a stored 
 Checks: `python3 -B -m unittest hass.tests.test_inbox_payload_types` ran 5 tests, OK; the wider inbox, retention and receiver test lists are recorded in the PR body.
 
 Limits: fixture data only; no enqueue validation, schema, receiver, status output, retention or conversation code changed; no timestamp parsing or string-content rules added.
+
+## H10/H12/H16 photo GUIDs with surrogate code points are refused before any URL is built (RF1100-21) — November 5, 2026
+
+Branch rb/rf1100-21 from origin/main a4435ca (RF1100-21). For Michael: a message or attachment GUID holding a lone surrogate code point (U+D800-U+DFFF, which UTF-8 cannot encode) used to escape as an uncaught `UnicodeEncodeError` while the photo URL was built. A direct `BlueBubblesPhotos.fetch` call now raises the fixed `ValueError` before the password file or any transport is touched; a surrogate in the first n attachment GUIDs of the provider metadata is the normal `shape` refusal, raised before any download (even of valid earlier items). `hass/bridge_photos.py` (new private `_valid_guid`, used for both guards; docstring updated). Real non-ASCII text (accents, NBSP, emoji), a JSON-escaped surrogate pair that decodes to one emoji, the 200-code-point limit and attachments after the first n behave as before. Added `hass/tests/test_bridge_photos_unicode.py`.
+
+Checks: `python3 -B -m unittest hass.tests.test_bridge_photos hass.tests.test_bridge_photos_ids hass.tests.test_bridge_photos_size hass.tests.test_bridge_photos_tail hass.tests.test_bridge_photos_unicode hass.tests.test_ledger_rf1120`.
+
+Limits: fixture transports only; `bridge.py`, URL/password policy, duplicate-key and count handling are unchanged. The fixed ValueError text now ends with "or surrogate code points" (the existing size test uses assertIn on an earlier part).
