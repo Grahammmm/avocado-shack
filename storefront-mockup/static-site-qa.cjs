@@ -30,6 +30,9 @@ const COMMERCE_TEXT=/\$\s?\d|\bbasket\b|\bcheck ?out\b|\bcart\b|add to (?:bag|ba
 const PRELAUNCH=/sandbox|before (?:a public )?launch|during setup|not been checked|not connected|saved locally|local service|unsubscribe/i;
 const RAW_ERROR=/JSON|Unexpected token|<!doctype|SyntaxError|Failed to fetch|TypeError/i;
 const CLOSED='Online signup isn’t open yet, so nothing was sent or saved. Please say hello at the Shack instead.';
+const UPFRONT='Online signup isn’t open yet. Please say hello at the Shack instead.';
+// AV1422-07: closed up front (no typing), controls disabled; a script-forced submit still gets the CLOSED sentence and sends nothing.
+const closedUpfront=async(page,form,inputs)=>{const st=page.locator(form+' .form-status');await st.filter({hasText:UPFRONT}).waitFor();assert.equal((await st.innerText()).trim(),UPFRONT);assert.doesNotMatch(await st.innerText(),RAW_ERROR);for(const i of inputs)assert.ok(await page.locator(i).isDisabled(),i+' disabled');assert.ok(await page.locator(form+' button[type=submit]').isDisabled(),form+' button disabled');assert.equal(await page.locator(form).getAttribute('aria-disabled'),'true');await page.locator(form).evaluate(f=>{f.querySelectorAll(':disabled').forEach(x=>x.disabled=false);f.requestSubmit()});await st.filter({hasText:CLOSED}).waitFor()};
 server.listen(0,'127.0.0.1',async()=>{
  const base=`http://127.0.0.1:${server.address().port}`;
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
@@ -64,9 +67,7 @@ server.listen(0,'127.0.0.1',async()=>{
   assert.equal((await page.locator('#catalog-count').textContent()).split(' · ')[0],'170 selections');
   assert.equal(await page.locator('.selection-checked').count(),0);
   assert.ok(await page.getByText('It isn’t a claim that every ingredient was grown there.').isVisible(),'sourcing sentence');
-  await page.locator('#newsletter-email').fill('visitor@example.com');await page.locator('#community-newsletter button[type=submit]').click();
-  const newsletter=page.locator('#community-newsletter .form-status');await newsletter.filter({hasText:CLOSED}).waitFor();
-  assert.doesNotMatch(await newsletter.innerText(),RAW_ERROR);assert.equal(await page.locator('#newsletter-email').inputValue(),'visitor@example.com');
+  await closedUpfront(page,'#community-newsletter',['#newsletter-email','#community-newsletter input[name=hikes]']);
 
   for(const route of ['/hike','/hike/']){
    await page.goto(base+route);await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
@@ -76,9 +77,7 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(await page.locator('.trail-journal-entry').count(),2,route+': trail journal');
    assert.match(await page.locator('#history-context').innerText(),/not confirmed club history/);
    assert.doesNotMatch(await page.locator('#upcoming-hikes').innerText(),/isn’t available right now/);
-   await page.locator('#hike-email').fill('visitor@example.com');await page.locator('#hike-updates button[type=submit]').click();
-   const status=page.locator('#hike-updates .form-status');await status.filter({hasText:CLOSED}).waitFor();
-   assert.doesNotMatch(await status.innerText(),RAW_ERROR);
+   await closedUpfront(page,'#hike-updates',['#hike-email']);
   }
   // AV1422-05: a fixed clock decides whether the sample invitation (startsAt 2026-11-08 09:00 Pacific) shows its date or "Date to be confirmed".
   const sample=JSON.parse(fs.readFileSync(path.join(root,'hiking-preview.json'),'utf8')),json=body=>({contentType:'application/json',body:JSON.stringify(body)});
