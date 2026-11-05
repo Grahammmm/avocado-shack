@@ -238,6 +238,37 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         other = self.target(self.r, "hike.update", {"id": hid, "description": "Easy loop."})
         self.assertNotIn("fieldsShown", self.capture(other)["checks"])
 
+    def test_cleared_field_must_be_gone(self):  # the line is absent, so only the cleared list can catch the old page
+        hid = self.create(self.r)
+        self.target(self.r, "hike.update", {"id": hid, "meetTime": "8:00 AM", "walkTime": "8:30 AM"})
+        old = (self.r.wt / COMMUNITY).read_bytes()
+        target = self.target(self.r, "hike.update", {"id": hid, "clear": ["meetTime"]})
+        self.assertEqual((target.get("changed"), target.get("cleared")), ({}, ["meetTime"]))
+        self.assertIs(self.capture(target)["checks"]["fieldsShown"], True)  # normal page: no Meet at line, Start kept
+        stale = self.capture(target, {COMMUNITY: old})
+        self.assertIs(stale["checks"]["fieldsShown"], False)
+        self.assertFalse(stale["ok"])
+        plain = self.target(self.r, "hike.update", {"id": hid, "description": "Easy loop."})
+        self.assertNotIn("cleared", plain)
+
+    def test_wrong_id_never_matches_a_started_card_without_a_button(self):
+        import json
+        hid = self.create(self.r)
+        target = self.target(self.r, "hike.update", {"id": hid, "rsvpEnabled": False})
+        self.assertIs(self.capture(target)["checks"]["dateShown"], True)
+        data = json.loads((self.r.wt / COMMUNITY).read_text())  # same title, already started, RSVPs off: no button, no calendar link
+        started = datetime.now(timezone.utc) - timedelta(hours=1)
+        for event in data["events"]:
+            event["startsAt"] = started.astimezone(timezone(timedelta(hours=-7))).isoformat()
+            event["rsvpEnabled"] = False
+        files = {COMMUNITY: json.dumps(data).encode()}
+        wrong = self.capture({**target, "id": "no-such-hike", "startsAt": started.isoformat()}, files)
+        self.assertEqual(self.scheduled(wrong), {"eventShown": False}, wrong)
+        self.assertFalse(wrong["ok"])
+        right = self.capture({**target, "startsAt": started.isoformat()}, files)
+        self.assertEqual(self.scheduled(right).get("eventShown"), True, right)
+        self.assertIs(right["checks"]["dateShown"], True, right)
+
     def test_changed_value_must_sit_under_its_own_label(self):  # stale card: Meet at still old, the new value is the Start time
         hid = self.create(self.r)
         self.target(self.r, "hike.update", {"id": hid, "walkTime": "9:00 AM", "meetTime": "8:00 AM"})

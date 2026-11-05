@@ -38,11 +38,11 @@ const allowed=req=>{
         const cards=await page.$$eval('.hike-event',(els,t)=>els.filter(c=>c.querySelector('h2')?.textContent===t.title).map(c=>{
           const facts={};for(const d of c.querySelectorAll('dt')){const dd=d.nextElementSibling?.cloneNode(true);dd?.querySelectorAll('a').forEach(a=>a.remove());
             (facts[d.textContent]??=[]).push(dd?dd.textContent.replace(/\s+/g,' ').replace(/\s*·\s*$/,'').trim():'');}
-          return {ids:[c.querySelector('[data-rsvp]')?.dataset.rsvp,(c.querySelector('a.hike-ics')?.getAttribute('download')||'').replace(/\.ics$/,'')].filter(Boolean),
+          return {ids:[c.id,c.querySelector('[data-rsvp]')?.dataset.rsvp,(c.querySelector('a.hike-ics')?.getAttribute('download')||'').replace(/\.ics$/,'')].filter(Boolean),
             date:c.querySelector('.hike-date')?.textContent,meet:[...c.querySelectorAll('dt')].filter(d=>d.textContent==='Meet').map(d=>d.nextElementSibling?.textContent),
             facts,places:[...c.querySelectorAll('p.club-small')].map(p=>p.textContent)};}),target);
-        // a card naming this id wins; else the cards naming no id (RSVPs off or full, no meeting point, already started) are the candidates
-        const mine=cards.filter(c=>c.ids.includes(target.id)),pool=mine.length?mine:cards.filter(c=>!c.ids.length);
+        // identity: a card's id is its anchor (id attribute), RSVP button or calendar link; only a card naming this id counts, none is guessed
+        const mine=cards.filter(c=>!!target.id&&c.ids.includes(target.id)),pool=mine;
         const LABEL={meetTime:'Meet at',meetingAddress:'Address',returnTime:'Back',walkTime:'Start'};
         const evaluate=card=>{
           const r={},when=new Date(target.startsAt),pt=o=>when.toLocaleString('en-US',{timeZone:'America/Los_Angeles',...o});
@@ -53,7 +53,8 @@ const allowed=req=>{
           // guests already confirmed are not in the target: an open hike with a capacity may also be full (remaining 0)
           r.placesShown=card.places.length===1&&(card.places[0]===want||(open&&n>0&&card.places[0]==='This hike is full.'));
           const ch=Object.entries(target.changed||{});  // each changed value must be the one under its own label
-          if(ch.length)r.fieldsShown=ch.every(([k,v])=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===1&&card.facts[LABEL[k]][0]===ws(v));
+          const gone=target.cleared||[];  // a cleared field's labeled line must be absent
+          if(ch.length||gone.length)r.fieldsShown=ch.every(([k,v])=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===1&&card.facts[LABEL[k]][0]===ws(v))&&gone.every(k=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===0);
           return r;
         };
         if(!pool.length)checks.eventShown=false;

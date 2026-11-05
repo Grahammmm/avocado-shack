@@ -94,6 +94,10 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
                       rsvpEnabled=after.get("rsvpEnabled") is True,
                       changed={k: after[k] for k in ("meetTime", "meetingAddress", "returnTime", "walkTime")
                                if isinstance(after.get(k), str) and after[k].strip() and before.get(k) != after[k]})
+        cleared = [k for k in ("meetTime", "meetingAddress", "returnTime", "walkTime")  # removed: the labeled line must be gone
+                   if isinstance(before.get(k), str) and before[k].strip() and not (isinstance(after.get(k), str) and after[k].strip())]
+        if cleared:
+            target["cleared"] = cleared
     return target
 
 
