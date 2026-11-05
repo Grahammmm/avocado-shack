@@ -215,21 +215,28 @@ function pageCollect(opts) {
       if (a * L.op >= 1 && L.color !== 'rgba(0, 0, 0, 0)') { stopped = L.el; break; }
     }
     if (!rec.exempt) {
-      const cx = [0.1, 0.5, 0.9], hits = new Set();
+      const cx = [0.1, 0.5, 0.9], hits = new Set(); let needsScroll = false;
       // elementsFromPoint only sees the viewport: an offscreen point is brought into view first (scroll restored afterwards).
-      const sx = scrollX, sy = scrollY, rectNow = () => node ? (() => { const r = document.createRange(); r.selectNodeContents(node); return r.getBoundingClientRect(); })() : el.getBoundingClientRect();
+      const rectNow = () => node ? (() => { const r = document.createRange(); r.selectNodeContents(node); return r.getBoundingClientRect(); })() : el.getBoundingClientRect();
       const inView = (x, y) => x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight;
+      // Every scroll position this sampling may change (window + each scrollable ancestor) is saved and put back before each
+      // point, so all geometry is recomputed from the untouched layout and the page is left exactly as found.
+      const saved = [[null, scrollX, scrollY]]; for (let x = el.parentElement; x; x = x.parentElement) if (x.scrollLeft || x.scrollTop || x.scrollWidth > x.clientWidth || x.scrollHeight > x.clientHeight) saved.push([x, x.scrollLeft, x.scrollTop]);
+      const restore = () => { for (const [x, l, t] of saved) { if (x) { if (x.scrollLeft !== l || x.scrollTop !== t) x.scrollTo({ left: l, top: t, behavior: 'instant' }); } else if (scrollX !== l || scrollY !== t) window.scrollTo({ left: l, top: t, behavior: 'instant' }); } };
       let sampled = 0;
       for (const fx of cx) for (const fy of [0.3, 0.7]) {
-        let r = rng, x = r.left + r.width * fx, y = r.top + r.height * fy;
+        restore();
+        let r = rectNow(), x = r.left + r.width * fx, y = r.top + r.height * fy;
         if (!inView(x, y)) {
-          window.scrollTo({ left: Math.max(0, x + sx - innerWidth / 2), top: Math.max(0, y + sy - innerHeight / 2), behavior: 'instant' });
+          // elementsFromPoint only sees the viewport: bring the point into view first.
+          window.scrollTo({ left: Math.max(0, x + scrollX - innerWidth / 2), top: Math.max(0, y + scrollY - innerHeight / 2), behavior: 'instant' });
           r = rectNow(); x = r.left + r.width * fx; y = r.top + r.height * fy;
           if (!inView(x, y)) { // nested scroll container (e.g. a horizontally scrolling filter row): scroll the element itself
             el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
             r = rectNow(); x = r.left + r.width * fx; y = r.top + r.height * fy;
           }
           if (!inView(x, y)) continue; // never displayable (off-canvas skip link, closed dialog parts): no backing to sample
+          needsScroll = true;
         }
         sampled++;
         const stack = document.elementsFromPoint(x, y);
@@ -243,11 +250,15 @@ function pageCollect(opts) {
           if (seen && stopped && s.contains(stopped)) break;
         }
       }
-      if (scrollX !== sx || scrollY !== sy) window.scrollTo({ left: sx, top: sy, behavior: 'instant' });
+      restore();
       const covered = [...hits].find(h => h.startsWith('covered by'));
       if (covered) rec.unsupported = 'text overlapped by another box (' + covered + ')';
       else if (hits.size) imageBacked = (imageBacked ? imageBacked + '; ' : '') + 'overlapping ' + [...hits].slice(0, 2).join(', ');
       if (imageBacked) rec.imageBacked = imageBacked;
+      if (imageBacked && needsScroll) { // the backing is only visible after scrolling: pixel capture repeats the scroll (see pageReveal)
+        window.__cqaTag = (window.__cqaTag || 0) + 1; el.setAttribute('data-cqa-t', String(window.__cqaTag)); rec.tag = window.__cqaTag;
+        rec.nodeIdx = node ? [...el.childNodes].indexOf(node) : -1;
+      }
     }
     results.push(rec);
   };
@@ -284,6 +295,20 @@ function pageCollect(opts) {
   return results;
 }
 
+// Scrolls a tagged element (window and nested containers) so it is displayed; returns its document rectangle and the undo data.
+function pageReveal(a) {
+  const el = document.querySelector('[data-cqa-t="' + a.tag + '"]'); if (!el) return null;
+  const saved = [[null, scrollX, scrollY]]; for (let x = el.parentElement; x; x = x.parentElement) if (x.scrollWidth > x.clientWidth || x.scrollHeight > x.clientHeight) saved.push([x, x.scrollLeft, x.scrollTop]);
+  window.__cqaUndo = saved;
+  el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+  const n = a.nodeIdx >= 0 ? el.childNodes[a.nodeIdx] : null;
+  let r; if (n) { const g = document.createRange(); g.selectNodeContents(n); r = g.getBoundingClientRect(); } else r = el.getBoundingClientRect();
+  return [r.left + scrollX, r.top + scrollY, r.width, r.height];
+}
+function pageUndoReveal(tag) {
+  for (const [x, l, t] of (window.__cqaUndo || [])) { if (x) x.scrollTo({ left: l, top: t, behavior: 'instant' }); else window.scrollTo({ left: l, top: t, behavior: 'instant' }); }
+  window.__cqaUndo = null; document.querySelector('[data-cqa-t="' + tag + '"]')?.removeAttribute('data-cqa-t');
+}
 function pageRequired(sels) {
   return sels.map(s => { const els = [...document.querySelectorAll(s)].filter(e => e.checkVisibility({ checkVisibilityCSS: true }) && ((e.innerText ?? e.textContent) || '').trim()); return [s, els.length]; });
 }
@@ -325,16 +350,18 @@ async function measure(page, st, extra = {}) {
     let method = 'computed styles';
     if (r.imageBacked && !r.unsupported) {
       try {
-        const [x, y, w, h] = r.rect;
+        let [x, y, w, h] = r.rect;
+        if (r.tag) { const rr = await page.evaluate(pageReveal, { tag: r.tag, nodeIdx: r.nodeIdx }); if (rr) [x, y, w, h] = rr; }
         await page.evaluate(() => { const s = document.createElement('style'); s.id = 'cqa-notext'; s.textContent = '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;caret-color:transparent!important}svg text,svg tspan{fill:transparent!important}'; document.head.append(s); });
         const clip = { x: Math.max(0, x - 2), y: Math.max(0, y - 2), width: Math.max(1, Math.ceil(w) + 4), height: Math.max(1, Math.ceil(h) + 4) };
         const hidden = await page.screenshot({ clip, fullPage: true, animations: 'disabled' });
         await page.evaluate(() => document.getElementById('cqa-notext')?.remove());
         const shown = await page.screenshot({ clip, fullPage: true, animations: 'disabled' });
         const px = await page.evaluate(pagePixels, [shown.toString('base64'), hidden.toString('base64')]);
+        if (r.tag) await page.evaluate(pageUndoReveal, r.tag);
         if (!px || !px.length) run.unsupported = 'image-backed text: backing pixels could not be read';
         else { run.pixels = px.map(s => s.split(',').map(Number)); method = 'backing pixels under the text bounds, text suppressed (' + r.imageBacked + ')'; }
-      } catch (e) { await page.evaluate(() => document.getElementById('cqa-notext')?.remove()).catch(() => {}); run.unsupported = 'image-backed text: pixel measurement failed'; }
+      } catch (e) { await page.evaluate(() => document.getElementById('cqa-notext')?.remove()).catch(() => {}); if (r.tag) await page.evaluate(pageUndoReveal, r.tag).catch(() => {}); run.unsupported = 'image-backed text: pixel measurement failed'; }
     }
     const a = assess(run);
     occurrences.push({ ...base, ...a, method, ...(a.status === 'unassessed' ? { bgs: [] } : {}) }); n++;

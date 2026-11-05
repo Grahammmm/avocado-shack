@@ -20,7 +20,7 @@ Measured text/background colour pairs the home page (with its catalog) and `/hik
 |---|---|
 | fixture site A (content as committed), published tree | `cebd4302f083b7e9 (192 files)` |
 | fixture site B (live notice + availability), published tree | `d01ca72a07c76bde (192 files)` |
-| storefront-mockup/site-contrast-qa.cjs | `d3ed3f8f51b568a0` |
+| storefront-mockup/site-contrast-qa.cjs | `5438ead0e85e83df` |
 | storefront-mockup/site-contrast-qa.py | `7a94c89eaeeeb9e5` |
 
 ## Result
@@ -29,7 +29,7 @@ Occurrences measured (route × viewport × state × interaction × text run): **
 
 | Pass | Fail | Exempt | Unassessed |
 |---:|---:|---:|---:|
-| 8428 | 24 | 62 | 0 |
+| 8430 | 22 | 62 | 0 |
 
 Complete: **yes** (complete means zero unassessed and every required state seen). Blocked non-loopback requests: 0.
 
@@ -69,27 +69,27 @@ Each state ran at both widths. A required selector must have visible nonempty te
 
 ## Failing pairs
 
-8 failing selector/colour groups (24 occurrences). Ratio is the lowest measured; the suggestion keeps the background fixed and passes against every backing measured for that selector.
+8 failing selector/colour groups (22 occurrences). Ratio is the lowest measured; the suggestion keeps the background fixed and passes against every backing measured for that selector.
 
 | # | Selector | Interaction | Foreground / background | Size / weight | Threshold | Ratio | Nearest passing foreground | Occurrences, viewports, states |
 |---:|---|---|---|---|---:|---:|---|---|
-| 1 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` (svg-text) | default | `#ffffff` on `#fefffe (backing #d2dbd8 to #fefffe)` | 11 px / 700 | 4.5 | 1.002 | no foreground-only solution: backings run from `#132739` to `#fefffe` | 5; 1440 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
-| 2 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` (svg-text) | default | `#ffffff` on `#f9fafa (backing #c5d0cc to #f9fafa)` | 11 px / 700 | 4.5 | 1.046 | no foreground-only solution: backings run from `#132739` to `#fefffe` | 4; 390 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events |
-| 3 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#faf7ef` | 10 px / 700 | 4.5 | 1.050 | no foreground-only solution: backings run from `#0c213d` to `#faf7ef` | 1; 390 px; hike-sample-map-dialog |
-| 4 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` (svg-text) | default | `#ffffff` on `#faf7ef` | 11 px / 700 | 4.5 | 1.071 | no foreground-only solution: backings run from `#132739` to `#fefffe` | 3; 1440, 390 px; hike-sample-map-dialog |
-| 5 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` (svg-text) | default | `#173c2e` on `#183242 (backing #1a2335 to #183242)` | 11 px / 700 | 4.5 | 1.094 | no foreground-only solution: backings run from `#1a2335` to `#fffbed` | 1; 1440 px; hike-sample-map-dialog |
-| 6 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#d7dadb (backing #929ba5 to #d7dadb)` | 10 px / 700 | 4.5 | 1.379 | no foreground-only solution: backings run from `#0c213d` to `#faf7ef` | 4; 390 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events |
-| 7 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#7f91a2 (backing #0c213d to #7f91a2)` | 10 px / 700 | 4.5 | 3.181 | no foreground-only solution: backings run from `#0c213d` to `#faf7ef` | 5; 1440 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
-| 8 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#7e91a4 (backing #152844 to #7e91a4)` | 10 px / 700 | 4.5 | 3.182 | no foreground-only solution: backings run from `#0c213d` to `#faf7ef` | 1; 1440 px; hike-sample-map-dialog |
+| 1 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` (svg-text) | default | `#ffffff` on `#fefffe (backing #d2dbd8 to #fefffe)` | 11 px / 700 | 4.5 | 1.002 | no foreground-only solution: backings run from `#214d3d` to `#fefffe` | 5; 1440 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
+| 2 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` (svg-text) | default | `#ffffff` on `#fdfdfd (backing #bac7c2 to #fdfdfd)` | 11 px / 700 | 4.5 | 1.017 | no foreground-only solution: backings run from `#214d3d` to `#fefffe` | 1; 1440 px; hike-sample-map-dialog |
+| 3 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` (svg-text) | default | `#ffffff` on `#fafbfb (backing #bdcbc6 to #fafbfb)` | 11 px / 700 | 4.5 | 1.037 | no foreground-only solution: backings run from `#214d3d` to `#fefffe` | 1; 390 px; hike-sample-map-dialog |
+| 4 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` (svg-text) | default | `#ffffff` on `#f9fafa (backing #c5d0cc to #f9fafa)` | 11 px / 700 | 4.5 | 1.046 | no foreground-only solution: backings run from `#214d3d` to `#fefffe` | 4; 390 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events |
+| 5 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#d7dadb (backing #929ba5 to #d7dadb)` | 10 px / 700 | 4.5 | 1.379 | no foreground-only solution: backings run from `#0c213d` to `#d7dadb` | 4; 390 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events |
+| 6 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#c9c9ca (backing #777780 to #c9c9ca)` | 10 px / 700 | 4.5 | 1.623 | no foreground-only solution: backings run from `#0c213d` to `#d7dadb` | 1; 390 px; hike-sample-map-dialog |
+| 7 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#7f91a2 (backing #0c213d to #7f91a2)` | 10 px / 700 | 4.5 | 3.181 | no foreground-only solution: backings run from `#0c213d` to `#d7dadb` | 5; 1440 px; hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
+| 8 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` (text) | default | `#fffdf3` on `#738691 (backing #132843 to #738691)` | 10 px / 700 | 4.5 | 3.712 | no foreground-only solution: backings run from `#0c213d` to `#d7dadb` | 1; 1440 px; hike-sample-map-dialog |
 
 ### Example nodes
 
 1. `section.trail-explorer:nth-child(1) > div.trail-map-stage:nth-child(2) > svg.trail-map-canvas:nth-child(1) > g.trail-route-markers:nth-child(4) > g:nth-child(1) > text.trail-endpoint-letter:nth-child(2)` — "P"
-2. `section.trail-explorer:nth-child(1) > div.trail-map-stage:nth-child(2) > svg.trail-map-canvas:nth-child(1) > g.trail-route-markers:nth-child(4) > g:nth-child(1) > text.trail-endpoint-letter:nth-child(2)` — "P"
-3. `body.catalog-only.hike-page:nth-child(2) > dialog.trail-map-dialog:nth-child(11) > section.trail-explorer:nth-child(2) > div.trail-map-stage:nth-child(2) > div.trail-compass:nth-child(2) > span:nth-child(1)` — "N"
-4. `section.trail-explorer:nth-child(2) > div.trail-map-stage:nth-child(2) > svg.trail-map-canvas:nth-child(1) > g.trail-route-markers:nth-child(4) > g:nth-child(1) > text.trail-endpoint-letter:nth-child(2)` — "P"
-5. `section.trail-explorer:nth-child(2) > div.trail-map-stage:nth-child(2) > svg.trail-map-canvas:nth-child(1) > g.trail-route-markers:nth-child(4) > g:nth-child(1) > text.trail-endpoint-label:nth-child(3)` — "Coon Creek parking"
-6. `article.trail-invitation:nth-child(1) > div:nth-child(4) > section.trail-explorer:nth-child(1) > div.trail-map-stage:nth-child(2) > div.trail-compass:nth-child(2) > span:nth-child(1)` — "N"
+2. `section.trail-explorer:nth-child(2) > div.trail-map-stage:nth-child(2) > svg.trail-map-canvas:nth-child(1) > g.trail-route-markers:nth-child(4) > g:nth-child(1) > text.trail-endpoint-letter:nth-child(2)` — "P"
+3. `section.trail-explorer:nth-child(2) > div.trail-map-stage:nth-child(2) > svg.trail-map-canvas:nth-child(1) > g.trail-route-markers:nth-child(4) > g:nth-child(1) > text.trail-endpoint-letter:nth-child(2)` — "P"
+4. `section.trail-explorer:nth-child(1) > div.trail-map-stage:nth-child(2) > svg.trail-map-canvas:nth-child(1) > g.trail-route-markers:nth-child(4) > g:nth-child(1) > text.trail-endpoint-letter:nth-child(2)` — "P"
+5. `article.trail-invitation:nth-child(1) > div:nth-child(4) > section.trail-explorer:nth-child(1) > div.trail-map-stage:nth-child(2) > div.trail-compass:nth-child(2) > span:nth-child(1)` — "N"
+6. `body.catalog-only.hike-page:nth-child(2) > dialog.trail-map-dialog:nth-child(11) > section.trail-explorer:nth-child(2) > div.trail-map-stage:nth-child(2) > div.trail-compass:nth-child(2) > span:nth-child(1)` — "N"
 7. `article.trail-invitation:nth-child(1) > div:nth-child(4) > section.trail-explorer:nth-child(1) > div.trail-map-stage:nth-child(2) > div.trail-compass:nth-child(2) > span:nth-child(1)` — "N"
 8. `body.catalog-only.hike-page:nth-child(2) > dialog.trail-map-dialog:nth-child(11) > section.trail-explorer:nth-child(2) > div.trail-map-stage:nth-child(2) > div.trail-compass:nth-child(2) > span:nth-child(1)` — "N"
 
@@ -106,18 +106,18 @@ Each state ran at both widths. A required selector must have visible nonempty te
 
 ## Pair inventory
 
-34 distinct effective foreground/background/threshold/status pairs, lowest ratio first.
+35 distinct effective foreground/background/threshold/status pairs, lowest ratio first.
 
 | Foreground | Background | Threshold | Status | Lowest ratio | Occurrences | Selectors (up to 4) |
 |---|---|---:|---|---:|---:|---|
 | `#ffffff` | `#fefffe` | 4.5 | fail | 1.002 | 5 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` |
+| `#ffffff` | `#fdfdfd` | 4.5 | fail | 1.017 | 1 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` |
+| `#ffffff` | `#fafbfb` | 4.5 | fail | 1.037 | 1 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` |
 | `#ffffff` | `#f9fafa` | 4.5 | fail | 1.046 | 4 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` |
-| `#fffdf3` | `#faf7ef` | 4.5 | fail | 1.050 | 1 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` |
-| `#ffffff` | `#faf7ef` | 4.5 | fail | 1.071 | 3 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` |
-| `#173c2e` | `#183242` | 4.5 | fail | 1.094 | 1 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` |
 | `#fffdf3` | `#d7dadb` | 4.5 | fail | 1.379 | 4 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` |
+| `#fffdf3` | `#c9c9ca` | 4.5 | fail | 1.623 | 1 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` |
 | `#fffdf3` | `#7f91a2` | 4.5 | fail | 3.181 | 5 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` |
-| `#fffdf3` | `#7e91a4` | 4.5 | fail | 3.182 | 1 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` |
+| `#fffdf3` | `#738691` | 4.5 | fail | 3.712 | 1 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` |
 | `#757575` | `#ffffff` | 4.5 | pass | 4.608 | 42 | `input#product-search`, `input#preview-rsvp-email`, `input#hike-email`, `input#newsletter-email` |
 | `#ac4828` | `#eeeadd` | 3 | pass | 4.701 | 70 | `h1#hiking-heading > em`, `section#our-way.market-values > div > h2 > em`, `section.hero > div.hero-copy > h1 > em`, `div#past-hikes.trail-journal > article.trail-journal-entry > div.trail-journal-marker` |
 | `#ac4828` | `#eeeadd` | 4.5 | pass | 4.701 | 18 | `article#fx-one.hike-event > p.hike-date`, `article#fx-scheduled.hike-event > p.hike-date`, `article#fx-cancelled.hike-event.hike-cancelled > p.hike-date`, `article#fx-closed.hike-event > p.hike-date` |
@@ -130,19 +130,20 @@ Each state ran at both widths. A required selector must have visible nonempty te
 | `#214d3d` | `#e5ebdd` | 4.5 | pass | 7.868 | 36 | `div.food-card-top > div.food-identity > div.food-badges > span` |
 | `#214d3d` | `#eeeadd` | 3 | pass | 7.954 | 179 | `h1#hiking-heading`, `h2#past-heading`, `section#hikes.hiking-club > div.hike-notify > div > h2`, `main > section.hero > div.hero-copy > h1` |
 | `#214d3d` | `#eeeadd` | 4.5 | pass | 7.954 | 1613 | `body.catalog-only.hike-page > footer > a`, `body.catalog-only > footer > a`, `section#our-way.market-values > div.values-copy > p`, `section.hero > div.hero-copy > div.hero-values > span` |
-| `#214d3d` | `#edede6` | 4.5 | pass | 8.141 | 5 | `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` |
+| `#214d3d` | `#edede6` | 4.5 | pass | 8.141 | 6 | `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` |
 | `#214d3d` | `#eeede6` | 4.5 | pass | 8.156 | 4 | `div > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` |
+| `#214d3d` | `#eeeee6` | 4.5 | pass | 8.209 | 1 | `dialog.trail-map-dialog > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` |
 | `#214d3d` | `#f0efe6` | 4.5 | pass | 8.294 | 5 | `div > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` |
+| `#214d3d` | `#f1efe6` | 4.5 | pass | 8.310 | 1 | `dialog.trail-map-dialog > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` |
+| `#214d3d` | `#f6f4ec` | 4.5 | pass | 8.693 | 1 | `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` |
 | `#214d3d` | `#f7f5ec` | 4.5 | pass | 8.765 | 4 | `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` |
 | `#214d3d` | `#faf7ef` | 3 | pass | 8.942 | 368 | `article > div.food-card-top > div.food-identity > h3`, `section#visit.story > div > h2`, `section#market.market > div.section-head > div > h2`, `section#visit.story > div > p.signature > strong` |
-| `#214d3d` | `#faf7ef` | 4.5 | pass | 8.942 | 4697 | `div#catalog-grid.products > article > a.text-link.card-link`, `article > div.food-card-top > div.food-identity > p.product-meta`, `div#catalog-grid.products > article > p.food-description`, `article > div.food-card-top > div.food-identity > h3` |
+| `#214d3d` | `#faf7ef` | 4.5 | pass | 8.942 | 4693 | `div#catalog-grid.products > article > a.text-link.card-link`, `article > div.food-card-top > div.food-identity > p.product-meta`, `div#catalog-grid.products > article > p.food-description`, `article > div.food-card-top > div.food-identity > h3` |
 | `#faf7ef` | `#214d3d` | 3 | pass | 8.942 | 60 | `h2#newsletter-heading`, `article.trail-invitation > dl.trail-stats > div > dd` |
 | `#faf7ef` | `#214d3d` | 4.5 | pass | 8.942 | 171 | `article.trail-invitation > dl.trail-stats > div > dt`, `section.trail-explorer > div.trail-explorer-heading > div.trail-layer-switch > button`, `form#community-newsletter > label`, `form#community-newsletter > label.community-check` |
 | `#214d3d` | `#ffffff` | 4.5 | pass | 9.573 | 58 | `select#brand-filter`, `select#preview-rsvp-party`, `input#hike-email`, `input#newsletter-email` |
-| `#ffffff` | `#214d3d` | 4.5 | pass | 9.573 | 165 | `body.catalog-only.hike-page > div.preview > a`, `body.catalog-only > div.preview > a`, `body.catalog-only.hike-page > div.preview > span`, `section#market.market > div.filters > button.selected` |
-| `#173c2e` | `#faf7ef` | 4.5 | pass | 11.390 | 3 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` |
-| `#173c2e` | `#fffbed` | 4.5 | pass | 11.772 | 18 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` |
-| `#ffffff` | `#1a2f43` | 4.5 | pass | 13.711 | 1 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` |
+| `#ffffff` | `#214d3d` | 4.5 | pass | 9.573 | 167 | `body.catalog-only.hike-page > div.preview > a`, `body.catalog-only > div.preview > a`, `body.catalog-only.hike-page > div.preview > span`, `section#market.market > div.filters > button.selected` |
+| `#173c2e` | `#fffbed` | 4.5 | pass | 11.772 | 22 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` |
 | `#000000` | `#efefef` | 4.5 | pass | 18.263 | 10 | `select#rsvp-party` |
 
 ## Occurrence index
@@ -319,8 +320,8 @@ Every selector group with its colours, how many nodes were measured (cards count
 | `dialog.trail-map-dialog > section.trail-explorer > details.trail-map-notes > summary` | text | `#214d3d` on `#faf7ef` | 11 px / 400 | pass | 2 | 1440, 390 | default | hike-sample-map-dialog |
 | `dialog.trail-map-dialog > section.trail-explorer > div.trail-elevation > p.trail-profile-hint` | text | `#536557` on `#faf7ef` | 10 px / 400 | pass | 2 | 1440, 390 | default | hike-sample-map-dialog |
 | `dialog.trail-map-dialog > section.trail-explorer > div.trail-map-caption > p` | text | `#536557` on `#faf7ef` | 10 px / 400 | pass | 4 | 1440, 390 | default | hike-sample-map-dialog |
-| `dialog.trail-map-dialog > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` | text | `#214d3d` on `#faf7ef` | 9 px / 400 | pass | 1 | 390 | default | hike-sample-map-dialog |
-| `dialog.trail-map-dialog > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` | text | `#214d3d` on `#faf7ef` | 10 px / 400 | pass | 1 | 1440 | default | hike-sample-map-dialog |
+| `dialog.trail-map-dialog > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` | text | `#214d3d` on `#eeeee6` | 9 px / 400 | pass | 1 | 390 | default | hike-sample-map-dialog |
+| `dialog.trail-map-dialog > section.trail-explorer > div.trail-map-stage > div.trail-map-route-key` | text | `#214d3d` on `#f1efe6` | 10 px / 400 | pass | 1 | 1440 | default | hike-sample-map-dialog |
 | `div > div.club-host > p > strong` | text | `#214d3d` on `#eeeadd` | 13 px / 700 | pass | 22 | 1440, 390 | default | hike-calendar-failure, hike-no-events-no-samples, hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash, hike-updates/saving, hike-updates/server-error, hike-updates/success, hike-updates/unreachable |
 | `div > section.trail-explorer > details.trail-map-notes > p` | text | `#214d3d` on `#faf7ef` | 12 px / 400 | pass | 18 | 1440, 390 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete |
 | `div > section.trail-explorer > details.trail-map-notes > summary` | text | `#214d3d` on `#faf7ef` | 11 px / 400 | pass | 17 | 1440, 390 | default, focus, hover | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
@@ -498,21 +499,19 @@ Every selector group with its colours, how many nodes were measured (cards count
 | `section.trail-explorer > div.trail-explorer-heading > div.trail-layer-switch > button` | text | `#214d3d` on `#faf7ef` | 12 px / 700 | pass | 19 | 1440, 390 | default, focus, hover | hike-real-events, hike-sample, hike-sample-map-dialog, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
 | `section.trail-explorer > div.trail-explorer-heading > div.trail-layer-switch > button` | text | `#faf7ef` on `#214d3d` | 12 px / 700 | pass | 19 | 1440, 390 | default, focus, hover | hike-real-events, hike-sample, hike-sample-map-dialog, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
 | `section.trail-explorer > div.trail-map-caption > p > a` | text | `#536557` on `#faf7ef` | 10 px / 400 | pass | 30 | 1440, 390 | default, focus, hover | hike-real-events, hike-sample, hike-sample-map-dialog, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
-| `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` | text | `#fffdf3` on `#7e91a4` | 10 px / 700 | fail | 1 | 1440 | default | hike-sample-map-dialog |
+| `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` | text | `#fffdf3` on `#738691` | 10 px / 700 | fail | 1 | 1440 | default | hike-sample-map-dialog |
 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` | text | `#fffdf3` on `#7f91a2` | 10 px / 700 | fail | 5 | 1440 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
+| `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` | text | `#fffdf3` on `#c9c9ca` | 10 px / 700 | fail | 1 | 390 | default | hike-sample-map-dialog |
 | `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` | text | `#fffdf3` on `#d7dadb` | 10 px / 700 | fail | 4 | 390 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events |
-| `section.trail-explorer > div.trail-map-stage > div.trail-compass > span` | text | `#fffdf3` on `#faf7ef` | 10 px / 700 | fail | 1 | 390 | default | hike-sample-map-dialog |
-| `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` | text | `#214d3d` on `#edede6` | 10 px / 400 | pass | 5 | 1440 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
+| `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` | text | `#214d3d` on `#edede6` | 10 px / 400 | pass | 6 | 1440 | default | hike-real-events, hike-sample, hike-sample-map-dialog, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
+| `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` | text | `#214d3d` on `#f6f4ec` | 10 px / 400 | pass | 1 | 390 | default | hike-sample-map-dialog |
 | `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` | text | `#214d3d` on `#f7f5ec` | 10 px / 400 | pass | 4 | 390 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events |
-| `section.trail-explorer > div.trail-map-stage > div.trail-map-scale > span` | text | `#214d3d` on `#faf7ef` | 10 px / 400 | pass | 2 | 1440, 390 | default | hike-sample-map-dialog |
 | `select#brand-filter` | value | `#214d3d` on `#ffffff` | 16 px / 400 | pass | 22 | 1440, 390 | default, focus, hover | home-newsletter/closed-service, home-newsletter/saving, home-newsletter/server-error, home-newsletter/success, home-newsletter/unreachable, home-notice-availability, home-notice-availability/filter-checked, home-ordinary, home-unmatched-search |
 | `select#preview-rsvp-party` | value | `#214d3d` on `#ffffff` | 16 px / 400 | pass | 10 | 1440, 390 | default, focus, hover | hike-sample, hike-sample-rsvp-complete, hike-trailing-slash |
 | `select#rsvp-party` | value | `#000000` on `#efefef` | 16 px / 400 | pass | 10 | 1440, 390 | default | hike-rsvp-dialog, hike-rsvp/saving, hike-rsvp/server-error, hike-rsvp/success, hike-rsvp/unreachable |
-| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` | svg-text | `#173c2e` on `#183242` | 11 px / 700 | fail | 1 | 1440 | default | hike-sample-map-dialog |
-| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` | svg-text | `#173c2e` on `#faf7ef` | 11 px / 700 | pass | 3 | 1440, 390 | default | hike-sample-map-dialog |
-| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` | svg-text | `#173c2e` on `#fffbed` | 11 px / 700 | pass | 18 | 1440, 390 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
-| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#1a2f43` | 11 px / 700 | pass | 1 | 1440 | default | hike-sample-map-dialog |
-| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#214d3d` | 11 px / 700 | pass | 9 | 1440, 390 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
+| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-label` | svg-text | `#173c2e` on `#fffbed` | 11 px / 700 | pass | 22 | 1440, 390 | default | hike-real-events, hike-sample, hike-sample-map-dialog, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
+| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#214d3d` | 11 px / 700 | pass | 11 | 1440, 390 | default | hike-real-events, hike-sample, hike-sample-map-dialog, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#f9fafa` | 11 px / 700 | fail | 4 | 390 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events |
-| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#faf7ef` | 11 px / 700 | fail | 3 | 1440, 390 | default | hike-sample-map-dialog |
+| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#fafbfb` | 11 px / 700 | fail | 1 | 390 | default | hike-sample-map-dialog |
+| `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#fdfdfd` | 11 px / 700 | fail | 1 | 1440 | default | hike-sample-map-dialog |
 | `svg.trail-map-canvas > g.trail-route-markers > g > text.trail-endpoint-letter` | svg-text | `#ffffff` on `#fefffe` | 11 px / 700 | fail | 5 | 1440 | default | hike-real-events, hike-sample, hike-sample-rsvp-complete, hike-static-events, hike-trailing-slash |
