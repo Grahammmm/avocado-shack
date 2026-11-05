@@ -62,8 +62,9 @@ def _maker(content, key):
     return content.makers[key] if key in content.makers else NotFound(key)
 
 
-def _same(a, b) -> bool:
-    return " ".join(str(a).split()).casefold() == " ".join(str(b).split()).casefold()
+def _same(a, b) -> bool:  # NFKC look-alikes count as the same, as routes._fold does
+    fold = lambda x: " ".join(unicodedata.normalize("NFKC", str(x)).split()).casefold()
+    return fold(a) == fold(b)
 
 
 def _spaced(value):
