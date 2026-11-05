@@ -55,17 +55,27 @@ function mountWhenNear(host){
  if(!('IntersectionObserver' in window))return window.AvoshackTrailExplorer?.mount(host);
  const io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){io.disconnect();window.AvoshackTrailExplorer?.mount(host)}},{rootMargin:'100% 0px'});io.observe(host);
 }
+// AV1622-01: a real hike card carries its event id (the address the .ics URL: line links to), unless the id is empty, already a page id, or already used by an earlier card.
+const staticIds=new Set(),usedIds=new Set();let jumped=false,scanned=false;
+const anchor=e=>{const id=e&&e.id;if(typeof id!=='string'||id===''||staticIds.has(id)||usedIds.has(id))return '';usedIds.add(id);return ` id="${esc(id)}"`};
+// Once per page load, after the first render: scroll to and focus the card the address names; unknown, malformed or static ids do nothing.
+function jump(){let want;try{want=decodeURIComponent((location.hash||'').slice(1))}catch{return}
+ if(!want||staticIds.has(want))return;
+ const card=[...document.querySelectorAll('#upcoming-hikes .hike-event[id], #past-hikes .past-hike[id]')].find(x=>x.id===want);if(!card)return;
+ card.scrollIntoView({block:'start'});card.setAttribute('tabindex','-1');card.focus({preventScroll:true})}
 function render(){
+ usedIds.clear();
  const next=club.events.filter(e=>upcoming(e)||showCancelled(e)).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt));
  const demo=preview?.enabled&&preview.upcoming&&trailById(preview.upcoming.trailId);
  let explorer=false;const first=next.find(e=>e.status==='scheduled');
- $('#upcoming-hikes').innerHTML=next.length?next.map(e=>{const x=e.status==='cancelled';return `<article class="hike-event${x?' hike-cancelled':''}"><p class="label">${x?'CANCELLED':e===first?'THE NEXT HIKE':'COMING UP'}</p><p class="hike-date">${esc(hikeDate(e))}</p><h2>${x?'Cancelled: ':''}${esc(e.title)}</h2><p>${esc(e.description||'')}</p>${attendance(e)}${details(e)}${route(e)}${!explorer&&e.status==='scheduled'&&EXPLORER_TRAILS.has(e.trailId)&&trailById(e.trailId)&&(explorer=true)?'<div data-trail-explorer><p class="trail-map-unavailable">Loading the trail map…</p></div>':''}${calendar(e)}${x?'<p class="club-small">This hike is cancelled. Nothing else is needed from you.</p>':e.rsvpOpen?e.remaining===0?'<p class="club-small hike-full">This hike is full.</p>':`<p class="club-small">${e.remaining===null?'RSVPs open':`${e.remaining} place${e.remaining===1?'':'s'} available`}</p><button class="button" data-rsvp="${esc(e.id)}">RSVP to this hike ↗</button>`:e.staticSite&&e.rsvpEnabled?'<p class="club-small">To join, ask at the Shack.</p>':'<p class="club-small">RSVP details will be shared when confirmed.</p>'}</article>`}).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h2>The next walk starts here.</h2><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
+ $('#upcoming-hikes').innerHTML=next.length?next.map(e=>{const x=e.status==='cancelled';return `<article${anchor(e)} class="hike-event${x?' hike-cancelled':''}"><p class="label">${x?'CANCELLED':e===first?'THE NEXT HIKE':'COMING UP'}</p><p class="hike-date">${esc(hikeDate(e))}</p><h2>${x?'Cancelled: ':''}${esc(e.title)}</h2><p>${esc(e.description||'')}</p>${attendance(e)}${details(e)}${route(e)}${!explorer&&e.status==='scheduled'&&EXPLORER_TRAILS.has(e.trailId)&&trailById(e.trailId)&&(explorer=true)?'<div data-trail-explorer><p class="trail-map-unavailable">Loading the trail map…</p></div>':''}${calendar(e)}${x?'<p class="club-small">This hike is cancelled. Nothing else is needed from you.</p>':e.rsvpOpen?e.remaining===0?'<p class="club-small hike-full">This hike is full.</p>':`<p class="club-small">${e.remaining===null?'RSVPs open':`${e.remaining} place${e.remaining===1?'':'s'} available`}</p><button class="button" data-rsvp="${esc(e.id)}">RSVP to this hike ↗</button>`:e.staticSite&&e.rsvpEnabled?'<p class="club-small">To join, ask at the Shack.</p>':'<p class="club-small">RSVP details will be shared when confirmed.</p>'}</article>`}).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h2>The next walk starts here.</h2><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
  const past=club.events.filter(e=>e.status==='completed').sort((a,b)=>new Date(b.startsAt)-new Date(a.startsAt));
  const samplePast=!past.length&&preview?.enabled&&(preview.past||[]).some(e=>trailById(e.trailId));
  $('#history-context').textContent=samplePast?'Sample archive · these outings are not confirmed club history.':'Places and memories from our walks together.';
  $('#past-hikes').classList.toggle('trail-journal',!!samplePast);
- $('#past-hikes').innerHTML=past.length?past.map(e=>`<details class="past-hike"><summary><span>${esc(e.title)}</span><time>${esc(new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:e.timezone||'America/Los_Angeles',month:'long',day:'numeric',year:'numeric'}))}</time></summary><p>${esc(e.recap||e.description||'')}</p>${details(e)}</details>`).join(''):samplePast?preview.past.map(sampleHistory).join(''):'<p class="club-small history-empty">We’re gathering the club’s past outings. Routes and stories will appear here as Michael shares them.</p>';
+ $('#past-hikes').innerHTML=past.length?past.map(e=>`<details${anchor(e)} class="past-hike"><summary><span>${esc(e.title)}</span><time>${esc(new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:e.timezone||'America/Los_Angeles',month:'long',day:'numeric',year:'numeric'}))}</time></summary><p>${esc(e.recap||e.description||'')}</p>${details(e)}</details>`).join(''):samplePast?preview.past.map(sampleHistory).join(''):'<p class="club-small history-empty">We’re gathering the club’s past outings. Routes and stories will appear here as Michael shares them.</p>';
  mountWhenNear(document.querySelector('[data-trail-explorer]'));
+ if(!jumped){jumped=true;jump()}
  const form=$('#preview-hike-rsvp');
  if(form)form.onsubmit=e=>{e.preventDefault();const status=form.querySelector('.form-status');status.textContent='That’s how the RSVP will work. No details were saved or sent.';form.reset();status.focus();};
 }
@@ -86,6 +96,7 @@ async function clubData(){
  const data=await r.json();data.events=(data.events||[]).map(e=>({...e,confirmedGuests:null,remaining:null,rsvpOpen:false,staticSite:true}));return data;
 }
 async function load(){try{
+ if(!scanned){scanned=true;document.querySelectorAll('[id]').forEach(x=>staticIds.add(x.id))}
  const [data,previewResponse]=await Promise.all([clubData(),fetch('/hiking-preview.json',{cache:'no-store'}).catch(()=>null)]);
  club=data;preview=previewResponse?.ok?await previewResponse.json().catch(()=>null):null;render();
 }catch{$('#upcoming-hikes').innerHTML='<p>The hike calendar isn’t available right now. Please try again shortly.</p>';$('#past-hikes').innerHTML='<p class="club-small">Past outings will appear when the calendar is available.</p>'}}

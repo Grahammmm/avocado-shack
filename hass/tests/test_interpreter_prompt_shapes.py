@@ -8,7 +8,7 @@ import unittest
 from hass.interpreter_prompt import build
 from hass.tests.test_interpreter_prompt import FIXTURE, TEST_REGISTRY, tiny_content
 
-PRODUCTS = "Products (id | name | brand | status):"
+PRODUCTS = "Products (id | name | brand | status | description):"
 MAKERS = "Makers (key | name):"
 GOOD = {"id": "zz-honey", "name": "Wildflower honey", "status": "active"}
 GOOD2 = {"id": "aa-avocado", "name": "Hass avocado", "status": "sold-out"}
@@ -36,8 +36,8 @@ def _prompt(products=None, makers=None, *, raw_products=False, raw_makers=False)
 class ProductShapeTest(unittest.TestCase):
     def test_non_object_products_are_skipped_in_id_order(self):
         prompt = _prompt([GOOD, "x", None, 3, [GOOD], GOOD2])
-        self.assertEqual(_section(prompt, PRODUCTS), ['"aa-avocado" | "Hass avocado" | "" | "sold-out"',
-                                                      '"zz-honey" | "Wildflower honey" | "" | "active"'])
+        self.assertEqual(_section(prompt, PRODUCTS), ['"aa-avocado" | "Hass avocado" | "" | "sold-out" | ""',
+                                                      '"zz-honey" | "Wildflower honey" | "" | "active" | ""'])
 
     def test_only_damaged_products_gives_none(self):
         self.assertEqual(_section(_prompt(["x", None, 3]), PRODUCTS), ["(none)"])

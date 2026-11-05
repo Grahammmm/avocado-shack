@@ -137,3 +137,28 @@ a shorter representative trial is Michael's and G's choice; this page does not m
 - H11 voice notes: Hass recognises a voice note but has no speech model to turn it into text.
 - H23 automatic changes: no action type has been opted in, so every change still needs `yes`.
 - H24 design requests: there is no path yet from an owner request to a checked layout change.
+
+## Reviewing the trial
+
+The operator can review the trial from counts alone. These commands print numbers only (no message text, summaries, codes,
+ids, sender or chat) and open the state store read-only:
+
+```
+python3 -B hass/trial_summary.py --state /path/to/state --from 2026-11-09
+python3 -B hass/trial_summary.py --state /path/to/state --from 2026-11-09 --days 14 --json
+```
+
+- Range: `--from` is a Pacific date (`YYYY-MM-DD`) and `--days` is 1-31 (default 7); the range is that many Pacific
+  calendar days, not that many 24-hour spans. It prints one line per day, a `day unknown` line and a `totals` line.
+- Per day: owner messages by what became of them (approved, rejected, near-approval, no-target, needs-details,
+  not-drafted, daily-limit, too-long, the attachment and photo ones, commands), drafts created that day by where they are
+  now (applied, checked, failed, undone, expired, cancelled, waiting), approvals, and interpreter calls. Messages, drafts,
+  approvals and calls are separate counts: do not add them up. A draft counts on the day it was created, in its state
+  now, not the day it was approved or undone. A photo sent with a caption may count as the caption's request, not as a photo draft.
+- A table the store does not have counts 0. A row with no usable time (missing, malformed or without a time zone) counts
+  under `day unknown`; that line covers all of the store, not only the range, and is included in `totals`.
+- Interpreter calls come from the usage table, which only grows when `interpreterDailyCap` is set; no usage means 0
+  recorded calls, not that the interpreter was never used.
+- Exit 0 when counted, 1 when the store is missing or unreadable (it is never created), 2 for a wrong argument.
+
+These counts supplement the blank task records above; they are not H18 completion and not evidence from a real phone.
