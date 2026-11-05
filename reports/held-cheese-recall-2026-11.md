@@ -83,7 +83,7 @@ This classifies only whether a notice names the product, not whether a particula
 
 ## Edge cases applied
 
-- `missing_lot_or_size`: no notice gives a lot or best-by code, and notices 2 and 3 give no sizes or UPCs. Written as "not stated in this notice"; no sample unit or other notice's code was borrowed.
+- `missing_lot_or_size`: no notice gives a lot or best-by code, and notice 2 states sizes (8-oz and 16-oz retail packages, 5-lb loaves) but no UPCs or item numbers, and notice 3 states neither sizes nor UPCs. Written as "not stated in this notice"; no sample unit or other notice's code was borrowed.
 - `generic_white_cheddar_or_goat_variant`: neither catalog variety is named exactly, so each stays "cannot tell". No whole-brand recall is assumed.
 - `no_result_or_blocked_official_page`: the maker's recall page was not found. The comparison stays "cannot tell"; this is not a finding that the products were not recalled.
 - `updated_or_conflicting_notice`: CDPH is marked UPDATED, and the FDA advisory (2026-09-25) and company announcement (2026-09-28) carry different dates. No scope conflict between the notices was seen. The update content was not available beyond what is quoted.
