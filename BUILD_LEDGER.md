@@ -1598,6 +1598,134 @@ Checks: `python3 -B -m unittest hass.tests.test_inbox_payload_types` ran 5 tests
 
 Limits: fixture data only; no enqueue validation, schema, receiver, status output, retention or conversation code changed; no timestamp parsing or string-content rules added.
 
+## H05/F04 shelf check: words only for the products named in it (AV1102-01) — November 4, 2026
+
+Branch rb/av1102-01 from origin/main dbe7400 (AV1102-01, PR #395, merged as 0c88f376716983fc104f0f77255f8a0491a0b9e7). Each product now carries an internal `available_on` day, never published. `store.confirm_selection` sets the word and the day only for the products it names; the site shows a product's word only when its day is the store check day and that check is fresh (not stale); otherwise it shows `Last confirmed <its day>`, and a product with no valid confirmed word or day shows no label. `product.set_availability` (allowed only after today's check) also sets the word and day, so an unnamed product can show a current word. The morning report counts the rest as not confirmed. `product.set_availability` is refused until today's check exists (G decision, November 3). `hass/content_model.py`, `hass/ops/store.py`, `hass/ops/catalog.py`, `hass/sitegen.py`, `hass/morning_report.py`, `docs/hass/COMMANDS.md`.
+
+Checks at PR head: the PR's Acceptance section records the nine-module command `python3 -B -m unittest hass.tests.test_selection_per_product_day hass.tests.test_selection_checked hass.tests.test_selection_backdate_window hass.tests.test_morning_report hass.tests.test_morning_report_names hass.tests.test_auto_policy hass.tests.test_store_ops hass.tests.test_content hass.tests.test_commands_doc -v`, run from the clone root, with 89 tests passing (OK) at head 61c5e04ed7de13e35b72a95b4856a8c12c85bba7. Its new test file is `hass.tests.test_selection_per_product_day`, and the edited ones are `hass.tests.test_selection_checked`, `hass.tests.test_morning_report` and `hass.tests.test_morning_report_names`; `hass/sitegen.py --check` reported the generated files unchanged.
+
+Limits: no product in the content source carries a word yet, so no generated file changed; the Available today filter, the status shelf line and clearing a word are other units.
+
+## Site: See all from this maker in the catalog (AV1102-02) — November 4, 2026
+
+Branch rb/av1102-02 from origin/main 8eaadd1 (AV1102-02, PR #357, merged as abbc594e9ff2602609593c786c3e0d43ea8ee1e2). For guests: a maker with two or more products gets a `See all N from <name>` button in its Meet the maker panel; it filters the grid to that maker, shows a `From <maker>` chip with `Show everything`, and is kept in the address as `from=<key>` only for a valid maker. A bad `from`, or a link with `?item=`, drops the filter. `storefront-mockup/shop.js`, `storefront-mockup/style.css`, `storefront-mockup/catalog-only-qa.cjs`.
+
+Checks at PR head ce5cb32112d4 (recorded in PR #357): `storefront-mockup/catalog-only-qa.cjs` run against a loopback server exited 0 with no errors, and `python3 -m unittest hass.tests.test_product_alt` ran 9 tests, OK. PREPUSH-TESTS NOT-RUN (host busy).
+
+Limits: the Available today filter, maker pages and the meaning of the brand filter are unchanged.
+
+## Site: Available today filter in the catalog (AV1102-03) — November 4, 2026
+
+Branch rb/av1102-03 (AV1102-03, PR #401, merged as d3c988e2cfb59b252e8776c4bad99eaa5a02b7f9). For guests: an Available today checkbox shows only cards whose current word is Available today or Limited, is kept in the address as `avail=1` and restored on reload. It exists only when some card carries a current word; `Last confirmed` cards never count, any other `avail` value is dropped, and `?item=` still wins. `storefront-mockup/shop.js`, `storefront-mockup/style.css`, `storefront-mockup/catalog-only-qa.cjs`; added `hass/tests/test_availability_words_pin.py`.
+
+Checks at PR head (recorded in PR #401): `storefront-mockup/catalog-only-qa.cjs` ran with a loopback server, exit 0 with 170 cards and no errors, and `python3 -m unittest hass.tests.test_availability_words_pin hass.tests.test_selection_checked hass.tests.test_product_alt -v` ran 23 tests, OK.
+
+Limits: the words and the per-product day are other units; the control is inserted after the producer label, not inside it.
+
+## Site: home page shows the next hike line (AV1102-04) — November 3, 2026
+
+Branch rb/av1102-04 (AV1102-04, PR #339: head c4ec917c0a8d, merged as b905e1ce96ae08ef20e104c6b64aec376842c5cb). For guests: with a scheduled upcoming hike the home page shows `Next hike: <weekday>, <month> <day>, <time> - <title>` under the intro, linking to `/hike#upcoming-hikes`; with none, or on a failed or non-JSON community reply, the element stays hidden. Sample hikes never feed it. `hass/templates/index.html`, regenerated `storefront-mockup/index.html`, `storefront-mockup/community.js`, `storefront-mockup/style.css`, `storefront-mockup/community-ui-qa.cjs`.
+
+Checks at PR head c4ec917c0a8d (recorded in PR #339): `storefront-mockup/community-qa.py` ran with `storefront-mockup/community-ui-qa.cjs` against a temporary server and passed, and `python3 -B -m unittest hass.tests.test_generated_targets hass.tests.test_generated_links hass.tests.test_content hass.tests.test_design_check -v` ran 51 tests, OK. PREPUSH-TESTS NOT-RUN (budget).
+
+Limits: no new API, and no RSVP or personal data on the home page; the hike card fields and the calendar link are other units.
+
+## H17/F04 status shows a shelf check line (AV1102-05) — November 3, 2026
+
+Branch rb/av1102-05 (AV1102-05, PR #324, merged as 146b072e884d3b3e21831c2c66fa159af09eaa89). For Michael: `status` (and `did it work?`) shows one `Shelf check: <day>` line after `Changes:`; `not done yet` with no check, a call-to-confirm tail after a week, a clock warning when dated after today, and no line when the content is unreadable. The words come from `morning_report.check_line`, shared with the morning report. `hass/morning_report.py`, `hass/conversation.py`, `docs/hass/COMMANDS.md`; added `hass/tests/test_status_shelf_check.py`.
+
+Checks at PR head: the PR body records no command or count. The new `hass.tests.test_status_shelf_check` is the check, and `hass.tests.test_status_pause` and `hass.tests.test_content_deep_json` had their expected status lines updated.
+
+Limits: read-only and still works while paused; the report command, per-product days and the site wording are other units.
+
+## H05 interpreter prompt lists each product's brand (AV1102-06) — November 4, 2026
+
+Branch rb/av1102-06 (AV1102-06, PR #322: head d7f1f399636d, merged as 06ac45ae7a15948093f67d421c76d098905c6037). For Michael: each product line in the interpreter prompt carries the stored brand (`displayBrand`, else `brand`, else empty), so naming a brand matches one listed product. The brand is quoted like every other value. `hass/interpreter_prompt.py`; added `hass/tests/test_interpreter_prompt_brand.py`.
+
+Checks at PR head d7f1f399636d (recorded in PR #322): `python3 -B -m unittest hass.tests.test_interpreter_prompt_brand hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_shapes hass.tests.test_interpreter_prompt_store hass.tests.test_interpreter_prompt_community hass.tests.test_interpreter_eval -v` ran 49 tests, OK.
+
+Limits: the site's `From the market` label is not copied; the home text lines, the design rule, notes and eval cases are other units.
+
+## H05 interpreter prompt lists the current home-page text (AV1102-07) — November 4, 2026
+
+Branch rb/av1102-07 (AV1102-07, PR #353: head 8bfe3deb371e, merged as 200f56648c4b1ea5a6cdeaa6707ab580c91a5538). For Michael: the prompt's store section now also lists the intro (or the default intro), each headline line, the story and the notice with its last day, so a partial edit can resend the whole value. A wrongly typed field is skipped, never raised. `hass/interpreter_prompt.py` (helper `_home_text_lines`).
+
+Checks at PR head 8bfe3deb371e (recorded in PR #353): `python3 -B -m unittest hass.tests.test_interpreter_prompt_home_text hass.tests.test_interpreter_prompt_store hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_shapes hass.tests.test_interpreter_prompt_community hass.tests.test_interpreter_eval -v` ran 54 tests, OK. PREPUSH-TESTS NOT-RUN (budget).
+
+Limits: no new prompt rule, the byte cap is unchanged, and a notice without a usable last day lists its text only.
+
+## H05 interpreter prompt: design requests are unsupported (AV1102-08) — November 4, 2026
+
+Branch rb/av1102-08 (AV1102-08, PR #361: head 3196d95f51bd, merged as da238f09d2cc5abf30534c4ae2c58012ab00c7f1). For Michael: one last prompt rule answers a request to change layout, colours, fonts, page structure or to add a section or page with the fixed reply `design changes cannot be made by message yet`; words, hours, photos, hikes and route ideas are not design changes. Design changes stay unbuilt: there is no keyword filter and `design_check` stays unwired. `hass/interpreter_prompt.py` (`DESIGN_UNSUPPORTED`).
+
+Checks at PR head 3196d95f51bd (recorded in PR #361): `python3 -B -m unittest hass.tests.test_interpreter_prompt_design hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_shapes hass.tests.test_interpreter_prompt_store hass.tests.test_interpreter_prompt_community hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out` ran 68 tests, OK. PREPUSH-TESTS NOT-RUN (busy host).
+
+Limits: `conversation.py` is unchanged; the brand column, home text, notes and scored eval rows are other units.
+
+## H15 saved notes reach the interpreter as preferences (AV1102-09) — November 4, 2026
+
+Branch rb/av1102-09 (AV1102-09, PR #368: head 7f3c97849d7b, merged as 4c123ebbe1335cc5d7549547fe5edff29492fc67). For Michael: the newest 20 saved notes, leaving out aliases, are sent to the interpreter with a request, and only when there is at least one; with none the request is unchanged. A note is never proof of a claim: a new prompt rule says a note never supplies a claim, a date, a time, a price or a quantity, and the claim check still reads only the owner's message, so a claim copied from a note still asks. A missing notes table or a read error sends no notes. `hass/conversation.py`, `hass/interpreter_local.py`, `hass/interpreter_prompt.py`; added `hass/tests/test_interpreter_notes.py`.
+
+Checks at PR head 7f3c97849d7b (recorded in PR #368): `python3 -B -m unittest hass.tests.test_interpreter_notes hass.tests.test_interpreter_local hass.tests.test_interpreter_local_strict hass.tests.test_interpreter_request_encode hass.tests.test_interpreter_today hass.tests.test_interpreter_prompt hass.tests.test_memory hass.tests.test_memory_chat hass.tests.test_memory_alias hass.tests.test_memory_source hass.tests.test_claims hass.tests.test_conversation -v` ran 113 tests, OK. PREPUSH-TESTS NOT-RUN (budget).
+
+Limits: notes are not shown in replies or used in `find`, and no eval rows for notes belong to this unit.
+
+## H09 interpreter eval set v4 (AV1102-10) — November 4, 2026
+
+Branch rb/av1102-10 (AV1102-10, PR #388, merged as 78728cc3110104921f20c8ecba2d850c0527f719). Eight cases (e56 to e63) are appended, so the set has 63 cases. They cover a brand naming one or two products, one headline word, an unclear story fix, two design requests, and two cases with saved notes. `load_cases` accepts an optional list of up to 20 notes and reports a bad one by line number, never by text. The added recorded replies are hand-written scorer fixtures, not a model run. `hass/interpreter_eval.py`; case and reply fixtures; `hass/tests/test_interpreter_eval_cases.py`.
+
+Checks (recorded in PR #388): `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out hass.tests.test_interpreter_prompt -v` ran 45 tests, OK; scoring gave 63 cases, 60 passed, the same three earlier failures.
+
+Limits: no `--live` run and no model call; scoring rules, exit codes and prompt text are unchanged.
+
+## H17/F04 report adds a Waiting for you block (AV1102-11) — November 4, 2026
+
+Branch rb/av1102-11 (AV1102-11, PR #374: head 1565286126822448710d, merged as 173a346eb642aba0020b9bdc6d86db18eabc4f69). For Michael: `report` adds `Waiting for you:` with the same draft lines `status` shows, then `Photos waiting for details: N`, or `Waiting for you: nothing`. It also follows the line saying the shelf report is unavailable. Read-only, works while paused. `status` shares the new helper `_waiting_lines`. `hass/conversation.py`, `docs/hass/COMMANDS.md`; added `hass/tests/test_report_waiting.py`.
+
+Checks at PR head 1565286126822448710d (recorded in PR #374): `python3 -B -m unittest hass.tests.test_report_waiting hass.tests.test_report_command hass.tests.test_conversation hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_status_pause hass.tests.test_status_photos hass.tests.test_morning_report hass.tests.test_status_shelf_check hass.tests.test_post_command hass.tests.test_find` ran 94 tests, OK. PREPUSH-TESTS NOT-RUN (busy host).
+
+Limits: no stock or sales numbers, no timed push, and `status` output is unchanged.
+
+## F03 margin command in chat (AV1102-12) — November 4, 2026
+
+Branch rb/av1102-12 (AV1102-12, PR #380: head 9bdbdcd7b9b5, merged as 84bf0904a2801280be47f1b2c8cc30e6f8ac30d5). For Michael: `margin <pack cost> for <units> at <margin>%` (optionally `shrink <S>%`) replies with each calculation step. Suggestion only; nothing stored: the reply is a price idea, with no draft, memory, file or usage row and no model call, and it works while paused. A bad input gets `Not calculated:` with the field named, and a malformed margin message gets the usage line. `hass/conversation.py`, `docs/hass/COMMANDS.md`; added `hass/tests/test_margin_chat.py`.
+
+Checks at PR head 9bdbdcd7b9b5 (recorded in PR #380): `python3 -B -m unittest hass.tests.test_margin_chat hass.tests.test_margins hass.tests.test_margins_percent_decimals hass.tests.test_margins_plain_numbers hass.tests.test_margins_price_check hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation` ran 65 tests, OK. PREPUSH-TESTS NOT-RUN (budget).
+
+Limits: supplier costs are not stored, there is no reverse price check in chat, no rounding endings and no price op.
+
+## H25 acceptance map matches main (AV1102-13) — November 3, 2026
+
+Branch rb/av1102-13 (AV1102-13, PR #325: head 1735d11bfabb, merged as 5c1f439e47aef66bbad5f90fc38b396ba2e08a37). `hass/acceptance.py` now maps H23 to `test_auto_policy` and H24 to the three `test_design_check` modules, and lists 12 more existing test modules on H09, H10, H12, H13, H17 and H20; a full run covers 25 ids with 3 not covered (was 5). `hass/tests/test_acceptance_runner.py` pins the new map.
+
+Checks at PR head 1735d11bfabb (recorded in PR #325): `python3 -B -m unittest hass.tests.test_acceptance_runner -v` ran 7 tests, OK. PREPUSH-TESTS PASS.
+
+Limits: H23 stays opt-in and unwired, H24 still has no message path, and acceptance stays local evidence, not a CI job.
+
+## H25 IMPLEMENTATION.md baseline matches main (AV1102-14) — November 4, 2026
+
+Branch rb/av1102-14 (AV1102-14, PR #330: head 2e16d7575e8d, merged as 74e1be361473ce5df8cc80b4fec8a2640cf05772). Docs only: `docs/hass/IMPLEMENTATION.md` now says the listed Hass modules are built and none is connected to the owner's channel, replaces the unchecked service claim with a source check dated November 3, and lists one row per built module. Text from the message flow section on is unchanged.
+
+Checks at PR head 2e16d7575e8d (recorded in PR #330): `python3 -B -m unittest hass.tests.test_limits_doc hass.tests.test_phone_guide hass.tests.test_support_doc hass.tests.test_tracked_private hass.tests.test_commands_doc -v` ran 38 tests, OK. PREPUSH-TESTS NOT-RUN; four browser-based `test_hike_ics` tests failed locally without the CI browser setup and CI decides.
+
+Limits: no feature state changed, the plan sections are untouched, and no row says live, connected or installed.
+
+## H18 owner trial task list proposal (AV1102-15) — November 3, 2026
+
+Branch rb/av1102-15 (AV1102-15, PR #329: head 0cb83e0f01ac, merged as 298ec1c8aa5eec59fa7cd1d8681c445a3bb4d8b2). Docs only: `docs/hass/TRIAL.md` holds a 21-row task table with an example message and what success looks like, a blank record form per task, what counts as done, and what is not in the trial. Proposal only; the trial is not run. Michael and G agree the list. `docs/hass/README.md` links it.
+
+Checks (recorded in PR #329): `python3 -B -m unittest hass.tests.test_limits_doc hass.tests.test_phone_guide hass.tests.test_support_doc hass.tests.test_tracked_private hass.tests.test_commands_doc` ran 38 tests, OK; every operation and command named in the table was checked against the code.
+
+Limits: no trial is run or scheduled, no results are recorded, and later operations such as maker hide and route hide are not yet rows.
+
+## H25 handover steps and open decisions (AV1102-16) — November 3, 2026
+
+Branch rb/av1102-16 (AV1102-16, PR #334: head 90943c7ef9ef, merged as e53c5454aafbe37f80637682c9052116cb43ff47). Docs only: `docs/hass/HANDOVER.md` lists the release steps (acceptance run, backup restore drill, phone guide and limits for Michael, the trial, a private launch only) and an open-decisions table with owners and line-anchored sources; `docs/hass/README.md` links it. It records no decision and claims no step happened.
+
+Checks at PR head 90943c7ef9ef (recorded in PR #334): `python3 -B -m unittest hass.tests.test_limits_doc hass.tests.test_phone_guide hass.tests.test_support_doc hass.tests.test_tracked_private hass.tests.test_commands_doc` ran 38 tests, OK; `python3 -B hass/acceptance.py` summarised 25 ids, 22 pass, 0 fail, 3 not covered. PREPUSH-TESTS NOT-RUN (busy host).
+
+Limits: no decision is made, the drill is not run, and the trial and feature states are other units.
+
 ## H10/H12/H16 photo GUIDs with surrogate code points are refused before any URL is built (RF1100-21) — November 5, 2026
 
 Branch rb/rf1100-21 from origin/main a4435ca (RF1100-21). For Michael: a message or attachment GUID holding a lone surrogate code point (U+D800-U+DFFF, which UTF-8 cannot encode) used to escape as an uncaught `UnicodeEncodeError` while the photo URL was built. A direct `BlueBubblesPhotos.fetch` call now raises the fixed `ValueError` before the password file or any transport is touched; a surrogate in the first n attachment GUIDs of the provider metadata is the normal `shape` refusal, raised before any download (even of valid earlier items). `hass/bridge_photos.py` (new private `_valid_guid`, used for both guards; docstring updated). Real non-ASCII text (accents, NBSP, emoji), a JSON-escaped surrogate pair that decodes to one emoji, the 200-code-point limit and attachments after the first n behave as before. Added `hass/tests/test_bridge_photos_unicode.py`.
