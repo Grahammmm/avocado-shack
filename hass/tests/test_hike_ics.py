@@ -60,6 +60,49 @@ class HikeIcsTest(unittest.TestCase):
         _, lines = self.ics(hike("autumn", "2027-10-09T09:00:00-07:00"))
         self.assertIn("DTSTART:20271009T160000Z", lines)
 
+    def test_no_detail_fields_leave_file_unchanged(self):
+        text, lines = self.ics(hike("plain", "2026-12-05T09:00:00-08:00", title="Plain"))
+        self.assertEqual([l for l in lines if l.startswith(("LOCATION", "DESCRIPTION"))], ["LOCATION:North lot"])
+        self.assertEqual(lines[4:], ["UID:plain@avocadoshack", "DTSTAMP:20261205T170000Z", "DTSTART:20261205T170000Z",
+                                     "DURATION:PT2H", "SUMMARY:Plain", "LOCATION:North lot",
+                                     "URL:https://club.example/hike#plain", "END:VEVENT", "END:VCALENDAR", ""])
+        _, lines = self.ics(hike("blank", "2026-12-05T09:00:00-08:00", meetingAddress="  ", meetTime="", bring=None, accessNote=" "))
+        self.assertNotIn("DESCRIPTION", "".join(l[:11] for l in lines))
+        self.assertIn("LOCATION:North lot", lines)
+
+    def test_address_follows_meeting_point_and_folds(self):
+        _, lines = self.ics(hike("addr", "2026-12-05T09:00:00-08:00", meetingAddress="123 Example St, Cayucos CA"))
+        self.assertIn("LOCATION:North lot\\, 123 Example St\\, Cayucos CA", lines)
+        long = "125 Example Street, " + "Cayucos California " * 5
+        text, lines = self.ics(hike("addr2", "2026-12-05T09:00:00-08:00", meetingAddress=long))
+        self.assertIn("\r\n ", text)
+        self.assertIn("LOCATION:" + ("North lot, " + long).replace(",", "\\,"), lines)
+
+    def test_address_without_meeting_point_is_location_alone(self):
+        _, lines = self.ics(hike("only", "2026-12-05T09:00:00-08:00", meetingPoint="", meetingAddress="123 Example St"))
+        self.assertIn("LOCATION:123 Example St", lines)
+
+    def test_description_parts_in_order_and_position(self):
+        _, lines = self.ics(hike("b", "2026-12-05T09:00:00-08:00", bring="water"))
+        self.assertIn("DESCRIPTION:Bring: water", lines)
+        _, lines = self.ics(hike("all", "2026-12-05T09:00:00-08:00", accessNote="Gate code at lot", bring="water", meetTime="8:30 AM"))
+        self.assertIn("DESCRIPTION:Meet: 8:30 AM\\nBring: water\\nAccess: Gate code at lot", lines)
+        i = [l.split(":")[0] for l in lines]
+        self.assertEqual(i.index("DESCRIPTION"), i.index("LOCATION") + 1)
+        self.assertEqual(i.index("URL"), i.index("DESCRIPTION") + 1)
+        self.assertEqual(lines.count("DURATION:PT2H"), 1)
+        self.assertNotIn("DTEND", i)
+
+    def test_description_text_escaped_and_control_dropped(self):
+        _, lines = self.ics(hike("e", "2026-12-05T09:00:00-08:00", accessNote="Dirt road; 4\\4, line\r\nnext\x07end"))
+        self.assertIn("DESCRIPTION:Access: Dirt road\\; 4\\\\4\\, line\\nnextend", lines)
+
+    def test_description_multibyte_folds_on_octets(self):
+        note = "Café stop 🥑 " * 12
+        text, lines = self.ics(hike("mb", "2026-12-05T09:00:00-08:00", accessNote=note))
+        self.assertIn("\r\n ", text)
+        self.assertIn("DESCRIPTION:Access: " + note, lines)
+
     def test_text_escaped_and_control_characters_dropped(self):
         _, lines = self.ics(hike("esc", "2026-12-05T09:00:00-08:00", title="Hike; bring water, snacks\\ & hats",
                                  meetingPoint="North lot\nGate 2\r\nby the\tsign"))
