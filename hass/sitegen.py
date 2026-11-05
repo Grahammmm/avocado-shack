@@ -191,14 +191,18 @@ def diff_paths(files: dict[str, bytes], root: Path) -> list[str]:
 
 
 def _check_folders(root: Path, rel: str) -> None:
-    """Refuse an absolute/escaping key or a symlinked folder below root (root itself may be a link)."""
+    """Refuse an absolute/escaping key, a symlinked folder or an existing non-directory folder below root
+    (root itself may be a link). Metadata only: a special file is never opened. Missing folders are allowed."""
     key = Path(rel)
     parts = key.parts
     if key.is_absolute() or key.drive or not parts or ".." in parts:
         raise ValueError("generated path escapes root")
     for i in range(1, len(parts)):
-        if os.path.islink(Path(root, *parts[:i])):
+        parent = Path(root, *parts[:i])
+        if os.path.islink(parent):
             raise OSError(errno.ELOOP, "generated folder is a symlink")
+        if os.path.lexists(parent) and not parent.is_dir():
+            raise NotADirectoryError(errno.ENOTDIR, "generated folder is not a directory")
 
 
 def _check_target(root: Path, rel: str) -> None:
