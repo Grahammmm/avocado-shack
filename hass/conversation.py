@@ -317,6 +317,30 @@ def parse_keyword(text: str):
     return ("approve" if match[1] in APPROVE else "reject"), match[2]
 
 
+COURTESY = {"please", "thanks", "ok", "okay"}
+
+
+def parse_phone(text: str):
+    """AV1352-04 (H05): (verb or None, code or None, question) when, after dropping punctuation other than ?, emoji and
+    the courtesy words (please, thanks, thank you, ok, okay), the whole message is one approve/cancel word and one code in
+    either order, or one code alone, or (with a ?) one such word alone; otherwise None. `question` is True when the
+    original text held a ?. Only the candidate is normalised, never the message; a ? is never stripped into an answer."""
+    question = "?" in text
+    words = "".join(c if c.isascii() and c.isalnum() else " " for c in text.lower()).split()
+    kept, i = [], 0
+    while i < len(words):
+        if words[i] == "thank" and words[i + 1:i + 2] == ["you"]: i += 2
+        else:
+            if words[i] not in COURTESY: kept.append(words[i])
+            i += 1
+    verbs = [w for w in kept if w in APPROVE or w in REJECT]
+    codes = [w for w in kept if re.fullmatch(r"[0-9a-f]{4,12}", w)]
+    if not kept or len(verbs) + len(codes) != len(kept) or len(verbs) > 1 or len(codes) > 1: return None
+    if not verbs: return None, codes[0], question  # a lone code is only ever a hint
+    if not codes and not question: return None  # courtesy never makes a new bare yes/no
+    return ("approve" if verbs[0] in APPROVE else "reject"), (codes[0] if codes else None), question
+
+
 def parse_near(text: str):
     """AV2022-07 (H05): code or "" when the whole message is a casual yes (ok, go ahead, ...); otherwise None.
     It never approves anything; Hass only answers with the exact `yes <code>` to send."""
@@ -610,7 +634,9 @@ class Conversation:
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
-        cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
+        phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
+        coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
+        cutoff = _answered_at(msg, now) if msg.attachments <= 0 and (parse_keyword(msg.text) or coded) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"): expired = []  # H17: read-only
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
@@ -623,7 +649,7 @@ class Conversation:
             disposition = self._memory(msg, *memory)
             self._record(msg, disposition)
             return disposition, None
-        keyword = parse_keyword(msg.text)
+        keyword = parse_keyword(msg.text) or coded
         if keyword is None and (near := parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
             codes = [r["code"] for r in self._drafts("state = 'proposed'")
                      if self._expiry(r) > now and near in ("", r["code"])]
@@ -631,6 +657,14 @@ class Conversation:
                         f"Nothing was applied. Reply yes <code> with one of: {', '.join(codes)}." if codes else NOTHING)
             self._record(msg, "near-approval")
             return "near-approval", None
+        if keyword is None and phone is not None:  # AV1352-04: a question or a lone code is never an answer
+            live = [r["code"] for r in self._drafts("state = 'proposed'") if self._expiry(r) > now]
+            if phone[0] is not None or phone[1] in live:
+                one = phone[1] if phone[1] in live else live[0] if len(live) == 1 else None
+                self._reply(f"Nothing was changed. To apply {one}, reply yes {one}; to cancel it, no {one}." if one else
+                            f"Nothing was changed. Reply yes <code> or no <code> with one of: {', '.join(live)}." if live else NOTHING)
+                self._record(msg, "near-approval")
+                return "near-approval", None
         if keyword is None:
             disposition = self._request(msg, now)
             self._record(msg, disposition)
