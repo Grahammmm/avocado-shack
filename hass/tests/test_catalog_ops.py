@@ -48,7 +48,7 @@ class CatalogRepo(WriterRepo):
         return json.loads(self.read("hass/content/makers.json"))["makers"]
 
     def catalog(self):
-        return json.loads(self.read("storefront-mockup/catalog-products.js")[len(b"const catalog="):].rstrip(b";\n"))
+        return json.loads(self.read("storefront-mockup/catalog-products.js").split(b"\n", 1)[0][len(b"const catalog="):].rstrip(b";"))
 
     def content(self):
         return load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup")

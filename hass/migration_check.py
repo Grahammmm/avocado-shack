@@ -156,7 +156,7 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
     # Held exclusions.
     held = baseline["held"]
     catalog_js = files[SITE_PREFIX + "catalog-products.js"].decode("utf-8")
-    catalog_ids = {r["id"] for r in json.loads(catalog_js[len("const catalog="):].rstrip("\n").rstrip(";"))}
+    catalog_ids = {r["id"] for r in json.loads(catalog_js.split("\n", 1)[0][len("const catalog="):].rstrip(";"))}
     held_file = json.loads((repo / "storefront-mockup" / "held-products.json").read_text("utf-8"))
     held_file_ids = _held_ids(held_file)
     if isinstance(held_file_ids, str):

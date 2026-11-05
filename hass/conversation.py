@@ -693,6 +693,10 @@ class Conversation:
             return "\n".join(["Which draft do you mean?"] + [f"{r['code']}: " + ("needs details: " if r["state"] ==
                              "needs-details" else "") + r["summary"] for r in targets]
                              + ["Reply yes <code> or no <code>."])
+        if code and self._by_code(code) is None:  # AV2152-01 (H05/H17): a code that matches no draft; never guessed
+            waiting = self._drafts("state = 'proposed'")
+            return "\n".join([f"No draft {code}."] + (["Waiting drafts:"] + [
+                f"{r['code']}: {r['summary']}; reply yes {r['code']}." for r in waiting] if waiting else []))
         named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired]
         return "\n".join(self._state_text(r) for r in named if r is not None) or NOTHING
 
