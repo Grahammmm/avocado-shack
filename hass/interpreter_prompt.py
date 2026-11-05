@@ -7,11 +7,13 @@ a name can never break a line or a section. Not wired into any service (NB-AV-02
 AV2022-01: a Community section lists every hike (id | title | starts at | status) and route idea (id | title).
 AV2022-02: a last Store section lists the street address, town and every hours line (field | value), because
 store.set_hours replaces the whole list.
+AV2152-06: each product row ends with its current description, whole or the unquoted marker <omitted>, never cut.
 RF1100-7: damaged catalog rows are skipped, like hikes and route ideas (a non-object maker keeps its key, empty name).
 """
 from __future__ import annotations
 
 import json
+import re
 
 from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
 from hass.sitegen import phone_text
@@ -19,6 +21,8 @@ from hass.sitegen import phone_text
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
 MAX_HIKES, MAX_ROUTES, MAX_HIKE_DETAILS = 60, 60, 12
 PROMPT_MAX_BYTES = 64 * 1024
+OMITTED = "<omitted>"  # AV2152-06: stands for a product description left out; never an argument value
+PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
 DESIGN_UNSUPPORTED = "design changes cannot be made by message yet"  # AV1102-08 (H24): the fixed design-request reply
 _LINE_BREAKS = {"\x85": "\\u0085", "\u2028": "\\u2028", "\u2029": "\\u2029"}  # json.dumps keeps these raw
 
@@ -46,6 +50,9 @@ RULES = (
     "in the order shown.",
     "hike.update text fields (meetingPoint, bring, accessNote) replace the whole text: to add or change part, send the "
     "whole new text built from the current value listed under Scheduled hike details.",
+    "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
+    f"current description listed under Products; if the description shows {OMITTED}, ask the owner for the full new "
+    "description instead of guessing the unseen part, and never send " + OMITTED + " as an argument.",
     "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
     "or product.add with imageAlt when the owner says it is a new product; never both.",
     "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
@@ -80,7 +87,7 @@ def _arg(name, arg) -> str:
 
 def _op_lines(registry) -> list:
     lines = [f"{name}({'; '.join(_arg(a, spec) for a, spec in registry[name].args.items())})"
-             for name in sorted(registry)]
+             for name in sorted(registry) if name != "history.revert"]  # AV0007-02: undo is a command, never offered
     return lines or ["(none)"]
 
 
@@ -90,11 +97,36 @@ def _capped(rows, cap) -> list:
     return rows[:cap] + ([f"… and {len(rows) - cap} more (ask the owner)"] if len(rows) > cap else [])
 
 
-def _product_lines(products) -> list:
+def _description(p, omit) -> str:
+    """The whole stored description as one JSON string; the marker, unquoted, when left out or not text."""
+    value = p.get("description")
+    if omit or (value is not None and not isinstance(value, str)):
+        return OMITTED
+    return _q(value)
+
+
+def _retention_key(p):
+    """Oldest first: damaged ids (lexical), then photo-product-<n> by n (the allocator suffix, newest = largest)."""
+    pid = p.get("id")
+    match = PRODUCT_ID_RE.fullmatch(pid) if isinstance(pid, str) else None
+    return (0, 0, str(pid)) if match is None else (1, int(match.group(1)), pid)
+
+
+def _product_lines(products, omitted=frozenset()) -> list:
+    """``omitted``: positions (in id-sorted order) whose description is replaced by the marker."""
     rows = sorted(products, key=lambda p: str(p.get("id", "")))
     shown = [next((v for v in (p.get("displayBrand"), p.get("brand")) if isinstance(v, str) and v), "") for p in rows]
-    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(brand)} | {_q(p.get('status'))}"
-                    for p, brand in zip(rows, shown)], MAX_PRODUCTS)  # AV1102-06: displayBrand, else brand
+    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(b)} | {_q(p.get('status'))} | "
+                    f"{_description(p, i in omitted)}"
+                    for i, (p, b) in enumerate(zip(rows, shown))], MAX_PRODUCTS)  # AV1102-06: displayBrand, else brand
+
+
+def _omission_order(products) -> list:
+    """Positions of the displayed rows whose description could shrink, in the order they are given up."""
+    rows = sorted(products, key=lambda p: str(p.get("id", "")))[:MAX_PRODUCTS]
+    saves = [i for i, p in enumerate(rows)
+             if isinstance(p.get("description"), str) and len(_q(p["description"]).encode("utf-8")) > len(OMITTED)]
+    return sorted(saves, key=lambda i: _retention_key(rows[i]))
 
 
 def _maker_lines(makers) -> list:
@@ -153,24 +185,36 @@ def _home_text_lines(store) -> list:
 
 
 def build(registry, content) -> str:
-    """The system prompt for ``registry`` (name -> Op) and ``content`` (.products, .makers, .community, .store)."""
+    """The system prompt for ``registry`` (name -> Op) and ``content`` (.products, .makers, .community, .store).
+
+    AV2152-06: over the byte cap, whole product descriptions become <omitted> oldest first until the prompt fits."""
     community = getattr(content, "community", None) or {}
     community = community if isinstance(community, dict) else {}
     makers = content.makers if isinstance(content.makers, dict) else {}
-    sections = [
-        ROLE,
-        CONTRACT,
-        "Rules:\n" + "\n".join(f"- {rule}" for rule in RULES),
-        "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
-        "Catalog.\nProducts (id | name | brand | status):\n" + "\n".join(_product_lines(_dicts(content.products)))
-        + "\nMakers (key | name):\n" + "\n".join(_maker_lines(makers)),
-        "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
-        + "\nScheduled hike details (id | meeting point | capacity | bring | access note):\n"
-        + "\n".join(_hike_detail_lines(community.get("events")))
-        + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),
-        "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),
-    ]
-    prompt = "\n\n".join(sections) + "\n"
+    products = _dicts(content.products)
+
+    def assemble(omitted) -> str:
+        sections = [
+            ROLE,
+            CONTRACT,
+            "Rules:\n" + "\n".join(f"- {rule}" for rule in RULES),
+            "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
+            "Catalog.\nProducts (id | name | brand | status | description):\n"
+            + "\n".join(_product_lines(products, omitted)) + "\nMakers (key | name):\n" + "\n".join(_maker_lines(makers)),
+            "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
+            + "\nScheduled hike details (id | meeting point | capacity | bring | access note):\n"
+            + "\n".join(_hike_detail_lines(community.get("events")))
+            + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),
+            "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),
+        ]
+        return "\n\n".join(sections) + "\n"
+
+    omitted, prompt = set(), assemble(frozenset())
+    for position in _omission_order(products):
+        if len(prompt.encode("utf-8")) <= PROMPT_MAX_BYTES:
+            break
+        omitted.add(position)
+        prompt = assemble(frozenset(omitted))
     if len(prompt.encode("utf-8")) > PROMPT_MAX_BYTES:
         raise ValueError("prompt too large")
     return prompt

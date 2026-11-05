@@ -11,6 +11,7 @@ from hass.tests.test_catalog_ops import NEW, CatalogTestCase
 ALT, PID, HELD = "Sunrise over the bluffs", "photo-product-001", "photo-product-040"
 CATALOG = "storefront-mockup/catalog-products.js"
 NODE = shutil.which("node")
+OWNER = "assets/products/photo-0123456789abcdef.jpg"  # an installed owner photo (AV0222-04 shape)
 DRIVER = Path(__file__).resolve().parent / "fixtures" / "shop_photo_driver.cjs"
 BAD = ("", "  ", " lead", "<b>x</b>", "{{x}}", "$5", "x" * 201)
 
@@ -131,10 +132,19 @@ class AltModelTests(unittest.TestCase):
 @unittest.skipUnless(NODE, "node is required for the storefront photo() driver")
 class StorefrontAltTests(unittest.TestCase):
     def photo(self, **product):
-        argv = [str(NODE), str(DRIVER), json.dumps({"image": "assets/products/a.webp", **product})]
+        argv = [str(NODE), str(DRIVER), json.dumps({"image": OWNER, **product})]
         return subprocess.run(argv, capture_output=True, text=True, timeout=30, check=True).stdout
 
     def test_alt_text_falls_back_to_escaped_name(self):
         self.assertIn(f'alt="{ALT}"', self.photo(name="Quince", imageAlt=ALT))
         self.assertIn('alt="Tom &amp; Jerry"', self.photo(name="Tom & Jerry"))
         self.assertIn('alt="Say &quot;hi&quot; &amp; go"', self.photo(name="Quince", imageAlt='Say "hi" & go'))
+
+    def test_generated_images_get_an_illustration_suffix_once_escaped(self):
+        for image in ("assets/products/a.webp", "assets/products/photo-0123456789abcdef.webp", "assets/products/photo-0123456789ABCDEF.jpg",
+                      "assets/products/photo-0123456789abcde.jpg", "assets/products/photo-0123456789abcdef0.png", "assets/products/photo-0123456789abcdef.jpg\n"):
+            with self.subTest(image=image):
+                self.assertIn('alt="Quince (illustration)"', self.photo(name="Quince", image=image))
+        self.assertIn(f'alt="{ALT} (illustration)"', self.photo(name="Quince", imageAlt=ALT, image="assets/products/a.webp"))
+        self.assertIn('alt="Say &quot;hi&quot; &amp; &lt;b&gt; (illustration)"', self.photo(name="Quince", imageAlt='Say "hi" & <b>', image="assets/products/a.webp"))
+        self.assertIn('alt="Quince"', self.photo(name="Quince", image="assets/products/photo-0123456789abcdef.png"))

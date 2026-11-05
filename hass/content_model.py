@@ -301,13 +301,14 @@ def validate_makers(problems, makers):
     for key, rec in makers.items():
         where = f"maker {key!r}"
         _text(problems, f"{where} key", key)
-        if not _closed_keys(problems, where, rec, MAKER_FIELDS + ("hidden",), MAKER_FIELDS):
+        if not _closed_keys(problems, where, rec, MAKER_FIELDS + ("hidden",), MAKER_FIELDS[:3]):
             continue
         if "hidden" in rec and rec["hidden"] is not True:
             problems.append(f"{where}.hidden: must be true when present")
         for field in ("name", "place", "story"):
             _text(problems, f"{where}.{field}", rec.get(field), limit=TEXT_LIMITS["maker"][field])
-        _https(problems, f"{where}.url", rec.get("url"))
+        if "url" in rec:  # AV1937-04: no website is written by leaving url out; a present url must still be public https
+            _https(problems, f"{where}.url", rec.get("url"))
 
 
 def _offset_datetime(problems, where, value):

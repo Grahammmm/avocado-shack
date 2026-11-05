@@ -149,7 +149,8 @@ class ClaimConversationTests(ConversationTestCase):
     def test_undo_restoring_organic_text_is_proposed(self):
         self.approve("description: organic and creamy", _ops(("product.edit", {"id": P1, "description": "Organic, creamy."})))
         plain = self.approve("description: creamy", _ops(("product.edit", {"id": P1, "description": "Creamy."})))
-        reply = self.proposes("put it back", _ops(("history.revert", {"changeId": plain["change_id"]})))
+        self.assertEqual(self.say(f"undo {plain['code']}"), "proposed")  # AV0007-02: command undo, not interpreter
+        reply = self.replies()[0]
         self.assertIn("Organic, creamy.", reply)
 
 

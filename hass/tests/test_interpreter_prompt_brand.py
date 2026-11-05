@@ -11,7 +11,7 @@ from hass.interpreter_prompt import MAX_PRODUCTS, PROMPT_MAX_BYTES, build
 from hass.ops import load_registry
 from hass.tests.test_interpreter_prompt import TEST_REGISTRY, _section, tiny_content
 
-PRODUCTS = "Products (id | name | brand | status):"
+PRODUCTS = "Products (id | name | brand | status | description):"
 
 
 def _rows(products):
@@ -20,14 +20,14 @@ def _rows(products):
 
 def _brand_field(row):
     """The third ' | '-separated JSON string of a row (id and name here never hold ' | ')."""
-    return json.loads(row.split(" | ", 2)[2].rsplit(" | ", 1)[0])
+    return json.loads(row.split(" | ", 2)[2].rsplit(" | ", 2)[0])
 
 
 class BrandChoiceTest(unittest.TestCase):
     def test_display_brand_wins_over_brand(self):
         rows = _rows([{"id": "yog-1", "name": "Plain yogurt", "displayBrand": "Straus Family Creamery",
                        "brand": "Straus", "status": "active"}])
-        self.assertEqual(rows, ['"yog-1" | "Plain yogurt" | "Straus Family Creamery" | "active"'])
+        self.assertEqual(rows, ['"yog-1" | "Plain yogurt" | "Straus Family Creamery" | "active" | ""'])
 
     def test_fallbacks(self):
         cases = [
@@ -44,13 +44,13 @@ class BrandChoiceTest(unittest.TestCase):
         for fields, want in cases:
             with self.subTest(fields=fields):
                 rows = _rows([{"id": "p1", "name": "Yogurt", "status": "active", **fields}])
-                self.assertEqual(rows, [f'"p1" | "Yogurt" | {json.dumps(want)} | "active"'])
+                self.assertEqual(rows, [f'"p1" | "Yogurt" | {json.dumps(want)} | "active" | ""'])
 
     def test_brand_named_request_has_one_matching_row(self):
         products = [{"id": "yog-a", "name": "Yogurt", "brand": "Straus", "status": "active"},
                     {"id": "yog-b", "name": "Yogurt", "brand": "Clover", "status": "active"}]
         rows = _rows(products)
-        self.assertEqual([r for r in rows if "Straus" in r], ['"yog-a" | "Yogurt" | "Straus" | "active"'])
+        self.assertEqual([r for r in rows if "Straus" in r], ['"yog-a" | "Yogurt" | "Straus" | "active" | ""'])
 
 
 class BrandEscapeTest(unittest.TestCase):
@@ -61,8 +61,8 @@ class BrandEscapeTest(unittest.TestCase):
         self.assertNotIn("\n", rows[0])
         for raw in ("\u2028", "\u2029", "\x85"):
             self.assertNotIn(raw, rows[0])
-        self.assertTrue(rows[0].startswith('"p1" | "Yogurt" | ') and rows[0].endswith(' | "active"'))
-        self.assertEqual(json.loads(rows[0][len('"p1" | "Yogurt" | '):-len(' | "active"')]), brand)
+        self.assertTrue(rows[0].startswith('"p1" | "Yogurt" | ') and rows[0].endswith(' | "active" | ""'))
+        self.assertEqual(json.loads(rows[0][len('"p1" | "Yogurt" | '):-len(' | "active" | ""')]), brand)
         prompt = build(TEST_REGISTRY, tiny_content([{"id": "p1", "name": "Y", "brand": brand, "status": "x"}]))
         self.assertEqual(prompt.count("Makers (key | name):\n"), 1)
         self.assertEqual(prompt.count("\nRules:\n"), 1)
@@ -75,8 +75,8 @@ class CapAndSizeTest(unittest.TestCase):
         rows = _rows(products)
         self.assertEqual(len(rows), MAX_PRODUCTS + 1)
         self.assertEqual(rows[-1], "… and 1 more (ask the owner)")
-        self.assertEqual(rows[-2], '"p-399" | "Item 399" | "B399" | "active"')
-        self.assertEqual(rows[0], '"p-000" | "Item 0" | "B0" | "active"')
+        self.assertEqual(rows[-2], '"p-399" | "Item 399" | "B399" | "active" | ""')
+        self.assertEqual(rows[0], '"p-000" | "Item 0" | "B0" | "active" | ""')
 
     def test_real_content_fits_and_shows_brands(self):
         content = load_and_validate()
@@ -86,7 +86,8 @@ class CapAndSizeTest(unittest.TestCase):
         for p in content.products:
             want = p.get("displayBrand") or p.get("brand") or ""
             self.assertTrue(rows[p["id"]].endswith(f" | {json.dumps(want, ensure_ascii=False)} | "
-                                                   f"{json.dumps(p.get('status'), ensure_ascii=False)}"), p["id"])
+                                                   f"{json.dumps(p.get('status'), ensure_ascii=False)} | "
+                                                   f"{json.dumps(p.get('description') or '', ensure_ascii=False)}"), p["id"])
 
 
 class OtherSectionsUnchangedTest(unittest.TestCase):
