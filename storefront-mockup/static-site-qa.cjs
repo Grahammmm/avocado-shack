@@ -69,12 +69,14 @@ server.listen(0,'127.0.0.1',async()=>{
   assert.ok(await page.getByText('It isn’t a claim that every ingredient was grown there.').isVisible(),'sourcing sentence');
   await closedUpfront(page,'#community-newsletter',['#newsletter-email','#community-newsletter input[name=hikes]']);
 
+  // AV1422-09: heading levels on /hike (closed dialog excluded) start h1,h2 and never jump by more than one.
+  const headingOrder=async(p,when)=>{const l=await p.evaluate(()=>[...document.querySelectorAll('main h1,main h2,main h3,main h4,main h5,main h6')].filter(h=>!h.closest('dialog')).map(h=>+h.tagName[1]));assert.deepEqual(l.slice(0,2),[1,2],when+': h1 then h2');l.forEach((n,i)=>assert.ok(i===0||n-l[i-1]<=1,when+': heading jump '+l.join(',')))};
   for(const route of ['/hike','/hike/']){
    const reqs=[],on=q=>{if(/point-buchon(-aerial\.webp|\.json)/.test(q.url()))reqs.push(q.url())};page.on('request',on);
    await page.goto(base+route);await page.locator('#upcoming-hikes article').first().waitFor();await page.waitForLoadState('networkidle');
    assert.deepEqual(reqs,[],route+': no map files before the map is near');assert.match(await page.locator('[data-trail-explorer]').innerText(),/Loading the trail map/);
    await page.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
-   assert.equal(reqs.filter(u=>/aerial\.webp/.test(u)).length,1,route+': one aerial request');assert.equal(reqs.filter(u=>/\.json/.test(u)).length,1,route+': one route request');page.off('request',on);
+   assert.equal(reqs.filter(u=>/aerial\.webp/.test(u)).length,1,route+': one aerial request');assert.equal(reqs.filter(u=>/\.json/.test(u)).length,1,route+': one route request');page.off('request',on);await headingOrder(page,route);
    assert.equal(await page.locator('.trail-invitation').count(),1,route+': sample invitation');
    assert.ok(await page.getByText('Sample invitation · plans to be confirmed').isVisible());
    assert.equal(await page.locator('.trail-map-canvas').count(),1,route+': trail map');
@@ -111,12 +113,13 @@ server.listen(0,'127.0.0.1',async()=>{
    await p.clock.setFixedTime(new Date(iso));await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,upcoming:{...sample.upcoming,startsAt}})));
    if(events)await p.route('**/community.json',r=>r.fulfill(json({events,routeIdeas:[]})));
    await p.goto(base+'/hike/');await p.locator('#upcoming-hikes article').first().waitFor();
-   const r={errs,sent,arts:await p.locator('#upcoming-hikes article').evaluateAll(a=>a.map(x=>({t:x.querySelector('h2').innerText,txt:x.innerText,n:x.querySelectorAll('[data-confirmed-guests]').length,b:x.querySelectorAll('[data-rsvp]').length,x:x.classList.contains('hike-cancelled')}))),body:await p.locator('body').innerText(),times:await p.locator('.trail-invitation-date time').count(),dateLine:await p.locator('.trail-invitation-date').allInnerTexts(),label:await p.getByText('Sample invitation · plans to be confirmed').count()};await ctx.close();return r};
+   const r={errs,sent,arts:await p.locator('#upcoming-hikes article').evaluateAll(a=>a.map(x=>({t:x.querySelector('h2').innerText,txt:x.innerText,n:x.querySelectorAll('[data-confirmed-guests]').length,b:x.querySelectorAll('[data-rsvp]').length,x:x.classList.contains('hike-cancelled')}))),body:await p.locator('body').innerText(),times:await p.locator('.trail-invitation-date time').count(),dateLine:await p.locator('.trail-invitation-date').allInnerTexts(),label:await p.getByText('Sample invitation · plans to be confirmed').count()};await headingOrder(p,'hike '+iso);await ctx.close();return r};
   for(const [when,iso] of [['the day before','2026-11-07T20:00:00Z'],['the same Pacific day','2026-11-08T20:00:00Z'],['UTC next day, still the 8th in Pacific','2026-11-09T06:00:00Z']]){
    const r=await hikeAt(iso);assert.equal(r.times,1,when+': <time> shown');assert.match(r.dateLine[0],/^Sunday, November 8, 2026 · 9:00 am$/,when);assert.equal(r.label,1,when+': sample label');assert.deepEqual(r.errs,[]);}
   for(const [when,iso,startsAt] of [['next Pacific day','2026-11-09T08:30:00Z'],['garbage startsAt','2026-11-08T20:00:00Z','not a date'],['missing startsAt','2026-11-08T20:00:00Z',null]]){
    const r=await hikeAt(iso,startsAt===undefined?{}:{startsAt});assert.deepEqual(r.dateLine,['Date to be confirmed'],when);assert.equal(r.times,0,when+': no <time>');
    assert.equal(r.label,1,when+': sample label stays');assert.doesNotMatch(r.body,/Invalid Date/);assert.deepEqual(r.errs,[],when+': page errors');}
+  await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'next-1',title:'Next hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'},{id:'done-1',title:'Done hike',status:'completed',startsAt:'2026-10-04T09:00:00-07:00',timezone:'America/Los_Angeles',description:'A good day.'}]});
   const real=await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'real-1',title:'Real hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'}]});
   assert.match(real.body,/Sunday, December 6, 2026/);assert.doesNotMatch(real.body,/Date to be confirmed/);assert.equal(real.label,0,'a real hike replaces the sample invitation');assert.deepEqual(real.errs,[]);
   // AV1422-06: no club service, so nobody counted guests: no count, no RSVP button; synthetic titles only.
