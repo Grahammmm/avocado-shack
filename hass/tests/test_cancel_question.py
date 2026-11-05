@@ -55,7 +55,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.assertEqual(self.replies(), [f"Cancelled {draft['code']}; nothing changed."])
         self.assertEqual((self.closed(draft), self.state(q2)["state"]), (("rejected", "owner"), "needs-details"))
         self.assertEqual(self.say("cancel beef"), "no-target")  # an unknown code closes nothing
-        self.assertEqual(self.replies(), [conversation.NOTHING])
+        self.assertEqual(self.replies(), ["No draft beef."])
         self.assertEqual(self.state(q2)["state"], "needs-details")
         self.assert_nothing_applied()
 
