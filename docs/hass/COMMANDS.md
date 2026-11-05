@@ -59,6 +59,11 @@ Checking the selection (change requests, not commands; each still needs `yes <co
   their last word, shown as "Last confirmed <day>" with the day they were last named.
 - `product.set_availability`: change one product's word ("the eggs are sold out") after today's check; with no
   check today it is refused with "check the selection first".
+- `product.clear_availability`: take one product's word off its card ("stop showing the eggs as sold out"). Only that
+  product changes: its word and its own check day are removed, so it is back to not confirmed (no word on the card).
+  It never sets "Sold out" and leaves the store's selection check and every other product alone. It needs `yes <code>`
+  even if shelf-check changes are set to apply automatically. It is refused when the product has no word set, is
+  hidden or is held. `undo` puts the word and its day back exactly as they were.
 - Until the first check the site shows no check line and no availability words. If
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
@@ -66,3 +71,8 @@ Checking the selection (change requests, not commands; each still needs `yes <co
 Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`, for example "put the old photo back",
 shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when
 no photo of yours is set; `undo` puts your photo back.
+
+Stop carrying a maker (a change request, needs `yes <code>`): `maker.hide` with `withProducts: true`, for example "we stopped
+carrying Etto", hides the maker and all of its active products in one change. The proposal lists the maker and every
+product id it will hide. Hidden and held products are left exactly as they are. Without `withProducts`, a maker that
+still has active products is refused and the reply names them. `undo` brings the maker and every product back together.

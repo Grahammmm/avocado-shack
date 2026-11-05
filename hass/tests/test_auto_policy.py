@@ -81,7 +81,9 @@ class UnwiredTest(unittest.TestCase):
         self.assertIn(out.returncode, (0, 1))
         self.assertEqual(out.stdout.split(), ["hass/acceptance.py", "hass/tests/test_acceptance_runner.py",
                                               "hass/tests/test_auto_policy.py",
-                                              "hass/tests/test_auto_policy_shapes.py"])  # no importer outside this test
+                                              "hass/tests/test_auto_policy_shapes.py",
+                                              "hass/tests/test_clear_availability.py",
+                                              "hass/tests/test_maker_hide_products.py"])  # no importer outside tests
         self.assertIn("UNWIRED", auto_policy.__doc__ or "")
 
 

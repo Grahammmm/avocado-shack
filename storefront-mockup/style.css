@@ -68,3 +68,5 @@ dialog .close{position:sticky;top:0;right:auto;float:right;width:44px;height:44p
 .catalog-from{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;overflow-wrap:anywhere}.catalog-from[hidden]{display:none}.catalog-from button,.maker-story button[data-from]{min-height:44px;white-space:normal;overflow-wrap:anywhere;text-align:left}.maker-story button[data-from]{display:block;max-width:100%}
 .catalog-controls .avail-filter{grid-column:1/-1;display:flex;align-items:center;gap:10px;min-height:44px}
 .catalog-controls .avail-filter input{display:inline-block;width:24px;height:24px;margin:0;flex:none}
+.catalog-controls #clear-filters{min-height:44px;justify-self:start}
+.catalog-controls #clear-filters[hidden]{display:block;visibility:hidden}

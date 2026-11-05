@@ -226,6 +226,21 @@ def _product_set_availability(content, args, ctx):
     return _touch("products", product["id"], before, product)
 
 
+def _product_clear_availability(content, args, ctx):
+    """AV1622-05: take one product's availability word and its own check day off its card (never sets 'no')."""
+    product = _product(content, args["id"])
+    if not isinstance(product, dict):
+        return product
+    if product["status"] != "active":
+        return Refused(f"{product['id']} is {product['status']}; restore it before clearing its availability")
+    if "available" not in product:
+        return Refused(f"{product['id']} has no availability word set; nothing to clear")
+    before = copy.deepcopy(product)
+    product.pop("available")
+    product.pop("available_on", None)
+    return _touch("products", product["id"], before, product)
+
+
 def _maker_add(content, args, ctx):
     key = args["key"]
     if len(key) > MAX_KEY:
@@ -268,17 +283,24 @@ def _maker_edit(content, args, ctx):
 
 
 def _maker_hide(content, args, ctx):
+    """Hide a maker; ``withProducts`` also hides its active products in the same change (maker first, then by id)."""
     maker = _maker(content, args["key"])
     if not isinstance(maker, dict):
         return maker
     if maker.get("hidden") is True:
         return Refused(f"maker {args['key']} is already hidden")
-    ids = [p["id"] for p in content.active_products() if p.get("producerKey") == args["key"]]
-    if ids:
-        return Refused(f"maker {args['key']} still has active products: " + ", ".join(ids))
+    active = sorted((p for p in content.active_products() if p.get("producerKey") == args["key"]),
+                    key=lambda p: p["id"])
+    if active and args.get("withProducts") is not True:
+        return Refused(f"maker {args['key']} still has active products: " + ", ".join(p["id"] for p in active))
     before = copy.deepcopy(maker)
     maker["hidden"] = True
-    return _touch("makers", args["key"], before, maker)
+    touched = _touch("makers", args["key"], before, maker)
+    for product in active:
+        was = copy.deepcopy(product)
+        product["status"] = "hidden"
+        touched += _touch("products", product["id"], was, product)
+    return touched
 
 
 def _maker_restore(content, args, ctx):
@@ -343,10 +365,11 @@ OPS = (
     Op("product.hide", _ID, _product_hide),
     Op("product.restore", _ID, _product_restore),
     Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
+    Op("product.clear_availability", _ID, _product_clear_availability),
     Op("maker.add", {"key": Arg("text"), **{k: Arg("url" if k == "url" else "text") for k in MAKER_EDITABLE}},
        _maker_add),
     Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE}},
        _maker_edit),
-    Op("maker.hide", _KEY, _maker_hide),
+    Op("maker.hide", {**_KEY, "withProducts": Arg("bool", required=False)}, _maker_hide),
     Op("maker.restore", _KEY, _maker_restore),
 )
