@@ -10,13 +10,14 @@ from hass import content_model, media
 DOC = Path(__file__).resolve().parents[2] / "docs" / "hass" / "LIMITS.md"
 CLAIM_RE = re.compile(r"\*\*(\d+)(?: ([A-Za-z]+))?\*\*\s*<!--\s*([\w.]+)\.(\w+)((?:\[\w+\])*)\s*-->")
 BOLD_NUMBER_RE = re.compile(r"\*\*\d")
-UNITS = {None: 1, "characters": 1, "MB": 2**20}
+UNITS = {None: 1, "characters": 1, "MB": 2**20, "digits": 1, "dollars": 1}
 IMAGE_TYPES = ("jpeg", "jpg", "png", "gif", "webp", "heic", "heif", "tiff", "bmp")
 REQUIRED = {"media.MAX_BYTES", "conversation.HISTORY_MAX", "conversation.MEMORY_LIST_MAX", "ops.catalog.MAX_CANDIDATES",
             "memory.MAX_VALUE", "editor.MAX_OPS", "content_model.MAX_HOURS_LINES", "conversation.MAX_OWNER_TEXT",
             "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX", "content_model.MAX_INTRO",
             "content_model.MAX_HEADLINE_LINE", "content_model.MAX_STORY", "content_model.MAX_NOTICE",
-            "content_model.MAX_NOTICE_DAYS"}  # AV0022-15, AV1322-12
+            "content_model.MAX_NOTICE_DAYS", "ops.store.PHONE_DIGITS", "margins.PACK_COST_MAX",
+            "margins.UNITS_MIN", "margins.UNITS_MAX"}  # AV0022-15, AV1322-12, AV1222-12
 
 
 def claims(doc: str) -> list:
@@ -105,6 +106,17 @@ class LimitsDocTest(unittest.TestCase):
         self.assertEqual(conversation.FIND_USAGE, "Send find and 1–60 characters, e.g. find lion's mane.")
         self.assertEqual(named_image_types(self.doc), {"jpeg", "png"})
         self.assertIn("upright or sideways", self.doc)
+
+    def test_phone_and_cost_limits_go_red(self):  # AV1222-12
+        from hass import margins
+        from hass.ops import store
+        lines = {c[4]: c[0] for c in claims(self.doc)}
+        for mod, name, value, said in ((store, "PHONE_DIGITS", 11, "10 digits"), (margins, "UNITS_MAX", 20000, "10000"),
+                                       (margins, "UNITS_MIN", 2, "1"), (margins, "PACK_COST_MAX", 200000, "100000 dollars")):
+            with self.subTest(name=name), mock.patch.object(mod, name, value):
+                source = f"{mod.__name__.removeprefix('hass.')}.{name}"
+                self.assertEqual(problems(self.doc), [f"line {lines[name]}: doc says {said}, {source} is {value}"])
+        self.assertEqual(store.PHONE_DIGITS, content_model.PHONE_DIGITS)
 
     def test_bold_number_without_comment_names_its_line(self):
         self.assertEqual(problems("Intro.\nAt most **7** things."), ["line 2: bold number without a source comment"])

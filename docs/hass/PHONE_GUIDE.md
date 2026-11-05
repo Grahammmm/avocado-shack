@@ -3,8 +3,7 @@
 Text Hass from Messages like you would text a helper. Nothing reaches the website until you say yes, and every change
 can be undone. Codes such as `a1b2` below are placeholders: use the short code Hass puts in its own reply.
 
-Each message stands on its own. A command (such as `status`) must be the whole message; anything else is read as a
-change in plain words.
+Each message stands on its own. A command (such as `status`) must be the whole message; anything else is read as a change in plain words.
 
 ## Add a product
 
@@ -61,6 +60,8 @@ Send: `no a1b2`
    Send (plain words): `Not a product, that one is for the top of the home page. Describe it as: Avocado Shack storefront with a green awning`
 4. Show a notice at the top of the home page through its last day.
    Send (plain words): `Put a notice on the home page: "Closed Thanksgiving Day", until 2026-11-26.`
+5. Set the store phone number shown on the website.
+   Send (plain words): `Our phone number is 805 555 0123`
 
 Tip: approve each draft with its code. A notice's last day is today or up to 60 days ahead (Pacific); a new notice replaces the old one, and undo removes it.
 
@@ -99,8 +100,11 @@ Tip: an undo is a draft like any other, so nothing goes back until you say yes.
 
 Tip: resuming never applies a waiting draft by itself, and drafts that wait too long expire with nothing changed.
 
-More commands, each as its own message: `report` replies your morning shelf report, and `post photo-product-001` replies a
-draft caption with the product's site photo. Neither posts anything.
+More commands, each as its own message: `report` replies your morning shelf report, `post photo-product-001` a draft photo caption, and `post hike` plus a hike's code a hike announcement draft. None of them posts anything.
+Send: `post hike hike-2026-11-14-point-buchon`
 
-Forgot a command? Send `help`. For what Hass cannot do yet see [Known limits](LIMITS.md), and for every command see
-[the command card](COMMANDS.md).
+Prices (private): save what you paid, then ask for a suggested price. The cost is private; it is never on the website.
+Send: `cost photo-product-001: 24.00 for 12`
+Send: `margin photo-product-001 at 35%`
+
+Forgot a command? Send `help`. For what Hass cannot do yet see [Known limits](LIMITS.md), and for every command see [the command card](COMMANDS.md).

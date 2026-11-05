@@ -9,6 +9,7 @@ import sys
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Context, DivisionByZero, InvalidOperation, Overflow, localcontext
 from decimal import Decimal as D
 
+PACK_COST_MAX, UNITS_MIN, UNITS_MAX = 100000, 1, 10000  # LIMITS.md cites these
 CENT, NOTE = D("0.01"), "Suggestion only. Prices are not on the site; any price change needs your approval."
 PLAIN = re.compile(r"-?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?", re.ASCII)  # no _, +, non-ASCII digits
 
@@ -56,8 +57,8 @@ def compute(pack_cost, units, shrink, margin, round_to=None):
 
 
 def _compute(pack_cost, units, shrink, margin, round_to):
-    pack = _num("pack cost", pack_cost, "0.01", "100000.00", places=2)
-    n, s, m = _num("units", units, 1, 10000, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("margin", margin, 0, 90, decimals=2)
+    pack = _num("pack cost", pack_cost, "0.01", f"{PACK_COST_MAX}.00", places=2)
+    n, s, m = _num("units", units, UNITS_MIN, UNITS_MAX, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("margin", margin, 0, 90, decimals=2)
     end = None if round_to is None else _num("round-to", round_to, 0, 1)
     if end is not None and end not in (D("0.49"), D("0.99")):
         raise InputError("round-to must be 0.49 or 0.99")
@@ -85,8 +86,8 @@ def check(pack_cost, units, shrink, price):  # reverse question: the margin a cu
 
 
 def _check(pack_cost, units, shrink, price):
-    pack = _num("pack cost", pack_cost, "0.01", "100000.00", places=2)
-    n, s, p = _num("units", units, 1, 10000, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("price", price, "0.01", "100000.00", places=2)
+    pack = _num("pack cost", pack_cost, "0.01", f"{PACK_COST_MAX}.00", places=2)
+    n, s, p = _num("units", units, UNITS_MIN, UNITS_MAX, whole=True), _num("shrink", shrink, 0, 90, decimals=2), _num("price", price, "0.01", f"{PACK_COST_MAX}.00", places=2)
     with localcontext() as ctx:  # same intermediates and floor as compute's margin_actual
         ctx.prec, ctx.rounding = 60, ROUND_CEILING
         sellable = (unit := pack / n) / (1 - s / 100)
