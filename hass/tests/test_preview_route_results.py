@@ -147,6 +147,25 @@ class CaptureTests(unittest.TestCase):
         result, checks = self.run_check(self.site([self.hike(1)], {CASS: title}), title)
         self.assertEqual((result["ok"], checks), (True, {"routeShown": True}), result)
 
+    def test_one_card_without_its_route_line_fails_among_several(self):
+        events = [self.hike(1), self.hike(2)]
+        files = self.site(events, {CASS: "Cass Hill Loop"})
+        ok, checks = self.run_check(files, "Cass Hill Loop")
+        self.assertEqual((ok["ok"], checks), (True, {"routeShown": True}), ok)
+        # the first card loses its Route line; the second card and the sample archive still read the title
+        js = (REPO_ROOT / "storefront-mockup/community.js").read_text()
+        self.assertIn("function route(e){", js)
+        files["storefront-mockup/community.js"] = js.replace("function route(e){", "function route(e){if(e.id==='h-1')return '';", 1).encode()
+        bad, checks = self.run_check(files, "Cass Hill Loop")
+        self.assertEqual((bad["ok"], checks), (False, {"routeShown": False}), bad)
+
+    def test_stale_title_containing_the_separator_fails(self):
+        # a real past hike switches the sample archive off, so only the linked card's Route line is left to read
+        past = {**self.hike(2, trail=BUCHON, status="completed"), "startsAt": "2020-01-01T09:00:00-08:00"}
+        files = self.site([self.hike(1), past], {CASS: "Cass Hill Loop \u00b7 Wrong"})
+        stale, checks = self.run_check(files, "Cass Hill Loop")
+        self.assertEqual((stale["ok"], checks), (False, {"routeShown": False}), stale)
+
 
 if __name__ == "__main__":
     unittest.main()

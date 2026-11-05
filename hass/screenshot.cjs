@@ -79,7 +79,9 @@ const allowed=req=>{
         const get=async p=>{try{const r=await fetch(p,{cache:'no-store'});return r.ok&&(r.headers.get('Content-Type')||'').includes('json')?await r.json():null}catch{return null}};
         const club=(await get('/api/community'))||(await get('/community.json'))||{},pv=await get('/hiking-preview.json'),linked=(club.events||[]).filter(e=>e.trailId===id),ws=v=>String(v).replace(/\s+/g,' ').trim();
         const lines=[...document.querySelectorAll('#upcoming-hikes .hike-event')].filter(c=>{const key=[c.id,c.querySelector('[data-rsvp]')?.dataset.rsvp].filter(Boolean),h=c.querySelector('h2')?.textContent;
-          return linked.some(e=>key.length?key.includes(e.id):h===e.title||h==='Cancelled: '+e.title);}).map(c=>c.querySelector('.hike-route')).filter(Boolean).map(r=>ws(r.textContent));
+          return linked.some(e=>key.length?key.includes(e.id):h===e.title||h==='Cancelled: '+e.title);}).map(c=>{const r=c.querySelector('.hike-route');if(!r)return null;  // a card with no Route line stays in the list so it fails the check
+          const link=r.querySelector('a');let before='';for(const n of r.childNodes){if(n===link)break;before+=n.textContent;}
+          return {before:ws(before),link:!!link};});  // the title is the text before the source link, never the link text
         const t=document.querySelector('#featured-hike-title');
         // the sample archive (community.js sampleHistory) renders pv.past entries whose route idea exists, in order, only while there are no real past hikes
         const ent=[...document.querySelectorAll('#past-hikes .trail-journal-entry')],vis=(pv?.past||[]).filter(e=>(club.routeIdeas||[]).some(r=>r.id===e.trailId));
@@ -87,8 +89,8 @@ const allowed=req=>{
         return {lines,archive,sample:t&&pv?.upcoming?.trailId===id?ws(t.childNodes[0]?.textContent):null};
       },target.id||'');
       const ws=v=>String(v).replace(/\s+/g,' ').trim(),title=ws(target.title),places=got.lines.length+got.archive.length+(got.sample===null?0:1);
-      if(target.hidden)checks.routeGone=places===0;
-      else if(places>0)checks.routeShown=got.lines.every(l=>l===`Route: ${title}`||l.startsWith(`Route: ${title} · `))&&got.archive.every(a=>a===title)&&(got.sample===null||got.sample===title);
+      if(target.hidden)checks.routeGone=got.lines.filter(Boolean).length+got.archive.length+(got.sample===null?0:1)===0;
+      else if(places>0)checks.routeShown=got.lines.every(l=>!!l&&l.before===(l.link?`Route: ${title} ·`:`Route: ${title}`))&&got.archive.every(a=>a===title)&&(got.sample===null||got.sample===title);
       else unshown=true;
     }else{
       await page.goto(base+'/',{waitUntil:'networkidle'});
