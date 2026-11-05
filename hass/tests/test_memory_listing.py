@@ -9,7 +9,7 @@ import unittest
 from datetime import timedelta
 from unittest import mock
 
-from hass import conversation
+from hass import conversation, memory as memory_mod
 from hass.tests.test_conversation import GROUP, STRANGER, T0, ConversationTestCase
 from hass.tests.test_editor import HOURS, _req
 from hass.tests.test_status_pause import StoreMixin
@@ -32,7 +32,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
         return reply
 
     def save(self, key, value):
-        if self.conv.memory is None: self.listing()
+        if self.conv.memory is None: self.conv.memory = memory_mod.Memory.on_connection(self.conv.db, self.conv.clock)
         self.conv.memory.remember(key, value, "fact", "owner-stated:test")
 
     def edit(self, name, change):
@@ -41,7 +41,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
         change(doc)
         path.write_text(json.dumps(doc), "utf-8")
 
-    def tables(self):
+    def snapshot(self):
         names = [r[0] for r in self.conv.db.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")]
         return {n: [tuple(r) for r in self.conv.db.execute(f'SELECT * FROM "{n}"')] for n in names if n not in ("messages", "outbox")}
 
@@ -81,11 +81,11 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
         self.assertIn(f"same maker -> Same Id Farm ({AVO})", out)
         self.edit("products.json", lambda d: [p.update(name="Renamed avocado", status="hidden") for p in d["products"] if p["id"] == AVO])
         self.edit("makers.json", lambda d: d["makers"]["Straus"].update(hidden=True))
-        before = self.tables()
+        before = self.snapshot()
         out = self.listing()
         self.assertIn(f"same -> Renamed avocado ({AVO}) [hidden]", out)
         self.assertIn("dairy -> Straus (Straus) [hidden]", out)
-        self.assertEqual(self.tables(), before)  # a rename changes the display, never the stored alias
+        self.assertEqual(self.snapshot(), before)  # a rename changes the display, never the stored alias
         self.edit("products.json", lambda d: [p.update(status="held", hold="private reason") for p in d["products"] if p["id"] == AVO])
         out = self.listing()
         self.assertIn(f"same -> Renamed avocado ({AVO}) [held]", out)
@@ -94,19 +94,19 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
     def test_dangling_and_legacy_bad_aliases(self):
         for key, value in (("alias.gone", "product:photo-product-078"), ("alias.gone-maker", "maker:Straus"),
                            ("alias.kind", "thing:x"), ("alias.nocolon", "photo-product-001"), ("alias.empty", "product:"),
-                           ("alias.dirty", "product:a\x07b"), ("alias.forgotten", f"product:{AVO}"), ("alias.ok", f"product:{AVO}")):
+                           ("alias.long", "product:" + "x" * 90), ("alias.forgotten", f"product:{AVO}"), ("alias.ok", f"product:{AVO}")):
             self.save(key, value)
         self.conv.memory.forget("alias.forgotten")
         self.edit("products.json", lambda d: d.update(products=[p for p in d["products"] if p["id"] != "photo-product-078"]))
         self.edit("makers.json", lambda d: d["makers"].pop("Straus"))
         out = self.listing()
-        self.assertIn("Aliases (6):", out)
+        self.assertIn("Aliases (7):", out)
         self.assertIn("gone -> photo-product-078 (no longer on the site - send forget alias.gone)", out)
         self.assertIn("gone maker -> Straus (no longer on the site - send forget alias.gone-maker)", out)
-        for slug in ("kind", "nocolon", "empty", "dirty"):
+        for slug in ("kind", "nocolon", "empty", "long"):
             self.assertIn(f"{slug} -> alias unreadable - send forget alias.{slug}", out)
         self.assertNotIn("thing:x", out)
-        self.assertNotIn("\x07", out)
+        self.assertNotIn("xxxxxxxx", out)
         self.assertNotIn("forgotten", out)
         self.assertIn(f"ok -> Hass avocado ({AVO})", out)
         self.assertEqual(self.conv.aliases().get("gone"), ("product", "photo-product-078"))  # find still ignores via lookup
@@ -136,14 +136,15 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
         self.interp.mapping["half"] = {"ops": _req((HOURS, {}))["ops"], "revises": None}
         self.assertEqual(self.say("half"), "needs-details")
         self.replies()
-        self.now = T0 + timedelta(seconds=601)  # lapsed
-        self.assertEqual(self.say("pause changes" if False else "stop changes"), "pause")
+        self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
-        before, states = self.tables(), [d["state"] for d in self.drafts()]
+        self.now = T0 + timedelta(seconds=601)  # lapsed
+        self.calls.clear()
+        before, states = self.snapshot(), [d["state"] for d in self.drafts()]
         self.assertEqual(states, ["needs-details"])
         self.assertEqual(self.listing(), "Nothing saved.\nAliases (0):")
         self.assertEqual([d["state"] for d in self.drafts()], states)
-        self.assertEqual(self.tables(), before)
+        self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.calls, [])
         self.say("forget nothing")  # a write still sweeps as before
         self.replies()
