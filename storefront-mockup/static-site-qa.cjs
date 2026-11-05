@@ -84,14 +84,14 @@ server.listen(0,'127.0.0.1',async()=>{
    await closedUpfront(page,'#hike-updates',['#hike-email']);
   }
   // AV1422-08: no IntersectionObserver mounts at once; a 404 route file still reaches the error state.
-  for(const [name,init,fail] of [['no IntersectionObserver',true,false],['route file 404',false,true]]){
+  for(const [name,init,fail] of [['no IntersectionObserver',true,false],['route file 404',false,true],['aerial image 404',false,'aerial']]){
    const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));
    if(init)await p.addInitScript(()=>{delete window.IntersectionObserver});
-   if(fail)await p.route('**/point-buchon.json',r=>r.fulfill({status:404,body:''}));
+   if(fail)await p.route(fail==='aerial'?'**/point-buchon-aerial.webp':'**/point-buchon.json',r=>r.fulfill({status:404,body:''}));
    await p.goto(base+'/hike/');await p.locator('#upcoming-hikes article').first().waitFor();
    if(fail)await p.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();
    await p.locator('[data-trail-explorer][data-ready]').waitFor({state:'attached'});
-   assert.equal(await p.locator('[data-trail-explorer]').getAttribute('data-ready'),fail?'error':'true',name);assert.deepEqual(errs,[],name+': page errors');await ctx.close();
+   if(fail)await p.locator('[data-trail-explorer][data-ready=error]').waitFor({state:'attached'});assert.equal(await p.locator('[data-trail-explorer]').getAttribute('data-ready'),fail?'error':'true',name);if(fail){assert.equal(await p.locator('[data-trail-explorer] .trail-map-canvas').count(),0,name+': no map canvas');assert.ok(await p.locator('[data-trail-explorer] .trail-map-unavailable a[href*="pge.com"]').isVisible(),name+': official guide link');}assert.deepEqual(errs,[],name+': page errors');await ctx.close();
   }
   // AV1422-05: a fixed clock decides whether the sample invitation (startsAt 2026-11-08 09:00 Pacific) shows its date or "Date to be confirmed".
   const sample=JSON.parse(fs.readFileSync(path.join(root,'hiking-preview.json'),'utf8')),json=body=>({contentType:'application/json',body:JSON.stringify(body)});

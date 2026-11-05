@@ -8,7 +8,6 @@ const icon=(name)=>({plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h1
 const control=(action,label,symbol)=>`<button type="button" data-map-action="${action}" aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">${icon(symbol)}</svg></button>`;
 function node(tag,attrs={}){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;}
 
-// Callers may defer mount (community.js loads the map only near view); mount itself is unchanged.
 const UNAVAILABLE='<p class="trail-map-unavailable">The interactive map couldn’t load. <a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">View the official trail guide ↗</a></p>';
 async function mount(host){
  if(!host||host.dataset.mounted)return;
@@ -38,6 +37,8 @@ async function mount(host){
   <details class="trail-map-notes"><summary>About this route &amp; map</summary><p>The line includes the walk from Coon Creek parking to the check-in station, then the main trail to the turnaround and back. The optional northern loop is not included. Our mapped route is about ${miles} miles; PG&amp;E describes the trail as 6.6 miles round trip.</p><p>Elevation is estimated from <a href="https://www.usgs.gov/3d-elevation-program" target="_blank" rel="noopener">USGS 3DEP terrain data</a>, sampled every 50 metres and lightly smoothed. It is not a GPS recording. Imagery is an aerial survey, not a live view. This is a route overview; check current access and follow trail signs.</p><p><a href="https://www.pge.com/assets/pge/images/about/point-buchon-trail-map.jpg" target="_blank" rel="noopener">Official trail map ↗</a><a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">Access &amp; trail conditions ↗</a></p></details>`;
   host.replaceChildren(wrapper);
   const q=s=>wrapper.querySelector(s),stage=q('.trail-map-stage'),svg=q('.trail-map-canvas'),photo=q('.trail-basemap');
+  // AV1422-08 edge 5: a failed aerial image (the first layer) is a failed map load, same fallback and retry as a failed route file.
+  photo.addEventListener('error',()=>{if(!/aerial/.test(photo.getAttribute('href'))||!host.isConnected||!host.contains(wrapper))return;delete host.dataset.mounted;host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});});
   const profile=d.profile,slider=q('.trail-distance'),output=q('#trail-elevation-readout');
   const [minX,minY,maxX,maxY]=d.bounds3857;
   function project(lon,lat){const x=6378137*lon*Math.PI/180,y=6378137*Math.log(Math.tan(Math.PI/4+lat*Math.PI/360));return [(x-minX)/(maxX-minX)*1000,(maxY-y)/(maxY-minY)*562.5];}
