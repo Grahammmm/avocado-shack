@@ -3,7 +3,7 @@ only. The real script runs under node (vm sandbox, fixed clock, fixture club pay
 skipped when node is absent. Each case reads the rendered #upcoming-hikes HTML and decodes the data: href.
 The stubbed fetch answers like a real Response (ok, headers.get, json), because liveData() inspects Content-Type.
 A stub missing headers makes liveData() throw, so render() shows its fallback and every assertion below is moot."""
-import html, json, re, shutil, subprocess, unittest, urllib.parse
+import html, json, os, re, shutil, subprocess, unittest, urllib.parse
 from pathlib import Path
 
 SITE = Path(__file__).resolve().parents[2] / "storefront-mockup"
@@ -30,10 +30,11 @@ def hike(id, startsAt, status="scheduled", **kw):
 
 @unittest.skipUnless(NODE, "node is required to run community.js")
 class HikeIcsTest(unittest.TestCase):
-    def render(self, *events):
+    def render(self, *events, tz=None):
         club = {"events": list(events), "routeIdeas": []}
+        env = dict(os.environ, TZ=tz) if tz else None
         out = subprocess.run([NODE, "-e", HARNESS], input=json.dumps([str(SITE), NOW, club]),
-                             capture_output=True, text=True, timeout=60, check=True).stdout
+                             capture_output=True, text=True, timeout=60, check=True, env=env).stdout
         self.assertNotIn("calendar isn’t available", out)  # render() completed
         cards = {}
         for art in out.split("<article ")[1:]:
@@ -80,6 +81,41 @@ class HikeIcsTest(unittest.TestCase):
         self.assertEqual(cards["Cancelled: Gone"], [])
         self.assertEqual(cards["Started"], [])  # listed as Today, already started: no link
         self.assertEqual(set(cards), {"Upcoming", "Cancelled: Gone", "Started"})
+
+    def test_naive_start_never_offers_calendar_in_any_host_zone(self):
+        for tz in ("UTC", "Asia/Tokyo"):
+            cards = self.render(hike("n", "2026-12-05T09:00:00", title="Naive", timezone="America/Los_Angeles"), tz=tz)
+            self.assertEqual(cards.get("Naive", []), [], tz)
+
+    def test_explicit_zones_produce_host_independent_instants(self):
+        want = {"A": "20261205T170000Z", "B": "20270805T160000Z", "C": "20261205T090000Z",
+                "D": "20261206T020000Z", "E": "20261205T170030Z"}
+        evs = [hike("A", "2026-12-05T09:00-08:00", title="A"), hike("B", "2027-08-05T09:00:00-07:00", title="B"),
+               hike("C", "2026-12-05T09:00:00Z", title="C"), hike("D", "2026-12-05T18:00:00-08:00", title="D"),
+               hike("E", "2026-12-05T09:00:30-08:00", title="E")]
+        for tz in ("UTC", "Asia/Tokyo"):
+            cards = self.render(*evs, tz=tz)
+            for k, v in want.items():
+                (_, text), = cards[k]
+                self.assertIn("\r\nDTSTART:" + v + "\r\n", text, (tz, k))
+
+    def test_calendar_start_shape_refusals(self):
+        bad = ["2026-12-05", "2026-12-05 09:00:00-08:00", "2026-12-05T09:00:00", "2026-12-05T09:00:00-0800",
+               " 2026-12-05T09:00:00Z", "2026-12-05T09:00:00Z ", "2026-12-05T09:00:00Z\n", "2026-12-05T09:00:00.5Z",
+               "2026-12-05T09:00:00z", None, 1796461200000, "garbage"]
+        evs = [hike("b%d" % i, v, title="Bad%d" % i) for i, v in enumerate(bad)]
+        cards = self.render(*evs, hike("ok", "2026-12-05T09:00:00Z", title="Good"))
+        self.assertEqual(len(cards["Good"]), 1)
+        for i in range(len(bad)):
+            self.assertEqual(cards.get("Bad%d" % i, []), [], repr(bad[i]))
+
+    def test_status_and_start_boundary_unchanged(self):
+        cards = self.render(hike("now", "2026-11-03T12:00:00-08:00", title="Equal"),
+                            hike("past", "2026-11-03T11:59:00-08:00", title="Past"),
+                            hike("fut", "2026-11-03T12:00:01-08:00", title="Future"))
+        self.assertEqual(cards.get("Equal", []), [])
+        self.assertEqual(cards.get("Past", []), [])
+        self.assertEqual(len(cards["Future"]), 1)
 
 
 if __name__ == "__main__":

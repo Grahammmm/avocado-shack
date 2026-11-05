@@ -131,6 +131,9 @@ by the owner/G (H22), never in Git. Read-only checks come first; anything that w
 
 ## Info lines
 
+### `backup-content`
+- **Means:** with `--backups`: the newest complete backup within `--backup-hours` lists no `content.bundle` (`content restores from Git only`; made before FAV-07 or without a content commit). Info only: it never changes `ok`, `notify` or the exit code, and older backups never raise it; the next `python3 hass/statebackup.py create` with a readable writer HEAD clears it.
+
 ### `conversation`
 - **Means:** `conversation.sqlite3` does not exist yet (`no conversation yet`). Normal before the first owner message.
 - **Check first:** whether owner messages have already been answered.

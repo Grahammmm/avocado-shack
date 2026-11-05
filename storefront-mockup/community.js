@@ -23,7 +23,9 @@ const utf8=new TextEncoder(),fold=l=>{let o='',n=0;for(const c of l){const b=utf
 // Content has no end time, so the event length is a fixed, stated two hours (DURATION:PT2H).
 function ics(e){const t=new Date(e.startsAt).toISOString().replace(/[-:]|\.\d+/g,'');return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Avocado Shack//Hiking Club//EN','BEGIN:VEVENT',`UID:${icsText(e.id)}@avocadoshack`,`DTSTAMP:${t}`,`DTSTART:${t}`,'DURATION:PT2H',`SUMMARY:${icsText(e.title)}`,`LOCATION:${icsText(e.meetingPoint)}`,`URL:${location.origin}/hike#${encodeURIComponent(e.id)}`,'END:VEVENT','END:VCALENDAR'].map(fold).join('\r\n')+'\r\n'}
 // Scheduled and not yet started; an unparseable startsAt gives NaN, which is never > now, so no link (and ics() is never called).
-function calendar(e){return e.status==='scheduled'&&Date.parse(e.startsAt)>Date.now()?`<p><a class="text-link hike-ics" download="${esc(e.id)}.ics" href="${esc('data:text/calendar;charset=utf-8,'+encodeURIComponent(ics(e)))}">Add to calendar</a></p>`:''}
+// RF1050-24: only an explicitly zoned start (Z or +/-HH:MM) is exported; a zone-less one would take the visitor's zone. JS $ (no m flag) matches only the true end, so a final newline fails.
+const calendarStart=e=>{const s=e&&e.startsAt;if(typeof s!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?(Z|[+-][0-9]{2}:[0-9]{2})$/.test(s))return null;const t=Date.parse(s);return Number.isFinite(t)?t:null};
+function calendar(e){const t=e.status==='scheduled'?calendarStart(e):null;return t!==null&&t>Date.now()?`<p><a class="text-link hike-ics" download="${esc(e.id)}.ics" href="${esc('data:text/calendar;charset=utf-8,'+encodeURIComponent(ics(e)))}">Add to calendar</a></p>`:''}
 function sampleInvitation(e){
  const t=trailById(e.trailId); if(!t)return '';
  // AV1422-05: once the sample's Pacific day has passed (or startsAt is unparseable) say so instead of showing a past date.
