@@ -211,8 +211,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    if(drop.includes('flowers')){assert.equal(sh.all.pressed,'true');assert.equal(Object.values(sh).filter(v=>v.pressed==='true').length,1);assert.equal(await countText(),(total-drop.reduce((n,d)=>n+perShelf[d],0))+' selections','falls back to All shelves');assert.deepEqual((await addr()).params,{utm:'synthetic'},'only shelf dropped');assert.equal((await addr()).hash,'#market');}
    await open('?shelf=eggs&q=a&utm=x');assert.equal((await addr()).params.shelf,drop.includes('eggs')?undefined:'eggs');if(drop.includes('eggs'))assert.deepEqual((await addr()).params,{q:'a',utm:'x'});
    await open('');await page.locator('[data-filter="pantry"]').click();await page.locator('[data-filter="all"]').click();assert.equal((await shelves()).all.pressed,'true');
-   const tabbed=[];await page.locator('#product-search').focus();await page.keyboard.press('Shift+Tab');for(let i=0;i<12;i++){const f=await page.evaluate(()=>document.activeElement.dataset.filter||'');if(f)tabbed.push(f);await page.keyboard.press('Shift+Tab');}
-   assert.ok(drop.every(d=>!tabbed.includes(d)),'Tab skips hidden shelves '+drop);assert.ok(tabbed.includes('all'));
+   const tabbed=[];await page.locator('[data-filter="all"]').focus();for(let i=0;i<10;i++){const f=await page.evaluate(()=>document.activeElement.dataset.filter||'');if(f)tabbed.push(f);await page.keyboard.press('Tab');}
+   assert.ok(drop.every(d=>!tabbed.includes(d)),'Tab skips hidden shelves '+drop);assert.deepEqual(tabbed,ALL9.filter(k=>!drop.includes(k)),'Tab visits exactly the visible shelves in order');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow');}
  }
  // Other filters and ?item survive the cleanup; an unknown shelf keeps today's behaviour; the shelf rewrite does not break invalid-from cleanup.
