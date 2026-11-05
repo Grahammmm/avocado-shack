@@ -88,17 +88,15 @@ class StoryOpTests(StoreTestCase):
         self.assertEqual(refusal(repo, NEW), ("refused", "the story already says that"))
         self.assertEqual(refusal(repo, DEFAULT_STORY)[0], "ok")
 
-    def test_undo_newer_story_keeps_headline_and_older_first_is_a_conflict(self):
+    def test_undo_older_headline_keeps_the_newer_story_and_either_order_works(self):  # AV2152-11: was a conflict
         repo = self.repo()
         before = repo.store()
         older = repo.run(("store.set_headline", {"first": "Fresh from the coast.", "second": "Grown close to home."}))
         newer = repo.run((SET, {"text": NEW}))
-        head = repo.head()
-        conflict = repo.prepare(_req((REVERT, {"changeId": older["change_id"]})))
-        self.assertNotEqual(conflict["result"], "ok", conflict)
-        self.assertEqual((repo.head(), repo.store()["story"]), (head, NEW))
+        repo.run((REVERT, {"changeId": older["change_id"]}))
+        self.assertEqual(repo.store(), {**before, "story": NEW})
         repo.run((REVERT, {"changeId": newer["change_id"]}))
-        self.assertEqual(repo.store(), {**before, "headline": ["Fresh from the coast.", "Grown close to home."]})
+        self.assertEqual(repo.store(), before)
 
 
 class ValidatorTests(unittest.TestCase):
