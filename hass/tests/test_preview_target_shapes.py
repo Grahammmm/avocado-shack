@@ -31,7 +31,7 @@ class GoodRecordTests(unittest.TestCase):
             (PRODUCT, {"kind": "product", "id": "p-1", "name": "Avocados", "status": "active", "description": "Ripe."}),
             (MAKER, {"kind": "maker", "key": "m-1", "name": "Farm", "place": "Cayucos", "hidden": True}),
             (STORE, {"kind": "store", "hours": ["Mon 9-5"], "streetAddress": "5 Example St", "town": "Cayucos",
-                     "headline": [], "story": None, "homeImage": None, "notice": None}),
+                     "headline": [], "story": None, "intro": None, "homeImage": None, "notice": None}),
             (EVENT, {"kind": "event", "title": "Hike", "status": "completed", "id": "h-1", "recap": "Calm."}),
             (ROUTE, {"kind": "event", "title": "Coast walk", "status": None, "id": "", "recap": ""}),
         ]
@@ -43,9 +43,15 @@ class GoodRecordTests(unittest.TestCase):
         self.assertEqual(preview.target_for({"collection": "products", "key": "p-1", "after": None}),
                          {"kind": "product", "id": "p-1", "name": "", "status": None, "description": None})
         self.assertEqual(preview.target_for(_with(STORE, hours=[])),
-                         {"kind": "store", "hours": [], "streetAddress": "5 Example St", "town": "Cayucos", "headline": [], "story": None, "homeImage": None, "notice": None})
+                         {"kind": "store", "hours": [], "streetAddress": "5 Example St", "town": "Cayucos", "headline": [], "story": None, "intro": None, "homeImage": None, "notice": None})
         self.assertEqual(preview.target_for(_with(STORE, hours=None))["hours"], [])
         self.assertEqual(preview.target_for(_with(PRODUCT, name=None, description=None))["name"], None)
+
+    def test_store_before_none_or_dict_preserves_the_target(self):
+        expected = preview.target_for(STORE)
+        for before in (None, {}):
+            with self.subTest(before=before):
+                self.assertEqual(preview.target_for({**STORE, "before": before}), expected)
 
     def test_fields_another_kind_reads_are_not_checked(self):
         self.assertEqual(preview.target_for(_with(PRODUCT, hours="Mon", place=3))["kind"], "product")
@@ -66,6 +72,11 @@ class DamagedRecordTests(unittest.TestCase):
             for after in ([], "Honey", 5, ["name"], "", 0, False):
                 with self.subTest(collection=base["collection"], after=after):
                     self.assertUnreadable({**base, "after": after})
+
+    def test_store_before_must_be_a_dict_or_none(self):
+        for before in ("damaged", ["homeImage"], 5, True, [], "", 0, False):
+            with self.subTest(before=before):
+                self.assertUnreadable({"collection": "store", "before": before, "after": {}})
 
     def test_store_hours_must_be_a_list_of_text(self):
         for hours in ("Mon 9-5", ["Mon 9-5", 7], [None], ("Mon 9-5",), {"Mon": "9-5"}, ""):

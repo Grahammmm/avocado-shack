@@ -8,12 +8,21 @@ const icon=(name)=>({plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h1
 const control=(action,label,symbol)=>`<button type="button" data-map-action="${action}" aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">${icon(symbol)}</svg></button>`;
 function node(tag,attrs={}){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;}
 
+const UNAVAILABLE='<p class="trail-map-unavailable">The interactive map couldn’t load. <a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">View the official trail guide ↗</a></p>';
 async function mount(host){
  if(!host||host.dataset.mounted)return;
  host.dataset.mounted='true';
+ if(host.dataset.ready==='error')host.innerHTML='<p class="trail-map-unavailable">Loading the trail map…</p>';
+ delete host.dataset.ready;
  try{
-  const response=await fetch('/assets/trails/point-buchon.json');if(!response.ok)throw Error('Trail data unavailable');
-  const d=await response.json();if(!host.isConnected)return;
+  let d;
+  try{const response=await fetch('/assets/trails/point-buchon.json');if(!response.ok)throw Error('Trail data unavailable');d=await response.json();}
+  catch(error){
+   delete host.dataset.mounted;if(!host.isConnected)return;
+   host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';
+   host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});return;
+  }
+  if(!host.isConnected){delete host.dataset.mounted;return;}
   const miles=mi(d.distanceMeters).toFixed(1),gain=roundedGain(d.gainMeters),loss=roundedGain(d.lossMeters);
   const wrapper=document.createElement('section');wrapper.className='trail-explorer';wrapper.setAttribute('aria-labelledby','trail-explorer-heading');wrapper.setAttribute('aria-live','off');
   wrapper.innerHTML=`<div class="trail-explorer-heading"><div><p class="trail-eyebrow">A CLOSER LOOK</p><h4 id="trail-explorer-heading">Follow the coastline.</h4><p>${miles} miles out &amp; back · from Coon Creek parking</p></div><div class="trail-layer-switch" role="group" aria-label="Map view"><button type="button" data-map-layer="aerial" aria-pressed="true">Aerial</button><button type="button" data-map-layer="topo" aria-pressed="false">Topo</button></div></div>
@@ -28,6 +37,15 @@ async function mount(host){
   <details class="trail-map-notes"><summary>About this route &amp; map</summary><p>The line includes the walk from Coon Creek parking to the check-in station, then the main trail to the turnaround and back. The optional northern loop is not included. Our mapped route is about ${miles} miles; PG&amp;E describes the trail as 6.6 miles round trip.</p><p>Elevation is estimated from <a href="https://www.usgs.gov/3d-elevation-program" target="_blank" rel="noopener">USGS 3DEP terrain data</a>, sampled every 50 metres and lightly smoothed. It is not a GPS recording. Imagery is an aerial survey, not a live view. This is a route overview; check current access and follow trail signs.</p><p><a href="https://www.pge.com/assets/pge/images/about/point-buchon-trail-map.jpg" target="_blank" rel="noopener">Official trail map ↗</a><a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">Access &amp; trail conditions ↗</a></p></details>`;
   host.replaceChildren(wrapper);
   const q=s=>wrapper.querySelector(s),stage=q('.trail-map-stage'),svg=q('.trail-map-canvas'),photo=q('.trail-basemap');
+  // AV1422-08 edge 5: a failed aerial image (the first layer) is a failed map load, same fallback and retry as a failed route file.
+  let failed=false;
+  photo.addEventListener('error',()=>{
+   const enlarged=!!(dialog&&dialog.contains(wrapper));
+   if(failed||!/aerial/.test(photo.getAttribute('href'))||!host.isConnected||!(enlarged||host.contains(wrapper)))return;
+   failed=true;
+   if(enlarged){const d=dialog;dialog=null;document.body.style.overflow=previousOverflow;d.close();d.remove();}
+   delete host.dataset.mounted;host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});
+  });
   const profile=d.profile,slider=q('.trail-distance'),output=q('#trail-elevation-readout');
   const [minX,minY,maxX,maxY]=d.bounds3857;
   function project(lon,lat){const x=6378137*lon*Math.PI/180,y=6378137*Math.log(Math.tan(Math.PI/4+lat*Math.PI/360));return [(x-minX)/(maxX-minX)*1000,(maxY-y)/(maxY-minY)*562.5];}
@@ -105,7 +123,7 @@ async function mount(host){
     const close=document.createElement('button');close.type='button';close.className='trail-map-close';close.textContent='Close map ×';close.addEventListener('click',()=>dialog.close());
     dialog.append(close,wrapper);document.body.append(dialog);previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';
     q('[data-map-action="expand"]').setAttribute('aria-label','Return to page');q('[data-map-action="expand"]').title='Return to page';
-    dialog.addEventListener('close',()=>{host.append(wrapper);document.body.style.overflow=previousOverflow;dialog.remove();dialog=null;q('[data-map-action="expand"]').setAttribute('aria-label','Enlarge map');q('[data-map-action="expand"]').title='Enlarge map';q('[data-map-action="expand"]').focus({preventScroll:true});});
+    dialog.addEventListener('close',()=>{if(failed)return;host.append(wrapper);document.body.style.overflow=previousOverflow;dialog.remove();dialog=null;q('[data-map-action="expand"]').setAttribute('aria-label','Enlarge map');q('[data-map-action="expand"]').title='Enlarge map';q('[data-map-action="expand"]').focus({preventScroll:true});});
     dialog.showModal();close.focus();
    }
   });
@@ -117,7 +135,7 @@ async function mount(host){
   fit();drawProfile();updatePosition(0);
   const stats=host.closest('.trail-invitation')?.querySelectorAll('.trail-stats dd');if(stats?.length===4){stats[0].textContent=`${miles} miles`;stats[2].textContent=`~${gain} ft`;stats[2].previousElementSibling.textContent='Est. elevation gain';}
   host.dataset.ready='true';
- }catch(error){host.innerHTML='<p class="trail-map-unavailable">The interactive map couldn’t load. <a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">View the official trail guide ↗</a></p>';host.dataset.ready='error';}
+ }catch(error){host.innerHTML=UNAVAILABLE;host.dataset.ready='error';}
 }
 window.AvoshackTrailExplorer={mount};
 })();

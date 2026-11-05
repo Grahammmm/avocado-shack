@@ -32,7 +32,7 @@ CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks"
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
 PRODUCT_OPTIONAL_PUBLIC = ("imageAlt",)  # public when present; never required (any status)
-PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available")  # "available": owner-set, absent = not confirmed (SHOP-1)
+PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on")  # owner-set word + its check day (SHOP-1)
 PRODUCT_STATUSES = ("active", "hidden", "held")
 AVAILABILITY = ("yes", "limited", "no")
 SHOP_TZ = ZoneInfo("America/Los_Angeles")
@@ -107,12 +107,22 @@ class Content:
 
 
 def _read_json(path: Path):
+    # Reader contract: a decoded object key repeated within one object is ambiguous
+    # (last-wins would silently flip e.g. hidden -> active), so refuse it by basename only.
+    def no_duplicates(pairs):
+        out = {}
+        for key, value in pairs:
+            if key in out:
+                raise ContentError([f"{path.name}: duplicate JSON object key"])
+            out[key] = value
+        return out
+
     try:
         text = path.read_bytes().decode("utf-8")
     except UnicodeDecodeError:
         raise ContentError([f"{path.name}: not UTF-8 text"]) from None
     try:
-        return json.loads(text)
+        return json.loads(text, object_pairs_hook=no_duplicates)
     except json.JSONDecodeError as exc:
         raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
     except RecursionError:
@@ -214,7 +224,7 @@ def _closed_keys(problems, where, rec, allowed, required=()):
     return True
 
 
-def validate_products(problems, products, makers, site_dir: Path | None):
+def validate_products(problems, products, makers, site_dir: Path | None, checked: date | None = None):
     if not isinstance(products, list):
         problems.append("products: must be a list")
         return
@@ -250,6 +260,10 @@ def validate_products(problems, products, makers, site_dir: Path | None):
             _text(problems, f"{where}.imageAlt", rec["imageAlt"], limit=limits["imageAlt"])
         if "available" in rec and rec["available"] not in AVAILABILITY:
             problems.append(f"{where}.available: must be one of {AVAILABILITY}")
+        if "available_on" in rec and ("available" not in rec or iso_day(rec["available_on"]) is None):
+            problems.append(f"{where}.available_on: must be a real date YYYY-MM-DD, set only together with available")
+        elif "available_on" in rec and (checked is None or iso_day(rec["available_on"]) > checked):
+            problems.append(f"{where}.available_on: {rec['available_on']} is after store.selection_checked_on")
         if status == "held":
             hold = rec.get("hold")
             if _closed_keys(problems, f"{where}.hold", hold, HOLD_FIELDS, ("reason", "source")):
@@ -398,7 +412,11 @@ def shop_today(now: datetime | None = None) -> date:
 
 def checked_on(store) -> date | None:
     """The stored selection-check date, or None when absent or not a real YYYY-MM-DD date."""
-    value = store.get("selection_checked_on") if isinstance(store, dict) else None
+    return iso_day(store.get("selection_checked_on") if isinstance(store, dict) else None)
+
+
+def iso_day(value) -> date | None:
+    """``value`` as a date when it is a real YYYY-MM-DD string, else None."""
     if not isinstance(value, str) or not DATE_RE.fullmatch(value):
         return None
     try:
@@ -478,7 +496,7 @@ def validate(content: Content, site_dir: Path | None = SITE_DIR) -> None:
     problems: list[str] = []
     makers = content.makers if isinstance(content.makers, dict) else {}
     validate_makers(problems, content.makers)
-    validate_products(problems, content.products, makers, site_dir)
+    validate_products(problems, content.products, makers, site_dir, checked_on(content.store))
     validate_community(problems, content.community)
     validate_store(problems, content.store)
     if problems:

@@ -11,6 +11,7 @@ A damaged change record gives the target ``{"kind": "unreadable"}``, refused bef
 import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
+from hass.content_model import DEFAULT_INTRO, shop_today
 from hass.notice import live_text
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
@@ -30,13 +31,15 @@ def _readable(record) -> bool:
     if not isinstance(after, dict) or not isinstance(record.get("key"), (str, type(None))):
         return False
     collection = record.get("collection") if isinstance(record.get("collection"), str) else ""
+    if collection == "store" and not isinstance(record.get("before"), (dict, type(None))):
+        return False
     hours = after.get("hours") if collection == "store" else None
     if not (hours is None or isinstance(hours, list) and all(isinstance(h, str) for h in hours)):
         return False
     headline = after.get("headline") if collection == "store" else None
     if not (headline is None or isinstance(headline, list) and all(isinstance(h, str) for h in headline)):
         return False
-    if collection == "store" and not isinstance(after.get("story"), (str, type(None))):
+    if collection == "store" and not all(isinstance(after.get(k), (str, type(None))) for k in ("story", "intro")):
         return False
     home = after.get("homeImage") if collection == "store" else None
     if not (home is None or isinstance(home, dict) and isinstance(home.get("image"), (str, type(None)))):
@@ -47,21 +50,37 @@ def _readable(record) -> bool:
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
 
 
-def target_for(record: dict, today=None) -> dict:
-    """The screenshot target for a touched record (the after value decides what the checks expect)."""
+def target_for(record: dict, today=None, *, store=None) -> dict:
+    """The screenshot target for a touched record (the after value decides what the checks expect).
+    AV1222-02: with ``store`` an active product also expects sitegen's own availability word (str or None) and a
+    changed photo expects its new src; ``today`` is the generation date of the files being checked."""
     if not _readable(record):
         return {"kind": "unreadable"}
     after, collection = record.get("after") or {}, record.get("collection")
     if collection == "products":
-        return {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
-                "status": after.get("status"), "description": after.get("description")}
+        target = {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
+                  "status": after.get("status"), "description": after.get("description")}
+        before = record.get("before")
+        if after.get("status") == "active":  # a hidden product is only checked for being absent
+            if store is not None:
+                from hass.sitegen import availability_label  # the one place the word and the stale rule live
+                target["availability"] = availability_label(after, store, today or shop_today())
+            if isinstance(before, dict) and before.get("image") != after.get("image") and isinstance(after.get("image"), str):
+                target["image"] = after["image"]
+        return target
     if collection == "makers":
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
-        return {"kind": "store", "hours": list(after.get("hours") or []),
+        from hass.sitegen import checked_line  # lazy: sitegen is the one place the selection words live
+        before = record.get("before") or {}
+        line = ({"selectionLine": checked_line(after, today)} if today is not None and
+                before.get("selection_checked_on") != after.get("selection_checked_on") else {})  # AV1222-03
+        cleared = bool((record.get("before") or {}).get("homeImage")) and "homeImage" not in after  # shop photo back
+        return {"kind": "store", **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
+                "intro": after.get("intro"), **line,
                 "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), today)}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
     return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
@@ -125,6 +144,36 @@ def _write_overlay(tmp: Path, files: dict) -> None:
             handle.write(data)
 
 
+def _asset_plan(assets: dict) -> dict:
+    """File name -> bytes for new photos; every key must be <site>/assets/products/<plain file name>."""
+    plan = {}
+    for rel, data in assets.items():
+        parts = PurePosixPath(rel).parts
+        if (len(parts) != 4 or parts[:3] != (SITE, "assets", "products") or parts[3] in ("", ".", "..")
+                or not isinstance(data, bytes)):
+            raise ValueError(f"preview photo outside assets/products: {rel}")
+        plan[parts[3]] = data
+    return plan
+
+
+def _link_assets(dest: Path, real: Path, plan: dict) -> None:
+    """A real assets folder of links to the tracked entries, with real products/ holding the new photos.
+    Nothing is ever written through a link: a new photo replaces a link in the copy only."""
+    dest.mkdir()
+    for entry in real.iterdir():
+        if entry.name != "products":
+            (dest / entry.name).symlink_to(entry)
+    products = dest / "products"
+    products.mkdir()
+    if (real / "products").is_dir():
+        for entry in (real / "products").iterdir():
+            if entry.name not in plan:
+                (products / entry.name).symlink_to(entry)
+    for name, data in plan.items():
+        with os.fdopen(os.open(products / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600), "wb") as handle:
+            handle.write(data)
+
+
 def _last_line(text: str) -> str:
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     return (lines[-1] if lines else "no output")[:200]
@@ -149,14 +198,15 @@ class Previewer:
         self.env = dict(os.environ if env is None else env)
         self.last_server = None  # {"pid", "port"} of the most recent preview server (for checks)
 
-    def capture(self, files, target, out_png) -> dict:
-        """Never raises: any failure comes back as ok False with a short error."""
+    def capture(self, files, target, out_png, assets=None) -> dict:
+        """Never raises: any failure comes back as ok False with a short error.
+        ``assets`` (site path -> bytes, new product photos only) are laid into the copy's own assets folder."""
         try:
-            return self._capture(dict(files), dict(target), Path(out_png))
+            return self._capture(dict(files), dict(target), Path(out_png), dict(assets or {}))
         except Exception as exc:  # noqa: BLE001 - the caller reports the error; a preview never blocks a reply
             return {"ok": False, "png": None, "checks": {}, "error": f"{type(exc).__name__}: {exc}"[:200]}
 
-    def _copy_site(self, tmp: Path, files: dict) -> Path:
+    def _copy_site(self, tmp: Path, files: dict, assets: dict | None = None) -> Path:
         listed = subprocess.run(["git", "-C", str(self.worktree), "ls-files", "-z", SITE],
                                 capture_output=True, check=True).stdout.decode("utf-8").split("\0")
         for rel in filter(None, listed):
@@ -165,18 +215,22 @@ class Previewer:
                 shutil.copyfile(self.worktree / rel, tmp / rel)
         site = tmp / SITE
         site.mkdir(exist_ok=True)
-        (site / "assets").symlink_to((self.worktree / ASSETS).resolve(), target_is_directory=True)
+        real_assets = (self.worktree / ASSETS).resolve()
+        if assets:
+            _link_assets(site / "assets", real_assets, _asset_plan(assets))
+        else:
+            (site / "assets").symlink_to(real_assets, target_is_directory=True)
         _write_overlay(tmp, files)
         return site
 
-    def _capture(self, files: dict, target: dict, out_png: Path) -> dict:
+    def _capture(self, files: dict, target: dict, out_png: Path, assets: dict | None = None) -> dict:
         if target.get("kind") == "unreadable":  # a damaged change record: no copy, no server
             return {"ok": False, "png": None, "checks": {}, "error": "preview target unreadable"}
         if self.viewports not in (("phone",), VIEWPORTS):
             raise ValueError(f"unsupported viewports {self.viewports!r}"[:80])
         with tempfile.TemporaryDirectory(prefix="hass-preview-") as raw:
             tmp = Path(raw)
-            site = self._copy_site(tmp, files)
+            site = self._copy_site(tmp, files, assets)
             port, base = _free_port(), {k: self.env.get(k, "") for k in ("PATH", "HOME")}
             server_env = {**base, "AVOSHACK_COMMUNITY_DB": str(tmp / "fixture.sqlite3"),
                           "AVOSHACK_COMMUNITY_CONFIG": str(site / "community.json")}
@@ -193,7 +247,7 @@ class Previewer:
                     time.sleep(0.1)
                 for name in self.viewports:
                     shot = tmp / ("shot.png" if name == "phone" else f"shot-{name}.png")
-                    node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps(target),
+                    node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps({**target, "defaultIntro": DEFAULT_INTRO} if target.get("kind") == "store" else target),
                                 "OUT": str(shot), "VIEWPORT": name,
                                 **{k: self.env[k] for k in PASS_THROUGH if self.env.get(k)}}
                     try:

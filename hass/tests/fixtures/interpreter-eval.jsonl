@@ -53,3 +53,11 @@
 {"id": "e53", "text": "Hide the Fiscalini Ranch route idea for now, it needs a new trail permit.", "pending": [], "expect": {"ops": [{"op": "route.hide", "args": {"id": "idea-fiscalini-bluff"}}], "revises": null}}
 {"id": "e54", "text": "Put the Cass Hill walk back on the route list.", "pending": [], "expect": {"ops": [{"op": "route.restore", "args": {"id": "idea-cass-hill"}}], "revises": null}}
 {"id": "e55", "text": "The permit came through, bring back idea-fiscalini-bluff, the one we hid last week.", "pending": [], "expect": {"ops": [{"op": "route.restore", "args": {"id": "idea-fiscalini-bluff"}}], "revises": null}}
+{"id": "e56", "text": "Take the Corberosa coffee off the site for now.", "pending": [], "expect": {"ops": [{"op": "product.hide", "args": {"id": "photo-product-087"}}], "revises": null}}
+{"id": "e57", "text": "Take the Jayleaf one off the site for now.", "pending": [], "expect": {"question": true}}
+{"id": "e58", "text": "The home page headline reads \"A little market.\" then \"A lot to discover.\". Change the word little to small.", "pending": [], "expect": {"ops": [{"op": "store.set_headline", "args": {"first": "A small market.", "second": "A lot to discover."}}], "revises": null}}
+{"id": "e59", "text": "Fix the story on the home page, it doesn't read right.", "pending": [], "expect": {"question": true}}
+{"id": "e60", "text": "Make the header green.", "pending": [], "expect": {"unsupported": true}}
+{"id": "e61", "text": "Add a reviews section to the home page.", "pending": [], "expect": {"unsupported": true}}
+{"id": "e62", "text": "Add Fuyu persimmons, category fruit.", "pending": [], "expect": {"ops": [{"op": "product.add", "args": {"name": "Fuyu persimmons", "category": "fruit"}}], "revises": null}, "notes": [{"key": "tone", "text": "short and friendly"}]}
+{"id": "e63", "text": "Add Bacon avocados, category fruit.", "pending": [], "expect": {"ops": [{"op": "product.add", "args": {"name": "Bacon avocados", "category": "fruit"}}], "revises": null}, "notes": [{"key": "farm", "text": "all our avocados are organic"}]}

@@ -30,6 +30,9 @@ const COMMERCE_TEXT=/\$\s?\d|\bbasket\b|\bcheck ?out\b|\bcart\b|add to (?:bag|ba
 const PRELAUNCH=/sandbox|before (?:a public )?launch|during setup|not been checked|not connected|saved locally|local service|unsubscribe/i;
 const RAW_ERROR=/JSON|Unexpected token|<!doctype|SyntaxError|Failed to fetch|TypeError/i;
 const CLOSED='Online signup isn’t open yet, so nothing was sent or saved. Please say hello at the Shack instead.';
+const UPFRONT='Online signup isn’t open yet. Please say hello at the Shack instead.';
+// AV1422-07: closed up front (no typing), controls disabled; a script-forced submit still gets the CLOSED sentence and sends nothing.
+const closedUpfront=async(page,form,inputs)=>{const st=page.locator(form+' .form-status');await st.filter({hasText:UPFRONT}).waitFor();assert.equal((await st.innerText()).trim(),UPFRONT);assert.doesNotMatch(await st.innerText(),RAW_ERROR);for(const i of inputs)assert.ok(await page.locator(i).isDisabled(),i+' disabled');assert.ok(await page.locator(form+' button[type=submit]').isDisabled(),form+' button disabled');assert.equal(await page.locator(form).getAttribute('aria-disabled'),'true');await page.locator(form).evaluate(f=>{f.querySelectorAll(':disabled').forEach(x=>x.disabled=false);f.noValidate=true;f.requestSubmit()});await st.filter({hasText:CLOSED}).waitFor()};
 server.listen(0,'127.0.0.1',async()=>{
  const base=`http://127.0.0.1:${server.address().port}`;
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
@@ -64,22 +67,68 @@ server.listen(0,'127.0.0.1',async()=>{
   assert.equal((await page.locator('#catalog-count').textContent()).split(' · ')[0],'170 selections');
   assert.equal(await page.locator('.selection-checked').count(),0);
   assert.ok(await page.getByText('It isn’t a claim that every ingredient was grown there.').isVisible(),'sourcing sentence');
-  await page.locator('#newsletter-email').fill('visitor@example.com');await page.locator('#community-newsletter button[type=submit]').click();
-  const newsletter=page.locator('#community-newsletter .form-status');await newsletter.filter({hasText:CLOSED}).waitFor();
-  assert.doesNotMatch(await newsletter.innerText(),RAW_ERROR);assert.equal(await page.locator('#newsletter-email').inputValue(),'visitor@example.com');
+  await closedUpfront(page,'#community-newsletter',['#newsletter-email','#community-newsletter input[name=hikes]']);
 
   for(const route of ['/hike','/hike/']){
-   await page.goto(base+route);await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
+   const reqs=[],on=q=>{if(/point-buchon(-aerial\.webp|\.json)/.test(q.url()))reqs.push(q.url())};page.on('request',on);
+   await page.goto(base+route);await page.locator('#upcoming-hikes article').first().waitFor();await page.waitForLoadState('networkidle');
+   assert.deepEqual(reqs,[],route+': no map files before the map is near');assert.match(await page.locator('[data-trail-explorer]').innerText(),/Loading the trail map/);
+   await page.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
+   assert.equal(reqs.filter(u=>/aerial\.webp/.test(u)).length,1,route+': one aerial request');assert.equal(reqs.filter(u=>/\.json/.test(u)).length,1,route+': one route request');page.off('request',on);
    assert.equal(await page.locator('.trail-invitation').count(),1,route+': sample invitation');
    assert.ok(await page.getByText('Sample invitation · plans to be confirmed').isVisible());
    assert.equal(await page.locator('.trail-map-canvas').count(),1,route+': trail map');
    assert.equal(await page.locator('.trail-journal-entry').count(),2,route+': trail journal');
    assert.match(await page.locator('#history-context').innerText(),/not confirmed club history/);
    assert.doesNotMatch(await page.locator('#upcoming-hikes').innerText(),/isn’t available right now/);
-   await page.locator('#hike-email').fill('visitor@example.com');await page.locator('#hike-updates button[type=submit]').click();
-   const status=page.locator('#hike-updates .form-status');await status.filter({hasText:CLOSED}).waitFor();
-   assert.doesNotMatch(await status.innerText(),RAW_ERROR);
+   await closedUpfront(page,'#hike-updates',['#hike-email']);
   }
+  // AV1422-08: no IntersectionObserver mounts at once; a 404 route file still reaches the error state.
+  for(const [name,init,fail] of [['no IntersectionObserver',true,false],['route file 404',false,true],['aerial image 404',false,'aerial']]){
+   const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));
+   if(init)await p.addInitScript(()=>{delete window.IntersectionObserver});
+   if(fail)await p.route(fail==='aerial'?'**/point-buchon-aerial.webp':'**/point-buchon.json',r=>r.fulfill({status:404,body:''}));
+   await p.goto(base+'/hike/');await p.locator('#upcoming-hikes article').first().waitFor();
+   if(fail)await p.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();
+   await p.locator('[data-trail-explorer][data-ready]').waitFor({state:'attached'});
+   if(fail)await p.locator('[data-trail-explorer][data-ready=error]').waitFor({state:'attached'});assert.equal(await p.locator('[data-trail-explorer]').getAttribute('data-ready'),fail?'error':'true',name);if(fail){assert.equal(await p.locator('[data-trail-explorer] .trail-map-canvas').count(),0,name+': no map canvas');assert.ok(await p.locator('[data-trail-explorer] .trail-map-unavailable a[href*="pge.com"]').isVisible(),name+': official guide link');}assert.deepEqual(errs,[],name+': page errors');await ctx.close();
+  }
+  // AV1422-08 edge 5, delayed: the aerial fails after Enlarge map moved the map into the dialog; the dialog and page scroll lock are cleaned up, the fallback shows, and retry recovers.
+  {const ctx=await browser.newContext({viewport:{width:1200,height:900}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));
+   let release;const gate=new Promise(r=>release=r),aerial='**/point-buchon-aerial.webp';
+   await p.route(aerial,async r=>{await gate;await r.fulfill({status:404,body:''});});
+   await p.goto(base+'/hike/');await p.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();
+   await p.locator('[data-trail-explorer][data-ready=true]').waitFor({state:'attached'});
+   await p.getByRole('button',{name:'Enlarge map',exact:true}).click();assert.equal(await p.locator('dialog[open]').count(),1,'enlarged: dialog open');
+   release();await p.locator('[data-trail-explorer][data-ready=error]').waitFor({state:'attached'});
+   assert.equal(await p.locator('dialog.trail-map-dialog').count(),0,'enlarged aerial 404: dialog removed');assert.equal(await p.evaluate(()=>document.body.style.overflow),'','enlarged aerial 404: scroll lock released');
+   assert.equal(await p.locator('[data-trail-explorer] .trail-map-canvas').count(),0,'enlarged aerial 404: no canvas');assert.ok(await p.locator('[data-trail-explorer] .trail-map-unavailable a[href*="pge.com"]').isVisible(),'enlarged aerial 404: official guide link');
+   await p.unroute(aerial);await p.locator('[data-trail-retry]').click();await p.locator('[data-trail-explorer][data-ready=true]').waitFor({state:'attached'});
+   assert.equal(await p.locator('[data-trail-explorer] .trail-map-canvas').count(),1,'retry after enlarged aerial 404: map back');assert.equal(await p.locator('dialog.trail-map-dialog').count(),0,'retry: no stale dialog');assert.deepEqual(errs,[],'enlarged aerial 404: page errors');await ctx.close();}
+  // AV1422-05: a fixed clock decides whether the sample invitation (startsAt 2026-11-08 09:00 Pacific) shows its date or "Date to be confirmed".
+  const sample=JSON.parse(fs.readFileSync(path.join(root,'hiking-preview.json'),'utf8')),json=body=>({contentType:'application/json',body:JSON.stringify(body)});
+  const hikeAt=async(iso,{startsAt=sample.upcoming.startsAt,events}={})=>{const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));const sent=[];p.on('request',r=>{if(r.method()!=='GET'||r.postData()||/[@?]|example\.com/.test(r.url()))sent.push(r.method()+' '+r.url())});
+   await p.clock.setFixedTime(new Date(iso));await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,upcoming:{...sample.upcoming,startsAt}})));
+   if(events)await p.route('**/community.json',r=>r.fulfill(json({events,routeIdeas:[]})));
+   await p.goto(base+'/hike/');await p.locator('#upcoming-hikes article').first().waitFor();
+   const r={errs,sent,arts:await p.locator('#upcoming-hikes article').evaluateAll(a=>a.map(x=>({t:x.querySelector('h3').innerText,txt:x.innerText,n:x.querySelectorAll('[data-confirmed-guests]').length,b:x.querySelectorAll('[data-rsvp]').length,x:x.classList.contains('hike-cancelled')}))),body:await p.locator('body').innerText(),times:await p.locator('.trail-invitation-date time').count(),dateLine:await p.locator('.trail-invitation-date').allInnerTexts(),label:await p.getByText('Sample invitation · plans to be confirmed').count()};await ctx.close();return r};
+  for(const [when,iso] of [['the day before','2026-11-07T20:00:00Z'],['the same Pacific day','2026-11-08T20:00:00Z'],['UTC next day, still the 8th in Pacific','2026-11-09T06:00:00Z']]){
+   const r=await hikeAt(iso);assert.equal(r.times,1,when+': <time> shown');assert.match(r.dateLine[0],/^Sunday, November 8, 2026 · 9:00 am$/,when);assert.equal(r.label,1,when+': sample label');assert.deepEqual(r.errs,[]);}
+  for(const [when,iso,startsAt] of [['next Pacific day','2026-11-09T08:30:00Z'],['garbage startsAt','2026-11-08T20:00:00Z','not a date'],['missing startsAt','2026-11-08T20:00:00Z',null]]){
+   const r=await hikeAt(iso,startsAt===undefined?{}:{startsAt});assert.deepEqual(r.dateLine,['Date to be confirmed'],when);assert.equal(r.times,0,when+': no <time>');
+   assert.equal(r.label,1,when+': sample label stays');assert.doesNotMatch(r.body,/Invalid Date/);assert.deepEqual(r.errs,[],when+': page errors');}
+  const real=await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'real-1',title:'Real hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'}]});
+  assert.match(real.body,/Sunday, December 6, 2026/);assert.doesNotMatch(real.body,/Date to be confirmed/);assert.equal(real.label,0,'a real hike replaces the sample invitation');assert.deepEqual(real.errs,[]);
+  // AV1422-06: no club service, so nobody counted guests: no count, no RSVP button; synthetic titles only.
+  const at='2026-12-01T09:00:00-08:00',ev=(id,title,more)=>({id,title,status:'scheduled',startsAt:at,timezone:'America/Los_Angeles',meetingPoint:'Test trailhead',...more});
+  const fx=await hikeAt('2026-11-09T08:30:00Z',{events:[ev('t-on','Synthetic RSVP-on hike',{rsvpEnabled:true,confirmedGuests:7}),ev('t-off','Synthetic RSVP-off hike',{rsvpEnabled:false}),ev('t-none','Synthetic no-flag hike',{}),ev('t-x','Synthetic cancelled hike',{status:'cancelled',startsAt:'2026-11-09T12:00:00-08:00',rsvpEnabled:true})]});
+  const art=t=>fx.arts.find(a=>a.t.endsWith(t)),JOIN=/To join, ask at the Shack\./,SHARED=/RSVP details will be shared when confirmed\./;
+  assert.equal(fx.arts.length,4,'four fixture hikes shown');
+  for(const a of fx.arts){assert.equal(a.n,0,a.t+': no guest count');assert.doesNotMatch(a.txt,/confirmed guests?/i,a.t+': no invented count');assert.equal(a.b,0,a.t+': no RSVP button')}
+  assert.match(art('RSVP-on hike').txt,JOIN);assert.doesNotMatch(art('RSVP-on hike').txt,SHARED);
+  for(const t of ['RSVP-off hike','no-flag hike']){assert.match(art(t).txt,SHARED,t);assert.doesNotMatch(art(t).txt,JOIN,t)}
+  assert.ok(art('cancelled hike').x&&/CANCELLED/.test(art('cancelled hike').txt)&&/This hike is cancelled\./.test(art('cancelled hike').txt));assert.doesNotMatch(art('cancelled hike').txt,JOIN);assert.doesNotMatch(art('cancelled hike').txt,SHARED);
+  assert.deepEqual(fx.errs,[]);assert.deepEqual(fx.sent,[],'the static hike list sent something');
   for(const missing of MISSING){ // a missing path, at any depth, gets the shop's own 404 page with its stylesheet
    const res=await page.goto(base+missing);await page.waitForLoadState('networkidle');
    assert.equal(res.status(),404,missing+': status');assert.equal(await page.locator('h1').innerText(),'That page isn’t here.',missing+': heading');
@@ -89,6 +138,19 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(await page.locator(COMMERCE_SELECTORS).count(),0,missing+': commerce markup');
    const t=await page.locator('body').innerText();assert.doesNotMatch(t,COMMERCE_TEXT,missing+': commerce wording');assert.doesNotMatch(t,PRELAUNCH,missing+': pre-launch wording');
    assert.ok(await page.evaluate(()=>[...document.styleSheets].some(s=>s.cssRules.length>0)),missing+': stylesheet loaded');
+  }
+  // AV1422-07 (review): a delayed unavailable service answers once per page, and a real submit made while that answer is pending leaves every control disabled.
+  for(const [route,form,inputs,email] of [['/','#community-newsletter',['#newsletter-email'],'#newsletter-email'],['/hike/','#hike-updates',['#hike-email'],'#hike-email']]){
+   const p=await browser.newPage({viewport:{width:390,height:844}});let release,hits=0,posts=0;const gate=new Promise(r=>release=r);
+   p.on('request',r=>{if(r.method()==='POST')posts++});
+   await p.route('**/api/community',async r=>{hits++;await gate;await r.fulfill({status:503,contentType:'application/json',body:'{}'})});
+   await p.goto(base+route);await p.locator(email).fill('visitor@example.com');
+   assert.equal(await p.locator(form+' button[type=submit]').isDisabled(),false,route+': enabled while the probe is pending');
+   await p.locator(form+' button[type=submit]').click();await p.locator(form+' .form-status').filter({hasText:'Saving…'}).waitFor();
+   release();await p.locator(form+' .form-status').filter({hasText:/Online signup isn’t open yet/}).waitFor();await p.waitForLoadState('networkidle');
+   for(const i of [...inputs,form+' button[type=submit]'])assert.ok(await p.locator(i).isDisabled(),route+': '+i+' disabled after a submit raced the probe');
+   assert.equal(await p.locator(form).getAttribute('aria-disabled'),'true');
+   assert.equal(hits,1,route+': one GET /api/community');assert.equal(posts,0,route+': nothing posted');await p.close();
   }
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,sourcingSentence:true,catalog:170,errors});

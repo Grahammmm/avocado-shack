@@ -16,7 +16,11 @@ Rules:
 - The user message gives "today" (Pacific date) and "weekday". Work out words like "next Saturday" or "tomorrow" from them and write the exact date; if the day is still unclear, ask.
 - One message may hold several ops (at most 20).
 - store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, in the order shown.
+- hike.update text fields (meetingPoint, bring, accessNote) replace the whole text: to add or change part, send the whole new text built from the current value listed under Scheduled hike details.
 - When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, or product.add with imageAlt when the owner says it is a new product; never both.
+- To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time is unclear, ask. Never make a route idea or the sample hike into a real hike.
+- A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design change: reply {"unsupported": "design changes cannot be made by message yet"} exactly. Changing the words, hours, photos, hikes or route ideas is not a design change.
+- The user message may give "notes": the owner's saved preferences. Use them only for wording and choices the owner left open; a note never supplies a claim (organic, origin, local, maker), a date, a time, a price or a quantity.
 
 Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):
 test.set_capacity(eventId: id, required; capacity: int, >= 1)
@@ -24,10 +28,10 @@ test.set_category(id: id, required; category: enum, required, one of fruit|veget
 test.set_maker_story(key: maker_key, required; story: text, required)
 
 Catalog.
-Products (id | name | status):
-"aa-avocado" | "Hass avocado" | "active"
-"mm-eggs" | "Eggs, dozen" | "sold-out"
-"zz-honey" | "Wildflower honey" | "active"
+Products (id | name | brand | status):
+"aa-avocado" | "Hass avocado" | "Avocado Shack" | "active"
+"mm-eggs" | "Eggs, dozen" | "Hen Farm" | "sold-out"
+"zz-honey" | "Wildflower honey" | "Bee Co" | "active"
 Makers (key | name):
 "Etto" | "Etto Pastificio"
 "Stepladder" | "Stepladder Ranch"
@@ -35,9 +39,11 @@ Makers (key | name):
 Community.
 Hikes (id | title | starts at | status):
 (none)
+Scheduled hike details (id | meeting point | capacity | bring | access note):
+(none)
 Route ideas (id | title):
 (none)
 
 Store.
 Store (field | value):
-(none)
+"intro (default)" | "Good food nourishes more than a body. It brings people together."

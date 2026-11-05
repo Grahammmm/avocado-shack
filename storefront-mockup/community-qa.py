@@ -12,9 +12,12 @@ if out:
  out=p;repo=str(root.parent.resolve())
  if p==repo or p.startswith(repo+os.sep):refuse('QA_OUT_DIR must be outside the repository')
 else:out=tempfile.mkdtemp(prefix='avoshack-qa-');print('QA_OUT_DIR='+out,file=sys.stderr)
-future=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=30)).isoformat()
+future=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=30)).replace(microsecond=0).isoformat()  # RF1050-24: whole seconds + explicit zone, the only calendar-exportable shape
 events=[dict(id='qa-hike',title='QA trail fixture',startsAt=future,status='scheduled',meetingPoint='QA meeting point',distance='3 miles',difficulty='Gentle pace',duration='2 hours',capacity=3,rsvpEnabled=True),dict(id='qa-race',title='QA limited places',startsAt=future,status='scheduled',meetingPoint='QA meeting point',capacity=1,rsvpEnabled=True),dict(id='qa-past',title='QA past outing',startsAt='2025-01-01T10:00:00-08:00',status='completed',meetingPoint='QA meeting point',recap='A test history entry; not a published hike.',rsvpEnabled=False)]
 events.append(dict(id='qa-unlimited',title='QA uncapped event',startsAt=future,status='scheduled',meetingPoint='QA meeting point',rsvpEnabled=True,confirmedGuests=999))
+# AV0207-01: one hike with every owner-set logistics field and one with none (the server must pass them through).
+events.append(dict(id='qa-full',title='QA all logistics',startsAt=future,status='scheduled',meetingPoint='QA full meeting point',meetTime='8:45 am',meetingAddress='QA Road 1, Los Osos',walkTime='9:00 am',returnTime='Around 12:30 pm',distance='4 miles',difficulty='Easy',duration='3 hours',bring='Water and a snack',accessNote='QA access: no pets.',rsvpEnabled=True))
+events.append(dict(id='qa-bare',title='QA no logistics',startsAt=future,status='scheduled',meetingPoint='QA meeting point',distance='2 miles',difficulty='Flat',duration='1 hour',rsvpEnabled=True))
 with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
  config=Path(t)/'community.json';dbpath=Path(t)/'community.sqlite3';config.write_text(json.dumps({'events':events}))
  # Bind port 0 atomically: concurrent CI jobs must never share a fixture server.
@@ -59,6 +62,52 @@ with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
    except urllib.error.HTTPError as x:return x.code,json.load(x)
   def rows():
    with sqlite3.connect(dbpath) as db:return [db.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0] for t in ('subscriptions','rsvps')]
+  def snapshot():
+   with sqlite3.connect(dbpath) as db:return [db.execute(f'SELECT * FROM {t} ORDER BY 1,2').fetchall() for t in ('subscriptions','rsvps')]
+  def seats(event_id):return next(e for e in request('/api/community')[1]['events'] if e['id']==event_id)['confirmedGuests']
+  def test_non_string_email_rejected_without_writes():
+   # RF0200-11: only JSON strings identify an email; nothing is stringified or saved.
+   bad=[None,True,False,0,7,1.5,[],['typed@example.invalid'],{},{'a':'typed@example.invalid'}]
+   good={'eventId':'qa-unlimited','name':'Typed Guest','partySize':2}
+   before,used=snapshot(),seats('qa-unlimited')
+   for value in bad:
+    for path,body in ((sub,{'email':value,'newsletter':True,'hikes':True}),(rsv,{**good,'email':value})):
+     got=raw(json.dumps(body).encode(),path);assert got==(400,{'error':bad_email}),(path,value,got)
+     assert snapshot()==before and seats('qa-unlimited')==used,(path,value)
+  def test_non_string_name_rejected_without_writes():
+   bad=[None,True,False,0,7,1.5,[],['Typed Guest'],{},{'name':'Typed Guest'}]
+   ok={'eventId':'qa-unlimited','email':'typed-name@example.invalid','partySize':3}
+   before,used=snapshot(),seats('qa-unlimited')
+   bodies=[dict(ok)]+[{**ok,'name':v} for v in bad]
+   for body in bodies:
+    got=raw(json.dumps(body).encode(),rsv);assert got==(400,{'error':bad_name}),(body,got)
+    assert snapshot()==before and seats('qa-unlimited')==used,body
+   assert request(rsv,{**ok,'name':'Typed Guest'})[0]==200 and seats('qa-unlimited')==used+3
+  def test_string_identity_normalization_and_boundaries():
+   # Valid text behaves as before: trimmed, lower-cased, consent merged, duplicates add no places.
+   assert request(sub,{'email':'  Mixed.Case@Example.INVALID \t','newsletter':True})[0]==200
+   assert request(sub,{'email':'MIXED.case@example.invalid','hikes':True})[0]==200
+   with sqlite3.connect(dbpath) as db:assert db.execute("SELECT email,newsletter,hikes FROM subscriptions WHERE email LIKE 'mixed.case%'").fetchall()==[('mixed.case@example.invalid',1,1)]
+   used,pad={'eventId':'qa-unlimited','partySize':1},'  Pad.Guest@Example.INVALID  '
+   assert request(rsv,{**used,'email':pad,'name':'  Zo\u00eb \u00dcnic\u00f6de  '})[0]==200
+   with sqlite3.connect(dbpath) as db:assert db.execute("SELECT email,name FROM rsvps WHERE email LIKE 'pad.guest%'").fetchall()==[('pad.guest@example.invalid','Zo\u00eb \u00dcnic\u00f6de')]
+   before,seated=snapshot(),seats('qa-unlimited')
+   dup=request(rsv,{**used,'email':'PAD.guest@example.invalid','name':'Other Name','partySize':6})
+   assert dup[0]==200 and dup[1]['alreadyRegistered'] and snapshot()==before and seats('qa-unlimited')==seated
+   assert request(rsv,{**used,'email':'long-name@example.invalid','name':'\u00e9'*120})[0]==200
+   before=snapshot()
+   for n,name in enumerate(('','   ','\u00e9'*121,' '+'x'*121+' ')):
+    got=raw(json.dumps({**used,'email':f'edge{n}@example.invalid','name':name}).encode(),rsv);assert got==(400,{'error':bad_name}),(name,got)
+   assert snapshot()==before
+   tail='@example.invalid';assert request(sub,{'email':'a'*(254-len(tail))+tail,'newsletter':True})[0]==200
+   before=snapshot()
+   assert raw(json.dumps({'email':'a'*(255-len(tail))+tail,'newsletter':True}).encode(),sub)==(400,{'error':bad_email}) and snapshot()==before
+  def test_closed_hike_keeps_error_precedence():
+   before=snapshot()
+   for event_id in ('qa-past','no-such-hike'):
+    for extra in ({'email':['typed@example.invalid'],'name':'Typed Guest'},{'email':'closed@example.invalid','name':['Typed Guest']},{'email':{'a':1},'name':None},{'email':None}):
+     got=raw(json.dumps({'eventId':event_id,'partySize':1,**extra}).encode(),rsv);assert got==(409,{'error':closed}),(event_id,extra,got)
+     assert snapshot()==before
   sub,rsv,new='/api/community/subscriptions','/api/community/rsvps',{'eventId':'qa-hike','name':'New Guest','email':'new@example.invalid','partySize':1}
   bad_email,bad_name,bad_party,form_msg='Please enter a valid email address.','Please enter your name (up to 120 characters).','Choose between one and six people.','Please use the form on the page.'
   generic,closed='Please check your name, email, and form selections.','This hike is not accepting RSVPs.'
@@ -78,6 +127,7 @@ with tempfile.TemporaryDirectory(prefix='avoshack-community-qa-') as t:
   assert request(rsv,{**new,'eventId':'qa-unlimited','name':'x'*120,'partySize':6})[0]==200 and rows()==[before[0],before[1]+1]
   node=os.environ.get('NODE','node')
   subprocess.run([node,str(root/'community-ui-qa.cjs')],env={**os.environ,'COMMUNITY_TEST_URL':base,'QA_OUT_DIR':out},check=True)
+  for check in (test_non_string_email_rejected_without_writes,test_non_string_name_rejected_without_writes,test_string_identity_normalization_and_boundaries,test_closed_hike_keeps_error_precedence):check()
   result={'subscriptionsPersisted':True,'consentMerge':True,'invalidEmailRejected':True,'crossOriginRejected':True,'duplicateRSVPPrevented':True,'capacityEnforced':True,'concurrentCapacitySafe':True,'pastRSVPRejected':True,'noPersonalDataInPublicAPI':True,'noExternalEmailSent':True,'fixtureDataIsolated':True,'guestCountIncludesPartySize':True,'duplicateGuestCountStable':True,'uncappedGuestCount':True,'configuredCountCannotOverrideDatabase':True}
   (Path(out)/'community-api-QA.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
  finally:server.shutdown();server.server_close();worker.join(timeout=5)

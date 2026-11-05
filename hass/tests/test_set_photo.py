@@ -6,6 +6,7 @@ WriterRepo harness (temp Git repo + linked writer worktree) whose assets/product
 
 import json
 import os
+import shutil
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -34,7 +35,9 @@ class PhotoRepo(CatalogRepo):
         assets.unlink()
         (assets / "products").mkdir(parents=True)
         for entry in [*(SITE_DIR / "assets").iterdir(), *(SITE_DIR / "assets" / "products").iterdir()]:
-            if entry.name != "products":
+            if entry.parent.name == "products":  # AVB-09: a listing image must be a regular file, not a symlink
+                shutil.copyfile(entry, assets / entry.relative_to(SITE_DIR / "assets"))
+            elif entry.name != "products":
                 (assets / entry.relative_to(SITE_DIR / "assets")).symlink_to(entry)
         git(self.wt, "add", "-A")
         git(self.wt, "commit", "-q", "-s", "-m", "real assets/products folder")
@@ -100,8 +103,8 @@ class SetPhotoTests(SetPhotoTestCase):
         result = self.rejected("needs-details", ("product.set_photo", {"id": PID, "photo": self.jpg}))
         self.assertEqual(result["missing"], ["imageAlt"])
         self.assertIn("imageAlt", result["question"])
-        result = self.rejected("invalid", _photo(PID, self.jpg, "a" * 201))
-        self.assertTrue(any("imageAlt: longer than 200 characters" in p for p in result["problems"]), result)
+        result = self.rejected("refused", _photo(PID, self.jpg, "a" * 201))
+        self.assertEqual(result["reason"], "the photo description is longer than 200 characters (it has 201)")
 
     def test_named_refusals_write_nothing(self):
         cases = {"unknown photo": (_photo(PID, "0" * 64), media.REPLIES["not-found"]),

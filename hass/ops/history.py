@@ -164,7 +164,10 @@ def _revert(content, args, ctx):
         elif collection in UNDO_ADDITION:
             field, hidden = UNDO_ADDITION[collection]
             value = {**(current or {}), field: hidden}
-        elif collection == "routeIdeas":  # AV1322-02: a route idea has no hidden state, so an added one is removed
+        elif collection == "routeIdeas":  # an added route idea is removed (hide is a separate op)
+            hike = next((e for e in content.community["events"] if e.get("trailId") == key), None)
+            if hike is not None:  # any status: the validator checks every hike's trailId
+                return Refused(f"{hike['id']} ({hike['title']}) uses this route; change that hike first")
             value = None
         else:
             return Refused(f"undo cannot remove the added {collection} {key}")

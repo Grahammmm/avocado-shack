@@ -143,7 +143,7 @@ class PhotoDemoTranscriptTests(unittest.TestCase):
         repo = self.fresh()
         png = repo.state / "shot.png"
         png.write_bytes(b"png")
-        previewer = mock.Mock(capture=lambda files, target, out: {"ok": True, "png": str(png), "error": None})
+        previewer = mock.Mock(capture=lambda files, target, out, assets=None: {"ok": True, "png": str(png), "error": None})
         adapter = FixtureAdapter(self.lines(repo, self.demo_rows()[:4]), photos=str(MEDIA))
         conv = FixtureConversation(str(repo.state), conversation.Editor(repo.state),
                                          conversation.FixtureInterpreter(json.loads(MAPPING.read_text("utf-8"))),

@@ -81,9 +81,17 @@ class RestoreImageRuleTests(CatalogTestCase):
         self.both_refused(setup, OUTSIDE)
 
     def test_real_image_file_restores_on_both_paths(self):
+        def setup(site):  # AVB-09: the post-apply migration check wants every listing image a real file, not a link
+            products = site / "assets/products"
+            for link in [e for e in products.iterdir() if e.is_symlink()]:
+                target = link.resolve()
+                link.unlink()
+                shutil.copyfile(target, link)
+            shutil.copyfile(SITE_DIR / P2_IMAGE, site / P2_IMAGE)
+
         for path in ("product.restore", REVERT):
             with self.subTest(path=path):
-                repo, change = self.hidden_p2(lambda site: shutil.copyfile(SITE_DIR / P2_IMAGE, site / P2_IMAGE))
+                repo, change = self.hidden_p2(setup)
                 repo.run((path, {"id": P2} if path == "product.restore" else {"changeId": change["change_id"]}))
                 self.assertEqual(self.status(repo, P2), "active")
 

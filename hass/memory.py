@@ -18,7 +18,8 @@ TABLE = """CREATE TABLE IF NOT EXISTS memory(id INTEGER PRIMARY KEY, key TEXT NO
   kind TEXT NOT NULL CHECK(kind IN ('fact','preference')), source TEXT NOT NULL, approved_change TEXT,
   created_at TEXT NOT NULL, superseded_at TEXT, forgotten_at TEXT)"""
 ACTIVE = "superseded_at IS NULL AND forgotten_at IS NULL"
-KEY_RE = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
+# Ordinary keys stay capped at 64; the cost namespace must fit a full 64-character product ID.
+KEY_RE = re.compile(r"(?:[a-z0-9][a-z0-9.-]{0,63}|cost\.[a-z0-9][a-z0-9-]{0,63})")
 SOURCE_RE = re.compile(r"(owner-approved|owner-stated|operator):(.+)", re.DOTALL)
 KINDS = ("fact", "preference")
 SOURCE_KIND = re.compile(r"(owner-approved|owner-stated|operator):")  # history shows only this part of a source
@@ -39,13 +40,16 @@ def _check_key(key) -> None:
 
 
 def _check_value(value) -> None:
-    if not _clean(value) or len(value) > MAX_VALUE: raise ValueError(f"value must be 1-{MAX_VALUE} plain characters")
+    # str.strip() only decides "blank" (RF0200-9); the stored text is never trimmed or normalised.
+    if not _clean(value) or len(value) > MAX_VALUE or not value.strip():
+        raise ValueError(f"value must be 1-{MAX_VALUE} plain characters")
 
 
 def _check_source(source) -> None:
-    """Only owner-approved:<change_id>, owner-stated:<provider_id> or operator:<note>; anything else is unverified."""
-    if not _clean(source) or len(source) > MAX_VALUE or not SOURCE_RE.fullmatch(source):
-        raise ValueError("unverified source")
+    """Only owner-approved:<change_id>, owner-stated:<provider_id> or operator:<note>; anything else is unverified.
+    The detail after the prefix must have non-whitespace content (RF0200-9)."""
+    match = SOURCE_RE.fullmatch(source) if _clean(source) and len(source) <= MAX_VALUE else None
+    if match is None or not match[2].strip(): raise ValueError("unverified source")
 
 
 def private_db(sdir, name) -> Path:

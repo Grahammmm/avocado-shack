@@ -17,8 +17,8 @@ from hass.tests.test_content import IsolatedRepo
 
 BASELINE = REPO_ROOT / "hass" / "content" / "migration-baseline.json"
 REPORT_KEYS = [
-    "baseCommit", "baselineListings", "baselineListingsPreserved", "activeProducts", "hiddenProducts",
-    "heldProducts", "baselineMakers", "makers", "baselineSourceLinks", "sourceLinksPreserved",
+    "baseCommit", "baselineListings", "baselineListingsPreserved", "baselineImagesPresent", "activeProducts",
+    "hiddenProducts", "heldProducts", "baselineMakers", "makers", "baselineSourceLinks", "sourceLinksPreserved",
     "catalogListings", "heldExcluded", "realEvents", "routeIdeas", "generatedFiles", "identicalToPreMigration",
 ]
 

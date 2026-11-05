@@ -153,18 +153,25 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
     site, registry = wt / "storefront-mockup", load_registry() if registry is None else registry
     content = load_and_validate(wt / "hass" / "content", site)
     problems, missing = [], []
+    provisional = dict(content.makers)  # AV1937-02: current makers plus keys of clean maker.add calls EARLIER in this list
     for i, call in enumerate(ops):
         op = registry.get(call["op"])
-        found, absent = check_args(op, call["args"], content.makers, site) if op else (["unknown op"], [])
+        found, absent = check_args(op, call["args"], provisional, site) if op else (["unknown op"], [])
         problems += [f"ops[{i}] {call['op']!r}: {p}" for p in found]
         missing += [name for name in absent if name not in missing]
+        if op and call["op"] == "maker.add" and not found and not absent:
+            provisional.setdefault(call["args"]["key"], {})  # provisional membership only; the real add may still refuse
     if problems: return {"result": "invalid", "problems": problems}
     if missing:
         return {"result": "needs-details", "missing": missing, "question": "Please provide: " + ", ".join(missing)}
     base, new = content_revision(wt), copy.deepcopy(content)
     ctx = OpContext(now or datetime.now(timezone.utc), site, MappingProxyType(dict(settings)), state_dir=sdir)
     records, summary = [], []
-    for call in ops:
+    for i, call in enumerate(ops):
+        found, absent = check_args(registry[call["op"]], call["args"], new.makers, site)  # against what earlier ops really did
+        if found: return {"result": "invalid", "problems": [f"ops[{i}] {call['op']!r}: {p}" for p in found]}
+        if absent:
+            return {"result": "needs-details", "missing": absent, "question": "Please provide: " + ", ".join(absent)}
         out = registry[call["op"]].apply(new, copy.deepcopy(call["args"]), ctx)
         if isinstance(out, NeedsDetails):
             return {"result": "needs-details", "missing": list(out.missing), "question": out.question}
@@ -191,7 +198,7 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
     writes.update({sitegen.SITE_PREFIX + p: data for p, data in ctx.assets.items()})
     if not writes: return {"result": "refused", "reason": "the operations change nothing"}
     return {"result": "ok", "base": base, "records": records, "generated": generated,
-            "warnings": list(ctx.warnings), "summary": summary, "writes": writes, "files": files}
+            "warnings": list(ctx.warnings), "summary": summary, "writes": writes, "files": files, "store": new.store}
 
 def prepare(request, *, state=None, registry=None, now=None) -> dict:
     sdir, cfg, wt = _load(state)
@@ -348,7 +355,8 @@ def render_draft(change_id, *, state=None, registry=None, now=None) -> dict:
         out = _compute(_read(path)["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
-    return {"result": "ok", "files": out["files"], "records": out["records"]} if out["result"] == "ok" else out
+    return {"result": "ok", "files": out["files"], "records": out["records"], "store": out["store"],
+                           "assets": {k: v for k, v in out["writes"].items() if k.startswith(sitegen.SITE_PREFIX + "assets/")}} if out["result"] == "ok" else out
 
 def history(limit=20, *, state=None) -> dict:
     """Change records newest first: id, state, applied_at, commit, one line per op, revertedBy."""
