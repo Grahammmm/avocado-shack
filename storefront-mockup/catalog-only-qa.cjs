@@ -188,6 +188,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await open('?avail=1&item='+encodeURIComponent(await page.evaluate(()=>catalog[4].id)));assert.equal(await avail().isChecked(),false,'?item wins over avail');assert.equal((await addr()).params.avail,undefined);
  }
  await fixture(W.slice(4));await open('?avail=1');assert.equal(await avail().count(),0,'only Last confirmed words: no control');assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
+ // AV1222-14: Clear filters shows for any one filter, resets all five, keeps other parameters and the hash, then focuses the search box.
+ const clr=page.locator('#clear-filters'),FILTERS=['shelf=pantry','q=jam','maker=Etto','from='+multi.key];
+ for(const width of [390,1440]){await page.setViewportSize({width,height:900});await open('');assert.equal(await clr.isVisible(),false,'fresh: hidden');assert.equal(await countText(),fullCount);
+  for(const f of FILTERS){await open('?'+f+'&utm=x#catalog');assert.equal(await clr.isVisible(),true,f);await clr.click();assert.equal(await countText(),fullCount,f);assert.deepEqual((await addr()).params,{utm:'x'},f);assert.equal((await addr()).hash,'#catalog');assert.equal(await page.evaluate(()=>document.activeElement.id),'product-search');assert.equal(await clr.isVisible(),false);}
+  await open('?q=unfindablefoo');assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);assert.equal(await clr.isVisible(),true);await clr.click();assert.equal(await countText(),fullCount);
+  await open('?q=%20%20%20');assert.equal(await clr.isVisible(),false,'spaces are not a filter');
+  await open('?shelf=pantry&q=jam');await page.locator('#product-search').focus();await page.keyboard.press('Tab');await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'clear-filters','Tab reaches it');await page.keyboard.press('Enter');assert.equal(await countText(),fullCount);assert.equal(await page.locator('#brand-filter').inputValue(),'');assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');
+  await open('?q=jam');const bx=await clr.boundingBox();assert.ok(bx.height>=44,'tap target '+width);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow '+width);}
+ await fixture(W);await open('?avail=1');assert.equal(await clr.isVisible(),true,'avail');await clr.click();assert.equal(await avail().isChecked(),false);assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
  await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await page.setViewportSize({width:390,height:844});
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
