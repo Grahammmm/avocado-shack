@@ -29,8 +29,9 @@ class PromptRuleTests(unittest.TestCase):
         rules = _rules(prompt)
         design = [line for line in rules if "design change" in line]
         self.assertEqual(len(design), 1)
-        self.assertEqual(rules[-2], design[0])  # after the photo rule, before the notes rule
-        self.assertIn("product.set_photo", rules[-3])
+        self.assertEqual(rules[-2], design[0])  # after photo/repeat rules, before the notes rule
+        self.assertIn("product.set_photo", rules[-4])
+        self.assertIn("hike.repeat", rules[-3])
         self.assertIn('"notes"', rules[-1])
         self.assertEqual(prompt.count(DESIGN_UNSUPPORTED), 1)
         found = re.search(r"\{\"unsupported\": \"[^\"]*\"\}", design[0])
@@ -44,7 +45,7 @@ class PromptRuleTests(unittest.TestCase):
         without = prompt.replace("- " + RULES[-2] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
         self.assertNotIn(DESIGN_UNSUPPORTED, without)
-        self.assertEqual(len(RULES), 12)
+        self.assertEqual(len(RULES), 13)  # AV1937-05 added the hike.repeat rule
         self.assertLess(len(RULES[-2].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 

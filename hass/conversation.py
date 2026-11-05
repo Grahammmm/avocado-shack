@@ -41,14 +41,16 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'forget <key> - delete a saved note: "forget parking"',
     'memory - list the saved notes: "memory"',
     'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
+    'cost <id>: <$> for <n> - save: "cost photo-product-001: 24 for 12"',  # AV1222-10
     'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'report - the morning shelf report: "report"',
     'post <id> - draft a caption, posts nothing: "post photo-product-001"',
-    'margin <cost> for <n> at <m>% - price idea: "margin 24 for 12 at 35%"',  # AV1102-12
+    'margin <id> at <m>% - price idea: "margin photo-product-001 at 35%"',  # AV1102-12, AV1222-10: saved cost
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
-MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)
+MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?"
+                       r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
@@ -58,6 +60,10 @@ POST_REFUSALS = {"no such product": "No product {id}; send find <words> for ids.
                  "no photo on the site": "{id} has no photo on the site."}  # other build() reasons: "Cannot draft a post for <id>: <reason>."
 _NUM = r"[-+]?[0-9.][0-9.,_]*(?:e[-+]?[0-9]+)?"  # AV1102-12: looks like a number; margins.compute is the only validator
 MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")
+MARGIN_ID_RE = re.compile(rf"([a-z0-9][a-z0-9-]*)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")  # AV1222-10: saved cost
+COST_RE = re.compile(r"\$?(\S+)\s+for\s+(\S+)", re.IGNORECASE)  # AV1222-10: margins.compute is the only number validator
+COST_USAGE = "send cost <id>: <pack cost> for <units>, e.g. cost photo-product-001: 24.00 for 12"
+PRIVATE_PREFIXES = ("alias.", "cost.")  # AV1222-10: memory keys the interpreter never sees
 MARGIN_USAGE = 'Send: margin <pack cost> for <units> at <margin>% (optional: shrink <S>%), e.g. "margin 24.00 for 12 at 35%".'
 PAUSED_LINE = "Changes are paused; send resume changes before yes."
 ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
@@ -331,6 +337,9 @@ def parse_memory(text: str):
     if match and match[6]:  # ("alias", name, product id or maker key); a missing part is refused, not guessed
         name, colon, ident = (match[7] or "").partition(":")
         return "alias", name.strip(), ident.strip() if colon else ""
+    if match and match[8]:  # AV1222-10 ("cost", product id, "<pack> for <units>"); a bad part is refused, not guessed
+        ident, colon, rest = (match[9] or "").partition(":")
+        return "cost", ident.strip().lower(), rest.strip() if colon else ""
     match = MEMORY_RE.fullmatch(re.sub(r"!+$", "", text.strip()))  # a key may end in "." (KEY_RE), never "!"
     if match and match[3]: return "forget", match[4].lower(), None
     match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
@@ -696,16 +705,27 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
             return None
 
+    def _sources(self):
+        """AV1937-05: the worktree's real hikes by id (read-only) for a hike.repeat copy; None when unreadable (no exemption)."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
+            return {e["id"]: e for e in events if isinstance(e, dict) and isinstance(e.get("id"), str)} if isinstance(events, list) else None
+        except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
+            return None
+
     def _notes(self) -> list:
         """AV1102-09: the newest MAX_NOTES active non-alias memory rows as {"key", "text"}; any problem means none."""
         try:
             if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone():
                 return []
-            rows = self.db.execute(f"SELECT key, value FROM memory WHERE {memory_mod.ACTIVE} AND substr(key, 1, 6) != 'alias.' "
+            private = "".join(f"AND substr(key, 1, {len(p)}) != '{p}' " for p in PRIVATE_PREFIXES)  # constants, not owner text
+            rows = self.db.execute(f"SELECT key, value FROM memory WHERE {memory_mod.ACTIVE} {private}"
                                    "ORDER BY created_at DESC, id DESC LIMIT ?", (MAX_NOTES,)).fetchall()
             return [{"key": r[0], "text": r[1]} for r in rows]
         except sqlite3.Error:
             return []
+
 
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
@@ -768,7 +788,7 @@ class Conversation:
             self._reply(f"Not drafted: {_reason(out)}")
             return "not-drafted"
         draft = out["draft"]
-        if hits := claims.unstated(draft, msg.text, self._makers(), self._routes()):  # NB-AV-05: an unstated claim asks, never drafts
+        if hits := claims.unstated(draft, msg.text, self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts
             self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
             return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]
@@ -960,12 +980,24 @@ class Conversation:
         """AV1102-12 (F03): margins.render for one purchase line, text in and text out. Read-only: nothing is stored or
         drafted, no interpreter call or usage count; works while paused."""
         found = MARGIN_RE.fullmatch(rest)
+        by_id = None if found else MARGIN_ID_RE.fullmatch(rest)  # AV1222-10: the saved cost of a product
         try:
-            text = margins.render(margins.compute(found[1], found[2], found[4] or "0", found[3])) if found else MARGIN_USAGE
+            text = margins.render(margins.compute(found[1], found[2], found[4] or "0", found[3])) if found else \
+                self._margin_saved(*by_id.groups()) if by_id else MARGIN_USAGE
         except margins.InputError as exc:
             text = f"Not calculated: {exc}."
         self._reply(text)
         return "margin"
+
+    def _margin_saved(self, ident, margin, shrink) -> str:
+        """AV1222-10: margins for the saved cost.<id> (read-only; the memory table is not created for a read)."""
+        has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+        if self.memory is None and has_table: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
+        row = next((r for r in self.memory.list() if r["key"] == f"cost.{ident}"), None) if has_table else None
+        if row is None: return f"No cost saved for {ident}; send cost {ident}: <pack cost> for <units> first."
+        pack, _, units = row["value"].partition(" for ")
+        since = datetime.fromisoformat(row["created_at"]).astimezone(LOCAL_TZ)
+        return f"Using cost from {since:%Y-%m-%d}: {row['value']}.\n" + margins.render(margins.compute(pack, units, shrink or "0", margin))
 
     def _post(self, pid) -> str:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
@@ -1068,7 +1100,7 @@ class Conversation:
     # -- H15: remember, forget, memory ---------------------------------------------------------------------------
     def _memory(self, msg, verb, key, value) -> str:
         """Owner-stated facts on this connection inside the message's transaction; a store ValueError undoes only
-        that op's savepoint and the message is still recorded. The interpreter reads non-alias notes as preferences (AV1102-09); never facts or claims."""
+        that op's savepoint and the message is still recorded. The interpreter reads notes other than PRIVATE_PREFIXES as preferences (AV1102-09); never facts or claims."""
         if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
         if verb == "memory":
             rows = self.memory.list()
@@ -1079,6 +1111,7 @@ class Conversation:
             self._reply("\n".join([f"Saved ({len(rows)}):"] + lines + more) if rows else "Nothing saved.")
             return "memory-list"
         if verb == "alias": return self._alias(msg, key, value)
+        if verb == "cost": return self._cost(msg, key, value)
         valid = memory_mod.KEY_RE.fullmatch(key) is not None
         if verb == "forget":
             if not valid or self.memory.get(key) is None:
@@ -1091,6 +1124,7 @@ class Conversation:
         if valid and (not memory_mod._clean(value) or len(value) > memory_mod.MAX_VALUE):
             problem = f"text must be 1–{memory_mod.MAX_VALUE} plain characters"
         if valid and key.startswith("alias."): problem = "send alias <name>: <id> to save an alias"
+        if valid and key.startswith("cost."): problem = "send cost <id>: <pack cost> for <units> to save a cost"  # AV1222-10
         old, source = (self.memory.get(key) if valid else None), f"owner-stated:{msg.provider_id}"
         if problem is None and old is not None and old == value:  # AVB-15: the same text again changes nothing
             self._reply(f"Already saved {key}: {value}; nothing changed.")
@@ -1105,6 +1139,39 @@ class Conversation:
             return "memory-invalid"
         self._reply((f"Saved {key}: {value}." if old is None else f"Updated {key} (was: {old}).")
                     + f" Send forget {key} to remove it.")
+        return "memory-saved" if old is None else "memory-updated"
+
+    def _cost(self, msg, ident, rest) -> str:
+        """AV1222-10 (F03): `cost <id>: <pack> for <units>` saves memory cost.<id> = "<pack> for <units>" (the dated,
+        owner-stated, private purchase cost for an existing product, any status). Never the site or the interpreter."""
+        found, key, product, problem, value = COST_RE.fullmatch(rest), f"cost.{ident}", None, None, ""
+        try:
+            if not found or not ident: problem = COST_USAGE
+            else:
+                shown = margins.compute(found[1], found[2], "0", "0")["inputs"]  # validates and normalises both numbers
+                value = f"{shown['pack_cost']} for {shown['units']}"
+                content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+                product = next((p for p in content.products if p["id"] == ident), None)
+                problem = None if product else f"no product {ident}"
+        except margins.InputError as exc:
+            problem = str(exc)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            problem = "the catalog is unavailable"
+        old, source = None, f"owner-stated:{msg.provider_id}"
+        try:
+            old = self.memory.get(key) if product else None
+            if product and old == value:
+                self._reply(f"Already saved cost for {ident}: {value}; nothing changed.")
+                return "memory-unchanged"
+            if product: self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
+        except ValueError as exc:  # e.g. an id too long for a memory key
+            problem = str(exc)
+        if problem:
+            self._reply(f"Not saved: {problem}.")
+            return "memory-invalid"
+        self._reply((f"Saved cost for {ident} ({product['name']}): {value}" if old is None else
+                     f"Updated cost for {ident} ({product['name']}): {value} (was: {old})")
+                    + f" (private; never on the website). Send forget {key} to remove it.")
         return "memory-saved" if old is None else "memory-updated"
 
     def _alias(self, msg, name, ident) -> str:
