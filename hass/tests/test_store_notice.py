@@ -60,7 +60,7 @@ class NoticeOpTests(StoreTestCase):
         with mock.patch.object(sitegen, "shop_today", return_value=tomorrow):
             self.assertEqual(sitegen.main(["--check", "--repo", str(repo.wt)]), 0)
             self.assertEqual(editor._post_checks(repo.wt), [])
-            self.assertEqual(Conversation.verify(verifier, {"change_id": change["change_id"]}), ("checked.png", None))
+            self.assertEqual(Conversation.verify(verifier, {"change_id": change["change_id"]}), ("checked.png", None, [False]))
             self.assertEqual(repo.read(INDEX), before)  # checks must not rewrite history
             (repo.wt / INDEX).write_bytes(before.replace(TEXT.encode(), b"Wrong notice"))
             self.assertEqual(sitegen.main(["--check", "--repo", str(repo.wt)]), 1)
