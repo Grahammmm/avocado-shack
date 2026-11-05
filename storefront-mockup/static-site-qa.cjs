@@ -113,6 +113,19 @@ server.listen(0,'127.0.0.1',async()=>{
    const t=await page.locator('body').innerText();assert.doesNotMatch(t,COMMERCE_TEXT,missing+': commerce wording');assert.doesNotMatch(t,PRELAUNCH,missing+': pre-launch wording');
    assert.ok(await page.evaluate(()=>[...document.styleSheets].some(s=>s.cssRules.length>0)),missing+': stylesheet loaded');
   }
+  // AV1422-07 (review): a delayed unavailable service answers once per page, and a real submit made while that answer is pending leaves every control disabled.
+  for(const [route,form,inputs,email] of [['/','#community-newsletter',['#newsletter-email'],'#newsletter-email'],['/hike/','#hike-updates',['#hike-email'],'#hike-email']]){
+   const p=await browser.newPage({viewport:{width:390,height:844}});let release,hits=0,posts=0;const gate=new Promise(r=>release=r);
+   p.on('request',r=>{if(r.method()==='POST')posts++});
+   await p.route('**/api/community',async r=>{hits++;await gate;await r.fulfill({status:503,contentType:'application/json',body:'{}'})});
+   await p.goto(base+route);await p.locator(email).fill('visitor@example.com');
+   assert.equal(await p.locator(form+' button[type=submit]').isDisabled(),false,route+': enabled while the probe is pending');
+   await p.locator(form+' button[type=submit]').click();await p.locator(form+' .form-status').filter({hasText:'Saving…'}).waitFor();
+   release();await p.locator(form+' .form-status').filter({hasText:/Online signup isn’t open yet/}).waitFor();await p.waitForLoadState('networkidle');
+   for(const i of [...inputs,form+' button[type=submit]'])assert.ok(await p.locator(i).isDisabled(),route+': '+i+' disabled after a submit raced the probe');
+   assert.equal(await p.locator(form).getAttribute('aria-disabled'),'true');
+   assert.equal(hits,1,route+': one GET /api/community');assert.equal(posts,0,route+': nothing posted');await p.close();
+  }
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,sourcingSentence:true,catalog:170,errors});
   fs.writeFileSync(path.join(out,'static-site-QA.json'),JSON.stringify(result,null,1));
