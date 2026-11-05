@@ -70,7 +70,11 @@ server.listen(0,'127.0.0.1',async()=>{
   await closedUpfront(page,'#community-newsletter',['#newsletter-email','#community-newsletter input[name=hikes]']);
 
   for(const route of ['/hike','/hike/']){
-   await page.goto(base+route);await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
+   const reqs=[],on=q=>{if(/point-buchon(-aerial\.webp|\.json)/.test(q.url()))reqs.push(q.url())};page.on('request',on);
+   await page.goto(base+route);await page.locator('#upcoming-hikes article').first().waitFor();await page.waitForLoadState('networkidle');
+   assert.deepEqual(reqs,[],route+': no map files before the map is near');assert.match(await page.locator('[data-trail-explorer]').innerText(),/Loading the trail map/);
+   await page.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
+   assert.equal(reqs.filter(u=>/aerial\.webp/.test(u)).length,1,route+': one aerial request');assert.equal(reqs.filter(u=>/\.json/.test(u)).length,1,route+': one route request');page.off('request',on);
    assert.equal(await page.locator('.trail-invitation').count(),1,route+': sample invitation');
    assert.ok(await page.getByText('Sample invitation · plans to be confirmed').isVisible());
    assert.equal(await page.locator('.trail-map-canvas').count(),1,route+': trail map');
@@ -78,6 +82,16 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.match(await page.locator('#history-context').innerText(),/not confirmed club history/);
    assert.doesNotMatch(await page.locator('#upcoming-hikes').innerText(),/isn’t available right now/);
    await closedUpfront(page,'#hike-updates',['#hike-email']);
+  }
+  // AV1422-08: no IntersectionObserver mounts at once; a 404 route file still reaches the error state.
+  for(const [name,init,fail] of [['no IntersectionObserver',true,false],['route file 404',false,true]]){
+   const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));
+   if(init)await p.addInitScript(()=>{delete window.IntersectionObserver});
+   if(fail)await p.route('**/point-buchon.json',r=>r.fulfill({status:404,body:''}));
+   await p.goto(base+'/hike/');await p.locator('#upcoming-hikes article').first().waitFor();
+   if(fail)await p.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();
+   await p.locator('[data-trail-explorer][data-ready]').waitFor({state:'attached'});
+   assert.equal(await p.locator('[data-trail-explorer]').getAttribute('data-ready'),fail?'error':'true',name);assert.deepEqual(errs,[],name+': page errors');await ctx.close();
   }
   // AV1422-05: a fixed clock decides whether the sample invitation (startsAt 2026-11-08 09:00 Pacific) shows its date or "Date to be confirmed".
   const sample=JSON.parse(fs.readFileSync(path.join(root,'hiking-preview.json'),'utf8')),json=body=>({contentType:'application/json',body:JSON.stringify(body)});

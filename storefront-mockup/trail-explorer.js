@@ -8,6 +8,7 @@ const icon=(name)=>({plus:'<path d="M12 5v14M5 12h14"/>',minus:'<path d="M5 12h1
 const control=(action,label,symbol)=>`<button type="button" data-map-action="${action}" aria-label="${label}" title="${label}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7">${icon(symbol)}</svg></button>`;
 function node(tag,attrs={}){const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;}
 
+// Callers may defer mount (community.js loads the map only near view); mount itself is unchanged.
 async function mount(host){
  if(!host||host.dataset.mounted)return;
  host.dataset.mounted='true';
