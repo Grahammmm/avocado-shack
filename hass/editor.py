@@ -17,6 +17,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import migration_check, sitegen  # noqa: E402
 from hass.content_model import IMAGE_RE, REPO_ROOT, ContentError, load_and_validate, validate  # noqa: E402
+from hass.field_words import field_list  # noqa: E402
 from hass.ops import (  # noqa: E402
     NeedsDetails, NotFound, OpContext, Refused, check_args, has_control_chars, load_registry)
 
@@ -163,7 +164,7 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
             provisional.setdefault(call["args"]["key"], {})  # provisional membership only; the real add may still refuse
     if problems: return {"result": "invalid", "problems": problems}
     if missing:
-        return {"result": "needs-details", "missing": missing, "question": "Please provide: " + ", ".join(missing)}
+        return {"result": "needs-details", "missing": missing, "question": "Please provide: " + field_list(missing)}
     base, new = content_revision(wt), copy.deepcopy(content)
     ctx = OpContext(now or datetime.now(timezone.utc), site, MappingProxyType(dict(settings)), state_dir=sdir)
     records, summary = [], []
@@ -171,7 +172,7 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
         found, absent = check_args(registry[call["op"]], call["args"], new.makers, site)  # against what earlier ops really did
         if found: return {"result": "invalid", "problems": [f"ops[{i}] {call['op']!r}: {p}" for p in found]}
         if absent:
-            return {"result": "needs-details", "missing": absent, "question": "Please provide: " + ", ".join(absent)}
+            return {"result": "needs-details", "missing": absent, "question": "Please provide: " + field_list(absent)}
         out = registry[call["op"]].apply(new, copy.deepcopy(call["args"]), ctx)
         if isinstance(out, NeedsDetails):
             return {"result": "needs-details", "missing": list(out.missing), "question": out.question}

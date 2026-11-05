@@ -181,13 +181,17 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  const pacificAt=w=>{const t=w-(wall(w)-w);return w-(wall(t)-t)}; // the instant whose Pacific wall clock reads w
  const nextDay=Date.parse(new Date(start).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})+'T00:00Z')+864e5;
  const today='Today — started '+new Date(start).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
- const view=async(now,timezoneId='America/Los_Angeles',extra=[],keep=()=>true)=>{
+ const baseJson=await (await fetch(process.env.COMMUNITY_TEST_URL+'/api/community')).json();
+ const view=async(now,timezoneId='America/Los_Angeles',extra=[],keep=()=>true,stat=false)=>{
   const c=await b.newContext({timezoneId}),pg=await c.newPage(),errs=[];pg.on('pageerror',e=>errs.push(e.message));
-  await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events=j.events.filter(keep).concat(extra);await r.fulfill({response:res,json:j})});
+  if(stat){ // published-site mode: no club service, /community.json is the only source
+   await pg.route('**/api/community',r=>r.fulfill({status:404,contentType:'text/plain',body:'no service'}));
+   await pg.route('**/community.json',r=>r.fulfill({json:{...baseJson,events:baseJson.events.filter(keep).concat(extra)}}));
+  }else await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events=j.events.filter(keep).concat(extra);await r.fulfill({response:res,json:j})});
   await pg.clock.setFixedTime(now);await pg.goto(process.env.COMMUNITY_TEST_URL+'/hike');
   await pg.locator('#upcoming-hikes :is(.hike-event,.hike-empty,.trail-invitation)').first().waitFor();
   const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h2').textContent,a.querySelector('.hike-date').textContent])),
-   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,ics:a.querySelectorAll('.hike-ics').length,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
+   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,ics:a.querySelectorAll('.hike-ics').length,guests:(a.querySelector('[data-confirmed-guests]')||{}).textContent??null,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
   check(!errs.length,'Page errors at '+new Date(now).toISOString()+': '+JSON.stringify(errs));await c.close();return r;
  };
  const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};
@@ -245,10 +249,10 @@ check(L(q)===[CX+'|Cancelled: AV x',CX+'|Cancelled: AV y'].join(' ; ')&&!q.empty
 q=await view(at,'America/Los_Angeles',[],none);
 check(!q.cards.length&&q.empty&&!/COMING UP/.test(q.up),'No real events did not keep the sample/empty state: '+q.up);
 // test_same_day_started_then_midnight
-q=await view(after,'America/Los_Angeles',[ev('later',5e5)],e=>e.id==='qa-hike');
-check(L(q)===[NEXT+'|QA trail fixture',SOON+'|AV later'].join(' ; '),'Same-day started hike lost the next label: '+L(q));
-q=await view(pacificAt(nextDay-6e4),'Asia/Tokyo',[ev('later',5e5)],e=>e.id==='qa-hike');
-check(q.cards[0]&&q.cards[0].label===NEXT&&q.cards[0].title==='QA trail fixture','Tokyo viewer lost Pacific same-day next label: '+L(q));
+q=await view(after,'America/Los_Angeles',[ev('later',after-start+6e4)],e=>e.id==='qa-hike');
+check(L(q)===['TODAY|QA trail fixture',NEXT+'|AV later'].join(' ; '),'Started hike is not TODAY or the next future hike is not next: '+L(q));
+q=await view(pacificAt(nextDay-6e4),'Asia/Tokyo',[ev('later',pacificAt(nextDay)-start+6e4)],e=>e.id==='qa-hike');
+check(q.cards[0]&&q.cards[0].label==='TODAY'&&q.cards[0].title==='QA trail fixture'&&q.cards[1]&&q.cards[1].label===NEXT,'Tokyo viewer lost Pacific same-day TODAY label: '+L(q));
 q=await view(pacificAt(nextDay+6e4),'America/Los_Angeles',[{...ev('later',5e5),startsAt:new Date(pacificAt(nextDay)+36e5).toISOString()},{...ev('later2',6e5),startsAt:new Date(pacificAt(nextDay)+72e5).toISOString()}],e=>e.id==='qa-hike');
 check(L(q)===[NEXT+'|AV later',SOON+'|AV later2'].join(' ; '),'After Pacific midnight the successor is not next: '+L(q));
 // test_rerender_recomputes_first: removing/cancelling the earliest on reload promotes its successor
@@ -259,6 +263,32 @@ check(L(q)===[CX+'|Cancelled: AV p',NEXT+'|AV r'].join(' ; '),'Cancelled earlies
 q=await view(at,'America/Los_Angeles',[ev('r',2e5)],none);
 check(L(q)===NEXT+'|AV r','Removed earliest left a stale winner: '+L(q));
 check(q.past===''||!q.past.includes('AV r'),'Upcoming hike listed in history');
+// AV1104-05: a hike under way is TODAY with closed RSVPs, in service and published-static modes alike.
+const STARTED='This hike has started, so RSVPs are closed.',OLD=/RSVP details|To join, ask|places? available|RSVPs open|This hike is full|THE NEXT HIKE|COMING UP/;
+for(const stat of [false,true])for(const tz of ['America/Los_Angeles','Asia/Tokyo']){
+ const m=(stat?'static ':'service ')+tz+': ';
+ // startedTodayServiceAndStatic / startedBoundaryAndStaleOpenFlag
+ for(const [name,now,extra] of [['exact start',start,{rsvpOpen:true,remaining:3,rsvpEnabled:true,confirmedGuests:1}],['start+1ms',start+1,{rsvpOpen:true,remaining:0,confirmedGuests:2}],['stale flags',after,{rsvpOpen:true,remaining:null,rsvpEnabled:false,confirmedGuests:7}]]){
+  q=await view(now,tz,[{...hike,id:'qa-hike',...extra}],none,stat);
+  const c=q.cards[0];
+  check(c&&c.label==='TODAY'&&c.text.includes(STARTED)&&c.rsvp===0&&!c.ics&&!OLD.test(c.text),m+name+' started card wrong: '+(c&&c.label+' '+c.text));
+  if(stat)check(c.guests===null,m+name+' static started card showed a guest count: '+c.guests);
+  else check(c.guests===String(extra.confirmedGuests),m+name+' service count changed: '+c.guests);
+ }
+ q=await view(start-1,tz,[{...hike,id:'qa-hike',rsvpOpen:false,remaining:0,rsvpEnabled:true}],none,stat);
+ check(q.cards[0].label===NEXT&&!q.cards[0].text.includes(STARTED),m+'start-1ms is not yet started: '+L(q));
+ // nextFutureAfterTodayAndCancelled
+ const tv=[ev('f2',3e5),ev('t2',-2e4),ev('f1',1e5),ev('f1b',1e5),ev('t1',-3e4),ev('cx',-4e4,'cancelled')];
+ q=await view(start,tz,tv,none,stat);
+ const lab=q.cards.map(c=>c.label+'|'+c.title).join(' ; ');
+ check(lab===[CX+'|Cancelled: AV cx','TODAY|AV t1','TODAY|AV t2',NEXT+'|AV f1',SOON+'|AV f1b',SOON+'|AV f2'].join(' ; '),m+'Mixed list labels wrong: '+lab);
+ check(q.cards.filter(c=>c.label==='TODAY').every(c=>c.text.includes(STARTED)&&!c.rsvp&&!c.ics)&&q.cards[0].text.includes(sentence)&&!q.cards[0].text.includes(STARTED),m+'TODAY/cancelled copy wrong');
+ q=await view(start,tz,[ev('t1',-3e4),ev('cx',-4e4,'cancelled')],none,stat);
+ check(!q.cards.some(c=>c.label===NEXT||c.label===SOON),m+'Started-only list invented a next hike: '+L(q));
+ // cancelledAndCompletedNotStarted: malformed start, completed
+ q=await view(after,tz,[ev('bad',0),{...ev('done',-1e5,'completed')}].map(e=>e.id==='bad'?{...e,startsAt:'not a date'}:e),none,stat);
+ check(!q.cards.some(c=>c.label==='TODAY'),m+'Malformed or completed hike became TODAY: '+L(q));
+}
 }
 // AV1102-04: the home page shows one "Next hike" line from the live API only; none, cancelled-only, past-only or a failing API leaves it hidden.
 const days=n=>new Date(Date.now()+n*864e5).toISOString(),oneLine=s=>s.replace(/\s+/g,' ').trim();
