@@ -187,7 +187,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
   await pg.clock.setFixedTime(now);await pg.goto(process.env.COMMUNITY_TEST_URL+'/hike');
   await pg.locator('#upcoming-hikes :is(.hike-event,.hike-empty,.trail-invitation)').first().waitFor();
   const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h2').textContent,a.querySelector('.hike-date').textContent])),
-   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
+   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,ics:a.querySelectorAll('.hike-ics').length,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
   check(!errs.length,'Page errors at '+new Date(now).toISOString()+': '+JSON.stringify(errs));await c.close();return r;
  };
  const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};
@@ -209,7 +209,8 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  const titles=v.cards.map(c=>c.title),s=v.cards.find(c=>c.title==='QA uncapped event'),c=cx(v);
  check(titles[0]==='Cancelled: QA early cancelled'&&titles.at(-1)==='Cancelled: QA cancelled fixture'&&titles.includes('QA uncapped event'),'Scheduled and cancelled not listed by start: '+JSON.stringify(titles));
  check(c.cls==='hike-event hike-cancelled'&&c.label==='CANCELLED'&&c.text.includes(sentence)&&c.rsvp===0&&!/RSVPs open|places? available|This hike is full|RSVP details|THE NEXT HIKE/.test(c.text),'Tomorrow’s cancelled hike card wrong: '+c.text);
- check(s.rsvp===1&&s.cls==='hike-event'&&s.label==='THE NEXT HIKE'&&!s.text.includes(sentence),'Scheduled hike lost its RSVP or was marked cancelled: '+s.text);
+ check(s.rsvp===1&&s.cls==='hike-event'&&s.label==='COMING UP'&&!s.text.includes(sentence),'Scheduled hike lost its RSVP or was marked cancelled: '+s.text);
+check(v.cards.filter(c=>c.label==='THE NEXT HIKE').length===1&&v.cards.find(c=>c.label==='THE NEXT HIKE').title==='QA trail fixture','Exactly the first scheduled card should be THE NEXT HIKE: '+JSON.stringify(v.cards.map(c=>c.label+'|'+c.title)));
  v=await view(pacificAt(nextDay+6e4),'America/Los_Angeles',[cancelled]);
  check(!v.up.includes('QA cancelled fixture'),'Cancelled hike still listed after midnight Pacific at the end of its day');
  v=await view(pacificAt(nextDay-6e4),'Asia/Tokyo',[cancelled]);
@@ -217,6 +218,48 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  v=await view(start-6e4,'America/Los_Angeles',[tomorrow],e=>e.status!=='scheduled');
  check(v.cards.length===1&&cx(v)&&cx(v).rsvp===0&&!v.empty,'Only a cancelled hike showed the empty state or sample invitation: '+v.up);
  check(v.past.includes('QA past outing')&&!v.up.includes('QA past outing'),'Completed hike not only under past hikes');
+// AV1937-08: only the first scheduled card says THE NEXT HIKE; later scheduled cards say COMING UP; cancelled cards keep CANCELLED.
+{
+const ev=(id,ms,status='scheduled')=>({...hike,rsvpOpen:true,remaining:null,id,title:'AV '+id,status,startsAt:new Date(start+ms).toISOString().replace('.000Z','Z')}),none=()=>false,at=start-6e4,L=v=>v.cards.map(c=>c.label+'|'+c.title).join(' ; ');
+const NEXT='THE NEXT HIKE',SOON='COMING UP',CX='CANCELLED',ctl=c=>c.rsvp+(c.ics?'c':'');
+const cards=v=>v.cards;
+// test_unsorted_scheduled_labels
+let q=await view(at,'America/Los_Angeles',[ev('c',3e5),ev('a',1e5),ev('b',2e5)],none);
+check(L(q)===[NEXT+'|AV a',SOON+'|AV b',SOON+'|AV c'].join(' ; '),'Unsorted scheduled labels wrong: '+L(q));
+// test_cancelled_before_and_between_scheduled
+q=await view(at,'America/Los_Angeles',[ev('s2',3e5),ev('x2',2e5,'cancelled'),ev('s1',1e5),ev('x1',-1e4,'cancelled')],none);
+check(L(q)===[CX+'|Cancelled: AV x1',NEXT+'|AV s1',CX+'|Cancelled: AV x2',SOON+'|AV s2'].join(' ; '),'Cancelled/scheduled labels wrong: '+L(q));
+check(cards(q).filter(c=>c.label===CX).every(c=>c.rsvp===0&&!c.ics&&c.text.includes(sentence)),'Cancelled card gained RSVP or calendar link');
+check(cards(q).filter(c=>c.label!==CX).every(c=>c.rsvp===1),'Scheduled card lost its RSVP');
+// test_equal_start_selects_one
+q=await view(at,'America/Los_Angeles',[ev('t1',1e5),ev('t2',1e5),ev('t3',1e5)],none);
+check(L(q)===[NEXT+'|AV t1',SOON+'|AV t2',SOON+'|AV t3'].join(' ; '),'Equal-start labels wrong: '+L(q));
+// test_one_scheduled_unchanged
+q=await view(at,'America/Los_Angeles',[ev('one',1e5)],none);
+check(L(q)===NEXT+'|AV one'&&ctl(q.cards[0])==='1c','Single hike changed: '+L(q)+ctl(q.cards[0]));
+q=await view(at,'America/Los_Angeles',[ev('x',-1e4,'cancelled'),ev('one',1e5)],none);
+check(L(q)===[CX+'|Cancelled: AV x',NEXT+'|AV one'].join(' ; ')&&ctl(q.cards[1])==='1c','Single hike after a cancelled one changed: '+L(q));
+// test_no_scheduled_or_no_events
+q=await view(at,'America/Los_Angeles',[ev('x',1e5,'cancelled'),ev('y',2e5,'cancelled')],none);
+check(L(q)===[CX+'|Cancelled: AV x',CX+'|Cancelled: AV y'].join(' ; ')&&!q.empty&&!/THE NEXT HIKE|COMING UP/.test(q.up),'All-cancelled list wrong: '+L(q)+' '+q.up);
+q=await view(at,'America/Los_Angeles',[],none);
+check(!q.cards.length&&q.empty&&!/COMING UP/.test(q.up),'No real events did not keep the sample/empty state: '+q.up);
+// test_same_day_started_then_midnight
+q=await view(after,'America/Los_Angeles',[ev('later',5e5)],e=>e.id==='qa-hike');
+check(L(q)===[NEXT+'|QA trail fixture',SOON+'|AV later'].join(' ; '),'Same-day started hike lost the next label: '+L(q));
+q=await view(pacificAt(nextDay-6e4),'Asia/Tokyo',[ev('later',5e5)],e=>e.id==='qa-hike');
+check(q.cards[0]&&q.cards[0].label===NEXT&&q.cards[0].title==='QA trail fixture','Tokyo viewer lost Pacific same-day next label: '+L(q));
+q=await view(pacificAt(nextDay+6e4),'America/Los_Angeles',[{...ev('later',5e5),startsAt:new Date(pacificAt(nextDay)+36e5).toISOString()},{...ev('later2',6e5),startsAt:new Date(pacificAt(nextDay)+72e5).toISOString()}],e=>e.id==='qa-hike');
+check(L(q)===[NEXT+'|AV later',SOON+'|AV later2'].join(' ; '),'After Pacific midnight the successor is not next: '+L(q));
+// test_rerender_recomputes_first: removing/cancelling the earliest on reload promotes its successor
+q=await view(at,'America/Los_Angeles',[ev('p',1e5),ev('r',2e5)],none);
+check(q.cards[0].label===NEXT&&q.cards[0].title==='AV p'&&q.cards[1].label===SOON,'Before override wrong: '+L(q));
+q=await view(at,'America/Los_Angeles',[ev('p',1e5,'cancelled'),ev('r',2e5)],none);
+check(L(q)===[CX+'|Cancelled: AV p',NEXT+'|AV r'].join(' ; '),'Cancelled earliest left a stale winner: '+L(q));
+q=await view(at,'America/Los_Angeles',[ev('r',2e5)],none);
+check(L(q)===NEXT+'|AV r','Removed earliest left a stale winner: '+L(q));
+check(q.past===''||!q.past.includes('AV r'),'Upcoming hike listed in history');
+}
 // AV1102-04: the home page shows one "Next hike" line from the live API only; none, cancelled-only, past-only or a failing API leaves it hidden.
 const days=n=>new Date(Date.now()+n*864e5).toISOString(),oneLine=s=>s.replace(/\s+/g,' ').trim();
 const nextLine=async(events,width=390)=>{const c=await b.newContext({viewport:{width,height:800}}),pg=await c.newPage(),errs=[],reqs=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('request',q=>reqs.push(q.url()));
