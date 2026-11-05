@@ -127,6 +127,17 @@ def score(cases, replies, registry) -> dict:
             "extra": sorted(set(replies) - {c["id"] for c in cases})}
 
 
+def _room_for(events, extra) -> list:
+    """The real events trimmed so the fixture hikes survive the prompt's caps (scheduled details: earliest kept;
+    all hikes: newest kept); a fixture hike cut by a cap would leave its case asking about text the model never saw."""
+    ok = [e for e in events if isinstance(e, dict)]
+    key = lambda e: (str(e.get("startsAt", "")), str(e.get("id", "")))  # noqa: E731
+    sched = sorted((e for e in ok if e.get("status") == "scheduled"), key=key)[:max(0, interpreter_prompt.MAX_HIKE_DETAILS - len(extra))]
+    rest = sorted((e for e in ok if e.get("status") != "scheduled"), key=key, reverse=True)
+    rest = rest[:max(0, interpreter_prompt.MAX_HIKES - len(extra) - len(sched))]
+    return [*sched, *rest]
+
+
 def live(cases, url, model, out, transport=None, registry=None, content=None) -> dict:
     """Record one fresh reply per case into a new file ``out`` outside the repository (operator only);
     the replies file is created 0600 and only when complete."""
@@ -139,7 +150,7 @@ def live(cases, url, model, out, transport=None, registry=None, content=None) ->
         have = {e.get("id") for e in community.get("events") or [] if isinstance(e, dict)}
         extra = json.loads(EVENTS.read_text("utf-8"))
         if clash := next((e["id"] for e in extra if e["id"] in have), None): raise EvalError(f"event {clash} is already in the content")
-        content = dataclasses.replace(content, community={**community, "events": [*(community.get("events") or []), *extra]})
+        content = dataclasses.replace(content, community={**community, "events": [*_room_for(community.get("events") or [], extra), *extra]})
         prompt = interpreter_prompt.build(registry or load_registry(), content)
         model_call = LocalInterpreter(url, model, prompt, transport=transport)
     except (ContentError, ValueError, OSError) as exc:

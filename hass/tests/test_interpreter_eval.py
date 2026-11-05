@@ -1,6 +1,6 @@
 """NB-AV-04 tests: the interpreter eval set and offline scorer. No model, no socket: --live uses a fake transport."""
 
-import contextlib, io, json, os, tempfile, unittest  # noqa: E401
+import contextlib, dataclasses, io, json, os, tempfile, unittest  # noqa: E401
 from collections import Counter
 from pathlib import Path
 
@@ -187,6 +187,25 @@ class LiveTests(EvalTestCase):
         replies = ev.load_replies(out)
         self.assertEqual(list(replies), [c["id"] for c in self.cases])
         self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 9)  # only the 9 must-ask cases pass
+
+    def test_fixture_hikes_survive_the_prompt_caps_when_the_content_is_full(self):
+        real = [{"id": f"hike-{n:02d}", "title": "t", "startsAt": f"2026-0{1 + n % 9}-01T08:00:00-08:00", "status": "scheduled",
+                 "bring": f"real bring {n}", "accessNote": "a", "meetingPoint": "m", "capacity": 5} for n in range(15)]
+        real += [{"id": f"old-{n:02d}", "title": "t", "startsAt": f"2025-01-{1 + n % 28:02d}T08:00:00-08:00", "status": "cancelled"}
+                 for n in range(80)]
+        content = dataclasses.replace(load_content(), community={"events": real, "routeIdeas": []})
+        bodies = []
+
+        def transport(url, body, headers, timeout):
+            bodies.append(body)
+            return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
+        out = self.tmp / "full.jsonl"
+        ev.live(self.cases[:1], URL, "m", out, transport=transport, content=content)
+        prompt = json.loads(bodies[0])["messages"][0]["content"]
+        for hike in json.loads(ev.EVENTS.read_text("utf-8")):
+            self.assertIn(hike["id"], prompt.split("Scheduled hike details (id")[-1])
+            self.assertIn(hike["bring"], prompt)
+            self.assertIn(hike["accessNote"], prompt)
 
 
 if __name__ == "__main__":
