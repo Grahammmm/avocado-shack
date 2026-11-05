@@ -12,7 +12,7 @@ NOW = "2026-11-03T20:00:00Z"  # 12:00 Pacific
 HARNESS = r"""
 const fs=require('fs'),vm=require('vm'),[site,now,club]=JSON.parse(fs.readFileSync(0,'utf8'));
 const el={'#upcoming-hikes':{innerHTML:''},'#past-hikes':{innerHTML:'',classList:{toggle(){}}},'#history-context':{textContent:''}};
-const ctx=vm.createContext({TextEncoder,location:{origin:'https://club.example'},$:s=>el[s]||null,document:{querySelector:()=>null},
+const ctx=vm.createContext({TextEncoder,location:{origin:'https://club.example'},$:s=>el[s]||null,document:{querySelector:()=>null,querySelectorAll:()=>[]},
  fetch:async u=>u==='/api/community'?{ok:true,headers:{get:h=>h.toLowerCase()==='content-type'?'application/json':null},json:async()=>club}:{ok:false,headers:{get:()=>null}}});ctx.window=ctx;
 vm.runInContext(`{const R=Date,N=Date.parse('${now}');Date=class extends R{constructor(...a){super(...(a.length?a:[N]))}static now(){return N}}}`,ctx);
 vm.runInContext(fs.readFileSync(site+'/script.js','utf8').split('\n')[0],ctx);
