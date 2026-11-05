@@ -62,3 +62,9 @@
 {"id": "e61", "reply": {"unsupported": "design changes cannot be made by message yet"}}
 {"id": "e62", "reply": {"ops": [{"op": "product.add", "args": {"name": "Fuyu persimmons", "category": "fruit"}}], "revises": null}}
 {"id": "e63", "reply": {"ops": [{"op": "product.add", "args": {"name": "Bacon avocados", "category": "fruit"}}], "revises": null}}
+{"id": "e64", "reply": {"ops": [{"op": "store.set_phone", "args": {"phone": "805 555 0123"}}], "revises": null}}
+{"id": "e65", "reply": {"ops": [{"op": "store.clear_phone", "args": {}}], "revises": null}}
+{"id": "e66", "reply": {"question": "That number looks short. What is the full 10-digit phone number?"}}
+{"id": "e67", "reply": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "bring": "Water, sturdy shoes, a hat, sunscreen"}}], "revises": null}}
+{"id": "e68", "reply": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "accessNote": "Park at the Point Buchon trailhead; the gate is locked overnight. The gate opens at 8."}}], "revises": null}}
+{"id": "e69", "reply": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-14-point-buchon", "meetingPoint": "The north lot"}}], "revises": null}}
