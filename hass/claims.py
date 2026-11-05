@@ -190,13 +190,18 @@ def _copied(draft: dict, sources) -> dict:
 def _defaulted(draft: dict) -> set:
     """Indexes of new product records whose displayBrand the catalog generated ('From the market' for an unidentified
     producer) because the product.add op named no displayBrand; an explicitly supplied label is not exempt."""
-    ops = [c.get("args") for c in draft.get("ops") or [] if isinstance(c, dict) and c.get("op") == "product.add"
-           and isinstance(c.get("args"), dict)]
-    ops = [a for a in ops if "displayBrand" not in a and a.get("brand") == "Producer not identified"]
-    return {i for i, r in enumerate(draft.get("records") or [])
-            if r.get("collection") == "products" and r.get("before") is None and isinstance(r.get("after"), dict)
-            and r["after"].get("displayBrand") == "From the market" and r["after"].get("brand") == "Producer not identified"
-            and any(a.get("name") == r["after"].get("name") for a in ops)}
+    adds = [c.get("args") for c in draft.get("ops") or [] if isinstance(c, dict) and c.get("op") == "product.add"
+            and isinstance(c.get("args"), dict)]
+    created = [i for i, r in enumerate(draft.get("records") or [])  # product.add is the only op that creates a product
+               if r.get("collection") == "products" and r.get("before") is None]
+    out = set()
+    for i, a in zip(created, adds):  # the k-th creating record belongs to the k-th product.add op, one to one
+        after = draft["records"][i].get("after")
+        if (isinstance(after, dict) and "displayBrand" not in a and a.get("brand") == "Producer not identified"
+                and after.get("displayBrand") == "From the market" and after.get("brand") == "Producer not identified"
+                and after.get("name") == a.get("name")):
+            out.add(i)
+    return out
 
 
 def unstated(draft: dict, owner_text, makers, routes=None, sources=None) -> list:

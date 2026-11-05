@@ -117,6 +117,20 @@ class DefaultBrandConversationTests(test_undo.H06TestCase):
         self.assertEqual(self.offer("Add Test quince, brand Test Orchard", {**OMIT, "displayBrand": "Mystery Label"}),
                          "claim-question")
 
+    def test_exemption_is_bound_to_its_own_add_operation(self):
+        """Add A (default), rename it to B, add A again with an explicit unsupported label: only the first is exempt."""
+        first = "photo-product-%03d" % (self.next_product_number())
+        text = "Add Test quince twice, brand Producer not identified"
+        self.interp.mapping[text] = _ops(("product.add", UNKNOWN),
+                                         ("product.edit", {"id": first, "name": "Test pear"}),
+                                         ("product.add", {**UNKNOWN, "displayBrand": "From the market"}))
+        self.assertEqual(self.say(text), "claim-question")
+
+    def next_product_number(self):
+        import re
+        root = Path(conversation.__file__).resolve().parent / "content" / "products.json"
+        return max(int(m) for m in re.findall(r'"photo-product-(\d+)"', root.read_text())) + 1
+
     def test_normal_brand_is_drafted(self):
         self.assertEqual(self.offer("Add Test quince, brand Test Orchard", OMIT), "proposed")
 
