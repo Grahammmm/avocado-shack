@@ -105,6 +105,87 @@ class DesignCheckTests(unittest.TestCase):
         self.git("commit", "-q", "-m", "submodule")
         self.assertEqual(self.run_check()[1]["outside"], ["T storefront-mockup/hiking.css"])
 
+    # RF0220-12: gitlink changes stay visible whatever Git's submodule-ignore settings say.
+    def gitlink(self, rel, sha):
+        self.git("rm", "-q", "--cached", "--ignore-unmatch", rel)
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{sha},{rel}")
+
+    def commit_index(self, msg):
+        self.git("commit", "-q", "-m", msg)  # index only: add -A would drop a gitlink with no worktree folder
+
+    def snapshot(self):
+        git_dir = self.repo / ".git"
+        tree = {str(p.relative_to(self.repo)): p.read_bytes() for p in sorted(self.repo.rglob("*"))
+                if p.is_file() and git_dir not in p.parents}
+        return (git_dir / "config").read_bytes(), (git_dir / "index").read_bytes(), tree
+
+    def run_readonly(self, *args):
+        before = self.snapshot()
+        result = self.run_check(*args)
+        self.assertEqual(self.snapshot(), before)
+        return result
+
+    def moved_gitlink(self):
+        """Commit a non-design gitlink at vendor/tool, then repoint it at a second local commit."""
+        first = self.git("rev-parse", "HEAD").stdout.strip()
+        self.gitlink("vendor/tool", first)
+        self.commit_index("gitlink")
+        self.git("commit", "-q", "--allow-empty", "-m", "other")
+        self.gitlink("vendor/tool", self.git("rev-parse", "HEAD").stdout.strip())
+        self.commit_index("repoint")
+
+    def test_gitlink_modification_visible_when_diff_ignores_submodules(self):
+        self.moved_gitlink()
+        expected = (1, {"result": "outside", "changed": 1, "outside": ["M vendor/tool"]})
+        self.assertEqual(self.run_readonly(), expected)
+        self.git("config", "diff.ignoreSubmodules", "all")
+        self.assertEqual(self.git("diff", "--name-status", "HEAD~1", "HEAD").stdout, "")  # the setting does hide it
+        self.assertEqual(self.run_readonly(), expected)
+
+    def test_gitlink_add_delete_and_design_type_change_are_visible(self):
+        sha = self.git("rev-parse", "HEAD").stdout.strip()
+        self.gitlink("vendor/old", sha)
+        self.commit_index("old")
+        self.git("config", "diff.ignoreSubmodules", "all")
+        self.gitlink("vendor/new", sha)
+        self.git("rm", "-q", "--cached", "vendor/old")
+        self.gitlink("storefront-mockup/hiking.css", sha)
+        self.write("storefront-mockup/style.css", "changed\n")
+        self.git("add", "storefront-mockup/style.css")
+        self.commit_index("mixed")
+        self.assertEqual(self.run_readonly(), (1, {"result": "outside", "changed": 4, "outside": [
+            "A vendor/new", "D vendor/old", "T storefront-mockup/hiking.css"]}))
+
+    def mapped_gitlink(self, gitmodules_ignore):
+        """vendor/tool is mapped as submodule "tool" in .gitmodules (no submodule is ever initialised)."""
+        ignore = "\tignore = all\n" if gitmodules_ignore else ""
+        self.write(".gitmodules", f'[submodule "tool"]\n\tpath = vendor/tool\n\turl = ./absent\n{ignore}')
+        self.git("add", ".gitmodules")
+        self.gitlink("vendor/tool", self.git("rev-parse", "HEAD").stdout.strip())
+        self.commit_index("mapping")
+        self.git("commit", "-q", "--allow-empty", "-m", "other")
+        self.gitlink("vendor/tool", self.git("rev-parse", "HEAD").stdout.strip())
+        self.commit_index("repoint")
+
+    def test_gitmodules_ignore_cannot_hide_change(self):
+        self.mapped_gitlink(gitmodules_ignore=True)
+        self.assertEqual(self.run_readonly(), (1, {"result": "outside", "changed": 1, "outside": ["M vendor/tool"]}))
+        self.assertFalse((self.repo / "vendor").exists())
+
+    def test_per_submodule_config_ignore_cannot_hide_change(self):
+        self.mapped_gitlink(gitmodules_ignore=False)
+        self.git("config", "submodule.tool.ignore", "all")
+        self.assertEqual(self.git("diff", "--name-status", "HEAD~1", "HEAD").stdout, "")  # the setting does hide it
+        self.assertEqual(self.run_readonly(), (1, {"result": "outside", "changed": 1, "outside": ["M vendor/tool"]}))
+        self.assertFalse((self.repo / "vendor").exists())
+
+    def test_submodule_config_does_not_change_noop_or_plain_css_result(self):
+        self.git("config", "diff.ignoreSubmodules", "all")
+        self.assertEqual(self.run_readonly("--base", "HEAD", "--head", "HEAD"),
+                         (0, {"result": "ok", "changed": 0, "outside": []}))
+        self.change("storefront-mockup/style.css")
+        self.assertEqual(self.run_readonly(), (0, {"result": "ok", "changed": 1, "outside": []}))
+
     def test_deleted_design_file_is_outside(self):
         (self.repo / "storefront-mockup/style.css").unlink()
         self.commit("delete")
