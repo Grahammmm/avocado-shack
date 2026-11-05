@@ -97,10 +97,12 @@ class LocalInterpreter:
             raise _Failed("clock") from None
         return local.date().isoformat(), WEEKDAYS[local.weekday()]
 
-    def _request(self, text, pending) -> bytes:
+    def _request(self, text, pending, notes=None) -> bytes:
         today, weekday = self._today()
         try:  # a lone surrogate or a non-JSON value is a failed call, never a crash
-            user = json.dumps({"message": text, "pending": pending, "today": today, "weekday": weekday}, ensure_ascii=False)
+            fields = {"message": text, "pending": pending, "today": today, "weekday": weekday}
+            if isinstance(notes, list) and notes: fields["notes"] = notes  # AV1102-09: owner preferences, never claims
+            user = json.dumps(fields, ensure_ascii=False)
             return json.dumps({"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
                                                                  {"role": "user", "content": user}],
                                "stream": False, "format": "json", "options": {"temperature": 0}},
@@ -135,12 +137,12 @@ class LocalInterpreter:
         if not isinstance(result, dict): raise _Failed("shape")
         return result
 
-    def interpret(self, text, pending) -> dict:
+    def interpret(self, text, pending, notes=None) -> dict:
         """The model's decoded JSON object as-is (Conversation's checks decide if it is usable), else the fixed
         unsupported reply with the reason code in last_error."""
         self.last_error = None
         try:
-            return self._call(self._request(text, pending))
+            return self._call(self._request(text, pending, notes))
         except _Failed as failure:
             self.last_error = failure.args[0]
             return {"unsupported": FAILED}

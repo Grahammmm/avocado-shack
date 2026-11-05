@@ -89,6 +89,23 @@ class MakerDuplicateTests(CatalogTestCase):
         self.assertEqual(reason, "maker Test Farm already has this name; restore it instead")
         self.assertNotIn("Test Farm 2", repo.makers())
 
+    def test_add_key_that_reads_like_an_existing_key(self):
+        repo = self.repo()
+        new = {**FARM, "name": "Another Farm Name"}
+        for key in ("etto", "ETTO", "Ｅｔｔｏ"):
+            with self.subTest(key=key):
+                self.assertEqual(self.refused(repo, ("maker.add", {**new, "key": key})), "maker Etto already exists")
+        repo.run(("maker.add", {**FARM, "key": "Etto Pasta", "name": "Etto Pasta"}))
+        self.assertEqual(self.refused(repo, ("maker.add", {**new, "key": "Etto  Pasta"})), "maker Etto Pasta already exists")
+        self.assertEqual(self.refused(repo, ("maker.add", {**new, "key": "Etto"})), "maker Etto already exists")
+        repo.run(("maker.add", FARM), ("maker.hide", {"key": "Test Farm"}))
+        self.assertEqual(self.refused(repo, ("maker.add", {**new, "key": "test farm"})),
+                         "maker Test Farm already exists; restore it instead")
+        self.assertEqual(self.refused(repo, ("maker.add", {**new, "key": "x" * 65})),
+                         "maker key is longer than 64 characters")
+        repo.run(("maker.add", {**new, "key": "Etto2"}))  # no fuzzy matching
+        self.assertIn("Etto2", repo.makers())
+
     def test_edit_rename(self):
         repo = self.repo()
         other = next(k for k, m in repo.makers().items() if k != "Etto" and m["name"] != "Etto")

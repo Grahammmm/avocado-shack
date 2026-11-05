@@ -40,11 +40,11 @@ class EvalTestCase(unittest.TestCase):
 
 
 class ScoreTests(EvalTestCase):
-    def test_recorded_fixture_passes_37_and_names_the_3_wrong(self):
+    def test_recorded_fixture_passes_60_and_names_the_3_wrong(self):
         code, out, err = scored(CASES, REPLIES)
         summary = json.loads(out)
         self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
-                         (0, "", {"cases": 40, "passed": 37, "missing": [], "extra": []}))
+                         (0, "", {"cases": 63, "passed": 60, "missing": [], "extra": []}))
         self.assertEqual(summary["failed"], [
             {"id": "e06", "why": "ops product.restore but expected product.hide"},  # wrong op
             {"id": "e13", "why": "op 1 hike.create: missing arg capacity"},  # missing arg
@@ -83,27 +83,27 @@ class ScoreTests(EvalTestCase):
                 if "trailId" in args: self.assertIn(args["trailId"], trails)
                 if op == "route.edit": self.assertIn(args["id"], trails, case["id"])
                 if "photo" in args: self.assertRegex(args["photo"], r"\A[0-9a-f]{64}\Z", case["id"])
-        self.assertEqual(kinds, {"product": 10, "maker": 4, "hike": 8, "store": 3, "route": 2, "revises": 5,
-                                 "question": 5, "unsupported": 3})
+        self.assertEqual(kinds, {"product": 13, "maker": 4, "hike": 8, "store": 12, "route": 8, "revises": 5,
+                                 "question": 8, "unsupported": 5})
 
     def test_missing_and_extra_ids(self):
         replies = {k: v for k, v in self.replies.items() if k != "e05"} | {"e99": {"question": "?"}}
         path = self.write("r.jsonl", [{"id": k, "reply": v} for k, v in replies.items()])
         code, out, _ = scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 36))
+        self.assertEqual((code, summary["missing"], summary["extra"], summary["passed"]), (0, ["e05"], ["e99"], 59))
 
     def test_duplicate_id_in_either_file_exits_2(self):
-        dup_cases = self.write("c.jsonl", self.rows[:39] + [self.rows[0]])
+        dup_cases = self.write("c.jsonl", self.rows[:62] + [self.rows[0]])
         dup_replies = self.write("r.jsonl", [{"_note": "x"}, {"id": "e01", "reply": {}}, {"id": "e01", "reply": {}}])
-        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 40: duplicate id"))
+        self.assertEqual(scored(dup_cases, REPLIES), (2, "", "cases line 63: duplicate id"))
         self.assertEqual(scored(CASES, dup_replies), (2, "", "replies line 3: duplicate id"))
 
-    def test_malformed_line_or_39_cases_exits_2_naming_only_the_line(self):
+    def test_malformed_line_or_62_cases_exits_2_naming_only_the_line(self):
         broken = self.write("c.jsonl", self.rows[:3] + ['{"id": "e04", "text": "owner words"'] + self.rows[4:])
         self.assertEqual(scored(broken, REPLIES), (2, "", "cases line 4: not valid JSON"))
-        self.assertEqual(scored(self.write("c39.jsonl", self.rows[:39]), REPLIES),
-                         (2, "", "cases: 39 cases, expected 40"))
+        self.assertEqual(scored(self.write("c62.jsonl", self.rows[:62]), REPLIES),
+                         (2, "", "cases: 62 cases, expected 63"))
         self.assertEqual(scored(CASES, self.tmp / "absent.jsonl"), (2, "", "replies: unreadable"))
 
     def test_unknown_op_scores_as_question(self):
@@ -134,6 +134,35 @@ class ScoreTests(EvalTestCase):
             self.assertEqual(self.why(case_id, self.replies["e03"]), ["expected question, got ops"])
 
 
+class V3HomeAndRouteTests(EvalTestCase):
+    """AV1322-14: the v3 cases for the home-page ops and route.add/hide/restore, and their failure paths."""
+
+    def test_every_new_op_has_two_cases_and_all_new_cases_pass_recorded(self):
+        ops = Counter(c["op"] for case in self.cases[40:55] for c in case["expect"].get("ops", ()))
+        self.assertEqual(ops, {"store.set_headline": 2, "store.set_story": 2, "store.set_home_image": 2,
+                               "store.set_notice": 2, "route.add": 2, "route.hide": 2, "route.restore": 2})
+        failed = {f["id"] for f in ev.score(self.cases, self.replies, REGISTRY)["failed"]}
+        self.assertEqual(failed & {c["id"] for c in self.cases[40:55]}, set())
+
+    def test_route_add_without_a_source_passes_only_when_the_reply_asks(self):
+        self.assertEqual(self.cases[50]["expect"], {"question": True})
+        self.assertEqual(self.why("e51", self.replies["e51"]), [])
+        full = self.replies["e49"]["ops"][0]["args"]
+        for args in ({**full, "sourceUrl": "", "sourceName": ""}, {k: v for k, v in full.items() if not k.startswith("source")}):
+            added = {"ops": [{"op": "route.add", "args": args}], "revises": None}
+            self.assertEqual(self.why("e51", added), ["expected question, got ops"])
+        self.assertEqual(self.why("e49", self.replies["e51"]), ["expected ops, got question"])
+
+    def test_wrong_op_or_target_on_the_new_cases_fails_by_name(self):
+        hide = lambda rid: {"ops": [{"op": "route.hide", "args": {"id": rid}}], "revises": None}  # noqa: E731
+        self.assertEqual(self.why("e54", hide("idea-cass-hill")), ["ops route.hide but expected route.restore"])
+        self.assertEqual(self.why("e53", hide("idea-cass-hill")), ["op 1 route.hide: arg id differs"])
+        notice = self.replies["e47"]["ops"][0]["args"]
+        late = {"ops": [{"op": "store.set_notice", "args": {**notice, "until": "2026-11-27"}}], "revises": None}
+        self.assertEqual(self.why("e47", late), ["op 1 store.set_notice: arg until differs"])
+        self.assertEqual(self.why("e42", self.replies["e41"]), ["op 1 store.set_headline: arg first differs"])
+
+
 class LiveTests(EvalTestCase):
     def fake(self, calls):
         def transport(url, body, headers, timeout):
@@ -154,10 +183,10 @@ class LiveTests(EvalTestCase):
     def test_live_records_one_reply_per_case_that_score_reads(self):
         calls, out = [], self.tmp / "fresh.jsonl"
         code, stdout, _ = run("--live", "--url", URL, "--model", "m", "--out", out, transport=self.fake(calls))
-        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 40}, 40))
+        self.assertEqual((code, json.loads(stdout), len(calls)), (0, {"failedCalls": 0, "recorded": 63}, 63))
         replies = ev.load_replies(out)
         self.assertEqual(list(replies), [c["id"] for c in self.cases])
-        self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 5)  # only the 5 must-ask cases pass
+        self.assertEqual(ev.score(self.cases, replies, REGISTRY)["passed"], 8)  # only the 8 must-ask cases pass
 
 
 if __name__ == "__main__":

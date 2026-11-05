@@ -64,7 +64,12 @@ const allowed=req=>{
           checks.productShown=count===(target.status==='active'?1:0);
           if(count===1){
             await card.scrollIntoViewIfNeeded();
-            if(target.status==='active')checks.description=(await card.locator('.food-description').textContent())===target.description;
+            if(target.status==='active'){
+              checks.description=(await card.locator('.food-description').textContent())===target.description;
+              if('availability' in target){const a=card.locator('.availability');checks.availabilityShown=(await a.count()?await a.first().textContent():null)===target.availability;}
+              if(target.image){const img=card.locator('img').first();await img.scrollIntoViewIfNeeded();
+                checks.imageShown=await img.evaluate((e,src)=>e.getAttribute('src')===src&&e.complete&&e.naturalWidth>0,target.image).catch(()=>false);}
+            }
           }
         }
       }else if(target.kind==='store'){
@@ -80,6 +85,10 @@ const allowed=req=>{
         if(typeof target.story==='string'){const p=page.locator('#visit > div > p:not(.signature):not(.label)').first();checks.storyShown=ws(await p.textContent())===ws(target.story);}
         if(typeof target.homeImage==='string'){const img=page.locator('.hero .hero-image').first();await img.scrollIntoViewIfNeeded();
           checks.homeImageShown=await img.evaluate((el,p)=>el.complete&&el.naturalWidth>0&&el.currentSrc.endsWith('/'+p),target.homeImage);}
+        if(target.homeImageCleared===true){const img=page.locator('.hero .hero-image').first();await img.scrollIntoViewIfNeeded();
+          checks.homeImageCleared=await img.evaluate(el=>el.complete&&el.naturalWidth>0&&el.currentSrc.endsWith('/assets/store.jpg'));}
+        if(typeof target.notice==='string'){const n=page.locator('main > .home-notice');
+          checks.noticeShown=await n.count()===1&&await n.isVisible()&&ws(await n.textContent())===ws(target.notice);}
       }
     }
     await page.waitForTimeout(150);

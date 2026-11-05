@@ -5,7 +5,7 @@ state backup covers it unchanged). Every row records its source and dates. A fac
 chat history, model output or repetition is never proof. correct() supersedes in one transaction; forget() blanks the
 text of every row of the key and keeps only the audit dates. Store only, plus a read-only history command: no chat
 commands, interpreter or network. An owner-approved:<change id> source must name a change whose record in this state
-dir is applied and not undone (RF1650-2); anything else is the same "unverified source".
+dir is applied and not undone (RF1650-2); anything else is the same "unverified source". correct() with the exact value already active is refused (RF1650-4).
 """
 import argparse, contextlib, errno, json, os, re, sqlite3, stat, sys  # noqa: E401
 from pathlib import Path
@@ -18,7 +18,8 @@ TABLE = """CREATE TABLE IF NOT EXISTS memory(id INTEGER PRIMARY KEY, key TEXT NO
   kind TEXT NOT NULL CHECK(kind IN ('fact','preference')), source TEXT NOT NULL, approved_change TEXT,
   created_at TEXT NOT NULL, superseded_at TEXT, forgotten_at TEXT)"""
 ACTIVE = "superseded_at IS NULL AND forgotten_at IS NULL"
-KEY_RE = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
+# Ordinary keys stay capped at 64; the cost namespace must fit a full 64-character product ID.
+KEY_RE = re.compile(r"(?:[a-z0-9][a-z0-9.-]{0,63}|cost\.[a-z0-9][a-z0-9-]{0,63})")
 SOURCE_RE = re.compile(r"(owner-approved|owner-stated|operator):(.+)", re.DOTALL)
 KINDS = ("fact", "preference")
 SOURCE_KIND = re.compile(r"(owner-approved|owner-stated|operator):")  # history shows only this part of a source
@@ -39,13 +40,16 @@ def _check_key(key) -> None:
 
 
 def _check_value(value) -> None:
-    if not _clean(value) or len(value) > MAX_VALUE: raise ValueError(f"value must be 1-{MAX_VALUE} plain characters")
+    # str.strip() only decides "blank" (RF0200-9); the stored text is never trimmed or normalised.
+    if not _clean(value) or len(value) > MAX_VALUE or not value.strip():
+        raise ValueError(f"value must be 1-{MAX_VALUE} plain characters")
 
 
 def _check_source(source) -> None:
-    """Only owner-approved:<change_id>, owner-stated:<provider_id> or operator:<note>; anything else is unverified."""
-    if not _clean(source) or len(source) > MAX_VALUE or not SOURCE_RE.fullmatch(source):
-        raise ValueError("unverified source")
+    """Only owner-approved:<change_id>, owner-stated:<provider_id> or operator:<note>; anything else is unverified.
+    The detail after the prefix must have non-whitespace content (RF0200-9)."""
+    match = SOURCE_RE.fullmatch(source) if _clean(source) and len(source) <= MAX_VALUE else None
+    if match is None or not match[2].strip(): raise ValueError("unverified source")
 
 
 def private_db(sdir, name) -> Path:
@@ -142,7 +146,8 @@ class Memory:
             self._insert(key, value, kind, source, approved_change if change_id is None else change_id)
 
     def correct(self, key, value, source) -> None:
-        """Supersede the active row with a new value (same kind) in one transaction; KeyError if none is active."""
+        """Supersede the active row with a new value (same kind) in one transaction; KeyError if none is active,
+        ValueError("already remembered") if the value is exactly the active one."""
         _check_key(key)
         _check_value(value)
         _check_source(source)
@@ -150,6 +155,7 @@ class Memory:
             old = self._active(key)
             if old is None: raise KeyError(key)
             change_id = self._check_approved(source)  # before any write: a refusal leaves the active row as it was
+            if old["value"] == value: raise ValueError("already remembered")  # exact text: no new row, the date stays
             self.db.execute("UPDATE memory SET superseded_at = ? WHERE id = ?", (self._now(), old["id"]))
             self._insert(key, value, old["kind"], source, change_id)
 

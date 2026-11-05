@@ -15,7 +15,8 @@ from typing import Any, Callable, Mapping
 from hass.content_model import ID_RE, IMAGE_RE, SITE_DIR, _https, _text
 
 KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "date", "time", "image")
-TIME_RE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+# clocks are ASCII HH:MM (consumed by time.fromisoformat); \d would also match Unicode digits
+TIME_RE = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 COLLECTIONS = ("products", "makers", "events", "routeIdeas", "store")
 CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
@@ -51,10 +52,17 @@ class OpContext:
 
     def change(self, change_id):
         """Read-only: the recorded change ``<state>/changes/<id>.json`` as a dict, or None (H06 undo); regular, non-link
-        file only: a link, FIFO, socket or folder there raises OSError and is never followed or opened."""
+        file only: a link, FIFO, socket or folder there raises OSError and is never followed or opened. The
+        ``changes`` parent must itself be a real folder (a link, dangling link or file raises OSError); absent is None."""
         if self.state_dir is None or not CHANGE_ID_RE.fullmatch(str(change_id)):
             return None
-        path = Path(self.state_dir) / "changes" / f"{change_id}.json"
+        parent = Path(self.state_dir) / "changes"
+        try:
+            if not stat.S_ISDIR(os.lstat(parent).st_mode):
+                raise OSError("changes parent is not a folder")
+        except FileNotFoundError:
+            return None
+        path = parent / f"{change_id}.json"
         try:
             st = os.lstat(path)
         except FileNotFoundError:

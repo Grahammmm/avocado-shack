@@ -9,7 +9,7 @@ settled state dir (config.json, drafts, changes, screenshots and consistent sqli
 conversation.sqlite3; never writer.lock, a journal, a symlink or an unknown entry) into a new private
 <out>/hass-state-<UTC stamp>/ (out: an existing 0700 user dir; built aside, renamed in) and writes MANIFEST.json last.
 verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
-stores, and that config.json is an object naming a worktree; listed photo originals and sidecars must pair one-to-one
+stores, and that config.json is an object naming the manifest's exact worktree; listed photo originals and sidecars must pair one-to-one
 and match media.originals. restore verifies first, then builds a NEW state dir bound
 to a separate drill worktree (only config.json `worktree` is rewritten). Isolation rule: nothing restores over an existing
 dir or onto the recorded writer worktree (an attended operation); backups stay private (0700/0600) and outside the
@@ -231,10 +231,13 @@ def _intact(path: Path) -> bool:
     except sqlite3.DatabaseError:
         return False
 
-def _config_ok(path: Path) -> bool:  # restore merges it as a dict and rewrites its worktree; never raises
-    try: cfg = json.loads(_read_small(path, SMALL_MAX).decode("utf-8"))
-    except (OSError, ValueError, RecursionError): return False
-    return isinstance(cfg, dict) and isinstance(cfg.get("worktree"), str) and cfg["worktree"] != ""
+def _config_worktree(path: Path):  # the worktree a hashed config.json names, else None; never raises
+    try: cfg = json.loads(_read_small(path, SMALL_MAX).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
+    except (OSError, ValueError, RecursionError): return None
+    wt = cfg.get("worktree") if isinstance(cfg, dict) else None
+    return wt if isinstance(wt, str) and wt != "" else None
+
+def _config_ok(path: Path) -> bool: return _config_worktree(path) is not None
 
 def verify(backup) -> dict:
     bdir = Path(backup).absolute()
@@ -261,7 +264,9 @@ def verify(backup) -> dict:
         if rel not in seen: problems.append(f"missing: {rel}")
         elif hashlib.sha256(_read(bdir / rel)).hexdigest() != digest: problems.append(f"hash mismatch: {rel}")
         elif rel in (DB, INBOX) and not _intact(bdir / rel): problems.append(f"integrity check failed: {rel}")
-        elif rel == CONFIG and not _config_ok(bdir / rel): problems.append("config: not a JSON object with a worktree")
+        elif rel == CONFIG and (cfg_wt := _config_worktree(bdir / rel)) is None:
+            problems.append("config: not a JSON object with a worktree")
+        elif rel == CONFIG and cfg_wt != doc["worktree"]: problems.append("config: worktree does not match manifest")
         elif rel == BUNDLE and "contentCommit" not in doc: problems.append("content bundle without contentCommit")
         elif rel == BUNDLE and not _bundle_holds(bdir / rel, doc["contentCommit"]):
             problems.append("content bundle: head is not contentCommit")

@@ -38,8 +38,9 @@ if __package__ in (None, ""):
 
 from hass.content_model import (  # noqa: E402
     DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
-    checked_on, load_and_validate, shop_today,
+    checked_on, iso_day, load_and_validate, shop_today,
 )
+from hass.notice import NOTICE_JS, slots as notice_slots, stale_paths  # noqa: E402,F401
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
 SITE_PREFIX = "storefront-mockup/"
@@ -81,11 +82,13 @@ def checked_note(store: dict, today) -> str:
 
 
 def availability_label(product: dict, store: dict, today) -> str | None:
-    """Card words for an active product, or None (no check yet, or availability not confirmed)."""
+    """Card words for an active product, or None (no check yet, or availability not confirmed). AV1102-01: the word
+    shows only when its own day is the store's latest, fresh check; otherwise "Last confirmed <its own day>"."""
     day, stale = _check_state(store, today)
-    if day is None or product.get("available") not in AVAILABILITY_WORDS:
+    on = iso_day(product.get("available_on"))
+    if day is None or on is None or product.get("available") not in AVAILABILITY_WORDS:
         return None
-    return f"Last confirmed {_day_text(day)}" if stale else AVAILABILITY_WORDS[product["available"]]
+    return AVAILABILITY_WORDS[product["available"]] if on == day and not stale else f"Last confirmed {_day_text(on)}"
 
 
 def _catalog_js(content: Content, today) -> bytes:
@@ -117,7 +120,7 @@ def _community_json(content: Content) -> bytes:
     return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def store_slots(store: dict) -> dict[str, str]:
+def store_slots(store: dict, today=None) -> dict[str, str]:
     """HTML-escaped values for the store-info slots in the page templates."""
     street, town, name = store["streetAddress"], store["town"], store["name"]
     maps = "https://www.google.com/maps/search/?api=1&query=" + quote_plus(f"{name} {street} {town}")
@@ -131,13 +134,15 @@ def store_slots(store: dict) -> dict[str, str]:
         "store.headlineHtml": f"{first}<br><em>{second}</em>",
         "store.storyHtml": html.escape(store.get("story") or DEFAULT_STORY, quote=False),
         "store.heroImageHtml": _hero_image(store.get("homeImage")),
+        **notice_slots(store.get("notice"), (today or shop_today()).isoformat()),
     }
 
 
-def _hero_image(home) -> str:  # no store.homeImage: exactly the template's original hero <img>
+def _hero_image(home) -> str:  # default store.jpg carries its 1600x900 size; an owner photo's size is not stored
     default = ("assets/store.jpg", "Produce and pantry shelves inside Avocado Shack in Morro Bay")
     image, alt = (home["image"], home["imageAlt"]) if home else default
-    return f'<img class="hero-image" src="{html.escape(image, quote=True)}" alt="{html.escape(alt, quote=True)}">'
+    size = "" if home else ' width="1600" height="900"'
+    return f'<img class="hero-image" src="{html.escape(image, quote=True)}" alt="{html.escape(alt, quote=True)}"{size}>'
 
 
 def render_template(text: str, slots: dict[str, str]) -> str:
@@ -150,9 +155,9 @@ def render_template(text: str, slots: dict[str, str]) -> str:
     return out
 
 
-def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None) -> dict[str, bytes]:
+def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, notice_today=None) -> dict[str, bytes]:
     """Return {repo-relative path: bytes} for every generated site file. ``today`` (default: the shop's current date)
-    only decides whether the stored selection check is stale; no clock value is ever written into the output."""
+    decides selection staleness and notice expiry; ``notice_today`` overrides only notice expiry for artifact checks."""
     today = today or shop_today()
     files = {
         SITE_PREFIX + "catalog-products.js": _catalog_js(content, today),
@@ -160,7 +165,7 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None) -> d
         SITE_PREFIX + "producers.json": _producers_json(content),
         SITE_PREFIX + "community.json": _community_json(content),
     }
-    slots = {**store_slots(content.store), "selection.checkedNote": checked_note(content.store, today)}
+    slots = {**store_slots(content.store, notice_today or today), "selection.checkedNote": checked_note(content.store, today)}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")
         files[SITE_PREFIX + rel] = render_template(text, slots).encode("utf-8")
@@ -184,15 +189,20 @@ def diff_paths(files: dict[str, bytes], root: Path) -> list[str]:
     return changed
 
 
+
 def _check_folders(root: Path, rel: str) -> None:
-    """Refuse an absolute/escaping key or a symlinked folder below root (root itself may be a link)."""
+    """Refuse an absolute/escaping key, a symlinked folder or an existing non-directory folder below root
+    (root itself may be a link). Metadata only: a special file is never opened. Missing folders are allowed."""
     key = Path(rel)
     parts = key.parts
     if key.is_absolute() or key.drive or not parts or ".." in parts:
         raise ValueError("generated path escapes root")
     for i in range(1, len(parts)):
-        if os.path.islink(Path(root, *parts[:i])):
+        parent = Path(root, *parts[:i])
+        if os.path.islink(parent):
             raise OSError(errno.ELOOP, "generated folder is a symlink")
+        if os.path.lexists(parent) and not parent.is_dir():
+            raise NotADirectoryError(errno.ENOTDIR, "generated folder is not a directory")
 
 
 def _check_target(root: Path, rel: str) -> None:
@@ -238,9 +248,11 @@ def write_files(files: dict[str, bytes], root: Path, only: list[str] | None = No
 # local server, QA scripts and screenshots, research logs with third-party contact details, hold notes and the
 # archived commerce preview; none of that is copied. Everything published is listed here or derived from content.
 PUBLISH_GENERATED = ("index.html", "hike/index.html", "catalog-products.js", "producers.js")
+# Slot-free pages rendered only for the published site (never by render(): the editor and --check pin its output).
+PUBLISH_PAGES = ("404.html",)
 PUBLISH_STATIC = ("style.css", "hiking.css", "trail-explorer.css", "script.js", "shop.js", "community.js",
                   "trail-explorer.js", "hiking-preview.json")
-PUBLISH_ASSETS = ("assets/logo.png", "assets/store.jpg", "assets/michael.jpg", "assets/trails/point-buchon.json",
+PUBLISH_ASSETS = ("assets/logo-header.png", "assets/favicon.png", "assets/store.jpg", "assets/michael.jpg", "assets/trails/point-buchon.json",
                   "assets/trails/point-buchon-coast.webp", "assets/trails/point-buchon-aerial.webp",
                   "assets/trails/point-buchon-topo.webp")
 # The public club file carries what the page reads (and what /api/community returns); not the proposed sender address.
@@ -255,13 +267,17 @@ def _public_community_json(content: Content) -> bytes:
 
 def publish_files(content: Content, repo: Path, template_dir: Path | None = None, today=None) -> dict[str, bytes]:
     """{site-relative path: bytes} for the publishable static site: generated pages and scripts, the allowlisted
-    static files, a public community.json, and only the assets the pages and the active catalog use."""
+    static files, a public community.json, and only the assets the pages and the active catalog use (the home
+    photo, when store.homeImage is set, is one of them: it is rendered into index.html)."""
     repo = Path(repo)
     site = repo / SITE_PREFIX
     rendered = render(content, template_dir or repo / "hass" / "templates", today=today)
     files = {rel: rendered[SITE_PREFIX + rel] for rel in PUBLISH_GENERATED}
     files["community.json"] = _public_community_json(content)
-    images = sorted({p["image"] for p in content.active_products()})
+    for rel in PUBLISH_PAGES:
+        files[rel] = render_template((Path(template_dir or repo / "hass" / "templates") / rel).read_bytes().decode("utf-8"), {}).encode("utf-8")
+    home = content.store.get("homeImage")
+    images = sorted({p["image"] for p in content.active_products()} | ({home["image"]} if home else set()))
     for rel in PUBLISH_STATIC + PUBLISH_ASSETS + tuple(images):
         if _linked(site, rel) or not (site / rel).is_file():
             raise OSError(errno.ENOENT, f"publish source missing or a symlink: {rel}")
@@ -326,7 +342,7 @@ def _main(argv: list[str] | None) -> int:
         written = write_files(files, args.out)
         print(f"rendered {len(written)} files into {args.out}")
         return 0
-    changed = diff_paths(files, repo)
+    changed = stale_paths(content, repo) if args.check else diff_paths(files, repo)
     if args.check:
         if changed:
             print("generated files out of date (run python3 hass/sitegen.py --write):")

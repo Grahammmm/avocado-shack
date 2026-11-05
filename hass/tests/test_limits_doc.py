@@ -14,7 +14,9 @@ UNITS = {None: 1, "characters": 1, "MB": 2**20}
 IMAGE_TYPES = ("jpeg", "jpg", "png", "gif", "webp", "heic", "heif", "tiff", "bmp")
 REQUIRED = {"media.MAX_BYTES", "conversation.HISTORY_MAX", "conversation.MEMORY_LIST_MAX", "ops.catalog.MAX_CANDIDATES",
             "memory.MAX_VALUE", "editor.MAX_OPS", "content_model.MAX_HOURS_LINES", "conversation.MAX_OWNER_TEXT",
-            "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX"}  # AV0022-15
+            "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX", "content_model.MAX_INTRO",
+            "content_model.MAX_HEADLINE_LINE", "content_model.MAX_STORY", "content_model.MAX_NOTICE",
+            "content_model.MAX_NOTICE_DAYS"}  # AV0022-15, AV1322-12
 
 
 def claims(doc: str) -> list:

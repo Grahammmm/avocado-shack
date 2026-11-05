@@ -23,7 +23,7 @@ PROMPT = ("Read the product label in this photo. Answer only with a JSON object 
           '{"name": string or null, "brand": string or null, "category": string or null}: the product name and the '
           "brand exactly as printed on the label, and the kind of product. Use null for anything not printed. "
           "Add nothing else.")
-_TERMS = tuple(claims.fold(term).replace("-", " ") for term in claims.TERMS)
+_TERMS = tuple(claims.fold(term).replace("-", " ") for term in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS)
 PLACEHOLDERS = frozenset({"null", "none", "nil", "n/a", "na", "unknown", "not printed", "not visible", "not shown",
                           "-", "--", "?", "no brand", "no name", "unbranded"})  # a "not printed" answer, not a value
 AMOUNT_RE = re.compile(r"[$€£]?\s*\d+(?:[.,]\d+)?\s*(?:fl\.?\s*oz|oz|lbs?|g|kg|mg|ml|l|ct|count|pack|pk)?\.?",

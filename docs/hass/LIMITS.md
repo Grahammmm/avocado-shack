@@ -19,6 +19,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - A proposal or a question waits for your reply only for the time the operator has set. After that it expires and nothing
   happens; send the change again. The expiry is judged at the time you sent your reply, so a `yes` sent in time still
   counts if the shop computer handles it later.
+- A reply sent more than 15 minutes after the message it answers (queued while the shop computer was offline, or a send that
+  failed and was retried) starts with `Late reply to your message from <day> <time>:` so you know which message it is for.
 - One message can change at most **20** <!-- editor.MAX_OPS --> things. Split bigger jobs into several messages.
 
 ## Lists
@@ -40,6 +42,15 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Hiking club: name, organizer and sender **400 characters** <!-- content_model.TEXT_LIMITS[club][clubName] --> each.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->, at most **7** <!-- content_model.MAX_HOURS_LINES --> lines of hours.
 - A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->.
+
+## Home page
+
+- Intro: at most **160 characters** <!-- content_model.MAX_INTRO -->.
+- Headline: each line at most **40 characters** <!-- content_model.MAX_HEADLINE_LINE -->.
+- Story: at most **400 characters** <!-- content_model.MAX_STORY -->.
+- Notice: at most **160 characters** <!-- content_model.MAX_NOTICE -->; its last day can be today or up to **60** <!-- content_model.MAX_NOTICE_DAYS --> days ahead.
+- Home photo: JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->.
+- The home photo needs a real description of at least three letters; a file name like IMG_1234 is refused.
 
 ## What Hass never does
 

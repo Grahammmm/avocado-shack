@@ -3,6 +3,10 @@
 Every event field comes from an argument: nothing is copied from a route idea or the labelled sample file, the
 start is computed from a local date and time in America/Los_Angeles, and capacity never drops below the confirmed
 guests counted (read-only) from an isolated RSVP database. No op notifies anyone or touches ``club.emailConnected``.
+A ``trailId`` that is not a route idea is refused: "unknown route idea <id>" or "<id> is a hike, not a route idea".
+AV1937-05: ``hike.repeat`` drafts a new scheduled hike on a new date and time from a real hike (REPEAT_FIELDS, RSVP
+setting and capacity); never its id, status, recap or guests, and never from a route idea or the sample file.
+A text over its content_model.TEXT_LIMITS limit is refused with one reply: "<field> is longer than <n> characters".
 """
 
 from __future__ import annotations
@@ -15,7 +19,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS
+from hass.claims import REPEAT_FIELDS
+from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS, TEXT_LIMITS
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -23,6 +28,7 @@ TZ = ZoneInfo("America/Los_Angeles")
 TEXT_FIELDS = tuple(f for f in EVENT_TEXT_FIELDS if f != "recap")
 MAX_AHEAD_DAYS = 400  # a start further out is a question ("check the year"), never a draft
 MAX_ID_BASE = 56  # leaves room for a "-NNN" suffix inside the 64-character id limit
+LIMITED = tuple(dict.fromkeys(("title", "meetingPoint", *TEXT_FIELDS)))  # the order the first over-long text is named
 
 
 # Seats per event plus a count of rows whose party size is missing, not a stored integer, or below 1 (a SUM over
@@ -139,8 +145,9 @@ def _slug_id(content, day, title):
     return candidate
 
 
-def _same(a, b) -> bool:  # same rule as catalog._same: whitespace collapsed, case folded
-    return " ".join(str(a).split()).casefold() == " ".join(str(b).split()).casefold()
+def _same(a, b) -> bool:  # same rule as catalog._same: NFKC, whitespace collapsed, case folded
+    fold = lambda x: " ".join(unicodedata.normalize("NFKC", str(x)).split()).casefold()
+    return fold(a) == fold(b)
 
 
 def _local_day(event):
@@ -168,14 +175,40 @@ def _off_capacity(event_id, capacity):  # a capacity stored on an event that tak
     return f"{event_id}: RSVPs are off, so capacity {capacity} has no effect until RSVPs are turned on"
 
 
+def _trail_problem(content, trail_id):
+    """Refused when trailId is a hidden idea (AV1322-03), a hike or no route idea at all (RF1530-3), else None."""
+    if trail_id is None:
+        return None
+    if trail_id in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
+        return Refused(f"route idea {trail_id} is hidden; restore it first")
+    if any(e["id"] == trail_id for e in _events(content)):
+        return Refused(f"{trail_id} is a hike, not a route idea")
+    if all(i["id"] != trail_id for i in content.community["routeIdeas"]):
+        return Refused(f"unknown route idea {trail_id}")
+    return None
+
+
+def _too_long(args, fields):
+    """Refused naming the first of fields whose string is over its event limit (code points, as the validator
+    counts; the value is never echoed), else None. The validator stays the backstop for hand edits."""
+    limits = TEXT_LIMITS["event"]
+    return next((Refused(f"{f} is longer than {limits[f]} characters") for f in fields
+                 if isinstance(args.get(f), str) and len(args[f]) > limits[f]), None)
+
+
 def _hike_create(content, args, ctx):
+    if (problem := _too_long(args, LIMITED)) is not None:
+        return problem
     if args["rsvpEnabled"] and ("capacity" in args) == bool(args.get("noCapacityLimit")):
         return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
+    # RF0200-10: with RSVPs off a capacity plus noCapacityLimit true still contradict each other; ask, never pick one.
+    if not args["rsvpEnabled"] and "capacity" in args and args.get("noCapacityLimit") is True:
+        return NeedsDetails(["capacity", "noCapacityLimit"], "Give either a capacity or noCapacityLimit true, not both.")
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
-    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
-        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
+    if (problem := _trail_problem(content, args.get("trailId"))) is not None:
+        return problem
     twin = _hike_twin(content, args["date"], args["title"])
     if twin is not None:
         return Refused(f"{twin['id']} is already scheduled with this title on {args['date']}; update it instead")
@@ -190,6 +223,23 @@ def _hike_create(content, args, ctx):
     if not args["rsvpEnabled"] and "capacity" in args:
         ctx.warnings.append(_off_capacity(event["id"], args["capacity"]))
     return _touch(None, event)
+
+
+def _hike_repeat(content, args, ctx):
+    """A new scheduled hike on args date/time with the title, text, route link and RSVP settings of a real hike."""
+    source = _event(content, args["id"])
+    if source is None:
+        if any(i["id"] == args["id"] for i in content.community["routeIdeas"]):
+            return Refused(f"{args['id']} is a route idea, not a real hike")
+        return NotFound(args["id"])
+    missing = [f for f in ("meetingPoint", "rsvpEnabled") if f not in source]
+    if missing:  # a legacy hike: nothing is invented for it
+        return NeedsDetails(missing, f"{args['id']} has no {' or '.join(missing)} on record; update that hike first, "
+                                     "then repeat it.")
+    copied = {f: copy.deepcopy(source[f]) for f in (*REPEAT_FIELDS, "rsvpEnabled", "capacity") if f in source}
+    if copied["rsvpEnabled"] and "capacity" not in copied:
+        copied["noCapacityLimit"] = True  # the source had no limit
+    return _hike_create(content, {**copied, "date": args["date"], "time": args["time"]}, ctx)
 
 
 def _scheduled(content, event_id):
@@ -217,11 +267,13 @@ def _spaced(v):
 
 
 def _hike_update(content, args, ctx):
+    if (problem := _too_long(args, LIMITED)) is not None:
+        return problem
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
-    if args.get("trailId") in [i["id"] for i in content.community["routeIdeas"] if i["status"] == "hidden"]:
-        return Refused(f"route idea {args['trailId']} is hidden; restore it first")  # AV1322-03
+    if (problem := _trail_problem(content, args.get("trailId"))) is not None:
+        return problem
     clear = list(dict.fromkeys(args.get("clear", ())))  # duplicates collapse
     for test, why in _CLEAR_CHECKS:
         bad = next((n for n in clear if test(n, args)), None)
@@ -293,6 +345,8 @@ def _hike_cancel(content, args, ctx):
 
 
 def _hike_complete(content, args, ctx):
+    if (problem := _too_long(args, ("recap",))) is not None:
+        return problem
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
@@ -307,6 +361,8 @@ def _hike_complete(content, args, ctx):
 
 def _hike_recap(content, args, ctx):
     """Set or correct the recap of a completed hike; no other field changes."""
+    if (problem := _too_long(args, ("recap",))) is not None:
+        return problem
     event = _event(content, args["id"])
     if event is None:
         return NotFound(args["id"])
@@ -329,6 +385,7 @@ OPS = (
     Op("hike.create", {"title": Arg("text"), "date": Arg("date"), "time": Arg("time"), "meetingPoint": Arg("text"),
                        "rsvpEnabled": Arg("bool"), **_CAPACITY, "trailId": Arg("id", required=False),
                        **_OPTIONAL_TEXT}, _hike_create),
+    Op("hike.repeat", {**_ID, "date": Arg("date"), "time": Arg("time")}, _hike_repeat),
     Op("hike.update", {**_ID, "title": Arg("text", required=False), "date": Arg("date", required=False),
                        "time": Arg("time", required=False), "meetingPoint": Arg("text", required=False),
                        "rsvpEnabled": Arg("bool", required=False), **_CAPACITY,

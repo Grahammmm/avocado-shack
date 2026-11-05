@@ -7,6 +7,7 @@ Usage (request ops):
     {"op": "store.confirm_selection", "args": {"yes": ["photo-product-001"], "no": ["photo-product-002"]}}   # an earlier "date" at most 7 days ago
     {"op": "store.set_intro", "args": {"text": "Fresh from the coast."}}   # home-page intro line, at most 160 characters; undo restores the default
 
+``store.confirm_selection``: a product may appear once across yes/limited/no.
 Limits: at most 7 hours lines of at most 60 characters, no repeated line (case, spacing and dash style
 ignored; the refusal names both line numbers); street and town at most 80 characters.
 Each hours line needs a letter or digit, and street and town each need a letter (the refusal names the line or field).
@@ -117,7 +118,9 @@ def _confirm_selection(content, args, ctx):
     for value in AVAILABILITY:
         for pid in args.get(value, ()):
             if pid in wanted:
-                return Refused(f"{pid} is listed twice ({wanted[pid]} and {value})")
+                same = wanted[pid] == value
+                return Refused(f"{pid} is listed twice in {value}" if same
+                               else f"{pid} is listed twice ({wanted[pid]} and {value})")
             wanted[pid] = value
     for pid, value in wanted.items():
         product = _product(content, pid)
@@ -125,9 +128,9 @@ def _confirm_selection(content, args, ctx):
             return product
         if product["status"] != "active":
             return Refused(f"{pid} is {product['status']}; restore it before marking it available")
-        if product.get("available") != value:
+        if (product.get("available"), product.get("available_on")) != (value, day.isoformat()):
             before = copy.deepcopy(product)
-            product["available"] = value
+            product["available"], product["available_on"] = value, day.isoformat()  # AV1102-01: word + its day
             touched.append(Touched("products", pid, before, copy.deepcopy(product)))
     if day == last and not touched:
         return Refused(f"the selection was already checked on {day.isoformat()}; nothing to change")

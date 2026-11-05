@@ -6,7 +6,7 @@ from pathlib import Path
 from hass.tests.test_commands_doc import verb
 
 DOCS = Path(__file__).resolve().parents[2] / "docs" / "hass"
-SECTIONS = ["Add a product", "Add a photo", "Post a hike", "Change opening hours", "Undo a change", "Pause and resume"]
+SECTIONS = ["Add a product", "Add a photo", "Post a hike", "Change opening hours", "Change the home page", "Route ideas", "Undo a change", "Pause and resume"]
 SEND_RE = re.compile(r"Send( \(plain words\))?: `([^`]+)`")
 PRIVATE_RE = re.compile(r"[\w.+-]+@[\w-]+\.\w+|\+\d|http://", re.I)
 

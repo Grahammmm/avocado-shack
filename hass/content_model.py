@@ -32,7 +32,7 @@ CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks"
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
 PRODUCT_OPTIONAL_PUBLIC = ("imageAlt",)  # public when present; never required (any status)
-PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available")  # "available": owner-set, absent = not confirmed (SHOP-1)
+PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on")  # owner-set word + its check day (SHOP-1)
 PRODUCT_STATUSES = ("active", "hidden", "held")
 AVAILABILITY = ("yes", "limited", "no")
 SHOP_TZ = ZoneInfo("America/Los_Angeles")
@@ -54,7 +54,8 @@ EVENT_TEXT_FIELDS = (
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage")  # all absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice")  # all absent by default
+MAX_NOTICE, MAX_NOTICE_DAYS = 160, 60  # store.notice text characters; its last day at most this many days ahead (set)
 HOME_IMAGE_RE = re.compile(r"^assets/products/photo-[0-9a-f]{16}\.(jpg|png)$")  # the path photos.install writes
 MAX_STORY = 400  # characters in the optional store.story (the "COME ON IN" paragraph)
 DEFAULT_STORY = "Michael Wolfe brings a produce buyer’s curiosity and long-standing grower relationships to the Shack. The idea is simple: connect friends and neighbors with good food and the people who grow and make it."  # shown when store.story is absent
@@ -213,7 +214,7 @@ def _closed_keys(problems, where, rec, allowed, required=()):
     return True
 
 
-def validate_products(problems, products, makers, site_dir: Path | None):
+def validate_products(problems, products, makers, site_dir: Path | None, checked: date | None = None):
     if not isinstance(products, list):
         problems.append("products: must be a list")
         return
@@ -249,6 +250,10 @@ def validate_products(problems, products, makers, site_dir: Path | None):
             _text(problems, f"{where}.imageAlt", rec["imageAlt"], limit=limits["imageAlt"])
         if "available" in rec and rec["available"] not in AVAILABILITY:
             problems.append(f"{where}.available: must be one of {AVAILABILITY}")
+        if "available_on" in rec and ("available" not in rec or iso_day(rec["available_on"]) is None):
+            problems.append(f"{where}.available_on: must be a real date YYYY-MM-DD, set only together with available")
+        elif "available_on" in rec and (checked is None or iso_day(rec["available_on"]) > checked):
+            problems.append(f"{where}.available_on: {rec['available_on']} is after store.selection_checked_on")
         if status == "held":
             hold = rec.get("hold")
             if _closed_keys(problems, f"{where}.hold", hold, HOLD_FIELDS, ("reason", "source")):
@@ -397,7 +402,11 @@ def shop_today(now: datetime | None = None) -> date:
 
 def checked_on(store) -> date | None:
     """The stored selection-check date, or None when absent or not a real YYYY-MM-DD date."""
-    value = store.get("selection_checked_on") if isinstance(store, dict) else None
+    return iso_day(store.get("selection_checked_on") if isinstance(store, dict) else None)
+
+
+def iso_day(value) -> date | None:
+    """``value`` as a date when it is a real YYYY-MM-DD string, else None."""
     if not isinstance(value, str) or not DATE_RE.fullmatch(value):
         return None
     try:
@@ -441,6 +450,18 @@ def validate_store(problems, store, today: date | None = None):
             _text(problems, "store.homeImage.imageAlt", home["imageAlt"], limit=TEXT_LIMITS["product"]["imageAlt"])
             if isinstance(home["imageAlt"], str) and sum(c.isalpha() for c in home["imageAlt"]) < 3:
                 problems.append("store.homeImage.imageAlt: needs at least 3 letters")
+    if "notice" in store:
+        notice = store["notice"]
+        if not isinstance(notice, dict) or set(notice) != {"text", "until"}:
+            problems.append("store.notice: must be an object with exactly text and until")
+        else:
+            _text(problems, "store.notice.text", notice["text"], limit=MAX_NOTICE)
+            if isinstance(notice["text"], str) and sum(c.isalpha() for c in notice["text"]) < 3:
+                problems.append("store.notice.text: needs at least 3 letters")
+            try:  # a real calendar date
+                date.fromisoformat(notice["until"] if DATE_RE.fullmatch(str(notice["until"])) else "")
+            except ValueError:
+                problems.append("store.notice.until: must be a real date YYYY-MM-DD")
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):
@@ -465,7 +486,7 @@ def validate(content: Content, site_dir: Path | None = SITE_DIR) -> None:
     problems: list[str] = []
     makers = content.makers if isinstance(content.makers, dict) else {}
     validate_makers(problems, content.makers)
-    validate_products(problems, content.products, makers, site_dir)
+    validate_products(problems, content.products, makers, site_dir, checked_on(content.store))
     validate_community(problems, content.community)
     validate_store(problems, content.store)
     if problems:

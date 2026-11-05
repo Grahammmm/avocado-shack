@@ -6,6 +6,7 @@ no source link is fetched. Run: python3 -m unittest hass.tests.test_route_add -v
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 
 from hass import migration_check
 from hass.content_model import load_and_validate
@@ -115,3 +116,28 @@ class RouteAddTests(HikeTestCase):
         result = self.assertRejected(repo, "refused", ("history.revert", {"changeId": added["change_id"]}))
         self.assertEqual(result["reason"], f"conflict: routeIdeas {NEW_ID} changed after {added['change_id']}")
         self.assertEqual(self.ideas(repo)[NEW_ID]["distance"], "2.5 miles")
+
+    def test_undo_is_refused_while_any_hike_links_the_new_idea(self):
+        reason = f"{HIKE_ID} (Test hike) uses this route; change that hike first"
+        for status in ("scheduled", "completed", "cancelled"):
+            with self.subTest(status=status):
+                repo = self.repo()
+                added = repo.run((ADD, NEW))
+                repo.run(("hike.create", {**HIKE, "trailId": NEW_ID}))
+                if status != "scheduled":
+                    repo.now = datetime(2026, 12, 5, 12, 0, tzinfo=timezone(timedelta(hours=-8)))
+                    repo.run(({"completed": "hike.complete", "cancelled": "hike.cancel"}[status], {"id": HIKE_ID}))
+                undo = ("history.revert", {"changeId": added["change_id"]})
+                self.assertEqual(self.assertRejected(repo, "refused", undo)["reason"], reason)
+                self.assertEqual((NEW_ID in self.ideas(repo), repo.event()["trailId"]), (True, NEW_ID))
+
+    def test_undo_works_once_the_hike_link_is_cleared(self):
+        repo = self.repo()
+        added = repo.run((ADD, NEW))
+        repo.run(("hike.create", {**HIKE, "trailId": NEW_ID}))
+        undo = ("history.revert", {"changeId": added["change_id"]})
+        self.assertRejected(repo, "refused", undo)
+        repo.run(("hike.update", {"id": HIKE_ID, "clear": ["trailId"]}))
+        repo.run(undo)
+        self.assertNotIn(NEW_ID, self.ideas(repo))
+        self.assertNotIn("trailId", repo.event())

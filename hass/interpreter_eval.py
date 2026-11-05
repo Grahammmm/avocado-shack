@@ -1,6 +1,8 @@
-"""NB-AV-04 (H09): interpreter eval set and offline scorer. `score --cases C --replies R` prints one JSON summary (ids
+"""NB-AV-04 (H09): interpreter eval set and offline scorer (AV1322-14: eval set v3 adds the home-page ops, route.add/hide/
+restore and a no-source route.add question; AV1102-10: v4 adds brand, home-text, design and saved-note cases, and a
+case may carry `notes`). `score --cases C --replies R` prints one JSON summary (ids
 and short reasons, never a case text or reply); exit 0 when every case was scored, even if some failed; 2 for an
-unreadable file, malformed line, duplicate id, a case file without exactly 40 cases or an unscorable case (RF0550-4:
+unreadable file, malformed line, duplicate id, a case file without exactly 63 cases or an unscorable case (RF0550-4:
 bad/repeated pending code, `revises` naming no pending draft, > MAX_OPS expected ops). `--live --url U --model M
 --out FILE` is OPERATOR ONLY, never run in CI or tests (they inject a fake transport): it builds the NB-AV-03 prompt
 from the real registry and catalog, asks the existing local model (NB-AV-02, loopback only) once per case and writes
@@ -18,7 +20,7 @@ from hass.ops import load_registry  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 CASES = REPO / "hass" / "tests" / "fixtures" / "interpreter-eval.jsonl"
-CASE_COUNT, ID_RE, NOTE_KEY = 40, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
+CASE_COUNT, ID_RE, NOTE_KEY = 63, re.compile(r"[A-Za-z0-9_-]{1,16}"), "_note"
 CLAIM_ARGS = frozenset({"organic", "producerKey"})  # an extra arg the case did not expect fails only for these
 
 
@@ -63,14 +65,20 @@ def _pending_codes(pending, n) -> set:  # each a 1-16 char str without whitespac
     return set(codes)
 
 
+def _notes_ok(notes) -> bool:  # AV1102-10: optional saved notes, at most 20 {"key", "text"} string objects
+    return (isinstance(notes, list) and len(notes) <= 20 and all(isinstance(x, dict) and set(x) == {"key", "text"}
+            and isinstance(x["key"], str) and isinstance(x["text"], str) for x in notes))
+
+
 def load_cases(path) -> list:
     cases, seen = [], set()
     for n, row in _rows(path, "cases"):
         _id(row, n, "cases", seen)
-        if not (set(row) == {"id", "text", "pending", "expect"} and isinstance(row["text"], str)
+        if not (set(row) - {"notes"} == {"id", "text", "pending", "expect"} and isinstance(row["text"], str)
                 and isinstance(row["pending"], list) and all(isinstance(p, dict) for p in row["pending"])
                 and _expect_ok(row["expect"])):
             raise EvalError(f"cases line {n}: not a case")
+        if "notes" in row and not _notes_ok(row["notes"]): raise EvalError(f"cases line {n}: bad notes")
         codes, expect, most = _pending_codes(row["pending"], n), row["expect"], interpret_check.MAX_OPS
         if "ops" in expect and expect["revises"] not in (None, *codes):
             raise EvalError(f"cases line {n}: revises names no pending draft")
@@ -129,8 +137,9 @@ def live(cases, url, model, out, transport=None, registry=None, content=None) ->
         model_call = LocalInterpreter(url, model, prompt, transport=transport)
     except (ContentError, ValueError) as exc:
         raise EvalError(str(exc)) from None
-    rows = [{"id": c["id"], "reply": model_call.interpret(c["text"], c["pending"]), "failed": model_call.last_error}
-            for c in cases]
+    notes = lambda c: {"notes": c["notes"]} if c.get("notes") else {}  # noqa: E731 - AV1102-10: only when it has some
+    rows = [{"id": c["id"], "reply": model_call.interpret(c["text"], c["pending"], **notes(c)),
+             "failed": model_call.last_error} for c in cases]
     tmp = None
     try:  # a private temp file beside the target (0600 by construction), linked into place only when complete
         fd, tmp = tempfile.mkstemp(prefix=".interpreter-eval-", suffix=".tmp", dir=target.parent)

@@ -8,7 +8,9 @@ python3 -m unittest hass.tests.test_morning_report_hikes -v
 import contextlib
 import io
 import json
+import os
 import sqlite3
+import time
 import unittest
 
 from hass import morning_report
@@ -129,6 +131,68 @@ class MorningReportHikesTests(unittest.TestCase):
         self.assertEqual([h["id"] for h in json.loads(self.report("--json"))["hikes"]], ["ridge"])
         self.hikes(raw="not a list")
         self.assertNotIn("Hikes", self.report())
+
+    def tree_bytes(self):
+        return {p.name: p.read_bytes() for p in sorted(self.dir.iterdir()) if p.is_file()}
+
+    def test_naive_hike_start_is_skipped_in_text_and_json(self):  # 7
+        self.hikes(hike("naive", "2026-11-03T01:00:00"), hike("dateonly", "2026-11-03"),
+                   hike("naivez", "2026-11-02T18:00:00.5"), hike("ridge", "2026-11-03T09:00:00-08:00"))
+        before = self.tree_bytes()
+        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday 9:00 am Ridge ({UNAV})")
+        self.assertEqual([(h["id"], h["confirmed"]) for h in json.loads(self.report("--json"))["hikes"]], [("ridge", None)])
+        self.assertEqual(self.tree_bytes(), before)
+        self.hikes(hike("naive", "2026-11-03T01:00:00"), hike("dateonly", "2026-11-03"))
+        self.assertEqual(self.report("--guests", self.rsvp_db([("naive", 3)])).split("\n")[-2:],
+                         ["Available 1 · Limited 0 · Sold out 0 · Not confirmed 0", LAST])
+
+    def test_report_is_host_timezone_independent(self):  # 8
+        self.hikes(hike("naive", "2026-11-03T01:00:00"), hike("dateonly", "2026-11-03"),
+                   hike("late", "2026-11-03T07:30:00Z"), hike("near", "2026-11-02T23:59:00-08:00"),
+                   hike("ridge", "2026-11-03T09:00:00-08:00"))
+        old, seen = os.environ.get("TZ"), []
+        try:
+            for zone in ("UTC", "America/Los_Angeles", "Asia/Tokyo"):
+                os.environ["TZ"] = zone
+                time.tzset()
+                seen.append((self.report(), self.report("--json")))
+        finally:
+            if old is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old
+            time.tzset()
+        self.assertEqual(seen[0], seen[1])
+        self.assertEqual(seen[0], seen[2])
+        self.assertEqual([h["id"] for h in json.loads(seen[0][1])["hikes"]], ["late", "near", "ridge"])
+        self.assertEqual(os.environ.get("TZ"), old)
+
+    def test_explicit_offsets_still_convert_to_pacific(self):  # 9
+        for start in ("2026-11-03T17:00:00Z", "2026-11-03T17:00:00+00:00", "2026-11-03T09:00:00-08:00",
+                      "2026-11-03T18:00:00+01:00"):
+            with self.subTest(start=start):
+                self.hikes(hike("ridge", start, title="Ridge"))
+                self.assertEqual(json.loads(self.report("--json"))["hikes"][0]["day"], "2026-11-03")
+                self.assertEqual(self.hikes_line(), f"Hikes: Tuesday 9:00 am Ridge ({UNAV})")
+        # a zone named elsewhere in the event never makes a naive start aware
+        self.hikes(dict(hike("naive", "2026-11-03T09:00:00"), timezone="America/Los_Angeles", utcOffset="-08:00"))
+        self.assertNotIn("Hikes", self.report())
+
+    def test_all_zone_less_starts_leave_shelf_report_unchanged(self):  # 10
+        self.hikes()
+        plain, plain_json = self.report(), self.report("--json")
+        self.hikes(hike("naive", "2026-11-03T01:00:00"), hike("dateonly", "2026-11-02"))
+        db = self.rsvp_db([("naive", 2)])
+        before = self.tree_bytes()
+        self.assertEqual((self.report(), self.report("--guests", db), self.report("--json")), (plain, plain, plain_json))
+        self.assertNotIn("hikes", json.loads(self.report("--json")))
+        self.assertEqual(self.tree_bytes(), before)  # content and the RSVP database are not written
+
+    def test_out_of_range_start_is_skipped_without_traceback(self):  # 11
+        self.hikes(hike("ancient", "0001-01-01T00:00:00+00:00"), hike("far", "9999-12-31T23:59:59-08:00"),
+                   hike("ridge", "2026-11-03T09:00:00-08:00"))
+        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday 9:00 am Ridge ({UNAV})")
+        self.assertEqual([h["id"] for h in json.loads(self.report("--json"))["hikes"]], ["ridge"])
 
 
 if __name__ == "__main__":

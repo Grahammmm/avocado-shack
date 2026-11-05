@@ -36,6 +36,8 @@ class RenderTests(unittest.TestCase):
         content = copy.deepcopy(self.content)
         if checked is not None:
             content.store["selection_checked_on"] = checked.isoformat()
+            for p in content.products:  # AV1102-01: the words were set on that check
+                p.update({"available_on": checked.isoformat()} if p["id"] in self.ids[:3] else {})
         files = sitegen.render(content, today=today)
         words = {p["id"]: p.get("availability") for p in _catalog(files) if p["id"] in self.ids}
         return files, files[INDEX].decode("utf-8"), words
@@ -153,14 +155,15 @@ class OpTests(CatalogTestCase):
         self.assertEqual({r["collection"] for r in draft["draft"]["records"]}, {"store", "products"})
 
     def test_set_availability_without_a_check_shows_nothing_then_check_shows_it(self):
-        head = self.r.head()
-        self.assertEqual(self.r.prepare(_req(("product.set_availability", {"id": self.a, "available": "no"})))
-                         ["result"], "ok")
-        self.assertEqual(self.r.head(), head)  # draft only
-        self.r.run(("product.set_availability", {"id": self.a, "available": "no"}))
+        # AV1102-01 (G decision 2026-11-03, option a): with no shelf check, set_availability refuses and sets nothing.
+        products = self.r.products()
+        self.assertIn("check the selection first", self.assertRejected(
+            self.r, "refused", ("product.set_availability", {"id": self.a, "available": "no"}))["reason"])
+        self.assertEqual(self.r.products(), products)
         self.assertEqual(self.words()[self.a], None)
         self.assertNotIn("selection-checked", self.r.read(INDEX).decode("utf-8"))
         self.r.run(("store.confirm_selection", {}))
+        self.r.run(("product.set_availability", {"id": self.a, "available": "no"}))
         self.assertEqual(self.words()[self.a], "Sold out")
 
     def test_future_out_of_order_and_repeated_checks_are_refused(self):
@@ -191,6 +194,17 @@ class OpTests(CatalogTestCase):
             self.r, "refused", ("store.confirm_selection", {"yes": [self.b]}))["reason"])
         self.assertNotIn("selection_checked_on", self.r.store())
 
+    def test_repeat_inside_one_list_names_that_list(self):
+        a, b = self.a, self.b
+        cases = (({"yes": [a, a]}, f"{a} is listed twice in yes"), ({"no": [b, a, b]}, f"{b} is listed twice in no"),
+                 ({"limited": [a, a]}, f"{a} is listed twice in limited"), ({"yes": [a], "no": [a]},
+                  f"{a} is listed twice (yes and no)"), ({"yes": [a, a], "no": [a]}, f"{a} is listed twice in yes"))
+        store, products = self.r.store(), self.r.products()
+        for args, reason in cases:
+            with self.subTest(args=args):
+                self.assertEqual(self.assertRejected(self.r, "refused", ("store.confirm_selection", args))["reason"], reason)
+                self.assertEqual((self.r.store(), self.r.products()), (store, products))
+
     def test_set_availability_refusals_and_wording_bypass(self):
         for bad in ("Yes", "available", "sold out", "maybe"):
             with self.subTest(bad=bad):
@@ -198,6 +212,7 @@ class OpTests(CatalogTestCase):
         self.assertRejected(self.r, "invalid", ("store.confirm_selection", {"date": "2026-10-20T09:00"}))
         self.assertIn("held:", self.assertRejected(
             self.r, "refused", ("product.set_availability", {"id": self.held, "available": "yes"}))["reason"])
+        self.r.run(("store.confirm_selection", {}))  # AV1102-01: set_availability needs today's check first
         self.r.run(("product.set_availability", {"id": self.b, "available": "yes"}))
         self.assertIn("already marked available=yes", self.assertRejected(
             self.r, "refused", ("product.set_availability", {"id": self.b, "available": "yes"}))["reason"])
