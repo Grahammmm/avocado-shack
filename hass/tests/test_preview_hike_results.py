@@ -236,6 +236,26 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         other = self.target(self.r, "hike.update", {"id": hid, "description": "Easy loop."})
         self.assertNotIn("fieldsShown", self.capture(other)["checks"])
 
+    def test_changed_value_must_sit_under_its_own_label(self):  # stale card: Meet at still old, the new value is the Start time
+        hid = self.create(self.r)
+        self.target(self.r, "hike.update", {"id": hid, "walkTime": "9:00 AM", "meetTime": "8:00 AM"})
+        old = (self.r.wt / COMMUNITY).read_bytes()
+        target = self.target(self.r, "hike.update", {"id": hid, "meetTime": "9:00 AM"})
+        self.assertEqual(target["changed"], {"meetTime": "9:00 AM"})
+        self.assertIs(self.capture(target)["checks"]["fieldsShown"], True)
+        self.assertIs(self.capture(target, {COMMUNITY: old})["checks"]["fieldsShown"], False)
+
+    def test_twin_titles_without_an_rsvp_button(self):  # RSVPs off: the card has no button to name its id
+        first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)
+        self.target(self.r, "hike.update", {"id": first, "rsvpEnabled": False})
+        target = self.target(self.r, "hike.update", {"id": second, "rsvpEnabled": False})
+        result = self.capture(target)
+        self.assertEqual(self.scheduled(result), {"eventShown": True, "dateShown": True, "meetShown": True,
+                                                  "placesShown": True}, result)
+        self.assertIs(self.capture({**target, "id": first})["checks"]["dateShown"], False)
+        mixed = self.target(self.r, "hike.update", {"id": second, "rsvpEnabled": True, "capacity": 5})
+        self.assertIs(self.capture(mixed)["checks"]["dateShown"], True)  # the other twin has no button; this one does
+
     def test_twin_titles_use_the_id(self):
         first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)
         target = self.target(self.r, "hike.update", {"id": second, "capacity": 5})
