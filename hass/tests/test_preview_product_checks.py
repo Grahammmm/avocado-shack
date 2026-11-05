@@ -36,28 +36,28 @@ class TargetTests(unittest.TestCase):
 
     def test_expected_word_is_the_sitegen_label(self):
         fresh = record(available="no", available_on=CHECKED)
-        self.assertEqual(preview.target_for(fresh, store(), TODAY)["availability"], "Sold out")
+        self.assertEqual(preview.target_for(fresh, TODAY, store=store())["availability"], "Sold out")
         stale = (TODAY - timedelta(days=9)).isoformat()
-        got = preview.target_for(record(available="no", available_on=stale), store(stale), TODAY)["availability"]
+        got = preview.target_for(record(available="no", available_on=stale), TODAY, store=store(stale))["availability"]
         self.assertTrue(got.startswith("Last confirmed "), got)
         self.assertEqual(got, sitegen.availability_label(product(available="no", available_on=stale), store(stale), TODAY))
         # a word set on an older check than the store's latest one is not current either
         older = (TODAY - timedelta(days=2)).isoformat()
-        self.assertTrue(preview.target_for(record(available="yes", available_on=older), store(), TODAY)
+        self.assertTrue(preview.target_for(record(available="yes", available_on=older), TODAY, store=store())
                         ["availability"].startswith("Last confirmed "))
 
     def test_no_word_is_none_but_present(self):
         for rec, st in ((record(), store()), (record(available="no", available_on=CHECKED), store(None))):
             with self.subTest(rec=rec, store=st):
-                self.assertIsNone(preview.target_for(rec, st, TODAY)["availability"])
+                self.assertIsNone(preview.target_for(rec, TODAY, store=st)["availability"])
 
     def test_hidden_product_gets_no_availability_or_image(self):
-        target = preview.target_for(record({"image": OLD}, status="hidden", image=NEW, available="no"), store(), TODAY)
+        target = preview.target_for(record({"image": OLD}, status="hidden", image=NEW, available="no"), TODAY, store=store())
         self.assertEqual(sorted(target), ["description", "id", "kind", "name", "status"])
 
     def test_image_only_after_a_photo_change(self):
         self.assertEqual(preview.target_for(record({"image": OLD}, image=NEW))["image"], NEW)
-        self.assertNotIn("image", preview.target_for(record(None), store(), TODAY))  # a new product has no 'before'
+        self.assertNotIn("image", preview.target_for(record(None), TODAY, store=store()))  # a new product has no 'before'
         self.assertNotIn("image", preview.target_for(record({"image": OLD}, description="x")))
         self.assertNotIn("image", preview.target_for(record({"image": OLD}, image=None)))
 
@@ -71,7 +71,7 @@ class BrowserChecks(BrowserCase):
         mutate(content, item)
         files = sitegen.render(content, wt / "hass" / "templates", today=TODAY)
         target = preview.target_for({"collection": "products", "key": item["id"], "after": dict(item),
-                                     **target_extra.pop("rec", {})}, content.store, TODAY)
+                                     **target_extra.pop("rec", {})}, TODAY, store=content.store)
         target.update(target_extra)
         return self.previewer.capture(files, target, self.repo.state / "screenshots" / "pc.png")["checks"]
 

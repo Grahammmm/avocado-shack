@@ -50,7 +50,7 @@ def _readable(record) -> bool:
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
 
 
-def target_for(record: dict, store=None, today=None) -> dict:
+def target_for(record: dict, today=None, *, store=None) -> dict:
     """The screenshot target for a touched record (the after value decides what the checks expect).
     AV1222-02: with ``store`` an active product also expects sitegen's own availability word (str or None) and a
     changed photo expects its new src; ``today`` is the generation date of the files being checked."""
