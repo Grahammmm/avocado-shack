@@ -39,7 +39,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  await shown({status:'cancelled'});
  check(await qaHike().locator('.label').innerText()==='CANCELLED'&&await qaHike().locator('a.hike-ics').count()===0,'Cancelled hike offered a calendar link');
  // AV0207-01: owner-set logistics in a fixed order, escaped, in the card and the RSVP dialog; an unset field shows nothing.
- const byTitle=t=>p.locator('.hike-event').filter({has:p.locator('h3',{hasText:t})}),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+ const byTitle=t=>p.locator('.hike-event').filter({has:p.locator('h2',{hasText:t})}),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
  const facts=l=>l.evaluate(n=>[...n.querySelectorAll('.hike-facts dt')].map(d=>d.textContent+'='+d.nextElementSibling.textContent));
  const FULL=['Meet=QA full meeting point','Meet at=8:45 am','Address=QA Road 1, Los Osos · Directions','Start=9:00 am','Back=Around 12:30 pm','Distance=4 miles','Pace / terrain=Easy','Time on trail=3 hours','Bring along=Water and a snack'];
  await shown({});
@@ -69,7 +69,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  await p.route(api,async r=>{const res=await r.fetch(),j=await res.json(),h=j.events.find(e=>e.id==='qa-hike');j.routeIdeas=ideas;
   j.events.push(...extra.map(([t,title])=>({...h,id:'x-'+t,title,trailId:t})));for(const e of j.events)if(linked[e.id])e.trailId=linked[e.id];await r.fulfill({response:res,json:j})});
  await p.goto(process.env.COMMUNITY_TEST_URL+'/hike');await qaHike().waitFor();await p.locator('.hike-event',{hasText:'QA http route'}).waitFor();
- const card=t=>p.locator('.hike-event').filter({has:p.locator('h3',{hasText:t})}),line=t=>card(t).locator('.hike-route'),said=async t=>(await line(t).textContent()).replace(/\s+/g,' ').trim();
+ const card=t=>p.locator('.hike-event').filter({has:p.locator('h2',{hasText:t})}),line=t=>card(t).locator('.hike-route'),said=async t=>(await line(t).textContent()).replace(/\s+/g,' ').trim();
  let link=line('QA trail fixture').locator('a');
  check(await line('QA trail fixture').count()===1&&await said('QA trail fixture')==='Route: QA Route One · QA Parks ↗','Linked route line wrong: '+await said('QA trail fixture'));
  check(await link.getAttribute('href')==='https://example.org/qa-trail'&&await link.getAttribute('target')==='_blank'&&await link.getAttribute('rel')==='noopener'&&await link.getAttribute('class')==='text-link','Route link attributes wrong');
@@ -186,8 +186,8 @@ const check=(value,message)=>{if(!value)throw Error(message)};
   await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events=j.events.filter(keep).concat(extra);await r.fulfill({response:res,json:j})});
   await pg.clock.setFixedTime(now);await pg.goto(process.env.COMMUNITY_TEST_URL+'/hike');
   await pg.locator('#upcoming-hikes :is(.hike-event,.hike-empty,.trail-invitation)').first().waitFor();
-  const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h3').textContent,a.querySelector('.hike-date').textContent])),
-   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h3').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
+  const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h2').textContent,a.querySelector('.hike-date').textContent])),
+   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
   check(!errs.length,'Page errors at '+new Date(now).toISOString()+': '+JSON.stringify(errs));await c.close();return r;
  };
  const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};

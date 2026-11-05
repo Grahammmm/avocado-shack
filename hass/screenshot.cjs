@@ -26,7 +26,7 @@ const allowed=req=>{
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
     if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
-      if(target.status==='scheduled')checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
+      if(target.status==='scheduled')checks.eventShown=await page.locator('h2',{hasText:target.title}).count()>0;
       else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
         const recaps=await page.locator('#past-hikes .past-hike').evaluateAll((els,title)=>els.filter(d=>
           d.querySelector('summary span')?.textContent===title).map(d=>d.querySelector(':scope>p')?.textContent),target.title);

@@ -6,7 +6,7 @@
 .trail-explorer{padding:30px;background:var(--cream,#faf7ef);color:var(--ink,#214d3d);min-width:0}
 .trail-explorer-heading{display:flex;justify-content:space-between;align-items:end;gap:20px;margin-bottom:20px}
 .trail-explorer .trail-eyebrow{font:700 10px/1.5 Arial,sans-serif;letter-spacing:.14em;margin:0 0 9px}
-.trail-explorer-heading h4{font:32px/1.15 Georgia,serif;letter-spacing:-.025em;margin:0 0 8px}
+.trail-explorer-heading h3{font:32px/1.15 Georgia,serif;letter-spacing:-.025em;margin:0 0 8px}
 .trail-explorer-heading p:last-child{font:12px/1.5 Arial,sans-serif;margin:0}
 .trail-layer-switch{display:flex;align-self:center;border:1px solid #aebbad;flex-shrink:0}
 .trail-layer-switch button{min-height:44px;padding:10px 20px;border:0;border-radius:0;background:transparent;color:#214d3d;font:700 12px Arial,sans-serif;cursor:pointer}
@@ -42,7 +42,7 @@
 .trail-map-caption a{text-underline-offset:2px}
 .trail-elevation{border-top:1px solid #d7dccd;padding-top:22px}
 .trail-elevation-heading{display:flex;justify-content:space-between;align-items:baseline;gap:14px;margin-bottom:10px}
-.trail-elevation-heading h5{font:23px/1.25 Georgia,serif;letter-spacing:-.02em;margin:0}
+.trail-elevation-heading h4{font:23px/1.25 Georgia,serif;letter-spacing:-.02em;margin:0}
 .trail-elevation-heading p{font:12px/1.6 Arial,sans-serif;margin:0;display:flex;gap:22px}
 .trail-profile-chart{width:100%;min-width:0}
 .trail-profile-svg{display:block;width:100%;height:178px;touch-action:pan-y;cursor:crosshair;overflow:visible}
@@ -79,7 +79,7 @@ dialog.trail-map-dialog::backdrop{background:#112b26d9}
  .trail-photograph figcaption{font-size:9px}
  .trail-explorer{padding:25px 20px}
  .trail-explorer-heading{display:block;margin-bottom:16px}
- .trail-explorer-heading h4{font-size:29px}
+ .trail-explorer-heading h3{font-size:29px}
  .trail-explorer-heading p:last-child{font-size:11px}
  .trail-layer-switch{width:fit-content;margin-top:17px}
  .trail-layer-switch button{min-width:82px}
@@ -100,4 +100,4 @@ dialog.trail-map-dialog::backdrop{background:#112b26d9}
  dialog.trail-map-dialog{width:100vw;max-width:100vw;max-height:100dvh;height:100dvh}
  .trail-map-dialog .trail-map-stage{height:55dvh;min-height:320px;aspect-ratio:auto}
 }
-@media(max-width:360px){.trail-explorer{padding-left:16px;padding-right:16px}.trail-explorer-heading h4{font-size:27px}.trail-map-route-key{font-size:8px;gap:4px}.trail-map-route-key i{width:12px}.trail-map-stage{height:400px}}
+@media(max-width:360px){.trail-explorer{padding-left:16px;padding-right:16px}.trail-explorer-heading h3{font-size:27px}.trail-map-route-key{font-size:8px;gap:4px}.trail-map-route-key i{width:12px}.trail-map-stage{height:400px}}
