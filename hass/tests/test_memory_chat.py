@@ -34,17 +34,17 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         return replies
 
     def test_save_list_forget_list(self):
-        self.chat("memory", "memory-list", "Nothing saved.")
+        self.chat("memory", "memory-list", "Nothing saved.\nAliases (0):")
         self.chat("remember hours: 9-5", "memory-saved", "Saved hours: 9-5. Send forget hours to remove it.", pid="s1")
         self.now = T0 + timedelta(hours=8)  # 01:00 UTC on Nov 3 is still Nov 2 in Los Angeles
         self.chat("remember parking: Behind the barn", "memory-saved", pid="s2")
         self.chat("Memory.", "memory-list", "Saved (2):\nhours: 9-5 (fact, since 2026-11-02)\n"
-                                            "parking: Behind the barn (fact, since 2026-11-02)")
+                                            "parking: Behind the barn (fact, since 2026-11-02)\nAliases (0):")
         self.chat("forget hours", "memory-forgot", "Forgot hours.")
         self.chat("Forget hours!", "memory-none", "Nothing saved as hours.")
         self.chat("forget no_such", "memory-none", "Nothing saved as no_such.")
         self.chat("forget parking", "memory-forgot")
-        self.chat("memory", "memory-list", "Nothing saved.")
+        self.chat("memory", "memory-list", "Nothing saved.\nAliases (0):")
         for row in self.rows():  # store behaviour: text blanked, dates kept
             self.assertEqual(row["value"], "")
             self.assertTrue(row["created_at"] and row["forgotten_at"])
@@ -56,17 +56,17 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         self.chat("remember hours: plain", "memory-saved")
         self.chat("remember hours.: dotted", "memory-saved", "Saved hours.: dotted. Send forget hours. to remove it.")
         self.chat("forget hours.", "memory-forgot", "Forgot hours..")
-        self.chat("memory", "memory-list", "Saved (1):\nhours: plain (fact, since 2026-11-02)")
+        self.chat("memory", "memory-list", "Saved (1):\nhours: plain (fact, since 2026-11-02)\nAliases (0):")
         self.chat("forget hours.", "memory-none", "Nothing saved as hours..")
         self.chat("forget hours!", "memory-forgot", "Forgot hours.")
-        self.chat("memory", "memory-list", "Nothing saved.")
+        self.chat("memory", "memory-list", "Nothing saved.\nAliases (0):")
 
     def test_correct_and_case(self):
         self.chat("remember hours: 9-5", "memory-saved", pid="c1")
         self.chat("remember hours: 10-6", "memory-updated", "Updated hours (was: 9-5). Send forget hours to remove it.",
                   pid="c2")
         self.chat("Remember Hours: Closed Mondays", "memory-updated", pid="c3")
-        self.chat("memory", "memory-list", "Saved (1):\nhours: Closed Mondays (fact, since 2026-11-02)")
+        self.chat("memory", "memory-list", "Saved (1):\nhours: Closed Mondays (fact, since 2026-11-02)\nAliases (0):")
         self.assertEqual(memory.Memory.on_connection(self.conv.db, self.conv.clock).get("hours"), "Closed Mondays")
         self.assertEqual([(r["value"], r["source"], r["superseded_at"] is None) for r in self.rows()],
                          [("9-5", "owner-stated:c1", False), ("10-6", "owner-stated:c2", False),
@@ -138,7 +138,7 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         self.assertFalse(self.conv.db.in_transaction)
         self.chat("remember hours: 10-6", "memory-updated")  # the connection is usable; nothing is locked
         self.conv = self.open()  # restart: rows persist, a fresh connection reads them
-        self.chat("memory", "memory-list", "Saved (1):\nhours: 10-6 (fact, since 2026-11-02)")
+        self.chat("memory", "memory-list", "Saved (1):\nhours: 10-6 (fact, since 2026-11-02)\nAliases (0):")
 
     def test_list_truncates_at_twenty(self):
         for i in range(23):
@@ -146,9 +146,10 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         [reply] = self.replies()[-1:]
         self.say("memory")
         lines = self.replies()[0].splitlines()
-        self.assertEqual((lines[0], lines[1], lines[20], lines[-1], len(lines)),
+        self.assertEqual((lines[0], lines[1], lines[20], lines[21], len(lines)),
                          ("Saved (23):", "k00: v0 (fact, since 2026-11-02)", "k19: v19 (fact, since 2026-11-02)",
-                          "… and 3 more.", 22))
+                          "… and 3 more.", 23))
+        self.assertEqual(lines[-1], "Aliases (0):")
         self.assertEqual(reply, "Saved k22: v22. Send forget k22 to remove it.")
 
 
