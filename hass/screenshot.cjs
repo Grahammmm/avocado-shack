@@ -64,7 +64,12 @@ const allowed=req=>{
           checks.productShown=count===(target.status==='active'?1:0);
           if(count===1){
             await card.scrollIntoViewIfNeeded();
-            if(target.status==='active')checks.description=(await card.locator('.food-description').textContent())===target.description;
+            if(target.status==='active'){
+              checks.description=(await card.locator('.food-description').textContent())===target.description;
+              if('availability' in target){const a=card.locator('.availability');checks.availabilityShown=(await a.count()?await a.first().textContent():null)===target.availability;}
+              if(target.image){const img=card.locator('img').first();await img.scrollIntoViewIfNeeded();
+                checks.imageShown=await img.evaluate((e,src)=>e.getAttribute('src')===src&&e.complete&&e.naturalWidth>0,target.image).catch(()=>false);}
+            }
           }
         }
       }else if(target.kind==='store'){
