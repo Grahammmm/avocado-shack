@@ -59,7 +59,7 @@ class PreviewTests(BrowserCase):
         self.assertEqual(stat.S_IMODE(png.stat().st_mode), 0o600)
         self.assertNotIn("Preview unavailable", sent["text"])
         self.assertEqual(self.previewer.results[-1]["checks"],
-                         {p + k: True for p in ("", "desktop:") for k in ("productShown", "description", "noPageErrors", "noPosts")})
+                         {p + k: True for p in ("", "desktop:") for k in ("productShown", "description", "availabilityShown", "noPageErrors", "noPosts")})
         server = self.previewer.last_server
         with self.assertRaises(ProcessLookupError):
             os.kill(server["pid"], 0)

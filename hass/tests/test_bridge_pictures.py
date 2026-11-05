@@ -62,7 +62,7 @@ class PictureFlushTests(H06TestCase):
         self.addCleanup(folder.cleanup)
         self.png = png = Path(folder.name) / "p.png"
         preview._write_private(png, PNG)
-        return mock.Mock(capture=lambda files, target, out: {"ok": True, "png": str(png), "error": None})
+        return mock.Mock(capture=lambda files, target, out, assets=None: {"ok": True, "png": str(png), "error": None})
 
     def setUp(self):
         super().setUp()
