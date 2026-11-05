@@ -6,10 +6,12 @@ Throwaway Git repos (test_catalog_ops.CatalogRepo); no network, no model.
 import unittest
 from pathlib import Path
 
-from hass import editor
+from hass import conversation, editor
 from hass.interpreter_prompt import _op_lines
 from hass.ops import load_registry
+from hass.tests import fixture_ops, test_undo
 from hass.tests.test_catalog_ops import NEW, CatalogTestCase, _req
+from hass.tests.test_conversation import _ops
 
 OMIT = {k: v for k, v in NEW.items() if k != "displayBrand"}
 DOC = Path(__file__).resolve().parents[2] / "docs" / "hass" / "COMMANDS.md"
@@ -84,6 +86,39 @@ class DefaultBrandTests(CatalogTestCase):
         self.assertIn("From the market", text)
         self.assertIn("Add Test Orchard quince, brand Test Orchard", text)
         self.assertNotIn("|", next(ln for ln in text.splitlines() if "Producer not identified" in ln))
+
+
+UNKNOWN = {**OMIT, "brand": "Producer not identified"}
+
+
+class DefaultBrandConversationTests(test_undo.H06TestCase):
+    """The claim check in the real conversation flow: a generated default is not an owner claim; a supplied label is."""
+
+    def setUp(self):
+        super().setUp()
+        self.editor = conversation.Editor(self.repo.state, {**fixture_ops.registry(), **load_registry()})
+        self.conv = self.open()
+        self.base = self.count()
+
+    def offer(self, text, args):
+        self.interp.mapping[text] = _ops(("product.add", args))
+        return self.say(text)
+
+    def test_sentinel_default_is_drafted(self):
+        self.assertEqual(self.offer("Add Test quince, brand Producer not identified", UNKNOWN), "proposed")
+
+    def test_explicit_label_with_sentinel_brand_still_asks(self):
+        for label in ("From the market", "Mystery Label"):
+            with self.subTest(label):
+                text = "Add Test quince, brand Producer not identified"
+                self.assertEqual(self.offer(text, {**UNKNOWN, "displayBrand": label}), "claim-question")
+
+    def test_explicit_unsupported_label_still_asks(self):
+        self.assertEqual(self.offer("Add Test quince, brand Test Orchard", {**OMIT, "displayBrand": "Mystery Label"}),
+                         "claim-question")
+
+    def test_normal_brand_is_drafted(self):
+        self.assertEqual(self.offer("Add Test quince, brand Test Orchard", OMIT), "proposed")
 
 
 if __name__ == "__main__":

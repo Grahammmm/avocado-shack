@@ -187,6 +187,18 @@ def _copied(draft: dict, sources) -> dict:
     return found
 
 
+def _defaulted(draft: dict) -> set:
+    """Indexes of new product records whose displayBrand the catalog generated ('From the market' for an unidentified
+    producer) because the product.add op named no displayBrand; an explicitly supplied label is not exempt."""
+    ops = [c.get("args") for c in draft.get("ops") or [] if isinstance(c, dict) and c.get("op") == "product.add"
+           and isinstance(c.get("args"), dict)]
+    ops = [a for a in ops if "displayBrand" not in a and a.get("brand") == "Producer not identified"]
+    return {i for i, r in enumerate(draft.get("records") or [])
+            if r.get("collection") == "products" and r.get("before") is None and isinstance(r.get("after"), dict)
+            and r["after"].get("displayBrand") == "From the market" and r["after"].get("brand") == "Producer not identified"
+            and any(a.get("name") == r["after"].get("name") for a in ops)}
+
+
 def unstated(draft: dict, owner_text, makers, routes=None, sources=None) -> list:
     """[(where, term)] for claims the draft adds that the owner's text does not contain; where = collection key field.
     makers: {key: maker} from the content (None when unreadable: every producerKey change is then unstated).
@@ -199,7 +211,7 @@ def unstated(draft: dict, owner_text, makers, routes=None, sources=None) -> list
     known = dict(makers or {})
     known.update({r.get("key"): r["after"] for r in records if r.get("collection") == "makers"
                   and isinstance(r.get("after"), dict)})  # a maker this same draft adds or renames
-    hits, repeats = [], _copied(draft, sources)
+    hits, repeats, defaulted = [], _copied(draft, sources), _defaulted(draft)
     for n, r in enumerate(records):
         before = r.get("before") if isinstance(r.get("before"), dict) else {}
         after = r.get("after") if isinstance(r.get("after"), dict) else {}
@@ -216,6 +228,7 @@ def unstated(draft: dict, owner_text, makers, routes=None, sources=None) -> list
                 name = maker.get("name") if isinstance(maker, dict) else None
                 if makers is None or not (_said(new, lines) or _said(name, lines)): hits.append((where, "maker"))
                 continue
+            if n in defaulted and field == "displayBrand": continue  # generated default, not an owner claim
             if field in SOURCE_FIELDS.get(r.get("collection"), ()) and new.strip() and _source_hit(field, new, lines):
                 hits.append((where, "link" if field == "url" else field))  # AV2022-04; the term scan still runs
             text, was = fold(new), fold(old if isinstance(old, str) else "")
