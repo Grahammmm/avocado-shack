@@ -14,7 +14,7 @@ import copy
 import re
 import unicodedata
 
-from hass.content_model import AVAILABILITY, CATEGORIES
+from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
 
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
@@ -24,6 +24,15 @@ ORGANIC_MAKERS = ("Ocean Ranch", "Straus", "Green Gold", "Massa Organics")
 PRODUCT_EDITABLE = ("name", "brand", "category", "image", "description", "displayBrand", "imageAlt")
 MAKER_EDITABLE = ("name", "place", "story", "url")
 MAX_KEY, MAX_CANDIDATES = 64, 10
+PRODUCT_LIMITED = ("name", "brand", "displayBrand", "description")  # imageAlt: RF1510-13 (photos.install)
+MAKER_LIMITED = ("name", "place", "story")
+
+
+def _too_long(args, kind, fields):
+    """Refused naming the first of fields whose string is over its TEXT_LIMITS limit (the value is never echoed)."""
+    limits = TEXT_LIMITS[kind]
+    return next((Refused(f"{f} is longer than {limits[f]} characters") for f in fields
+                 if isinstance(args.get(f), str) and len(args[f]) > limits[f]), None)
 
 
 def _organic(product) -> bool:
@@ -96,6 +105,8 @@ def _touch(collection, key, before, after):
 
 
 def _product_add(content, args, ctx):
+    if problem := _too_long(args, "product", PRODUCT_LIMITED):
+        return problem
     if twin := _twin(content, args["name"], args["brand"]):
         tail = {"active": "already has this name and brand; edit it instead",
                 "hidden": "has this name and brand and is hidden; restore it instead"}.get(
@@ -131,6 +142,8 @@ def _product_edit(content, args, ctx):
     product = _product(content, args["id"])
     if not isinstance(product, dict):
         return product
+    if problem := _too_long(args, "product", PRODUCT_LIMITED):
+        return problem
     changes = {field: args[field] for field in PRODUCT_EDITABLE if field in args}
     if "producerKey" in args and args.get("clearProducer"):
         return Refused("producerKey and clearProducer cannot be combined")
@@ -213,6 +226,8 @@ def _maker_add(content, args, ctx):
     key = args["key"]
     if len(key) > MAX_KEY:
         return Refused(f"maker key is longer than {MAX_KEY} characters")
+    if problem := _too_long(args, "maker", MAKER_LIMITED):
+        return problem
     if (same := next((k for k in content.makers if _key_fold(k) == _key_fold(key)), None)) is not None:
         hidden = content.makers[same].get("hidden") is True
         return Refused(f"maker {same} already exists" + ("; restore it instead" if hidden else ""))
@@ -227,6 +242,8 @@ def _maker_edit(content, args, ctx):
     maker = _maker(content, args["key"])
     if not isinstance(maker, dict):
         return maker
+    if problem := _too_long(args, "maker", MAKER_LIMITED):
+        return problem
     changes = {field: args[field] for field in MAKER_EDITABLE if field in args}
     if not changes:
         return NeedsDetails(list(MAKER_EDITABLE), f"What should change on maker {args['key']}? "
