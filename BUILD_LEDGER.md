@@ -1696,7 +1696,7 @@ Limits: supplier costs are not stored, there is no reverse price check in chat, 
 
 ## H25 acceptance map matches main (AV1102-13) — November 3, 2026
 
-Branch rb/av1102-13 (AV1102-13, PR #325: head 1735d11bfabb, merged as 5c1f439e47aef66bbad5f90fc38b396ba2e08a37). `hass/acceptance.py` now maps H23 to `test_auto_policy` and H24 to the three `test_design_check` modules, and lists 16 more existing test modules on H09, H10, H12, H13, H17 and H20; a full run covers 25 ids with 3 not covered (was 5). `hass/tests/test_acceptance_runner.py` pins the new map.
+Branch rb/av1102-13 (AV1102-13, PR #325: head 1735d11bfabb, merged as 5c1f439e47aef66bbad5f90fc38b396ba2e08a37). `hass/acceptance.py` now maps H23 to `test_auto_policy` and H24 to the three `test_design_check` modules, and lists 12 more existing test modules on H09, H10, H12, H13, H17 and H20; a full run covers 25 ids with 3 not covered (was 5). `hass/tests/test_acceptance_runner.py` pins the new map.
 
 Checks at PR head 1735d11bfabb (recorded in PR #325): `python3 -B -m unittest hass.tests.test_acceptance_runner -v` ran 7 tests, OK. PREPUSH-TESTS PASS.
 
