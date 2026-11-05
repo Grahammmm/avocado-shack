@@ -28,10 +28,10 @@ class HelpTextTests(unittest.TestCase):
                 self.assertEqual(example.split()[0], word)  # the example belongs to its own line
                 self.assertIsNotNone(verb(example))
         self.assertEqual({verb(ex) for _, ex in pairs}, parser_verbs())  # incl. alias and help; no extra verb
-        self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs))  # one line per verb
+        self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs) - 1)  # one line per verb; AV1222-11: post has two (product, hike)
 
     def test_limits_and_plain_text(self):
-        self.assertLessEqual(len(LINES), 19)  # AV1222-10: + the cost line; AV0022-08: + the show line; AV1322-05: + the report line; AV1322-07: + the post line; AV1102-12: + the margin line
+        self.assertLessEqual(len(LINES), 20)  # AV1222-11: + the post hike line; AV1222-10: + the cost line; AV0022-08: + the show line; AV1322-05: + the report line; AV1322-07: + the post line; AV1102-12: + the margin line
         for line in LINES:
             self.assertLessEqual(len(line), 70, line)
             self.assertFalse(set(line) & set("*_`#"), line)  # plain text, no markdown
