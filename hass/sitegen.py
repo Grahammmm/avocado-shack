@@ -89,7 +89,12 @@ def checked_line(store: dict, today) -> str | None:
 def checked_note(store: dict, today) -> str:
     """The whole freshness paragraph for the index template, or '' when there is no check yet."""
     line = checked_line(store, today)
-    return "" if line is None else f'<p class="catalog-note selection-checked">{html.escape(line, quote=False)}</p>'
+    if line is None:
+        return ""
+    # AV1622-04: shop.js re-ages this paragraph in the browser from its own stored date (and phone); this text is the no-JS fallback.
+    day, phone = checked_on(store), store.get("phone")
+    attrs = f' data-checked-on="{day.isoformat() if day else ""}"' + (f' data-phone="{phone}"' if phone else "")
+    return f'<p class="catalog-note selection-checked"{attrs}>{html.escape(line, quote=False)}</p>'
 
 
 def availability_label(product: dict, store: dict, today) -> str | None:
@@ -99,17 +104,24 @@ def availability_label(product: dict, store: dict, today) -> str | None:
     on = iso_day(product.get("available_on"))
     if day is None or on is None or product.get("available") not in AVAILABILITY_WORDS:
         return None
+    if on > day:  # AV1622-04: a product cannot have been checked after the store's latest check
+        return None
     return AVAILABILITY_WORDS[product["available"]] if on == day and not stale else f"Last confirmed {_day_text(on)}"
 
 
-def _catalog_js(content: Content, today) -> bytes:
+def _catalog_js(content: Content) -> bytes:
+    """AV1622-04: the catalog carries the recorded check dates and raw state, never a finished word or the build date;
+    shop.js turns them into words with the same rule as availability_label/checked_line against the visitor's Pacific day."""
     records = []
     for p in content.active_products():
         record = {k: v for k, v in p.items() if k in PRODUCT_PUBLIC_FIELDS + PRODUCT_OPTIONAL_PUBLIC}
-        if (label := availability_label(p, content.store, today)) is not None:
-            record["availability"] = label
+        if p.get("available") in AVAILABILITY_WORDS and iso_day(p.get("available_on")) is not None:
+            record["availabilityState"], record["availabilityCheckedOn"] = p["available"], p["available_on"]
         records.append(record)
-    return ("const catalog=" + json.dumps(records, ensure_ascii=False) + ";\n").encode("utf-8")
+    day = checked_on(content.store)
+    fresh = {"selectionCheckedOn": day.isoformat() if day else None}
+    return ("const catalog=" + json.dumps(records, ensure_ascii=False) + ";\n"
+            "const catalogFreshness=" + json.dumps(fresh) + ";\n").encode("utf-8")
 
 
 def _visible_makers(content: Content) -> dict:
@@ -188,7 +200,7 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, n
     decides selection staleness and notice expiry; ``notice_today`` overrides only notice expiry for artifact checks."""
     today = today or shop_today()
     files = {
-        SITE_PREFIX + "catalog-products.js": _catalog_js(content, today),
+        SITE_PREFIX + "catalog-products.js": _catalog_js(content),
         SITE_PREFIX + "producers.js": _producers_js(content),
         SITE_PREFIX + "producers.json": _producers_json(content),
         SITE_PREFIX + "community.json": _community_json(content),

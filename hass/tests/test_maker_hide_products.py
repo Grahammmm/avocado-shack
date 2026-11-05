@@ -128,7 +128,7 @@ class MakerHideConversationTests(H06TestCase):
 
     def generated(self):
         site = self.repo.wt / "storefront-mockup"
-        read = lambda name, head: json.loads((site / name).read_text("utf-8")[len(head):].rstrip(";\n"))  # noqa: E731
+        read = lambda name, head: json.loads((site / name).read_text("utf-8").split("\n", 1)[0][len(head):].rstrip(";\n"))  # noqa: E731
         return (read("catalog-products.js", "const catalog="), read("producers.js", "const producers="),
                 json.loads((site / "producers.json").read_text("utf-8")))
 

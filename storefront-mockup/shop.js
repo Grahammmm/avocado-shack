@@ -6,14 +6,38 @@ function maker(p){return producers[p.producerKey]}
 function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus','Green Gold','Massa Organics'].includes(p.producerKey)}
 function photo(p){return `<img loading="lazy" width="800" height="800" src="${esc(p.image)}" alt="${esc(p.imageAlt||p.name)}">`}
 function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
-function badges(p){return organic(p)?'<div class="food-badges"><span>Organic</span></div>':''}
+function badges(p){return (organic(p)?'<div class="food-badges"><span>Organic</span></div>':'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
 function card(p){
  const m=maker(p);
  return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3><p class="origin-label">${esc(origin(p))}</p>${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${m?`<details class="maker-story"><summary>Meet the maker<span class="sr-only">: ${esc(m.name)}</span></summary><div class="maker-story-content"><p>${esc(m.story)}</p><a href="${esc(m.url)}" target="_blank" rel="noopener">Visit ${esc(m.name)} <span aria-hidden="true">↗</span></a>${makerCounts.get(p.producerKey)>=2?`<button type="button" class="text-link" data-from="${esc(p.producerKey)}">See all ${makerCounts.get(p.producerKey)} from ${esc(m.name)}</button>`:''}</div></details>`:''}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
 }
 [...new Set(catalog.map(p=>p.brand))].sort().forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=b==='Producer not identified'?'Other market selections':b;$('#brand-filter').append(o)});
+// AV1622-04: shelf-check words and the selection line are worked out here, in the visitor's browser, from the recorded dates
+// in catalog-products.js and today's date in Pacific time, with the same rule as sitegen (pinned by test_browser_freshness).
+// The words are never published and no date is invented; the build-time paragraph stays as the no-JS fallback.
+// FRESHNESS-BEGIN
+const STALE_AFTER_DAYS=7,AVAILABILITY_WORDS={yes:'Available today',limited:'Limited',no:'Sold out'};
+const DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const PACIFIC_DAY=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'});
+function pacificDay(now){const q={};for(const x of PACIFIC_DAY.formatToParts(now))q[x.type]=x.value;return `${q.year}-${q.month}-${q.day}`}
+// UTC day number of a real YYYY-MM-DD date, else null (impossible dates such as 2026-02-30 are rejected).
+function dayNumber(s){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof s==='string'?s:'');if(!m)return null;const y=+m[1],mo=+m[2],d=+m[3],t=new Date(Date.UTC(y,mo-1,d));return t.getUTCFullYear()===y&&t.getUTCMonth()===mo-1&&t.getUTCDate()===d?t.getTime()/864e5:null}
+function dayText(s){const t=new Date(dayNumber(s)*864e5);return `${DAY_NAMES[t.getUTCDay()]}, ${MONTH_NAMES[t.getUTCMonth()]} ${t.getUTCDate()}`}
+// Whole calendar days from the check to today, or null (missing, invalid or future date).
+function checkAge(checked,today){const a=dayNumber(checked),t=dayNumber(today);return a===null||t===null||a>t?null:t-a}
+function selectionLine(checked,today,phone){const age=checkAge(checked,today);if(age===null)return null;
+ const call=/^\d{10}$/.test(phone||'')?` call (${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)} or`:' call or';
+ return `Selection last checked by Michael on ${dayText(checked)}${age>STALE_AFTER_DAYS?` (more than a week ago -${call} visit to confirm)`:''}.`}
+function availabilityWord(state,on,checked,today){const age=checkAge(checked,today),o=dayNumber(on);
+ if(age===null||o===null||o>dayNumber(checked)||typeof state!=='string'||!Object.hasOwn(AVAILABILITY_WORDS,state))return null;
+ return o===dayNumber(checked)&&age<=STALE_AFTER_DAYS?AVAILABILITY_WORDS[state]:`Last confirmed ${dayText(on)}`}
+function refreshFreshness(now=new Date()){const today=pacificDay(now),checked=typeof catalogFreshness==='object'&&catalogFreshness?catalogFreshness.selectionCheckedOn:null;
+ catalog.forEach(p=>{const w=availabilityWord(p.availabilityState,p.availabilityCheckedOn,checked,today);if(w===null)delete p.availability;else p.availability=w});
+ const note=document.querySelector('.selection-checked'),line=note&&selectionLine(note.dataset.checkedOn,today,note.dataset.phone);if(line)note.textContent=line}
+// FRESHNESS-END
 // AV1102-03: the words match sitegen.AVAILABILITY_WORDS (pinned by a test); "Last confirmed ..." is never current.
+refreshFreshness();
 const CURRENT=new Set(['Available today','Limited','Sold out']),AVAIL=new Set(['Available today','Limited']);let availBox=null;
 if(catalog.some(p=>CURRENT.has(p.availability))){$('#brand-filter').closest('label').insertAdjacentHTML('afterend','<label class="avail-filter"><input type="checkbox" id="avail-filter"> Available today</label>');availBox=$('#avail-filter')}
 const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\u2018\u2019\u02bc]/g,"'").toLowerCase();
@@ -21,7 +45,7 @@ const SHELF=Object.fromEntries([...document.querySelectorAll('[data-filter]')].f
 // One search normalization for filtering, the address and restore: trimmed, at most 80 characters (code points).
 const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return catalog.filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
-function renderCatalog(append=false){const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
+function renderCatalog(append=false){refreshFreshness();const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
 function anyFilter(){return activeCategory!=='all'||!!searchText($('#product-search').value)||!!$('#brand-filter').value||!!activeFrom||!!availBox?.checked}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
  linkedItem='';p.delete('item');  // A filter change also cancels any pending item scroll/focus.
