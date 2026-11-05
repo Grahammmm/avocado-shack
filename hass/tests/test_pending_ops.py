@@ -113,7 +113,8 @@ class PhotoPendingOpsTests(unittest.TestCase):
                                                  attachments=attachments)), want)
         ops = [{"op": "product.set_photo", "args": {"photo": pd.SHA}}]
         self.assertEqual(interp.pendings[-1],
-                         [{"code": pd.SHA[:4], "state": "needs-details", "question": PHOTO_QUESTION, "ops": ops}])
+                         [{"code": pd.SHA[:4], "state": "needs-details", "question": PHOTO_QUESTION, "ops": ops,
+                           "missing": ["id", "imageAlt"]}])
 
 
 if __name__ == "__main__":

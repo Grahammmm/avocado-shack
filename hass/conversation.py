@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TE
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
   reason TEXT, replaced_by TEXT, draft_hash TEXT, base TEXT, ops_json TEXT NOT NULL, summary TEXT NOT NULL,
   sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT,
-  screenshot TEXT, checked_at TEXT, proposed_at TEXT);
+  screenshot TEXT, checked_at TEXT, proposed_at TEXT, missing_json TEXT);
 CREATE TABLE IF NOT EXISTS approvals(id INTEGER PRIMARY KEY, sender TEXT NOT NULL, chat TEXT NOT NULL,
   provider_id TEXT NOT NULL, change_id TEXT NOT NULL, draft_hash TEXT NOT NULL, base TEXT NOT NULL,
   expires_at TEXT NOT NULL, approved_at TEXT NOT NULL);
@@ -236,6 +236,16 @@ def _pending_ops(ops_json) -> dict:  # AV0022-03 (H05): a waiting draft's ops; t
     try: ops = json.loads(ops_json) if len(ops_json.encode()) <= OPS_PENDING_MAX else None
     except (TypeError, ValueError, AttributeError, RecursionError): ops = None
     return {"ops": ops} if isinstance(ops, list) else {"opsOmitted": True}
+
+
+def _missing_ids(missing_json) -> list:  # AV0007-03: stored argument ids of a question; anything unreadable -> []
+    try: ids = json.loads(missing_json) if missing_json else []
+    except (TypeError, ValueError, RecursionError): return []
+    out = []
+    for i in ids if isinstance(ids, list) else []:
+        if not isinstance(i, str): return []
+        if i and i not in out: out.append(i)
+    return out
 
 
 def _answered_at(msg, now: datetime) -> datetime:
@@ -450,7 +460,7 @@ class Conversation:
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         columns = {r["name"] for r in self.db.execute("PRAGMA table_info(drafts)")}
-        for column in ("screenshot", "checked_at", "proposed_at"):  # an H05 database gains the H06 + AVB-03 columns
+        for column in ("screenshot", "checked_at", "proposed_at", "missing_json"):  # an H05 database gains the H06 + AVB-03 + AV0007-03 columns
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
         if "reply_to" not in {r["name"] for r in self.db.execute("PRAGMA table_info(outbox)")}:  # AV0022-10 (H16)
             self.db.execute("ALTER TABLE outbox ADD COLUMN reply_to TEXT")
@@ -551,7 +561,7 @@ class Conversation:
         expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))
         fields = dict(change_id=draft["change_id"], draft_hash=draft["draft_hash"], base=draft["base"],
                       ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires,
-                      proposed_at=_iso(now))  # AVB-03: the proposal instant itself, not derived from the current ttl
+                      proposed_at=_iso(now), missing_json=None)  # AVB-03: the proposal instant itself; a filled question has nothing missing
         if row is not None:
             self._move(row, "proposed", **fields)
             return self._row(row["row_id"])
@@ -758,7 +768,8 @@ class Conversation:
             self.db.execute(USAGE)
             self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
-                    r["summary"], **_pending_ops(r["ops_json"])}  # AV0022-03: + "ops" or "opsOmitted"
+                    r["summary"], **_pending_ops(r["ops_json"]),  # AV0022-03: + "ops" or "opsOmitted"
+                    **({"missing": _missing_ids(r["missing_json"])} if r["state"] == "needs-details" else {})}  # AV0007-03
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         notes = self._notes()  # AV1102-09: preferences only; no notes means exactly the two-argument call
         try:
@@ -789,15 +800,16 @@ class Conversation:
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
             expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))  # H16: questions lapse too
+            missing_json = json.dumps(out.get("missing", []))  # AV0007-03: stored with the question, same transaction
             if revised is not None and revised["state"] == "needs-details":  # the owner just answered: refresh
-                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ?, expires_at = ? WHERE row_id = ?",
-                                (ops_json, out["question"], expires, revised["row_id"]))
+                self.db.execute("UPDATE drafts SET ops_json = ?, summary = ?, expires_at = ?, missing_json = ? WHERE row_id = ?",
+                                (ops_json, out["question"], expires, missing_json, revised["row_id"]))
             else:
                 code = self._code(hashlib.sha256(msg.provider_id.encode()).hexdigest())
                 self.db.execute(
-                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at)"
-                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?, ?)",
-                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now), expires))
+                    "INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at, missing_json)"
+                    " VALUES (?, 'needs-details', ?, ?, ?, ?, ?, ?, ?)",
+                    (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now), expires, missing_json))
                 # An incomplete correction still supersedes the proposal it names: it can no longer be approved.
                 if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
@@ -847,9 +859,10 @@ class Conversation:
         if said:
             self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
-        self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at) VALUES"
-                        " (?, 'needs-details', ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
-                            [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now)))
+        self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, missing_json) VALUES"
+                        " (?, 'needs-details', ?, ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
+                            [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now),
+                            json.dumps(["id", "imageAlt"])))  # AV0007-03: set_photo's required args besides the photo
         self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
         if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
         return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"

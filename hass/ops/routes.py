@@ -22,6 +22,7 @@ import re
 import unicodedata
 
 from hass.content_model import TEXT_LIMITS, _https
+from hass.field_words import field_list
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.hikes import MAX_ID_BASE
 
@@ -80,7 +81,7 @@ def _route_add(content, args, ctx):
     if not (args.get("sourceUrl") and args.get("sourceName")):
         return NeedsDetails(["sourceUrl", "sourceName"], "Where does this route come from (link and name)?")
     if missing := [f for f in ROUTE_EDITABLE if f not in args]:  # the validator needs every route text non-empty
-        return NeedsDetails(missing, "Please provide: " + ", ".join(missing))
+        return NeedsDetails(missing, "Please provide: " + field_list(missing))
     if long := _too_long(args):
         return long
     problems = []
