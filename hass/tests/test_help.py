@@ -31,7 +31,7 @@ class HelpTextTests(unittest.TestCase):
         self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs) - 1)  # one line per verb; AV1222-11: post has two (product, hike)
 
     def test_limits_and_plain_text(self):
-        self.assertLessEqual(len(LINES), 21)  # AV1222-13: + the hidden line; AV1222-11: + the post hike line; AV1222-10: + the cost line; AV0022-08: + the show line; AV1322-05: + the report line; AV1322-07: + the post line; AV1102-12: + the margin line
+        self.assertLessEqual(len(LINES), 22)  # AV1622-09: + the listing line; AV1222-13: + the hidden line; AV1222-11: + the post hike line; AV1222-10: + the cost line; AV0022-08: + the show line; AV1322-05: + the report line; AV1322-07: + the post line; AV1102-12: + the margin line
         for line in LINES:
             self.assertLessEqual(len(line), 70, line)
             self.assertFalse(set(line) & set("*_`#"), line)  # plain text, no markdown
