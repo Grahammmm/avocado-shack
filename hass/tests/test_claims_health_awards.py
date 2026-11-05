@@ -65,7 +65,8 @@ class HealthAwardTermTests(unittest.TestCase):
             with self.subTest(owner=owner):
                 self.assertEqual(self.hits("", f"A {term} jar.", owner), [term])
         self.assertEqual(self.hits("", "Stay immune", "not sick. immune is good"), [])
-        self.assertEqual(self.hits("", "Stay immune", "I do not think so but immune"), ["immune"])  # 4 words back
+        self.assertEqual(self.hits("", "Stay immune", "I do not think so but immune"), [])  # negator 4 words back: outside the window
+        self.assertEqual(self.hits("", "Stay immune", "I do not think so immune"), ["immune"])  # 3 words back: inside
         self.assertEqual(self.hits("", "Not immune at all"), ["immune"])  # negated draft wording still asks
 
     def test_counts_lists_and_collections(self):
@@ -98,7 +99,7 @@ class HealthAwardTermTests(unittest.TestCase):
                                         "description": "A gold medal view"}}]}
         self.assertEqual(claims.unstated(draft, "", MAKERS, None, sources), [])
         draft["records"][0]["after"]["description"] = "A gold medal view, superfood"
-        self.assertEqual([t for _w, t in claims.unstated(draft, "", MAKERS, None, sources)], ["gold medal", "superfood"])
+        self.assertEqual([t for _w, t in claims.unstated(draft, "", MAKERS, None, sources)], ["superfood", "gold medal"])
 
     def test_label_values_cannot_supply_claims(self):
         for term in TERMS:
