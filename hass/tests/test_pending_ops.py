@@ -28,7 +28,7 @@ class Recorder(conversation.FixtureInterpreter):  # "make it 09:30" copies the f
         super().__init__(mapping)
         self.pendings = []
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         self.pendings.append(copy.deepcopy(pending))
         if text != "make it 09:30": return super().interpret(text, pending)
         ops = copy.deepcopy(pending[0]["ops"])

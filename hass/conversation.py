@@ -184,7 +184,7 @@ class FixtureInterpreter:
     def __init__(self, mapping):
         self.mapping = dict(mapping)
 
-    def interpret(self, text, pending, notes=None):
+    def interpret(self, text, pending, notes=None, *, sent_at=None):
         return copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
 
 
@@ -764,10 +764,11 @@ class Conversation:
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
                     r["summary"], **_pending_ops(r["ops_json"])}  # AV0022-03: + "ops" or "opsOmitted"
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
-        notes = self._notes()  # AV1102-09: preferences only; no notes means exactly the two-argument call
+        notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
+        sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
         try:
-            result = _checked(self.interpreter.interpret(msg.text, pending, notes=notes) if notes
-                              else self.interpreter.interpret(msg.text, pending))
+            result = _checked(self.interpreter.interpret(msg.text, pending, notes=notes, sent_at=sent_at) if notes
+                              else self.interpreter.interpret(msg.text, pending, sent_at=sent_at))
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
         codes = {p["code"] for p in pending}

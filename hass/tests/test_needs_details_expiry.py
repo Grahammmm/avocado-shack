@@ -20,7 +20,7 @@ class SpyInterpreter(conversation.FixtureInterpreter):
         super().__init__({})
         self.mapping, self.pendings = mapping, []
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         self.pendings.append([p["code"] for p in pending])
         return super().interpret(text, pending)
 

@@ -39,7 +39,7 @@ class PhotoInterpreter:
     def __init__(self):
         self.mapping, self.texts = {ANSWER: {"id": PID, "imageAlt": ALT}}, []
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         self.texts.append(text)
         if text not in self.mapping: return {"unsupported": "Sorry, I can't do that yet."}
         waiting = [p["code"] for p in pending if p["state"] == "needs-details"]

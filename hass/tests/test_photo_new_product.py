@@ -34,7 +34,7 @@ class NewProductInterpreter:
     def __init__(self):
         self.mapping = {}
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         if text not in self.mapping: return {"unsupported": "Sorry, I can't do that yet."}
         ops, revises = self.mapping[text]
         waiting = [p["code"] for p in pending if p["state"] == "needs-details"]

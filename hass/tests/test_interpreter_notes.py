@@ -59,21 +59,21 @@ class SentNotesTests(NotesTestCase):
         for i in range(3): self.save(f"alias.jam-{i}", f"product:photo-product-00{i}")
         (args, kw) = self.sent()
         self.assertEqual(args, ("hours", []))
-        self.assertEqual(kw, {"notes": [{"key": f"note-{i:02d}", "text": f"text {i}"} for i in range(24, 4, -1)]})
+        self.assertEqual(kw, {"notes": [{"key": f"note-{i:02d}", "text": f"text {i}"} for i in range(24, 4, -1)], "sent_at": self.now})
         self.assertEqual(len(kw["notes"]), conversation.MAX_NOTES)
         self.assertFalse([n for n in kw["notes"] if n["key"].startswith("alias.")])
 
     def test_no_table_or_no_rows_is_the_plain_two_argument_call(self):
         self.assertIsNone(self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'memory'").fetchone())
-        self.assertEqual(self.sent("nothing"), (("nothing", []), {}))
+        self.assertEqual(self.sent("nothing"), (("nothing", []), {"sent_at": self.now}))
         self.mem()  # creates the empty table
-        self.assertEqual(self.sent("nothing"), (("nothing", []), {}))
+        self.assertEqual(self.sent("nothing"), (("nothing", []), {"sent_at": self.now}))
         self.save("alias.only", "maker:Etto")  # aliases alone are still no notes
-        self.assertEqual(self.sent("nothing"), (("nothing", []), {}))
+        self.assertEqual(self.sent("nothing"), (("nothing", []), {"sent_at": self.now}))
 
     def test_two_parameter_double_still_works_with_notes_absent(self):
         class Old(conversation.FixtureInterpreter):
-            def interpret(self, text, pending):
+            def interpret(self, text, pending, **kw):
                 return super().interpret(text, pending)
         self.interp = Old(self.interp.mapping)
         self.conv = self.open()
@@ -89,7 +89,7 @@ class SentNotesTests(NotesTestCase):
         self.mem().forget("greeting")
         (_args, kw) = self.sent()
         self.assertEqual(kw["notes"], [{"key": "tone", "text": "formal"}, {"key": "sign-off", "text": "Thanks"}])
-        self.assertNotIn("short and friendly", json.dumps(kw))
+        self.assertNotIn("short and friendly", json.dumps(kw, default=str))
 
     def test_a_memory_read_error_goes_on_without_notes(self):
         self.conv.db.execute("CREATE TABLE memory(id INTEGER PRIMARY KEY, key TEXT)")  # no value column: OperationalError
@@ -97,7 +97,7 @@ class SentNotesTests(NotesTestCase):
         self.assertEqual(self.say("hours"), "proposed")
         [reply] = self.replies()
         self.assertTrue(reply.startswith("Draft "), reply)
-        self.assertEqual(self.interp.seen[-1][1], {})
+        self.assertEqual(self.interp.seen[-1][1], {"sent_at": self.now})
 
 
 class NoteIsNotProofTests(NotesTestCase):

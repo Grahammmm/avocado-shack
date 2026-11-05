@@ -22,7 +22,7 @@ class CountingInterpreter(conversation.FixtureInterpreter):
         super().__init__(mapping)
         self.calls = 0
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, **kw):
         self.calls += 1
         if text == "boom": raise RuntimeError("simulated interpreter failure")
         return {"bogus": 1} if text == "junk" else super().interpret(text, pending)
