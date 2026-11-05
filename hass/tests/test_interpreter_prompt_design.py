@@ -45,7 +45,7 @@ class PromptRuleTests(unittest.TestCase):
         without = prompt.replace("- " + RULES[-2] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
         self.assertNotIn(DESIGN_UNSUPPORTED, without)
-        self.assertEqual(len(RULES), 12)
+        self.assertEqual(len(RULES), 13)
         self.assertLess(len(RULES[-2].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 
