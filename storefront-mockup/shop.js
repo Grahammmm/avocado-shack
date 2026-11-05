@@ -13,19 +13,22 @@ function card(p){
  return `<article data-product-id="${esc(p.id)}" data-category="${esc(p.category)}"><div class="food-card-top"><div class="product-image">${photo(p)}</div><div class="food-identity"><p class="product-meta">${esc(brand(p))}</p><h3>${esc(p.name)}</h3><p class="origin-label">${esc(origin(p))}</p>${badges(p)}</div></div><p class="food-description">${esc(p.description)}</p>${m?`<details class="maker-story"><summary>Meet the maker<span class="sr-only">: ${esc(m.name)}</span></summary><div class="maker-story-content"><p>${esc(m.story)}</p><a href="${esc(m.url)}" target="_blank" rel="noopener">Visit ${esc(m.name)} <span aria-hidden="true">↗</span></a>${makerCounts.get(p.producerKey)>=2?`<button type="button" class="text-link" data-from="${esc(p.producerKey)}">See all ${makerCounts.get(p.producerKey)} from ${esc(m.name)}</button>`:''}</div></details>`:''}<a class="text-link card-link" href="?item=${esc(encodeURIComponent(p.id))}#market">Link to this</a></article>`;
 }
 [...new Set(catalog.map(p=>p.brand))].sort().forEach(b=>{const o=document.createElement('option');o.value=b;o.textContent=b==='Producer not identified'?'Other market selections':b;$('#brand-filter').append(o)});
+// AV1102-03: the words match sitegen.AVAILABILITY_WORDS (pinned by a test); "Last confirmed ..." is never current.
+const CURRENT=new Set(['Available today','Limited','Sold out']),AVAIL=new Set(['Available today','Limited']);let availBox=null;
+if(catalog.some(p=>CURRENT.has(p.availability))){$('#brand-filter').closest('label').insertAdjacentHTML('afterend','<label class="avail-filter"><input type="checkbox" id="avail-filter"> Available today</label>');availBox=$('#avail-filter')}
 const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\u2018\u2019\u02bc]/g,"'").toLowerCase();
 // One search normalization for filtering, the address and restore: trimmed, at most 80 characters (code points).
 const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
-function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return catalog.filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''}`).includes(term))}
+function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return catalog.filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''}`).includes(term))}
 function renderCatalog(append=false){const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
  linkedItem='';p.delete('item');  // A filter change also cancels any pending item scroll/focus.
- set('from',activeFrom);set('shelf',activeCategory==='all'?'':activeCategory);set('q',searchText($('#product-search').value));set('maker',$('#brand-filter').value);
+ set('from',activeFrom);set('shelf',activeCategory==='all'?'':activeCategory);set('q',searchText($('#product-search').value));set('maker',$('#brand-filter').value);set('avail',availBox?.checked?'1':'');
  history.replaceState(null,'',location.pathname+(s()?'?'+s():'')+location.hash)}
 function resetCatalog(){limit=12;syncUrl();renderCatalog();scheduleScroll()}
 function loadMore(){if(visibleCount>=filteredProducts().length)return;limit+=12;renderCatalog(true)}
 // Typed or pasted text past the limit is cut in the box too, so the box, the results and a shared address agree.
-$('#product-search').oninput=()=>{const box=$('#product-search');if([...box.value.trim()].length>80)box.value=searchText(box.value);resetCatalog()};$('#brand-filter').onchange=resetCatalog;$('#more-products').onclick=loadMore;
+$('#product-search').oninput=()=>{const box=$('#product-search');if([...box.value.trim()].length>80)box.value=searchText(box.value);resetCatalog()};$('#brand-filter').onchange=resetCatalog;if(availBox)availBox.onchange=resetCatalog;$('#more-products').onclick=loadMore;
 function selectShelf(b){activeCategory=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))})}
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{selectShelf(b);resetCatalog()});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-from],[data-clear-from]');if(!b)return;const key=b.dataset.from||'';if(key&&!validFrom(key))return;activeFrom=key;selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';resetCatalog();$('#catalog-grid').scrollIntoView({block:'start'})});
@@ -55,8 +58,10 @@ try{const u=new URLSearchParams(location.search),shelf=[...document.querySelecto
  // AV1322-10: ?item=<catalog id> wins over the filters: show everything, load enough cards to reach it.
  // An unknown, empty or over-80-character id is ignored and the filters above apply as before.
  const item=u.get('item'),i=item&&[...item].length<=80?catalog.findIndex(p=>p.id===item):-1;
- if(i>=0){activeFrom='';selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item}
- if(u.has('from')&&!activeFrom){u.delete('from');const q=u.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}}catch(e){}
+ if(i>=0){activeFrom='';selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item;if(availBox)availBox.checked=false}
+ if(availBox)availBox.checked=u.get('avail')==='1'&&i<0;
+ let fix=false;if(u.has('from')&&!activeFrom){u.delete('from');fix=true}if(u.has('avail')&&!availBox?.checked){u.delete('avail');fix=true}
+ if(fix){const q=u.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}}catch(e){}
 renderCatalog();
 // Prefer load, after the browser's #market jump, but do not wait indefinitely for a nonessential asset.
 let linkedShown=false;
