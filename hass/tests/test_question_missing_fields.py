@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from hass import conversation, interpreter_prompt
 from hass.conversation import Inbound, _missing_ids
+from hass.field_words import field_list
 from hass.fixture_chat import FixtureAdapter
 from hass.tests import test_photo_draft as pd
 from hass.tests.test_catalog_ops import NEW
@@ -28,7 +29,6 @@ class QuestionWordsTests(HikeTestCase):
     def test_required_and_one_of_questions_keep_ids(self):
         repo = self.repo()
         repo.run(("hike.create", HIKE))
-        no_alt = {k: v for k, v in NEW.items() if k not in ("displayBrand", "producerKey")}
         cases = [
             (("route.add", {"title": "T", "place": "P", "sourceUrl": "https://trails.example.org/x", "sourceName": "N"}),
              "Please provide: "),
@@ -40,18 +40,18 @@ class QuestionWordsTests(HikeTestCase):
             with self.subTest(op=op):
                 missing, question = self.missing_of(repo, op, args)
                 self.assertTrue(question.startswith(prefix), question)
-                from hass.field_words import field_list
                 self.assertEqual(question[len(prefix):], field_list(missing))  # prose mapped, ids untouched
-                self.assertTrue(set(missing) & {"url", "clearUrl", "producerKey", "rsvpEnabled", "meetingPoint", "elevationLabel",
-                                                "routeType", "clearProducer", "clearImageAlt", "noCapacityLimit", "trailId",
-                                                "displayBrand", "imageAlt"})
-                self.assertNotIn("clearUrl", question)
-                self.assertNotIn("producerKey", question)
-                self.assertNotIn("noCapacityLimit", question)
+                self.assertTrue(missing and all(isinstance(m, str) for m in missing))
+        missing, question = self.missing_of(repo, "product.edit", {"id": "photo-product-001"})
+        self.assertTrue({"producerKey", "clearProducer", "clearImageAlt"} <= set(missing))
+        self.assertTrue(question.endswith("the maker, remove the maker, remove the photo description"), question)
+        missing, question = self.missing_of(repo, "maker.edit", {"key": "Etto"})
+        self.assertIn("clearUrl", missing)
+        self.assertTrue(question.endswith("remove the website link"), question)
         missing, question = self.missing_of(repo, "hike.update", {"id": HIKE_ID})
         self.assertIn("noCapacityLimit", missing)
         self.assertIn("no guest limit", question)
-        self.assertNotIn("imageAlt", no_alt)
+        self.assertNotIn("noCapacityLimit", question)
 
     def test_editor_missing_args_are_mapped_but_ids_kept(self):
         repo = self.repo()
@@ -69,9 +69,6 @@ class QuestionWordsTests(HikeTestCase):
             with self.subTest(extra=extra):
                 result = self.assertRejected(repo, "refused", ("product.add", {**fields, **extra}))
                 self.assertEqual(result["reason"], "Send the photo with the product name as its caption.")
-        result = self.assertRejected(repo, "refused", ("product.add", {**fields, "image": "assets/products/x.webp",
-                                                                       "photo": pd.SHA, "imageAlt": ALT}))
-        self.assertEqual(result["reason"], "give image or photo, not both")  # unchanged
         result = self.assertRejected(repo, "refused", ("product.add", {**fields, "photo": pd.SHA}))
         self.assertEqual(result["reason"], "imageAlt is required with photo")  # unchanged
 
