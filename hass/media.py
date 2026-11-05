@@ -325,10 +325,14 @@ def _valid_source(meta: dict) -> bool:
     return "source" not in meta or (isinstance(meta["source"], str) and SOURCE_RE.fullmatch(meta["source"]) is not None)
 
 def verify_store(root) -> dict:
-    """Read-only re-hash of the store with sidecar, mode, temp and web-copy checks; a sha is shown as 12 hex only."""
+    """Read-only re-hash of the store with sidecar, mode, temp and web-copy checks; a sha is shown as 12 hex only.
+
+    An existing web copy of a hash-valid original must equal the sanitized bytes computed in memory
+    (`web content mismatch`); an original the sanitizer refuses gives `web unverifiable`. Nothing is written."""
     bad, root = _verify_unsafe(root)
     if bad is not None: return {"result": "unsafe", "problems": [bad]}
     problems, found, short = set(), {"originals": {}, "web": {}}, lambda rel: SHA_RE.sub(lambda m: m[0][:12], rel)
+    good = {}  # (sha, ext) -> bytes of a hash-valid original of the right kind, kept to check its web copy
     def walk(path, rel, depth):  # depth 0 root, 1 originals|web, 2 <aa> (files live here only); links never followed
         try:  # an access error is a redacted one-line problem (relative name only), never a crash or a path
             st = os.lstat(path)
@@ -358,6 +362,7 @@ def verify_store(root) -> dict:
         for ext, path in images.items():
             if (data := read(path, sha)) is not None and hashlib.sha256(data).hexdigest() != sha:
                 problems.add(f"content mismatch: {sha[:12]}")
+            elif data is not None and sniff(data) == ("jpeg" if ext == "jpg" else "png"): good[sha, ext] = data
             if "json" not in files: problems.add(f"sidecar missing: {sha[:12]}")
             elif data is not None and (raw := read(files["json"], sha)) is not None:
                 try: meta = json.loads(raw) if len(raw) <= SIDECAR_MAX else None  # RF1920-6: oversize or too deep is
@@ -368,6 +373,11 @@ def verify_store(root) -> dict:
     for sha, files in found["web"].items():
         have = set(found["originals"].get(sha, {})) - {"json"}
         problems.update(f"web {'kind' if have else 'orphan'}: {sha[:12]}" for ext in files if ext not in have)
+        for ext in sorted(set(files) & have):  # RF1100-20: the stored bytes must equal the in-memory sanitized original
+            if (sha, ext) not in good: continue  # original already reported (or wrong kind): no cascaded problem
+            try: want = (_jpeg_copy if ext == "jpg" else _png_copy)(good[sha, ext])[0]
+            except (Refused, ValueError, IndexError): problems.add(f"web unverifiable: {sha[:12]}"); continue
+            if (actual := read(files[ext], sha)) is not None and actual != want: problems.add(f"web content mismatch: {sha[:12]}")
     return {"result": "problems" if problems else "ok", "problems": sorted(problems), "web": sum(map(len, found["web"].values())),
             "originals": sum(len(f) - ("json" in f) for f in found["originals"].values())}
 
