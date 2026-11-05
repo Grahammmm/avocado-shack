@@ -38,7 +38,7 @@ class HikeIcsTest(unittest.TestCase):
         self.assertNotIn("calendar isn’t available", out)  # render() completed
         cards = {}
         for art in out.split("<article ")[1:]:
-            title = html.unescape(re.search(r"<h3>(.*?)</h3>", art).group(1))
+            title = html.unescape(re.search(r"<h2>(.*?)</h2>", art).group(1))
             links = LINK.findall(art)
             cards[title] = [(d, urllib.parse.unquote(html.unescape(h).split(",", 1)[1])) for d, h in links]
         return cards

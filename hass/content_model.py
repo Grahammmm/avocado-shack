@@ -53,7 +53,8 @@ EVENT_TEXT_FIELDS = (
 )
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
-PHONE_RE = re.compile(r"[2-9][0-9]{2}[2-9][0-9]{6}", re.ASCII)
+PHONE_DIGITS = 10  # US number: area code, exchange, line; LIMITS.md cites it
+PHONE_RE = re.compile(rf"[2-9][0-9]{{2}}[2-9][0-9]{{{PHONE_DIGITS - 4}}}", re.ASCII)
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
 STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone")  # all absent by default
 MAX_NOTICE, MAX_NOTICE_DAYS = 160, 60  # store.notice text characters; its last day at most this many days ahead (set)

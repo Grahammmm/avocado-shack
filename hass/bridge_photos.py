@@ -8,6 +8,8 @@ REST (docs.bluebubbles.app): GET /api/v1/message/{guid}?with=attachment -> {"dat
 GET /api/v1/attachment/{guid}/download -> raw bytes.
 A download whose length differs from the attachment's declared int totalBytes is refused as size-mismatch.
 Attachments after the first n are never read or checked.
+A guid is scalar text: non-empty, at most MAX_GUID code points, no C0/C1 control and no surrogate code point
+(U+D800-U+DFFF, which UTF-8 cannot encode); a bad attachment guid in the first n is a `shape` refusal before any download.
 """
 import json, sys, urllib.error, urllib.parse, urllib.request  # noqa: E401
 from pathlib import Path
@@ -32,6 +34,12 @@ def _urllib_transport(url, headers, timeout, limit):
     except urllib.error.HTTPError as exc:
         exc.close()
         return exc.code, b""
+
+
+def _valid_guid(value):
+    """True only for a non-empty str of at most MAX_GUID code points with no control or surrogate code point."""
+    return isinstance(value, str) and 0 < len(value) <= MAX_GUID and not any(
+        ord(c) < 32 or 127 <= ord(c) < 160 or 0xD800 <= ord(c) <= 0xDFFF for c in value)
 
 
 def _quote(value):
@@ -84,7 +92,7 @@ class BlueBubblesPhotos:
         if not all(isinstance(a, dict) and isinstance(a.get("guid"), str) and a["guid"] for a in head):
             return "shape", []
         if len({a["guid"] for a in head}) < len(head) or any(
-                len(a["guid"]) > MAX_GUID or any(ord(c) < 32 or 127 <= ord(c) < 160 for c in a["guid"])
+                not _valid_guid(a["guid"])
                 or not (a.get("totalBytes") is None or type(a["totalBytes"]) is int and a["totalBytes"] >= 0)
                 for a in head):
             return "shape", []  # a non-int (bool, str, float) or negative totalBytes is a shape error too
@@ -94,9 +102,9 @@ class BlueBubblesPhotos:
         return None, [(a["guid"], a.get("totalBytes")) for a in items[:n]]
 
     def fetch(self, guid, n):
-        if not (isinstance(guid, str) and 0 < len(guid) <= MAX_GUID) or any(ord(c) < 32 or 127 <= ord(c) < 160
-                                                                         for c in guid):
-            raise ValueError(f"guid must be a non-empty str of at most {MAX_GUID} chars without control characters")
+        if not _valid_guid(guid):
+            raise ValueError(f"guid must be a non-empty str of at most {MAX_GUID} chars without control characters "
+                             "or surrogate code points")
         if type(n) is not int or not 1 <= n <= MAX_COUNT: raise ValueError(f"n must be an int from 1 to {MAX_COUNT}")
         code, status, out = None, None, []
         try:

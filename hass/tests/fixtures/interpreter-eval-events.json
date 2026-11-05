@@ -1,0 +1,13 @@
+[
+  {
+    "id": "hike-2026-11-14-point-buchon",
+    "title": "Point Buchon walk",
+    "startsAt": "2026-11-14T08:30:00-08:00",
+    "timezone": "America/Los_Angeles",
+    "status": "scheduled",
+    "meetingPoint": "The Avocado Shack shop",
+    "capacity": 12,
+    "bring": "Water, sturdy shoes, a hat",
+    "accessNote": "Park at the Point Buchon trailhead; the gate is locked overnight."
+  }
+]
