@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from hass import editor, sitegen
 from hass.content_model import ContentError, load_and_validate, shop_today, validate
+from hass.tests.test_browser_freshness import browser_words, words_of
 from hass.tests.test_catalog_ops import CatalogRepo, CatalogTestCase, _req
 
 CHECK = date(2026, 10, 20)  # a Tuesday
@@ -21,7 +22,7 @@ NOT_CHECKED = "The selection has not been checked yet."
 
 
 def _catalog(files):
-    return json.loads(files[CATALOG][len(b"const catalog="):].rstrip(b";\n"))
+    return json.loads(files[CATALOG].split(b"\n", 1)[0][len(b"const catalog="):].rstrip(b";"))
 
 
 class RenderTests(unittest.TestCase):
@@ -39,8 +40,7 @@ class RenderTests(unittest.TestCase):
             for p in content.products:  # AV1102-01: the words were set on that check
                 p.update({"available_on": checked.isoformat()} if p["id"] in self.ids[:3] else {})
         files = sitegen.render(content, today=today)
-        words = {p["id"]: p.get("availability") for p in _catalog(files) if p["id"] in self.ids}
-        return files, files[INDEX].decode("utf-8"), words
+        return files, files[INDEX].decode("utf-8"), browser_words(files, today, self.ids)
 
     def test_no_check_says_so_and_shows_no_words_or_clock(self):
         files, page, words = self.render(None, date(2026, 11, 3))
@@ -77,7 +77,8 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(self.render(CHECK, CHECK + timedelta(days=6))[0], first)  # no clock in the output
         text = first[INDEX].decode("utf-8") + first[CATALOG].decode("utf-8")
         self.assertNotIn("October 21", text)
-        self.assertNotIn("2026-10-2", text)
+        self.assertNotIn("2026-10-21", text)  # the stored check date is published; the build date never is
+        self.assertNotIn("2026-10-26", text)
 
     def test_hidden_and_held_products_never_show_words(self):
         content = copy.deepcopy(self.content)
@@ -137,7 +138,8 @@ class OpTests(CatalogTestCase):
         self.r.now = datetime(day.year, day.month, day.day, hour + 8, tzinfo=timezone.utc)  # midday Pacific (PST or PDT)
 
     def words(self):
-        return {p["id"]: p.get("availability") for p in self.r.catalog() if p["id"] in (self.a, self.b, self.c)}
+        return words_of(self.r.catalog(), {"selectionCheckedOn": self.r.store().get("selection_checked_on")},
+                        shop_today(), (self.a, self.b, self.c))
 
     def test_confirm_goes_through_prepare_and_apply_only(self):
         head, store, page = self.r.head(), self.r.store(), self.r.read(INDEX)
