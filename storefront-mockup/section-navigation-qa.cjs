@@ -6,7 +6,7 @@ const fs=require('fs'),assert=require('assert/strict');
  for(const width of [390,1440]){
   await page.setViewportSize({width,height:900});
   for(const path of ['/hike','/hike/','/#hikes']){
-   await page.goto(base+path);await page.waitForURL(/\/hike(?:\/|#|$)/);await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
+   await page.goto(base+path);await page.waitForURL(/\/hike(?:\/|#|$)/);await page.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();await page.locator('[data-trail-explorer][data-ready=true]').waitFor();
    assert.equal(await page.locator('h1').count(),1);assert.equal(await page.locator('#catalog-grid').count(),0);assert.equal(await page.locator('[data-confirmed-guests]').textContent(),'0');
    const failedImages=await page.locator('img').evaluateAll(a=>a.filter(e=>e.complete&&e.naturalWidth===0).map(e=>e.src));assert.deepEqual(failedImages,[]);
    await page.getByRole('button',{name:'Topo',exact:true}).click();assert.equal(await page.locator('.trail-map-stage').getAttribute('data-layer'),'topo');

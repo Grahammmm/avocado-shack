@@ -23,6 +23,17 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  // RF1650-8: accents and curly apostrophes are folded in both the search term and the product text.
  const q=async t=>{await page.locator('#product-search').fill(t);return page.evaluate(()=>({n:filteredProducts().length,ids:filteredProducts().map(p=>p.id).sort(),cards:document.querySelectorAll('#catalog-grid article').length,names:[...document.querySelectorAll('#catalog-grid article h3')].map(e=>e.textContent)}))};
  for(const [t,want] of [['jalapenos','Jalape\u00f1os'],['JALAPE\u00d1OS','Jalape\u00f1os'],['chevre','Ch\u00e8vre'],['montana','Monta\u00f1a']]){const r=await q(t);assert.ok(r.cards>0&&r.names.some(n=>n.includes(want)),t);}
+// AV1222-01: search also matches the shelf name and the Organic badge, never descriptions.
+ const ids=(f)=>page.evaluate(f),sameSet=(a,b)=>JSON.stringify([...a].sort())===JSON.stringify([...b].sort());
+ const orgWant=await ids(()=>catalog.filter(p=>organic(p)||/organic/i.test(`${p.name} ${p.brand} ${maker(p)?.place||''}`)).map(p=>p.id));assert.ok(orgWant.length>3);
+ for(const t of ['organic','ORGANIC','Organic'])assert.ok(sameSet((await q(t)).ids,orgWant),t+' finds exactly the badged cards');
+ const shelfWant=(s,w)=>page.evaluate(([s,w])=>catalog.filter(p=>p.category===s||`${p.name} ${p.brand} ${maker(p)?.place||''}`.toLowerCase().includes(w)).map(p=>p.id),[s,w]);
+ assert.ok(sameSet((await q('flowers')).ids,await shelfWant('flowers','flowers')),'flowers');
+ for(const [t,s] of [['dairy & cheese','dairy'],['drinks','drinks']]){const want=await shelfWant(s,t),got=(await q(t)).ids;assert.ok(want.length&&sameSet(got,want),t);}
+ for(const t of ['shelves','all shelves'])assert.equal((await q(t)).n,0,t+' matches no card');
+ const descOnly=await ids(()=>{const labels=[...document.querySelectorAll('[data-filter]')].map(b=>b.textContent).join(' ');const h=p=>`${p.name} ${p.brand} ${maker(p)?.place||''} ${labels} organic`.toLowerCase();return catalog.flatMap(p=>String(p.description).toLowerCase().match(/[a-z]{6,}/g)||[]).find(w=>!catalog.some(p=>h(p).includes(w)))||''});
+ assert.ok(descOnly);assert.equal((await q(descOnly)).n,0,'description-only word matches nothing');
+ await page.locator('#product-search').fill('');
  const lion=await page.evaluate(()=>catalog.filter(p=>/lion\u2019s mane/i.test(p.name)).map(p=>p.id).sort());assert.equal(lion.length,2);
  for(const t of ["lion's",'lion\u2019s','LION\u2018S','lion\u02bcs']){const r=await q(t);assert.deepEqual(r.ids,lion,t);assert.equal(r.cards,2,t);}
  assert.equal((await q('lions')).n,0,'lions without an apostrophe stays unmatched (pinned)');
@@ -77,6 +88,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const long=await page.evaluate(()=>catalog.map(p=>`${p.name} ${p.brand} ${maker(p)?.place||''}`).find(t=>[...t].length>80&&!/\s/.test([...t][79])&&!/\s/.test(t[0])));
  if(long){const head=[...long].slice(0,80).join('');assert.ok((await roundTrip(()=>page.keyboard.type(head+' and more words'),head,'typed')).ids.length>0,'typed: the first 80 characters still find the product');}
  else{console.log('NOTE: no catalog text over 80 characters; typed check uses filler');await roundTrip(()=>page.keyboard.type('a'.repeat(90)),'a'.repeat(80),'typed');}
+ await roundTrip(()=>page.keyboard.type('organic'),'organic','organic');
  await roundTrip(()=>page.keyboard.insertText('  '+'\u{1f951}'.repeat(90)),'\u{1f951}'.repeat(80),'pasted');
  // AV1322-10: each card links to itself; ?item=<id> resets the filters, loads enough cards, scrolls that card into view and focuses it.
  const shown=()=>page.evaluate(()=>{const g=[...document.querySelectorAll('#catalog-grid article')],f=document.activeElement;
@@ -176,6 +188,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await open('?avail=1&item='+encodeURIComponent(await page.evaluate(()=>catalog[4].id)));assert.equal(await avail().isChecked(),false,'?item wins over avail');assert.equal((await addr()).params.avail,undefined);
  }
  await fixture(W.slice(4));await open('?avail=1');assert.equal(await avail().count(),0,'only Last confirmed words: no control');assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
+ // AV1222-14: Clear filters shows for any one filter, resets all five, keeps other parameters and the hash, then focuses the search box.
+ const clr=page.locator('#clear-filters'),FILTERS=['shelf=pantry','q=jam','maker=Etto','from='+multi.key];
+ for(const width of [390,1440]){await page.setViewportSize({width,height:900});await open('');assert.equal(await clr.isVisible(),false,'fresh: hidden');assert.equal(await countText(),fullCount);
+  for(const f of FILTERS){await open('?'+f+'&utm=x#catalog');assert.equal(await clr.isVisible(),true,f);await clr.click();assert.equal(await countText(),fullCount,f);assert.deepEqual((await addr()).params,{utm:'x'},f);assert.equal((await addr()).hash,'#catalog');assert.equal(await page.evaluate(()=>document.activeElement.id),'product-search');assert.equal(await clr.isVisible(),false);}
+  await open('?q=unfindablefoo');assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);assert.equal(await clr.isVisible(),true);await clr.click();assert.equal(await countText(),fullCount);
+  await open('?q=%20%20%20');assert.equal(await clr.isVisible(),false,'spaces are not a filter');
+  await open('?shelf=pantry&q=jam');await page.locator('#product-search').focus();await page.keyboard.press('Tab');await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'clear-filters','Tab reaches it');await page.keyboard.press('Enter');assert.equal(await countText(),fullCount);assert.equal(await page.locator('#brand-filter').inputValue(),'');assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');
+  await open('?q=jam');const bx=await clr.boundingBox();assert.ok(bx.height>=44,'tap target '+width);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow '+width);}
+ await fixture(W);await open('?avail=1');assert.equal(await clr.isVisible(),true,'avail');await clr.click();assert.equal(await avail().isChecked(),false);assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
  await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await page.setViewportSize({width:390,height:844});
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);

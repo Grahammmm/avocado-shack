@@ -53,7 +53,9 @@ class BackupVerifyHealthTest(unittest.TestCase):
         self.backup(2)
         code, doc = self.run_health()
         self.assertEqual((code, doc), (0, {"ok": True, "problems": [], "notify": False,
-                                           "info": [{"check": "conversation", "detail": "no conversation yet"}],
+                                           "info": [{"check": "conversation", "detail": "no conversation yet"},
+                                                    {"check": "backup-content",
+                                                     "detail": "content restores from Git only"}],
                                            "fingerprint": health.fingerprint([])}))
 
     def test_hash_damaged_newest_gives_count_only(self):

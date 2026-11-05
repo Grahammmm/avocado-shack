@@ -92,7 +92,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  p.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
  const explorerPage=async(change,abort=false)=>{await p.unroute(api);await p.unroute(trailJson);if(abort)await p.route(trailJson,r=>r.abort());
   await p.route(api,async r=>{const res=await r.fetch(),j=await res.json();j.routeIdeas=[buchon,...ideas];change(j.events,j.events.find(e=>e.id==='qa-hike'));await r.fulfill({response:res,json:j})});
-  await p.goto(process.env.COMMUNITY_TEST_URL+'/hike');await qaHike().waitFor();await p.waitForFunction(()=>[...document.querySelectorAll('[data-trail-explorer]')].every(h=>h.dataset.ready));
+  await p.goto(process.env.COMMUNITY_TEST_URL+'/hike');await qaHike().waitFor();await p.locator('[data-trail-explorer]').evaluateAll(a=>a.forEach(h=>h.scrollIntoView()));await p.waitForFunction(()=>[...document.querySelectorAll('[data-trail-explorer]')].every(h=>h.dataset.ready));
   return {n:await p.locator('.trail-explorer').count(),hosts:await p.locator('[data-trail-explorer]').count(),inCard:async t=>card(t).locator('[data-trail-explorer] .trail-explorer .trail-profile-svg').count()}};
  let ex=await explorerPage((_,h)=>{h.trailId='idea-point-buchon'});
  check(ex.n===1&&ex.hosts===1&&await ex.inCard('QA trail fixture')===1&&await p.locator('.trail-profile-svg path,.trail-profile-svg polyline').count()>0&&await card('QA trail fixture').locator('.hike-route').count()===1,'Buchon hike lacks exactly one explorer with its elevation chart');
