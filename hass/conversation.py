@@ -518,7 +518,7 @@ class Conversation:
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
-            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(draft["records"][0], store=rendered.get("store")),
+            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(draft["records"][0], shop_today(), store=rendered.get("store")),
                                           self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
                 if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
             shots = [shot["png"]] if shot.get("png") else []
@@ -909,7 +909,7 @@ class Conversation:
         files = {p: (wt / p).read_bytes() for p in editor_mod.GENERATED_PATHS}  # the committed files
         picked, png = [], None  # AV1737-08: each touched record with a distinct target, in order
         for record in change["records"]:
-            target = preview_mod.target_for(record, store=content.store)  # the store the committed files were generated from
+            target = preview_mod.target_for(record, shop_today(), store=content.store)  # the store the committed files were generated from
             if all(target != t for _r, t in picked): picked.append((record, target))
         for i, (record, target) in enumerate(picked[:VERIFY_MAX], 1):
             shot = self.previewer.capture(files, target, self.sdir / "screenshots" /
