@@ -24,6 +24,8 @@ class MorningReportNameTests(unittest.TestCase):
     def report(self, products, *args, checked=True):
         store = {"schemaVersion": 1} | ({"selection_checked_on": (TODAY - timedelta(days=1)).isoformat()} if checked else {})
         items = [product(n, a) | {"id": f"p{i}"} for i, (n, a) in enumerate(products)]  # unique ids for shared names
+        if checked:  # AV1102-01: each word was set on that check
+            items = [p | ({"available_on": store["selection_checked_on"]} if "available" in p else {}) for p in items]
         for name, doc in (("products", {"schemaVersion": 1, "products": items}), ("makers", {"schemaVersion": 1, "makers": {}}),
                           ("community", {"schemaVersion": 1}), ("store", store)):
             (self.dir / f"{name}.json").write_text(json.dumps(doc), encoding="utf-8")
