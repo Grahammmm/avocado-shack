@@ -82,11 +82,11 @@ server.listen(0,'127.0.0.1',async()=>{
   }
   // AV1422-05: a fixed clock decides whether the sample invitation (startsAt 2026-11-08 09:00 Pacific) shows its date or "Date to be confirmed".
   const sample=JSON.parse(fs.readFileSync(path.join(root,'hiking-preview.json'),'utf8')),json=body=>({contentType:'application/json',body:JSON.stringify(body)});
-  const hikeAt=async(iso,{startsAt=sample.upcoming.startsAt,events}={})=>{const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));
+  const hikeAt=async(iso,{startsAt=sample.upcoming.startsAt,events}={})=>{const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));const sent=[];p.on('request',r=>{if(r.method()!=='GET'||r.postData()||/[@?]|example\.com/.test(r.url()))sent.push(r.method()+' '+r.url())});
    await p.clock.setFixedTime(new Date(iso));await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,upcoming:{...sample.upcoming,startsAt}})));
    if(events)await p.route('**/community.json',r=>r.fulfill(json({events,routeIdeas:[]})));
    await p.goto(base+'/hike/');await p.locator('#upcoming-hikes article').first().waitFor();
-   const r={errs,body:await p.locator('body').innerText(),times:await p.locator('.trail-invitation-date time').count(),dateLine:await p.locator('.trail-invitation-date').allInnerTexts(),label:await p.getByText('Sample invitation · plans to be confirmed').count()};await ctx.close();return r};
+   const r={errs,sent,arts:await p.locator('#upcoming-hikes article').evaluateAll(a=>a.map(x=>({t:x.querySelector('h3').innerText,txt:x.innerText,n:x.querySelectorAll('[data-confirmed-guests]').length,b:x.querySelectorAll('[data-rsvp]').length,x:x.classList.contains('hike-cancelled')}))),body:await p.locator('body').innerText(),times:await p.locator('.trail-invitation-date time').count(),dateLine:await p.locator('.trail-invitation-date').allInnerTexts(),label:await p.getByText('Sample invitation · plans to be confirmed').count()};await ctx.close();return r};
   for(const [when,iso] of [['the day before','2026-11-07T20:00:00Z'],['the same Pacific day','2026-11-08T20:00:00Z'],['UTC next day, still the 8th in Pacific','2026-11-09T06:00:00Z']]){
    const r=await hikeAt(iso);assert.equal(r.times,1,when+': <time> shown');assert.match(r.dateLine[0],/^Sunday, November 8, 2026 · 9:00 am$/,when);assert.equal(r.label,1,when+': sample label');assert.deepEqual(r.errs,[]);}
   for(const [when,iso,startsAt] of [['next Pacific day','2026-11-09T08:30:00Z'],['garbage startsAt','2026-11-08T20:00:00Z','not a date'],['missing startsAt','2026-11-08T20:00:00Z',null]]){
@@ -94,6 +94,16 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(r.label,1,when+': sample label stays');assert.doesNotMatch(r.body,/Invalid Date/);assert.deepEqual(r.errs,[],when+': page errors');}
   const real=await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'real-1',title:'Real hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'}]});
   assert.match(real.body,/Sunday, December 6, 2026/);assert.doesNotMatch(real.body,/Date to be confirmed/);assert.equal(real.label,0,'a real hike replaces the sample invitation');assert.deepEqual(real.errs,[]);
+  // AV1422-06: no club service, so nobody counted guests: no count, no RSVP button; synthetic titles only.
+  const at='2026-12-01T09:00:00-08:00',ev=(id,title,more)=>({id,title,status:'scheduled',startsAt:at,timezone:'America/Los_Angeles',meetingPoint:'Test trailhead',...more});
+  const fx=await hikeAt('2026-11-09T08:30:00Z',{events:[ev('t-on','Synthetic RSVP-on hike',{rsvpEnabled:true,confirmedGuests:7}),ev('t-off','Synthetic RSVP-off hike',{rsvpEnabled:false}),ev('t-none','Synthetic no-flag hike',{}),ev('t-x','Synthetic cancelled hike',{status:'cancelled',startsAt:'2026-11-09T12:00:00-08:00',rsvpEnabled:true})]});
+  const art=t=>fx.arts.find(a=>a.t.endsWith(t)),JOIN=/To join, ask at the Shack\./,SHARED=/RSVP details will be shared when confirmed\./;
+  assert.equal(fx.arts.length,4,'four fixture hikes shown');
+  for(const a of fx.arts){assert.equal(a.n,0,a.t+': no guest count');assert.doesNotMatch(a.txt,/confirmed guests?/i,a.t+': no invented count');assert.equal(a.b,0,a.t+': no RSVP button')}
+  assert.match(art('RSVP-on hike').txt,JOIN);assert.doesNotMatch(art('RSVP-on hike').txt,SHARED);
+  for(const t of ['RSVP-off hike','no-flag hike']){assert.match(art(t).txt,SHARED,t);assert.doesNotMatch(art(t).txt,JOIN,t)}
+  assert.ok(art('cancelled hike').x&&/CANCELLED/.test(art('cancelled hike').txt)&&/This hike is cancelled\./.test(art('cancelled hike').txt));assert.doesNotMatch(art('cancelled hike').txt,JOIN);assert.doesNotMatch(art('cancelled hike').txt,SHARED);
+  assert.deepEqual(fx.errs,[]);assert.deepEqual(fx.sent,[],'the static hike list sent something');
   for(const missing of MISSING){ // a missing path, at any depth, gets the shop's own 404 page with its stylesheet
    const res=await page.goto(base+missing);await page.waitForLoadState('networkidle');
    assert.equal(res.status(),404,missing+': status');assert.equal(await page.locator('h1').innerText(),'That page isn’t here.',missing+': heading');
