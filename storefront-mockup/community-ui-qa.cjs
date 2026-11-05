@@ -181,13 +181,17 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  const pacificAt=w=>{const t=w-(wall(w)-w);return w-(wall(t)-t)}; // the instant whose Pacific wall clock reads w
  const nextDay=Date.parse(new Date(start).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})+'T00:00Z')+864e5;
  const today='Today — started '+new Date(start).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
- const view=async(now,timezoneId='America/Los_Angeles',extra=[],keep=()=>true)=>{
+ const baseJson=await (await fetch(process.env.COMMUNITY_TEST_URL+'/api/community')).json();
+ const view=async(now,timezoneId='America/Los_Angeles',extra=[],keep=()=>true,stat=false)=>{
   const c=await b.newContext({timezoneId}),pg=await c.newPage(),errs=[];pg.on('pageerror',e=>errs.push(e.message));
-  await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events=j.events.filter(keep).concat(extra);await r.fulfill({response:res,json:j})});
+  if(stat){ // published-site mode: no club service, /community.json is the only source
+   await pg.route('**/api/community',r=>r.fulfill({status:404,contentType:'text/plain',body:'no service'}));
+   await pg.route('**/community.json',r=>r.fulfill({json:{...baseJson,events:baseJson.events.filter(keep).concat(extra)}}));
+  }else await pg.route('**/api/community',async r=>{const res=await r.fetch(),j=await res.json();j.events=j.events.filter(keep).concat(extra);await r.fulfill({response:res,json:j})});
   await pg.clock.setFixedTime(now);await pg.goto(process.env.COMMUNITY_TEST_URL+'/hike');
   await pg.locator('#upcoming-hikes :is(.hike-event,.hike-empty,.trail-invitation)').first().waitFor();
   const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h2').textContent,a.querySelector('.hike-date').textContent])),
-   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,ics:a.querySelectorAll('.hike-ics').length,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
+   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,ics:a.querySelectorAll('.hike-ics').length,guests:(a.querySelector('[data-confirmed-guests]')||{}).textContent??null,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
   check(!errs.length,'Page errors at '+new Date(now).toISOString()+': '+JSON.stringify(errs));await c.close();return r;
  };
  const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};
@@ -245,10 +249,10 @@ check(L(q)===[CX+'|Cancelled: AV x',CX+'|Cancelled: AV y'].join(' ; ')&&!q.empty
 q=await view(at,'America/Los_Angeles',[],none);
 check(!q.cards.length&&q.empty&&!/COMING UP/.test(q.up),'No real events did not keep the sample/empty state: '+q.up);
 // test_same_day_started_then_midnight
-q=await view(after,'America/Los_Angeles',[ev('later',5e5)],e=>e.id==='qa-hike');
-check(L(q)===[NEXT+'|QA trail fixture',SOON+'|AV later'].join(' ; '),'Same-day started hike lost the next label: '+L(q));
-q=await view(pacificAt(nextDay-6e4),'Asia/Tokyo',[ev('later',5e5)],e=>e.id==='qa-hike');
-check(q.cards[0]&&q.cards[0].label===NEXT&&q.cards[0].title==='QA trail fixture','Tokyo viewer lost Pacific same-day next label: '+L(q));
+q=await view(after,'America/Los_Angeles',[ev('later',after-start+6e4)],e=>e.id==='qa-hike');
+check(L(q)===['TODAY|QA trail fixture',NEXT+'|AV later'].join(' ; '),'Started hike is not TODAY or the next future hike is not next: '+L(q));
+q=await view(pacificAt(nextDay-6e4),'Asia/Tokyo',[ev('later',pacificAt(nextDay)-start+6e4)],e=>e.id==='qa-hike');
+check(q.cards[0]&&q.cards[0].label==='TODAY'&&q.cards[0].title==='QA trail fixture'&&q.cards[1]&&q.cards[1].label===NEXT,'Tokyo viewer lost Pacific same-day TODAY label: '+L(q));
 q=await view(pacificAt(nextDay+6e4),'America/Los_Angeles',[{...ev('later',5e5),startsAt:new Date(pacificAt(nextDay)+36e5).toISOString()},{...ev('later2',6e5),startsAt:new Date(pacificAt(nextDay)+72e5).toISOString()}],e=>e.id==='qa-hike');
 check(L(q)===[NEXT+'|AV later',SOON+'|AV later2'].join(' ; '),'After Pacific midnight the successor is not next: '+L(q));
 // test_rerender_recomputes_first: removing/cancelling the earliest on reload promotes its successor
@@ -259,14 +263,41 @@ check(L(q)===[CX+'|Cancelled: AV p',NEXT+'|AV r'].join(' ; '),'Cancelled earlies
 q=await view(at,'America/Los_Angeles',[ev('r',2e5)],none);
 check(L(q)===NEXT+'|AV r','Removed earliest left a stale winner: '+L(q));
 check(q.past===''||!q.past.includes('AV r'),'Upcoming hike listed in history');
+// AV1104-05: a hike under way is TODAY with closed RSVPs, in service and published-static modes alike.
+const STARTED='This hike has started, so RSVPs are closed.',OLD=/RSVP details|To join, ask|places? available|RSVPs open|This hike is full|THE NEXT HIKE|COMING UP/;
+for(const stat of [false,true])for(const tz of ['America/Los_Angeles','Asia/Tokyo']){
+ const m=(stat?'static ':'service ')+tz+': ';
+ // startedTodayServiceAndStatic / startedBoundaryAndStaleOpenFlag
+ for(const [name,now,extra] of [['exact start',start,{rsvpOpen:true,remaining:3,rsvpEnabled:true,confirmedGuests:1}],['start+1ms',start+1,{rsvpOpen:true,remaining:0,confirmedGuests:2}],['stale flags',after,{rsvpOpen:true,remaining:null,rsvpEnabled:false,confirmedGuests:7}]]){
+  q=await view(now,tz,[{...hike,id:'qa-hike',...extra}],none,stat);
+  const c=q.cards[0];
+  check(c&&c.label==='TODAY'&&c.text.includes(STARTED)&&c.rsvp===0&&!c.ics&&!OLD.test(c.text),m+name+' started card wrong: '+(c&&c.label+' '+c.text));
+  if(stat)check(c.guests===null,m+name+' static started card showed a guest count: '+c.guests);
+  else check(c.guests===String(extra.confirmedGuests),m+name+' service count changed: '+c.guests);
+ }
+ q=await view(start-1,tz,[{...hike,id:'qa-hike',rsvpOpen:false,remaining:0,rsvpEnabled:true}],none,stat);
+ check(q.cards[0].label===NEXT&&!q.cards[0].text.includes(STARTED),m+'start-1ms is not yet started: '+L(q));
+ // nextFutureAfterTodayAndCancelled
+ const tv=[ev('f2',3e5),ev('t2',-2e4),ev('f1',1e5),ev('f1b',1e5),ev('t1',-3e4),ev('cx',-4e4,'cancelled')];
+ q=await view(start,tz,tv,none,stat);
+ const lab=q.cards.map(c=>c.label+'|'+c.title).join(' ; ');
+ check(lab===[CX+'|Cancelled: AV cx','TODAY|AV t1','TODAY|AV t2',NEXT+'|AV f1',SOON+'|AV f1b',SOON+'|AV f2'].join(' ; '),m+'Mixed list labels wrong: '+lab);
+ check(q.cards.filter(c=>c.label==='TODAY').every(c=>c.text.includes(STARTED)&&!c.rsvp&&!c.ics)&&q.cards[0].text.includes(sentence)&&!q.cards[0].text.includes(STARTED),m+'TODAY/cancelled copy wrong');
+ q=await view(start,tz,[ev('t1',-3e4),ev('cx',-4e4,'cancelled')],none,stat);
+ check(!q.cards.some(c=>c.label===NEXT||c.label===SOON),m+'Started-only list invented a next hike: '+L(q));
+ // cancelledAndCompletedNotStarted: malformed start, completed
+ q=await view(after,tz,[ev('bad',0),{...ev('done',-1e5,'completed')}].map(e=>e.id==='bad'?{...e,startsAt:'not a date'}:e),none,stat);
+ check(!q.cards.some(c=>c.label==='TODAY'),m+'Malformed or completed hike became TODAY: '+L(q));
 }
-// AV1102-04: the home page shows one "Next hike" line from the live API only; none, cancelled-only, past-only or a failing API leaves it hidden.
+}
+// AV1102-04/AV0007-01: the home page shows one "Next hike" line from the live API, else the published community.json; none, cancelled-only, past-only or both sources failing leaves it hidden. A valid live answer is never second-guessed by the static file.
 const days=n=>new Date(Date.now()+n*864e5).toISOString(),oneLine=s=>s.replace(/\s+/g,' ').trim();
-const nextLine=async(events,width=390)=>{const c=await b.newContext({viewport:{width,height:800}}),pg=await c.newPage(),errs=[],reqs=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('request',q=>reqs.push(q.url()));
+const nextLine=async(events,width=390,stat)=>{const c=await b.newContext({viewport:{width,height:800}}),pg=await c.newPage(),errs=[],reqs=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('request',q=>reqs.push(q.url()));
+ if(stat!==undefined)await pg.route('**/community.json',r=>stat===null?r.fulfill({status:404,contentType:'text/html',body:'<p>no</p>'}):r.fulfill({json:{clubName:'QA',events:stat}}));
  await pg.route('**/api/community',async r=>{if(typeof events==='string')return r.fulfill({status:events==='500'?500:200,contentType:'text/html',body:'<p>no</p>'});const res=await r.fetch(),j=await res.json();j.events=events(j.events);await r.fulfill({response:res,json:j})});
  await Promise.all([pg.waitForResponse('**/api/community'),pg.goto(process.env.COMMUNITY_TEST_URL+'/')]);await pg.evaluate(()=>new Promise(r=>setTimeout(r,150)));
  const el=pg.locator('#next-hike-line'),a=el.locator('a'),box=await pg.evaluate(()=>{const l=document.querySelector('#next-hike-line').getBoundingClientRect(),h=document.querySelector('.hero-copy').getBoundingClientRect();return {out:l.width>0&&(l.left<h.left-1||l.right>h.right+1),page:document.documentElement.scrollWidth>innerWidth}});
- const r={hidden:await el.isHidden(),n:await el.count(),links:await a.count(),text:oneLine(await el.textContent()),href:await a.first().getAttribute('href').catch(()=>null),bold:await el.locator('b').count(),preview:reqs.some(u=>u.includes('hiking-preview')),...box};
+ const r={staticAsked:reqs.some(u=>u.endsWith('/community.json')),hidden:await el.isHidden(),n:await el.count(),links:await a.count(),text:oneLine(await el.textContent()),href:await a.first().getAttribute('href').catch(()=>null),bold:await el.locator('b').count(),preview:reqs.some(u=>u.includes('hiking-preview')),...box};
  check(!errs.length,'Page errors on the home page: '+JSON.stringify(errs));await c.close();return r};
 const mk=(id,title,days_,status='scheduled')=>({...hike,id,title,status,startsAt:days(days_)}),shownText=(x,t)=>oneLine('Next hike: '+new Date(x.startsAt).toLocaleDateString('en-US',{timeZone:'America/Los_Angeles',weekday:'long',month:'long',day:'numeric'})+', '+new Date(x.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})+' - '+t);
 const soon=mk('n-soon','QA earlier hike',10),late=mk('n-late','QA later hike',60);
@@ -274,7 +305,17 @@ let n=await nextLine(e=>[late,soon,mk('n-x','QA cancelled sooner',5,'cancelled')
 check(!n.hidden&&n.n===1&&n.links===1&&n.href==='/hike#upcoming-hikes'&&n.text===shownText(soon,'QA earlier hike')&&/^Next hike: \w+day, \w+ \d+, \d+:\d\d [AP]M - QA earlier hike$/.test(n.text)&&!n.preview,'Next hike line wrong (earliest scheduled, cancelled skipped): '+JSON.stringify(n));
 n=await nextLine(e=>[mk('n-b','QA <b>bold</b> & more',3)]);check(!n.hidden&&n.text.endsWith(' - QA <b>bold</b> & more')&&n.bold===0,'Title not shown literally: '+JSON.stringify(n));
 for(const [name,events] of [['none',()=>[]],['cancelled only',()=>[mk('n-c','QA cancelled',3,'cancelled')]],['past or completed only',()=>[mk('n-p','QA past',-3),mk('n-d','QA done',3,'completed')]],['500','500'],['not JSON','200']]){
- n=await nextLine(events);check(n.hidden&&n.n===1&&n.links===0&&n.text==='','Next hike line shown for '+name+': '+JSON.stringify(n))}
+ n=await nextLine(events,390,null);check(n.hidden&&n.n===1&&n.links===0&&n.text==='','Next hike line shown for '+name+': '+JSON.stringify(n))}
+// AV0007-01: API failing -> published community.json names the earliest scheduled hike; a valid live answer (even empty) never falls back.
+const stat=[late,soon,mk('n-x','QA cancelled sooner',5,'cancelled')];
+for(const [name,events] of [['500','500'],['not JSON','200']]){
+ n=await nextLine(events,390,stat);check(!n.hidden&&n.n===1&&n.links===1&&n.href==='/hike#upcoming-hikes'&&n.text===shownText(soon,'QA earlier hike')&&!n.preview,'Static Next hike wrong after API '+name+': '+JSON.stringify(n))}
+n=await nextLine('500',390,[mk('n-b','QA <b>bold</b> & more',3)]);check(!n.hidden&&n.text.endsWith(' - QA <b>bold</b> & more')&&n.bold===0,'Static title not literal: '+JSON.stringify(n));
+for(const [name,sx] of [['none',[]],['cancelled only',[mk('n-c','QA cancelled',3,'cancelled')]],['past or completed only',[mk('n-p','QA past',-3),mk('n-d','QA done',3,'completed')]]]){
+ n=await nextLine('500',390,sx);check(n.hidden&&n.n===1&&n.links===0&&n.text===''&&!n.preview,'Static Next hike shown for '+name+': '+JSON.stringify(n))}
+n=await nextLine(e=>[],390,[mk('n-d','QA static decoy',3)]);check(n.hidden&&n.links===0&&!n.staticAsked,'Empty live calendar fell back to static: '+JSON.stringify(n));
+n=await nextLine(e=>[mk('n-c','QA cancelled',3,'cancelled')],390,[mk('n-d','QA static decoy',3)]);check(n.hidden&&n.links===0&&!n.staticAsked,'Cancelled-only live calendar fell back to static: '+JSON.stringify(n));
+n=await nextLine(e=>[soon],390,[mk('n-d','QA static decoy',3)]);check(!n.hidden&&n.text===shownText(soon,'QA earlier hike')&&!n.staticAsked,'Live hike did not win over static: '+JSON.stringify(n));
 for(const width of [390,1440]){n=await nextLine(e=>[mk('n-w','QA a long hike title to check the line wraps inside the hero on a phone and a desktop',3)],width);check(!n.hidden&&!n.out&&!n.page,'Next hike line overflows at '+width+': '+JSON.stringify(n))}
  const result={guestCountUpdatedAfterRSVP:true,demoGuestCountUnchanged:true,checkedAt:new Date().toISOString(),rsvpForm:true,newsletterForm:true,hikingUpdates:true,pastHikes:true,confirmedEventTakesPrecedence:true,realCalendarEmpty:true,demoPosts:posts.length,demoBrowserStorage:false,demoValidation:true,demoSuccessFocus:true,layouts,errors};
  fs.writeFileSync(out+'/community-ui-QA.json',JSON.stringify(result,null,2));

@@ -28,7 +28,7 @@ DEMO, MAPPING = FIXTURES / "conversation-demo-photo.jsonl", FIXTURES / "conversa
 SHA = hashlib.sha256((MEDIA / "pixel.jpg").read_bytes()).hexdigest()
 CODE, INSTALLED = SHA[:4], f"assets/products/photo-{SHA[:16]}.jpg"
 ASKED = f"{PHOTO_QUESTION} Reply with the product and description (draft {CODE})."
-QUESTION = "Please provide: imageAlt"  # the editor's question when the caption names only the product
+QUESTION = "Please provide: a few words saying what the photo shows"  # the editor's question when the caption names only the product
 KINDS = (ASKED, QUESTION, "That photo is already in draft ", "Draft ", "Applied and checked ", "Applied ",
          "Recent changes:", "Undo ")
 EXPECTED = [ASKED, QUESTION, "That photo is already in draft ", "Draft ", "Applied ", "Recent changes:", "Undo ",
