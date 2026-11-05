@@ -17,8 +17,9 @@ Text kinds already reject markup, ``$`` and control characters. ``name`` and ``s
     {"op": "store.set_phone", "args": {"phone": "805 555 0123"}}   # US 10 digits; spaces - . ( ) and +1 / 1 allowed
     {"op": "store.clear_phone", "args": {}}   # undo restores either
 
-Selective-undo limit: the store is ONE record, so ``history.revert`` of an older store change after a later store
-change is refused as a conflict (``conflict: store store changed after <id>``). Undo the newest store change first.
+Selective undo: ``history.revert`` of an older store change sets back only the store fields that change wrote and keeps
+later changes to other store fields; a later change to one of the same fields is refused
+(``conflict: store store changed after <id>``). Undo that later change first.
 """
 
 from __future__ import annotations

@@ -27,6 +27,7 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 - `history` shows the last **5** <!-- conversation.HISTORY_MAX --> approved changes.
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
+- `memory` shows the first **20** <!-- conversation.ALIAS_LIST_MAX --> aliases apart from the notes and says how many more there are.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
 - `find` takes at most **60 characters** <!-- conversation.FIND_TEXT_MAX --> of words to look for.
 - An alias name is at most **60 characters** <!-- conversation.ALIAS_NAME_MAX -->.
@@ -56,6 +57,12 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Notice: at most **160 characters** <!-- content_model.MAX_NOTICE -->; its last day can be today or up to **60** <!-- content_model.MAX_NOTICE_DAYS --> days ahead.
 - Home photo: JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->.
 - The home photo needs a real description of at least three letters; a file name like IMG_1234 is refused.
+
+## Undoing a store change
+
+- Undoing an older change to the shop details (hours, address, intro, headline, story, home photo, notice, phone or shelf check date) puts back only the details that change wrote, and keeps later edits to the other details.
+- If a later edit gave one of those same details a different value, the undo is refused until that later edit is undone. A notice, with its dates, counts as one detail.
+- Changes to products, hikes, makers and routes are still undone one whole item at a time.
 
 ## What Hass never does
 

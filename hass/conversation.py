@@ -41,7 +41,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as 
     'resume changes - let approvals apply again: "resume changes"',
     'remember <key>: <text> - save a note: "remember parking: back lot"',
     'forget <key> - delete a saved note: "forget parking"',
-    'memory - list the saved notes: "memory"',
+    'memory - saved notes and aliases: "memory"',
     'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
     'cost <id>: <$> for <n> - save: "cost photo-product-001: 24 for 12"',  # AV1222-10
     'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
@@ -57,6 +57,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as 
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?"
                        r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
+ALIAS_LIST_MAX = 20  # AV0222-05: `memory` lists this many aliases apart from the notes (LIMITS.md)
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
 HIDDEN_MAX = 20  # AV1222-13: lines of the hidden list
@@ -614,12 +615,13 @@ class Conversation:
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"): expired = []  # H17: read-only
+        memory = None if command or msg.attachments > 0 else parse_memory(msg.text)
+        if memory and memory[0] == "memory": expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
             self._record(msg, disposition)
             return disposition, None
-        memory = parse_memory(msg.text)
         if memory:  # not a site change: never the interpreter or editor, and pause does not apply
             disposition = self._memory(msg, *memory)
             self._record(msg, disposition)
@@ -1217,15 +1219,21 @@ class Conversation:
     def _memory(self, msg, verb, key, value) -> str:
         """Owner-stated facts on this connection inside the message's transaction; a store ValueError undoes only
         that op's savepoint and the message is still recorded. The interpreter reads notes other than PRIVATE_PREFIXES as preferences (AV1102-09); never facts or claims."""
-        if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
-        if verb == "memory":
-            rows = self.memory.list()
+        if verb == "memory":  # AV0222-05: read-only; no memory table is created to answer it
+            has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+            if has_table and self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
+            every = self.memory.list() if has_table else []
+            rows = [r for r in every if not r["key"].startswith("alias.")]
+            aliases = [r for r in every if r["key"].startswith("alias.")]
             lines = [f"{r['key']}: {r['value']} ({r['kind']}, since "
                      f"{datetime.fromisoformat(r['created_at']).astimezone(LOCAL_TZ):%Y-%m-%d})"
                      for r in rows[:MEMORY_LIST_MAX]]
             more = [f"… and {len(rows) - MEMORY_LIST_MAX} more."] if len(rows) > MEMORY_LIST_MAX else []
-            self._reply("\n".join([f"Saved ({len(rows)}):"] + lines + more) if rows else "Nothing saved.")
+            notes = "\n".join([f"Saved ({len(rows)}):"] + lines + more) if rows else "Nothing saved."
+            amore = [f"... and {len(aliases) - ALIAS_LIST_MAX} more"] if len(aliases) > ALIAS_LIST_MAX else []
+            self._reply("\n".join([notes, f"Aliases ({len(aliases)}):"] + self._alias_lines(aliases[:ALIAS_LIST_MAX]) + amore))
             return "memory-list"
+        if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
         if verb == "alias": return self._alias(msg, key, value)
         if verb == "cost": return self._cost(msg, key, value)
         valid = memory_mod.KEY_RE.fullmatch(key) is not None
@@ -1317,6 +1325,43 @@ class Conversation:
         self._reply((f"Saved alias {name} → " if old is None else f"Updated alias {name} (was: {old}) → ")
                     + f"{target}. Send forget {key} to remove it.")
         return "memory-saved" if old is None else "memory-updated"
+
+    def _alias_lines(self, rows) -> list:
+        """AV0222-05: one line per alias row: name -> target name (id), [hidden]/[held], or what is wrong with it.
+        The catalog is read once, only when there is a line to show; never echoes unsafe stored or catalog text."""
+        def safe(text):
+            problems = []
+            checked_text(problems, "x", text)
+            return isinstance(text, str) and not problems
+        parsed = []
+        for r in rows:
+            slug = r["key"][6:]
+            kind, colon, ident = str(r["value"]).partition(":")
+            ok = bool(colon) and kind in ("product", "maker") and bool(ident) and len(ident) <= 80 and safe(ident)
+            parsed.append((slug, kind, ident, ok))
+        records = None
+        if any(ok for *_, ok in parsed):
+            try:
+                content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+                records = {"product": {p["id"]: (p["name"], p["status"]) for p in content.products},
+                           "maker": {k: (m["name"], "hidden" if m.get("hidden") else "visible") for k, m in content.makers.items()}}
+            except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+                records = None
+        lines = []
+        for slug, kind, ident, ok in parsed:
+            name = slug.replace("-", " ")
+            if not ok:
+                lines.append(f"{name} -> alias unreadable - send forget alias.{slug}")
+            elif records is None:
+                lines.append(f"{name} -> target unavailable right now ({ident})")
+            elif (found := records[kind].get(ident)) is None:
+                lines.append(f"{name} -> {ident} (no longer on the site - send forget alias.{slug})")
+            elif not safe(found[0]):
+                lines.append(f"{name} -> target unavailable right now ({ident})")
+            else:
+                mark = " [hidden]" if found[1] == "hidden" else " [held]" if found[1] == "held" else ""
+                lines.append(f"{name} -> {found[0]} ({ident}){mark}")
+        return lines
 
     def aliases(self) -> dict:
         """Read-only H15 aliases {name: (kind, id)} from active memory rows, for catalog.lookup(aliases=…)."""
