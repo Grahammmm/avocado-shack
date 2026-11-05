@@ -142,8 +142,9 @@ def _slug_id(content, day, title):
     return candidate
 
 
-def _same(a, b) -> bool:  # same rule as catalog._same: whitespace collapsed, case folded
-    return " ".join(str(a).split()).casefold() == " ".join(str(b).split()).casefold()
+def _same(a, b) -> bool:  # same rule as catalog._same: NFKC, whitespace collapsed, case folded
+    fold = lambda x: " ".join(unicodedata.normalize("NFKC", str(x)).split()).casefold()
+    return fold(a) == fold(b)
 
 
 def _local_day(event):
