@@ -59,7 +59,7 @@ class PhoneAnswerTests(H06TestCase):
                            ("yes?", ("approve", None, True)), ("no?", ("reject", None, True)), ("a1b2", (None, "a1b2", False)),
                            ("a1b2?", (None, "a1b2", True)), ("yes please", None), ("yes", None), ("ok", None),
                            ("yes but a1b2", None), ("yes a1b2 a1b3", None), ("yes no a1b2", None), ("yes a1b", None),
-                           ("yes a1b2c3d4e5f6a", None), ("yes a1 b2", None), ("yes a1b2g", None), ("", None), ("👍", None)):
+                           ("yes a1b2c3d4e5f6a", None), ("yes a1b2 不要", None), ("不要 yes a1b2", None), ("no a1b2 谢谢", None), ("yes a1b2 não", None), ("yes a1b2é", None), ("yes a1b2 нет?", None), ("yes a1 b2", None), ("yes a1b2g", None), ("", None), ("👍", None)):
             with self.subTest(text=text):
                 self.assertEqual(conversation.parse_phone(text), want)
         self.assertEqual(conversation.parse_phone("yes a1b2c3d4e5f6")[1], "a1b2c3d4e5f6")  # 12 characters
@@ -122,7 +122,7 @@ class PhoneAnswerTests(H06TestCase):
     def test_other_words_keep_todays_reading(self):
         self.proposal()
         for text in ("yes but make it 10am", "no, 5pm", "yes {} but later", "yes yes {}", "yes {} {}", "yes no {}",
-                     "yes abc", "yes {}x", "{} {}"):
+                     "yes abc", "yes {}x", "{} {}", "yes {} 不要", "不要 yes {}", "no {} 谢谢", "yes {} não", "yes {}é", "yes {} нет?"):
             with self.subTest(text=text):
                 code = self.drafts()[-1]["code"]
                 text = text.format(code, code) if "{}" in text else text

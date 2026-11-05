@@ -326,7 +326,7 @@ def parse_phone(text: str):
     either order, or one code alone, or (with a ?) one such word alone; otherwise None. `question` is True when the
     original text held a ?. Only the candidate is normalised, never the message; a ? is never stripped into an answer."""
     question = "?" in text
-    words = "".join(c if c.isascii() and c.isalnum() else " " for c in text.lower()).split()
+    words = "".join(c if c.isalnum() else " " for c in text.lower()).split()
     kept, i = [], 0
     while i < len(words):
         if words[i] == "thank" and words[i + 1:i + 2] == ["you"]: i += 2
