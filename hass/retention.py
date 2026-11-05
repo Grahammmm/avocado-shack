@@ -69,7 +69,7 @@ def _sidecar_time(path: Path):
 def _shots(folder: Path, cutoff) -> dict:
     """Screenshot PNGs by file mtime (the only class dated that way); no real screenshots dir counts as none."""
     found = os.scandir(folder) if folder.is_dir() and not folder.is_symlink() else ()
-    old = [s.st_size for e in found if e.is_file(follow_symlinks=False)
+    old = [s.st_size for e in found if e.name.endswith(".png") and e.is_file(follow_symlinks=False)  # completed .png only
            and (s := e.stat(follow_symlinks=False)).st_mtime < cutoff.timestamp()]
     return {"files": len(old), "bytes": sum(old)}
 

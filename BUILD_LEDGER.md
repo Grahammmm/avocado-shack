@@ -1597,3 +1597,11 @@ Branch rb/rf0220-10 from origin/main 8108de8 (RF0220-10). For Michael: a stored 
 Checks: `python3 -B -m unittest hass.tests.test_inbox_payload_types` ran 5 tests, OK; the wider inbox, retention and receiver test lists are recorded in the PR body.
 
 Limits: fixture data only; no enqueue validation, schema, receiver, status output, retention or conversation code changed; no timestamp parsing or string-content rules added.
+
+## H21 retention counts only completed .png screenshots (RF1100-18) — November 5, 2026
+
+Branch rb/rf1100-18 (RF1100-18). For Michael: the read-only retention report counts a screenshot only when it is a regular file whose name ends in lowercase .png; notes, .json, extensionless files, .png.tmp temp files, .PNG, links, FIFOs and folders no longer add to the screenshot files or bytes. `hass/retention.py` (_shots filter); added `hass/tests/test_retention_screenshots.py` (5 tests; 2 fail on the old code).
+
+Checks: `python3 -B -m unittest discover -s hass/tests -t . -p "test_retention*.py"` ran 49 tests, OK.
+
+Limits: nothing is deleted, no retention period is chosen, no image bytes are read, the scan does not recurse, and the report keys and wording are unchanged.
