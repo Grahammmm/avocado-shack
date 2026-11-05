@@ -79,7 +79,7 @@ class RecordingInterpreter:
     def __init__(self):
         self.pendings, self.answers = [], {}
 
-    def interpret(self, text, pending):
+    def interpret(self, text, pending, *, sent_at=None):
         self.pendings.append(json.loads(json.dumps(pending)))
         if text not in self.answers: return {"unsupported": "Sorry, I can't do that yet."}
         waiting = [p for p in pending if p["state"] == "needs-details"]

@@ -95,6 +95,7 @@ USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NO
 DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
                "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
+MAX_INTERPRETER_ALIASES = 50  # AV0007-06: live owner aliases the interpreter sees (newest first)
 MAX_NOTES = 20  # AV1102-09: saved notes the interpreter sees (newest first)
 TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
             "Send a shorter change.")
@@ -184,7 +185,7 @@ class FixtureInterpreter:
     def __init__(self, mapping):
         self.mapping = dict(mapping)
 
-    def interpret(self, text, pending, notes=None, *, sent_at=None):
+    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None):
         return copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
 
 
@@ -792,6 +793,27 @@ class Conversation:
         except sqlite3.Error:
             return []
 
+    def _interpreter_aliases(self) -> list:
+        """AV0007-06: the newest MAX_INTERPRETER_ALIASES active aliases whose product or maker still exists, as
+        {"name", "kind", "id"}; read-only (no table made, no write); any problem means none."""
+        try:
+            if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone():
+                return []
+            rows = self.db.execute(f"SELECT key, value FROM memory WHERE {memory_mod.ACTIVE} AND substr(key, 1, 6) = 'alias.' "
+                                   "ORDER BY created_at DESC, id DESC").fetchall()
+            if not rows: return []
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+            product_ids = {p["id"] for p in content.products}
+            out = []
+            for key, value in rows:
+                slug, (kind, colon, ident) = key[6:], str(value).partition(":")
+                if not slug or not colon or not ident: continue
+                if not (ident in product_ids if kind == "product" else ident in content.makers if kind == "maker" else False): continue
+                out.append({"name": slug.replace("-", " "), "kind": kind, "id": ident})
+                if len(out) >= MAX_INTERPRETER_ALIASES: break
+            return out
+        except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
+            return []
 
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
@@ -810,10 +832,10 @@ class Conversation:
                     **({"missing": _missing_ids(r["missing_json"])} if r["state"] == "needs-details" else {})}  # AV0007-03
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
+        context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases())) if v}  # AV0007-06
         sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
         try:
-            result = _checked(self.interpreter.interpret(msg.text, pending, notes=notes, sent_at=sent_at) if notes
-                              else self.interpreter.interpret(msg.text, pending, sent_at=sent_at))
+            result = _checked(self.interpreter.interpret(msg.text, pending, **context, sent_at=sent_at))
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
         codes = {p["code"] for p in pending}
