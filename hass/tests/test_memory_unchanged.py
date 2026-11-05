@@ -33,7 +33,7 @@ class MemoryUnchangedTests(StoreMixin, ConversationTestCase):
         self.chat("remember hours: 9-5", "memory-unchanged", SAME, pid="u2")
         self.assertEqual(self.rows(), [first])  # one active row, nothing superseded, original created_at kept
         self.assertEqual(self.disposition("u2"), "memory-unchanged")  # the message is still recorded
-        self.chat("memory", "memory-list", "Saved (1):\nhours: 9-5 (fact, since 2026-11-02)")
+        self.chat("memory", "memory-list", "Saved (1):\nhours: 9-5 (fact, since 2026-11-02)\nAliases (0):")
         self.assertFalse(self.conv.db.in_transaction)
 
     def test_different_text_is_still_an_update(self):

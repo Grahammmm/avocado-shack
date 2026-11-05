@@ -27,6 +27,7 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 - `history` shows the last **5** <!-- conversation.HISTORY_MAX --> approved changes.
 - `memory` shows the first **20** <!-- conversation.MEMORY_LIST_MAX --> saved notes and says how many more there are.
+- `memory` shows the first **20** <!-- conversation.ALIAS_LIST_MAX --> aliases apart from the notes and says how many more there are.
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
 - `find` takes at most **60 characters** <!-- conversation.FIND_TEXT_MAX --> of words to look for.
 - An alias name is at most **60 characters** <!-- conversation.ALIAS_NAME_MAX -->.
