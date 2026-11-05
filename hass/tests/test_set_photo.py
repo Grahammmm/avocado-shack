@@ -102,7 +102,7 @@ class SetPhotoTests(SetPhotoTestCase):
     def test_image_alt_is_required_and_limited(self):
         result = self.rejected("needs-details", ("product.set_photo", {"id": PID, "photo": self.jpg}))
         self.assertEqual(result["missing"], ["imageAlt"])
-        self.assertIn("imageAlt", result["question"])
+        self.assertEqual(result["question"], "Please provide: a few words saying what the photo shows")
         result = self.rejected("refused", _photo(PID, self.jpg, "a" * 201))
         self.assertEqual(result["reason"], "the photo description is longer than 200 characters (it has 201)")
 
