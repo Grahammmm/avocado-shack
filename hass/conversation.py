@@ -31,7 +31,7 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
                         r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
                         r"|(hidden)"  # AV1222-13 (H03): group 17
                         r"|(listing)(?:\s+(\S+))?")  # AV1622-09 (H17): groups 18/19; one token, the id is re-read from the original text
-HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
+HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as sold out".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
     'status (or did it work?) - last change, waiting drafts: "status"',
