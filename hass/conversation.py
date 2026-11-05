@@ -800,11 +800,21 @@ class Conversation:
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
         sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
+        failed = None  # AV1052-10: None until interpret actually returned; then the adapter's last_error (or "")
         try:
             result = _checked(self.interpreter.interpret(msg.text, pending, notes=notes, sent_at=sent_at) if notes
                               else self.interpreter.interpret(msg.text, pending, sent_at=sent_at))
+            failed = getattr(self.interpreter, "last_error", None) or ""
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
+        if failed:  # AV1052-10: the reader itself failed: remember it for status (latest only, no error detail kept)
+            self.db.execute(CONTROL)
+            self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('reader-failed', '1', ?, ?)"
+                            " ON CONFLICT(name) DO UPDATE SET value = '1', set_at = excluded.set_at,"
+                            " provider_id = excluded.provider_id", (_iso(now), msg.provider_id))
+        elif failed is not None and self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
+            self.db.execute("DELETE FROM control WHERE name = 'reader-failed'")  # a request was read again
         codes = {p["code"] for p in pending}
         named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
         cancelled_question = named is not None and named["state"] == "rejected" and named["reason"] == "owner" \
@@ -815,7 +825,7 @@ class Conversation:
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])
-                return key
+                return "reader-failed" if failed and key == "unsupported" else key
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
         photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
                      None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
@@ -1444,6 +1454,7 @@ class Conversation:
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
             lines.append(shelf.check_line(f, " - more than a week ago, the site says call to confirm"))  # AV1102-05
+        lines += self._reader_failed_lines()
         lines += self._waiting_lines(now) or [NOTHING]
         lines += self._photo_lines(now)  # NB-AV-12: counts only, before Last change
         last = self.db.execute(  # the most recently approved change that has a result
@@ -1453,6 +1464,19 @@ class Conversation:
             lines.append(f"Last change: {last['code']} {last['summary']} - "
                          + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
+
+    def _reader_failed_lines(self) -> list:
+        """AV1052-10: the last request was not read because the reader failed; read-only, never raises."""
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
+            return []
+        row = self.db.execute("SELECT set_at FROM control WHERE name = 'reader-failed'").fetchone()
+        if not row: return []
+        try:
+            at = datetime.fromisoformat(row["set_at"]).astimezone(LOCAL_TZ)
+            when = f"{WEEKDAYS[at.weekday()]} {at:%H:%M}"
+        except (ValueError, TypeError, OverflowError, OSError):
+            when = "time unavailable"
+        return [f"Last request not read: {when} - the reader was not working; send it again"]
 
     def _waiting_lines(self, now) -> list:
         """AV1102-11: one line per unexpired draft waiting for yes or for details; `status` and `report` share it."""

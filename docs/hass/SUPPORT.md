@@ -6,6 +6,13 @@ exit 0 is ok, 1 means problems, 2 means unsafe (nothing else was checked). Each 
 The owner's first move is always the chat command `status`. The support contact and account ownership are recorded privately
 by the owner/G (H22), never in Git. Read-only checks come first; anything that writes state happens only after `pause changes`.
 
+## Reader not working
+
+When Hass could not reach the model or got no usable answer, it replies "I could not work that out right now, so nothing was drafted" and `status` adds `Last request not read: <weekday time> - the reader was not working; send it again`. Nothing was drafted, nothing is retried automatically, and it was not the owner's wording. The line stays until a later change request is read. This is a chat status indication, not a health problem id.
+
+- **Owner:** send the change again once the reader is back; Hass never replays it for you.
+- **Operator:** if it repeats, run `python3 hass/health.py --state DIR` and check the model there. Do not edit the queue or restart anything for this alone; contact the support person recorded privately.
+
 ## Problems
 
 ### `state`
