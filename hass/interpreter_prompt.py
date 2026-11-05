@@ -16,7 +16,7 @@ import json
 from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
 
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
-MAX_HIKES, MAX_ROUTES = 60, 60
+MAX_HIKES, MAX_ROUTES, MAX_HIKE_DETAILS = 60, 60, 12
 PROMPT_MAX_BYTES = 64 * 1024
 DESIGN_UNSUPPORTED = "design changes cannot be made by message yet"  # AV1102-08 (H24): the fixed design-request reply
 _LINE_BREAKS = {"\x85": "\\u0085", "\u2028": "\\u2028", "\u2029": "\\u2029"}  # json.dumps keeps these raw
@@ -43,8 +43,12 @@ RULES = (
     f"One message may hold several ops (at most {MAX_OPS}).",
     "store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, "
     "in the order shown.",
+    "hike.update text fields (meetingPoint, bring, accessNote) replace the whole text: to add or change part, send the "
+    "whole new text built from the current value listed under Scheduled hike details.",
     "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
     "or product.add with imageAlt when the owner says it is a new product; never both.",
+    "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
+    "is unclear, ask. Never make a route idea or the sample hike into a real hike.",
     "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
     f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
     "route ideas is not a design change.",
@@ -109,6 +113,16 @@ def _hike_lines(events) -> list:
                     for e in rows], MAX_HIKES)
 
 
+def _hike_detail_lines(events) -> list:
+    """AV1222-08: each scheduled hike's current details (earliest first), so a partial edit resends the whole text."""
+    rows = sorted(sorted((e for e in _dicts(events) if e.get("status") == "scheduled"), key=lambda e: str(e.get("id", ""))),
+                  key=lambda e: str(e.get("startsAt", "")))
+    text = lambda v: v if isinstance(v, str) else ""  # noqa: E731  # a wrong type shows as empty, never raises
+    cap = lambda v: str(v) if isinstance(v, int) and not isinstance(v, bool) else ""  # noqa: E731
+    return _capped([f"{_q(e.get('id'))} | {_q(text(e.get('meetingPoint')))} | {_q(cap(e.get('capacity')))} | "
+                    f"{_q(text(e.get('bring')))} | {_q(text(e.get('accessNote')))}" for e in rows], MAX_HIKE_DETAILS)
+
+
 def _route_lines(ideas) -> list:
     rows = sorted(_dicts(ideas), key=lambda r: str(r.get("id", "")))
     return _capped([f"{_q(r.get('id'))} | {_q(r.get('title'))}" for r in rows], MAX_ROUTES)
@@ -149,6 +163,8 @@ def build(registry, content) -> str:
         "Catalog.\nProducts (id | name | brand | status):\n" + "\n".join(_product_lines(_dicts(content.products)))
         + "\nMakers (key | name):\n" + "\n".join(_maker_lines(makers)),
         "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
+        + "\nScheduled hike details (id | meeting point | capacity | bring | access note):\n"
+        + "\n".join(_hike_detail_lines(community.get("events")))
         + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),
         "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),
     ]

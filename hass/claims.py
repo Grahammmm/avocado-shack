@@ -16,11 +16,15 @@ AV0022-12: an events number with a unit (mi, km, ft, hours, min; ranges give bot
 text or in the text of the route idea the hike's trailId names; "3.20 miles" is "3.2 mi", "3,2" is 3.2; "5k", "10h" are not.
 RF0220-11: a store record's notice.text and homeImage.imageAlt strings are checked like any text field (labels "notice.text",
 "homeImage.imageAlt"); no other dictionary is scanned, and a leaf that is not a string is skipped.
+AV1937-05: a hike.repeat copies title, trailId and the event text (never the recap) from a real hike; a copied value that
+equals the same field of that source hike (read from the content by the conversation) is not checked again.
 """
 import re
 import unicodedata
 from collections import Counter
 from decimal import Decimal
+
+from hass.content_model import EVENT_TEXT_FIELDS
 
 TERMS = ("organic", "certified", "pesticide-free", "spray-free", "non-gmo", "local", "locally", "grown in", "made in",
          "raised in", "harvested in", "sourced from", "produced in", "family farm", "estate",
@@ -148,10 +152,42 @@ def _fields(r: dict, before: dict, after: dict):
             yield field, new, old
 
 
-def unstated(draft: dict, owner_text, makers, routes=None) -> list:
+REPEAT_FIELDS = ("title",) + tuple(f for f in EVENT_TEXT_FIELDS if f != "recap") + ("trailId",)  # what hike.repeat copies
+
+
+def _copied(draft: dict, sources) -> dict:
+    """{record index: source event} for each new event record that a hike.repeat op in the draft made, else nothing.
+
+    A record counts only when it is a new scheduled event whose id starts hike-<date>- and whose start is the op's local
+    date and time, and its source is a real event in ``sources``. A record is claimed by one repeat op at most.
+    """
+    if not isinstance(sources, dict):
+        return {}
+    found, spent = {}, set()
+    for call in draft.get("ops") or []:
+        args = call.get("args") if isinstance(call, dict) and call.get("op") == "hike.repeat" else None
+        source = sources.get(args.get("id")) if isinstance(args, dict) and isinstance(args.get("id"), str) else None
+        if not isinstance(source, dict) or not all(isinstance(args.get(k), str) for k in ("date", "time")):
+            continue
+        for i, r in enumerate(draft.get("records") or []):
+            after = r.get("after") if isinstance(r.get("after"), dict) else {}
+            if (r.get("collection") == "events" and r.get("before") is None and i not in spent
+                    and isinstance(r.get("key"), str) and r["key"].startswith(f"hike-{args['date']}-")
+                    and after.get("status") == "scheduled" and after.get("id") == r["key"]
+                    and isinstance(after.get("startsAt"), str)
+                    and after["startsAt"].startswith(f"{args['date']}T{args['time']}")
+                    and after.get("title") == source.get("title")):
+                spent.add(i)
+                found[i] = source
+                break
+    return found
+
+
+def unstated(draft: dict, owner_text, makers, routes=None, sources=None) -> list:
     """[(where, term)] for claims the draft adds that the owner's text does not contain; where = collection key field.
     makers: {key: maker} from the content (None when unreadable: every producerKey change is then unstated).
-    routes: {id: routeIdea} (None when unreadable: only the owner's text backs an events number)."""
+    routes: {id: routeIdea} (None when unreadable: only the owner's text backs an events number).
+    sources: {id: event} of the content's real hikes (None when unreadable: a hike.repeat copy is checked like any text)."""
     if all(isinstance(c, dict) and c.get("op") == "history.revert" for c in draft.get("ops") or [None]):
         return []
     records = draft.get("records") or []
@@ -159,11 +195,14 @@ def unstated(draft: dict, owner_text, makers, routes=None) -> list:
     known = dict(makers or {})
     known.update({r.get("key"): r["after"] for r in records if r.get("collection") == "makers"
                   and isinstance(r.get("after"), dict)})  # a maker this same draft adds or renames
-    hits = []
-    for r in records:
+    hits, repeats = [], _copied(draft, sources)
+    for n, r in enumerate(records):
         before = r.get("before") if isinstance(r.get("before"), dict) else {}
         after = r.get("after") if isinstance(r.get("after"), dict) else {}
+        copy_of = repeats.get(n)
         for field, new, old in _fields(r, before, after):
+            if copy_of is not None and field in REPEAT_FIELDS and field in copy_of and new == copy_of[field]:
+                continue  # AV1937-05: copied word for word from the real hike this repeat names
             if _lines(new):  # RF2030-5: a list of text (store hours) is checked as its newline-joined lines
                 new, old = "\n".join(new), "\n".join(old) if _lines(old) else ""
             if not isinstance(new, str) or new == old: continue

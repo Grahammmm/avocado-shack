@@ -107,16 +107,10 @@ class OpLimitTests(unittest.TestCase):
         self.addCleanup(repo.cleanup)
         return repo
 
-    def assertInvalid(self, repo, field, *ops):
-        head, drafts = repo.head(), repo.drafts()
-        result = repo.prepare(_req(*ops))
-        self.assertEqual(result["result"], "invalid", result)
-        self.assertTrue(any(f".{field}: longer than" in p for p in result["problems"]), result["problems"])
-        self.assertEqual((repo.head(), repo.drafts()), (head, drafts))  # no draft file, no commit
-
     def test_product_edit_description(self):
         repo = self.repo(CatalogRepo)
-        self.assertInvalid(repo, "description", ("product.edit", {"id": "photo-product-001", "description": "a" * 601}))
+        self.assertRefusedLong(repo, "description is longer than 600 characters",
+                               ("product.edit", {"id": "photo-product-001", "description": "a" * 601}))
         repo.run(("product.edit", {"id": "photo-product-001", "description": "a" * 600}))
 
     def assertRefusedLong(self, repo, reason, *ops):

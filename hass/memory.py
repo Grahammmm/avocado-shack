@@ -18,7 +18,8 @@ TABLE = """CREATE TABLE IF NOT EXISTS memory(id INTEGER PRIMARY KEY, key TEXT NO
   kind TEXT NOT NULL CHECK(kind IN ('fact','preference')), source TEXT NOT NULL, approved_change TEXT,
   created_at TEXT NOT NULL, superseded_at TEXT, forgotten_at TEXT)"""
 ACTIVE = "superseded_at IS NULL AND forgotten_at IS NULL"
-KEY_RE = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
+# Ordinary keys stay capped at 64; the cost namespace must fit a full 64-character product ID.
+KEY_RE = re.compile(r"(?:[a-z0-9][a-z0-9.-]{0,63}|cost\.[a-z0-9][a-z0-9-]{0,63})")
 SOURCE_RE = re.compile(r"(owner-approved|owner-stated|operator):(.+)", re.DOTALL)
 KINDS = ("fact", "preference")
 SOURCE_KIND = re.compile(r"(owner-approved|owner-stated|operator):")  # history shows only this part of a source

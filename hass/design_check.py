@@ -9,7 +9,8 @@ surface, a deletion, a symlink, submodule or non-plain (e.g. executable) file,
 or a template changed without its generated page (or the reverse). Paths only,
 never contents. Exit 0 ok,
 1 outside, 2 usage (bad refs, no common history, or not inside a git work tree). Read-only git at the
-repository top level (any folder inside it; `diff.relative` is ignored); nothing is written.
+repository top level (any folder inside it; `diff.relative` and any submodule-ignore setting are ignored);
+nothing is written.
 """
 
 from __future__ import annotations
@@ -69,8 +70,10 @@ def merge_base(base: str, head: str, top: str) -> str:
 
 
 def check(base: str, head: str, top: str) -> tuple[int, list[str]]:
-    parts = git("diff", "--no-relative", "--name-status", "-z", "--no-renames", merge_base(base, head, top), head,
-                "--", cwd=top).split("\0")[:-1]
+    # --ignore-submodules=none overrides diff.ignoreSubmodules, submodule.<name>.ignore and .gitmodules, so a
+    # committed gitlink change is always listed; only recorded commit ids are compared, no submodule is opened.
+    parts = git("diff", "--no-relative", "--ignore-submodules=none", "--name-status", "-z", "--no-renames",
+                merge_base(base, head, top), head, "--", cwd=top).split("\0")[:-1]
     changes = list(zip(parts[0::2], parts[1::2]))  # (status, path)
     modes = {e.split("\t", 1)[1]: e.split(" ", 1)[0]
              for e in git("ls-tree", "-r", "-z", "--full-tree", head, cwd=top).split("\0") if "\t" in e}

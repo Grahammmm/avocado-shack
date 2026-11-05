@@ -1589,3 +1589,11 @@ Branch rb/rf1740-7 (RF1740-7, PR #341: head a32fbd3, merged as 96447aa9afd34375e
 Checks at PR head a32fbd3 (recorded in PR #341): `python3 -m unittest hass.tests.test_set_photo_folder hass.tests.test_set_photo hass.tests.test_undo -v` ran 24 tests, OK.
 
 Limits: missing folders are unchanged (the editor creates them); the media store checks and `editor.py` are unchanged; the reply names no path or sha.
+
+## H16 a wrongly typed queued payload becomes done/unreadable and no longer stalls the inbox (RF0220-10) — November 4, 2026
+
+Branch rb/rf0220-10 from origin/main 8108de8 (RF0220-10). For Michael: a stored message that decodes but has a wrongly typed field (text, sender, chat, kind, received time or provider id not a string; `from_me` not a true/false; `attachments` not a whole number of 0 or more, including null, true/false and decimals) is now marked done as `unreadable` with its payload erased, and the next message is handled in the same drain. Before, a null `attachments` made the handler raise on every drain and held back every later message. `hass/inbox.py` (new private `_decode_payload`, used inside the existing decode catch). Genuine handler errors, including a TypeError or ValueError from a valid message, still propagate and stay retryable; photo retries and history rows are unchanged. Added `hass/tests/test_inbox_payload_types.py` (5 tests, 46 subtests; fail on the old `inbox.py`).
+
+Checks: `python3 -B -m unittest hass.tests.test_inbox_payload_types` ran 5 tests, OK; the wider inbox, retention and receiver test lists are recorded in the PR body.
+
+Limits: fixture data only; no enqueue validation, schema, receiver, status output, retention or conversation code changed; no timestamp parsing or string-content rules added.

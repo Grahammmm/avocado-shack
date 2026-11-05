@@ -25,11 +25,13 @@ function ics(e){const t=new Date(e.startsAt).toISOString().replace(/[-:]|\.\d+/g
 function calendar(e){return e.status==='scheduled'&&Date.parse(e.startsAt)>Date.now()?`<p><a class="text-link hike-ics" download="${esc(e.id)}.ics" href="${esc('data:text/calendar;charset=utf-8,'+encodeURIComponent(ics(e)))}">Add to calendar</a></p>`:''}
 function sampleInvitation(e){
  const t=trailById(e.trailId); if(!t)return '';
+ // AV1422-05: once the sample's Pacific day has passed (or startsAt is unparseable) say so instead of showing a past date.
+ const past=isNaN(Date.parse(e.startsAt))||pacificDay(e.startsAt)<pacificDay(Date.now());
  const day=new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:'America/Los_Angeles',weekday:'long',month:'long',day:'numeric',year:'numeric'});
  return `<article class="trail-invitation" aria-labelledby="featured-hike-title">
   <div class="trail-invitation-head"><p class="label">THE NEXT HIKE</p><p class="sample-caption">Sample invitation · plans to be confirmed</p></div>
   <div class="trail-feature">
-   <div class="trail-feature-copy"><p class="trail-place">${esc(t.place)} · Central Coast, California</p><h3 id="featured-hike-title">${esc(t.title)}<br><em>A morning on the coast.</em></h3><p class="trail-invitation-date"><time datetime="${esc(e.startsAt)}">${esc(day)}</time> · ${esc(e.walkTime)}</p><p>${esc(e.invitation)}</p><p class="trail-host-note">A community hike led by Michael Wolfe.</p></div>
+   <div class="trail-feature-copy"><p class="trail-place">${esc(t.place)} · Central Coast, California</p><h3 id="featured-hike-title">${esc(t.title)}<br><em>A morning on the coast.</em></h3>${past?'<p class="trail-invitation-date">Date to be confirmed</p>':`<p class="trail-invitation-date"><time datetime="${esc(e.startsAt)}">${esc(day)}</time> · ${esc(e.walkTime)}</p>`}<p>${esc(e.invitation)}</p><p class="trail-host-note">A community hike led by Michael Wolfe.</p></div>
    <figure class="trail-photograph"><img src="/assets/trails/point-buchon-coast.webp" alt="Sunlit sea arches and blue Pacific water below the bluffs at Point Buchon" loading="lazy" width="1600" height="1067"><figcaption><span>Point Buchon, from the bluffs.</span><span>Photo: <a href="https://commons.wikimedia.org/wiki/File:Waterscape_with_massive_arches_and_stone_outcroppings_of_Miguelito_shale,_Point_Buchon.jpg" target="_blank" rel="noopener">Mike Baird</a> · <a href="https://creativecommons.org/licenses/by/2.0/" target="_blank" rel="noopener">CC BY 2.0</a></span></figcaption></figure>
   </div>
   <dl class="trail-stats" aria-label="Hike at a glance">${metric('Round trip',t.distance)}${metric('Difficulty',t.difficulty)}${metric(t.elevationLabel,t.elevation)}${metric('Allow',t.duration)}</dl>
