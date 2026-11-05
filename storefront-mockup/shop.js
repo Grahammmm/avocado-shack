@@ -18,6 +18,9 @@ const CURRENT=new Set(['Available today','Limited','Sold out']),AVAIL=new Set(['
 if(catalog.some(p=>CURRENT.has(p.availability))){$('#brand-filter').closest('label').insertAdjacentHTML('afterend','<label class="avail-filter"><input type="checkbox" id="avail-filter"> Available today</label>');availBox=$('#avail-filter')}
 const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\u2018\u2019\u02bc]/g,"'").toLowerCase();
 const SHELF=Object.fromEntries([...document.querySelectorAll('[data-filter]')].filter(b=>b.dataset.filter!=='all').map(b=>[b.dataset.filter,b.textContent.trim()]));
+// AV1052-02: a shelf with no product in the published catalog is not offered; worked out once per page load.
+const SHELVES=new Set(catalog.map(p=>p.category));
+document.querySelectorAll('[data-filter]').forEach(b=>{b.hidden=b.dataset.filter!=='all'&&!SHELVES.has(b.dataset.filter)});
 // One search normalization for filtering, the address and restore: trimmed, at most 80 characters (code points).
 const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return catalog.filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
@@ -57,13 +60,13 @@ window.addEventListener('hashchange',()=>followSection(location.hash));
 // A malformed address must never stop the catalog, so the whole restore is guarded.
 try{const u=new URLSearchParams(location.search),shelf=[...document.querySelectorAll('[data-filter]')].find(x=>x.dataset.filter===u.get('shelf')),mk=u.get('maker');
  activeFrom=validFrom(u.get('from'))?u.get('from'):'';
- if(shelf)selectShelf(shelf);$('#product-search').value=searchText(u.get('q'));$('#brand-filter').value=mk&&[...$('#brand-filter').options].some(o=>o.value===mk)?mk:'';
+ if(shelf&&!shelf.hidden)selectShelf(shelf);$('#product-search').value=searchText(u.get('q'));$('#brand-filter').value=mk&&[...$('#brand-filter').options].some(o=>o.value===mk)?mk:'';
  // AV1322-10: ?item=<catalog id> wins over the filters: show everything, load enough cards to reach it.
  // An unknown, empty or over-80-character id is ignored and the filters above apply as before.
  const item=u.get('item'),i=item&&[...item].length<=80?catalog.findIndex(p=>p.id===item):-1;
  if(i>=0){activeFrom='';selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item;if(availBox)availBox.checked=false}
  if(availBox)availBox.checked=u.get('avail')==='1'&&i<0;
- let fix=false;if(u.has('from')&&!activeFrom){u.delete('from');fix=true}if(u.has('avail')&&!availBox?.checked){u.delete('avail');fix=true}
+ let fix=false;if(shelf?.hidden){u.delete('shelf');fix=true}if(u.has('from')&&!activeFrom){u.delete('from');fix=true}if(u.has('avail')&&!availBox?.checked){u.delete('avail');fix=true}
  if(fix){const q=u.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}}catch(e){}
 renderCatalog();
 // Prefer load, after the browser's #market jump, but do not wait indefinitely for a nonessential asset.
