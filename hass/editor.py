@@ -355,7 +355,8 @@ def render_draft(change_id, *, state=None, registry=None, now=None) -> dict:
         out = _compute(_read(path)["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
-    return {"result": "ok", "files": out["files"], "records": out["records"], "store": out["store"]} if out["result"] == "ok" else out
+    return {"result": "ok", "files": out["files"], "records": out["records"], "store": out["store"],
+                           "assets": {k: v for k, v in out["writes"].items() if k.startswith(sitegen.SITE_PREFIX + "assets/")}} if out["result"] == "ok" else out
 
 def history(limit=20, *, state=None) -> dict:
     """Change records newest first: id, state, applied_at, commit, one line per op, revertedBy."""
