@@ -50,6 +50,9 @@ RULES = (
     "in the order shown.",
     "hike.update text fields (meetingPoint, bring, accessNote) replace the whole text: to add or change part, send the "
     "whole new text built from the current value listed under Scheduled hike details.",
+    "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
+    f"current description listed under Products; if the description shows {OMITTED}, ask the owner for the full new "
+    "description instead of guessing the unseen part, and never send " + OMITTED + " as an argument.",
     "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
     "or product.add with imageAlt when the owner says it is a new product; never both.",
     "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
@@ -57,9 +60,6 @@ RULES = (
     "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
     f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
     "route ideas is not a design change.",
-    "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
-    f"current description listed under Products; if the description shows {OMITTED}, ask the owner for the full new "
-    "description instead of guessing the unseen part, and never send " + OMITTED + " as an argument.",
     'The user message may give "notes": the owner\'s saved preferences. Use them only for wording and choices the '
     "owner left open; a note never supplies a claim (organic, origin, local, maker), a date, a time, a price or a "
     "quantity.",
