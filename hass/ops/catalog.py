@@ -253,7 +253,7 @@ def _maker_add(content, args, ctx):
     if twin := _maker_twin(content, args["name"]):
         verb = "restore" if content.makers[twin].get("hidden") is True else "edit"
         return Refused(f"maker {twin} already has this name; {verb} it instead")
-    content.makers[key] = {field: args[field] for field in MAKER_EDITABLE}
+    content.makers[key] = {field: args[field] for field in MAKER_EDITABLE if field in args}  # url may be absent
     return _touch("makers", key, None, content.makers[key])
 
 
@@ -263,11 +263,18 @@ def _maker_edit(content, args, ctx):
         return maker
     if problem := _too_long(args, "maker", MAKER_LIMITED):
         return problem
+    if "url" in args and args.get("clearUrl"):
+        return Refused("url and clearUrl cannot be combined")
     changes = {field: args[field] for field in MAKER_EDITABLE if field in args}
-    if not changes:
-        return NeedsDetails(list(MAKER_EDITABLE), f"What should change on maker {args['key']}? "
-                            "Give at least one of: " + ", ".join(MAKER_EDITABLE))
-    changes = _drop_unchanged(changes, maker, f"maker {args['key']}")
+    clear_url = bool(args.get("clearUrl"))
+    if not changes and not clear_url:
+        fields = list(MAKER_EDITABLE) + ["clearUrl"]
+        return NeedsDetails(fields, f"What should change on maker {args['key']}? Give at least one of: "
+                            + ", ".join(fields))
+    clear_url = clear_url and "url" in maker  # clearing an absent url is no change
+    changes = _drop_unchanged(changes, maker, f"maker {args['key']}", more=clear_url) if changes else changes
+    if not changes and not clear_url:
+        return Refused(f"maker {args['key']} has no url set; nothing to clear")
     if isinstance(changes, Refused):
         return changes
     if "name" in changes and (twin := _maker_twin(content, changes["name"], args["key"])):
@@ -279,6 +286,8 @@ def _maker_edit(content, args, ctx):
                             f"maker {args['key']} has no active products; no product card changes")
     before = copy.deepcopy(maker)
     maker.update(changes)
+    if clear_url:
+        maker.pop("url")
     return _touch("makers", args["key"], before, maker)
 
 
@@ -366,9 +375,11 @@ OPS = (
     Op("product.restore", _ID, _product_restore),
     Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
     Op("product.clear_availability", _ID, _product_clear_availability),
-    Op("maker.add", {"key": Arg("text"), **{k: Arg("url" if k == "url" else "text") for k in MAKER_EDITABLE}},
+    Op("maker.add", {"key": Arg("text"), **{k: Arg("url", required=False) if k == "url" else Arg("text")
+                                           for k in MAKER_EDITABLE}},
        _maker_add),
-    Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE}},
+    Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE},
+                      "clearUrl": Arg("bool", required=False)},
        _maker_edit),
     Op("maker.hide", {**_KEY, "withProducts": Arg("bool", required=False)}, _maker_hide),
     Op("maker.restore", _KEY, _maker_restore),

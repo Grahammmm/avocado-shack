@@ -68,6 +68,12 @@ Checking the selection (change requests, not commands; each still needs `yes <co
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
 
+A maker without a website: `maker.add` needs only the key, name, place and story; leave `url` out and the maker's
+card shows its story and place with no "Visit" link. `maker.edit` with `clearUrl: true` removes a maker's website (it
+cannot be combined with `url`); a maker with no website and nothing else changed is refused. Both are change requests that
+need `yes <code>`, and `undo` restores the website exactly as it was. A website recorded as a migrated source link
+cannot be removed: the change is blocked.
+
 Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`, for example "put the old photo back",
 shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when
 no photo of yours is set; `undo` puts your photo back.
