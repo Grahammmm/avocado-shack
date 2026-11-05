@@ -49,6 +49,12 @@ function sampleHistory(item,index){
  const t=trailById(item.trailId);if(!t)return '';
  return `<article class="trail-journal-entry"><div class="trail-journal-marker" aria-hidden="true">${index===0?'↗':'≈'}</div><div class="trail-journal-copy"><p class="trail-place">${esc(t.place)} <span>· ${esc(item.dateLabel)}</span></p><h4>${esc(t.title)}</h4><p>${esc(t.description)}</p><dl class="trail-journal-stats">${metric('Distance',t.distance)}${metric('Difficulty',t.difficulty)}${metric(t.elevationLabel,t.elevation)}${metric('Allow',t.duration)}</dl><a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">Explore this trail <span aria-hidden="true">↗</span></a></div></article>`;
 }
+// AV1422-08: the 1.8 MB aerial and route file load only once the map is within one screen of view.
+function mountWhenNear(host){
+ if(!host||host.dataset.observing)return;host.dataset.observing='true';
+ if(!('IntersectionObserver' in window))return window.AvoshackTrailExplorer?.mount(host);
+ const io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){io.disconnect();window.AvoshackTrailExplorer?.mount(host)}},{rootMargin:'100% 0px'});io.observe(host);
+}
 function render(){
  const next=club.events.filter(e=>upcoming(e)||showCancelled(e)).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt));
  const demo=preview?.enabled&&preview.upcoming&&trailById(preview.upcoming.trailId);
@@ -59,7 +65,7 @@ function render(){
  $('#history-context').textContent=samplePast?'Sample archive · these outings are not confirmed club history.':'Places and memories from our walks together.';
  $('#past-hikes').classList.toggle('trail-journal',!!samplePast);
  $('#past-hikes').innerHTML=past.length?past.map(e=>`<details class="past-hike"><summary><span>${esc(e.title)}</span><time>${esc(new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:e.timezone||'America/Los_Angeles',month:'long',day:'numeric',year:'numeric'}))}</time></summary><p>${esc(e.recap||e.description||'')}</p>${details(e)}</details>`).join(''):samplePast?preview.past.map(sampleHistory).join(''):'<p class="club-small history-empty">We’re gathering the club’s past outings. Routes and stories will appear here as Michael shares them.</p>';
- window.AvoshackTrailExplorer?.mount(document.querySelector('[data-trail-explorer]'));
+ mountWhenNear(document.querySelector('[data-trail-explorer]'));
  const form=$('#preview-hike-rsvp');
  if(form)form.onsubmit=e=>{e.preventDefault();const status=form.querySelector('.form-status');status.textContent='That’s how the RSVP will work. No details were saved or sent.';form.reset();status.focus();};
 }
