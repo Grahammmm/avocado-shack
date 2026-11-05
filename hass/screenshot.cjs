@@ -12,6 +12,8 @@ if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const base=process.env.PREVIEW_URL,target=JSON.parse(process.env.TARGET||'{}'),out=process.env.OUT;
 const origin=new URL(base).origin;
+// AV1104-10 operator design preview: {kind:'design',page:'home'|'hike'}; the page is a fixed enum checked before any navigation.
+if(target.kind==='design'&&!['home','hike'].includes(target.page)){console.error('bad design page');process.exit(1);}
 const allowed=req=>{
   if(!['GET','HEAD'].includes(req.method()))return false;
   try{const url=new URL(req.url());return url.protocol==='data:'||(url.origin===origin&&url.hostname==='127.0.0.1');}
@@ -24,7 +26,11 @@ const allowed=req=>{
     const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};
     page.on('pageerror',e=>errors.push(e.message));
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
-    if(target.kind==='event'){
+    if(target.kind==='design'){  // pageLoaded: HTTP 200 and the page's own heading visible; noHorizontalOverflow at this viewport
+      const hike=target.page==='hike',reply=await page.goto(base+(hike?'/hike':'/'),{waitUntil:'networkidle'});
+      checks.pageLoaded=reply!==null&&reply.status()===200&&await page.locator(hike?'main h1':'.hero h1').first().isVisible();
+      checks.noHorizontalOverflow=await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth);
+    }else if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
       if(target.status==='scheduled')checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
       else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
