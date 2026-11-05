@@ -34,7 +34,7 @@ SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & 
 # key order (the migrated records use three historical orders; the generator
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
-PRODUCT_OPTIONAL_PUBLIC = ("imageAlt",)  # public when present; never required (any status)
+PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn")  # public when present; never required (any status)
 PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on")  # owner-set word + its check day (SHOP-1)
 PRODUCT_STATUSES = ("active", "hidden", "held")
 AVAILABILITY = ("yes", "limited", "no")
@@ -263,6 +263,12 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
             problems.append(f"{where}: image must be assets/products/<file> ({image!r})")
         if "imageAlt" in rec:
             _text(problems, f"{where}.imageAlt", rec["imageAlt"], limit=limits["imageAlt"])
+        if "addedOn" in rec:  # AV1622-06: the Pacific day Hass added the product; never in the future
+            added = iso_day(rec["addedOn"])
+            if added is None:
+                problems.append(f"{where}.addedOn: must be a real date YYYY-MM-DD")
+            elif added > shop_today():
+                problems.append(f"{where}.addedOn: {rec['addedOn']} is in the future")
         if "available" in rec and rec["available"] not in AVAILABILITY:
             problems.append(f"{where}.available: must be one of {AVAILABILITY}")
         if "available_on" in rec and ("available" not in rec or iso_day(rec["available_on"]) is None):

@@ -7,7 +7,7 @@ a private media root outside the repo). No live service, no network.
 from pathlib import Path
 
 from hass import editor, media
-from hass.content_model import SITE_DIR
+from hass.content_model import SITE_DIR, shop_today
 from hass.ops import photos
 from hass.tests.test_catalog_ops import NEW
 from hass.tests.test_editor import git
@@ -30,7 +30,8 @@ class ProductAddPhotoTests(SetPhotoTestCase):
         added = self.repo.products()[-1]
         self.assertEqual(added["id"], NEW_ID)
         self.assertEqual(list(added), ["id", "name", "brand", "category", "image", "description", "producerKey",
-                                       "displayBrand", "status", "imageAlt"])
+                                       "displayBrand", "status", "imageAlt", "addedOn"])
+        self.assertEqual(added["addedOn"], shop_today().isoformat())  # AV1622-06: dated like an image add
         self.assertEqual((added["image"], added["imageAlt"]), (f"assets/products/photo-{self.jpg[:16]}.jpg", ALT))
         self.assertNotIn("photo", added)
         self.assertIn(self.target(self.jpg), self.repo.committed())

@@ -9,7 +9,7 @@ const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{
 if(catalog.some(p=>!installedImage(p.image))){const n=document.createElement('p');n.className='catalog-note';n.textContent='Some product pictures are illustrations made from photos of our shelves, so a label or package in the store may look different.';$('.catalog-controls').before(n)}
 function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
 function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
-function badges(p){return (organic(p)?'<div class="food-badges"><span>Organic</span></div>':'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
+function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
 function card(p){
  const m=maker(p);
@@ -39,6 +39,10 @@ function refreshFreshness(now=new Date()){const today=pacificDay(now),checked=ty
  catalog.forEach(p=>{const w=availabilityWord(p.availabilityState,p.availabilityCheckedOn,checked,today);if(w===null)delete p.availability;else p.availability=w});
  const note=document.querySelector('.selection-checked'),line=note&&selectionLine(note.dataset.checkedOn,today,note.dataset.phone);if(line)note.textContent=line}
 // FRESHNESS-END
+// AV1622-06: a product Hass added shows New for its first NEW_BADGE_DAYS Pacific calendar days (addedOn, same day rule as above);
+// a missing, invalid or future date shows nothing. Worked out each time a card is drawn, from the visitor's clock.
+const NEW_BADGE_DAYS=14;
+function isNew(p,now=new Date()){const a=dayNumber(p.addedOn),t=dayNumber(pacificDay(now));return a!==null&&t!==null&&t-a>=0&&t-a<NEW_BADGE_DAYS}
 // AV1102-03: the words match sitegen.AVAILABILITY_WORDS (pinned by a test); "Last confirmed ..." is never current.
 refreshFreshness();
 const CURRENT=new Set(['Available today','Limited','Sold out']),AVAIL=new Set(['Available today','Limited']);let availBox=null;

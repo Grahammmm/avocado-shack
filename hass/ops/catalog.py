@@ -134,6 +134,7 @@ def _product_add(content, args, ctx):
         record[field] = image if field == "image" else args[field]
     record.update(producerKey=key, displayBrand=args["displayBrand"], status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
+    record["addedOn"] = shop_today(ctx.now).isoformat()  # AV1622-06: Pacific day of this add; no other op sets it
     content.products.append(record)
     if _organic(record):
         ctx.warnings.append(f"adds Organic badge to {record['id']}")

@@ -54,6 +54,11 @@ gets a reply naming the limit, and nothing is saved or drafted.
 Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are
 missing). A draft is never applied until you reply `yes <code>`; drafts that wait too long expire and nothing changes.
 
+New products (a change request, needs `yes <code>`): a product you add shows a "New" badge on its card for its first
+14 days (counted in Pacific calendar days from the day it was added, worked out in the visitor's browser). Editing,
+hiding or restoring a product, or undoing and restoring an add, never starts the 14 days again, and the products that
+were already on the site have no "New" badge.
+
 Checking the selection (change requests, not commands; each still needs `yes <code>`):
 
 - `store.confirm_selection`: tell Hass you checked the shelves, for example "I checked the selection today: the
