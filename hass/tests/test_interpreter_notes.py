@@ -56,7 +56,7 @@ class NotesTestCase(ConversationTestCase):
 class SentNotesTests(NotesTestCase):
     def test_newest_20_without_aliases_newest_first(self):
         for i in range(25): self.save(f"note-{i:02d}", f"text {i}")
-        for i in range(3): self.save(f"alias.jam-{i}", f"product:photo-product-00{i}")
+        for i in range(3): self.save(f"alias.jam-{i}", f"product:no-such-00{i}")
         (args, kw) = self.sent()
         self.assertEqual(args, ("hours", []))
         self.assertEqual(kw, {"notes": [{"key": f"note-{i:02d}", "text": f"text {i}"} for i in range(24, 4, -1)]})
@@ -160,8 +160,8 @@ class RequestBytesTests(unittest.TestCase):
         self.assertEqual((user["message"], user["pending"]), ("hi", PENDING))
 
     def test_the_rule_is_the_last_prompt_rule(self):
-        self.assertIn('"notes"', interpreter_prompt.RULES[-1])
-        self.assertIn("never supplies a claim", interpreter_prompt.RULES[-1])
+        self.assertIn('"notes"', interpreter_prompt.RULES[-2])
+        self.assertIn("never supplies a claim", interpreter_prompt.RULES[-2])
 
 
 if __name__ == "__main__":

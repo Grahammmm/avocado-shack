@@ -65,7 +65,7 @@ class SentAliasesTests(AliasCase):
         self.assertEqual(len(names), conversation.MAX_INTERPRETER_ALIASES)
         self.assertEqual(list(kw["aliases"][0]), ["name", "kind", "id"])
         self.assertEqual(kw["aliases"][0], {"name": "same", "kind": "maker", "id": "Etto"})
-        self.assertNotIn("notes", kw)
+        self.assertEqual(list(kw), ["notes", "aliases"])
 
     def test_equal_time_ties_break_newest_id_first(self):
         for name in ("a", "b"): self.save(f"alias.{name}", f"product:{AVO}", minutes=0)
