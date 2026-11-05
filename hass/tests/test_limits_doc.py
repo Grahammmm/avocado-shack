@@ -12,7 +12,7 @@ CLAIM_RE = re.compile(r"\*\*(\d+)(?: ([A-Za-z]+))?\*\*\s*<!--\s*([\w.]+)\.(\w+)(
 BOLD_NUMBER_RE = re.compile(r"\*\*\d")
 UNITS = {None: 1, "characters": 1, "MB": 2**20, "digits": 1, "dollars": 1}
 IMAGE_TYPES = ("jpeg", "jpg", "png", "gif", "webp", "heic", "heif", "tiff", "bmp")
-REQUIRED = {"media.MAX_BYTES", "conversation.HISTORY_MAX", "conversation.MEMORY_LIST_MAX", "ops.catalog.MAX_CANDIDATES",
+REQUIRED = {"media.MAX_BYTES", "conversation.HISTORY_MAX", "conversation.MEMORY_LIST_MAX", "conversation.ALIAS_LIST_MAX", "ops.catalog.MAX_CANDIDATES",
             "memory.MAX_VALUE", "editor.MAX_OPS", "content_model.MAX_HOURS_LINES", "conversation.MAX_OWNER_TEXT",
             "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX", "content_model.MAX_INTRO",
             "content_model.MAX_HEADLINE_LINE", "content_model.MAX_STORY", "content_model.MAX_NOTICE",
@@ -99,6 +99,7 @@ class LimitsDocTest(unittest.TestCase):
         lines = {c[4]: c[0] for c in claims(self.doc)}
         for mod, name, value, said in ((conversation, "FIND_TEXT_MAX", 61, "60 characters"),
                                        (conversation, "ALIAS_NAME_MAX", 61, "60 characters"),
+                                       (conversation, "ALIAS_LIST_MAX", 21, "20"),
                                        (content_model, "MAX_HOURS_LINES", 8, "7")):
             with self.subTest(name=name), mock.patch.object(mod, name, value):
                 source = f"{mod.__name__.removeprefix('hass.')}.{name}"
