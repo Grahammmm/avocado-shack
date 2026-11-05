@@ -20,7 +20,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from hass.claims import REPEAT_FIELDS
-from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS, TEXT_LIMITS
+from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS, LINE_SEPARATORS, TEXT_LIMITS
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -335,12 +335,20 @@ def _hike_update(content, args, ctx):
 
 
 def _hike_cancel(content, args, ctx):
+    note = args.get("note")
+    if isinstance(note, str):
+        if any(c in note for c in LINE_SEPARATORS):
+            return Refused("note must be one line")
+        if len(note) > TEXT_LIMITS["event"]["cancelNote"]:
+            return Refused(f"note is longer than {TEXT_LIMITS['event']['cancelNote']} characters")
     event = _scheduled(content, args["id"])
     if not isinstance(event, dict):
         return event
     _guest_warning(ctx, event)
     before = copy.deepcopy(event)
     event["status"] = "cancelled"
+    if "note" in args:  # AV2152-07: stored as cancelNote, exactly as given; absent means no field
+        event["cancelNote"] = args["note"]
     return _touch(before, event)
 
 
@@ -391,7 +399,7 @@ OPS = (
                        "rsvpEnabled": Arg("bool", required=False), **_CAPACITY,
                        "trailId": Arg("id", required=False), **_OPTIONAL_TEXT,
                        "clear": Arg("text_list", required=False)}, _hike_update),
-    Op("hike.cancel", _ID, _hike_cancel),
+    Op("hike.cancel", {**_ID, "note": Arg("text", required=False)}, _hike_cancel),
     Op("hike.complete", {**_ID, "recap": Arg("text", required=False)}, _hike_complete),
     Op("hike.recap", {**_ID, "recap": Arg("text")}, _hike_recap),
 )

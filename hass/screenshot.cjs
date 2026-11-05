@@ -71,6 +71,11 @@ const allowed=req=>{
         if(target.recap)checks.recapShown=recaps[0]===target.recap;
       }else if(target.status==='cancelled'){  // the id is compared in page JS, never put into a selector
         checks.rsvpGone=await page.$$eval('[data-rsvp]',(els,id)=>els.filter(b=>b.dataset.rsvp===id).length,target.id||'')===0;
+        if('cancelNote' in target){  // AV2152-07: one visible note paragraph for exactly this id, in a cancelled card, directly above the fixed sentence
+          const notes=await page.$$eval('.hike-cancelled p.hike-cancel-note',(els,id)=>els.filter(p=>p.dataset.hikeId===id).map(p=>({text:p.textContent,
+            next:p.nextElementSibling?.textContent,shown:!!(p.offsetWidth||p.offsetHeight)&&getComputedStyle(p).visibility!=='hidden'})),target.id||'');
+          checks.cancelNoteShown=notes.length===1&&notes[0].shown&&notes[0].text===target.cancelNote&&notes[0].next==='This hike is cancelled. Nothing else is needed from you.';
+        }
       }
     }else{
       await page.goto(base+'/',{waitUntil:'networkidle'});

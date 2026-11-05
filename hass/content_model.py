@@ -51,7 +51,10 @@ EVENT_TEXT_FIELDS = (
     "meetingPoint", "meetingAddress", "distance", "difficulty", "duration", "description", "recap",
     "meetTime", "walkTime", "returnTime", "invitation", "bring", "accessNote",
 )
-EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
+# cancelNote (AV2152-07) is optional one-line text on a cancelled hike; it stays out of EVENT_TEXT_FIELDS, which feeds
+# hike.create/update and the hike.repeat copied-text allowlist.
+EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId", "cancelNote")
+LINE_SEPARATORS = "\u2028\u2029"  # not caught by INVISIBLE_RE but they break a line like CR/LF
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 PHONE_DIGITS = 10  # US number: area code, exchange, line; LIMITS.md cites it
 PHONE_RE = re.compile(rf"[2-9][0-9]{{2}}[2-9][0-9]{{{PHONE_DIGITS - 4}}}", re.ASCII)
@@ -72,7 +75,8 @@ MAX_EVENT_CAPACITY = 1000  # H14 typo guard on events[].capacity (a sanity ceili
 TEXT_LIMITS = {
     "product": {"name": 80, "brand": 60, "displayBrand": 60, "category": 40, "description": 600, "imageAlt": 200},
     "maker": {"name": 80, "place": 60, "story": 600},
-    "event": {f: 400 for f in EVENT_TEXT_FIELDS} | {"title": 80, "description": 800, "meetingPoint": 160, "recap": 2000},
+    "event": {f: 400 for f in EVENT_TEXT_FIELDS} | {"title": 80, "description": 800, "meetingPoint": 160, "recap": 2000,
+              "cancelNote": 160},
     "routeIdea": {f: 600 for f in ROUTE_IDEA_FIELDS if f not in ("id", "sourceUrl", "status", "rsvpEnabled")},
     "club": {f: 400 for f in ("clubName", "organizer", "intendedSender")},
     "store": {"streetAddress": MAX_ADDRESS_PART, "town": MAX_ADDRESS_PART, "hoursLine": MAX_HOURS_LINE},
@@ -406,6 +410,10 @@ def validate_community(problems, community):
         for field in EVENT_TEXT_FIELDS:
             if field in ev:
                 _text(problems, f"{where}.{field}", ev[field], limit=TEXT_LIMITS["event"][field])
+        if "cancelNote" in ev:
+            _text(problems, f"{where}.cancelNote", ev["cancelNote"], limit=TEXT_LIMITS["event"]["cancelNote"])
+            if isinstance(ev["cancelNote"], str) and any(c in ev["cancelNote"] for c in LINE_SEPARATORS):
+                problems.append(f"{where}.cancelNote: must be one line")
 
 
 def shop_today(now: datetime | None = None) -> date:
