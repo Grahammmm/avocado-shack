@@ -6,13 +6,13 @@ The expected word is sitegen.availability_label's own answer for the store and d
 
 import os
 import unittest
-from datetime import date, timedelta
+from datetime import timedelta
 
 from hass import preview, sitegen
-from hass.content_model import load_and_validate
+from hass.content_model import load_and_validate, shop_today
 from hass.tests.test_preview import BrowserCase
 
-TODAY = date(2026, 11, 4)
+TODAY = shop_today()  # AV1622-04: the page now ages words with the browser's own Pacific day, so the fixture uses the real one
 CHECKED = TODAY.isoformat()
 OLD, NEW = "assets/products/photo-product-001.webp", "assets/products/photo-product-016.webp"
 

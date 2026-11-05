@@ -11,7 +11,8 @@ from datetime import datetime, timedelta, timezone
 from hass import morning_report, sitegen
 from hass.content_model import ContentError, shop_today, validate
 from hass.tests.test_catalog_ops import CatalogTestCase
-from hass.tests.test_selection_checked import CATALOG, DatedRepo, _catalog
+from hass.tests.test_browser_freshness import browser_words
+from hass.tests.test_selection_checked import CATALOG, DatedRepo
 
 CHECK, SET = "store.confirm_selection", "product.set_availability"
 
@@ -35,7 +36,7 @@ class PerProductDayTests(CatalogTestCase):
 
     def words(self, content=None, today=None):
         files = sitegen.render(content or self.r.content(), today=today or self.today)
-        return {p["id"]: p.get("availability") for p in _catalog(files) if p["id"] in (self.a, self.b, self.c)}
+        return browser_words(files, today or self.today, (self.a, self.b, self.c))
 
     def facts(self, content=None):
         return morning_report.facts(content or self.r.content(), self.today)

@@ -41,11 +41,16 @@ def catalog_of(files):
     return json.loads(first[len("const catalog="):].rstrip(";")), json.loads(rest[len("const catalogFreshness="):].rstrip(";\n"))
 
 
-def browser_words(files, day: date, ids=None):
-    """{product id: the word the page shows} for generated ``files`` opened on Pacific day ``day``."""
-    records, fresh = catalog_of(files)
+def words_of(records, fresh, day: date, ids=None):
+    """{product id: the word the page shows} for catalog ``records`` + ``fresh`` metadata opened on Pacific day ``day``."""
     out = probe([{"fn": "refresh", "catalog": records, "freshness": fresh, "now": noon_utc(day), "note": None}])[0]
     return {r["id"]: w for r, w in zip(records, out["availability"]) if ids is None or r["id"] in ids}
+
+
+def browser_words(files, day: date, ids=None):
+    """Same, for generated ``files``."""
+    records, fresh = catalog_of(files)
+    return words_of(records, fresh, day, ids)
 
 
 def sel(checked, **extra):

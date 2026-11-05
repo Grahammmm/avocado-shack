@@ -173,8 +173,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await open(fromUrl(multi.key)+'&item='+encodeURIComponent(id40)+'#market');await inView(id40);assert.equal((await shown()).focused,id40,'item keeps its existing precedence');assert.equal(await page.locator('.catalog-from').isVisible(),false);assert.equal((await addr()).params.from,undefined);
  // AV1102-03: the Available today filter exists only when some card carries a current word.
  await open('?avail=1&utm=x');assert.equal(await page.locator('#avail-filter').count(),0,'main catalog: no control');assert.equal(await countText(),fullCount);assert.deepEqual((await addr()).params,{utm:'x'},'main catalog: ?avail=1 removed');
- const fixture=async words=>{await page.unroute('**/catalog-products.js').catch(()=>{});await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;${JSON.stringify(words)}.forEach((w,i)=>{catalog[i].availability=w});`})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
- const W=['Available today','Available today','Limited','Sold out','Last confirmed Mon Nov 2','Last confirmed Tue Nov 3'],avail=()=>page.locator('#avail-filter');
+ // AV1622-04: the page works the words out from raw state + check dates and today's Pacific day, so the fixture sets those.
+ const pacificAgo=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date(Date.now()-n*864e5));
+ const fixture=async(rows,checked=pacificAgo(0))=>{await page.unroute('**/catalog-products.js').catch(()=>{});await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;catalogFreshness.selectionCheckedOn=${JSON.stringify(checked)};${JSON.stringify(rows)}.forEach(([s,o],i)=>{catalog[i].availabilityState=s;catalog[i].availabilityCheckedOn=o});`})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
+ const W=[['yes',pacificAgo(0)],['yes',pacificAgo(0)],['limited',pacificAgo(0)],['no',pacificAgo(0)],['yes',pacificAgo(3)],['yes',pacificAgo(2)]],avail=()=>page.locator('#avail-filter');
  for(const width of [390,1440]){await page.setViewportSize({width,height:900});await fixture(W);await open('');
   assert.equal(await avail().count(),1,'fixture: control shown');assert.equal(await avail().isChecked(),false);assert.equal(await countText(),fullCount);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow with the control '+width);
@@ -188,6 +190,9 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await open('?avail=1&item='+encodeURIComponent(await page.evaluate(()=>catalog[4].id)));assert.equal(await avail().isChecked(),false,'?item wins over avail');assert.equal((await addr()).params.avail,undefined);
  }
  await fixture(W.slice(4));await open('?avail=1');assert.equal(await avail().count(),0,'only Last confirmed words: no control');assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
+ // AV1622-04: an old build opened today: every check is 8 days old, so every word is "Last confirmed" and nothing passes Available today.
+ await fixture(W.slice(0,4).map(([s])=>[s,pacificAgo(8)]),pacificAgo(8));await open('?avail=1');assert.equal(await avail().count(),0,'8-day-old checks: no control');assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
+ assert.match(await page.locator('#catalog-grid article .availability').first().textContent(),/^Last confirmed /);assert.equal(await page.locator('#catalog-grid .availability',{hasText:/Available today|Limited|Sold out/}).count(),0);
  // AV1222-14: Clear filters shows for any one filter, resets all five, keeps other parameters and the hash, then focuses the search box.
  const clr=page.locator('#clear-filters'),FILTERS=['shelf=pantry','q=jam','maker=Etto','from='+multi.key];
  for(const width of [390,1440]){await page.setViewportSize({width,height:900});await open('');assert.equal(await clr.isVisible(),false,'fresh: hidden');assert.equal(await countText(),fullCount);
