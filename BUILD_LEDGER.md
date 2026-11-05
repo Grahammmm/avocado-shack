@@ -1614,6 +1614,14 @@ Checks: `python3 -B -m unittest hass.tests.test_statebackup_restore_atomic` ran 
 
 Limits: fixture data only; rollback moves, preflight refusals and wording, the helper and the manifest are unchanged; no lock service or symlink-race redesign.
 
+## H21 retention counts only completed .png screenshots (RF1100-18) — November 5, 2026
+
+Branch rb/rf1100-18 (RF1100-18). For Michael: the read-only retention report counts a screenshot only when it is a regular file whose name ends in lowercase .png; notes, .json, extensionless files, .png.tmp temp files, .PNG, links, FIFOs and folders no longer add to the screenshot files or bytes. `hass/retention.py` (_shots filter); added `hass/tests/test_retention_screenshots.py` (5 tests; 2 fail on the old code).
+
+Checks: `python3 -B -m unittest discover -s hass/tests -t . -p "test_retention*.py"` ran 49 tests, OK.
+
+Limits: nothing is deleted, no retention period is chosen, no image bytes are read, the scan does not recurse, and the report keys and wording are unchanged.
+
 ## H10/H19 media verify checks web copies against their safe derivative (RF1100-20) — November 5, 2026
 
 Branch rb/rf1100-20 (RF1100-20). For Michael: `media.py verify` (and `health --media`) now compares each existing private web copy with the metadata-free bytes computed in memory from its hash-valid original. A changed, empty, truncated or metadata-restored web file is one `web content mismatch: <12 hex>` problem; an original the sanitizer refuses with a matching web file is `web unverifiable: <12 hex>`. `hass/media.py` (`verify_store` only); added `hass/tests/test_media_verify_web.py` (8 tests, 4 fail on the old `media.py`). Health still shows only the count.
