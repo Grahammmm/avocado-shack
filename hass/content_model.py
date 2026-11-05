@@ -26,6 +26,9 @@ SCHEMA_VERSION = 1
 
 # Category values offered by the catalog filter buttons in index.html.
 CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers")
+# Shelf names as the filter buttons in index.html show them (AV0222-02); a test ties this table to those buttons.
+SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & cheese", "eggs": "Eggs", "meat": "Meat",
+                "pantry": "Pantry", "drinks": "Drinks & coffee", "bread": "Bread", "flowers": "Flowers"}
 
 # Public product fields, emitted to catalog-products.js. Records keep their own
 # key order (the migrated records use three historical orders; the generator
