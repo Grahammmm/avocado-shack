@@ -6,7 +6,8 @@ unreadable file, malformed line, duplicate id, a case file without exactly 69 ca
 bad/repeated pending code, `revises` naming no pending draft, > MAX_OPS expected ops). `--live --url U --model M
 --out FILE` is OPERATOR ONLY, never run in CI or tests (they inject a fake transport): it builds the NB-AV-03 prompt
 from the real registry and catalog, asks the existing local model (NB-AV-02, loopback only) once per case and writes
-{"id", "reply"} lines to a new FILE outside the repo."""
+{"id", "reply"} lines to a new FILE outside the repo.
+AV1922-04: `compare --before R1 --after R2 [--cases C]` exits 0 when nothing regressed, 1 when something did, 2 as score."""
 import argparse, contextlib, dataclasses, json, os, re, sys, tempfile  # noqa: E401
 from pathlib import Path
 
@@ -127,6 +128,21 @@ def score(cases, replies, registry) -> dict:
             "extra": sorted(set(replies) - {c["id"] for c in cases})}
 
 
+def compare(cases, before, after, registry) -> dict:
+    """AV1922-04: score both reply sets with `score` (same cases, same registry) and classify each case id present in both.
+    Ids missing from a side are listed for that side only; extra reply ids are ignored, as score ignores them."""
+    runs = [score(cases, replies, registry) for replies in (before, after)]
+    bad = [{f["id"] for f in r["failed"]} for r in runs]
+    why = {f["id"]: f["why"] for f in runs[1]["failed"]}
+    absent = [set(r["missing"]) for r in runs]
+    both = [c["id"] for c in cases if c["id"] not in absent[0] and c["id"] not in absent[1]]
+    return {"regressed": [{"id": i, "why": why[i]} for i in both if i not in bad[0] and i in bad[1]],
+            "fixed": [i for i in both if i in bad[0] and i not in bad[1]],
+            "stillFailing": sum(i in bad[0] and i in bad[1] for i in both),
+            "passedBoth": sum(i not in bad[0] and i not in bad[1] for i in both),
+            "missing": {"before": runs[0]["missing"], "after": runs[1]["missing"]}}
+
+
 def _room_for(events, extra) -> list:
     """The real events trimmed so the fixture hikes survive the prompt's caps (scheduled details: earliest kept;
     all hikes: newest kept); a fixture hike cut by a cap would leave its case asking about text the model never saw."""
@@ -178,23 +194,33 @@ def live(cases, url, model, out, transport=None, registry=None, content=None) ->
 
 def main(argv=None, transport=None) -> int:
     parser = argparse.ArgumentParser(description="NB-AV-04 interpreter eval: offline scorer; --live is operator only")
-    parser.add_argument("command", nargs="?", choices=("score",))
+    parser.add_argument("command", nargs="?", choices=("score", "compare"))
     parser.add_argument("--cases", default=str(CASES))
     parser.add_argument("--live", action="store_true", help="operator only: record replies from the local model")
-    for flag in ("--replies", "--url", "--model", "--out"): parser.add_argument(flag)
+    for flag in ("--replies", "--url", "--model", "--out", "--before", "--after"): parser.add_argument(flag)
     args = parser.parse_args(argv)
-    if not (args.live and not args.command and args.url and args.model and args.out
-            or not args.live and args.command == "score" and args.replies):
-        parser.error("use: score --replies R [--cases C], or --live --url U --model M --out FILE [--cases C]")
+    cmp_ = not args.live and args.command == "compare" and args.before and args.after
+    if cmp_ and (args.replies or args.url or args.model or args.out):
+        parser.error("compare takes only --before, --after and --cases")
+    if args.before or args.after:
+        if not cmp_: parser.error("--before and --after belong to compare, which needs both")
+    elif not (args.live and not args.command and args.url and args.model and args.out
+              or not args.live and args.command == "score" and args.replies):
+        parser.error("use: score --replies R [--cases C], or compare --before R1 --after R2 [--cases C], "
+                     "or --live --url U --model M --out FILE [--cases C]")
     try:
         cases = load_cases(args.cases)
-        summary = (live(cases, args.url, args.model, args.out, transport=transport) if args.live
-                   else score(cases, load_replies(args.replies), load_registry()))
+        if cmp_:
+            before, after = load_replies(args.before), load_replies(args.after)
+            summary = compare(cases, before, after, load_registry())
+        else:
+            summary = (live(cases, args.url, args.model, args.out, transport=transport) if args.live
+                       else score(cases, load_replies(args.replies), load_registry()))
     except EvalError as exc:
         print(f"interpreter_eval: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(summary, sort_keys=True))
-    return 0
+    return 1 if cmp_ and summary["regressed"] else 0
 
 
 if __name__ == "__main__":
