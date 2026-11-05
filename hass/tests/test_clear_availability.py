@@ -13,7 +13,8 @@ from hass.content_model import shop_today
 from hass.ops import load_registry
 from hass.tests.test_editor import git
 from hass.tests.test_catalog_ops import CatalogTestCase, _req
-from hass.tests.test_selection_checked import DatedRepo, _catalog
+from hass.tests.test_browser_freshness import browser_words
+from hass.tests.test_selection_checked import DatedRepo
 
 CHECK, SET, CLEAR, REVERT = \
     "store.confirm_selection", "product.set_availability", "product.clear_availability", "history.revert"
@@ -37,7 +38,7 @@ class ClearAvailabilityTests(CatalogTestCase):
 
     def words(self):
         files = sitegen.render(self.r.content(), today=self.today)
-        return {p["id"]: p.get("availability") for p in _catalog(files) if p["id"] in (self.a, self.b, self.c, self.d)}
+        return browser_words(files, self.today, (self.a, self.b, self.c, self.d))
 
     def check(self, **groups):
         self.r.run((CHECK, groups))
