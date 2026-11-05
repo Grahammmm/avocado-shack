@@ -49,7 +49,9 @@ const allowed=req=>{
           r.dateShown=card.date===(when<=new Date()?`Today — started ${pt({hour:'numeric',minute:'2-digit'})}`:pt({weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}));
           r.meetShown=target.meetingPoint?card.meet.length===1&&card.meet[0]===target.meetingPoint:card.meet.length===0;
           const n=target.capacity,open=target.rsvpEnabled&&!!target.meetingPoint&&when>new Date();  // community-server.py scheduled(): RSVPs close at startsAt
-          const want=!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
+          const day=d=>d.toLocaleDateString('en-US',{timeZone:'America/Los_Angeles'}),now=new Date();  // community.js started(): begun on today's Pacific day
+          const started=when<=now&&day(when)===day(now);
+          const want=started?'This hike has started, so RSVPs are closed.':!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
           // guests already confirmed are not in the target: an open hike with a capacity may also be full (remaining 0)
           r.placesShown=card.places.length===1&&(card.places[0]===want||(open&&n>0&&card.places[0]==='This hike is full.'));
           const ch=Object.entries(target.changed||{});  // each changed value must be the one under its own label
