@@ -13,6 +13,10 @@ ignored; the refusal names both line numbers); street and town at most 80 charac
 Each hours line needs a letter or digit, and street and town each need a letter (the refusal names the line or field).
 Text kinds already reject markup, ``$`` and control characters. ``name`` and ``schemaVersion`` are not editable.
 
+``store.set_phone`` / ``store.clear_phone``: one store phone, shown in the Visit block and named in the stale selection line.
+    {"op": "store.set_phone", "args": {"phone": "805 555 0123"}}   # US 10 digits; spaces - . ( ) and +1 / 1 allowed
+    {"op": "store.clear_phone", "args": {}}   # undo restores either
+
 Selective-undo limit: the store is ONE record, so ``history.revert`` of an older store change after a later store
 change is refused as a conflict (``conflict: store store changed after <id>``). Undo the newest store change first.
 """
@@ -20,11 +24,12 @@ change is refused as a conflict (``conflict: store store changed after <id>``). 
 from __future__ import annotations
 
 import copy
+import re
 import unicodedata
 from datetime import date
 
 from hass.content_model import (
-    AVAILABILITY, DEFAULT_INTRO, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, MAX_INTRO, checked_on, shop_today,
+    AVAILABILITY, DEFAULT_INTRO, PHONE_RE, MAX_ADDRESS_PART, MAX_HOURS_LINE, MAX_HOURS_LINES, MAX_INTRO, checked_on, shop_today,
 )
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.catalog import _product
@@ -101,6 +106,29 @@ def _set_intro(content, args, ctx):
     return _touch(before, content.store)
 
 
+def _set_phone(content, args, ctx):
+    digits = re.sub(r"[ \-.()]", "", args["phone"])
+    if len(digits) == 12 and digits.startswith("+1"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if not PHONE_RE.fullmatch(digits):
+        return Refused("the phone number needs 10 digits, like 805 555 0123")
+    if content.store.get("phone") == digits:
+        return Refused("the phone number already says that")
+    before = copy.deepcopy(content.store)
+    content.store["phone"] = digits
+    return _touch(before, content.store)
+
+
+def _clear_phone(content, args, ctx):
+    if "phone" not in content.store:
+        return Refused("there is no phone number to remove")
+    before = copy.deepcopy(content.store)
+    del content.store["phone"]
+    return _touch(before, content.store)
+
+
 def _confirm_selection(content, args, ctx):
     """SHOP-1: record that Michael checked the selection (today, or an earlier ``date``) and, optionally, which
     products are available (``yes``), limited or sold out (``no``): lists of exact product ids."""
@@ -148,4 +176,6 @@ OPS = (
     Op("store.set_address", {"streetAddress": Arg("text", required=False), "town": Arg("text", required=False)},
        _set_address),
     Op("store.set_intro", {"text": Arg("text")}, _set_intro),
+    Op("store.set_phone", {"phone": Arg("text")}, _set_phone),
+    Op("store.clear_phone", {}, _clear_phone),
 )

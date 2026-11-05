@@ -60,6 +60,15 @@ def _day_text(day) -> str:
     return f"{_DAYS[day.weekday()]}, {_MONTHS[day.month - 1]} {day.day}"
 
 
+def phone_text(d: str) -> str:
+    """'8055550123' -> '(805) 555-0123'."""
+    return f"({d[:3]}) {d[3:6]}-{d[6:]}"
+
+
+def _phone_html(d) -> str:  # only validated digits reach the href; "" without a phone
+    return f'<p class="visit-phone"><a href="tel:+1{d}">{phone_text(d)}</a></p>' if d else ""
+
+
 def _check_state(store: dict, today):
     """(check date or None, stale?) where stale means older than STALE_AFTER_DAYS at generation date ``today``."""
     day = checked_on(store)
@@ -71,7 +80,9 @@ def checked_line(store: dict, today) -> str | None:
     day, stale = _check_state(store, today)
     if day is None:
         return None
-    tail = " (more than a week ago - call or visit to confirm)" if stale else ""
+    phone = store.get("phone")  # AV1222-04
+    tail = f" (more than a week ago - call {phone_text(phone)} or visit to confirm)" if stale and phone else \
+        " (more than a week ago - call or visit to confirm)" if stale else ""
     return f"Selection last checked by Michael on {_day_text(day)}{tail}."
 
 
@@ -129,6 +140,7 @@ def store_slots(store: dict, today=None) -> dict[str, str]:
         "store.addressLine": html.escape(f"{street}, {town}", quote=False),
         "store.addressShort": html.escape(f"{street} · {town}", quote=False),
         "store.hoursHtml": "<br>".join(html.escape(line, quote=False) for line in store["hours"]),
+        "store.phoneHtml": _phone_html(store.get("phone")),
         "store.mapsUrl": html.escape(maps, quote=True),
         "store.introHtml": html.escape(store.get("intro") or DEFAULT_INTRO, quote=False),
         "store.headlineHtml": f"{first}<br><em>{second}</em>",
