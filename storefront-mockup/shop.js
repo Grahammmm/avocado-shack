@@ -4,7 +4,10 @@ const validFrom=key=>Object.hasOwn(producers,key)&&makerCounts.get(key)>=2;
 $('#catalog-grid').insertAdjacentHTML('beforebegin','<p class="catalog-from" hidden></p>');
 function maker(p){return producers[p.producerKey]}
 function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus','Green Gold','Massa Organics'].includes(p.producerKey)}
-function photo(p){return `<img loading="lazy" width="800" height="800" src="${esc(p.image)}" alt="${esc(p.imageAlt||p.name)}">`}
+// AV1352-01: only an installed owner photo (same shape as content_model.HOME_IMAGE_RE) is not an illustration; JS $ without the m flag is a true end.
+const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{16}\.(jpg|png)$/.test(s);
+if(catalog.some(p=>!installedImage(p.image))){const n=document.createElement('p');n.className='catalog-note';n.textContent='Some product pictures are illustrations made from photos of our shelves, so a label or package in the store may look different.';$('.catalog-controls').before(n)}
+function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
 function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
 function badges(p){return organic(p)?'<div class="food-badges"><span>Organic</span></div>':''}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
