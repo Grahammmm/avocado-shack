@@ -1597,3 +1597,11 @@ Branch rb/rf0220-10 from origin/main 8108de8 (RF0220-10). For Michael: a stored 
 Checks: `python3 -B -m unittest hass.tests.test_inbox_payload_types` ran 5 tests, OK; the wider inbox, retention and receiver test lists are recorded in the PR body.
 
 Limits: fixture data only; no enqueue validation, schema, receiver, status output, retention or conversation code changed; no timestamp parsing or string-content rules added.
+
+## H20 state and media restore publish with atomic no-replace (RF1100-19) — November 5, 2026
+
+Branch rb/rf1100-19. For Michael: `statebackup restore` and `drill` now publish the restored state and media directories with the same kernel no-replace rename the content restore already used, so a directory created by someone else at that moment (even an empty one) is kept instead of silently replaced. The call fails with the existing one-line error JSON (exit 1), takes back only the state/staging trees it made itself, and leaves the backup untouched. `hass/statebackup.py` (two call replacements); added `hass/tests/test_statebackup_restore_atomic.py` (5 tests; all 5 fail on the old code).
+
+Checks: `python3 -B -m unittest hass.tests.test_statebackup_restore_atomic` ran 5 tests, OK; wider statebackup list in the PR body.
+
+Limits: fixture data only; rollback moves, preflight refusals and wording, the helper and the manifest are unchanged; no lock service or symlink-race redesign.
