@@ -87,7 +87,7 @@ def _arg(name, arg) -> str:
 
 def _op_lines(registry) -> list:
     lines = [f"{name}({'; '.join(_arg(a, spec) for a, spec in registry[name].args.items())})"
-             for name in sorted(registry)]
+             for name in sorted(registry) if name != "history.revert"]  # AV0007-02: undo is a command, never offered
     return lines or ["(none)"]
 
 

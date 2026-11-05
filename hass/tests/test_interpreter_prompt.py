@@ -26,6 +26,7 @@ TEST_REGISTRY = {op.name: op for op in (
     Op("test.set_category", {"id": Arg("id"), "category": Arg("enum", choices=CATEGORIES)}, _noop),
     Op("test.set_capacity", {"eventId": Arg("id"), "capacity": Arg("int", required=False, minimum=1)}, _noop),
     Op("test.set_maker_story", {"key": Arg("maker_key"), "story": Arg("text")}, _noop),
+    Op("history.revert", {"changeId": Arg("id")}, _noop),  # AV0007-02: registered but never listed
 )}
 
 
@@ -71,8 +72,10 @@ class RealRegistryTest(unittest.TestCase):
         prompt = build(registry, content)
         ops = _section(prompt, "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):")
         names = [line.split("(", 1)[0] for line in ops]
-        self.assertEqual(names, sorted(registry))
-        for name in registry:
+        self.assertIn("history.revert", registry)  # AV0007-02: still registered, never offered to the model
+        expected = sorted(k for k in registry if k != "history.revert")
+        self.assertEqual(names, expected)
+        for name in expected:
             self.assertEqual(names.count(name), 1, name)
         products = _section(prompt, "Products (id | name | brand | status | description):")
         for product in content.products:

@@ -16,6 +16,8 @@ HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
 STRING_KINDS = ("id", "maker_key", "text", "url", "enum", "date", "time", "image")
 NAME_CUT = 40
 AGAIN = "Could you say it another way?"
+UNDO_GUIDANCE = ("To undo a change, send undo for the latest change, undo <code> for a specific change, "
+                 "or history to see recent changes.")
 WANTS = {"bool": "a yes/no", "int": "a whole number", "text_list": "a list of text"}
 
 
@@ -47,6 +49,7 @@ def _problem(result: dict, registry, pending_codes):
         if not (isinstance(call, dict) and set(call) == {"op", "args"} and isinstance(call["op"], str)
                 and isinstance(call["args"], dict)):
             return f"I could not read change {n} of that message. {AGAIN}"
+    if any(call["op"] == "history.revert" for call in calls): return UNDO_GUIDANCE  # AV0007-02: whole result refused
     seen = {}
     for i, call in enumerate(calls, 1):
         try: key = (call["op"], json.dumps({k: _spaced(v) for k, v in call["args"].items()}, sort_keys=True, ensure_ascii=False))
