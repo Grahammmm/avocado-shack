@@ -57,6 +57,12 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Home photo: JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->.
 - The home photo needs a real description of at least three letters; a file name like IMG_1234 is refused.
 
+## Undoing a store change
+
+- Undoing an older change to the shop details (hours, address, intro, headline, story, home photo, notice, phone or shelf check date) puts back only the details that change wrote, and keeps later edits to the other details.
+- If a later edit gave one of those same details a different value, the undo is refused until that later edit is undone. A notice, with its dates, counts as one detail.
+- Changes to products, hikes, makers and routes are still undone one whole item at a time.
+
 ## What Hass never does
 
 - Send messages to guests or customers.

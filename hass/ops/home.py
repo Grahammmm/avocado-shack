@@ -21,8 +21,9 @@ home page (``store.notice``; at most 160 characters, 3 letters; last day today t
 replaces it and ``store.clear_notice`` removes it. The generated page drops it once ``until`` is past; between
 regenerations a page script hides it after that day, so without JavaScript it stays until the next change regenerates.
 
-Selective-undo limit (as hass/ops/store.py): the store is ONE record, so ``history.revert`` of an older store change
-after a later store change is refused as a conflict. Undo the newest store change first.
+Selective undo (as hass/ops/store.py): ``history.revert`` of an older store change sets back only the store fields that
+change wrote (a notice with its dates is one field) and keeps later changes to other fields; a later change to the same
+field is refused as a conflict.
 """
 
 from __future__ import annotations
