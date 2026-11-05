@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 
 from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
+from hass.sitegen import phone_text
 
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
 MAX_HIKES, MAX_ROUTES, MAX_HIKE_DETAILS = 60, 60, 12
@@ -131,6 +132,7 @@ def _route_lines(ideas) -> list:
 def _store_lines(store) -> list:
     store = store if isinstance(store, dict) else {}
     rows = [f"{_q(key)} | {_q(store[key])}" for key in ("streetAddress", "town") if store.get(key) is not None]
+    rows += [f"{_q('phone')} | {_q(phone_text(store['phone']))}"] if isinstance(store.get("phone"), str) and store["phone"].isdigit() else []
     hours = store.get("hours") if isinstance(store.get("hours"), list) else []
     rows += _capped([f"{_q('hours')} | {_q(line)}" for line in hours], MAX_HOURS_LINES) if hours else []
     return rows + _home_text_lines(store)  # AV1102-07: never empty, the default intro row is always there
