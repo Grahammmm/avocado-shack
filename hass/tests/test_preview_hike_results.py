@@ -269,6 +269,26 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         self.assertEqual(self.scheduled(right).get("eventShown"), True, right)
         self.assertIs(right["checks"]["dateShown"], True, right)
 
+    def test_started_rsvp_enabled_card_reads_closed(self):  # community-server.py closes RSVPs at startsAt even with rsvpEnabled and a meeting point
+        import json
+        hid = self.create(self.r)
+        target = self.target(self.r, "hike.update", {"id": hid, "capacity": 7})
+        self.assertTrue(target["rsvpEnabled"] and target["meetingPoint"], target)
+        open_page = (self.r.wt / COMMUNITY).read_bytes()
+        self.assertIs(self.capture(target)["checks"]["placesShown"], True)
+        data = json.loads(open_page)
+        started = datetime.now(timezone.utc) - timedelta(hours=1)
+        for event in data["events"]:
+            event["startsAt"] = started.astimezone(timezone(timedelta(hours=-7))).isoformat()
+        started_target = {**target, "startsAt": started.isoformat()}
+        correct = self.capture(started_target, {COMMUNITY: json.dumps(data).encode()})
+        self.assertEqual(self.scheduled(correct), {"eventShown": True, "dateShown": True, "meetShown": True,
+                                                   "placesShown": True}, correct)
+        self.assertTrue(correct["ok"], correct)
+        stale = self.capture(started_target, {COMMUNITY: open_page})  # old page still offers places
+        self.assertIs(stale["checks"]["placesShown"], False, stale)
+        self.assertFalse(stale["ok"])
+
     def test_changed_value_must_sit_under_its_own_label(self):  # stale card: Meet at still old, the new value is the Start time
         hid = self.create(self.r)
         self.target(self.r, "hike.update", {"id": hid, "walkTime": "9:00 AM", "meetTime": "8:00 AM"})
