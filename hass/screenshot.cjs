@@ -23,7 +23,7 @@ const allowed=req=>{
   if(!base||new URL(base).hostname!=='127.0.0.1')throw new Error('PREVIEW_URL must be a 127.0.0.1 address');
   const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
   try{
-    const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};
+    const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};let unshown=false;
     page.on('pageerror',e=>errors.push(e.message));
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
     if(target.kind==='design'){  // pageLoaded: HTTP 200 and the page's own heading visible; noHorizontalOverflow at this viewport
@@ -49,7 +49,8 @@ const allowed=req=>{
           r.dateShown=card.date===(when<=new Date()?`Today — started ${pt({hour:'numeric',minute:'2-digit'})}`:pt({weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}));
           r.meetShown=target.meetingPoint?card.meet.length===1&&card.meet[0]===target.meetingPoint:card.meet.length===0;
           const n=target.capacity,open=target.rsvpEnabled&&!!target.meetingPoint&&when>new Date();  // community-server.py scheduled(): RSVPs close at startsAt
-          const want=!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
+          const day=d=>d.toLocaleDateString('en-US',{timeZone:'America/Los_Angeles'}),started=when<=new Date()&&day(when)===day(new Date());  // AV1104-05 community.js: started today reads closed
+          const want=started?'This hike has started, so RSVPs are closed.':!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
           // guests already confirmed are not in the target: an open hike with a capacity may also be full (remaining 0)
           r.placesShown=card.places.length===1&&(card.places[0]===want||(open&&n>0&&card.places[0]==='This hike is full.'));
           const ch=Object.entries(target.changed||{});  // each changed value must be the one under its own label
@@ -72,6 +73,25 @@ const allowed=req=>{
       }else if(target.status==='cancelled'){  // the id is compared in page JS, never put into a selector
         checks.rsvpGone=await page.$$eval('[data-rsvp]',(els,id)=>els.filter(b=>b.dataset.rsvp===id).length,target.id||'')===0;
       }
+    }else if(target.kind==='route'){  // AV1222-06: every place /hike shows this route (linked hike cards' Route line, the sample invitation) reads the title; compared as text in page JS
+      await page.goto(base+'/hike',{waitUntil:'networkidle'});
+      const got=await page.evaluate(async id=>{
+        const get=async p=>{try{const r=await fetch(p,{cache:'no-store'});return r.ok&&(r.headers.get('Content-Type')||'').includes('json')?await r.json():null}catch{return null}};
+        const club=(await get('/api/community'))||(await get('/community.json'))||{},pv=await get('/hiking-preview.json'),linked=(club.events||[]).filter(e=>e.trailId===id),ws=v=>String(v).replace(/\s+/g,' ').trim();
+        const lines=[...document.querySelectorAll('#upcoming-hikes .hike-event')].filter(c=>{const key=[c.id,c.querySelector('[data-rsvp]')?.dataset.rsvp].filter(Boolean),h=c.querySelector('h2')?.textContent;
+          return linked.some(e=>key.length?key.includes(e.id):h===e.title||h==='Cancelled: '+e.title);}).map(c=>{const r=c.querySelector('.hike-route');if(!r)return null;  // a card with no Route line stays in the list so it fails the check
+          const link=r.querySelector('a');let before='';for(const n of r.childNodes){if(n===link)break;before+=n.textContent;}
+          return {before:ws(before),link:!!link};});  // the title is the text before the source link, never the link text
+        const t=document.querySelector('#featured-hike-title');
+        // the sample archive (community.js sampleHistory) renders pv.past entries whose route idea exists, in order, only while there are no real past hikes
+        const ent=[...document.querySelectorAll('#past-hikes .trail-journal-entry')],vis=(pv?.past||[]).filter(e=>(club.routeIdeas||[]).some(r=>r.id===e.trailId));
+        const archive=vis.map((e,i)=>e.trailId===id&&ent.length===vis.length?ws(ent[i].querySelector('h3')?.textContent):null).filter(x=>x!==null);
+        return {lines,archive,sample:t&&pv?.upcoming?.trailId===id?ws(t.childNodes[0]?.textContent):null};
+      },target.id||'');
+      const ws=v=>String(v).replace(/\s+/g,' ').trim(),title=ws(target.title),places=got.lines.length+got.archive.length+(got.sample===null?0:1);
+      if(target.hidden)checks.routeGone=got.lines.filter(Boolean).length+got.archive.length+(got.sample===null?0:1)===0;
+      else if(places>0)checks.routeShown=got.lines.every(l=>!!l&&l.before===(l.link?`Route: ${title} ·`:`Route: ${title}`))&&got.archive.every(a=>a===title)&&(got.sample===null||got.sample===title);
+      else unshown=true;
     }else{
       await page.goto(base+'/',{waitUntil:'networkidle'});
       if(target.kind==='product'||target.kind==='maker'){
@@ -136,6 +156,6 @@ const allowed=req=>{
     await page.screenshot({path:out});
     checks.noPageErrors=errors.length===0;
     checks.noPosts=!blocked.some(m=>m!=='GET'&&m!=='HEAD');
-    console.log(JSON.stringify({checks,blockedRequests:blocked.length}));
+    console.log(JSON.stringify({checks,blockedRequests:blocked.length,...(unshown?{unshown:true}:{})}));
   }finally{await browser.close();}
 })().catch(e=>{console.error(String((e&&e.message)||e).split('\n')[0]);process.exit(1);});
