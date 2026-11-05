@@ -14,8 +14,8 @@
 - Active products reviewed: 170 (all; “about 49” in the card is a discovery estimate, not a target)
 - Active products with at least one qualifying sentence: 88
 - Qualifying sentences: 91
-- Checkable clauses assessed: 159
-- Unsupported clauses (verdict starts “no source found”): 97
+- Checkable clauses assessed: 182
+- Unsupported clauses (verdict starts “no source found”): 120
 - Clauses with recorded support: 32; partial support: 30
 
 | Shelf | Active products | With qualifying sentence | Qualifying sentences |
@@ -338,6 +338,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
   - Clause: San Luis Obispo location — **recorded support**
     - maker-location record: `hass/content/makers.json` L42, maker "Cal Poly", place "San Luis Obispo, California"
+  - Clause: strawberry jam (product identity and fruit as stated in the sentence) — **no source found**
+    - Note: No record names this fruit or flavour for the Cal Poly product; the maker story says only “jam”.
 
 #### photo-product-009 — Cal Poly raspberry jam
 
@@ -347,6 +349,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
   - Clause: San Luis Obispo location — **recorded support**
     - maker-location record: `hass/content/makers.json` L42, maker "Cal Poly", place "San Luis Obispo, California"
+  - Clause: raspberry jam (product identity and fruit as stated in the sentence) — **no source found**
+    - Note: No record names this fruit or flavour for the Cal Poly product; the maker story says only “jam”.
 
 #### photo-product-010 — Cal Poly blackberry jam
 
@@ -356,6 +360,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
   - Clause: San Luis Obispo location — **recorded support**
     - maker-location record: `hass/content/makers.json` L42, maker "Cal Poly", place "San Luis Obispo, California"
+  - Clause: blackberry jam (product identity and fruit as stated in the sentence) — **no source found**
+    - Note: No record names this fruit or flavour for the Cal Poly product; the maker story says only “jam”.
 
 #### photo-product-011 — Sweet Hickory BBQ sauce
 
@@ -364,6 +370,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
   - Clause: made by Cal Poly — **no source found (secondary context only)**
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
+  - Clause: Sweet Hickory (named sauce style/flavour) — **no source found**
+    - Note: No record describes this sauce’s style, flavour or ingredients; the maker story says only “barbecue sauce”.
 
 #### photo-product-012 — Cal Poly chocolate
 
@@ -622,6 +630,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L79: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Peppermint Crunch chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-110 — Cookies and Cream chocolate
 
@@ -631,6 +641,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L98: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Cookies and Cream chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-111 — Zesty Orange chocolate
 
@@ -640,6 +652,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L117: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Zesty Orange chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-112 — Dark chocolate
 
@@ -649,6 +663,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L136: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Dark chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-113 — Milk chocolate
 
@@ -658,6 +674,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L155: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Milk chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-114 — Lemon Bar white chocolate
 
@@ -667,6 +685,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L174: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Lemon Bar white chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-115 — Habanero chocolate
 
@@ -676,6 +696,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L193: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Habanero chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-116 — S’mores chocolate
 
@@ -685,6 +707,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L212: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (S’mores chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-117 — Lemon Lavender white chocolate
 
@@ -694,6 +718,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L231: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Lemon Lavender white chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-118 — Birthday Cake chocolate
 
@@ -703,6 +729,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
     - secondary context only (maker story, not independent): `hass/content/makers.json` L43, maker "Cal Poly": “Students work on products from cheese and chocolate to jam and barbecue sauce”
     - Note: No Cal Poly query exists in the research log.
 - October photo-review record (other records consulted): `storefront-mockup/completion-new-products.json` L250: status “Distinct label or product visible in original photograph; owner confirmation remains in research file”; evidence “Original photograph IMG_9710.jpg”; notes “Selling units, price and availability remain development assumptions.”. This proves only that a distinct label or product was recorded as visible in the photograph; it records no origin, ingredient or process. The original photograph was not inspected, and the generated product image is not label evidence.
+  - Clause: named flavour/type (Birthday Cake chocolate) as stated in the sentence — **no source found**
+    - Note: No record states the flavour, type or ingredients of this bar; the maker story says only “chocolate”.
 
 #### photo-product-119 — Mustang Kick BBQ sauce
 
@@ -836,6 +864,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - Shelf: Drinks & coffee. Locator: `hass/content/products.json` L1770 (`id` photo-product-051, field `description`). Maker key: “Fair Hills Farm”.
 - **S1** “Ginger gives black tea a sharp little edge.”
   - Clause: contains ginger (ingredient) — **no source found**
+  - Clause: black tea (base ingredient named in the sentence) — **no source found**
+    - Note: No record names black tea for this product; the product name and the maker range are not ingredient records.
 
 #### photo-product-083 — Albino Coast Redwood Blend
 
@@ -843,7 +873,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
   - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
-    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
+    - Note: Maker-level; the named blend is not recorded.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 #### photo-product-084 — Cone Peak Blend
 
@@ -851,7 +883,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
   - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
-    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
+    - Note: Maker-level; the named blend is not recorded.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 #### photo-product-085 — Dream Girl Decaf
 
@@ -863,7 +897,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
   - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
-    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
+    - Note: Maker-level; the named blend is not recorded.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 #### photo-product-086 — Peace Be With You Blend
 
@@ -871,7 +907,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
   - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
-    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
+    - Note: Maker-level; the named blend is not recorded.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 #### photo-product-087 — Packer’s Blend coffee bags
 
@@ -880,6 +918,8 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
   - Clause: product is coffee, roasted by Corberosa (product type) — **no source found (secondary context only)**
     - secondary context only (maker story, not independent): `hass/content/makers.json` L61, maker "Corberosa": “Corberosa roasts coffee on a moving bed of hot air”
     - Note: No Corberosa query exists in the research log; the Packer’s Blend is not named in any record.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 #### photo-product-092 — Avocado Shack Blend (Hut)
 
@@ -887,7 +927,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
   - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
-    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
+    - Note: Maker-level; the named blend is not recorded.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 #### photo-product-094 — Cass Hill Blend
 
@@ -895,7 +937,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
   - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
-    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
+    - Note: Maker-level; the named blend is not recorded.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 #### photo-product-095 — Cambria Blend
 
@@ -903,7 +947,9 @@ No description on this shelf contains a qualifying checkable-fact sentence (reas
 - **S2** “Coffee for a real pause in the day: grind fresh when possible, brew with care, and give the first cup a minute of your attention.”
   - Clause: product is coffee, roasted by Joebella / Avocado Shack (product type) — **partial support**
     - recorded producer extract: `storefront-mockup/producer-research-log.json` L12 (query “Joebella coffee official about”, result record #2): “we’ve been roasting small-batch, organic coffee right here in Atascadero”
-    - Note: Maker-level; the named blend is not recorded, and “grind fresh” implies whole beans, which no record states.
+    - Note: Maker-level; the named blend is not recorded.
+  - Clause: sold as whole-bean coffee (state implied by “grind fresh”) — **no source found**
+    - Note: No record states the sold form (whole bean or ground) of this product; “grind fresh when possible” is conditional wording, but it presupposes whole beans.
 
 ### Bread (4 active products)
 
