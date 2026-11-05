@@ -44,7 +44,8 @@ const allowed=req=>{
           r.meetShown=target.meetingPoint?card.meet.length===1&&card.meet[0]===target.meetingPoint:card.meet.length===0;
           const n=target.capacity,open=target.rsvpEnabled&&!!target.meetingPoint;
           const want=!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
-          r.placesShown=card.places.length===1&&card.places[0]===want;
+          // guests already confirmed are not in the target: an open hike with a capacity may also be full (remaining 0)
+          r.placesShown=card.places.length===1&&(card.places[0]===want||(open&&n>0&&card.places[0]==='This hike is full.'));
           const ch=Object.entries(target.changed||{});  // each changed value must be the one under its own label
           if(ch.length)r.fieldsShown=ch.every(([k,v])=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===1&&card.facts[LABEL[k]][0]===ws(v));
           return r;

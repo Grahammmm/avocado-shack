@@ -7,15 +7,17 @@ are skipped when PLAYWRIGHT_MODULE is unset. Run: python3 -m unittest hass.tests
 
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from hass import preview
 from hass.content_model import REPO_ROOT
 from hass.tests.test_editor import git
-from hass.tests.test_hike_ops import HikeTestCase
+from hass.tests.test_hike_ops import SCHEMA, HikeTestCase
 
 DAY, LATER = "2030-06-01", "2030-06-08"  # far ahead, so a scheduled hike still has an open RSVP on the live clock
 AFTER = datetime(2030, 6, 9, 12, 0, tzinfo=timezone(timedelta(hours=-7)))
@@ -255,6 +257,29 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         self.assertIs(self.capture({**target, "id": first})["checks"]["dateShown"], False)
         mixed = self.target(self.r, "hike.update", {"id": second, "rsvpEnabled": True, "capacity": 5})
         self.assertIs(self.capture(mixed)["checks"]["dateShown"], True)  # the other twin has no button; this one does
+
+    def test_twin_titles_with_a_full_card(self):  # capacity 12, 12 synthetic confirmed guests: "This hike is full.", no button
+        first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)
+        target = self.target(self.r, "hike.update", {"id": second, "description": "Full twin."})
+        original = preview.Previewer._copy_site
+
+        def seeded_copy(previewer, tmp, files, assets=None):  # only the disposable preview database gets rows
+            site = original(previewer, tmp, files, assets)
+            with sqlite3.connect(tmp / "fixture.sqlite3") as db:
+                db.execute(SCHEMA)
+                for i in range(2):
+                    db.execute("INSERT INTO rsvps(event_id,email,name,party_size,created_at) VALUES(?,?,?,?,?)",
+                               (second, f"fixture{i}@example.invalid", "Synthetic fixture", 6, "2030-05-20T00:00:00Z"))
+            return site
+
+        with mock.patch.object(preview.Previewer, "_copy_site", seeded_copy):
+            result = self.capture(target)
+            self.assertEqual(self.scheduled(result), {"eventShown": True, "dateShown": True, "meetShown": True,
+                                                      "placesShown": True}, result)
+            self.assertIs(self.capture({**target, "id": first})["checks"]["dateShown"], False)  # the other twin
+            self.assertIs(self.capture({**target, "meetingPoint": "Elsewhere"})["checks"]["meetShown"], False)
+            self.assertIs(self.capture({**target, "rsvpEnabled": False})["checks"]["placesShown"], False)  # full is not "details later"
+        self.assertIs(self.capture(target)["checks"]["placesShown"], True)  # no guests: "12 places available" also matches
 
     def test_twin_titles_use_the_id(self):
         first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)
