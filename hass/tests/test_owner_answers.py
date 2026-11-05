@@ -88,7 +88,7 @@ class DidItWorkTests(unittest.TestCase):
         got = answers.did_it_work(row("applied", reason="not verified: products avocado-1: check failed: productShown"),
                                   None, NOW)
         self.assertEqual(got, "Saved, but not confirmed on the website. The preview check failed: the preview did not "
-                              "show the change as expected (products avocado-1). " + NOT_COPIED.split(". ", 2)[2])
+                              "show the change as expected: the product card (products avocado-1). " + NOT_COPIED.split(". ", 2)[2])
         self.assertNotIn("Nothing is broken", got)
 
     def test_preview_diagnostics_are_plain_and_redacted(self):  # RETURN 1: no path or exception text
@@ -97,7 +97,7 @@ class DidItWorkTests(unittest.TestCase):
                  "storefront-mockup/catalog.json", "the website pages were not rebuilt for it"),
                 ("products avocado-1: preview server did not start", "the preview could not be started (products avocado-1)"),
                 ("products avocado-1: desktop: check failed: productShown",
-                 "the preview did not show the change as expected (products avocado-1)"),
+                 "the preview did not show the change as expected: the product card (products avocado-1)"),
                 ("no change record", "the saved change could not be found"),
                 ("products avocado-1: FileNotFoundError: [Errno 2] /home/x/state/screenshots/chg-1.png",
                  "the preview could not be checked (products avocado-1)"),
