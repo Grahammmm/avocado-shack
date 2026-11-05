@@ -34,7 +34,7 @@ class TargetTests(unittest.TestCase):
     def test_selection_line_only_when_the_check_date_changed_and_today_is_given(self):
         today = date(2026, 11, 4)
         record = _store_record(before={}, selection_checked_on="2026-11-04")
-        self.assertEqual(preview.target_for(record, today)["selectionLine"], "Selection last checked by Michael on Wednesday, Nov 4.")
+        self.assertEqual(preview.target_for(record, today)["selectionLine"], "Selection last checked by Michael on Wednesday, November 4.")
         self.assertNotIn("selectionLine", preview.target_for(record))  # no caller value
         hours_only = _store_record(before={"selection_checked_on": "2026-11-04"}, selection_checked_on="2026-11-04")
         self.assertNotIn("selectionLine", preview.target_for(hours_only, today))
