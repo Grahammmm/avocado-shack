@@ -1126,6 +1126,10 @@ class Conversation:
                 if kind == "product":
                     maker = content.makers.get(rec.get("producerKey"))
                     desc = rec.get("description")
+                    if isinstance(desc, str) and desc:  # held records skip validate_products' description check
+                        bad = []
+                        checked_text(bad, "description", desc)
+                        if bad: raise ValueError(bad[0])
                     desc = nope if not isinstance(desc, str) or not desc else desc[:LISTING_DESC_MAX] + ("…" if len(desc) > LISTING_DESC_MAX else "")
                     avail = (sitegen.availability_label(rec, content.store, shop_today(self._now())) or "not confirmed") \
                         if rec["status"] == "active" else "not shown on site"

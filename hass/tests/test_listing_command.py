@@ -184,7 +184,13 @@ class ListingTests(StoreMixin, ConversationTestCase):
             self.product(pid, description=bad)
             reply = self.listing(pid)
             self.assertEqual(reply, [UNAVAILABLE], bad[:10])
-        self.product(pid, description="fine")
+        held = {"hold": {"reason": "fixture", "source": "https://example.com/"}, "status": "held"}
+        for bad in ("first line\nStatus: active <b>markup</b>", "bad<b>", "x\u200by"):  # held skips validate_products
+            self.product(pid, **held, description=bad)
+            self.assertEqual(self.listing(pid), [UNAVAILABLE], repr(bad))
+        self.product(pid, **held, description="fine held text")
+        self.assertEqual(self.fields(pid)[1]["Description"], "fine held text")
+        self.product(pid, status="active", hold="<DEL>", description="fine")
         self.edit("store.json", lambda doc: doc.update(selection_checked_on="not-a-date"))
         self.assertEqual(self.listing(pid), [UNAVAILABLE])
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
