@@ -21,7 +21,7 @@ class MemoryAliasTests(StoreMixin, ConversationTestCase):
         self.calls = []
         for obj, name in ((self.interp, "interpret"), (self.editor, "prepare"), (self.editor, "apply")):
             real = getattr(obj, name)
-            setattr(obj, name, lambda *a, _r=real, _n=name: (self.calls.append(_n), _r(*a))[1])
+            setattr(obj, name, lambda *a, _r=real, _n=name, **k: (self.calls.append(_n), _r(*a, **k))[1])
         self.addCleanup(lambda: self.assertEqual(self.calls, [], "an alias command reached the interpreter/editor"))
 
     def chat(self, text, disposition, reply=None):
