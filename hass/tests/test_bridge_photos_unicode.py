@@ -71,8 +71,7 @@ class UnicodeGuidTests(unittest.TestCase):
         slashy = "a/b?c"
         fake = FakeTransport(meta=_meta({"guid": slashy}), files={slashy: (200, JPG)})
         self.assertEqual(self.photos(fake).fetch(slashy, 1), [JPG])
-        for u, *_ in fake.calls:
-            self.assertEqual(len(urlsplit(u).path.split("/")), 5)  # one segment: "/" and "?" stay encoded
+        self.assertEqual([len(urlsplit(u).path.split("/")) for u, *_ in fake.calls], [5, 6])  # one segment each
         self.assertEqual(unquote(urlsplit(fake.calls[0][0]).path.split("/")[4]), slashy)
         for bad in ("", "a" * 201, "a\nb", "a\x85b", None, 5, b"abc"):
             with self.subTest(guid=repr(bad)):
