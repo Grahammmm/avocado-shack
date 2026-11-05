@@ -56,6 +56,11 @@ Checking the selection (change requests, not commands; each still needs `yes <co
   their last word, shown as "Last confirmed <day>" with the day they were last named.
 - `product.set_availability`: change one product's word ("the eggs are sold out") after today's check; with no
   check today it is refused with "check the selection first".
+- `product.clear_availability`: take one product's word off its card ("stop showing the eggs as sold out"). Only that
+  product changes: its word and its own check day are removed, so it is back to not confirmed (no word on the card).
+  It never sets "Sold out" and leaves the store's selection check and every other product alone. It needs `yes <code>`
+  even if shelf-check changes are set to apply automatically. It is refused when the product has no word set, is
+  hidden or is held. `undo` puts the word and its day back exactly as they were.
 - Until the first check the site shows no check line and no availability words. If
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.

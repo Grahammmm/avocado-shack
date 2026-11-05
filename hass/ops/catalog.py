@@ -225,6 +225,21 @@ def _product_set_availability(content, args, ctx):
     return _touch("products", product["id"], before, product)
 
 
+def _product_clear_availability(content, args, ctx):
+    """AV1622-05: take one product's availability word and its own check day off its card (never sets 'no')."""
+    product = _product(content, args["id"])
+    if not isinstance(product, dict):
+        return product
+    if product["status"] != "active":
+        return Refused(f"{product['id']} is {product['status']}; restore it before clearing its availability")
+    if "available" not in product:
+        return Refused(f"{product['id']} has no availability word set; nothing to clear")
+    before = copy.deepcopy(product)
+    product.pop("available")
+    product.pop("available_on", None)
+    return _touch("products", product["id"], before, product)
+
+
 def _maker_add(content, args, ctx):
     key = args["key"]
     if len(key) > MAX_KEY:
@@ -342,6 +357,7 @@ OPS = (
     Op("product.hide", _ID, _product_hide),
     Op("product.restore", _ID, _product_restore),
     Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
+    Op("product.clear_availability", _ID, _product_clear_availability),
     Op("maker.add", {"key": Arg("text"), **{k: Arg("url" if k == "url" else "text") for k in MAKER_EDITABLE}},
        _maker_add),
     Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE}},
