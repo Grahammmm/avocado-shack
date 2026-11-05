@@ -15,7 +15,8 @@ from typing import Any, Callable, Mapping
 from hass.content_model import ID_RE, IMAGE_RE, SITE_DIR, _https, _text
 
 KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "date", "time", "image")
-TIME_RE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+# clocks are ASCII HH:MM (consumed by time.fromisoformat); \d would also match Unicode digits
+TIME_RE = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 COLLECTIONS = ("products", "makers", "events", "routeIdeas", "store")
 CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
