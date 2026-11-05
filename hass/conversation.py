@@ -29,7 +29,8 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
                         r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
                         r"|(post)(?:\s+(hike\s+\S+|\S+))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
                         r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
-                        r"|(hidden)")  # AV1222-13 (H03): group 17
+                        r"|(hidden)"  # AV1222-13 (H03): group 17
+                        r"|(listing)(?:\s+(\S+))?")  # AV1622-09 (H17): groups 18/19; one token, the id is re-read from the original text
 HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as sold out".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -50,6 +51,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as 
     'post hike <id> - hike draft: "post hike hike-2026-11-14-point-buchon"',  # AV1222-11
     'margin <id> at <m>% - price idea: "margin photo-product-001 at 35%"',  # AV1102-12, AV1222-10: saved cost
     'hidden - hidden products and makers, ids: "hidden"',  # AV1222-13
+    'listing <id> - what the site shows for one id: "listing Etto"',  # AV1622-09
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?"
@@ -58,6 +60,10 @@ MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states th
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
 HIDDEN_MAX = 20  # AV1222-13: lines of the hidden list
+LISTING_DESC_MAX = 120  # AV1622-09: characters of a product description in `listing`
+LISTING_USAGE = "Send listing and an id from find."
+LISTING_NONE = "No listing with that id; send find <words>."
+LISTING_MANY = "That id matches more than one listing; send find <words>."
 FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. find lion's mane."  # AV1537-04
 POST_USAGE = "Send post and a product id, e.g. post photo-product-001."  # AV1322-07
 HIKE_USAGE = "Send post hike and a hike id, e.g. post hike hike-2026-11-14-point-buchon (find <words> gives ids)."  # AV1222-11
@@ -323,6 +329,7 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[18]: return "listing", re.sub(r"[.!]+$", "", text.strip())[7:].strip() if match[19] else ""  # AV1622-09: the id in its own case
     if match[17]: return "hidden", None  # AV1222-13
     if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
     if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
@@ -605,7 +612,7 @@ class Conversation:
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and parse_keyword(msg.text) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden"): expired = []  # H17: read-only
+        if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"): expired = []  # H17: read-only
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -953,6 +960,7 @@ class Conversation:
         if verb == "post": return self._post(code)
         if verb == "margin": return self._margin(code)
         if verb == "hidden": return self._hidden()
+        if verb == "listing": return self._listing(code)
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
@@ -1096,6 +1104,52 @@ class Conversation:
         self._reply("\n".join(lines[:FIND_MAX] + tail) if lines
                     else f'No product, maker, hike or route idea matches "{query}".')
         return "find"
+
+    def _listing(self, ident) -> str:
+        """AV1622-09 (H17): read-only view of one saved product, maker, hike or route idea by exact id, from the writer
+        worktree content (strictly validated). Nothing is drafted or stored; works while paused."""
+        if not ident:
+            self._reply(LISTING_USAGE)
+            return "listing"
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            content = load_content(wt / "hass" / "content")
+            validate(content, wt / "storefront-mockup")
+            found = [("product", p) for p in content.products if p.get("id") == ident]
+            found += [("maker", m) for k, m in content.makers.items() if k == ident]
+            found += [(kind, r) for kind, key in (("hike", "events"), ("route idea", "routeIdeas"))
+                      for r in content.community[key] if r.get("id") == ident]
+            if len(found) != 1: text = LISTING_NONE if not found else LISTING_MANY
+            else:
+                kind, rec = found[0]
+                nope = "not set"
+                if kind == "product":
+                    maker = content.makers.get(rec.get("producerKey"))
+                    desc = rec.get("description")
+                    if isinstance(desc, str) and desc:  # held records skip validate_products' description check
+                        bad = []
+                        checked_text(bad, "description", desc)
+                        if bad: raise ValueError(bad[0])
+                    desc = nope if not isinstance(desc, str) or not desc else desc[:LISTING_DESC_MAX] + ("…" if len(desc) > LISTING_DESC_MAX else "")
+                    avail = (sitegen.availability_label(rec, content.store, shop_today(self._now())) or "not confirmed") \
+                        if rec["status"] == "active" else "not shown on site"
+                    fields = [("Name", rec["name"]), ("Maker", (maker or {}).get("name") or rec.get("brand") or nope),
+                              ("Shelf", rec.get("category") or nope), ("Description", desc), ("Availability", avail),
+                              ("Status", rec["status"])]
+                elif kind == "maker":
+                    fields = [("Name", rec["name"]), ("Place", rec.get("place") or nope),
+                              ("Active products", sum(1 for p in content.products if p["status"] == "active" and p.get("producerKey") == ident)),
+                              ("Status", "hidden" if rec.get("hidden") else "visible")]
+                elif kind == "hike":
+                    fields = [("Title", rec["title"]), ("Start", _hike_time(rec["startsAt"])), ("Status", rec["status"]),
+                              ("Meeting point", rec.get("meetingPoint") or nope), ("Capacity", rec.get("capacity", nope))]
+                else:
+                    fields = [("Title", rec["title"]), ("Place", rec.get("place") or nope), ("Status", rec["status"])]
+                text = "\n".join(["Saved listing (not a live website check):", f"{kind} {ident}"] + [f"{k}: {v}" for k, v in fields])
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            text = "Catalog unavailable right now; nothing changed."
+        self._reply(text)
+        return "listing"
 
     def _hidden(self) -> str:
         """AV1222-13 (H03): read-only list of hidden products then hidden makers; held products and visible makers never."""

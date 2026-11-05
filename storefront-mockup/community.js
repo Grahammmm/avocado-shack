@@ -64,12 +64,14 @@ function render(){
 // The live club service adds RSVP counts; a plain static host has no /api, so fall back to the published
 // community.json (same club, events and route ideas). Without the service nobody can RSVP online.
 // The club service's GET (no visitor data) answers acceptsSubmissions:true; that is the only way a form may POST.
-let serviceProbe;
-async function liveData(){try{
+// One GET /api/community at a time: callers that arrive while it is in flight (the probe, loadNext, liveData) share it.
+let serviceProbe,inflight;
+const apiCommunity=()=>inflight??=(async()=>{try{
  const r=await fetch('/api/community',{cache:'no-store'});
  if(!r.ok||!(r.headers.get('Content-Type')||'').includes('application/json'))return null;
- const data=await r.json();serviceProbe=Promise.resolve(data?.acceptsSubmissions===true);return data}catch{return null}}
-const liveService=()=>serviceProbe??=liveData().then(d=>d?.acceptsSubmissions===true);
+ return await r.json()}catch{return null}})().finally(()=>{inflight=null});
+const liveData=()=>apiCommunity();
+const liveService=()=>serviceProbe??=apiCommunity().then(d=>d?.acceptsSubmissions===true);
 async function clubData(){
  const live=await liveData();if(live)return live;
  const r=await fetch('/community.json',{cache:'no-store'});if(!r.ok)throw Error();
@@ -89,14 +91,17 @@ async function send(form,path,data){const status=form.querySelector('.form-statu
  let result=null;if((r.headers.get('Content-Type')||'').includes('application/json'))result=await r.json().catch(()=>null);
  if(!r.ok||!result||typeof result.message!=='string'){status.textContent=result&&typeof result.error==='string'?result.error:SIGNUP_CLOSED;return false}
  status.textContent=result.message;form.reset();return true
-}finally{button.disabled=false}}
+}finally{button.disabled=form.getAttribute('aria-disabled')==='true'}}
 if($('#hike-updates'))$('#hike-updates').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:false,hikes:true})};
 if($('#community-newsletter'))$('#community-newsletter').onsubmit=e=>{e.preventDefault();send(e.currentTarget,'/api/community/subscriptions',{email:e.currentTarget.email.value,newsletter:true,hikes:e.currentTarget.hikes.checked})};
+// AV1422-07: without the club service both signup forms say so up front and are disabled; while the probe is pending they stay enabled. Same cached probe as send(); it shares the page's one in-flight GET /api/community.
+const SIGNUP_CLOSED_UPFRONT='Online signup isn’t open yet. Please say hello at the Shack instead.';
+for(const form of [$('#community-newsletter'),$('#hike-updates')])if(form)liveService().then(ok=>{if(ok)return;form.querySelector('.form-status').textContent=SIGNUP_CLOSED_UPFRONT;form.setAttribute('aria-disabled','true');form.querySelectorAll('input,select,textarea,button').forEach(x=>x.disabled=true)});
 if($('#upcoming-hikes'))$('#upcoming-hikes').onclick=e=>{const button=e.target.closest('[data-rsvp]');if(!button)return;const event=club.events.find(x=>x.id===button.dataset.rsvp);if(!event)return;show(`<p class="label">NORTH COAST HIKING CLUB</p><h2>Join the next hike.</h2><h3>${esc(event.title)}</h3><p>${esc(dateLabel(event))}</p>${details(event)}<form id="hike-rsvp"><label for="rsvp-name">Your name</label><input id="rsvp-name" name="name" autocomplete="name" maxlength="120" required><label for="rsvp-email">Email address</label><input id="rsvp-email" name="email" type="email" autocomplete="email" required><label for="rsvp-party">People in your group, including you</label><select id="rsvp-party" name="partySize">${Array.from({length:Math.min(6,event.remaining??6)},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}</select><p class="setup-note">Your RSVP goes on the club’s list. No confirmation email is sent.</p><button class="button" type="submit">Save my RSVP ↗</button><p class="form-status" role="status"></p></form>`);$('#hike-rsvp').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const saved=await send(f,'/api/community/rsvps',{eventId:event.id,name:f.elements.name.value,email:f.elements.email.value,partySize:Number(f.elements.partySize.value)});if(saved)load()}};
 // AV1102-04: the home page's one "Next hike" line. Live /api/community only (never the sample hikes); any failure or no scheduled upcoming hike leaves it hidden.
 async function loadNext(){try{
- const r=await fetch('/api/community',{cache:'no-store'});if(!r.ok)return;
- const e=((await r.json()).events||[]).filter(upcoming).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt))[0];if(!e)return;
+ const data=await apiCommunity();if(!data)return;
+ const e=(data.events||[]).filter(upcoming).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt))[0];if(!e)return;
  const at=new Date(e.startsAt),tz=e.timezone||'America/Los_Angeles',line=$('#next-hike-line');
  const when=at.toLocaleDateString('en-US',{timeZone:tz,weekday:'long',month:'long',day:'numeric'})+', '+at.toLocaleTimeString('en-US',{timeZone:tz,hour:'numeric',minute:'2-digit'});
  line.innerHTML=`<a class="text-link" href="/hike#upcoming-hikes">Next hike: ${esc(when)} - ${esc(e.title)}</a>`;line.hidden=false}catch{}}
