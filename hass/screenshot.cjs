@@ -27,9 +27,9 @@ const allowed=req=>{
     if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
       if(target.status==='scheduled'){
-        checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
+        checks.eventShown=await page.locator('h2',{hasText:target.title}).count()>0;
         const ws=v=>String(v).replace(/\s+/g,' ').trim();  // AV1222-05: cards are read in page JS (title equal); a card's id is its RSVP button or calendar link
-        const cards=await page.$$eval('.hike-event',(els,t)=>els.filter(c=>c.querySelector('h3')?.textContent===t.title).map(c=>{
+        const cards=await page.$$eval('.hike-event',(els,t)=>els.filter(c=>c.querySelector('h2')?.textContent===t.title).map(c=>{
           const facts={};for(const d of c.querySelectorAll('dt')){const dd=d.nextElementSibling?.cloneNode(true);dd?.querySelectorAll('a').forEach(a=>a.remove());
             (facts[d.textContent]??=[]).push(dd?dd.textContent.replace(/\s+/g,' ').replace(/\s*·\s*$/,'').trim():'');}
           return {ids:[c.querySelector('[data-rsvp]')?.dataset.rsvp,(c.querySelector('a.hike-ics')?.getAttribute('download')||'').replace(/\.ics$/,'')].filter(Boolean),

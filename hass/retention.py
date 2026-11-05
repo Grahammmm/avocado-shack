@@ -27,9 +27,11 @@ SIDECAR_MAX = 64 * 1024  # bytes; a longer photo sidecar is undated, never read 
 class Unsafe(Exception): """A path the report refuses to open (exit 2)."""
 
 def _when(raw):
-    """An aware datetime, or None for a missing, zone-less or malformed time."""
-    with contextlib.suppress(TypeError, ValueError):
-        if (dt := datetime.fromisoformat(raw)).tzinfo is not None: return dt
+    """An aware datetime, or None for a missing, zone-less, malformed or UTC-unrepresentable time (offset past year 1/9999)."""
+    with contextlib.suppress(TypeError, ValueError, OverflowError):
+        if (dt := datetime.fromisoformat(raw)).tzinfo is not None:
+            dt.astimezone(timezone.utc)  # raises OverflowError when the UTC instant is outside the calendar
+            return dt
     return None
 
 def _tally(cutoff, items, keys) -> dict:
