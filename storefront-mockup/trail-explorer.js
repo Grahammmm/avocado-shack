@@ -38,7 +38,14 @@ async function mount(host){
   host.replaceChildren(wrapper);
   const q=s=>wrapper.querySelector(s),stage=q('.trail-map-stage'),svg=q('.trail-map-canvas'),photo=q('.trail-basemap');
   // AV1422-08 edge 5: a failed aerial image (the first layer) is a failed map load, same fallback and retry as a failed route file.
-  photo.addEventListener('error',()=>{if(!/aerial/.test(photo.getAttribute('href'))||!host.isConnected||!host.contains(wrapper))return;delete host.dataset.mounted;host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});});
+  let failed=false;
+  photo.addEventListener('error',()=>{
+   const enlarged=!!(dialog&&dialog.contains(wrapper));
+   if(failed||!/aerial/.test(photo.getAttribute('href'))||!host.isConnected||!(enlarged||host.contains(wrapper)))return;
+   failed=true;
+   if(enlarged){const d=dialog;dialog=null;document.body.style.overflow=previousOverflow;d.close();d.remove();}
+   delete host.dataset.mounted;host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});
+  });
   const profile=d.profile,slider=q('.trail-distance'),output=q('#trail-elevation-readout');
   const [minX,minY,maxX,maxY]=d.bounds3857;
   function project(lon,lat){const x=6378137*lon*Math.PI/180,y=6378137*Math.log(Math.tan(Math.PI/4+lat*Math.PI/360));return [(x-minX)/(maxX-minX)*1000,(maxY-y)/(maxY-minY)*562.5];}
@@ -116,7 +123,7 @@ async function mount(host){
     const close=document.createElement('button');close.type='button';close.className='trail-map-close';close.textContent='Close map ×';close.addEventListener('click',()=>dialog.close());
     dialog.append(close,wrapper);document.body.append(dialog);previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';
     q('[data-map-action="expand"]').setAttribute('aria-label','Return to page');q('[data-map-action="expand"]').title='Return to page';
-    dialog.addEventListener('close',()=>{host.append(wrapper);document.body.style.overflow=previousOverflow;dialog.remove();dialog=null;q('[data-map-action="expand"]').setAttribute('aria-label','Enlarge map');q('[data-map-action="expand"]').title='Enlarge map';q('[data-map-action="expand"]').focus({preventScroll:true});});
+    dialog.addEventListener('close',()=>{if(failed)return;host.append(wrapper);document.body.style.overflow=previousOverflow;dialog.remove();dialog=null;q('[data-map-action="expand"]').setAttribute('aria-label','Enlarge map');q('[data-map-action="expand"]').title='Enlarge map';q('[data-map-action="expand"]').focus({preventScroll:true});});
     dialog.showModal();close.focus();
    }
   });

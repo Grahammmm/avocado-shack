@@ -93,6 +93,18 @@ server.listen(0,'127.0.0.1',async()=>{
    await p.locator('[data-trail-explorer][data-ready]').waitFor({state:'attached'});
    if(fail)await p.locator('[data-trail-explorer][data-ready=error]').waitFor({state:'attached'});assert.equal(await p.locator('[data-trail-explorer]').getAttribute('data-ready'),fail?'error':'true',name);if(fail){assert.equal(await p.locator('[data-trail-explorer] .trail-map-canvas').count(),0,name+': no map canvas');assert.ok(await p.locator('[data-trail-explorer] .trail-map-unavailable a[href*="pge.com"]').isVisible(),name+': official guide link');}assert.deepEqual(errs,[],name+': page errors');await ctx.close();
   }
+  // AV1422-08 edge 5, delayed: the aerial fails after Enlarge map moved the map into the dialog; the dialog and page scroll lock are cleaned up, the fallback shows, and retry recovers.
+  {const ctx=await browser.newContext({viewport:{width:1200,height:900}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));
+   let release;const gate=new Promise(r=>release=r),aerial='**/point-buchon-aerial.webp';
+   await p.route(aerial,async r=>{await gate;await r.fulfill({status:404,body:''});});
+   await p.goto(base+'/hike/');await p.locator('[data-trail-explorer]').scrollIntoViewIfNeeded();
+   await p.locator('[data-trail-explorer][data-ready=true]').waitFor({state:'attached'});
+   await p.getByRole('button',{name:'Enlarge map',exact:true}).click();assert.equal(await p.locator('dialog[open]').count(),1,'enlarged: dialog open');
+   release();await p.locator('[data-trail-explorer][data-ready=error]').waitFor({state:'attached'});
+   assert.equal(await p.locator('dialog.trail-map-dialog').count(),0,'enlarged aerial 404: dialog removed');assert.equal(await p.evaluate(()=>document.body.style.overflow),'','enlarged aerial 404: scroll lock released');
+   assert.equal(await p.locator('[data-trail-explorer] .trail-map-canvas').count(),0,'enlarged aerial 404: no canvas');assert.ok(await p.locator('[data-trail-explorer] .trail-map-unavailable a[href*="pge.com"]').isVisible(),'enlarged aerial 404: official guide link');
+   await p.unroute(aerial);await p.locator('[data-trail-retry]').click();await p.locator('[data-trail-explorer][data-ready=true]').waitFor({state:'attached'});
+   assert.equal(await p.locator('[data-trail-explorer] .trail-map-canvas').count(),1,'retry after enlarged aerial 404: map back');assert.equal(await p.locator('dialog.trail-map-dialog').count(),0,'retry: no stale dialog');assert.deepEqual(errs,[],'enlarged aerial 404: page errors');await ctx.close();}
   // AV1422-05: a fixed clock decides whether the sample invitation (startsAt 2026-11-08 09:00 Pacific) shows its date or "Date to be confirmed".
   const sample=JSON.parse(fs.readFileSync(path.join(root,'hiking-preview.json'),'utf8')),json=body=>({contentType:'application/json',body:JSON.stringify(body)});
   const hikeAt=async(iso,{startsAt=sample.upcoming.startsAt,events}={})=>{const ctx=await browser.newContext({viewport:{width:390,height:844}}),p=await ctx.newPage(),errs=[];p.on('pageerror',e=>errs.push(e.message));const sent=[];p.on('request',r=>{if(r.method()!=='GET'||r.postData()||/[@?]|example\.com/.test(r.url()))sent.push(r.method()+' '+r.url())});
