@@ -116,6 +116,25 @@ class CaptureTests(unittest.TestCase):
         result, checks = self.run_check({COMMUNITY: json.dumps(data).encode()}, "Cass Hill Loop")
         self.assertEqual((result["ok"], checks, result.get("unshown")), (True, {}, True), result)
 
+    def test_sample_archive_title_is_checked(self):
+        # no real completed hikes: the sample archive shows idea-cass-hill and idea-fiscalini-bluff
+        fisc = "idea-fiscalini-bluff"
+        for key, name in ((CASS, "Cass Hill Loop"), (fisc, "Fiscalini Bluff Walk")):
+            result, checks = self.run_check(self.site([], {key: name}), name, key)
+            self.assertEqual((result["ok"], checks, "unshown" in result), (True, {"routeShown": True}, False), result)
+            stale, checks = self.run_check(self.site([]), name, key)
+            self.assertEqual((stale["ok"], checks), (False, {"routeShown": False}), stale)
+
+    def test_archive_and_linked_hike_must_both_read_the_new_title(self):
+        result, checks = self.run_check(self.site([self.hike(1)], {CASS: "Cass Hill Loop"}), "Cass Hill Loop")
+        self.assertEqual((result["ok"], checks), (True, {"routeShown": True}), result)
+
+    def test_hidden_archive_route_is_gone(self):
+        result, checks = self.run_check(self.site([], drop=(CASS,)), "Cass Hill", status="hidden")
+        self.assertEqual((result["ok"], checks), (True, {"routeGone": True}), result)
+        stale, checks = self.run_check(self.site([]), "Cass Hill", status="hidden")
+        self.assertEqual((stale["ok"], checks), (False, {"routeGone": False}), stale)
+
     def test_hidden_route_is_gone_and_a_card_still_showing_it_fails(self):
         events = [self.hike(1)]
         result, checks = self.run_check(self.site(events, drop=(CASS,)), "Cass Hill", status="hidden")
