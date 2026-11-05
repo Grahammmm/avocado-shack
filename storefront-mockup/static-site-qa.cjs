@@ -122,6 +122,23 @@ server.listen(0,'127.0.0.1',async()=>{
   await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'next-1',title:'Next hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'},{id:'done-1',title:'Done hike',status:'completed',startsAt:'2026-10-04T09:00:00-07:00',timezone:'America/Los_Angeles',description:'A good day.'}]});
   const real=await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'real-1',title:'Real hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'}]});
   assert.match(real.body,/Sunday, December 6, 2026/);assert.doesNotMatch(real.body,/Date to be confirmed/);assert.equal(real.label,0,'a real hike replaces the sample invitation');assert.deepEqual(real.errs,[]);
+  // AV0007-01: the static home page names the earliest scheduled hike from the published community.json (no /api, no sample preview).
+  const homeNext=async(events,{iso='2026-11-09T08:30:00Z',tz,width=390}={})=>{const ctx=await browser.newContext({viewport:{width,height:844},timezoneId:tz}),p=await ctx.newPage(),errs=[],reqs=[];p.on('pageerror',e=>errs.push(e.message));p.on('request',r=>reqs.push(r.method()+' '+new URL(r.url()).pathname));
+   try{await p.clock.setFixedTime(new Date(iso));if(events!==undefined)await p.route('**/community.json',r=>events===null?r.fulfill({status:404,contentType:'text/html',body:'<p>no</p>'}):r.fulfill(json({events,routeIdeas:[]})));
+    await Promise.all([p.waitForResponse('**/community.json'),p.goto(base+'/')]);await p.waitForLoadState('networkidle');
+    const el=p.locator('#next-hike-line');return {errs,reqs,hidden:await el.isHidden(),n:await el.count(),links:await el.locator('a').count(),bold:await el.locator('b').count(),href:await el.locator('a').first().getAttribute('href').catch(()=>null),text:(await el.textContent()).replace(/\s+/g,' ').trim(),overflow:await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth)}}finally{await ctx.close()}};
+  const nh=(id,title,startsAt,more)=>({id,title,status:'scheduled',startsAt,timezone:'America/Los_Angeles',...more});
+  {const r=await homeNext([nh('h-late','Later hike','2026-12-20T09:00:00-08:00'),nh('h-x','Cancelled sooner','2026-11-20T09:00:00-08:00',{status:'cancelled'}),nh('h-1','Earlier <b>&</b> "hike"','2026-12-06T09:00:00-08:00')]);
+   assert.equal(r.n,1);assert.equal(r.links,1);assert.equal(r.hidden,false);assert.equal(r.href,'/hike#upcoming-hikes');assert.equal(r.bold,0);
+   assert.equal(r.text,'Next hike: Sunday, December 6, 9:00 AM - Earlier <b>&</b> "hike"');assert.deepEqual(r.errs,[]);
+   assert.ok(!r.reqs.some(q=>q.includes('hiking-preview')),'home line asked for the sample preview');assert.ok(!r.reqs.some(q=>q.startsWith('POST')),'POST from home');}
+  for(const [name,events] of [['empty',[]],['cancelled only',[nh('c','C','2026-12-06T09:00:00-08:00',{status:'cancelled'})]],['completed only',[nh('d','D','2026-12-06T09:00:00-08:00',{status:'completed'})]],['past day only',[nh('p','P','2026-11-08T09:00:00-08:00')]],['missing file',null],['malformed events',{bad:1}]]){
+   const r=await homeNext(events);assert.equal(r.n,1,name);assert.equal(r.hidden,true,name);assert.equal(r.links,0,name);assert.equal(r.text,'',name);assert.deepEqual(r.errs,[],name);assert.ok(!r.reqs.some(q=>q.includes('hiking-preview')),name+': sample requested');}
+  {const day=[nh('s','Started today','2026-11-09T07:00:00-08:00')]; // Pacific 9 Nov 07:00
+   let r=await homeNext(day,{iso:'2026-11-09T20:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.links,1,'started today, viewer in Tokyo');assert.equal(r.text,'Next hike: Monday, November 9, 7:00 AM - Started today');
+   r=await homeNext(day,{iso:'2026-11-10T08:30:00Z',tz:'Asia/Tokyo'});assert.equal(r.links,0,'hidden after Pacific midnight');
+   r=await homeNext([nh('t','Plain hike','2026-12-06T09:00:00-08:00',{timezone:undefined}),],{width:1440});assert.equal(r.text,'Next hike: Sunday, December 6, 9:00 AM - Plain hike');
+   r=await homeNext([nh('w','A very long hike title '.repeat(8),'2026-12-06T09:00:00-08:00')],{width:390});assert.equal(r.overflow,false,'long title overflows the page');}
   // AV1422-09: the no-hike empty state (sample off, no events) keeps the look its h3 had: 32px/8px at desktop, 29px/8px on a phone.
   for(const [w,size] of [[1440,'32px'],[390,'29px']]){const ctx=await browser.newContext({viewport:{width:w,height:900}}),p=await ctx.newPage();
    await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,enabled:false})));await p.route('**/community.json',r=>r.fulfill(json({events:[],routeIdeas:[]})));
