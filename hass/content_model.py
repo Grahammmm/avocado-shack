@@ -107,12 +107,22 @@ class Content:
 
 
 def _read_json(path: Path):
+    # Reader contract: a decoded object key repeated within one object is ambiguous
+    # (last-wins would silently flip e.g. hidden -> active), so refuse it by basename only.
+    def no_duplicates(pairs):
+        out = {}
+        for key, value in pairs:
+            if key in out:
+                raise ContentError([f"{path.name}: duplicate JSON object key"])
+            out[key] = value
+        return out
+
     try:
         text = path.read_bytes().decode("utf-8")
     except UnicodeDecodeError:
         raise ContentError([f"{path.name}: not UTF-8 text"]) from None
     try:
-        return json.loads(text)
+        return json.loads(text, object_pairs_hook=no_duplicates)
     except json.JSONDecodeError as exc:
         raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
     except RecursionError:
