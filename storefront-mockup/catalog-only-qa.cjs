@@ -159,6 +159,24 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await open(fromUrl(multi.key)+'&shelf='+other);assert.equal((await fromState()).n,0);assert.equal(await page.locator('#catalog-grid article').count(),0);assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);
  await open(fromUrl(multi.key)+'&q=unfindablefoo&maker=Etto');assert.equal((await fromState()).n,0,'search and brand remain AND filters');await page.locator('[data-clear-from]').click();assert.equal(await countText(),fullCount,'clear resets the combined view');
  await open(fromUrl(multi.key)+'&item='+encodeURIComponent(id40)+'#market');await inView(id40);assert.equal((await shown()).focused,id40,'item keeps its existing precedence');assert.equal(await page.locator('.catalog-from').isVisible(),false);assert.equal((await addr()).params.from,undefined);
+ // AV1102-03: the Available today filter exists only when some card carries a current word.
+ await open('?avail=1&utm=x');assert.equal(await page.locator('#avail-filter').count(),0,'main catalog: no control');assert.equal(await countText(),fullCount);assert.deepEqual((await addr()).params,{utm:'x'},'main catalog: ?avail=1 removed');
+ const fixture=async words=>{await page.unroute('**/catalog-products.js').catch(()=>{});await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;${JSON.stringify(words)}.forEach((w,i)=>{catalog[i].availability=w});`})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
+ const W=['Available today','Available today','Limited','Sold out','Last confirmed Mon Nov 2','Last confirmed Tue Nov 3'],avail=()=>page.locator('#avail-filter');
+ for(const width of [390,1440]){await page.setViewportSize({width,height:900});await fixture(W);await open('');
+  assert.equal(await avail().count(),1,'fixture: control shown');assert.equal(await avail().isChecked(),false);assert.equal(await countText(),fullCount);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow with the control '+width);
+  await avail().check();assert.equal(await countText(),'3 selections');assert.deepEqual((await addr()).params,{avail:'1'});
+  const ids=await page.evaluate(()=>filteredProducts().map(p=>p.availability).sort());assert.deepEqual(ids,['Available today','Available today','Limited']);
+  await page.reload();await page.waitForSelector('#catalog-grid article');assert.equal(await avail().isChecked(),true,'reload restores');assert.equal(await countText(),'3 selections');
+  const empty=await page.evaluate(()=>{const have=new Set(catalog.slice(0,3).map(p=>p.category));return [...new Set(catalog.map(p=>p.category))].find(c=>!have.has(c))});assert.ok(empty);
+  await page.locator(`[data-filter="${empty}"]`).click();assert.equal(await page.locator('#catalog-grid article').count(),0);assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);
+  await avail().uncheck();assert.ok(await page.locator('#catalog-grid article').count()>0,'unchecking restores the shelf');assert.equal((await addr()).params.avail,undefined);
+  await open('?avail=yes');assert.equal(await avail().isChecked(),false);assert.equal((await addr()).params.avail,undefined,'?avail=yes rewritten');assert.equal(await countText(),fullCount);
+  await open('?avail=1&item='+encodeURIComponent(await page.evaluate(()=>catalog[4].id)));assert.equal(await avail().isChecked(),false,'?item wins over avail');assert.equal((await addr()).params.avail,undefined);
+ }
+ await fixture(W.slice(4));await open('?avail=1');assert.equal(await avail().count(),0,'only Last confirmed words: no control');assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
+ await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await page.setViewportSize({width:390,height:844});
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
  const result={checkedAt:new Date().toISOString(),all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
