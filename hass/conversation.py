@@ -820,9 +820,10 @@ class Conversation:
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
         if failed:  # AV1052-10: the reader itself failed: remember it for status (latest only, no error detail kept)
             self.db.execute(CONTROL)
-            self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('reader-failed', '1', ?, ?)"
-                            " ON CONFLICT(name) DO UPDATE SET value = '1', set_at = excluded.set_at,"
-                            " provider_id = excluded.provider_id", (_iso(now), msg.provider_id))
+            self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('reader-failed', ?, ?, ?)"
+                            " ON CONFLICT(name) DO UPDATE SET value = excluded.value, set_at = excluded.set_at,"
+                            " provider_id = excluded.provider_id",
+                            (getattr(self, "_photo_draft", None) or "1", _iso(now), msg.provider_id))
         elif failed is not None and self.db.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
             self.db.execute("DELETE FROM control WHERE name = 'reader-failed'")  # a request was read again
@@ -914,7 +915,10 @@ class Conversation:
                             json.dumps(["id", "imageAlt"])))  # AV0007-03: set_photo's required args besides the photo
         self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
         if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
-        return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"
+        if not caption: return "photo-draft"
+        self._photo_draft = code  # AV1052-10: if the reader fails on this caption, status names this draft
+        try: return self._request(Inbound(**{**vars(msg), "text": caption}), now)
+        finally: self._photo_draft = None
 
     def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
         try:
@@ -1482,13 +1486,16 @@ class Conversation:
         """AV1052-10: the last request was not read because the reader failed; read-only, never raises."""
         if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
             return []
-        row = self.db.execute("SELECT set_at FROM control WHERE name = 'reader-failed'").fetchone()
+        row = self.db.execute("SELECT set_at, value FROM control WHERE name = 'reader-failed'").fetchone()
         if not row: return []
         try:
             at = datetime.fromisoformat(row["set_at"]).astimezone(LOCAL_TZ)
             when = f"{WEEKDAYS[at.weekday()]} {at:%H:%M}"
         except (ValueError, TypeError, OverflowError, OSError):
             when = "time unavailable"
+        if row["value"] != "1" and self._by_code(row["value"], ("needs-details",)):  # a photo caption: resending the photo
+            return [f"Last request not read: {when} - the reader was not working; the photo is kept as draft "  # is a duplicate
+                    f"{row['value']}, so reply to it with the product and description"]
         return [f"Last request not read: {when} - the reader was not working; send it again"]
 
     def _waiting_lines(self, now) -> list:
