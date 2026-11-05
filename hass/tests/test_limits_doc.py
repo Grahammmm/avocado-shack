@@ -135,3 +135,9 @@ class LimitsDocTest(unittest.TestCase):
         self.assertEqual(named_image_types("JPEG, PNG or HEIC"), {"jpeg", "png", "heic"})
         self.assertEqual(private_text("Call 209-555-0100 or a@b.co, see hass/media.py or config.json"),
                          ["209-555-0100", "@", "hass/media.py", "config.json"])
+
+    def test_store_undo_wording(self):  # AV2152-11
+        section = self.doc.split("## Undoing a store change")[1].split("\n## ")[0]
+        self.assertIn("keeps later edits to the other details", section)
+        self.assertIn("different value, the undo is refused", section)
+        self.assertNotIn("newest", section)

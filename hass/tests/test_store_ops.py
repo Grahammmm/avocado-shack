@@ -168,11 +168,11 @@ class StoreUndoAndPreviewTests(StoreTestCase):
         self.assertIn("already undone", again["reason"])
         self.assertEqual(repo.status(), "")
 
-    def test_older_store_change_cannot_be_undone_after_a_later_one(self):
+    def test_older_store_change_to_the_same_field_cannot_be_undone_after_a_later_one(self):
         repo = self.repo()
         original = repo.store()
         a = repo.run((SET_HOURS, {"hours": NEW_HOURS}))
-        b = repo.run((SET_ADDRESS, {"streetAddress": "1023 Example Street"}))
+        b = repo.run((SET_HOURS, {"hours": ["Monday–Friday 10am–4pm"]}))
         head, drafts = repo.head(), repo.drafts()
         result = repo.prepare(_req((REVERT, {"changeId": a["change_id"]})))
         self.assertEqual(result["result"], "refused", result)
