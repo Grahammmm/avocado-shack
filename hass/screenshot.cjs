@@ -82,6 +82,8 @@ const allowed=req=>{
         const h=target.headline||[];
         const ws=v=>String(v).replace(/\s+/g,' ').trim();  // HTML collapses runs of spaces; compare both sides the same way
         if(h.length===2){const h1=ws(await page.locator('.hero h1').innerText());checks.headlineShown=h.every(l=>h1.includes(ws(l)));}
+        const intro=ws(await page.locator('.hero-intro').first().textContent());checks.introShown=intro===ws(target.intro||target.defaultIntro);
+        if(target.selectionLine){checks.selectionShown=ws(await page.locator('.selection-checked').first().textContent().catch(()=>''))===ws(target.selectionLine);}
         if(typeof target.story==='string'){const p=page.locator('#visit > div > p:not(.signature):not(.label)').first();checks.storyShown=ws(await p.textContent())===ws(target.story);}
         if(typeof target.homeImage==='string'){const img=page.locator('.hero .hero-image').first();await img.scrollIntoViewIfNeeded();
           checks.homeImageShown=await img.evaluate((el,p)=>el.complete&&el.naturalWidth>0&&el.currentSrc.endsWith('/'+p),target.homeImage);}
