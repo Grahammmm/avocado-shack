@@ -32,6 +32,8 @@ def hike(title="Cass Hill", day=DAY):
 
 class HikeTargetMixin:
     def create(self, repo, title="Cass Hill", day=DAY):
+        if not repo.db.exists():
+            repo.make_db([])  # capacity edits count confirmed guests, so they need the (empty) guest database
         repo.now = BEFORE  # AVB-05: a start more than 400 days after the fixture clock is a question, not a draft
         return repo.run(("hike.create", hike(title, day)))["records"][0]["key"]
 
@@ -64,6 +66,49 @@ class HikeTargetTests(HikeTargetMixin, HikeTestCase):
             with self.subTest(record=record):
                 self.assertEqual(preview.target_for(record),
                                  {"kind": "event", "title": "", "status": None, "id": "", "recap": ""})
+
+
+class ScheduledTargetTests(HikeTargetMixin, HikeTestCase):  # AV1222-05: the card's date, Meet and places lines
+    def test_scheduled_target_carries_record_fields(self):
+        repo = self.repo()
+        hid = self.create(repo)
+        target = self.target(repo, "hike.update", {"id": hid, "time": "08:00", "capacity": 12})
+        self.assertEqual((target["status"], target["id"], target["meetingPoint"], target["capacity"]),
+                         ("scheduled", hid, "Test trailhead lot", 12))
+        self.assertTrue(target["rsvpEnabled"])
+        self.assertIn("T08:00", target["startsAt"].replace("Z", ""))
+        self.assertEqual(target["changed"], {})
+
+    def test_no_capacity_and_rsvps_off(self):
+        repo = self.repo()
+        hid = self.create(repo)
+        self.assertIsNone(self.target(repo, "hike.update", {"id": hid, "noCapacityLimit": True})["capacity"])
+        off = self.target(repo, "hike.update", {"id": hid, "rsvpEnabled": False})
+        self.assertIs(off["rsvpEnabled"], False)
+
+    def test_changed_lists_only_differing_card_fields(self):
+        repo = self.repo()
+        hid = self.create(repo)
+        self.assertEqual(self.target(repo, "hike.update", {"id": hid, "meetTime": "8:30 AM"})["changed"],
+                         {"meetTime": "8:30 AM"})
+        self.assertEqual(self.target(repo, "hike.update", {"id": hid, "description": "Easy loop."})["changed"], {})
+        self.assertEqual(self.target(repo, "hike.update", {"id": hid, "meetTime": "8:45 AM"})["changed"],
+                         {"meetTime": "8:45 AM"})
+
+    def test_cancelled_and_completed_keep_the_old_shape(self):
+        repo = self.repo()
+        hid, other = self.create(repo), self.create(repo, "Other walk")
+        self.assertEqual(list(self.target(repo, "hike.cancel", {"id": hid})), ["kind", "title", "status", "id", "recap"])
+        repo.now = AFTER
+        self.assertEqual(list(self.target(repo, "hike.complete", {"id": other})),
+                         ["kind", "title", "status", "id", "recap"])
+
+    def test_non_integer_capacity_is_none(self):
+        for cap in (True, "12", None):
+            with self.subTest(cap=cap):
+                t = preview.target_for({"collection": "events", "key": "x", "after": {
+                    "title": "T", "status": "scheduled", "capacity": cap}})
+                self.assertIsNone(t["capacity"])
 
 
 @unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")
@@ -146,6 +191,59 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         self.assertEqual((result["ok"], self.event_checks(result)), (True, {"pastShown": True, "recapShown": True}))
         self.assertEqual(self.event_checks(self.capture({**target, "id": ODD})), {"rsvpGone": True})
         self.assertEqual(self.event_checks(self.capture(target, {COMMUNITY: old})), {"rsvpGone": False})
+
+
+    def scheduled(self, result):
+        return {k: v for k, v in result["checks"].items() if k in ("eventShown", "dateShown", "meetShown",
+                                                                    "placesShown", "fieldsShown")}
+
+    def test_reschedule_checks_date_and_old_page_fails(self):
+        hid = self.create(self.r)
+        old = (self.r.wt / COMMUNITY).read_bytes()
+        target = self.target(self.r, "hike.update", {"id": hid, "time": "08:00"})
+        self.assertTrue(self.capture(target)["checks"]["dateShown"])
+        stale = self.capture(target, {COMMUNITY: old})
+        self.assertIs(stale["checks"]["dateShown"], False)
+        self.assertFalse(stale["ok"])
+
+    def test_meeting_point_change(self):
+        hid = self.create(self.r)
+        old = (self.r.wt / COMMUNITY).read_bytes()
+        target = self.target(self.r, "hike.update", {"id": hid, "meetingPoint": "North gate"})
+        self.assertIs(self.capture(target)["checks"]["meetShown"], True)
+        self.assertIs(self.capture(target, {COMMUNITY: old})["checks"]["meetShown"], False)
+
+    def test_places_lines(self):
+        hid = self.create(self.r)
+        for args, want in (({"noCapacityLimit": True}, "RSVPs open"),
+                           ({"rsvpEnabled": False}, "RSVP details will be shared when confirmed."),
+                           ({"rsvpEnabled": True, "capacity": 12}, "12 places available"),
+                           ({"capacity": 1}, "1 place available")):
+            with self.subTest(args=args):
+                target = self.target(self.r, "hike.update", {"id": hid, **args})
+                result = self.capture(target)
+                self.assertIs(result["checks"]["placesShown"], True, result)
+                wrong = self.capture({**target, "capacity": 7, "rsvpEnabled": True} if "capacity" not in args
+                                     else {**target, "capacity": args["capacity"] + 1})
+                self.assertIs(wrong["checks"]["placesShown"], False)
+
+    def test_meet_time_change_is_checked_and_description_is_not(self):
+        hid = self.create(self.r)
+        old = (self.r.wt / COMMUNITY).read_bytes()
+        target = self.target(self.r, "hike.update", {"id": hid, "meetTime": "8:15 AM"})
+        self.assertIs(self.capture(target)["checks"]["fieldsShown"], True)
+        self.assertIs(self.capture(target, {COMMUNITY: old})["checks"]["fieldsShown"], False)
+        other = self.target(self.r, "hike.update", {"id": hid, "description": "Easy loop."})
+        self.assertNotIn("fieldsShown", self.capture(other)["checks"])
+
+    def test_twin_titles_use_the_id(self):
+        first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)
+        target = self.target(self.r, "hike.update", {"id": second, "capacity": 5})
+        result = self.capture(target)
+        self.assertEqual(self.scheduled(result), {"eventShown": True, "dateShown": True, "meetShown": True,
+                                                  "placesShown": True})
+        self.assertIs(self.capture({**target, "id": first})["checks"]["dateShown"], False)
+        self.assertIs(self.capture({**target, "title": "Nope"})["checks"]["eventShown"], False)
 
 
 if __name__ == "__main__":
