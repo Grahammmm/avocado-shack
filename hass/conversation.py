@@ -27,7 +27,7 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
                         r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
                         r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
-                        r"|(post)(?:\s+(\S+))?"  # AV1322-07 (F07): groups 13/14; the id is re-read from the original text to keep its case
+                        r"|(post)(?:\s+(hike\s+\S+|\S+))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
                         r"|(margin)(?:\s+((?s:.*)))?")  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
 HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
@@ -46,6 +46,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado descript
     'show <code> - repeat a draft and its screenshot: "show a1b2"',
     'report - the morning shelf report: "report"',
     'post <id> - draft a caption, posts nothing: "post photo-product-001"',
+    'post hike <id> - hike draft: "post hike hike-2026-11-14-point-buchon"',  # AV1222-11
     'margin <id> at <m>% - price idea: "margin photo-product-001 at 35%"',  # AV1102-12, AV1222-10: saved cost
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
@@ -56,6 +57,9 @@ HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV
 FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
 FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. find lion's mane."  # AV1537-04
 POST_USAGE = "Send post and a product id, e.g. post photo-product-001."  # AV1322-07
+HIKE_USAGE = "Send post hike and a hike id, e.g. post hike hike-2026-11-14-point-buchon (find <words> gives ids)."  # AV1222-11
+HIKE_REFUSALS = {"no such hike": "No hike {id}; send find <words> for ids.", "hike is cancelled": "{id} is cancelled; nothing to announce.",
+                 "hike already happened": "{id} has already happened.", "not scheduled": "{id} is not scheduled yet."}  # other reasons: "Cannot draft a post for <id>: <reason>."
 POST_REFUSALS = {"no such product": "No product {id}; send find <words> for ids.", "not on the site": "{id} is not on the site.",
                  "no photo on the site": "{id} has no photo on the site."}  # other build() reasons: "Cannot draft a post for <id>: <reason>."
 _NUM = r"[-+]?[0-9.][0-9.,_]*(?:e[-+]?[0-9]+)?"  # AV1102-12: looks like a number; margins.compute is the only validator
@@ -993,6 +997,7 @@ class Conversation:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
         writer worktree content. Read-only: nothing is posted, scheduled, written or drafted; works while paused."""
         photo = None
+        if pid.lower().split(None, 1)[:1] == ["hike"]: return self._post_hike(pid[4:].strip())
         try:
             if not pid: raise LookupError
             wt = editor_mod._load(str(self.sdir))[2]
@@ -1009,6 +1014,19 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             text, photo = "Catalog unavailable right now; nothing changed.", None
         self._reply(text, [str(photo)] if photo else [])
+        return "post"
+
+    def _post_hike(self, hid) -> str:
+        """AV1222-11 (F07): social_draft.build_hike's caption for one scheduled upcoming hike. Read-only, nothing is stored."""
+        try:
+            if not hid: raise LookupError
+            out = social_draft.build_hike(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), hid, self._now())
+            if out["draft"]: text = f"Draft post (not posted; copy it yourself):\n{out['caption']}"
+            elif out["reason"] == "cannot read content": raise OSError
+            else: text = HIKE_REFUSALS[out["reason"]].format(id=hid) if out["reason"] in HIKE_REFUSALS else f"Cannot draft a post for {hid}: {out['reason']}."
+        except LookupError: text = HIKE_USAGE
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError): text = "Catalog unavailable right now; nothing changed."
+        self._reply(text)
         return "post"
 
     def _find(self, query) -> str:
