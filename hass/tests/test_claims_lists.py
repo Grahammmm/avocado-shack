@@ -112,8 +112,7 @@ class ListConversationTests(ConversationTestCase):
     def test_undo_restoring_an_organic_line_is_proposed(self):
         self.approve("hours: Organic honey Saturdays", ["Mon–Sat 9–6", "Organic honey Saturdays"])
         plain = self.approve("hours: Mon–Sat 9–6 only", ["Mon–Sat 9–6"])
-        self.interp.mapping["put the hours back"] = _ops(("history.revert", {"changeId": plain["change_id"]}))
-        self.assertEqual(self.say("put the hours back"), "proposed")
+        self.assertEqual(self.say(f"undo {plain['code']}"), "proposed")  # AV0007-02: command undo, not interpreter
         self.assertIn("Organic honey Saturdays", self.replies()[0])
 
     def test_a_product_text_change_is_still_checked(self):

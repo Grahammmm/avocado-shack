@@ -26,7 +26,7 @@ The two note commands are stricter:
 | `resume` or `resume changes` | Lets approvals apply again. It never applies a waiting draft by itself. | `resume changes` |
 | `remember <key>: <text>` | Saves a note for Hass (key: a-z, 0-9, `.` or `-`). Sending the same key again updates it. | `remember parking: use the back lot` |
 | `forget <key>` | Deletes that saved note. | `forget parking` |
-| `memory` | Lists the saved notes (up to 20). | `memory` |
+| `memory` | Lists your saved notes (up to 20, `Saved (N):`), then your aliases apart under `Aliases (N):` (up to 20, then `... and N more`); notes and aliases are counted and capped separately. An alias line reads `green jam -> Linn's blueberry preserves (photo-product-001)` with the product or maker name as it is on the site now and its id, `[hidden]` for a hidden product or maker and `[held]` for a held product. An alias whose product or maker is gone says `no longer on the site - send forget alias.<name>`; an unreadable saved alias says to send the same forget; when the catalog cannot be read right now it says `target unavailable right now`, not deleted. It only reads: it changes nothing, does not expire drafts, and works while paused. | `memory` |
 | `alias <name>: <id>` | Saves your own name for a product id or maker key that exists now, so a lookup of that name finds it. Send `forget alias.<name with - for spaces>` to remove it. | `alias green jam: photo-product-001` |
 | `cost <id>: <pack cost> for <units>` | Saves what you paid for one purchase of a product (it must exist now, any status), with today's Pacific date, as your private note `cost.<id>`; sending a new cost updates it and says what it was. A number that is out of range is named (`Not saved: units must be a finite whole number.`). The cost is never on the website, in a draft or in what is sent to the interpreter; `memory` shows it to you and `forget cost.<id>` removes it. `remember cost.<id>: ...` does not work, use this command. It changes no price and works while paused. | `cost photo-product-001: 24.00 for 12` |
 | `find <words>` | Lists up to 10 matching products, makers, hikes and route ideas, with ids: products and makers whose name matches (your aliases too), then hikes (by start, with the Pacific weekday, date and time) and route ideas whose title contains every word, each with its status, hidden, cancelled and completed ones included. It changes nothing and works while paused. | `find lion's mane` |
@@ -67,6 +67,12 @@ Checking the selection (change requests, not commands; each still needs `yes <co
 - Until the first check the site shows no check line and no availability words. If
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
+
+A maker without a website: `maker.add` needs only the key, name, place and story; leave `url` out and the maker's
+card shows its story and place with no "Visit" link. `maker.edit` with `clearUrl: true` removes a maker's website (it
+cannot be combined with `url`); a maker with no website and nothing else changed is refused. Both are change requests that
+need `yes <code>`, and `undo` restores the website exactly as it was. A website recorded as a migrated source link
+cannot be removed: the change is blocked.
 
 Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`, for example "put the old photo back",
 shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when

@@ -56,7 +56,7 @@ class MemoryAliasTests(StoreMixin, ConversationTestCase):
         self.assertNotIn("via", self.find("Hass avocado"), "names without an alias keep the old shape")
         [row] = self.rows("alias.green-jam")
         self.assertEqual((row["value"], row["kind"], row["source"]), (f"product:{AVO}", "fact", "owner-stated:m1"))
-        self.assertIn(f"alias.green-jam: product:{AVO} (fact, since", self.chat("memory", "memory-list")[0])
+        self.assertIn(f"green jam -> Hass avocado ({AVO})", self.chat("memory", "memory-list")[0])
 
     def test_maker_alias_and_kind_mismatch(self):
         self.chat("alias the dairy: Straus", "memory-saved",
