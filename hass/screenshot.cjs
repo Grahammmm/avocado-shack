@@ -32,7 +32,38 @@ const allowed=req=>{
       checks.noHorizontalOverflow=await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth);
     }else if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
-      if(target.status==='scheduled')checks.eventShown=await page.locator('h2',{hasText:target.title}).count()>0;
+      if(target.status==='scheduled'){
+        checks.eventShown=await page.locator('h2',{hasText:target.title}).count()>0;
+        const ws=v=>String(v).replace(/\s+/g,' ').trim();  // AV1222-05: cards are read in page JS (title equal); a card's id is its RSVP button or calendar link
+        const cards=await page.$$eval('.hike-event',(els,t)=>els.filter(c=>c.querySelector('h2')?.textContent===t.title).map(c=>{
+          const facts={};for(const d of c.querySelectorAll('dt')){const dd=d.nextElementSibling?.cloneNode(true);dd?.querySelectorAll('a').forEach(a=>a.remove());
+            (facts[d.textContent]??=[]).push(dd?dd.textContent.replace(/\s+/g,' ').replace(/\s*·\s*$/,'').trim():'');}
+          return {ids:[c.id,c.querySelector('[data-rsvp]')?.dataset.rsvp,(c.querySelector('a.hike-ics')?.getAttribute('download')||'').replace(/\.ics$/,'')].filter(Boolean),
+            date:c.querySelector('.hike-date')?.textContent,meet:[...c.querySelectorAll('dt')].filter(d=>d.textContent==='Meet').map(d=>d.nextElementSibling?.textContent),
+            facts,places:[...c.querySelectorAll('p.club-small')].map(p=>p.textContent)};}),target);
+        // identity: a card's id is its anchor (id attribute), RSVP button or calendar link; only a card naming this id counts, none is guessed
+        const mine=cards.filter(c=>!!target.id&&c.ids.includes(target.id)),pool=mine;
+        const LABEL={meetTime:'Meet at',meetingAddress:'Address',returnTime:'Back',walkTime:'Start'};
+        const evaluate=card=>{
+          const r={},when=new Date(target.startsAt),pt=o=>when.toLocaleString('en-US',{timeZone:'America/Los_Angeles',...o});
+          r.dateShown=card.date===(when<=new Date()?`Today — started ${pt({hour:'numeric',minute:'2-digit'})}`:pt({weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}));
+          r.meetShown=target.meetingPoint?card.meet.length===1&&card.meet[0]===target.meetingPoint:card.meet.length===0;
+          const n=target.capacity,open=target.rsvpEnabled&&!!target.meetingPoint&&when>new Date();  // community-server.py scheduled(): RSVPs close at startsAt
+          const want=!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
+          // guests already confirmed are not in the target: an open hike with a capacity may also be full (remaining 0)
+          r.placesShown=card.places.length===1&&(card.places[0]===want||(open&&n>0&&card.places[0]==='This hike is full.'));
+          const ch=Object.entries(target.changed||{});  // each changed value must be the one under its own label
+          const gone=target.cleared||[];  // a cleared field's labeled line must be absent
+          if(ch.length||gone.length)r.fieldsShown=ch.every(([k,v])=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===1&&card.facts[LABEL[k]][0]===ws(v))&&gone.every(k=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===0);
+          return r;
+        };
+        if(!pool.length)checks.eventShown=false;
+        else if('startsAt' in target){  // community.js keeps hikeDate private (IIFE), so its dateLabel/hikeDate format is mirrored here
+          let best=null,bestN=-1;
+          for(const c of pool){const r=evaluate(c),k=Object.values(r).filter(Boolean).length;if(k>bestN){best=r;bestN=k;}}
+          Object.assign(checks,best);
+        }
+      }
       else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
         const recaps=await page.locator('#past-hikes .past-hike').evaluateAll((els,title)=>els.filter(d=>
           d.querySelector('summary span')?.textContent===title).map(d=>d.querySelector(':scope>p')?.textContent),target.title);
