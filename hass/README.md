@@ -215,3 +215,14 @@ Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.
 - Read-only: SQLite opens with `mode=ro`, nothing is created, written or deleted (`"deletes": 0`). No ids, text or file names are printed.
 - A missing or unreadable store reports `"unavailable"` (exit 1); an unsafe path (missing, symlink) exits 2. A photo whose sidecar has no `received_at` counts as `undated`, never guessed.
 - The owner picks the retention period (owner action 4). Nothing deletes or prunes yet; that is a later unit.
+
+## Owner-visible behaviour added by AV1102 (ledger: `BUILD_LEDGER.md`)
+
+- Shelf check (AV1102-01): each product carries its own confirmed word and day. A word such as Available today shows only when that day is the latest shelf-check day and the check is not stale (more than 7 days old); otherwise the card reads `Last confirmed <its day>`. A product with no valid confirmed word or day shows no label. Both the check naming the product and `product.set_availability` (allowed only after today's check) set the word and day, so a product the check did not name can also show a current word.
+- `status` (AV1102-05) shows a `Shelf check: <day>` line; `report` (AV1102-11) ends with a `Waiting for you` block.
+- `margin <cost> for <n> at <m>%` (AV1102-12) replies with a price idea; nothing is stored.
+- Interpreter prompt: product brands (AV1102-06), current home-page text (AV1102-07), design requests answered as unsupported (AV1102-08), and saved notes sent as preferences, never as proof of a claim (AV1102-09).
+- Interpreter eval set v4 (AV1102-10) has 63 cases; it runs without a model.
+- Site: See all from this maker (AV1102-02), an Available today filter (AV1102-03) and a next-hike line on the home page (AV1102-04).
+- `hass/acceptance.py` (AV1102-13) maps H23 and H24 to their tests; run `python3 -B hass/acceptance.py`.
+- Docs: `IMPLEMENTATION.md` (AV1102-14), the proposed trial `TRIAL.md` (AV1102-15) and `HANDOVER.md` (AV1102-16), all under `docs/hass/`.
