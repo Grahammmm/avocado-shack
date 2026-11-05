@@ -15,11 +15,14 @@ UNITS += tuple(f"AV1537-{n:02d}" for n in range(1, 16))  # AV1537-16 roll-up
 UNITS += tuple(f"AV1737-{n:02d}" for n in range(1, 16))  # AV1737-16 roll-up
 UNITS += tuple(f"RF1650-{n}" for n in (1, 2, 3, 4, 5, 8))  # RF1650-9 roll-up
 UNITS += ("RF1740-6", "RF1740-7")  # RF1740-8 roll-up (RF1740-5 is superseded: no merge, see test_superseded_unit_has_no_merge)
+UNITS += tuple(f"AV1102-{n:02d}" for n in range(1, 17))  # AV1102-17 roll-up (sections in id order; the ledger has no issue headings)
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
 WORDS |= {"RF1650-1": ("are not editable",), "RF1650-3": ("a redo is not offered",)}  # RF1650-9 edge path 5
 WORDS |= {"RF1740-6": ("fails closed",), "RF1740-7": ("names no path or sha",)}  # RF1740-8 edge path 5
+WORDS |= {"AV1102-08": ("Design changes stay unbuilt",), "AV1102-09": ("A note is never proof of a claim",),
+          "AV1102-12": ("Suggestion only; nothing stored",), "AV1102-15": ("Proposal only; the trial is not run",)}  # AV1102-17 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -97,6 +100,15 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "RF1740-7: missing test_set_photo_folderz.py": LEDGER.replace("hass.tests.test_set_photo_folder ", "hass.tests.test_set_photo_folderz "),
                   "RF1740-6: limit wording?": LEDGER.replace("fails closed", "fails open"), "RF1740-7: limit wording?": LEDGER.replace("names no path or sha", "names the path"),
                   "RF1740-7: private data": LEDGER.replace("(RF1740-7)", "(RF1740-7)\nmail owner@example.com")}
+        cases |= {"AV1102-01: 2 headings": LEDGER + "\n" + sections(LEDGER, "AV1102-01")[0], "AV1102-16: 0 headings": LEDGER.replace("(AV1102-16)", "(AV1102-160)"),
+                  "AV1102-05: no merge sha": LEDGER.replace(SHA.findall(sections(LEDGER, "AV1102-05")[0])[0], "146b072"),
+                  "AV1102-03: missing test_availability_words_pinz.py": LEDGER.replace("test_availability_words_pin ", "test_availability_words_pinz "),
+                  "AV1102-02: missing storefront-mockup/nope-qa.cjs": LEDGER.replace("catalog-only-qa.cjs` run", "nope-qa.cjs` run"),
+                  "AV1102-08: limit wording?": LEDGER.replace("Design changes stay unbuilt", "Design changes are built"),
+                  "AV1102-09: limit wording?": LEDGER.replace("A note is never proof of a claim", "A note proves a claim"),
+                  "AV1102-12: limit wording?": LEDGER.replace("Suggestion only; nothing stored", "Suggestion stored"),
+                  "AV1102-15: limit wording?": LEDGER.replace("Proposal only; the trial is not run", "The trial is run"),
+                  "AV1102-09: private data": LEDGER.replace("(AV1102-09)", "(AV1102-09)\nmail owner@example.com")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242", "+15550100777")}
         cases["AV1537-15: private data"] = LEDGER.replace("(AV1537-15)", "(AV1537-15)\ncall +1 555 123 4567")
