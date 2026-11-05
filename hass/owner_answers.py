@@ -24,6 +24,14 @@ PREVIEW_REASONS = (  # preview/result-check diagnostics -> plain words; the raw 
     ("preview server did not start", "the preview could not be started"),
     ("check failed:", "the preview did not show the change as expected"),
     ("no change record", "the saved change could not be found"))
+CHECK_WORDS = {  # AV1222-03: result-check key -> plain words (an unknown key is never shown)
+    "productShown": "the product card", "description": "the product description", "availabilityShown": "the availability word",
+    "imageShown": "the product photo", "hoursShown": "the opening hours", "addressShown": "the address",
+    "headlineShown": "the home-page headline", "storyShown": "the shop story", "introShown": "the home-page intro",
+    "selectionShown": "the selection checked line", "eventShown": "the hike", "pastShown": "the past hike",
+    "recapShown": "the hike recap", "rsvpGone": "the sign-up button", "makerName": "the maker's name",
+    "makerPlace": "the maker's place", "makerHidden": "the hidden maker",
+    "phoneShown": "the phone number"}
 RECORD_RE = re.compile(r"([a-z][a-z0-9_-]{0,40}) ([A-Za-z0-9][A-Za-z0-9._-]{0,80}): (.*)", re.S)  # no path characters
 NOT_COPIED = "Copying it to the website has not been done, or did not finish"
 PARTIAL = ("If copying it was started and stopped part way, some pages may already show it; ask for help to copy it "
@@ -95,7 +103,12 @@ def preview_reason(error) -> str:
     text = str(error or "")
     found = RECORD_RE.fullmatch(text)
     rest, which = (found[3], f" ({found[1]} {found[2]})") if found else (text, "")
-    return next((plain for marker, plain in PREVIEW_REASONS if marker in rest), "the preview could not be checked") + which
+    plain = next((plain for marker, plain in PREVIEW_REASONS if marker in rest), "the preview could not be checked")
+    if "check failed:" in rest:  # name the checks that failed (diagnostic order), known ones only
+        keys = [k.strip().removeprefix("desktop:") for k in rest.split("check failed:", 1)[1].split(",")]
+        names = list(dict.fromkeys(CHECK_WORDS[k] for k in keys if k in CHECK_WORDS))
+        plain += f": {', '.join(names)}" if names else ""
+    return plain + which
 
 
 def applied_text(code, summary, checked=False, error=None) -> str:

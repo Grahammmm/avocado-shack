@@ -53,8 +53,9 @@ EVENT_TEXT_FIELDS = (
 )
 EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
+PHONE_RE = re.compile(r"[2-9][0-9]{2}[2-9][0-9]{6}", re.ASCII)
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice")  # all absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone")  # all absent by default
 MAX_NOTICE, MAX_NOTICE_DAYS = 160, 60  # store.notice text characters; its last day at most this many days ahead (set)
 HOME_IMAGE_RE = re.compile(r"^assets/products/photo-[0-9a-f]{16}\.(jpg|png)$")  # the path photos.install writes
 MAX_STORY = 400  # characters in the optional store.story (the "COME ON IN" paragraph)
@@ -107,12 +108,22 @@ class Content:
 
 
 def _read_json(path: Path):
+    # Reader contract: a decoded object key repeated within one object is ambiguous
+    # (last-wins would silently flip e.g. hidden -> active), so refuse it by basename only.
+    def no_duplicates(pairs):
+        out = {}
+        for key, value in pairs:
+            if key in out:
+                raise ContentError([f"{path.name}: duplicate JSON object key"])
+            out[key] = value
+        return out
+
     try:
         text = path.read_bytes().decode("utf-8")
     except UnicodeDecodeError:
         raise ContentError([f"{path.name}: not UTF-8 text"]) from None
     try:
-        return json.loads(text)
+        return json.loads(text, object_pairs_hook=no_duplicates)
     except json.JSONDecodeError as exc:
         raise ContentError([f"{path.name}: invalid JSON at line {exc.lineno}"]) from None
     except RecursionError:
@@ -450,6 +461,8 @@ def validate_store(problems, store, today: date | None = None):
             _text(problems, "store.homeImage.imageAlt", home["imageAlt"], limit=TEXT_LIMITS["product"]["imageAlt"])
             if isinstance(home["imageAlt"], str) and sum(c.isalpha() for c in home["imageAlt"]) < 3:
                 problems.append("store.homeImage.imageAlt: needs at least 3 letters")
+    if "phone" in store and not (isinstance(store["phone"], str) and PHONE_RE.fullmatch(store["phone"])):
+        problems.append("store.phone: must be 10 digits")  # AV1222-04: stored as exactly 10 ASCII digits, never coerced
     if "notice" in store:
         notice = store["notice"]
         if not isinstance(notice, dict) or set(notice) != {"text", "until"}:

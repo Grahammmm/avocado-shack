@@ -1725,3 +1725,11 @@ Branch rb/av1102-16 (AV1102-16, PR #334: head 90943c7ef9ef, merged as e53c5454aa
 Checks at PR head 90943c7ef9ef (recorded in PR #334): `python3 -B -m unittest hass.tests.test_limits_doc hass.tests.test_phone_guide hass.tests.test_support_doc hass.tests.test_tracked_private hass.tests.test_commands_doc` ran 38 tests, OK; `python3 -B hass/acceptance.py` summarised 25 ids, 22 pass, 0 fail, 3 not covered. PREPUSH-TESTS NOT-RUN (busy host).
 
 Limits: no decision is made, the drill is not run, and the trial and feature states are other units.
+
+## H10/H19 media verify checks web copies against their safe derivative (RF1100-20) — November 5, 2026
+
+Branch rb/rf1100-20 (RF1100-20). For Michael: `media.py verify` (and `health --media`) now compares each existing private web copy with the metadata-free bytes computed in memory from its hash-valid original. A changed, empty, truncated or metadata-restored web file is one `web content mismatch: <12 hex>` problem; an original the sanitizer refuses with a matching web file is `web unverifiable: <12 hex>`. `hass/media.py` (`verify_store` only); added `hass/tests/test_media_verify_web.py` (8 tests, 4 fail on the old `media.py`). Health still shows only the count.
+
+Checks: `python3 -B -m unittest hass.tests.test_media_verify_web` ran 8 tests, OK; the wider media/health list is recorded in the PR body.
+
+Limits: verification never writes or generates a web copy; a store with no web copy stays healthy; an original already bad is reported once and its web copy is not compared; sanitizer rules and `health.py` are unchanged.

@@ -15,7 +15,8 @@ apply would refuse the recorded writer worktree; git runs with GIT_OPTIONAL_LOCK
 photo-unused: photo-<sha> copies in assets/products no product's image uses, file names only, never deleted),
 paused (info; problem paused-long when set over --paused-hours ago or unreadable), memory-invariant (owner memory
 rows breaking its rules: two active rows for one key, or text left on a forgotten key; count only), backup-age
-(--backups: no complete hass-state-* within --backup-hours), backup-verify, media-store (--media DIR: media.py
+(--backups: no complete hass-state-* within --backup-hours), backup-verify (info backup-content: that newest
+backup lists no content bundle; content restores from Git only), media-store (--media DIR: media.py
 verify of the photo store, read-only, never inside the state dir; count only), disk-low (--min-free-mb: the state
 or --backups filesystem has under that many MB free; `<store>: <n> MB free` in 50-MB steps, no path), model (--model:
 one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed). Problems carry a
@@ -144,6 +145,11 @@ def _verify_backup(path, problems: list) -> None:  # H20, read-only; the detail 
         return problems.append(_problem("backup-verify", "verify failed"))
     if result["result"] != "ok": problems.append(_problem("backup-verify", f"{len(result['problems'])} problem(s)"))
 
+def _backup_content(path, info: list) -> None:  # AV1322-15: that same newest backup only; fixed words, never a path
+    doc = statebackup._manifest(Path(path))  # read-only; None (unreadable or invalid) is backup-verify's problem
+    if doc is not None and statebackup.BUNDLE not in doc["files"]:  # FAV-07: no content.bundle listed
+        info.append(_problem("backup-content", "content restores from Git only"))
+
 def _media_check(raw, sdir: Path, problems: list) -> None:  # RF1710-6 (H10): count only, never verify_store's text
     try:  # the state-dir rule is added here; verify_store refuses a missing or in-repo root before opening anything
         full, sdir = Path(os.path.abspath(raw)).resolve(), sdir.resolve()
@@ -267,6 +273,7 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
     _inbox_check(sdir, now, inbox_minutes, problems, inbox_unreadable_hours)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
         _verify_backup(newest, problems)
+        _backup_content(newest, info)
     if writer:
         _writer_check(sdir, problems)
         _unused_photos(sdir, info)

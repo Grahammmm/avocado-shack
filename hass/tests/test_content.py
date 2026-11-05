@@ -159,7 +159,7 @@ class ValidationTests(unittest.TestCase):
             "http maker url": (lambda c: c.makers["Etto"].update(url="http://ettopastificio.com/"), "https://"),
             "extra maker field": (lambda c: c.makers["Etto"].update(organic=True), "unknown field 'organic'"),
             "store markup": (lambda c: c.store.update(hours=["9am<script>"]), "forbidden text '<'"),
-            "store unknown field": (lambda c: c.store.update(phone="555"), "unknown field 'phone'"),
+            "store unknown field": (lambda c: c.store.update(email="a@b.c"), "unknown field 'email'"),
             "email connected": (lambda c: c.community["club"].update(emailConnected=True), "emailConnected"),
             "route idea rsvp": (lambda c: c.community["routeIdeas"][0].update(rsvpEnabled=True), "rsvpEnabled"),
             "route idea dated": (lambda c: c.community["routeIdeas"][0].update(status="scheduled"), "'idea'"),
