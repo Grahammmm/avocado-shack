@@ -1606,6 +1606,14 @@ Checks: `python3 -B -m unittest hass.tests.test_bridge_photos hass.tests.test_br
 
 Limits: fixture transports only; `bridge.py`, URL/password policy, duplicate-key and count handling are unchanged. The fixed ValueError text now ends with "or surrogate code points" (the existing size test uses assertIn on an earlier part).
 
+## H20 state and media restore publish with atomic no-replace (RF1100-19) — November 5, 2026
+
+Branch rb/rf1100-19. For Michael: `statebackup restore` and `drill` now publish the restored state and media directories with the same kernel no-replace rename the content restore already used, so a directory created by someone else at that moment (even an empty one) is kept instead of silently replaced. The call fails with the existing one-line error JSON (exit 1), takes back only the state/staging trees it made itself, and leaves the backup untouched. `hass/statebackup.py` (two call replacements); added `hass/tests/test_statebackup_restore_atomic.py` (5 tests; all 5 fail on the old code).
+
+Checks: `python3 -B -m unittest hass.tests.test_statebackup_restore_atomic` ran 5 tests, OK; wider statebackup list in the PR body.
+
+Limits: fixture data only; rollback moves, preflight refusals and wording, the helper and the manifest are unchanged; no lock service or symlink-race redesign.
+
 ## H10/H19 media verify checks web copies against their safe derivative (RF1100-20) — November 5, 2026
 
 Branch rb/rf1100-20 (RF1100-20). For Michael: `media.py verify` (and `health --media`) now compares each existing private web copy with the metadata-free bytes computed in memory from its hash-valid original. A changed, empty, truncated or metadata-restored web file is one `web content mismatch: <12 hex>` problem; an original the sanitizer refuses with a matching web file is `web unverifiable: <12 hex>`. `hass/media.py` (`verify_store` only); added `hass/tests/test_media_verify_web.py` (8 tests, 4 fail on the old `media.py`). Health still shows only the count.

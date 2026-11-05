@@ -370,10 +370,10 @@ def restore(backup, into, worktree, paused=False, now=None, media_into=None, con
             _clone_content(bdir / BUNDLE, ctmp, doc["contentCommit"])
         extra = {"paused": True, "pausedSince": _pause(tmp / DB, now)} if paused else {}
         if os.path.lexists(target): raise FileExistsError(f"restore dir appeared during restore: {target}")
-        os.rename(tmp, target)
+        _rename_noreplace(tmp, target)  # atomic: a dir that appeared since (even empty) is refused, never replaced
         renamed = True
         if mtmp and os.path.lexists(mtarget): raise FileExistsError(f"media restore dir appeared: {mtarget}")
-        if mtmp: os.rename(mtmp, mtarget)
+        if mtmp: _rename_noreplace(mtmp, mtarget)
         mrenamed = bool(mtmp)
         if ctmp and os.path.lexists(ctarget): raise FileExistsError(f"content restore dir appeared: {ctarget}")
         if ctmp: _rename_noreplace(ctmp, ctarget)  # a dir that appeared since (even empty) is refused, never replaced

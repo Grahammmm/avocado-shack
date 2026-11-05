@@ -72,12 +72,14 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
-        from hass.sitegen import checked_line  # lazy: sitegen is the one place the selection words live
+        from hass.sitegen import checked_line, phone_text  # lazy: sitegen is the one place the selection words live
         before = record.get("before") or {}
         line = ({"selectionLine": checked_line(after, today)} if today is not None and
                 before.get("selection_checked_on") != after.get("selection_checked_on") else {})  # AV1222-03
         cleared = bool((record.get("before") or {}).get("homeImage")) and "homeImage" not in after  # shop photo back
-        return {"kind": "store", **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
+        phone = ({"phone": phone_text(after["phone"]) if after.get("phone") else None}
+                 if before.get("phone") != after.get("phone") else {})  # AV1222-04
+        return {"kind": "store", **phone, **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
                 "intro": after.get("intro"), **line,
