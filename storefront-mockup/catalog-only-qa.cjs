@@ -197,6 +197,37 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await open('?shelf=pantry&q=jam');await page.locator('#product-search').focus();await page.keyboard.press('Tab');await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'clear-filters','Tab reaches it');await page.keyboard.press('Enter');assert.equal(await countText(),fullCount);assert.equal(await page.locator('#brand-filter').inputValue(),'');assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');
   await open('?q=jam');const bx=await clr.boundingBox();assert.ok(bx.height>=44,'tap target '+width);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow '+width);}
  await fixture(W);await open('?avail=1');assert.equal(await clr.isVisible(),true,'avail');await clr.click();assert.equal(await avail().isChecked(),false);assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
+// AV1052-02: a shelf with no product in the published catalog is hidden (really invisible, out of the Tab order); All shelves always shows.
+ const shelfFix=async(drop,after='')=>{await page.unroute('**/catalog-products.js').catch(()=>{});await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;for(let i=catalog.length;i--;)if(${JSON.stringify(drop)}.includes(catalog[i].category))catalog.splice(i,1);${after}`})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
+ const shelves=()=>page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[data-filter]')].map(b=>[b.dataset.filter,{shown:b.getBoundingClientRect().width>0,pressed:b.getAttribute('aria-pressed')}])));
+ const ALL9=['all','fruit','vegetables','dairy','eggs','meat','pantry','drinks','bread','flowers'];
+ await page.setViewportSize({width:390,height:844});await open('');let sh=await shelves();assert.deepEqual(Object.keys(sh).filter(k=>sh[k].shown),ALL9,'every shelf has a product: all buttons show');
+ const perShelf=await page.evaluate(()=>{const o={};catalog.forEach(p=>o[p.category]=(o[p.category]||0)+1);return o}),total=Object.values(perShelf).reduce((a,b)=>a+b,0);
+ for(const width of [390,1440]){await page.setViewportSize({width,height:900});
+  for(const drop of [['flowers'],['eggs'],['eggs','flowers']]){await shelfFix(drop);
+   await open('?shelf=flowers&utm=synthetic#market');
+   sh=await shelves();assert.deepEqual(Object.keys(sh).filter(k=>sh[k].shown),ALL9.filter(k=>!drop.includes(k)),'only the empty shelves vanish: '+drop);
+   assert.equal(await page.locator('[data-filter="flowers"]').count(),1,'node kept');assert.equal(await page.getByRole('button',{name:'Flowers',exact:true}).count(),drop.includes('flowers')?0:1,'role query agrees');
+   if(drop.includes('flowers')){assert.equal(sh.all.pressed,'true');assert.equal(Object.values(sh).filter(v=>v.pressed==='true').length,1);assert.equal(await countText(),(total-drop.reduce((n,d)=>n+perShelf[d],0))+' selections','falls back to All shelves');assert.deepEqual((await addr()).params,{utm:'synthetic'},'only shelf dropped');assert.equal((await addr()).hash,'#market');}
+   await open('?shelf=eggs&q=a&utm=x');assert.equal((await addr()).params.shelf,drop.includes('eggs')?undefined:'eggs');if(drop.includes('eggs'))assert.deepEqual((await addr()).params,{q:'a',utm:'x'});
+   await open('');await page.locator('[data-filter="pantry"]').click();await page.locator('[data-filter="all"]').click();assert.equal((await shelves()).all.pressed,'true');
+   const tabbed=[];await page.locator('[data-filter="all"]').focus();for(let i=0;i<10;i++){const f=await page.evaluate(()=>document.activeElement.dataset.filter||'');if(f)tabbed.push(f);await page.keyboard.press('Tab');}
+   assert.ok(drop.every(d=>!tabbed.includes(d)),'Tab skips hidden shelves '+drop);assert.deepEqual(tabbed,ALL9.filter(k=>!drop.includes(k)),'Tab visits exactly the visible shelves in order');
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow');}
+ }
+ // Other filters and ?item survive the cleanup; an unknown shelf keeps today's behaviour; the shelf rewrite does not break invalid-from cleanup.
+ await shelfFix(['flowers']);
+ await open('?shelf=flowers&q=a&maker=Etto&from=nope&avail=1&utm=x#market');a=await addr();assert.deepEqual(a.params,{q:'a',maker:'Etto',utm:'x'});assert.equal(a.hash,'#market');assert.equal(await page.locator('#product-search').inputValue(),'a');assert.equal(await page.locator('#brand-filter').inputValue(),'Etto');
+ const histLen=await page.evaluate(()=>history.length);await open('?shelf=flowers');assert.ok((await page.evaluate(()=>history.length))<=histLen+1,'no extra history');
+ await open('?item='+encodeURIComponent(id41)+'&shelf=flowers&utm=x');s=await shown();assert.equal(s.pressed,'all');assert.equal(s.focused,null===s.focused?null:id41);assert.deepEqual((await addr()).params,{item:id41,utm:'x'},'valid item kept, empty shelf dropped');
+ await open('?item=nope&shelf=flowers&q=jam');s=await shown();assert.deepEqual([s.pressed,s.q,s.focused],['all','jam',null]);
+ await open('?shelf=nonsense&shelf=constructor');assert.equal((await shelves()).all.pressed,'true');
+ // A populated shelf is never hidden because of the current search, and sold-out products keep their shelf.
+ await shelfFix(['flowers'],`catalog.filter(p=>p.category==='eggs').forEach(p=>p.availability='Sold out');`);await open('?q=unfindablefoo');sh=await shelves();assert.equal(sh.pantry.shown,true);assert.equal(sh.eggs.shown,true,'sold-out-only shelf stays');assert.equal(sh.flowers.shown,false);
+ await page.locator('#product-search').fill('');await page.locator('[data-filter="fruit"]').click();sh=await shelves();assert.equal(sh.pantry.shown,true);assert.equal(sh.flowers.shown,false,'no dynamic unhide');
+ // Empty catalog: only All shows, selected, with the existing empty message; a restored product brings its shelf back on reload.
+ await shelfFix(ALL9.slice(1));await open('?shelf=fruit');sh=await shelves();assert.deepEqual(Object.keys(sh).filter(k=>sh[k].shown),['all']);assert.equal(sh.all.pressed,'true');assert.equal(await countText(),'0 selections');assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);
+ await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await open('?shelf=flowers');sh=await shelves();assert.equal(sh.flowers.shown,true);assert.equal(sh.flowers.pressed,'true','reload with the product restores the shelf');
  await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await page.setViewportSize({width:390,height:844});
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
