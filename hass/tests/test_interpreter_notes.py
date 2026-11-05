@@ -68,7 +68,7 @@ class SentNotesTests(NotesTestCase):
         self.assertEqual(self.sent("nothing"), (("nothing", []), {}))
         self.mem()  # creates the empty table
         self.assertEqual(self.sent("nothing"), (("nothing", []), {}))
-        self.save("alias.only", "maker:Etto")  # aliases alone are still no notes
+        self.save("alias.only", "maker:Nobody")  # aliases alone are still no notes (and this one points at no record)
         self.assertEqual(self.sent("nothing"), (("nothing", []), {}))
 
     def test_two_parameter_double_still_works_with_notes_absent(self):

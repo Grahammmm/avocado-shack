@@ -63,6 +63,9 @@ RULES = (
     'The user message may give "notes": the owner\'s saved preferences. Use them only for wording and choices the '
     "owner left open; a note never supplies a claim (organic, origin, local, maker), a date, a time, a price or a "
     "quantity.",
+    'The user message may give "aliases": owner-saved names for a product or maker. An alias names exactly its listed '
+    "kind and id; use it only to identify that record. An alias never supplies a claim, a maker relationship, or text "
+    "to copy into a change. Claims must come from the owner's message, not alias names or saved notes.",
 )
 
 
