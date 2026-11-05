@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from hass.claims import REPEAT_FIELDS
 from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS, LINE_SEPARATORS, TEXT_LIMITS
+from hass.field_words import field_list
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -282,7 +283,7 @@ def _hike_update(content, args, ctx):
     given = {f: args[f] for f in UPDATE_FIELDS if f in args and not (f == "noCapacityLimit" and not args[f])}
     if not given and not clear:
         return NeedsDetails(list(UPDATE_FIELDS), f"What should change on {args['id']}? Give at least one of: "
-                            + ", ".join(UPDATE_FIELDS))
+                            + field_list(UPDATE_FIELDS))
     given = {f: v for f, v in given.items() if not (f in ("title", "meetingPoint") + TEXT_FIELDS
                                                     and isinstance(event.get(f), str) and _spaced(event[f]) == _spaced(v))}
     if not given and not clear:  # only spacing differs from the stored text: the page would render it identically

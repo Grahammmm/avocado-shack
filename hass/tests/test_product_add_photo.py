@@ -52,8 +52,8 @@ class ProductAddPhotoTests(SetPhotoTestCase):
         git(self.repo.wt, "add", "-A")
         git(self.repo.wt, "commit", "-q", "-s", "-m", "real image")
         cases = {"both": (_add(image=real, photo=self.jpg, imageAlt=ALT), "give image or photo, not both"),
-                 "neither": (_add(), "product.add needs image or photo"),
-                 "neither with alt": (_add(imageAlt=ALT), "product.add needs image or photo"),
+                 "neither": (_add(), "Send the photo with the product name as its caption."),
+                 "neither with alt": (_add(imageAlt=ALT), "Send the photo with the product name as its caption."),
                  "photo without alt": (_add(photo=self.jpg), "imageAlt is required with photo")}
         for name, (op, reason) in cases.items():
             with self.subTest(case=name):
