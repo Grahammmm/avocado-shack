@@ -122,6 +122,13 @@ server.listen(0,'127.0.0.1',async()=>{
   await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'next-1',title:'Next hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'},{id:'done-1',title:'Done hike',status:'completed',startsAt:'2026-10-04T09:00:00-07:00',timezone:'America/Los_Angeles',description:'A good day.'}]});
   const real=await hikeAt('2026-11-09T08:30:00Z',{events:[{id:'real-1',title:'Real hike',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles'}]});
   assert.match(real.body,/Sunday, December 6, 2026/);assert.doesNotMatch(real.body,/Date to be confirmed/);assert.equal(real.label,0,'a real hike replaces the sample invitation');assert.deepEqual(real.errs,[]);
+  // AV1422-09: the no-hike empty state (sample off, no events) keeps the look its h3 had: 32px/8px at desktop, 29px/8px on a phone.
+  for(const [w,size] of [[1440,'32px'],[390,'29px']]){const ctx=await browser.newContext({viewport:{width:w,height:900}}),p=await ctx.newPage();
+   await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,enabled:false})));await p.route('**/community.json',r=>r.fulfill(json({events:[],routeIdeas:[]})));
+   await p.goto(base+'/hike/');await p.locator('#upcoming-hikes .hike-empty h2').waitFor();
+   const cs=await p.locator('#upcoming-hikes .hike-empty h2').evaluate(h=>{const c=getComputedStyle(h);return {fs:c.fontSize,mb:c.marginBottom,lh:c.lineHeight,ls:c.letterSpacing}});
+   assert.deepEqual(cs,{fs:size,mb:'8px',lh:(parseFloat(size)*1.2).toFixed(1).replace(/\.0$/,'')+'px',ls:(parseFloat(size)*-.02).toFixed(3).replace(/0+$/,'').replace(/\.$/,'')+'px'},'empty hike state heading at '+w);
+   await headingOrder(p,'empty hike state '+w);await ctx.close();}
   // AV1422-06: no club service, so nobody counted guests: no count, no RSVP button; synthetic titles only.
   const at='2026-12-01T09:00:00-08:00',ev=(id,title,more)=>({id,title,status:'scheduled',startsAt:at,timezone:'America/Los_Angeles',meetingPoint:'Test trailhead',...more});
   const fx=await hikeAt('2026-11-09T08:30:00Z',{events:[ev('t-on','Synthetic RSVP-on hike',{rsvpEnabled:true,confirmedGuests:7}),ev('t-off','Synthetic RSVP-off hike',{rsvpEnabled:false}),ev('t-none','Synthetic no-flag hike',{}),ev('t-x','Synthetic cancelled hike',{status:'cancelled',startsAt:'2026-11-09T12:00:00-08:00',rsvpEnabled:true})]});
