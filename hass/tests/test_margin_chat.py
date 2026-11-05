@@ -103,7 +103,7 @@ class MarginChatTests(StoreMixin, ConversationTestCase):
     def test_help_has_the_margin_line_and_its_example_runs(self):
         [line] = [ln for ln in conversation.HELP_TEXT.splitlines() if ln.startswith("margin ")]
         self.assertLessEqual(len(line), 70)
-        self.assertTrue(line.endswith('"margin 24 for 12 at 35%"'))
+        self.assertTrue(line.endswith('"margin photo-product-001 at 35%"'))  # AV1222-10: the product form
         self.assertTrue(self.margin("margin 24 for 12 at 35%").endswith(margins.NOTE))
 
 
