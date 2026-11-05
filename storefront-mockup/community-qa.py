@@ -12,7 +12,7 @@ if out:
  out=p;repo=str(root.parent.resolve())
  if p==repo or p.startswith(repo+os.sep):refuse('QA_OUT_DIR must be outside the repository')
 else:out=tempfile.mkdtemp(prefix='avoshack-qa-');print('QA_OUT_DIR='+out,file=sys.stderr)
-future=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=30)).isoformat()
+future=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=30)).replace(microsecond=0).isoformat()  # RF1050-24: whole seconds + explicit zone, the only calendar-exportable shape
 events=[dict(id='qa-hike',title='QA trail fixture',startsAt=future,status='scheduled',meetingPoint='QA meeting point',distance='3 miles',difficulty='Gentle pace',duration='2 hours',capacity=3,rsvpEnabled=True),dict(id='qa-race',title='QA limited places',startsAt=future,status='scheduled',meetingPoint='QA meeting point',capacity=1,rsvpEnabled=True),dict(id='qa-past',title='QA past outing',startsAt='2025-01-01T10:00:00-08:00',status='completed',meetingPoint='QA meeting point',recap='A test history entry; not a published hike.',rsvpEnabled=False)]
 events.append(dict(id='qa-unlimited',title='QA uncapped event',startsAt=future,status='scheduled',meetingPoint='QA meeting point',rsvpEnabled=True,confirmedGuests=999))
 # AV0207-01: one hike with every owner-set logistics field and one with none (the server must pass them through).

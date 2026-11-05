@@ -31,7 +31,7 @@ COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same n
                         r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
                         r"|(hidden)"  # AV1222-13 (H03): group 17
                         r"|(listing)(?:\s+(\S+))?")  # AV1622-09 (H17): groups 18/19; one token, the id is re-read from the original text
-HELP_TEXT = "\n".join(('Send a change in plain words: "Make the avocado description shorter".',  # AV1537-03, test_help
+HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as sold out".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
     'status (or did it work?) - last change, waiting drafts: "status"',
@@ -533,7 +533,7 @@ class Conversation:
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
-            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(draft["records"][0], store=rendered.get("store")),
+            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(draft["records"][0], shop_today(), store=rendered.get("store")),
                                           self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
                 if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
             shots = [shot["png"]] if shot.get("png") else []
@@ -924,7 +924,7 @@ class Conversation:
         files = {p: (wt / p).read_bytes() for p in editor_mod.GENERATED_PATHS}  # the committed files
         picked, png = [], None  # AV1737-08: each touched record with a distinct target, in order
         for record in change["records"]:
-            target = preview_mod.target_for(record, store=content.store)  # the store the committed files were generated from
+            target = preview_mod.target_for(record, shop_today(), store=content.store)  # the store the committed files were generated from
             if all(target != t for _r, t in picked): picked.append((record, target))
         for i, (record, target) in enumerate(picked[:VERIFY_MAX], 1):
             shot = self.previewer.capture(files, target, self.sdir / "screenshots" /

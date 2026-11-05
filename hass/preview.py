@@ -11,7 +11,7 @@ A damaged change record gives the target ``{"kind": "unreadable"}``, refused bef
 import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
-from hass.content_model import shop_today
+from hass.content_model import DEFAULT_INTRO, shop_today
 from hass.notice import live_text
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
@@ -39,7 +39,7 @@ def _readable(record) -> bool:
     headline = after.get("headline") if collection == "store" else None
     if not (headline is None or isinstance(headline, list) and all(isinstance(h, str) for h in headline)):
         return False
-    if collection == "store" and not isinstance(after.get("story"), (str, type(None))):
+    if collection == "store" and not all(isinstance(after.get(k), (str, type(None))) for k in ("story", "intro")):
         return False
     home = after.get("homeImage") if collection == "store" else None
     if not (home is None or isinstance(home, dict) and isinstance(home.get("image"), (str, type(None)))):
@@ -72,10 +72,15 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
+        from hass.sitegen import checked_line  # lazy: sitegen is the one place the selection words live
+        before = record.get("before") or {}
+        line = ({"selectionLine": checked_line(after, today)} if today is not None and
+                before.get("selection_checked_on") != after.get("selection_checked_on") else {})  # AV1222-03
         cleared = bool((record.get("before") or {}).get("homeImage")) and "homeImage" not in after  # shop photo back
         return {"kind": "store", **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
+                "intro": after.get("intro"), **line,
                 "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), today)}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
     return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
@@ -242,7 +247,7 @@ class Previewer:
                     time.sleep(0.1)
                 for name in self.viewports:
                     shot = tmp / ("shot.png" if name == "phone" else f"shot-{name}.png")
-                    node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps(target),
+                    node_env = {**base, "PREVIEW_URL": f"http://127.0.0.1:{port}", "TARGET": json.dumps({**target, "defaultIntro": DEFAULT_INTRO} if target.get("kind") == "store" else target),
                                 "OUT": str(shot), "VIEWPORT": name,
                                 **{k: self.env[k] for k in PASS_THROUGH if self.env.get(k)}}
                     try:

@@ -36,6 +36,7 @@ class HelpTextTests(unittest.TestCase):
             self.assertLessEqual(len(line), 70, line)
             self.assertFalse(set(line) & set("*_`#"), line)  # plain text, no markdown
         self.assertIsNone(verb(re.search(r'"([^"]+)"', LINES[0])[1]))  # the plain-words example is a change
+        self.assertIn('"Stop showing the eggs as sold out"', LINES[0])  # AV1622-05
 
     def test_help_wordings_parse_and_lookalikes_do_not(self):
         for text in ("help", "Help!", "commands.", "?", " HELP ", "Commands!"):
