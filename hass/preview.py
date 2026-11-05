@@ -60,12 +60,13 @@ def target_for(record: dict, store=None, today=None) -> dict:
     if collection == "products":
         target = {"kind": "product", "id": record.get("key"), "name": after.get("name", ""),
                   "status": after.get("status"), "description": after.get("description")}
-        if store is not None and after.get("status") == "active":
-            from hass.sitegen import availability_label  # the one place the word and the stale rule live
-            target["availability"] = availability_label(after, store, today or shop_today())
         before = record.get("before")
-        if isinstance(before, dict) and before.get("image") != after.get("image") and isinstance(after.get("image"), str):
-            target["image"] = after["image"]
+        if after.get("status") == "active":  # a hidden product is only checked for being absent
+            if store is not None:
+                from hass.sitegen import availability_label  # the one place the word and the stale rule live
+                target["availability"] = availability_label(after, store, today or shop_today())
+            if isinstance(before, dict) and before.get("image") != after.get("image") and isinstance(after.get("image"), str):
+                target["image"] = after["image"]
         return target
     if collection == "makers":
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",

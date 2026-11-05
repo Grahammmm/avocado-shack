@@ -25,7 +25,7 @@ def record(before=None, **after):
     return {"collection": "products", "key": "p-1", "before": before, "after": product(**after)}
 
 
-def store(checked=CHECKED):
+def store(checked: str | None = CHECKED):
     return {"selection_checked_on": checked} if checked else {}
 
 
