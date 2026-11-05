@@ -1605,3 +1605,11 @@ Branch rb/rf1100-19. For Michael: `statebackup restore` and `drill` now publish 
 Checks: `python3 -B -m unittest hass.tests.test_statebackup_restore_atomic` ran 5 tests, OK; wider statebackup list in the PR body.
 
 Limits: fixture data only; rollback moves, preflight refusals and wording, the helper and the manifest are unchanged; no lock service or symlink-race redesign.
+
+## H10/H19 media verify checks web copies against their safe derivative (RF1100-20) — November 5, 2026
+
+Branch rb/rf1100-20 (RF1100-20). For Michael: `media.py verify` (and `health --media`) now compares each existing private web copy with the metadata-free bytes computed in memory from its hash-valid original. A changed, empty, truncated or metadata-restored web file is one `web content mismatch: <12 hex>` problem; an original the sanitizer refuses with a matching web file is `web unverifiable: <12 hex>`. `hass/media.py` (`verify_store` only); added `hass/tests/test_media_verify_web.py` (8 tests, 4 fail on the old `media.py`). Health still shows only the count.
+
+Checks: `python3 -B -m unittest hass.tests.test_media_verify_web` ran 8 tests, OK; the wider media/health list is recorded in the PR body.
+
+Limits: verification never writes or generates a web copy; a store with no web copy stays healthy; an original already bad is reported once and its web copy is not compared; sanitizer rules and `health.py` are unchanged.
