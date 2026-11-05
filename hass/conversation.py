@@ -705,6 +705,15 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
             return None
 
+    def _sources(self):
+        """AV1937-05: the worktree's real hikes by id (read-only) for a hike.repeat copy; None when unreadable (no exemption)."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            events = json.loads((wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
+            return {e["id"]: e for e in events if isinstance(e, dict) and isinstance(e.get("id"), str)} if isinstance(events, list) else None
+        except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
+            return None
+
     def _notes(self) -> list:
         """AV1102-09: the newest MAX_NOTES active non-alias memory rows as {"key", "text"}; any problem means none."""
         try:
@@ -716,6 +725,7 @@ class Conversation:
             return [{"key": r[0], "text": r[1]} for r in rows]
         except sqlite3.Error:
             return []
+
 
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
@@ -778,7 +788,7 @@ class Conversation:
             self._reply(f"Not drafted: {_reason(out)}")
             return "not-drafted"
         draft = out["draft"]
-        if hits := claims.unstated(draft, msg.text, self._makers(), self._routes()):  # NB-AV-05: an unstated claim asks, never drafts
+        if hits := claims.unstated(draft, msg.text, self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts
             self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
             return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]

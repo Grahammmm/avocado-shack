@@ -29,8 +29,9 @@ class PromptRuleTests(unittest.TestCase):
         rules = _rules(prompt)
         design = [line for line in rules if "design change" in line]
         self.assertEqual(len(design), 1)
-        self.assertEqual(rules[-2], design[0])  # after the photo rule, before the notes rule
-        self.assertIn("product.set_photo", rules[-3])
+        self.assertEqual(rules[-2], design[0])  # after photo/repeat rules, before the notes rule
+        self.assertIn("product.set_photo", rules[-4])
+        self.assertIn("hike.repeat", rules[-3])
         self.assertIn('"notes"', rules[-1])
         self.assertEqual(prompt.count(DESIGN_UNSUPPORTED), 1)
         found = re.search(r"\{\"unsupported\": \"[^\"]*\"\}", design[0])
