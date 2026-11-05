@@ -146,7 +146,7 @@ function summarize(occurrences) {
   return { counts, failures };
 }
 
-if (require.main !== module) { module.exports = { LIN, lum, contrastRatio, ratioOfLum, thresholdFor, isLarge, parseColor, over, backing, effectiveFg, hex, nearestPassing, nearestExhaustive, recommend, assess, summarize, LARGE_PX }; return; }
+if (require.main !== module) { module.exports = { LIN, lum, contrastRatio, ratioOfLum, thresholdFor, isLarge, parseColor, over, backing, effectiveFg, hex, nearestPassing, nearestExhaustive, recommend, assess, summarize, LARGE_PX, pageCollect }; return; }
 
 // =====================================================================================================
 // Browser collector (only when run directly)
@@ -218,7 +218,14 @@ function pageCollect(opts) {
       const cx = [0.1, 0.5, 0.9], hits = new Set(); let needsScroll = false;
       // elementsFromPoint only sees the viewport: an offscreen point is brought into view first (scroll restored afterwards).
       const rectNow = () => node ? (() => { const r = document.createRange(); r.selectNodeContents(node); return r.getBoundingClientRect(); })() : el.getBoundingClientRect();
-      const inView = (x, y) => x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight;
+      // A point is displayed only inside the browser viewport AND inside every overflow-clipping ancestor's box
+      // (a text run scrolled out of an overflow:auto/hidden container is invisible to elementsFromPoint even when its viewport coordinates are on screen).
+      const clippers = []; for (let c = el.parentElement; c; c = c.parentElement) { const s = getComputedStyle(c); if (s.overflowX !== 'visible' || s.overflowY !== 'visible') clippers.push([c, s.overflowX !== 'visible', s.overflowY !== 'visible']); }
+      const inView = (x, y) => {
+        if (!(x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight)) return false;
+        for (const [c, cx2, cy2] of clippers) { const b = c.getBoundingClientRect(); if (cx2 && (x < b.left || x > b.right)) return false; if (cy2 && (y < b.top || y > b.bottom)) return false; }
+        return true;
+      };
       // Every scroll position this sampling may change (window + each scrollable ancestor) is saved and put back before each
       // point, so all geometry is recomputed from the untouched layout and the page is left exactly as found.
       const saved = [[null, scrollX, scrollY]]; for (let x = el.parentElement; x; x = x.parentElement) if (x.scrollLeft || x.scrollTop || x.scrollWidth > x.clientWidth || x.scrollHeight > x.clientHeight) saved.push([x, x.scrollLeft, x.scrollTop]);

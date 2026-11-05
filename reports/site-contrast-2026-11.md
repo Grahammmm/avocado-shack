@@ -20,7 +20,7 @@ Measured text/background colour pairs the home page (with its catalog) and `/hik
 |---|---|
 | fixture site A (content as committed), published tree | `cebd4302f083b7e9 (192 files)` |
 | fixture site B (live notice + availability), published tree | `d01ca72a07c76bde (192 files)` |
-| storefront-mockup/site-contrast-qa.cjs | `5438ead0e85e83df` |
+| storefront-mockup/site-contrast-qa.cjs | `f87bd9d166f4fa64` |
 | storefront-mockup/site-contrast-qa.py | `7a94c89eaeeeb9e5` |
 
 ## Result
