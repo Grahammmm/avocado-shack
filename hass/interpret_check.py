@@ -10,6 +10,7 @@ pair; it is checked after the shape check and before op/field checks, so a repea
 import json
 import unicodedata
 
+from hass.content_model import FORBIDDEN_TEXT
 from hass.editor import MAX_OPS
 
 HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
@@ -18,6 +19,9 @@ NAME_CUT = 40
 AGAIN = "Could you say it another way?"
 UNDO_GUIDANCE = ("To undo a change, send undo for the latest change, undo <code> for a specific change, "
                  "or history to see recent changes.")
+PRICE_REPLY = "The website does not show prices, so nothing was drafted. Send the change without the price."  # AV0222-03
+PLAIN_TEXT_REPLY = ("The website only accepts plain text, so nothing was drafted. "
+                    "Send the change without HTML or template marks.")
 WANTS = {"bool": "a yes/no", "int": "a whole number", "text_list": "a list of text"}
 
 
@@ -37,6 +41,14 @@ def _kind_ok(kind: str, value) -> bool:
     if kind == "bool": return isinstance(value, bool)
     if kind == "int": return isinstance(value, int) and not isinstance(value, bool)
     return False  # a kind this check does not know is never passed through
+
+
+def _forbidden_reply(kind: str, value):
+    """AV0222-03: PRICE_REPLY for '$', PLAIN_TEXT_REPLY for the other FORBIDDEN_TEXT marks, in a text or text_list value."""
+    for text in ([value] if kind == "text" else value if kind == "text_list" else []):
+        if "$" in text: return PRICE_REPLY
+        if any(bad in text for bad in FORBIDDEN_TEXT): return PLAIN_TEXT_REPLY
+    return None
 
 
 def _problem(result: dict, registry, pending_codes):
@@ -68,6 +80,8 @@ def _problem(result: dict, registry, pending_codes):
                 return f'I could not turn that into a change I know (unknown field "{label}"). {AGAIN}'
             if not _kind_ok(arg.kind, value):
                 return f"{label} should be {WANTS.get(arg.kind, 'text')}. {AGAIN}"
+            reply = _forbidden_reply(arg.kind, value)
+            if reply: return reply
     code = result["revises"]
     if code is not None and code not in pending_codes:
         return f"I could not find draft {_clean(code)} waiting; reply with the change again."

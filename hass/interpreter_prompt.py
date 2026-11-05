@@ -16,6 +16,7 @@ import json
 import re
 
 from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
+from hass.interpret_check import PRICE_REPLY
 from hass.sitegen import phone_text
 
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
@@ -43,6 +44,9 @@ RULES = (
     "If a product or maker is not clearly one listed entry, ask a question naming the candidates.",
     "Never add organic, origin, local or maker claims the owner did not write.",
     "Never guess dates, times, prices or quantities; ask a question instead.",
+    "The website shows no prices. Never write a price into any field. If the message's only change is a price, reply "
+    f'{{"unsupported": "{PRICE_REPLY}"}} exactly; do not return ops. If a requested text change includes a price, ask '
+    "the owner to resend it without the price; do not silently strip it or draft part of the message.",
     'The user message gives "today" (Pacific date) and "weekday". Work out words like "next Saturday" or "tomorrow" '
     "from them and write the exact date; if the day is still unclear, ask.",
     f"One message may hold several ops (at most {MAX_OPS}).",
