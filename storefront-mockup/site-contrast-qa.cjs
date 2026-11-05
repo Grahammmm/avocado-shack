@@ -216,9 +216,22 @@ function pageCollect(opts) {
     }
     if (!rec.exempt) {
       const cx = [0.1, 0.5, 0.9], hits = new Set();
+      // elementsFromPoint only sees the viewport: an offscreen point is brought into view first (scroll restored afterwards).
+      const sx = scrollX, sy = scrollY, rectNow = () => node ? (() => { const r = document.createRange(); r.selectNodeContents(node); return r.getBoundingClientRect(); })() : el.getBoundingClientRect();
+      const inView = (x, y) => x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight;
+      let sampled = 0;
       for (const fx of cx) for (const fy of [0.3, 0.7]) {
-        const x = rng.left + rng.width * fx, y = rng.top + rng.height * fy;
-        if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
+        let r = rng, x = r.left + r.width * fx, y = r.top + r.height * fy;
+        if (!inView(x, y)) {
+          window.scrollTo({ left: Math.max(0, x + sx - innerWidth / 2), top: Math.max(0, y + sy - innerHeight / 2), behavior: 'instant' });
+          r = rectNow(); x = r.left + r.width * fx; y = r.top + r.height * fy;
+          if (!inView(x, y)) { // nested scroll container (e.g. a horizontally scrolling filter row): scroll the element itself
+            el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+            r = rectNow(); x = r.left + r.width * fx; y = r.top + r.height * fy;
+          }
+          if (!inView(x, y)) continue; // never displayable (off-canvas skip link, closed dialog parts): no backing to sample
+        }
+        sampled++;
         const stack = document.elementsFromPoint(x, y);
         // pointer-events:none text never appears in the stack: then every box found there is treated as beneath it.
         let seen = !stack.some(s => s === el || el.contains(s));
@@ -230,6 +243,7 @@ function pageCollect(opts) {
           if (seen && stopped && s.contains(stopped)) break;
         }
       }
+      if (scrollX !== sx || scrollY !== sy) window.scrollTo({ left: sx, top: sy, behavior: 'instant' });
       const covered = [...hits].find(h => h.startsWith('covered by'));
       if (covered) rec.unsupported = 'text overlapped by another box (' + covered + ')';
       else if (hits.size) imageBacked = (imageBacked ? imageBacked + '; ' : '') + 'overlapping ' + [...hits].slice(0, 2).join(', ');
