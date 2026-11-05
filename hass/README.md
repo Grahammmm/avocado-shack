@@ -218,7 +218,7 @@ Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.
 
 ## Owner-visible behaviour added by AV1102 (ledger: `BUILD_LEDGER.md`)
 
-- Shelf check (AV1102-01): a word such as Available today is shown only for products named in the latest check; others read `Last confirmed <day>`.
+- Shelf check (AV1102-01): each product carries its own confirmed word and day. A word such as Available today shows only when that day is the latest shelf-check day and the check is not stale (more than 7 days old); otherwise the card reads `Last confirmed <its day>`. A product with no valid confirmed word or day shows no label. Both the check naming the product and `product.set_availability` (allowed only after today's check) set the word and day, so a product the check did not name can also show a current word.
 - `status` (AV1102-05) shows a `Shelf check: <day>` line; `report` (AV1102-11) ends with a `Waiting for you` block.
 - `margin <cost> for <n> at <m>%` (AV1102-12) replies with a price idea; nothing is stored.
 - Interpreter prompt: product brands (AV1102-06), current home-page text (AV1102-07), design requests answered as unsupported (AV1102-08), and saved notes sent as preferences, never as proof of a claim (AV1102-09).
