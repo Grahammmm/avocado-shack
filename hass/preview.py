@@ -85,8 +85,16 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
                 "intro": after.get("intro"), **line,
                 "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), today)}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
-    return {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
-            "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
+    target = {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
+              "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
+    if event and after.get("status") == "scheduled":  # AV1222-05: the card's date, Meet and places lines, and AV0207-01 fields
+        before, cap = record.get("before") or {}, after.get("capacity")
+        target.update(startsAt=after.get("startsAt"), meetingPoint=after.get("meetingPoint") or "",
+                      capacity=cap if isinstance(cap, int) and not isinstance(cap, bool) else None,
+                      rsvpEnabled=after.get("rsvpEnabled") is True,
+                      changed={k: after[k] for k in ("meetTime", "meetingAddress", "returnTime", "walkTime")
+                               if isinstance(after.get(k), str) and after[k].strip() and before.get(k) != after[k]})
+    return target
 
 
 def _free_port() -> int:

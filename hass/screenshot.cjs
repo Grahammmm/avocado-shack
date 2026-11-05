@@ -26,7 +26,26 @@ const allowed=req=>{
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
     if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
-      if(target.status==='scheduled')checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
+      if(target.status==='scheduled'){
+        checks.eventShown=await page.locator('h3',{hasText:target.title}).count()>0;
+        const ws=v=>String(v).replace(/\s+/g,' ').trim();  // AV1222-05: the card is found in page JS (title equal, then the RSVP button's id)
+        const cards=await page.$$eval('.hike-event',(els,t)=>els.filter(c=>c.querySelector('h3')?.textContent===t.title).map(c=>({
+          mine:c.querySelector('[data-rsvp]')?.dataset.rsvp===t.id,text:c.textContent.replace(/\s+/g,' ').trim(),
+          date:c.querySelector('.hike-date')?.textContent,
+          meet:[...c.querySelectorAll('dt')].filter(d=>d.textContent==='Meet').map(d=>d.nextElementSibling?.textContent),
+          places:[...c.querySelectorAll('p.club-small')].map(p=>p.textContent)})),target);
+        const card=cards.length>1?cards.find(c=>c.mine):cards[0];
+        if(!card)checks.eventShown=false;
+        else if('startsAt' in target){  // community.js keeps hikeDate private (IIFE), so its dateLabel/hikeDate format is mirrored here
+          const when=new Date(target.startsAt),pt=o=>when.toLocaleString('en-US',{timeZone:'America/Los_Angeles',...o});
+          checks.dateShown=card.date===(when<=new Date()?`Today — started ${pt({hour:'numeric',minute:'2-digit'})}`:pt({weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}));
+          checks.meetShown=target.meetingPoint?card.meet.length===1&&card.meet[0]===target.meetingPoint:card.meet.length===0;
+          const n=target.capacity,open=target.rsvpEnabled&&!!target.meetingPoint;
+          const want=!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
+          checks.placesShown=card.places.length===1&&card.places[0]===want;
+          const ch=Object.values(target.changed||{});if(ch.length)checks.fieldsShown=ch.every(v=>card.text.includes(ws(v)));
+        }
+      }
       else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
         const recaps=await page.locator('#past-hikes .past-hike').evaluateAll((els,title)=>els.filter(d=>
           d.querySelector('summary span')?.textContent===title).map(d=>d.querySelector(':scope>p')?.textContent),target.title);
