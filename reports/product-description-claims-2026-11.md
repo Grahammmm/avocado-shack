@@ -1,7 +1,7 @@
 # Product description claims — recorded sources (AV1104-11)
 
 - Report date: 2026-11-05
-- Audited main SHA: `d61b69678d4855d2e0e32b61cd7da4440c14d4fd` (full)
+- Audited main SHA: `942a463b0ff2cd5f07e13ba70b35c3f2a42aa141` (full)
 - Canonical inputs: `hass/content/products.json` (active records only); recorded-source families: `storefront-mockup/producer-research-log.json`, `hass/content/makers.json` (maker key and place), `storefront-mockup/new-products.json` and `storefront-mockup/completion-new-products.json` (matching stable ids).
 - Selection rule: every sentence of an active product description that asserts a product-specific checkable fact: a maker, farm or town; a family operation; raw, cultured or aged state; manufacture or process; an ingredient or composition; organic status in prose; or alcohol/caffeine absence. Taste, texture, metaphor, cooking and serving suggestions are excluded unless they also assert such a fact (“Eat one raw” is advice; “Raw and unfiltered” is a claim). A place inside a blend name is not treated as production origin.
 - Order rule: the nine shelves in the site’s filter-button order (Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread, Flowers, from `storefront-mockup/index.html` L23); within a shelf, the canonical active-record order of `products.json`, never alphabetical. A product sits on the shelf of its `category`, so some products sit on a shelf their name does not suggest (for example tortilla chips and cantaloupe are on Vegetables, Gouda is on Dairy).
@@ -930,4 +930,3 @@ The owner decides each of these; nothing here is a proposed rewrite or an approv
 2. Sean’s Muesli Munch (“from San Luis Obispo”): decide whether the San Luis Obispo place in `makers.json` is enough, because the research result for that query belongs to unrelated Munch businesses.
 3. Dream Girl Decaf, Zero non-alcoholic cider, Rye bread and Mortadella: decide what evidence is wanted for decaffeinated, non-alcoholic, rye and mortadella.
 4. Maple Valley syrup (“from a Wisconsin cooperative”) and Joebella / Avocado Shack coffee: decide whether maker-level records are enough for a product-level sentence.
-
