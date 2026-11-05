@@ -1,7 +1,10 @@
 """Hass history op (H06): ``history.revert`` undoes one applied change as a new, conflict-checked inverse change.
 
 Only the records that change touched are set back, and only when each still holds the value that change wrote, so
-later edits to other records are kept. A record the change created is hidden/cancelled, never deleted, except an added
+later edits to other records are kept. The store is one record, but undo is field-selective: only the store fields
+that change wrote (hours, streetAddress, town, intro, headline, story, homeImage, notice, phone, selection_checked_on)
+are set back and checked, so later edits to other store fields are kept; a later differing value in one of those
+fields is a conflict. A field's value (a notice with its dates, the hours list) is one indivisible unit. A record the change created is hidden/cancelled, never deleted, except an added
 route idea (no hidden state), which is removed. The A2 writer
 sets ``revertedBy`` on the original change record once the revert is committed.
 An undo of an undo is refused, so the original keeps ``revertedBy``; to bring a change back, ask for it again.
@@ -52,6 +55,22 @@ def _put(content, collection, key, value):
             del items[index]
         else:
             items[index] = value
+
+
+_MISSING = object()  # a store key that is absent (distinct from an explicit null)
+
+
+def _store_write_set(records):
+    """Top-level store keys whose presence or value differs between before and after, over one change's store records."""
+    keys = set()
+    for record in records:
+        before, after = record["before"], record["after"]
+        keys |= {k for k in before.keys() | after.keys() if before.get(k, _MISSING) != after.get(k, _MISSING)}
+    return keys
+
+
+def _store_shape_ok(record):
+    return record["key"] == "store" and isinstance(record["before"], dict) and isinstance(record["after"], dict)
 
 
 def _well_formed(change):
@@ -129,6 +148,10 @@ def _revert(content, args, ctx):
     if any(call.get("op") == "history.revert" for call in ops):
         return Refused(f"{change_id} is an undo; to bring the change back, ask for it again")
     first, last = {}, {}  # per record: the value before the change and the value the change finally wrote
+    store_records = [r for r in change.get("records") or [] if r["collection"] == "store"]
+    if not all(_store_shape_ok(r) for r in store_records):
+        return Refused(f"{change_id} record is malformed")
+    write_set = _store_write_set(store_records)
     for record in change.get("records") or []:
         ref = (record["collection"], record["key"])
         first.setdefault(ref, record["before"])
@@ -138,12 +161,22 @@ def _revert(content, args, ctx):
     if not all(_before_ok(collection, before) for (collection, _), before in first.items()):
         return Refused(f"{change_id} record is malformed")
     for (collection, key), after in last.items():
-        if _current(content, collection, key) != after:
+        if collection == "store":
+            if any(content.store.get(k, _MISSING) != after.get(k, _MISSING) for k in write_set):
+                return Refused(f"conflict: {collection} {key} changed after {change_id}")
+        elif _current(content, collection, key) != after:
             return Refused(f"conflict: {collection} {key} changed after {change_id}")
     touched, pending = [], []  # pending: guest warnings, added only once the whole undo is drafted
     for (collection, key), before in first.items():
         current = copy.deepcopy(_current(content, collection, key))
-        if before is not None:
+        if collection == "store":  # only the fields this change wrote; every other current field stays
+            value = copy.deepcopy(current)
+            for k in write_set:
+                if k in before:
+                    value[k] = copy.deepcopy(before[k])
+                else:
+                    value.pop(k, None)
+        elif before is not None:
             value = copy.deepcopy(before)
             if collection == "events":
                 if "capacity" in value:
