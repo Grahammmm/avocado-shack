@@ -4,7 +4,7 @@ These are the only messages Hass treats as commands. Send each one as the whole 
 do not matter (`YES A1B2` is the same as `yes a1b2`). Codes are the short codes Hass puts in its replies; `A1B2` below
 is only a placeholder.
 
-A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work).
+A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work). A trailing `?` is also ignored, but only for the read-only commands `status`, `history`, `report`, `memory`, `find`, `show`, `post`, `listing`, `hidden`, `margin` and `help` (`status?`, `find eggs?` and `show a1b2?` work). A `?` never runs `yes`, `no`, `undo`, `stop`, `resume`, `remember`, `forget` or `alias`.
 The two note commands are stricter:
 
 - `remember <key>: <text>` saves the text exactly as sent, so its capitals and any final `.` or `!` are kept.
@@ -45,6 +45,14 @@ A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b
 | `help` (or `commands`, `?`) | Replies a short list of every command with one example each. It changes nothing. | `help` |
 
 Saved notes never change the site, and pause does not affect them.
+
+Cancelling a hike (a change request, needs `yes <code>`; not the `cancel <code>` command above, which only rejects a
+waiting draft): say it in your own words, for example "cancel the Point Buchon hike, rained out - we will pick a new
+date soon". `hike.cancel` takes the hike id and an optional `note`, for example `Rained out - we will pick a new date soon`.
+The note is one line of plain text, at most 160 characters, and is public site copy: the cancelled hike's card shows it
+exactly as written, above "This hike is cancelled." It is checked like other hike text (no markup, `$` or invisible
+characters), and any claim in it, such as a distance or "organic", must come from your own message. Without a note the
+card is unchanged. Cancelling notifies nobody. `undo` brings the hike back as scheduled and removes the note.
 
 Photos: send one photo per message, as JPEG or PNG, up to 20 MB. A phone photo's rotation is kept, so it shows upright
 (only that rotation tag is kept, never its location, camera or date); only a PNG with a rotation tag is refused. Any

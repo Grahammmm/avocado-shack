@@ -97,6 +97,14 @@ class CommandsDocTest(unittest.TestCase):
         self.assertEqual(conv.parse_memory("remember Parking: Use the back lot!"),
                          ("remember", "parking", "Use the back lot!"))
 
+    def test_commands_note_section(self):
+        """AV2152-07: the prose after the table describes the optional hike.cancel note (it adds no parser verb)."""
+        doc = " ".join(DOC.read_text("utf-8").split())
+        for phrase in ("`hike.cancel` takes the hike id and an optional `note`", "`Rained out - we will pick a new date soon`",
+                       "one line of plain text, at most 160 characters", "public site copy", "above \"This hike is cancelled.\"",
+                       "Cancelling notifies nobody", "removes the note", "not the `cancel <code>` command"):
+            self.assertIn(phrase, doc)
+
 
 if __name__ == "__main__":
     unittest.main()

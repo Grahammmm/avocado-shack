@@ -41,8 +41,9 @@ class HelpTextTests(unittest.TestCase):
     def test_help_wordings_parse_and_lookalikes_do_not(self):
         for text in ("help", "Help!", "commands.", "?", " HELP ", "Commands!"):
             self.assertEqual(conversation.parse_command(text), ("help", None), text)
-        for text in ("help me with avocados", "help a1b2", "??", "what?", "help?", "command"):
+        for text in ("help me with avocados", "help a1b2", "??", "what?", "command"):
             self.assertIsNone(verb(text), text)
+        self.assertEqual(conversation.read_command("help?"), ("help", None))  # AV1352-05: a read-only command
 
 
 class HelpConversationTests(ConversationTestCase):

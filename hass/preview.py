@@ -47,6 +47,8 @@ def _readable(record) -> bool:
     notice = after.get("notice") if collection == "store" else None
     if not (notice is None or isinstance(notice, dict) and isinstance(notice.get("text"), (str, type(None)))):
         return False
+    if collection == "events" and "cancelNote" in after and not isinstance(after["cancelNote"], str):
+        return False
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
 
 
@@ -89,6 +91,8 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
     target = {"kind": "event", "title": after.get("title", ""), "status": after.get("status") if event else None,
               "id": (record.get("key") or "") if event else "", "recap": (after.get("recap") or "") if event else ""}
+    if event and "cancelNote" in after:  # AV2152-07: only a stored note adds the field; no-note targets are unchanged
+        target["cancelNote"] = after["cancelNote"]
     if event and after.get("status") == "scheduled":  # AV1222-05: the card's date, Meet and places lines, and AV0207-01 fields
         before, cap = record.get("before") or {}, after.get("capacity")
         target.update(startsAt=after.get("startsAt"), meetingPoint=after.get("meetingPoint") or "",

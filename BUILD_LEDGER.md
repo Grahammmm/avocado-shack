@@ -1757,3 +1757,123 @@ Branch rb/rf1100-20 (RF1100-20). For Michael: `media.py verify` (and `health --m
 Checks: `python3 -B -m unittest hass.tests.test_media_verify_web` ran 8 tests, OK; the wider media/health list is recorded in the PR body.
 
 Limits: verification never writes or generates a web copy; a store with no web copy stays healthy; an original already bad is reported once and its web copy is not compared; sanitizer rules and `health.py` are unchanged.
+
+## Site: catalog search matches shelf names and Organic (AV1222-01) — November 5, 2026
+
+Branch rb/av1222-01 (AV1222-01, PR #412, merged as 8c8dace13bf2cd7f15feed8097f08f293af2b97d). For guests: the catalog search also matches each card's shelf name and its Organic badge, so `organic`, `flowers` or `dairy & cheese` find cards; descriptions, the search text cap, the address and the `?q=` restore are unchanged. `storefront-mockup/shop.js`, `storefront-mockup/catalog-only-qa.cjs`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright QA_OUT_DIR=<tmp> PREVIEW_URL=<local server> node storefront-mockup/catalog-only-qa.cjs` against a local community server exited 0 with all 170 cards, as recorded in the PR; no Python test pins shop.js. PREPUSH-TESTS NOT-RUN.
+
+Limits: only the shelf name and the Organic badge were added to what search reads; the other filters and the sort are unchanged.
+
+## H06 product result check reads availability and photo (AV1222-02) — November 4, 2026
+
+Branch rb/av1222-02 (AV1222-02, PR #403, merged as 6489f3d9c1a0e3974f8b186dc53c377aa6391119). For Michael: a product change's result check also compares the card's availability word with the record and, after a photo change, the card image with the new image. A failed check reaches him through the existing `check failed` reply. `hass/preview.py`, `hass/screenshot.cjs`, `hass/conversation.py`, `hass/editor.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_product_checks hass.tests.test_preview hass.tests.test_preview_target_shapes hass.tests.test_preview_checks_shape` ran 29 tests, OK (recorded in PR #403).
+
+Limits: the stale-word rule is not re-implemented (the site's own label function decides); a product with no store check has no availability check; the product page itself is not read.
+
+## H06 store result check reads intro and selection line (AV1222-03) — November 5, 2026
+
+Branch rb/av1222-03 (AV1222-03, PR #407, merged as 8b416bf555b2f326fbcb0a26e5903652295dacf0). For Michael: the store change result check also finds the home-page intro and, after `store.confirm_selection`, the `Selection last checked` line; the failed check is named in the reply. `hass/preview.py`, `hass/screenshot.cjs`, `hass/owner_answers.py`, `hass/conversation.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_store_checks hass.tests.test_preview_store_address hass.tests.test_preview_target_shapes hass.tests.test_owner_answers hass.tests.test_owner_answers_shapes -v` OK (recorded in PR #407). prepush.py was not run.
+
+Limits: only the intro and the selection line were added; unknown check names are not shown to the owner; the notice check is unchanged.
+
+## H13 store phone (AV1222-04) — November 5, 2026
+
+Branch rb/av1222-04 (AV1222-04, PR #428, merged as 87a5611c72c2c10f5855a86c88722ae5a492a499). For Michael: `store.set_phone` takes a ten-digit US number in any common spacing and the Visit block shows it as a tap-to-call link; the stale selection line then offers the number to call; `store.clear_phone` removes it and undo restores the earlier value; a failed check is named as the phone number. The phone is described here in words and no number is quoted. `hass/ops/store.py`, `hass/content_model.py`, `hass/sitegen.py`, `hass/owner_answers.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_store_phone hass.tests.test_store_ops hass.tests.test_selection_checked hass.tests.test_content hass.tests.test_interpreter_prompt_store hass.tests.test_preview_target_shapes hass.tests.test_preview_store_checks hass.tests.test_interpreter_prompt_design` ran 89 tests; after the test_content fixture fix, `hass.tests.test_content hass.tests.test_store_phone` ran 31 tests, OK (recorded in PR #428). PREPUSH-TESTS NOT-RUN.
+
+Limits: US numbers only; the demo content has no phone, so the generated pages are unchanged until Michael sets one.
+
+## H06 hike result check reads date, meet and places (AV1222-05) — November 5, 2026
+
+Branch rb/av1222-05 (AV1222-05, PR #440, merged as bc2bf8013e9120b95e4a39ebe854d56b08c6eeb0). For Michael: a scheduled hike's result check compares the card's date line, Meet line, places-left line and the changed meeting fields with the record, not only the title. `hass/preview.py`, `hass/screenshot.cjs`, `hass/tests/test_preview_hike_results.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_hike_results` ran 19 tests, OK (recorded in PR #440).
+
+Limits: cancelled and completed hikes keep their earlier check; the date format is mirrored from community.js, so a format change there fails the check loudly; `screenshot.cjs` went a few lines over its budget.
+
+## H06 route idea result check (AV1222-06) — November 5, 2026
+
+Branch rb/av1222-06 (AV1222-06, PR #464, merged as ac12687cf00e07c8fd6d892f75a97ca81c22657f). For Michael: a route idea change is checked where /hike shows the route (a linked hike's Route line or the sample invitation); a hidden route needs no place; a route shown nowhere is said in the reply and is not reported as checked. `hass/preview.py`, `hass/screenshot.cjs`, `hass/conversation.py`, `hass/owner_answers.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_route_results hass.tests.test_preview_target_shapes` ran 23 tests, OK (recorded in PR #464). PREPUSH-TESTS NOT-RUN.
+
+Limits: a route shown nowhere gets no content check; hidden is read from the route's status as it is on main.
+
+## H09 photo demo with the real previewer (AV1222-07) — November 4, 2026
+
+Branch rb/av1222-07 (AV1222-07, PR #408, merged as 867e8d0cb444a672e133fc5ec611f02f1dc3d61b). Test only: the photo demo (photo and caption, draft, yes, undo, yes) runs once through the real Chromium previewer, reading the check results from the captures, not the reply text. `hass/tests/test_demo_browser_photo.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_demo_browser_photo hass.tests.test_demo_browser hass.tests.test_demo_transcript_photo -v` (recorded in PR #408; the new tests take about 25 s).
+
+Limits: the class skips when `PLAYWRIGHT_MODULE` is unset; the fixture is unchanged; no production code changed.
+
+## H04/H05 interpreter prompt lists scheduled hike details (AV1222-08) — November 4, 2026
+
+Branch rb/av1222-08 (AV1222-08, PR #389, merged as 93b49a409da8bec3fabdbdce3baede86ad29629d). The prompt lists each scheduled hike's meeting point, capacity, bring and access note (at most 12, then an ask-the-owner line), so "also bring sunscreen" can become a whole-text hike.update built from the current value. `hass/interpreter_prompt.py`, `hass/tests/fixtures/interpreter-prompt.txt`.
+
+Checks at PR head 485ed2b: `python3 -B -m unittest hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_community hass.tests.test_interpreter_prompt_shapes hass.tests.test_interpreter_cap hass.tests.test_interpreter_request_encode -v` plus the other prompt tests ran 128 tests, OK (recorded in PR #389). PREPUSH-TESTS NOT-RUN.
+
+Limits: `PROMPT_MAX_BYTES` is not raised, and the worst case with every catalog text at its limit was already over it before this unit; no clock, guest names or RSVP data are in the prompt.
+
+## H09 interpreter eval set v5 (AV1222-09) — November 5, 2026
+
+Branch rb/av1222-09 (AV1222-09, PR #434, merged as d61b69678d4855d2e0e32b61cd7da4440c14d4fd). Six more cases (phone set and clear, short number asks, and whole-text hike.update for bring, access note and meeting point) take the set from 63 to 69; the new events fixture is laid over a copy of the content and never written. `hass/tests/test_interpreter_eval.py` and `hass/tests/test_interpreter_eval_out.py` count pins moved.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out -v` ran 42 tests, OK (recorded in PR #434).
+
+Limits: the six reply rows are synthetic and no recorded model run is claimed; it runs without a model.
+
+## F03 saved purchase cost per product (AV1222-10) — November 4, 2026
+
+Branch rb/av1222-10 (AV1222-10, PR #390, merged as aaf7d30981e6d64e08dff51bf5ce7e7d42cd7f84). For Michael: `cost <id>: <pack cost> for <units>` saves a cost per product (a bad field is named; the same cost again changes nothing) and `margin <id> at <M>%` reads it. The cost is private; it is never on the website, and the notes reader skips `cost.` keys so it never reaches the interpreter. No cost is quoted here. `hass/conversation.py`, `docs/hass/COMMANDS.md`.
+
+Checks at PR head b0de00a5: `python3 -B -m unittest hass.tests.test_purchase_cost hass.tests.test_margins hass.tests.test_memory_chat hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation -v` ran 64 tests, OK (recorded in PR #390). PREPUSH-TESTS NOT-RUN.
+
+Limits: the older pack-cost form of margin still works and is unchanged; a generic remember of a cost key is refused.
+
+## F07 post hike command (AV1222-11) — November 4, 2026
+
+Branch rb/av1222-11 (AV1222-11, PR #399, merged as ddaad23f7880697c0e0c92cc78b50c6562517242). For Michael: `post hike <id>` replies with the hike's social draft in chat. Draft only; nothing is posted, nothing is stored, and it works while paused. `hass/conversation.py`, `hass/tests/test_post_hike_command.py`.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_post_hike_command hass.tests.test_post_command hass.tests.test_social_draft_hike hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation` ran 55 tests, OK (recorded in PR #399).
+
+Limits: `hass/social_draft.py` is unchanged; the help line is shorter than the spec wording because of the 70-character help limit.
+
+## H25 phone guide and limits for phone, cost and post hike (AV1222-12) — November 5, 2026
+
+Branch rb/av1222-12 (AV1222-12, PR #438, merged as 72dbe74448537346c4fcc81768ec034267177ca8). Docs and constants: `docs/hass/PHONE_GUIDE.md` explains the store phone, `post hike` and the private prices pair; `docs/hass/LIMITS.md` gains a Phone and prices section tied to code constants (`PHONE_DIGITS`, the pack cost maximum and the unit range).
+
+Checks at PR head 743ca102c01a: `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc hass.tests.test_margins hass.tests.test_store_phone` ran 41 tests, OK, 2 skipped (recorded in PR #438). PREPUSH-TESTS NOT-RUN.
+
+Limits: the guide keeps its 110-line cap and section order; no limit value or error message changed.
+
+## H03/H17 hidden command lists hidden products and makers (AV1222-13) — November 4, 2026
+
+Branch rb/av1222-13 (AV1222-13, PR #409, merged as ab2f6cd318411dcbdfb48485815a048d1b2a2c4a). For Michael: `hidden` lists hidden products by id and hidden makers by key (at most 20 lines, then a count of the rest) with the restore line, or says nothing is hidden. Read-only, works while paused. `hass/conversation.py`, `hass/tests/test_hidden_command.py`.
+
+Checks at PR head e123c6dd: `python3 -B -m unittest hass.tests.test_hidden_command hass.tests.test_find hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation` ran 48 tests, OK (recorded in PR #409). prepush.py not run.
+
+Limits: held products and visible makers never appear; the list reads stored text without the full content validation, so a name with markup shows as stored.
+
+## Site: Clear filters button in the catalog (AV1222-14) — November 5, 2026
+
+Branch rb/av1222-14 (AV1222-14, PR #425, merged as 8a53dcfd861791204a26ca2f22cd0244eed8d285). For guests: a Clear filters button shows whenever a shelf, search, maker, from or available filter is set (also in the empty state); it resets all five, drops them from the address (other parameters and the hash stay) and returns focus to the search box. `storefront-mockup/shop.js`, `storefront-mockup/style.css`, regenerated `storefront-mockup/index.html`, `storefront-mockup/catalog-only-qa.cjs`.
+
+Checks at PR head: `node storefront-mockup/catalog-only-qa.cjs` against a local server exited 0 with all 170 cards, and `python3 -B -m unittest hass.tests.test_catalog_clear_filters hass.tests.test_selection_checked hass.tests.test_generated_targets -v` ran 21 tests, OK (recorded in PR #425). PREPUSH-TESTS NOT-RUN.
+
+Limits: the hidden button keeps its space so desktop does not shift; no other filter behaviour changed.
+
+## Site: drop dead commerce CSS (AV1222-15) — November 5, 2026
+
+Branch rb/av1222-15 (AV1222-15, PR #432, merged as 02465a63ddbba690f2d67d9431fd11ed891d2344). No visible change: `storefront-mockup/style.css` loses only rules whose every selector matches nothing the site builds (merch, weekly, box, price, cart and quantity classes); no live selector was touched. New `hass/tests/test_style_no_commerce.py` fails if they return.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_style_no_commerce hass.tests.test_design_check hass.tests.test_selection_checked hass.tests.test_generated_targets` ran 40 tests, OK; `storefront-mockup/catalog-only-qa.cjs` exited 0 (recorded in PR #432). The new test was red on the old style.css.
+
+Limits: no before/after screenshots were taken; the design checker flags only the new test file; archive and QA scripts are untouched.

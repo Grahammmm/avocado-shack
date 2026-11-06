@@ -27,7 +27,7 @@ class DefaultBrandTests(CatalogTestCase):
         repo.apply(draft["draft"])
         added = repo.products()[-1]
         self.assertEqual(list(added), ["id", "name", "brand", "category", "image", "description", "producerKey",
-                                       "displayBrand", "status"])
+                                       "displayBrand", "status", "addedOn"])  # AV1622-06: every add records addedOn
         self.assertEqual((added["brand"], added["displayBrand"]), ("Test Orchard", "Test Orchard"))
         self.assertEqual(repo.catalog()[-1]["displayBrand"], "Test Orchard")
 
