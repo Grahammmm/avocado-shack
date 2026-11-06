@@ -200,6 +200,16 @@ class VerifyTest(unittest.TestCase):
         problems = self.run_verify(plan=plan, needs=self.NEEDS, records={"quick": record("quick", ["test_b"], 2)})
         self.assertIn("job hass result success, expected skipped", problems)
 
+    def test_affected_plan_always_runs_the_private_file_guard(self):
+        from unittest import mock
+        modules = sorted(set(MODULES) | {cs.SMOKE, cs.PRIVACY_GUARD})
+        texts, edges = graph(TREE)
+        with mock.patch.object(cs, "changed_paths", return_value=["branding/customer-export.db"]), \
+                mock.patch.object(cs, "build_graph", return_value=(texts, edges)):
+            plan = cs.make_plan("pull_request", "base", 4, {}, modules)
+        self.assertEqual(plan["tier"], "affected")
+        self.assertIn(cs.PRIVACY_GUARD, plan["shards"][0])
+
     def test_plan_round_trips_through_json(self):
         self.assertEqual(json.loads(json.dumps(self.FULL)), self.FULL)
 

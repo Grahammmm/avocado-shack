@@ -21,7 +21,7 @@ The rule, applied per changed path (renames count under both names). The first m
                                                        checks, which run on every PR)
        any other unreached path                     -> FULL (unmapped)
   4. If the selection weighs more than AFFECTED_MAX_SECONDS of measured test time -> FULL.
-The smoke module (this file's own tests) is always in the affected selection, so the runner is exercised on
+The smoke module (this file's own tests) and test_tracked_private (the repo-wide private-file guard) are always in the affected selection, so the runner is exercised on
 every PR. Main never relies on this map: push, schedule and dispatch are always FULL.
 
 Commands:
@@ -54,6 +54,7 @@ DEFAULT_WEIGHT = 3  # seconds for a module with no measurement yet
 AFFECTED_MAX_SECONDS = 240  # past this, the affected tier would be no faster than a full shard
 SHARED_FRACTION = 0.5
 SMOKE = "test_ci_shards"
+PRIVACY_GUARD = "test_tracked_private"  # repo-wide: any newly tracked private path must fail every PR, affected or full
 
 FULL_PREFIXES = (".github/", "hass/ops/", "hass/content/", "hass/templates/")
 FULL_FILES = {"hass/__init__.py", "package-lock.json"}
@@ -324,6 +325,7 @@ def make_plan(event, base, shards, weights, modules=None):
                 reason = why
             else:
                 selected.add(SMOKE)
+                selected.update({PRIVACY_GUARD} & set(modules))
                 cost = sum(weight(n, weights) for n in selected)
                 if cost > AFFECTED_MAX_SECONDS:
                     selected, reason = None, (f"affected selection ({cost}s measured) is over "
