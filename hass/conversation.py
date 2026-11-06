@@ -16,6 +16,7 @@ from hass import editor as editor_mod, memory as memory_mod, migration_check, pr
 from hass import claims, interpret_check, label_reader, margins, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
 from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
+from hass.social_message import classify_social  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
@@ -105,6 +106,7 @@ TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed":
                "verified": {"reverted"}}
 INTERRUPTED = "interrupted; not applied; approve a new draft"
 NOTHING = "Nothing is waiting for approval."
+SOCIAL_REPLY = "Nothing changed. Send a change in plain words, or help."  # AV0007-07
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
 LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
@@ -663,7 +665,12 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         keyword = parse_keyword(msg.text) or coded
-        if keyword is None and (near := parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
+        social = classify_social(msg.text) if keyword is None and parse_near(msg.text) is None else None  # AV0007-07
+        if social == "social":  # thanks, a greeting or emoji only: no interpreter call, draft or usage count
+            self._reply(SOCIAL_REPLY)
+            self._record(msg, "social")
+            return "social", None
+        if keyword is None and (near := "" if social == "near" else parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
             codes = [r["code"] for r in self._drafts("state = 'proposed'")
                      if self._expiry(r) > now and near in ("", r["code"])]
             self._reply(f"Nothing was applied. To apply {codes[0]}, reply yes {codes[0]}." if len(codes) == 1 else
