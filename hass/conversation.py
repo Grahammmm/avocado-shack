@@ -21,7 +21,7 @@ LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
 KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
 NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds good|looks good)(?: ([0-9a-f]{4,12}))?")  # H05
-COMMAND_RE = re.compile(r"(history)|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
+COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
                         r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
                         r"|(resume)(?: changes)?|(help|commands|\?)"
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
@@ -35,7 +35,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as 
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
     'status (or did it work?) - last change, waiting drafts: "status"',
-    'history - the last five changes: "history"',
+    'history [words] - recent or matching changes: "history hours"',
     'undo [code] - draft an undo of an applied change: "undo a1b2"',
     'stop changes (or pause changes) - nothing applies: "stop changes"',
     'resume changes - let approvals apply again: "resume changes"',
@@ -65,6 +65,8 @@ LISTING_DESC_MAX = 120  # AV1622-09: characters of a product description in `lis
 LISTING_USAGE = "Send listing and an id from find."
 LISTING_NONE = "No listing with that id; send find <words>."
 LISTING_MANY = "That id matches more than one listing; send find <words>."
+HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX = 10, 60  # AV2152-02 (H06/H17): `history <words>`; docs/hass/COMMANDS.md
+HISTORY_USAGE = f"Send history and 1–{HISTORY_TEXT_MAX} characters, e.g. history opening hours."
 FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. find lion's mane."  # AV1537-04
 POST_USAGE = "Send post and a product id, e.g. post photo-product-001."  # AV1322-07
 HIKE_USAGE = "Send post hike and a hike id, e.g. post hike hike-2026-11-14-point-buchon (find <words> gives ids)."  # AV1222-11
@@ -365,6 +367,9 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[1]:  # AV2152-02: bare history stays (history, None); history <words> keeps the words in their own case
+        stripped = re.sub(r"[.!]+$", "", text.strip())
+        if stripped.lower() != "history": return "history", stripped[7:].strip()
     if match[18]: return "listing", re.sub(r"[.!]+$", "", text.strip())[7:].strip() if match[19] else ""  # AV1622-09: the id in its own case
     if match[17]: return "hidden", None  # AV1222-13
     if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
@@ -674,7 +679,8 @@ class Conversation:
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and (parse_keyword(msg.text) or coded) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"): expired = []  # H17: read-only
+        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing")
+                        or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         memory = None if command or msg.attachments > 0 else read_memory(msg.text)
         if memory and memory[0] == "memory": expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
@@ -1066,6 +1072,23 @@ class Conversation:
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
                     self._reply(answers.applied_text(row["code"], row["summary"], error=error))
 
+    def _history_search(self, query: str) -> str:
+        """AV2152-02: up to ten newest owner-approved changes whose summary holds every word; read-only."""
+        words = catalog._fold(query).split() if 1 <= len(query) <= HISTORY_TEXT_MAX and query.isprintable() else []
+        if not words:
+            self._reply(HISTORY_USAGE)
+            return "history"
+        found = []
+        for r in self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
+                                 "ORDER BY row_id DESC", HISTORY_STATES):
+            folded = catalog._fold(r["summary"])
+            if all(w in folded for w in words): found.append(r)
+            if len(found) >= HISTORY_SEARCH_MAX: break
+        self._reply("\n".join(["Matching changes:"] + [
+            f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
+            for r in found]) if found else f'No approved changes match "{query}".')
+        return "history"
+
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":
             self._reply(HELP_TEXT)
@@ -1078,6 +1101,7 @@ class Conversation:
         if verb == "margin": return self._margin(code)
         if verb == "hidden": return self._hidden()
         if verb == "listing": return self._listing(code)
+        if verb == "history" and code is not None: return self._history_search(code)
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
