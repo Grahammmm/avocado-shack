@@ -13,6 +13,7 @@ import unittest
 from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from hass import preview
 from hass.content_model import REPO_ROOT
@@ -27,10 +28,12 @@ ODD = 'Cass "Ridge" [loop]'
 EVENT_CHECKS = ("eventShown", "pastShown", "recapShown", "rsvpGone")
 
 
-def started_today():  # an hour ago, but never before Pacific midnight: the page shows a started hike on its own day only
-    from zoneinfo import ZoneInfo
-    now = datetime.now(ZoneInfo("America/Los_Angeles"))
-    return max(now - timedelta(hours=1), now.replace(hour=0, minute=0, second=0, microsecond=0)).astimezone(timezone.utc)
+def started_today():
+    """A start already passed but on today's Pacific date: community.js lists a started hike only on its own Pacific
+    day, so a fixed "an hour ago" falls on yesterday between 00:00 and 01:00 Pacific and the card disappears."""
+    now = datetime.now(timezone.utc)
+    midnight = now.astimezone(ZoneInfo("America/Los_Angeles")).replace(hour=0, minute=0, second=0, microsecond=0)
+    return now - min(timedelta(hours=1), (now - midnight) / 2)
 
 
 def hike(title="Cass Hill", day=DAY):

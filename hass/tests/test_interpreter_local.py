@@ -175,7 +175,7 @@ class ConversationWithLocalInterpreterTests(ConversationTestCase):
         for result, code in FAILURES:
             with self.subTest(code=code, result=repr(result)[:60]):
                 self.fake.result = result
-                self.assertEqual(self.say(OWNER_TEXT), "unsupported")
+                self.assertEqual(self.say(OWNER_TEXT), "reader-failed")
                 self.assertEqual(self.replies(), [FAILED])
                 self.assertEqual(self.interp.last_error, code)
                 self.assertEqual(self.drafts(), [])

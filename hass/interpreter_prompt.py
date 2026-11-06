@@ -213,7 +213,8 @@ def build(registry, content) -> str:
             "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
             + "\nScheduled hike details (id | meeting point | capacity | bring | access note):\n"
             + "\n".join(_hike_detail_lines(community.get("events")))
-            + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas"))),
+            + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas")))
+            + ("\nsamples | hidden" if (community.get("club") or {}).get("showSamples") is False else ""),
             "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),
         ]
         return "\n\n".join(sections) + "\n"
