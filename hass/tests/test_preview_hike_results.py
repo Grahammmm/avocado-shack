@@ -29,14 +29,11 @@ EVENT_CHECKS = ("eventShown", "pastShown", "recapShown", "rsvpGone")
 
 
 def started_today():
-    """A start that has passed but is still on today's Pacific date (community.js keeps it listed).
-
-    now - 1h falls on yesterday's Pacific date shortly after Pacific midnight, so cap it at the
-    midpoint between Pacific midnight and now.
-    """
-    now = datetime.now(ZoneInfo("America/Los_Angeles"))
-    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    return max(now - timedelta(hours=1), midnight + (now - midnight) / 2).astimezone(timezone.utc)
+    """A start already passed but on today's Pacific date: community.js lists a started hike only on its own Pacific
+    day, so a fixed "an hour ago" falls on yesterday between 00:00 and 01:00 Pacific and the card disappears."""
+    now = datetime.now(timezone.utc)
+    midnight = now.astimezone(ZoneInfo("America/Los_Angeles")).replace(hour=0, minute=0, second=0, microsecond=0)
+    return now - min(timedelta(hours=1), (now - midnight) / 2)
 
 
 def hike(title="Cass Hill", day=DAY):

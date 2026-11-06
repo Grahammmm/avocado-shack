@@ -136,6 +136,7 @@ def _product_add(content, args, ctx):
         "From the market" if args["brand"] == "Producer not identified" else args["brand"])  # absence alone defaults
     record.update(producerKey=key, displayBrand=shown, status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
+    record["addedOn"] = shop_today(ctx.now).isoformat()  # AV1622-06: Pacific day of this add; no other op sets it
     content.products.append(record)
     if _organic(record):
         ctx.warnings.append(f"adds Organic badge to {record['id']}")

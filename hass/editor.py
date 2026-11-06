@@ -26,7 +26,7 @@ REVISION_PATHS = tuple(sorted(CONTENT_PATHS + ("hass/templates/index.html", "has
 GENERATED_PATHS = tuple(sitegen.SITE_PREFIX + n for n in (
     "catalog-products.js", "producers.js", "producers.json", "community.json", "index.html", "hike/index.html"))
 OWNED_PATHS = CONTENT_PATHS + GENERATED_PATHS
-COLLECTION_FILE = dict(products="products", makers="makers", events="community", routeIdeas="community", store="store")
+COLLECTION_FILE = dict(products="products", makers="makers", events="community", routeIdeas="community", store="store", club="community")
 MAX_REQUEST, MAX_OPS = 64 * 1024, 20
 CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
 
