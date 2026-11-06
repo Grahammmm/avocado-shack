@@ -14,7 +14,7 @@ MAP = {  # frozen: H id -> covering modules, or a "not covered" reason
     "H02": ("test_editor",), "H03": ("test_catalog_ops",),
     "H04": ("test_hike_ops",), "H05": ("test_conversation", "test_near_approval"),
     "H06": ("test_preview", "test_undo"), "H07": "needs Michael's devices",
-    "H08": ("test_bridge", "test_owner_sender_match"),
+    "H08": ("test_bridge", "test_owner_sender_match", "test_host", "test_relay"),
     "H09": ("test_demo_transcript", "test_demo_negative", "test_demo_browser", "test_demo_transcript_photo"),
     "H10": ("test_label_reader", "test_label_reader_amounts", "test_label_question_brand"),
     "H11": ("test_media_audio",),
