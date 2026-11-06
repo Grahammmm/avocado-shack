@@ -34,7 +34,7 @@ SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & 
 # key order (the migrated records use three historical orders; the generator
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
-PRODUCT_OPTIONAL_PUBLIC = ("imageAlt",)  # public when present; never required (any status)
+PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn")  # public when present; never required (any status)
 PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on")  # owner-set word + its check day (SHOP-1)
 PRODUCT_STATUSES = ("active", "hidden", "held")
 AVAILABILITY = ("yes", "limited", "no")
@@ -43,6 +43,7 @@ HOLD_FIELDS = ("reason", "source", "evidence", "record")
 
 MAKER_FIELDS = ("name", "place", "story", "url")
 CLUB_FIELDS = ("clubName", "organizer", "intendedSender", "emailConnected")
+CLUB_OPTIONAL = ("showSamples",)  # AV1422-10: false hides the sample hikes; absent = shown
 ROUTE_IDEA_FIELDS = (
     "id", "title", "place", "character", "distance", "difficulty", "elevation", "elevationLabel",
     "duration", "routeType", "terrain", "description", "sourceUrl", "sourceName", "status", "rsvpEnabled",
@@ -54,7 +55,10 @@ EVENT_TEXT_FIELDS = (
     "meetingPoint", "meetingAddress", "distance", "difficulty", "duration", "description", "recap",
     "meetTime", "walkTime", "returnTime", "invitation", "bring", "accessNote",
 )
-EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId")
+# cancelNote (AV2152-07) is optional one-line text on a cancelled hike; it stays out of EVENT_TEXT_FIELDS, which feeds
+# hike.create/update and the hike.repeat copied-text allowlist.
+EVENT_OPTIONAL = EVENT_TEXT_FIELDS + ("rsvpEnabled", "capacity", "trailId", "cancelNote")
+LINE_SEPARATORS = "\u2028\u2029"  # not caught by INVISIBLE_RE but they break a line like CR/LF
 EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 PHONE_DIGITS = 10  # US number: area code, exchange, line; LIMITS.md cites it
 PHONE_RE = re.compile(rf"[2-9][0-9]{{2}}[2-9][0-9]{{{PHONE_DIGITS - 4}}}", re.ASCII)
@@ -75,7 +79,8 @@ MAX_EVENT_CAPACITY = 1000  # H14 typo guard on events[].capacity (a sanity ceili
 TEXT_LIMITS = {
     "product": {"name": 80, "brand": 60, "displayBrand": 60, "category": 40, "description": 600, "imageAlt": 200},
     "maker": {"name": 80, "place": 60, "story": 600},
-    "event": {f: 400 for f in EVENT_TEXT_FIELDS} | {"title": 80, "description": 800, "meetingPoint": 160, "recap": 2000},
+    "event": {f: 400 for f in EVENT_TEXT_FIELDS} | {"title": 80, "description": 800, "meetingPoint": 160, "recap": 2000,
+              "cancelNote": 160},
     "routeIdea": {f: 600 for f in ROUTE_IDEA_FIELDS if f not in ("id", "sourceUrl", "status", "rsvpEnabled")},
     "club": {f: 400 for f in ("clubName", "organizer", "intendedSender")},
     "store": {"streetAddress": MAX_ADDRESS_PART, "town": MAX_ADDRESS_PART, "hoursLine": MAX_HOURS_LINE},
@@ -263,6 +268,12 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
             problems.append(f"{where}: image must be assets/products/<file> ({image!r})")
         if "imageAlt" in rec:
             _text(problems, f"{where}.imageAlt", rec["imageAlt"], limit=limits["imageAlt"])
+        if "addedOn" in rec:  # AV1622-06: the Pacific day Hass added the product; never in the future
+            added = iso_day(rec["addedOn"])
+            if added is None:
+                problems.append(f"{where}.addedOn: must be a real date YYYY-MM-DD")
+            elif added > shop_today():
+                problems.append(f"{where}.addedOn: {rec['addedOn']} is in the future")
         if "available" in rec and rec["available"] not in AVAILABILITY:
             problems.append(f"{where}.available: must be one of {AVAILABILITY}")
         if "available_on" in rec and ("available" not in rec or iso_day(rec["available_on"]) is None):
@@ -333,11 +344,13 @@ def validate_community(problems, community):
                         ("club", "events", "routeIdeas")):
         return
     club = community.get("club")
-    if _closed_keys(problems, "community.club", club, CLUB_FIELDS, CLUB_FIELDS):
+    if _closed_keys(problems, "community.club", club, CLUB_FIELDS + CLUB_OPTIONAL, CLUB_FIELDS):
         for field in ("clubName", "organizer", "intendedSender"):
             _text(problems, f"community.club.{field}", club.get(field), limit=TEXT_LIMITS["club"][field])
         if club.get("emailConnected") is not False:
             problems.append("community.club.emailConnected: email delivery is not connected; must be false")
+        if "showSamples" in club and not isinstance(club["showSamples"], bool):
+            problems.append("community.club.showSamples: must be true or false")
     ideas = community.get("routeIdeas")
     idea_ids, hidden = set(), []  # hidden: AV1322-03 ideas left out of the generated route list
     if not isinstance(ideas, list):
@@ -409,6 +422,10 @@ def validate_community(problems, community):
         for field in EVENT_TEXT_FIELDS:
             if field in ev:
                 _text(problems, f"{where}.{field}", ev[field], limit=TEXT_LIMITS["event"][field])
+        if "cancelNote" in ev:
+            _text(problems, f"{where}.cancelNote", ev["cancelNote"], limit=TEXT_LIMITS["event"]["cancelNote"])
+            if isinstance(ev["cancelNote"], str) and any(c in ev["cancelNote"] for c in LINE_SEPARATORS):
+                problems.append(f"{where}.cancelNote: must be one line")
 
 
 def shop_today(now: datetime | None = None) -> date:
