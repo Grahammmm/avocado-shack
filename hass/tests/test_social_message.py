@@ -50,6 +50,12 @@ class ClassifierTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(classify_social(text))
 
+    def test_vs16_then_skin_modifier(self):
+        for text in (THUMB + "\ufe0f\U0001F3FD", OK_HAND + "\ufe0f\U0001F3FD"):
+            with self.subTest(text=text):
+                self.assertEqual(classify_social(text), "near")
+        self.assertEqual(classify_social("\U0001F469\ufe0f\U0001F3FD\u200d\U0001F373"), "social")
+
     def test_long_emoji_is_linear_and_still_social(self):
         self.assertEqual(classify_social(AVOCADO * 20000), "social")
         self.assertEqual(classify_social(THUMB * 20000), "near")
@@ -82,6 +88,13 @@ class SocialConversationTests(H06TestCase):
                 self.social(text)
         self.assertEqual(self.drafts()[-1]["state"], "proposed")
         self.assertEqual(self.say(f"yes {draft['code']}"), "approved")  # explicit approval still works
+
+    def test_vs16_skin_modifier_no_call_no_count(self):
+        self.social("\U0001F469\ufe0f\U0001F3FD\u200d\U0001F373")
+        usage = self.usage()
+        self.assertEqual(self.say(THUMB + "\ufe0f\U0001F3FD"), "near-approval")
+        self.replies()
+        self.assertEqual((self.interp.texts, self.usage()), ([], usage))
 
     def test_social_while_paused(self):
         self.assertEqual(self.say("pause"), "pause")

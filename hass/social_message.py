@@ -83,7 +83,7 @@ def _element(cps: list, i: int):
         return None
     j = i + 1
     if j < n and cps[j] == _VS16: j += 1
-    elif j < n and 0x1F3FB <= cps[j] <= 0x1F3FF and _in(EMOJI_MODIFIER_BASE_RANGES, _MOD_STARTS, cp): j += 1
+    if j < n and 0x1F3FB <= cps[j] <= 0x1F3FF and _in(EMOJI_MODIFIER_BASE_RANGES, _MOD_STARTS, cp): j += 1
     return j, cp
 
 
