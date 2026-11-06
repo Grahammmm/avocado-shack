@@ -44,7 +44,7 @@ class HikePendingOpsTests(H06TestCase):
         self.interp = self.conv.interpreter = Recorder(self.interp.mapping)
 
     def pending(self):
-        self.assertEqual(self.say("hello"), "unsupported")  # the request still runs
+        self.assertEqual(self.say("hello there"), "unsupported")  # the request still runs
         self.replies()
         return self.interp.pendings[-1]
 
@@ -108,7 +108,7 @@ class PhotoPendingOpsTests(unittest.TestCase):
         _settings(repo, **SETTINGS, mediaRoot=str(repo.media))
         conv = conversation.Conversation(str(repo.state), conversation.Editor(repo.state), interp, lambda: T0,
                                          photos=pd.FakePhotos())
-        for pid, text, attachments, want in ((1, "", 1, "photo-draft"), (2, "hello", 0, "unsupported")):
+        for pid, text, attachments, want in ((1, "", 1, "photo-draft"), (2, "hello there", 0, "unsupported")):
             self.assertEqual(conv.handle(Inbound(f"m{pid}", CHAT, OWNER, text, received_at=T0.isoformat(),
                                                  attachments=attachments)), want)
         ops = [{"op": "product.set_photo", "args": {"photo": pd.SHA}}]
