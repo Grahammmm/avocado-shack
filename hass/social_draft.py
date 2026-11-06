@@ -2,6 +2,7 @@
 
     python3 hass/social_draft.py PRODUCT_ID
     python3 hass/social_draft.py --hike EVENT_ID
+    python3 hass/social_draft.py --maker KEY
 
 Prints one JSON object. Success: {"draft": true, "image", "alt", "caption"} built only from the product's
 stored name, description, image, imageAlt and its maker's name and place (caption <= 2200 characters, at most
@@ -17,6 +18,10 @@ list that is not a list of records is 'cannot read content'.
 then fixed #AvocadoShack #NorthCoastHikingClub. Refusal (exit 1): "cannot read content" | "no such hike" | "hike is
 cancelled" | "hike already happened" (completed, or start before now) | "not scheduled" | "hike record incomplete"
 (title/meeting point not one line, start unreadable) | "free text has a hashtag or account name" | "caption too long".
+--maker prints {"draft": true, "caption"}: "Meet the maker: <name>", "Based in <place>.", the stored story verbatim, the count of the
+maker's active products, then fixed #AvocadoShack #MeetTheMaker (no photo, url or derived text). Refusal (exit 1): "cannot read content" |
+"no such maker" (exact, case-sensitive key) | "not on the site" (hidden maker) | "no active products" | "maker record incomplete"
+(name/place not one line, story not text) | "free text has a hashtag or account name" | "caption too long".
 Read-only: nothing is posted, scheduled, written or sent, and the module imports no network code.
 """
 from __future__ import annotations
@@ -35,6 +40,7 @@ from hass.ops import hikes  # noqa: E402
 
 MAX_CAPTION = 2200
 HIKE_TAGS = "#AvocadoShack #NorthCoastHikingClub"  # fixed; never from free text
+MAKER_TAGS = "#AvocadoShack #MeetTheMaker"  # fixed; never from free text
 CATEGORY_TAGS = {c: "#" + c.capitalize() for c in CATEGORIES}  # fixed per category; never from free text
 # a hashtag or @account in free text is refused, never rewritten; marks: # @, full-width U+FF03 U+FF20, small-form U+FE5F U+FE6B
 _TAG_RE = re.compile(r"[#@\uFF03\uFF20\uFE5F\uFE6B]\w")
@@ -111,17 +117,40 @@ def build_hike(content, event_id: str, now: datetime) -> dict:
     return refuse("caption too long") if len(caption) > MAX_CAPTION else {"draft": True, "caption": caption}
 
 
+def build_maker(content, maker_key: str) -> dict:
+    """Return {"draft": True, "caption"} for one visible maker with active products, or {"draft": False, "reason": ...}."""
+    def refuse(reason): return {"draft": False, "reason": reason}
+    makers, products = content.makers, content.products
+    if not isinstance(makers, dict) or not isinstance(products, list) or not all(isinstance(p, dict) for p in products):
+        return refuse("cannot read content")
+    if maker_key not in makers: return refuse("no such maker")
+    maker = makers[maker_key]
+    if not isinstance(maker, dict): return refuse("maker record incomplete")
+    if maker.get("hidden") is True: return refuse("not on the site")
+    count = sum(1 for p in products if p.get("producerKey") == maker_key and p.get("status") == "active")
+    if count == 0: return refuse("no active products")
+    name, place, story = maker.get("name"), maker.get("place"), maker.get("story")
+    if not (_line(name) and _line(place) and _block(story)): return refuse("maker record incomplete")
+    if any(_TAG_RE.search(t) for t in (name, place, story)): return refuse("free text has a hashtag or account name")
+    total = f"{count} active product on our site." if count == 1 else f"{count} active products on our site."
+    caption = f"Meet the maker: {name}\nBased in {place}.\n{story}\n{total}\n\n{MAKER_TAGS}"
+    return refuse("caption too long") if len(caption) > MAX_CAPTION else {"draft": True, "caption": caption}
+
+
 def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) -> int:
-    parser = argparse.ArgumentParser(description="Print a local DRAFT Instagram post for one active product or hike (posts nothing).")
+    parser = argparse.ArgumentParser(description="Print a local DRAFT Instagram post for one active product or hike, or a maker introduction (posts nothing).")
     which = parser.add_mutually_exclusive_group(required=True)
     which.add_argument("product_id", nargs="?")
     which.add_argument("--hike", metavar="ID")
+    which.add_argument("--maker", metavar="KEY")
     parser.add_argument("--now", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)  # --now: tests only
     try: content = load_content(content_dir)
     except (ContentError, OSError): content = None  # missing or invalid content: one JSON refusal, never a traceback
-    result = {"draft": False, "reason": "cannot read content"} if content is None else build(content, args.product_id, site_dir) \
-        if args.hike is None else build_hike(content, args.hike, args.now or datetime.now(timezone.utc))
+    if content is None: result = {"draft": False, "reason": "cannot read content"}
+    elif args.maker is not None: result = build_maker(content, args.maker)
+    elif args.hike is not None: result = build_hike(content, args.hike, args.now or datetime.now(timezone.utc))
+    else: result = build(content, args.product_id, site_dir)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["draft"] else 1
 
