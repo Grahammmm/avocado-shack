@@ -174,7 +174,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  // AV1102-03: the Available today filter exists only when some card carries a current word.
  await open('?avail=1&utm=x');assert.equal(await page.locator('#avail-filter').count(),0,'main catalog: no control');assert.equal(await countText(),fullCount);assert.deepEqual((await addr()).params,{utm:'x'},'main catalog: ?avail=1 removed');
  // AV1622-04: the page works the words out from raw state + check dates and today's Pacific day, so the fixture sets those.
- const pacificAgo=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date(Date.now()-n*864e5));
+ // Calendar days back from today's Pacific date (subtracting n*24h crosses DST changes and can land on the wrong day).
+ const pacificAgo=n=>{const d=new Date(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-n);return d.toISOString().slice(0,10)};
  const fixture=async(rows,checked=pacificAgo(0))=>{await page.unroute('**/catalog-products.js').catch(()=>{});await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;catalogFreshness.selectionCheckedOn=${JSON.stringify(checked)};${JSON.stringify(rows)}.forEach(([s,o],i)=>{catalog[i].availabilityState=s;catalog[i].availabilityCheckedOn=o});`})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
  const W=[['yes',pacificAgo(0)],['yes',pacificAgo(0)],['limited',pacificAgo(0)],['no',pacificAgo(0)],['yes',pacificAgo(3)],['yes',pacificAgo(2)]],avail=()=>page.locator('#avail-filter');
  for(const width of [390,1440]){await page.setViewportSize({width,height:900});await fixture(W);await open('');
