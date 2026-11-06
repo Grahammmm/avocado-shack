@@ -18,6 +18,7 @@ UNITS += ("RF1740-6", "RF1740-7")  # RF1740-8 roll-up (RF1740-5 is superseded: n
 UNITS += tuple(f"AV1102-{n:02d}" for n in range(1, 17))  # AV1102-17 roll-up (sections in id order; the ledger has no issue headings)
 UNITS += tuple(f"AV1222-{n:02d}" for n in range(1, 16))  # AV1222-16 roll-up (id order; the ledger has no issue headings)
 UNITS += tuple(f"AV2022-{n:02d}" for n in range(1, 15))  # AV2022-15 roll-up
+UNITS += tuple(f"AV1322-{n:02d}" for n in range(1, 16))  # AV1322-16 roll-up
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
