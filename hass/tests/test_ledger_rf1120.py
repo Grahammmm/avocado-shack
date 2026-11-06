@@ -17,6 +17,8 @@ UNITS += tuple(f"RF1650-{n}" for n in (1, 2, 3, 4, 5, 8))  # RF1650-9 roll-up
 UNITS += ("RF1740-6", "RF1740-7")  # RF1740-8 roll-up (RF1740-5 is superseded: no merge, see test_superseded_unit_has_no_merge)
 UNITS += tuple(f"AV1102-{n:02d}" for n in range(1, 17))  # AV1102-17 roll-up (sections in id order; the ledger has no issue headings)
 UNITS += tuple(f"AV1222-{n:02d}" for n in range(1, 16))  # AV1222-16 roll-up (id order; the ledger has no issue headings)
+UNITS += tuple(f"AV2022-{n:02d}" for n in range(1, 15))  # AV2022-15 roll-up
+UNITS += tuple(f"AV1322-{n:02d}" for n in range(1, 16))  # AV1322-16 roll-up
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
@@ -26,6 +28,9 @@ WORDS |= {"AV1102-08": ("Design changes stay unbuilt",), "AV1102-09": ("A note i
           "AV1102-12": ("Suggestion only; nothing stored",), "AV1102-15": ("Proposal only; the trial is not run",)}  # AV1102-17 edge path 5
 WORDS |= {"AV1222-10": ("The cost is private; it is never on the website",), "AV1222-11": ("Draft only; nothing is posted",),
           "AV1222-15": ("No visible change",)}  # AV1222-16 edge path 5
+WORDS |= {"AV2022-05": ("Audio is refused, never transcribed or stored",),
+          "AV2022-09": ("BlueBubbles is loopback-only with no password in errors",),
+          "AV2022-13": ("Retention reports counts only and deletes nothing",)}
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -120,6 +125,15 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "AV1222-11: limit wording?": LEDGER.replace("Draft only; nothing is posted", "The draft is posted"),
                   "AV1222-15: limit wording?": LEDGER.replace("No visible change", "A visible change"),
                   "AV1222-04: private data": LEDGER.replace("(AV1222-04)", "(AV1222-04)\ncall +1 555 123 4567")}
+        cases |= {"AV2022-01: 2 headings": LEDGER + "\n" + sections(LEDGER, "AV2022-01")[0],
+                  "AV2022-14: 0 headings": LEDGER.replace("(AV2022-14)", "(AV2022-140)"),
+                  "AV2022-03: no merge sha": LEDGER.replace(SHA.findall(sections(LEDGER, "AV2022-03")[0])[0], "21e06ae"),
+                  "AV2022-03: missing test_interpreter_today_missing.py": LEDGER.replace("hass.tests.test_interpreter_today -v", "hass.tests.test_interpreter_today_missing -v"),
+                  "AV2022-05: limit wording?": LEDGER.replace("Audio is refused, never transcribed or stored", "Audio is stored"),
+                  "AV2022-09: limit wording?": LEDGER.replace("BlueBubbles is loopback-only with no password in errors", "BlueBubbles is remote"),
+                  "AV2022-13: limit wording?": LEDGER.replace("Retention reports counts only and deletes nothing", "Retention deletes rows")}
+        cases |= {f"AV2022-08: private data|{leak}": LEDGER.replace("(AV2022-08)", "(AV2022-08)\n" + leak) for leak in
+                  ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242", "+15550100777")}
         cases["AV1537-15: private data"] = LEDGER.replace("(AV1537-15)", "(AV1537-15)\ncall +1 555 123 4567")

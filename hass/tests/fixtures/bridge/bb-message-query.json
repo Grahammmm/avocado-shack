@@ -1,0 +1,9 @@
+{
+  "_note": "UNVERIFIED BlueBubbles query response; synthetic data, not a Mac capture.",
+  "data": [{
+    "guid": "missed", "dateCreated": 1793638800000, "isFromMe": false,
+    "handle": {"address": "owner@example.invalid"},
+    "chats": [{"guid": "iMessage;-;owner@example.invalid"}],
+    "text": "desc", "attachments": []
+  }]
+}
