@@ -52,6 +52,12 @@ Photos: send one photo per message, as JPEG or PNG, up to 20 MB. A phone photo's
 other file, or a photo that is too large, incomplete or unreadable,
 gets a reply naming the limit, and nothing is saved or drafted.
 
+A new product needs one brand. The card label (`displayBrand`) is optional: left out, the card shows that brand, and the
+exact brand `Producer not identified` shows `From the market`. Give a label only to show something different; it changes
+the card label only, not the maker link. Example: `Add Test Orchard quince, brand Test Orchard` with the photo. Hass
+still asks for any other missing required fact and never invents one; the draft still needs `yes <code>`, and `undo`
+works as for any change.
+
 Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are
 missing). A draft is never applied until you reply `yes <code>`; drafts that wait too long expire and nothing changes.
 
