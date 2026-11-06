@@ -72,18 +72,19 @@ class Receiver:
     its config.json holds the owner settings (ownerSenders, ownerChat) and its guard decides who is the owner.
     reply: the outbound send callable, never called by receive(); the default refuses with NotConnected."""
 
-    def __init__(self, *, state, settings, reply=not_connected):
+    def __init__(self, *, state, settings, reply=not_connected, apply=False):
         self.inbox, self.conversation, self.reply, self._codes = state, settings, reply, {}
+        self.apply = apply  # HASS-RCV-1: False holds every owner approval (SHOP-3); True lets the Conversation apply it
 
     def send(self, chat, text, attachments=()):
         """Outbox adapter shape, so Conversation.flush(receiver) goes to `reply` (refused by default)."""
         return self.reply(chat, text, attachments)
 
     def handle(self, msg, last_try=False) -> str:
-        """What drain() calls for each message: Conversation.handle with apply=False (an owner approval is held, never
-        applied), noting the code of the draft THIS message made proposed (a new row, or a question it filled)."""
+        """What drain() calls for each message: Conversation.handle with apply=self.apply (False: an owner approval is
+        held, never applied), noting the code of the draft THIS message made proposed (a new row, or a question it filled)."""
         before = self._proposed()
-        disposition = self.conversation.handle(msg, last_try=last_try, apply=False)
+        disposition = self.conversation.handle(msg, last_try=last_try, apply=self.apply)
         if disposition == "proposed":
             made = {k: v for k, v in self._proposed().items() if k not in before}
             self._codes[msg.provider_id] = made[max(made)] if made else None  # None: a repeat reused a waiting draft
@@ -93,6 +94,36 @@ class Receiver:
         rows = self.conversation.db.execute("SELECT row_id, code FROM drafts WHERE state = 'proposed'")
         return {r[0]: r[1] for r in rows}
 
+    def _intake(self, raw, secret, now):
+        """Size, strict JSON, unseal, enqueue -> (result for a refusal or repeat, None) or (None, the queued message)."""
+        if isinstance(raw, (str, bytes, bytearray)):
+            size = len(raw.encode("utf-8", "surrogatepass")) if isinstance(raw, str) else len(raw)
+            if size > MAX_ENVELOPE_BYTES: return _result("rejected", REJECTED["size"]), None
+        try:
+            envelope = (json.loads(raw, object_pairs_hook=_pairs, parse_constant=_no_constant)
+                        if isinstance(raw, (str, bytes, bytearray)) else raw)
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return _result("rejected", REJECTED["shape"]), None
+        try:  # a missing or short secret is a ValueError from bridge: a setup fault, raised, never a message result
+            msg = bridge.unseal(envelope, secret, now=now, seen=self.inbox.seen())
+        except bridge.EnvelopeError as exc:
+            if exc.code == "replay": return _result("duplicate", "this exact envelope was already received"), None
+            return _result("rejected", REJECTED.get(exc.code, REJECTED["shape"])), None
+        queued = self.inbox.enqueue(msg)
+        if queued == "duplicate": return _result("duplicate", "this message id was already received; not queued again"), None
+        if queued == "history": return _result("history", "sent before the recorded start point; kept as history only"), None
+        return None, msg
+
+    def accept(self, raw, *, secret, now) -> dict:
+        """HASS-RCV-1: the first half of receive(): store only, never drain. rejected | duplicate | history | queued."""
+        early, _ = self._intake(raw, secret, now)
+        return early or _result("queued", "stored; the next drain handles it")
+
+    def drain(self) -> list:
+        """HASS-RCV-1: hand every pending message to handle(), in order; [(provider_id, disposition)]."""
+        self._codes = {}
+        return self.inbox.drain(self)
+
     def receive(self, raw, *, secret, now) -> dict:
         """One sealed envelope (JSON text, bytes or dict) -> {result, draft_id, reason, disposition}. result is
         drafted | duplicate | history | rejected | ignored | handled (owner message, no new draft) | queued (stored,
@@ -100,24 +131,9 @@ class Receiver:
         repeat reused a waiting draft). A crash in drain propagates: the message stays queued and the next
         receive() drains it first (Inbox order; Conversation answers `duplicate` for one it already recorded).
         A str/bytes envelope over MAX_ENVELOPE_BYTES is rejected unread (nonce untouched); a dict is not measured."""
-        if isinstance(raw, (str, bytes, bytearray)):
-            size = len(raw.encode("utf-8", "surrogatepass")) if isinstance(raw, str) else len(raw)
-            if size > MAX_ENVELOPE_BYTES: return _result("rejected", REJECTED["size"])
-        try:
-            envelope = (json.loads(raw, object_pairs_hook=_pairs, parse_constant=_no_constant)
-                        if isinstance(raw, (str, bytes, bytearray)) else raw)
-        except (ValueError, UnicodeDecodeError, RecursionError):
-            return _result("rejected", REJECTED["shape"])
-        try:  # a missing or short secret is a ValueError from bridge: a setup fault, raised, never a message result
-            msg = bridge.unseal(envelope, secret, now=now, seen=self.inbox.seen())
-        except bridge.EnvelopeError as exc:
-            if exc.code == "replay": return _result("duplicate", "this exact envelope was already received")
-            return _result("rejected", REJECTED.get(exc.code, REJECTED["shape"]))
-        queued = self.inbox.enqueue(msg)
-        if queued == "duplicate": return _result("duplicate", "this message id was already received; not queued again")
-        if queued == "history": return _result("history", "sent before the recorded start point; kept as history only")
-        self._codes = {}
-        handled = dict(self.inbox.drain(self))  # self.handle: draft-only, one code per message
+        early, msg = self._intake(raw, secret, now)
+        if early: return early
+        handled = dict(self.drain())  # self.handle: draft-only, one code per message
         if msg.provider_id not in handled:
             return _result("queued", "stored; it waits behind an earlier message and is handled by the next drain")
         disposition = handled[msg.provider_id]

@@ -32,10 +32,11 @@ before any agent sends a message (the fleet AGENTS.md/CLAUDE.md rule: no outboun
 6. Set the owner allowlist in the private state dir's `config.json` `settings`: `ownerSenders` (the owner's
    address), `ownerChat` (the one-to-one chat id, `iMessage;-;<address>`) and `approvalTtlSeconds`; record the
    inbox start point when the inbox is first opened, so older messages stay history.
-7. Write and run, as services, the forwarder on the Mac (BlueBubbles webhook -> `normalize` -> `seal` -> post to
-   the receiver) and the receiver host side (read the secret, call `receive`), with `BlueBubblesSender` as `reply`.
-   Neither exists in this repository yet; each is its own reviewed change. This receiver holds every approval
-   (`approval-held`); acting on an owner `yes` is part of that reviewed change, not a setting.
+7. Run, as services, the forwarder on the Mac (HASS-FWD-1: BlueBubbles webhook -> `normalize` -> `seal` -> post to the
+   receiver) and the receiver host, `python3 hass/host.py serve|work --host <host.json>` (HASS-RCV-1): `serve` stores sealed
+   posts, `work` drains them and queues replies for the Mac to pull. The forwarder is not in this repository yet. First run
+   `host.py check` (config, 0600 key file, runtime commit) and `host.py start-point --at <ISO time>`. `approvals` is `hold`
+   (an owner `yes` is held) or `private` (applied through the editor's single-writer path); `live` is not installed.
 8. Smoke checks, by G, in this order: the owner texts `status` and gets one reply; a stranger's text gets no reply
    and no draft; the owner texts a small change, a draft arrives, the owner replies `no` and nothing changes;
    `python3 hass/inbox.py status --state <state dir>` shows the messages as done and no pending backlog.
