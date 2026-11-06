@@ -9,7 +9,7 @@
 Exit 0 ok, 2 config / secret / start point / runtime refused (one JSON line, field names only), 1 any other error.
 Nothing prints message text, a sender, a chat id, a URL, a secret or a path. `live` approvals are not installed here.
 """
-import argparse, ipaddress, json, logging, os, secrets, signal, socket, socketserver, stat, subprocess, sys, threading  # noqa: E401
+import argparse, base64, collections, ipaddress, json, logging, os, secrets, signal, socket, socketserver, stat, subprocess, sys, threading  # noqa: E401
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -25,7 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
 MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay")
 METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
-KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit"}
+KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures"}
+PICTURES_PER_MIN = 10  # HASS-ATTACH-1: more picture requests in a minute get `gone` with no data
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 LIVE_REASON = "live release is not installed"
 
@@ -76,11 +77,11 @@ def load_host(path, allow_port_zero=False) -> dict:
     """host.json: a regular 0600 file of this user, <= 64 KiB, closed keys. Returns the config plus `addr`, `peers`."""
     raw = _private_json(path)
     if raw.get("approvals") == "live": raise HostConfigError(["approvals"], LIVE_REASON)
-    bad = sorted(set(raw) - KEYS) + sorted(KEYS - {"previewer"} - set(raw))
+    bad = sorted(set(raw) - KEYS) + sorted(KEYS - {"previewer", "pictures"} - set(raw))
     text = lambda v: isinstance(v, str) and 0 < len(v) <= 4096  # noqa: E731
     itp = raw.get("interpreter")
     peers = raw.get("allowedPeers")
-    checks = {"state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
+    checks = {"pictures": type(raw.get("pictures", False)) is bool, "state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
               "approvals": raw.get("approvals") in ("hold", "private"),
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
@@ -96,7 +97,8 @@ def load_host(path, allow_port_zero=False) -> dict:
     if not bad and not peers and not _listen(raw["listen"], allow_port_zero)[0].is_loopback: bad.append("allowedPeers")
     if bad: raise HostConfigError(bad)
     ip, port = _listen(raw["listen"], allow_port_zero)
-    return {**raw, "addr": (str(ip), port), "peers": frozenset(str(_ip(p)) for p in peers), "previewer": raw.get("previewer", False)}
+    return {**raw, "addr": (str(ip), port), "peers": frozenset(str(_ip(p)) for p in peers), "previewer": raw.get("previewer", False),
+            "pictures": raw.get("pictures", False)}
 
 
 def runtime_problem(cfg, root=ROOT) -> bool:
@@ -162,6 +164,12 @@ class Handler(BaseHTTPRequestHandler):
         secs = int(now.timestamp())
         if msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
         elif msg["op"] == "ack": srv.store.ack(msg["ids"], secs); out = {"op": "acked", "ids": msg["ids"]}
+        elif msg["op"] == "picture":
+            while srv.pic_times and secs - srv.pic_times[0] >= 60: srv.pic_times.popleft()
+            shot = None if len(srv.pic_times) >= PICTURES_PER_MIN else srv.store.picture(msg["id"], msg["idx"])
+            srv.pic_times.append(secs)
+            out = ({"op": "picture", "id": msg["id"], "idx": msg["idx"], "sha256": shot[0],
+                    "b64": base64.b64encode(shot[1]).decode("ascii")} if shot else {"op": "gone", "id": msg["id"], "idx": msg["idx"]})
         else: return self._send(400, {"result": "rejected"})
         self._send(200, relay.seal_control(out, srv.secret, nonce=secrets.token_hex(16), now=now))
 
@@ -170,6 +178,7 @@ class Server(HTTPServer):
     def __init__(self, cfg, secret, rx, store, clock=_now):
         self.address_family = socket.AF_INET6 if ":" in cfg["addr"][0] else socket.AF_INET
         self.peers, self.secret, self.receiver, self.store, self.clock = cfg["peers"], secret, rx, store, clock
+        self.pic_times = collections.deque()
         super().__init__(cfg["addr"], Handler)
 
     def server_bind(self):  # no reverse DNS lookup of the Tailscale address
@@ -182,9 +191,9 @@ class Server(HTTPServer):
 
 # -- work ----------------------------------------------------------------------------------------------------------
 class Worker:
-    def __init__(self, conv, rx, store, worktree, build, clock=_now):
+    def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None):
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
-        self.sender = relay.RelaySender(store, conv.settings["ownerChat"], lambda: int(clock().timestamp()))
+        self.sender = relay.RelaySender(store, conv.settings["ownerChat"], lambda: int(clock().timestamp()), shots_dir)
         self.rev = editor_mod.content_revision(self.worktree)
         handle = rx.handle
 
@@ -229,7 +238,7 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now) -> Worker:
                                      previewer=preview.Previewer(worktree) if cfg["previewer"] else None)
     rx = receiver.Receiver(state=inbox_mod.Inbox(cfg["state"], clock=clock), settings=conv,
                            apply=cfg["approvals"] == "private")
-    return Worker(conv, rx, store, worktree, build, clock)
+    return Worker(conv, rx, store, worktree, build, clock, Path(cfg["state"]).resolve() / "screenshots" if cfg["pictures"] else None)
 
 
 # -- commands ------------------------------------------------------------------------------------------------------
