@@ -54,7 +54,7 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as 
     'listing <id> - what the site shows for one id: "listing Etto"',  # AV1622-09
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
-MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S+)|(memory)|(alias)(?:\s+(.*))?"
+MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory)|(alias)(?:\s+(.*))?"
                        r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
 ALIAS_LIST_MAX = 20  # AV0222-05: `memory` lists this many aliases apart from the notes (LIMITS.md)
@@ -378,13 +378,18 @@ def parse_command(text: str):
     return ("status" if found.startswith("did ") else "pause" if found == "stop" else found), None
 
 
+def _note_key(name: str) -> str:
+    """AV1352-07: a note name as typed: trimmed, lower-cased, runs of spaces become one \"-\" (KEY_RE still decides)."""
+    return re.sub(" +", "-", name.strip().lower())
+
+
 def parse_memory(text: str):
     """("remember", key, text), ("forget", key, None) or ("memory", None, None) when the whole message is an H15
     memory command; otherwise None. `remember …` without `key:` still parses (as an empty text) so it is refused."""
     match = MEMORY_RE.fullmatch(text.strip())
     if match and match[1]:
         key, colon, value = (match[2] or "").partition(":")
-        return "remember", key.strip().lower(), value.strip() if colon else ""
+        return "remember", _note_key(key), value.strip() if colon else ""
     if match and match[6]:  # ("alias", name, product id or maker key); a missing part is refused, not guessed
         name, colon, ident = (match[7] or "").partition(":")
         return "alias", name.strip(), ident.strip() if colon else ""
@@ -392,7 +397,14 @@ def parse_memory(text: str):
         ident, colon, rest = (match[9] or "").partition(":")
         return "cost", ident.strip().lower(), rest.strip() if colon else ""
     match = MEMORY_RE.fullmatch(re.sub(r"!+$", "", text.strip()))  # a key may end in "." (KEY_RE), never "!"
-    if match and match[3]: return "forget", match[4].lower(), None
+    if match and match[3]:  # AV1352-07: spaces in a note name become "-"; `forget alias <name>` removes alias.<name>
+        operand = match[4].strip()
+        if re.search(r"[^\S ]", operand) or re.fullmatch(r"it +all", operand, re.IGNORECASE): return None  # old routing
+        if re.match(r"alias +\S", operand, re.IGNORECASE):
+            name = operand[5:].strip()
+            ok = memory_mod._clean(name) and len(name) <= ALIAS_NAME_MAX
+            return "forget", "alias." + catalog._fold(name).replace(" ", "-") if ok else "alias. " + name.lower(), None
+        return "forget", _note_key(operand), None
     match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
     return ("memory", None, None) if match and match[5] else None
 

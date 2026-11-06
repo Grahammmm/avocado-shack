@@ -76,7 +76,7 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         for text, reply in (("remember no spaces!: x", KEY_BAD), ("remember hours:", TEXT_BAD),
                             ("remember hours:   ", TEXT_BAD), ("remember hours: " + "x" * 501, TEXT_BAD),
                             ("remember hours: ring \x07 bell", TEXT_BAD), ("remember hours: two\nlines", TEXT_BAD),
-                            ("remember to restock avocados", KEY_BAD), ("remember hours", TEXT_BAD),
+                            ("remember to restock avocados", TEXT_BAD), ("remember hours", TEXT_BAD),
                             ("REMEMBER", KEY_BAD), ("remember " + "k" * 65 + ": x", KEY_BAD)):
             with self.subTest(text=text):
                 self.chat(text, "memory-invalid", reply, pid=f"bad{len(self.out.sent)}")
@@ -111,6 +111,35 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         self.chat("remember hours: 9-5", "memory-saved", "Saved hours: 9-5. Send forget hours to remove it.")
         self.assertEqual(self.status()[0], "Changes: paused since 2026-11-02 09:00 PST")
         self.assertEqual(self.calls, [])
+
+    def test_spaced_note_names_normalize_to_hyphens(self):
+        """AV1352-07: spaces in a note name become -; capitals fold; the value keeps its case; invalid names refuse."""
+        self.chat("remember Parking  Spot: Use the Back Lot.", "memory-saved",
+                  "Saved parking-spot: Use the Back Lot.. Send forget parking-spot to remove it.")
+        self.chat("remember parking spot: Use the Back Lot.", "memory-unchanged")
+        self.chat("remember  parking-spot : new lot", "memory-updated")
+        self.chat("forget parking spot?", "memory-none", "Nothing saved as parking-spot?.")
+        self.chat("forget Parking Spot!", "memory-forgot", "Forgot parking-spot.")
+        self.chat("forget parking spot", "memory-none", "Nothing saved as parking-spot.")
+        self.assertEqual([r["value"] for r in self.rows()], ["", ""])
+        self.assertEqual(self.calls, [])
+        for text in ("remember back_lot spot: x", "remember a/b c: x", "remember " + "x " * 32 + "y: x"):
+            self.chat(text, "memory-invalid", KEY_BAD)
+        self.chat("remember " + "x" * 31 + " " + "y" * 32 + ": x", "memory-saved")  # 64 characters
+        self.chat("remember parking spot: " + "z" * 501, "memory-invalid", TEXT_BAD)
+        self.assertEqual(len(self.rows()), 3)
+
+    def test_spaced_forget_dotted_and_it(self):
+        self.chat("remember hours today.: dotted", "memory-saved")
+        self.chat("forget hours today", "memory-none", "Nothing saved as hours-today.")
+        self.chat("forget hours today.", "memory-forgot", "Forgot hours-today..")
+        self.chat("remember it: x", "memory-saved")
+        self.chat("forget it", "memory-forgot", "Forgot it.")
+        self.assertEqual(self.calls, [])
+        self.assertIsNone(conversation.parse_memory("forget it  all"))
+        self.assertIsNone(conversation.parse_memory("forget two\nlines"))
+        self.assertIsNone(conversation.parse_memory("forget"))
+        self.chat("forget Unicode Näme", "memory-none")
 
     def test_look_alikes_go_to_interpreter(self):
         for text in ("please remember to restock avocados", "Remembering the hike", "forget it all",
