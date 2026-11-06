@@ -2,6 +2,8 @@ let activeCategory='all',limit=12,visibleCount=0,linkedItem='',activeFrom='';
 const makerCounts=new Map();catalog.forEach(p=>makerCounts.set(p.producerKey,(makerCounts.get(p.producerKey)||0)+1));
 const validFrom=key=>Object.hasOwn(producers,key)&&makerCounts.get(key)>=2;
 $('#catalog-grid').insertAdjacentHTML('beforebegin','<p class="catalog-from" hidden></p>');
+// AV1352-02: one status line for a shared ?item= link to a product that is no longer listed; hidden again at the next filter change.
+$('#catalog-grid').insertAdjacentHTML('beforebegin','<p class="micro" id="catalog-item-status" role="status" hidden></p>');
 function maker(p){return producers[p.producerKey]}
 function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus','Green Gold','Massa Organics'].includes(p.producerKey)}
 // AV1352-01: only an installed owner photo (same shape as content_model.HOME_IMAGE_RE) is not an illustration; JS $ without the m flag is a true end.
@@ -54,7 +56,7 @@ function filteredProducts(){const term=fold(searchText($('#product-search').valu
 function renderCatalog(append=false){refreshFreshness();const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
 function anyFilter(){return activeCategory!=='all'||!!searchText($('#product-search').value)||!!$('#brand-filter').value||!!activeFrom||!!availBox?.checked}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
- linkedItem='';p.delete('item');  // A filter change also cancels any pending item scroll/focus.
+ linkedItem='';p.delete('item');const gone=$('#catalog-item-status');gone.hidden=true;gone.textContent='';  // A filter change also cancels any pending item scroll/focus.
  set('from',activeFrom);set('shelf',activeCategory==='all'?'':activeCategory);set('q',searchText($('#product-search').value));set('maker',$('#brand-filter').value);set('avail',availBox?.checked?'1':'');
  history.replaceState(null,'',location.pathname+(s()?'?'+s():'')+location.hash)}
 function resetCatalog(){limit=12;syncUrl();renderCatalog();scheduleScroll()}
@@ -93,7 +95,9 @@ try{const u=new URLSearchParams(location.search),shelf=[...document.querySelecto
  const item=u.get('item'),i=item&&[...item].length<=80?catalog.findIndex(p=>p.id===item):-1;
  if(i>=0){activeFrom='';selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item;if(availBox)availBox.checked=false}
  if(availBox)availBox.checked=u.get('avail')==='1'&&i<0;
- let fix=false;if(shelf?.hidden){u.delete('shelf');fix=true}if(u.has('from')&&!activeFrom){u.delete('from');fix=true}if(u.has('avail')&&!availBox?.checked){u.delete('avail');fix=true}
+ let fix=false;
+ // AV1352-02: a nonempty id of at most 80 characters that is not in the catalog gets one neutral line and loses ?item (exact id, nothing echoed).
+ if(i<0&&item&&[...item].length<=80){const s=$('#catalog-item-status');s.textContent='That item is not in our catalog right now. Here is everything else.';s.hidden=false;u.delete('item');fix=true}if(shelf?.hidden){u.delete('shelf');fix=true}if(u.has('from')&&!activeFrom){u.delete('from');fix=true}if(u.has('avail')&&!availBox?.checked){u.delete('avail');fix=true}
  if(fix){const q=u.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}}catch(e){}
 renderCatalog();
 // Prefer load, after the browser's #market jump, but do not wait indefinitely for a nonessential asset.
