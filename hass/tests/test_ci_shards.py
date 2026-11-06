@@ -1,0 +1,218 @@
+"""AV-CI-SHARD-1: the hass/tests CI planner (hass/tests/ci_shards.py): stable shards, the union proof, the
+changed-files -> test-modules map with its FULL fallbacks, and the aggregate verdict."""
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from hass.tests import ci_shards as cs
+
+
+def graph(files):
+    """build_graph over an in-memory tree written to a temp dir."""
+    tmp = tempfile.TemporaryDirectory()
+    root = Path(tmp.name)
+    for rel, text in files.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+    texts, edges = cs.build_graph(root, sorted(files))
+    tmp.cleanup()
+    return texts, edges
+
+
+TREE = {
+    "hass/__init__.py": '"""pkg"""\n',
+    "hass/leaf.py": "VALUE = 1\n",
+    "hass/mid.py": "from hass import leaf\n",
+    "hass/hub.py": "from . import mid\n",
+    "hass/runner.py": "import subprocess\nsubprocess.run(['node', 'hass/screen.cjs'])\n",
+    "hass/screen.cjs": "const env = require('./qa-env.cjs');\n",
+    "hass/qa-env.cjs": "module.exports = {};\n",
+    "hass/lonely.py": "X = 2\n",
+    "hass/prose.py": '"""Mentions lonely.py in a docstring only."""\n# and lonely.py in a comment\n',
+    "hass/tests/__init__.py": "",
+    "hass/tests/test_leaf.py": "from hass.leaf import VALUE\n",
+    "hass/tests/test_hub.py": "from hass import hub\n",
+    "hass/tests/test_shot.py": "from hass import runner\n",
+    "hass/tests/test_doc.py": "DOC = 'docs/hass/GUIDE.md'\n",
+    "hass/tests/test_prose.py": "from hass import prose\n",
+    "hass/tests/test_reuse.py": "from hass.tests.test_leaf import VALUE\n",
+}
+MODULES = sorted(Path(p).stem for p in TREE if p.startswith("hass/tests/test_"))
+
+
+class PartitionTest(unittest.TestCase):
+    def test_every_module_once_and_stable(self):
+        names = [f"test_{i:03d}" for i in range(40)]
+        weights = {n: (i * 7) % 13 + 1 for i, n in enumerate(names)}
+        shards = cs.partition(names, 4, weights)
+        self.assertEqual(len(shards), 4)
+        ok, lines = cs.union_proof(names, shards)
+        self.assertTrue(ok, lines)
+        self.assertEqual(shards, cs.partition(list(reversed(names)), 4, weights))  # input order never matters
+        loads = [sum(weights[n] for n in s) for s in shards]
+        self.assertLessEqual(max(loads) - min(loads), max(weights.values()))
+
+    def test_more_shards_than_modules(self):
+        self.assertEqual(cs.partition(["test_a", "test_b"], 4, {}), [["test_a"], ["test_b"]])
+
+    def test_union_proof_names_each_difference(self):
+        ok, lines = cs.union_proof(["a", "b", "c"], [["a", "b"], ["b", "d"]])
+        self.assertFalse(ok)
+        text = "\n".join(lines)
+        self.assertIn("DIFFERENT", text)
+        self.assertIn("missing: c", text)
+        self.assertIn("extra: d", text)
+        self.assertIn("duplicated: b", text)
+
+
+class InventoryTest(unittest.TestCase):
+    def test_walk_matches_discovery_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            for rel in ("test_a.py", "tests_b.py", "helper.py", "pkg/__init__.py", "pkg/test_c.py",
+                        "fixtures/test_not_a_package.py"):
+                (t / rel).parent.mkdir(parents=True, exist_ok=True)
+                (t / rel).write_text("")
+            self.assertEqual(cs.all_modules(t), ["pkg.test_c", "test_a", "tests_b"])
+
+    def test_real_tree_full_plan_covers_every_module(self):
+        modules = cs.all_modules()
+        self.assertIn("test_ci_shards", modules)
+        plan = cs.make_plan("push", "HEAD^1", cs.DEFAULT_SHARDS, cs.load_weights(), modules)
+        self.assertEqual(plan["tier"], "full")
+        self.assertEqual(len(plan["shards"]), cs.DEFAULT_SHARDS)
+        ok, lines = cs.union_proof(modules, plan["shards"])
+        self.assertTrue(ok, lines)
+
+
+class GraphTest(unittest.TestCase):
+    def setUp(self):
+        self.texts, self.edges = graph(TREE)
+
+    def test_imports_relative_imports_and_mentions(self):
+        self.assertIn("hass/leaf.py", self.edges["hass/mid.py"])
+        self.assertIn("hass/mid.py", self.edges["hass/hub.py"])  # from . import mid
+        self.assertIn("hass/screen.cjs", self.edges["hass/runner.py"])  # a path in a string constant
+        self.assertIn("hass/qa-env.cjs", self.edges["hass/screen.cjs"])  # require() in JS
+        self.assertIn("hass/tests/test_leaf.py", self.edges["hass/tests/test_reuse.py"])
+
+    def test_docstrings_and_comments_are_not_references(self):
+        self.assertNotIn("hass/lonely.py", self.edges["hass/prose.py"])
+
+    def sel(self, *paths):
+        return cs.select(list(paths), MODULES, self.texts, self.edges)
+
+    def test_changed_module_selects_tests_that_reach_it(self):
+        self.assertEqual(self.sel("hass/leaf.py"), ({"test_leaf", "test_hub", "test_reuse"}, None))
+        self.assertEqual(self.sel("hass/qa-env.cjs"), ({"test_shot"}, None))  # test -> runner -> screen -> qa-env
+
+    def test_changed_test_module_selects_itself_and_its_importers(self):
+        self.assertEqual(self.sel("hass/tests/test_leaf.py"), ({"test_leaf", "test_reuse"}, None))
+
+    def test_docs_are_mapped_by_mention(self):
+        self.assertEqual(self.sel("docs/hass/GUIDE.md"), ({"test_doc"}, None))
+        self.assertEqual(self.sel("docs/hass/OTHER.md"), ({"test_doc"}, None))  # its directory is named
+        self.assertEqual(self.sel("planning/notes.md"), (set(), None))  # known area, no test reads it
+        self.assertEqual(self.sel("BUILD_LEDGER.md"), (set(), None))
+
+    def test_full_suite_fallbacks(self):
+        for path in (".github/workflows/check.yml", "hass/tests/run_parallel.py", "hass/tests/fixtures/x.json",
+                     "hass/tests/ci_weights.json", "hass/__init__.py", "hass/ops/catalog.py", "hass/content/a.json",
+                     "hass/templates/page.html", "package-lock.json",
+                     "hass/lonely.py",  # a hass module no test reaches
+                     "hass/new_file.txt",  # an unmapped hass path
+                     "toplevel.cfg", "newarea/thing.py"):  # unmapped paths outside hass
+            with self.subTest(path=path):
+                selected, why = self.sel("hass/leaf.py", path)
+                self.assertIsNone(selected)
+                self.assertTrue(why.startswith(path), why)
+
+    def test_shared_library_runs_everything(self):
+        files = dict(TREE)
+        for i in range(10):
+            files[f"hass/tests/test_more{i}.py"] = "from hass import hub\n"
+        texts, edges = graph(files)
+        modules = sorted(Path(p).stem for p in files if p.startswith("hass/tests/test_"))
+        selected, why = cs.select(["hass/mid.py"], modules, texts, edges)
+        self.assertIsNone(selected)
+        self.assertIn("shared library", why)
+
+
+def record(key, modules, tests, ok=True):
+    return {"shard": key, "modules": modules, "tests_run": tests, "ok": ok, "failures": 0 if ok else 1,
+            "errors": 0, "skipped": 0, "seconds": 1.0}
+
+
+class VerifyTest(unittest.TestCase):
+    MODS = ["test_a", "test_b", "test_c"]
+    FULL = {"tier": "full", "reason": "push", "event": "push", "shards": [["test_a", "test_c"], ["test_b"]],
+            "tests": 5}
+    NEEDS = {"quick": {"result": "success"}, "site": {"result": "success"}, "hass": {"result": "success"}}
+
+    def run_verify(self, plan=None, needs=None, records=None, recomputed=None):
+        plan = plan or self.FULL
+        records = records if records is not None else {"0": record("0", ["test_a", "test_c"], 3),
+                                                       "1": record("1", ["test_b"], 2)}
+        recomputed = plan if recomputed is None else recomputed
+        problems, _ = cs.verify(plan, recomputed, needs or self.NEEDS, records, {}, self.MODS)
+        return problems
+
+    def test_all_shards_ran_everything_once(self):
+        self.assertEqual(self.run_verify(), [])
+
+    def test_missing_record_fails(self):
+        problems = self.run_verify(records={"0": record("0", ["test_a", "test_c"], 3)})
+        self.assertTrue(any("shard 1: no record" in p for p in problems), problems)
+        self.assertTrue(any("executed shard union differs" in p for p in problems), problems)
+
+    def test_failed_shard_fails(self):
+        problems = self.run_verify(records={"0": record("0", ["test_a", "test_c"], 3),
+                                            "1": record("1", ["test_b"], 2, ok=False)})
+        self.assertIn("shard 1: failed", problems)
+
+    def test_plan_that_drops_a_module_fails(self):
+        plan = dict(self.FULL, shards=[["test_a"], ["test_b"]], tests=4)
+        problems = self.run_verify(plan=plan, records={"0": record("0", ["test_a"], 2),
+                                                       "1": record("1", ["test_b"], 2)})
+        self.assertIn("planned shard union differs from the expected module list", problems)
+
+    def test_test_count_and_job_results_are_checked(self):
+        problems = self.run_verify(records={"0": record("0", ["test_a", "test_c"], 2),
+                                            "1": record("1", ["test_b"], 2)})
+        self.assertIn("ran 4 tests, planned 5", problems)
+        problems = self.run_verify(needs=dict(self.NEEDS, hass={"result": "skipped"}))
+        self.assertIn("job hass result skipped, expected success", problems)
+        problems = self.run_verify(needs=dict(self.NEEDS, site={"result": "failure"}))
+        self.assertIn("job site result failure, expected success", problems)
+
+    def test_recomputed_plan_must_match(self):
+        other = dict(self.FULL, tier="affected", shards=[["test_a"]])
+        problems = self.run_verify(recomputed=other)
+        self.assertIn("the plan recomputed here differs from the quick job's plan", problems)
+
+    def test_affected_tier_runs_in_quick_and_skips_shards(self):
+        plan = {"tier": "affected", "reason": "x", "event": "pull_request", "shards": [["test_b"]], "tests": 2}
+        needs = dict(self.NEEDS, hass={"result": "skipped"})
+        self.assertEqual(self.run_verify(plan=plan, needs=needs, records={"quick": record("quick", ["test_b"], 2)}),
+                         [])
+        problems = self.run_verify(plan=plan, needs=self.NEEDS, records={"quick": record("quick", ["test_b"], 2)})
+        self.assertIn("job hass result success, expected skipped", problems)
+
+    def test_affected_plan_always_runs_the_private_file_guard(self):
+        from unittest import mock
+        modules = sorted(set(MODULES) | {cs.SMOKE, cs.PRIVACY_GUARD})
+        texts, edges = graph(TREE)
+        with mock.patch.object(cs, "changed_paths", return_value=["branding/customer-export.db"]), \
+                mock.patch.object(cs, "build_graph", return_value=(texts, edges)):
+            plan = cs.make_plan("pull_request", "base", 4, {}, modules)
+        self.assertEqual(plan["tier"], "affected")
+        self.assertIn(cs.PRIVACY_GUARD, plan["shards"][0])
+
+    def test_plan_round_trips_through_json(self):
+        self.assertEqual(json.loads(json.dumps(self.FULL)), self.FULL)
+
+
+if __name__ == "__main__":
+    unittest.main()

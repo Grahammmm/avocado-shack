@@ -3,16 +3,41 @@ name: check
 # Offline checks only: no secrets, no deploy, no network beyond installing the
 # pinned Playwright test tool. All servers bind 127.0.0.1 with a temporary
 # community database; the private runtime data directory is never used.
+#
+# AV-CI-SHARD-1 (2026-11-06): one 23-minute job became parallel jobs. The required check is still
+# the job named `check`, which now only aggregates: it is green only when every other job did its part.
+#   quick           syntax + commerce unit tests, plans the hass tests (hass/tests/ci_shards.py plan)
+#                   and, on the affected tier, runs the affected hass test modules itself
+#   hass shard N    full tier only: one stable shard of hass/tests (HASS_SHARD_JOBS shards, default 4)
+#   site community  catalog + community checks against a loopback server on an OS-assigned port
+#   site static     the publishable build on a plain static host, every page checked
+#   check           re-derives the plan, proves every planned module ran exactly once (shard union ==
+#                   module list, test count == plan), and reprints any failing shard's unittest output
+#
+# WHICH HASS TESTS RUN (the full rule is in the docstring of hass/tests/ci_shards.py):
+#   push to main, the nightly schedule and manual runs: ALWAYS THE FULL SUITE, sharded.
+#   pull_request: only the test modules the changed files can reach (Python imports plus references to the
+#   file's name in code), run in the quick job. A PR runs the FULL suite instead when it touches
+#   .github/, hass/tests/ infrastructure (anything but a test module), hass/__init__.py, hass/ops/,
+#   hass/content/, hass/templates/ or package-lock.json; a hass module reached by more than half of the
+#   test modules (a shared library); any hass/ path no test reaches; or any unmapped path outside the
+#   known areas (docs, planning, reports, branding, commerce, storefront-mockup, inventory-intake, *.md).
+#   It also runs FULL when the selection would take longer than a full shard.
+#   The site and commerce checks run on every event.
 on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "23 10 * * *"  # nightly full suite on main, 02:23 PST
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: check-${{ github.ref }}
+  # The nightly run gets its own group, so it can never replace a pending main push run.
+  group: check-${{ github.event_name == 'schedule' && 'nightly-' || '' }}${{ github.ref }}
   # A superseded PR run is worth cancelling; a superseded main run is not. Cancelling main's
   # check left main with no verdict on 38 of 45 main runs measured 2026-11-02/03, and
   # bin/mainstate.py reads a cancelled check at HEAD as NO_VERDICT (CANCELMASK-1), which caps
@@ -21,24 +46,92 @@ concurrency:
 
 env:
   PLAYWRIGHT_VERSION: "1.64.1"
+  # Hass shard jobs on the full tier. The suite is ~1150 s of measured module time (hass/tests/ci_weights.json),
+  # so 4 shards are ~290 s each; 4 shards + quick + 2 site jobs fit in the 8 avocado-shack runners with one
+  # free. Retune with the repo variable HASS_SHARD_JOBS (1-8) without a code change.
+  HASS_SHARD_JOBS: ${{ vars.HASS_SHARD_JOBS || 4 }}
 
+# Self-hosted on AgentOrange (operator 2026-11-02). avocado-shack is PRIVATE, so this repo
+# receives no fork pull requests and needs no same-repo guard; GitHub-hosted minutes are
+# billable for private repos and were blocked by the account spend limit, which stopped every
+# check job at 0 steps. Runners agentorange-avo-1..8 carry the avocado-shack label.
 jobs:
-  check:
-    name: check
-    # Self-hosted on AgentOrange (operator 2026-11-02). avocado-shack is PRIVATE, so this repo
-    # receives no fork pull requests and needs no same-repo guard; GitHub-hosted minutes are
-    # billable for private repos and were blocked by the account spend limit, which stopped every
-    # check job at 0 steps. Runners agentorange-avo-1/2 carry the avocado-shack label.
+  quick:
+    name: quick
     runs-on: [self-hosted, Linux, X64, avocado-shack]
-    # hass/tests took ~6.5 min on GitHub-hosted runners and >9.5 min on the shared
-    # AgentOrange host (run 41518439444 was cancelled at 10 min with every test passing).
-    # AV-CI-MAIN-1 (2026-11-06): over the last 100 completed check runs, 16 of the 68 jobs that ran
-    # to an end hit the 25-min limit (11 of the 15 main push jobs; 14 of the 16 stopped in "Hass
-    # tests", 2 have no step record), and the jobs that finished were bunched just under it (p50
-    # 23.2, p90 24.7, max 24.9 min). So the true p90 is above 25.3 min; 45 (the cap) is 1.78x
-    # that lower bound. A timed-out job gives no verdict, so main reads NO_VERDICT in
-    # bin/mainstate.py and ship-queue merges one per pass.
-    timeout-minutes: 45
+    timeout-minutes: 20
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      tier: ${{ steps.plan.outputs.tier }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2  # a PR checks out its merge commit: HEAD^1 is the base branch tip
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Plan hass tests (tier, shards, union proof)
+        id: plan
+        run: python3 hass/tests/ci_shards.py plan --event "$GITHUB_EVENT_NAME" --base HEAD^1 --shards "$HASS_SHARD_JOBS"
+
+      - name: Python syntax check
+        run: python3 -m compileall -q storefront-mockup reports/hermes-handoff
+
+      - name: Commerce gateway unit tests (pure logic, no dependencies)
+        # owner-photo needs the sharp image library; the commerce prototype is
+        # historical, so only dependency-free tests run here.
+        run: |
+          tests=$(ls commerce/gateway/*.test.mjs | grep -v '/owner-photo\.test\.mjs$')
+          node --test $tests
+
+      - uses: ./.github/actions/test-env
+        if: steps.plan.outputs.tier == 'affected'
+
+      - name: Affected hass tests
+        if: steps.plan.outputs.tier == 'affected'
+        env:
+          HASS_PLAN: ${{ steps.plan.outputs.plan }}
+        run: python3 -u hass/tests/ci_shards.py run --shard quick --record-dir "$RUNNER_TEMP/hass-records"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.plan.outputs.tier == 'affected'
+        with:
+          name: hass-record-quick
+          path: ${{ runner.temp }}/hass-records/*.json
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.plan.outputs.tier == 'affected'
+        with:
+          name: hass-log-quick
+          path: ${{ runner.temp }}/hass-records/*.log
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - name: Remove private TMPDIR
+        if: always()
+        run: if [ -n "${AVO_CI_TMPDIR:-}" ]; then rm -rf "$AVO_CI_TMPDIR"; fi
+
+  hass:
+    name: hass shard ${{ matrix.shard }}
+    needs: quick
+    if: needs.quick.outputs.tier == 'full'
+    runs-on: [self-hosted, Linux, X64, avocado-shack]
+    # A shard is ~290 s of measured module time; 30 min leaves >5x for a loaded host.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.quick.outputs.shards || '["0"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,101 +145,132 @@ jobs:
         with:
           node-version: "22"
 
-      # Playwright is a test-only tool (not a repo dependency); cache the npm
-      # install and the downloaded Chromium, keyed by the pinned version.
-      - name: Cache Playwright package and browser
-        id: pw-cache
-        uses: actions/cache@v4
+      - uses: ./.github/actions/test-env
+
+      # Each shard is one plain unittest run (verbosity 2) of its planned module list, printed as it runs,
+      # so the "=====" rule stays directly above every FAIL:/ERROR: header that bin/mergegate.py parses.
+      - name: Hass tests
+        env:
+          HASS_PLAN: ${{ needs.quick.outputs.plan }}
+          SHARD: ${{ matrix.shard }}
+        run: python3 -u hass/tests/ci_shards.py run --shard "$SHARD" --record-dir "$RUNNER_TEMP/hass-records"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          path: |
-            ~/pw-tools
-            ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+          name: hass-record-${{ matrix.shard }}
+          path: ${{ runner.temp }}/hass-records/*.json
+          retention-days: 1
+          if-no-files-found: ignore
 
-      # The AgentOrange runners are unprivileged user services (no sudo), so
-      # `--with-deps` / `install-deps` (which apt-get through sudo) only run on
-      # GitHub-hosted runners. The self-hosted host already has Chromium's
-      # system libraries installed (same pattern as skippercast's ci.yml);
-      # the verify step below fails loudly if one is ever missing.
-      - name: Install Playwright test tool
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/pw-tools
-          npm install --prefix ~/pw-tools --no-save --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}"
-          ~/pw-tools/node_modules/.bin/playwright install chromium
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: hass-log-${{ matrix.shard }}
+          path: ${{ runner.temp }}/hass-records/*.log
+          retention-days: 1
+          if-no-files-found: ignore
 
-      - name: Install Chromium system libraries (GitHub-hosted only)
-        if: runner.environment == 'github-hosted'
-        run: ~/pw-tools/node_modules/.bin/playwright install-deps chromium
+      - name: Remove private TMPDIR
+        if: always()
+        run: if [ -n "${AVO_CI_TMPDIR:-}" ]; then rm -rf "$AVO_CI_TMPDIR"; fi
 
-      - name: Verify Chromium launches (system libraries present)
-        run: |
-          cd ~/pw-tools
-          node -e "require('playwright').chromium.launch().then(b => b.close())"
+  site:
+    name: site ${{ matrix.part }}
+    runs-on: [self-hosted, Linux, X64, avocado-shack]
+    # Measured inside the old single job: catalog + community 5.7 min, static site 3.8 min.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [community, static]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-      - name: Python syntax check
-        run: python3 -m compileall -q storefront-mockup reports/hermes-handoff
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Commerce gateway unit tests (pure logic, no dependencies)
-        # owner-photo needs the sharp image library; the commerce prototype is
-        # historical, so only dependency-free tests run here.
-        run: |
-          tests=$(ls commerce/gateway/*.test.mjs | grep -v '/owner-photo\.test\.mjs$')
-          node --test $tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: ./.github/actions/test-env
 
       # community-ui-qa.cjs also reads the normal site at PREVIEW_URL (read-only;
       # it asserts the sample RSVP makes no POST), so one temp-DB server backs
       # both the catalog check and that part of the community check.
-      # The self-hosted host may already run a long-lived preview on 3101 (and
-      # other jobs share it), so use the first port nothing answers on, and
-      # stop if our own server is not the one that came up.
-      - name: Catalog + community checks (loopback servers, temporary databases)
+      # Several check jobs share one host, so the server binds port 0: the OS hands it a free port
+      # atomically, and the server prints the port it actually bound. (The old "first port nothing
+      # answers on" scan raced when two jobs probed the same port before either bound it.)
+      - name: Catalog + community checks (loopback server, temporary databases)
+        if: matrix.part == 'community'
         run: |
-          export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
           export QA_OUT_DIR="$RUNNER_TEMP/qa"
-          port=
-          for p in $(seq 3111 3199); do
-            curl -s -o /dev/null --max-time 1 "http://127.0.0.1:$p/" || { port=$p; break; }
-          done
-          test -n "$port"
-          export PREVIEW_URL="http://127.0.0.1:$port"
           mkdir -p "$QA_OUT_DIR"
+          log="$RUNNER_TEMP/server.log"
           AVOSHACK_COMMUNITY_DB="$RUNNER_TEMP/site.sqlite3" \
-            python3 storefront-mockup/community-server.py --port "$port" >"$RUNNER_TEMP/server.log" 2>&1 &
+            python3 -u storefront-mockup/community-server.py --port 0 >"$log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
-          for _ in $(seq 1 50); do
-            curl -fsS "$PREVIEW_URL/" >/dev/null 2>&1 && break
-            sleep 0.2
+          port=
+          for _ in $(seq 1 100); do
+            port="$(grep -o 'http://127\.0\.0\.1:[0-9]*/' "$log" | head -1 | grep -o '[0-9]*/$' | tr -d /)" || true
+            [ -n "$port" ] && break
+            kill -0 "$server_pid" 2>/dev/null || break
+            sleep 0.1
           done
-          kill -0 "$server_pid" || { cat "$RUNNER_TEMP/server.log"; exit 1; }
+          [ -n "$port" ] || { echo "server did not report a port"; cat "$log"; exit 1; }
+          export PREVIEW_URL="http://127.0.0.1:$port"
+          echo "PREVIEW_URL=$PREVIEW_URL"
+          curl -fsS --max-time 10 "$PREVIEW_URL/" >/dev/null
+          kill -0 "$server_pid" || { cat "$log"; exit 1; }
           node storefront-mockup/catalog-only-qa.cjs
           python3 storefront-mockup/community-qa.py
-          # AVO-LAUNCH-1: the publishable build (allowlist only) on a plain static host, every page checked.
+
+      # AVO-LAUNCH-1: the publishable build (allowlist only) on a plain static host, every page checked.
+      - name: Static published site check
+        if: matrix.part == 'static'
+        run: |
           site="$(mktemp -d "$RUNNER_TEMP/published-site.XXXXXX")"
           python3 hass/sitegen.py --publish "$site"
           node storefront-mockup/static-site-qa.cjs "$site"
 
-      # This step was 1174s of a 1203s job (97.6%) measured over 14 successful runs on
-      # 2026-11-02/03: 282 modules and 2371 tests run one at a time on a 24-core host.
-      # run_parallel.py runs the same modules in parallel shards, each a real
-      # `python3 -m unittest -v` run whose output is printed whole and never interleaved, so the
-      # "=====" rule stays directly above every FAIL:/ERROR: header that bin/mergegate.py parses.
-      - name: Hass tests
+      - name: Remove private TMPDIR
+        if: always()
+        run: if [ -n "${AVO_CI_TMPDIR:-}" ]; then rm -rf "$AVO_CI_TMPDIR"; fi
+
+  # The required check. bin/mainstate.py and bin/mergegate.py count every check run (keyed by id, not by
+  # name), so the shard and site checks also count on their own; `check` keeps the one name a person or a
+  # branch rule can require, and fails closed when any job failed, was skipped where it should have run, or
+  # the executed modules differ from the full list.
+  check:
+    name: check
+    needs: [quick, hass, site]
+    if: ${{ !cancelled() }}
+    runs-on: [self-hosted, Linux, X64, avocado-shack]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true  # nothing to download is reported below as a missing shard record
+        with:
+          pattern: hass-*
+          path: ${{ runner.temp }}/hass-records
+          merge-multiple: true
+
+      - name: Every planned hass module ran exactly once, and every job passed
         env:
-          # Shard width x runner count is one budget on one host, so this is tunable without a
-          # code change: set the repo variable HASS_SHARDS to retune. Measured 2026-11-04 on
-          # AgentOrange: four concurrent hass suites were 35.4 MB/s of writes, 74.8% of everything
-          # the box wrote, with the NVMe at 81.4% utilisation and an average queue depth of 16.9.
-          # CPU was idle (7.5 of 24 cores); the cores are idle because the work is blocked on disk.
-          # 4 runners x 4 shards would be 16 concurrent suites against a device already saturated
-          # at 4, which is what produced the 11.2-23.8 min spread in this job. 2 keeps the peak at
-          # 8 and leaves the job far short of timeout-minutes.
-          HASS_SHARDS: ${{ vars.HASS_SHARDS || 2 }}
-        run: |
-          export PLAYWRIGHT_MODULE="$HOME/pw-tools/node_modules/playwright"
-          if [ -d hass/tests ]; then
-            python3 hass/tests/run_parallel.py --jobs "${HASS_SHARDS}"
-          else
-            echo "hass/tests not present yet; nothing to run."
-          fi
+          HASS_PLAN: ${{ needs.quick.outputs.plan }}
+          HASS_NEEDS: ${{ toJSON(needs) }}
+        run: python3 hass/tests/ci_shards.py verify --record-dir "$RUNNER_TEMP/hass-records" --base HEAD^1 --shards "$HASS_SHARD_JOBS"
