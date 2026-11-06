@@ -37,15 +37,18 @@ def _items(content, collection):
 def _current(content, collection, key):
     if collection == "store":
         return content.store
+    if collection == "club":
+        return content.community["club"]
     if collection == "makers":
         return content.makers.get(key)
     return next((item for item in _items(content, collection) if item.get("id") == key), None)
 
 
 def _put(content, collection, key, value):
-    if collection == "store":
-        content.store.clear()
-        content.store.update(value)
+    if collection in ("store", "club"):
+        target = content.store if collection == "store" else content.community["club"]
+        target.clear()
+        target.update(value)
     elif collection == "makers":
         content.makers[key] = value
     else:

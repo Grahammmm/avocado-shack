@@ -43,6 +43,7 @@ HOLD_FIELDS = ("reason", "source", "evidence", "record")
 
 MAKER_FIELDS = ("name", "place", "story", "url")
 CLUB_FIELDS = ("clubName", "organizer", "intendedSender", "emailConnected")
+CLUB_OPTIONAL = ("showSamples",)  # AV1422-10: false hides the sample hikes; absent = shown
 ROUTE_IDEA_FIELDS = (
     "id", "title", "place", "character", "distance", "difficulty", "elevation", "elevationLabel",
     "duration", "routeType", "terrain", "description", "sourceUrl", "sourceName", "status", "rsvpEnabled",
@@ -333,11 +334,13 @@ def validate_community(problems, community):
                         ("club", "events", "routeIdeas")):
         return
     club = community.get("club")
-    if _closed_keys(problems, "community.club", club, CLUB_FIELDS, CLUB_FIELDS):
+    if _closed_keys(problems, "community.club", club, CLUB_FIELDS + CLUB_OPTIONAL, CLUB_FIELDS):
         for field in ("clubName", "organizer", "intendedSender"):
             _text(problems, f"community.club.{field}", club.get(field), limit=TEXT_LIMITS["club"][field])
         if club.get("emailConnected") is not False:
             problems.append("community.club.emailConnected: email delivery is not connected; must be false")
+        if "showSamples" in club and not isinstance(club["showSamples"], bool):
+            problems.append("community.club.showSamples: must be true or false")
     ideas = community.get("routeIdeas")
     idea_ids, hidden = set(), []  # hidden: AV1322-03 ideas left out of the generated route list
     if not isinstance(ideas, list):

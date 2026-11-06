@@ -113,7 +113,8 @@ class PublishedSite(unittest.TestCase):
                 self.assertEqual(len(emails), 0, f"{len(emails)} email address(es) in {rel}")
                 self.assertEqual(len(PHONE.findall(text)), 0, f"phone number(s) in {rel}")
         club = json.loads(self.text["community.json"])
-        self.assertEqual(sorted(club), sorted(sitegen.PUBLIC_COMMUNITY_KEYS))
+        self.assertLessEqual(set(club), set(sitegen.PUBLIC_COMMUNITY_KEYS))  # AV1422-10: showSamples only when false
+        self.assertLessEqual({"clubName", "events", "routeIdeas"}, set(club))
         self.assertEqual(len(club["routeIdeas"]), 3)
 
     def test_images_carry_no_camera_or_location_metadata(self):
