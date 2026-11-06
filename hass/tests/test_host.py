@@ -209,14 +209,14 @@ class ServeTests(HostCase):
 
     def test_relay_over_http_pulls_acks_and_refuses_replay(self):
         srv, store_id = self.server(), self.store.add(OWNER_CHAT, "hello", 0, NOW)
-        pull = relay.seal_control({"type": "pull", "max": 5}, SECRET, nonce="aa" * 16, now=NOW)
+        pull = relay.seal_control({"op": "pull", "max": 5}, SECRET, nonce="aa" * 16, now=NOW)
         status, body = self.post(srv, "/v1/relay", json.dumps(pull).encode())
         reply = relay.unseal_control(json.loads(body), SECRET, now=NOW, seen=set())
         self.assertEqual((status, reply["items"]), (200, [{"id": store_id, "chat": OWNER_CHAT, "text": "hello", "pictures": 0}]))
         self.assertEqual(self.post(srv, "/v1/relay", json.dumps(pull).encode())[0], 400)  # replayed
-        ack = relay.seal_control({"type": "ack", "ids": [store_id]}, SECRET, nonce="bb" * 16, now=NOW)
+        ack = relay.seal_control({"op": "ack", "ids": [store_id]}, SECRET, nonce="bb" * 16, now=NOW)
         status, body = self.post(srv, "/v1/relay", json.dumps(ack).encode())
-        self.assertEqual((status, relay.unseal_control(json.loads(body), SECRET, now=NOW, seen=set())["count"]), (200, 1))
+        self.assertEqual((status, relay.unseal_control(json.loads(body), SECRET, now=NOW, seen=set())), (200, {"op": "acked", "ids": [store_id]}))
         v1 = bridge.seal(bridge.Inbound("p", "c", "s", "t", received_at="x"), SECRET, nonce="cc" * 16, now=NOW)
         self.assertEqual(self.post(srv, "/v1/relay", json.dumps(v1).encode())[0], 400)
         self.assertEqual(self.store.status(), {"waiting": 0, "total": 1})
@@ -294,14 +294,26 @@ class WorkTests(HostCase):
         with contextlib.redirect_stdout(out):
             self.inbound(srv, self.seal(event("new-message")))
             self.post(srv, "/v1/other?token=" + KEY_HEX, b"{}")
+            self.post(srv, "/v1/inbound", b"", method="PRIVATE-TEXT")
             self.post(self.server(peers=("10.0.0.9",)), "/v1/inbound", b"{}")
             with mock.patch.object(work.rx, "drain", side_effect=RuntimeError(f"{OWNER} {OWNER_CHAT} {KEY_HEX}")):
                 work.run(Stop(2))
             host.main(["check", "--host", str(self.host_json(secretFile=str(self.hostdir / "nokey")))])
         seen = "\n".join([out.getvalue(), *(r.getMessage() for r in self.records)])
-        for private in (OWNER, OWNER_CHAT, KEY_HEX, str(self.repo.state), str(self.hostdir), "desc", "token"):
+        for private in (OWNER, OWNER_CHAT, KEY_HEX, str(self.repo.state), str(self.hostdir), "desc", "token", "PRIVATE"):
             self.assertNotIn(private, seen)
         self.assertIn("cycle failed: RuntimeError", seen)
+
+    def test_interpreter_refreshed_between_messages_of_one_drain(self):
+        srv, work, seen, real = self.server(), self.worker(True), [], self.conv.handle
+        for guid in ("FAKE-A", "FAKE-B"): self.inbound(srv, self.seal(self.event_from("new-message", guid=guid)))
+
+        def handle(msg, *a, **kw):  # the first message applies a content change
+            seen.append(self.builds)
+            if len(seen) == 1: self.assertEqual(self.repo.apply(self.repo.prepare(_hours())["draft"])["result"], "applied")
+            return real(msg, *a, **kw)
+        with mock.patch.object(self.conv, "handle", side_effect=handle): work.cycle()
+        self.assertEqual(seen, [0, 1])  # the second message met a rebuilt interpreter
 
     def test_worker_backs_off_and_resets(self):
         work, stop = self.worker(False), Stop(4)

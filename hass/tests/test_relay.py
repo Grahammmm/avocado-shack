@@ -64,26 +64,26 @@ class ControlTests(unittest.TestCase):
             self.assertEqual([r["id"] for r in store.pull(5, 300)], [b])
             self.assertEqual(store.status(), {"waiting": 1, "total": 2})
             self.assertEqual(store.db.execute("SELECT value FROM meta WHERE name = 'last_pull_at'").fetchone()[0], "300")
-        env, seen = self.seal({"type": "pull", "max": 3}, "cd" * 16), set()
-        self.assertEqual(relay.unseal_control(env, SECRET, now=self.NOW, seen=seen), {"type": "pull", "max": 3})
+        env, seen = self.seal({"op": "pull", "max": 3}, "cd" * 16), set()
+        self.assertEqual(relay.unseal_control(env, SECRET, now=self.NOW, seen=seen), {"op": "pull", "max": 3})
         with self.assertRaises(bridge.EnvelopeError) as ctx:
             relay.unseal_control(env, SECRET, now=self.NOW, seen=seen)
         self.assertEqual(ctx.exception.code, "replay")
 
     def test_envelope_key_stale_and_closed_shapes(self):
-        env = self.seal({"type": "replies", "items": [{"id": 1, "chat": "c", "text": "t", "pictures": 0}]})
+        env = self.seal({"op": "replies", "items": [{"id": 1, "chat": "c", "text": "t", "pictures": 0}]})
         self.assertEqual(env["mac"], bridge._mac(relay.control_key(SECRET), {k: v for k, v in env.items() if k != "mac"}))
         self.assertNotEqual(env["mac"], bridge._mac(SECRET, {k: v for k, v in env.items() if k != "mac"}))  # not the raw key
-        self.assertEqual(relay.unseal_control(env, SECRET, now=self.NOW, seen=set())["type"], "replies")
+        self.assertEqual(relay.unseal_control(env, SECRET, now=self.NOW, seen=set())["op"], "replies")
         for bad, now, want in ((env, self.NOW + 301, "stale"), ({**env, "v": 1}, self.NOW, "version"),
                                ({**env, "mac": "0" * 64}, self.NOW, "mac"), ({**env, "extra": 1}, self.NOW, "shape"),
-                               ({**env, "body": {"type": "pull", "max": 6}}, self.NOW, "shape")):
+                               ({**env, "body": {"op": "pull", "max": 6}}, self.NOW, "shape")):
             with self.subTest(want=want), self.assertRaises(bridge.EnvelopeError) as ctx:
                 relay.unseal_control(bad, SECRET, now=now, seen=set())
             self.assertEqual(ctx.exception.code, want)
-        for body in ({"type": "ack", "ids": []}, {"type": "ack", "ids": [0]}, {"type": "pull", "max": 1, "x": 1},
-                     {"type": "replies", "items": [{"id": 1, "chat": "c", "text": "x" * 8193, "pictures": 0}]},
-                     {"type": "replies", "items": [{"id": 1, "chat": "c", "text": "t", "pictures": 11}]}):
+        for body in ({"op": "ack", "ids": []}, {"op": "ack", "ids": [0]}, {"op": "pull", "max": 1, "x": 1},
+                     {"op": "replies", "items": [{"id": 1, "chat": "c", "text": "x" * 8193, "pictures": 0}]},
+                     {"op": "replies", "items": [{"id": 1, "chat": "c", "text": "t", "pictures": 11}]}):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 self.seal(body)
         v1 = bridge.seal(bridge.Inbound("p", "c", "s", "t", received_at="x"), SECRET, nonce="ef" * 16, now=self.NOW)

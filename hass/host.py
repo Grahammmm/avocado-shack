@@ -24,6 +24,7 @@ from hass.ops import load_registry  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
 MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay")
+METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
 KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit"}
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 LIVE_REASON = "live release is not installed"
@@ -126,7 +127,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_request(self, code="-", size="-"):  # method, known path and status only: no peer, body, header or query
         path = getattr(self, "path", "")
-        LOG.info("%s %s %s", getattr(self, "command", "-"), path if path in ROUTES else "-", code)
+        method = getattr(self, "command", "")
+        LOG.info("%s %s %s", method if method in METHODS else "-", path if path in ROUTES else "-", code)
 
     def _send(self, code, obj=None):
         data = b"" if obj is None else json.dumps(obj, sort_keys=True).encode("utf-8")
@@ -158,8 +160,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError, RecursionError, bridge.EnvelopeError):
             return self._send(400, {"result": "rejected"})
         secs = int(now.timestamp())
-        if msg["type"] == "pull": out = {"type": "replies", "items": srv.store.pull(msg["max"], secs)}
-        elif msg["type"] == "ack": out = {"type": "acked", "count": srv.store.ack(msg["ids"], secs)}
+        if msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
+        elif msg["op"] == "ack": srv.store.ack(msg["ids"], secs); out = {"op": "acked", "ids": msg["ids"]}
         else: return self._send(400, {"result": "rejected"})
         self._send(200, relay.seal_control(out, srv.secret, nonce=secrets.token_hex(16), now=now))
 
@@ -184,11 +186,20 @@ class Worker:
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
         self.sender = relay.RelaySender(store, conv.settings["ownerChat"], lambda: int(clock().timestamp()))
         self.rev = editor_mod.content_revision(self.worktree)
+        handle = rx.handle
 
-    def cycle(self):
-        """Rebuild the interpreter prompt when the content changed, drain the inbox, queue the replies for the Mac."""
+        def refreshed(msg, *a, **kw):  # an earlier message in the same drain may have applied a change
+            self._refresh()
+            return handle(msg, *a, **kw)
+        rx.handle = refreshed
+
+    def _refresh(self):
         if (rev := editor_mod.content_revision(self.worktree)) != self.rev:
             self.conv.interpreter, self.rev = self.build(), rev
+
+    def cycle(self):
+        """Rebuild the interpreter prompt when the content changed (before every message), drain the inbox, queue the replies."""
+        self._refresh()
         self.rx.drain()
         self.conv.flush(self.sender)
 

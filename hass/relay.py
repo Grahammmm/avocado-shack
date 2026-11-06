@@ -61,17 +61,17 @@ def _ints(v, lo, hi) -> bool:
     return type(v) is list and lo <= len(v) <= hi and all(type(x) is int and x > 0 for x in v)
 
 
-SHAPES = {  # body type -> (keys, validator of the whole body)
-    "pull": ({"type", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5),
-    "ack": ({"type", "ids"}, lambda b: _ints(b["ids"], 1, 20)),
-    "replies": ({"type", "items"}, lambda b: type(b["items"]) is list and len(b["items"]) <= 5
+SHAPES = {  # body op -> (keys, validator of the whole body)
+    "pull": ({"op", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5),
+    "ack": ({"op", "ids"}, lambda b: _ints(b["ids"], 1, 20)),
+    "replies": ({"op", "items"}, lambda b: type(b["items"]) is list and len(b["items"]) <= 5
                 and all(map(_item, b["items"]))),
-    "acked": ({"type", "count"}, lambda b: type(b["count"]) is int and 0 <= b["count"] <= 20),
+    "acked": ({"op", "ids"}, lambda b: _ints(b["ids"], 0, 20)),
 }
 
 
 def _body_ok(body) -> bool:
-    shape = SHAPES.get(body.get("type")) if type(body) is dict else None
+    shape = SHAPES.get(body.get("op")) if type(body) is dict else None
     return shape is not None and set(body) == shape[0] and shape[1](body)
 
 
