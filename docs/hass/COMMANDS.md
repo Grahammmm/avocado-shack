@@ -25,6 +25,7 @@ A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b
 | `no <code>` (or `cancel <code>`, `reject <code>`) | Cancels that draft or question; nothing changes on the site. | `cancel A1B2` |
 | `no` alone (or `cancel`, `reject`) | Cancels the waiting draft or question; nothing changes. | `no` |
 | `history` | Lists the last five approved changes (approved (still being saved), applied, checked, failed or undone) with their codes and states, each with where it is now (on the website, not confirmed on the website, undone). | `history` |
+| `history <words>` | Lists up to 10 approved changes (same states and line format as `history`, each with its code and where it is now), newest first, whose summary contains every word you send; capital letters and accents do not matter, and the words may come in any order. Only the summary is searched, across all approved history, so the code of an older change can be found for `undo <code>`. Send 1–60 characters; no match says so, and no words gets a usage reply. It changes nothing, expires nothing and works while paused. | `history opening hours` |
 | `undo` | Drafts an undo of the most recent applied change; a bare undo skips undos and takes the change before. It needs `yes <code>` like any draft. | `undo` |
 | `undo <code>` | Drafts an undo of that applied change. It needs `yes <code>`. | `undo A1B2!` |
 | `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals, and the last shelf check (`Shelf check: <day>`, the same words as the morning report; after a week it adds that the site says call to confirm). With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |
@@ -48,6 +49,14 @@ A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b
 | `help` (or `commands`, `?`) | Replies a short list of every command with one example each. It changes nothing. | `help` |
 
 Saved notes never change the site, and pause does not affect them.
+
+Cancelling a hike (a change request, needs `yes <code>`; not the `cancel <code>` command above, which only rejects a
+waiting draft): say it in your own words, for example "cancel the Point Buchon hike, rained out - we will pick a new
+date soon". `hike.cancel` takes the hike id and an optional `note`, for example `Rained out - we will pick a new date soon`.
+The note is one line of plain text, at most 160 characters, and is public site copy: the cancelled hike's card shows it
+exactly as written, above "This hike is cancelled." It is checked like other hike text (no markup, `$` or invisible
+characters), and any claim in it, such as a distance or "organic", must come from your own message. Without a note the
+card is unchanged. Cancelling notifies nobody. `undo` brings the hike back as scheduled and removes the note.
 
 Photos: send one photo per message, as JPEG or PNG, up to 20 MB. A phone photo's rotation is kept, so it shows upright
 (only that rotation tag is kept, never its location, camera or date); only a PNG with a rotation tag is refused. Any
