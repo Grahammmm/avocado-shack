@@ -86,6 +86,7 @@ NOT_READ_REPLY = ("I only read new messages, so that reaction or edit changed no
                   "Send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
 PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
                   "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
+PHOTO_PATH_RE = re.compile(r"assets/products/photo-[0-9a-f]{16}\.(jpg|png)")
 PHOTO_OPS = ("product.set_photo", "product.add")  # AV0022-04: ops in a photo-draft answer that get the draft's photo
 FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was changed. Please send it again."
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
@@ -475,22 +476,26 @@ def _summary(draft: dict) -> str:
 
 def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty fields, sorted, one per line (≤ 40)
     rows = [(k, _hike_time(v) if k == "startsAt" else v) for k, v in sorted(r["after"].items()) if v not in (None, "", [])]
+    rows = [("photo", "the photo from your message") if k == "image" and PHOTO_PATH_RE.fullmatch(str(v)) else (k, v)
+            for k, v in rows]
     more = [f"  … and {len(rows) - 40} more fields"] if len(rows) > 40 else []
     return [f"{r['collection']} {r['key']}: new"] + [f"  {k}: " + "\n    ".join(
         (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
 
 
-def _record_lines(draft: dict) -> list:  # AV0022-08: a draft's record and warning lines (proposal_text and show)
+def _record_lines(draft: dict, undo: bool = False) -> list:  # AV0022-08: proposal_text and show
     lines = []
     for r in draft["records"]:
         lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
+            f"{r['collection']} {r['key']}: photo: " + ("the previous photo" if undo else "the photo from your message")
+            if f == "image" and (PHOTO_PATH_RE.fullmatch(str(a)) or undo and PHOTO_PATH_RE.fullmatch(str(b))) else
             f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in (
                 (f, *(map(_hike_time, (b, a)) if f == "startsAt" else (b, a))) for f, b, a in _changes(r))]
     return lines + [f"Warning: {w}" for w in draft.get("warnings") or []]
 
 
-def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "") -> str:
-    lines = [head or f"Draft {code}:"] + _record_lines(draft)
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False) -> str:
+    lines = [head or f"Draft {code}:"] + _record_lines(draft, undo)
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
     return "\n".join(lines)
@@ -589,7 +594,7 @@ class Conversation:
 
     def _proposal_reply(self, row, draft, prefix=""):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
-        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row)), []
+        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row)), []
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
@@ -1299,11 +1304,11 @@ class Conversation:
             rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
             draft = {"records": rec["records"], "warnings": rec.get("warnings")}
             if state == "proposed":
-                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), f"Draft {code} (waiting):")
+                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), f"Draft {code} (waiting):", undo=_is_undo(row))
                 shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
             else:
                 sha = f" ({row['commit'][:7]})" if row["commit"] else ""
-                text, shot = "\n".join([f"Applied {code}{sha}:"] + _record_lines(draft)), row["screenshot"]
+                text, shot = "\n".join([f"Applied {code}{sha}:"] + _record_lines(draft, _is_undo(row))), row["screenshot"]
             return text, [str(shot)] if shot and Path(shot).is_file() else []
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return f"{code}: the draft details are not available any more.", []
