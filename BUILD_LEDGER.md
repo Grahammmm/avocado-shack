@@ -1877,3 +1877,115 @@ Branch rb/av1222-15 (AV1222-15, PR #432, merged as 02465a63ddbba690f2d67d9431fd1
 Checks at PR head: `python3 -B -m unittest hass.tests.test_style_no_commerce hass.tests.test_design_check hass.tests.test_selection_checked hass.tests.test_generated_targets` ran 40 tests, OK; `storefront-mockup/catalog-only-qa.cjs` exited 0 (recorded in PR #432). The new test was red on the old style.css.
 
 Limits: no before/after screenshots were taken; the design checker flags only the new test file; archive and QA scripts are untouched.
+
+## H04/H05 interpreter prompt lists hikes and route ideas (AV2022-01) — November 1, 2026
+
+Branch rb/av2022-01 (AV2022-01, PR #137, merged as 41ed9e45641165d1a95d18b92727780e0380782a). The prompt includes hikes and undated route ideas, never RSVP counts or guest data.
+
+Checks at PR head 9d90307a: `python3 -m unittest discover -s hass/tests -t . -v` — 978 tests in 316.516s, OK (skipped=10) (recorded in PR #137). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: Store hours/address, today's date, the club block, live model calls and interpret_check id validation are outside this unit.
+
+## H13/H05 interpreter prompt shows current hours and address (AV2022-02) — November 1, 2026
+
+Branch rb/av2022-02 (AV2022-02, PR #191, merged as 3167b924d4410829b4399a3b92475fbc821fbec9). The prompt reads current store hours and address.
+
+Checks at PR head 5ddd021a: `python3 -m unittest discover -s hass/tests -t . -v` — 1338 tests in 832.405s, OK (skipped=21) (recorded in PR #191). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No per-line store.set_hours operation, shop-name or club-organizer/sender change, or live model call; the quoted full run preceded the final main merge, after which 16 prompt tests passed.
+
+## H04/H05 interpreter knows today's Pacific date (AV2022-03) — November 1, 2026
+
+Branch rb/av2022-03 (AV2022-03, PR #195, merged as 21e06aed15dd446743fca7f9bdbae3c4eb0c0c11). The prompt supplies the current Pacific date.
+
+Checks at PR head 64f75999: `python3 -m unittest hass.tests.test_interpreter_today -v` — 10 tests, OK (recorded in PR #195).
+
+Limits: No Python date parsing, resolving relative dates ourselves, proposal-date wording changes, live model call or interpreter_eval fixture change.
+
+## H03 unstated brand, maker place or link asks first (AV2022-04) — November 4, 2026
+
+Branch rb/av2022-04 (AV2022-04, PR #346, merged as 9d92913443071cf62ee1ae349bee8245544c5a55). Unstated brand, maker place and link claims ask for owner facts first.
+
+Checks at PR head ecc16c0: `python3 -m unittest hass.tests.test_claims_sources hass.tests.test_undo hass.tests.test_claims` — 31 tests, OK after merging origin/main (recorded in PR #346).
+
+Limits: Maker name/story and product name/description term scanning are unchanged; no fetching or validating links or live model call.
+
+## H11/H12 voice notes get a please-type-it reply (AV2022-05) — November 1, 2026
+
+Branch rb/av2022-05 (AV2022-05, PR #140, merged as 76990116c47e57f4d0c2eaefdb767d6a86811074). Audio is refused, never transcribed or stored; a voice note gets a request to type instead.
+
+Checks at PR head fa8a9d27: `python3 -m unittest discover -s hass/tests -t . -v` — 995 tests in 401.986s, OK (skipped=10) (recorded in PR #140). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No transcription, audio storage, MP3/WAV/OGG detection, bridge attachment metadata or LIMITS.md wording change.
+
+## H06/H17 history lists approved changes only (AV2022-06) — November 1, 2026
+
+Branch rb/av2022-06 (AV2022-06, PR #169, merged as 341c1469c7d34b8b61112b38774d2d5686927e75). Chat history lists approved changes only.
+
+Checks at PR head b1f23cd2: `python3 -m unittest discover -s hass/tests -t . -v` — PASS, rc 0 via prepush (no full-suite count recorded); a targeted run recorded 104 tests, OK (recorded in PR #169). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No paging, history-all variant, editor CLI history change or undo-selection rule change.
+
+## H05/H17 near-approval asks for the explicit yes code (AV2022-07) — November 1, 2026
+
+Branch rb/av2022-07 (AV2022-07, PR #179, merged as ffdf942c079a4a4855e4169892cf831d46702f28). Near-approval words request yes <code>; they never approve a draft.
+
+Checks at PR head 1413841914b: `python3 -m unittest discover -s hass/tests -t . -v` — 1305 tests in 687.003s, OK (skipped=21), before the final main merge (recorded in PR #179). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No approval on these words, emoji/reaction approvals, other languages or HELP_TEXT/COMMANDS.md wording change.
+
+## H08 sender matching ignores email case and phone punctuation (AV2022-08) — November 1, 2026
+
+Branch rb/av2022-08 (AV2022-08, PR #184, merged as c708a99d5240fae5fe0a849fab258e7272879485). Owner sender matching ignores email case and phone punctuation; no configured sender value is quoted here.
+
+Checks at PR head da932439: `memcap -- python3 -m unittest hass.tests.test_ledger_rf1120 hass.tests.test_output_hygiene hass.tests.test_owner_sender_match hass.tests.test_state_db_nofollow` — 20 tests in 19.297s, OK (recorded in PR #184).
+
+Limits: No ownerChat matching, multi-owner roles, bridge sender parsing, real contact details or live BlueBubbles call.
+
+## H08/H10 BlueBubblesPhotos fetches attachments with a fake transport (AV2022-09) — November 1, 2026
+
+Branch rb/av2022-09 (AV2022-09, PR #141, merged as 5370850e8157d594d8c7fbd8f535c75fb484bd8b). BlueBubbles is loopback-only with no password in errors; attachment fetching is tested with a fake transport.
+
+Checks at PR head 99950540171662e: `python3 -m unittest discover -s hass/tests -t . -v` — 1000 tests in 390.431s, OK (skipped=10) (recorded in PR #141). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No live Mac/BlueBubbles call, service/runner wiring, HEIC conversion, storage or bridge.py edit; fake transports and repository fixtures only.
+
+## H06 maker result check reads the maker's product card (AV2022-10) — November 1, 2026
+
+Branch rb/av2022-10 (AV2022-10, PR #170, merged as dec67f5bfc0466fa7478334a92e7f14b39ebb858). Maker result checking reads the maker's product card.
+
+Checks at PR head 2104281921d: `python3 -m unittest discover -s hass/tests -t . -v` — 1207 tests in 510.607s, OK (skipped=15); gated capture tests separately ran 8 tests, OK (recorded in PR #170). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No shop.js data attributes, makers-page change, product/hike result-check change or deploy.
+
+## H06 completed and cancelled hikes get a result check (AV2022-11) — November 1, 2026
+
+Branch rb/av2022-11 (AV2022-11, PR #175, merged as 81c130c144bb46961f9a1bdff7d7acb7f0219659). Completed and cancelled hikes receive a real preview result check.
+
+Checks at PR head 162f514f: `python3 -m unittest hass.tests.test_preview_hike_results hass.tests.test_preview_store_address -v` — 17 tests in 35.932s, OK (recorded in PR #175).
+
+Limits: No community.js rendering, guest counts or RSVP server change, live-site check or deploy.
+
+## site real hikes show route and trail-information link (AV2022-12) — November 1, 2026
+
+Branch rb/av2022-12 (AV2022-12, PR #149, merged as e4a23a4076aa7725f7f76cab9377e1786121bf41). A real hike shows its route and trail-information link.
+
+Checks at PR head 1049f825: `python3 storefront-mockup/community-qa.py` — Community UI passed, exit 0; full hass discovery separately recorded 1058 tests, OK (skipped=10) (recorded in PR #149).
+
+Limits: No copying route fields into events, trail map/explorer or hike-page template change, or deploy beyond the normal on-merge path.
+
+## H21 retention counts approval and closed-memory rows (AV2022-13) — November 1, 2026
+
+Branch rb/av2022-13 (AV2022-13, PR #193, merged as a8879cb6dc088e0a25a84a0baa6b52f1f1ae4594). Retention reports counts only and deletes nothing, including approval and closed-memory row counts.
+
+Checks at PR head 02f49e4b: `python3 -m unittest discover -s hass/tests -t . -v` — 1337 tests in 841.465s, OK (skipped=21), before the last main merge; after merge, 31 retention tests were OK and prepush hass unittests passed (recorded in PR #193). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No deletion or pruning (an owner decision), statebackup, health output, SUPPORT.md wording or live-state access.
+
+## H25 phone guide documents commands the parser accepts (AV2022-14) — November 1, 2026
+
+Branch rb/av2022-14 (AV2022-14, PR #144, merged as 2e80eab13e4d84ad0a30088101b7e50885422c09). The owner phone guide documents commands checked against the parser.
+
+Checks at PR head 7d666798: `python3 -m unittest hass.tests.test_phone_guide hass.tests.test_commands_doc hass.tests.test_limits_doc hass.tests.test_support_doc -v` — 32 tests in 0.017s, OK (recorded in PR #144).
+
+Limits: No command, HELP_TEXT or COMMANDS.md change, owner trial, Mac setup docs, screenshots or publication beyond the repository.
