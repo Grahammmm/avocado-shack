@@ -1,0 +1,59 @@
+name: avocado test environment
+description: >-
+  Playwright (cached, pinned by PLAYWRIGHT_VERSION) and a private TMPDIR on tmpfs, shared by every check job that
+  runs tests. Sets PLAYWRIGHT_MODULE and TMPDIR in the job environment. The job's last step must remove
+  $AVO_CI_TMPDIR (`if: always()`); composite actions have no post step.
+runs:
+  using: composite
+  steps:
+    # Playwright is a test-only tool (not a repo dependency); cache the npm
+    # install and the downloaded Chromium, keyed by the pinned version.
+    - name: Cache Playwright package and browser
+      id: pw-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/pw-tools
+          ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+
+    # The AgentOrange runners are unprivileged user services (no sudo), so
+    # `--with-deps` / `install-deps` (which apt-get through sudo) only run on
+    # GitHub-hosted runners. The self-hosted host already has Chromium's
+    # system libraries installed (same pattern as skippercast's ci.yml);
+    # the verify step below fails loudly if one is ever missing.
+    - name: Install Playwright test tool
+      if: steps.pw-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p ~/pw-tools
+        npm install --prefix ~/pw-tools --no-save --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}"
+        ~/pw-tools/node_modules/.bin/playwright install chromium
+
+    - name: Install Chromium system libraries (GitHub-hosted only)
+      if: runner.environment == 'github-hosted'
+      shell: bash
+      run: ~/pw-tools/node_modules/.bin/playwright install-deps chromium
+
+    - name: Verify Chromium launches (system libraries present)
+      shell: bash
+      run: |
+        cd ~/pw-tools
+        node -e "require('playwright').chromium.launch().then(b => b.close())"
+
+    # AV-CI-SHARD-1: the hass suite is bound by disk writes, not CPU, on the shared AgentOrange host
+    # (2026-11-04: NVMe 81% busy, queue depth 16.9, 7.5 of 24 cores in use). Measured 2026-11-06, the whole
+    # suite run 6 modules at a time took 160 s with TMPDIR on /dev/shm and did not finish in 420 s with
+    # TMPDIR on disk. The tests and their temp files are unchanged; only where the temp files live moves.
+    # Directories left by a killed job are swept after 12 hours (every job has a timeout far below that).
+    - name: Private TMPDIR on tmpfs
+      shell: bash
+      run: |
+        base=/dev/shm
+        if [ ! -d "$base" ] || [ ! -w "$base" ]; then base="$RUNNER_TEMP"; fi
+        find "$base" -maxdepth 1 -name 'avo-ci-*' -user "$(id -u)" -mmin +720 -exec rm -rf {} + 2>/dev/null || true
+        dir="$(mktemp -d "$base/avo-ci-${GITHUB_RUN_ID}-${GITHUB_JOB}-XXXXXX")"
+        echo "TMPDIR=$dir" >> "$GITHUB_ENV"
+        echo "AVO_CI_TMPDIR=$dir" >> "$GITHUB_ENV"
+        echo "PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright" >> "$GITHUB_ENV"
+        echo "TMPDIR=$dir"
