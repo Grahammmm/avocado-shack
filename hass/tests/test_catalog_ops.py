@@ -75,11 +75,11 @@ class ProductAddEditTests(CatalogTestCase):
         repo.run(("product.add", NEW))
         added = repo.products()[-1]
         self.assertEqual(list(added), ["id", "name", "brand", "category", "image", "description", "producerKey",
-                                       "displayBrand", "status"])
+                                       "displayBrand", "status", "addedOn"])
         self.assertEqual((added["id"], added["status"], added["producerKey"]), ("photo-product-175", "active", None))
         self.assertEqual(len(repo.catalog()), 171)
         public = [p for p in repo.catalog() if p["id"] == "photo-product-175"][0]
-        self.assertEqual(sorted(public), sorted(PRODUCT_PUBLIC_FIELDS))
+        self.assertEqual(sorted(public), sorted(PRODUCT_PUBLIC_FIELDS + ("addedOn",)))  # AV1622-06
 
         repo.run(("product.edit", {"id": "photo-product-175", "description": "Sweet when baked."}))
         edited = repo.products()[-1]
