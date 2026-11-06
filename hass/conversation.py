@@ -402,6 +402,30 @@ def parse_memory(text: str):
     return ("memory", None, None) if match and match[5] else None
 
 
+READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"}
+
+
+def _asked(text: str):
+    """AV1352-05 (H17): the message without its closing run of . ! ? when that run holds a ?, else None."""
+    cut = re.sub(r"[.!?]+$", "", text.strip())
+    return cut if cut != text.strip() and "?" in text.strip()[len(cut):] else None
+
+
+def read_command(text: str):
+    """AV1352-05 (H17): parse_command, but a closing ? is dropped for a read-only command only (never yes/no, undo, stop,
+    resume); anything else keeps today's reading of the original text."""
+    cut = _asked(text)
+    found = parse_command(cut) if cut else None
+    return found if found and found[0] in READ_ONLY else parse_command(text)
+
+
+def read_memory(text: str):
+    """AV1352-05 (H17): `memory?` lists notes; remember, forget and alias never see a stripped text."""
+    cut = _asked(text)
+    found = parse_memory(cut) if cut else None
+    return found if found and found[0] == "memory" else parse_memory(text)
+
+
 def _checked(result) -> dict:
     if isinstance(result, dict):
         if set(result) == {"ops", "revises"} and isinstance(result["ops"], list) \
@@ -649,7 +673,7 @@ class Conversation:
             self._reply(ATTACHMENT_REPLY)
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
-        now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
+        now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
@@ -657,7 +681,7 @@ class Conversation:
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
-        memory = None if command or msg.attachments > 0 else parse_memory(msg.text)
+        memory = None if command or msg.attachments > 0 else read_memory(msg.text)
         if memory and memory[0] == "memory": expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
@@ -840,10 +864,21 @@ class Conversation:
         notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
         context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases())) if v}  # AV0007-06
         sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
+        failed = None  # AV1052-10: None until interpret actually returned; then the adapter's last_error (or "")
         try:
             result = _checked(self.interpreter.interpret(msg.text, pending, **context, sent_at=sent_at))
+            failed = getattr(self.interpreter, "last_error", None) or ""
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
+        if failed:  # AV1052-10: the reader itself failed: remember it for status (latest only, no error detail kept)
+            self.db.execute(CONTROL)
+            self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('reader-failed', ?, ?, ?)"
+                            " ON CONFLICT(name) DO UPDATE SET value = excluded.value, set_at = excluded.set_at,"
+                            " provider_id = excluded.provider_id",
+                            (getattr(self, "_photo_draft", None) or "1", _iso(now), msg.provider_id))
+        elif failed is not None and self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
+            self.db.execute("DELETE FROM control WHERE name = 'reader-failed'")  # a request was read again
         codes = {p["code"] for p in pending}
         named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
         cancelled_question = named is not None and named["state"] == "rejected" and named["reason"] == "owner" \
@@ -854,7 +889,7 @@ class Conversation:
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])
-                return key
+                return "reader-failed" if failed and key == "unsupported" else key
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
         photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
                      None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
@@ -932,7 +967,10 @@ class Conversation:
                             json.dumps(["id", "imageAlt"])))  # AV0007-03: set_photo's required args besides the photo
         self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
         if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
-        return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-draft"
+        if not caption: return "photo-draft"
+        self._photo_draft = code  # AV1052-10: if the reader fails on this caption, status names this draft
+        try: return self._request(Inbound(**{**vars(msg), "text": caption}), now)
+        finally: self._photo_draft = None
 
     def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
         try:
@@ -1506,6 +1544,7 @@ class Conversation:
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
             lines.append(shelf.check_line(f, " - more than a week ago, the site says call to confirm"))  # AV1102-05
+        lines += self._reader_failed_lines(now)
         lines += self._waiting_lines(now) or [NOTHING]
         lines += self._photo_lines(now)  # NB-AV-12: counts only, before Last change
         last = self.db.execute(  # the most recently approved change that has a result
@@ -1515,6 +1554,26 @@ class Conversation:
             lines.append(f"Last change: {last['code']} {last['summary']} - "
                          + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
+
+    def _reader_failed_lines(self, now) -> list:
+        """AV1052-10: the last request was not read because the reader failed; read-only, never raises."""
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
+            return []
+        row = self.db.execute("SELECT set_at, value FROM control WHERE name = 'reader-failed'").fetchone()
+        if not row: return []
+        try:
+            at = datetime.fromisoformat(row["set_at"]).astimezone(LOCAL_TZ)
+            when = f"{WEEKDAYS[at.weekday()]} {at:%H:%M}"
+        except (ValueError, TypeError, OverflowError, OSError):
+            when = "time unavailable"
+        draft = row["value"] != "1" and self._by_code(row["value"], ("needs-details",))  # a photo caption
+        if draft and self._expiry(draft) > now:  # resending the photo is a duplicate while its draft is open
+            return [f"Last request not read: {when} - the reader was not working; the photo is kept as draft "
+                    f"{row['value']}, so reply to it with the product and description"]
+        if draft:  # the draft lapsed (status does not sweep it): a reply would find nothing, so the photo goes again
+            return [f"Last request not read: {when} - the reader was not working and photo draft {row['value']} "
+                    "has expired; send the photo again with its caption"]
+        return [f"Last request not read: {when} - the reader was not working; send it again"]
 
     def _waiting_lines(self, now) -> list:
         """AV1102-11: one line per unexpired draft waiting for yes or for details; `status` and `report` share it."""

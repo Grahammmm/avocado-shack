@@ -132,8 +132,11 @@ def _product_add(content, args, ctx):
     record = {"id": "photo-product-%03d" % (max(numbers, default=0) + 1)}
     for field in ("name", "brand", "category", "image", "description"):
         record[field] = image if field == "image" else args[field]
-    record.update(producerKey=key, displayBrand=args["displayBrand"], status="active")
+    shown = args["displayBrand"] if "displayBrand" in args else (
+        "From the market" if args["brand"] == "Producer not identified" else args["brand"])  # absence alone defaults
+    record.update(producerKey=key, displayBrand=shown, status="active")
     record.update({"imageAlt": args["imageAlt"]} if "imageAlt" in args else {})  # optional; kept after status
+    record["addedOn"] = shop_today(ctx.now).isoformat()  # AV1622-06: Pacific day of this add; no other op sets it
     content.products.append(record)
     if _organic(record):
         ctx.warnings.append(f"adds Organic badge to {record['id']}")
@@ -367,7 +370,7 @@ _OPTIONAL = {"producerKey": Arg("maker_key", required=False), "imageAlt": Arg("t
 _ID, _KEY = {"id": Arg("id")}, {"key": Arg("text")}
 
 OPS = (
-    Op("product.add", {**_PRODUCT_FIELDS, "image": Arg("image", required=False), "photo": Arg("id", required=False),
+    Op("product.add", {**_PRODUCT_FIELDS, "displayBrand": Arg("text", required=False), "image": Arg("image", required=False), "photo": Arg("id", required=False),
                        **_OPTIONAL}, _product_add),
     Op("product.edit", {**_ID, **{k: Arg(a.kind, required=False, choices=a.choices) for k, a in _PRODUCT_FIELDS.items()},
                         **_OPTIONAL, "clearProducer": Arg("bool", required=False),

@@ -296,7 +296,7 @@ PUBLISH_ASSETS = ("assets/logo-header.png", "assets/favicon.png", "assets/store.
                   "assets/trails/point-buchon-coast.webp", "assets/trails/point-buchon-aerial.webp",
                   "assets/trails/point-buchon-topo.webp")
 # The public club file carries what the page reads (and what /api/community returns); not the proposed sender address.
-PUBLIC_COMMUNITY_KEYS = ("clubName", "events", "routeIdeas")
+PUBLIC_COMMUNITY_KEYS = ("clubName", "events", "routeIdeas", "showSamples")  # showSamples only when false
 
 
 def _public_community_json(content: Content) -> bytes:
