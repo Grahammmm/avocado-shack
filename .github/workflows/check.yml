@@ -32,7 +32,13 @@ jobs:
     runs-on: [self-hosted, Linux, X64, avocado-shack]
     # hass/tests took ~6.5 min on GitHub-hosted runners and >9.5 min on the shared
     # AgentOrange host (run 41518439444 was cancelled at 10 min with every test passing).
-    timeout-minutes: 25
+    # AV-CI-MAIN-1 (2026-11-06): over the last 100 completed check runs, 16 of the 68 jobs that ran
+    # to an end hit the 25-min limit (11 of the 15 main push jobs; 14 of the 16 stopped in "Hass
+    # tests", 2 have no step record), and the jobs that finished were bunched just under it (p50
+    # 23.2, p90 24.7, max 24.9 min). So the true p90 is above 25.3 min; 45 (the cap) is 1.78x
+    # that lower bound. A timed-out job gives no verdict, so main reads NO_VERDICT in
+    # bin/mainstate.py and ship-queue merges one per pass.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
