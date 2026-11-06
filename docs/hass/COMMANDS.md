@@ -4,7 +4,7 @@ These are the only messages Hass treats as commands. Send each one as the whole 
 do not matter (`YES A1B2` is the same as `yes a1b2`). Codes are the short codes Hass puts in its replies; `A1B2` below
 is only a placeholder.
 
-A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work).
+A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work). A trailing `?` is also ignored, but only for the read-only commands `status`, `history`, `report`, `memory`, `find`, `show`, `post`, `listing`, `hidden`, `margin` and `help` (`status?`, `find eggs?` and `show a1b2?` work). A `?` never runs `yes`, `no`, `undo`, `stop`, `resume`, `remember`, `forget` or `alias`.
 The two note commands are stricter:
 
 - `remember <key>: <text>` saves the text exactly as sent, so its capitals and any final `.` or `!` are kept.
@@ -22,6 +22,7 @@ A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b
 | `no <code>` (or `cancel <code>`, `reject <code>`) | Cancels that draft or question; nothing changes on the site. | `cancel A1B2` |
 | `no` alone (or `cancel`, `reject`) | Cancels the waiting draft or question; nothing changes. | `no` |
 | `history` | Lists the last five approved changes (approved (still being saved), applied, checked, failed or undone) with their codes and states, each with where it is now (on the website, not confirmed on the website, undone). | `history` |
+| `history <words>` | Lists up to 10 approved changes (same states and line format as `history`, each with its code and where it is now), newest first, whose summary contains every word you send; capital letters and accents do not matter, and the words may come in any order. Only the summary is searched, across all approved history, so the code of an older change can be found for `undo <code>`. Send 1–60 characters; no match says so, and no words gets a usage reply. It changes nothing, expires nothing and works while paused. | `history opening hours` |
 | `undo` | Drafts an undo of the most recent applied change; a bare undo skips undos and takes the change before. It needs `yes <code>` like any draft. | `undo` |
 | `undo <code>` | Drafts an undo of that applied change. It needs `yes <code>`. | `undo A1B2!` |
 | `status` | Says whether changes are paused, lists waiting drafts and the last result, and upcoming hike seat totals, and the last shelf check (`Shelf check: <day>`, the same words as the morning report; after a week it adds that the site says call to confirm). With a daily limit set, it also shows `Interpreter today: N of CAP` (change requests read today). It also counts `Photos waiting for details: N` and, when any, `Photos still downloading: M` (`unavailable` if the inbox cannot be read). It changes nothing. | `Status.` |
@@ -46,6 +47,14 @@ A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b
 
 Saved notes never change the site, and pause does not affect them.
 
+Cancelling a hike (a change request, needs `yes <code>`; not the `cancel <code>` command above, which only rejects a
+waiting draft): say it in your own words, for example "cancel the Point Buchon hike, rained out - we will pick a new
+date soon". `hike.cancel` takes the hike id and an optional `note`, for example `Rained out - we will pick a new date soon`.
+The note is one line of plain text, at most 160 characters, and is public site copy: the cancelled hike's card shows it
+exactly as written, above "This hike is cancelled." It is checked like other hike text (no markup, `$` or invisible
+characters), and any claim in it, such as a distance or "organic", must come from your own message. Without a note the
+card is unchanged. Cancelling notifies nobody. `undo` brings the hike back as scheduled and removes the note.
+
 Photos: send one photo per message, as JPEG or PNG, up to 20 MB. A phone photo's rotation is kept, so it shows upright
 (only that rotation tag is kept, never its location, camera or date); only a PNG with a rotation tag is refused. Any
 other file, or a photo that is too large, incomplete or unreadable,
@@ -59,6 +68,11 @@ works as for any change.
 
 Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are
 missing). A draft is never applied until you reply `yes <code>`; drafts that wait too long expire and nothing changes.
+
+New products (a change request, needs `yes <code>`): a product you add shows a "New" badge on its card for its first
+14 days (counted in Pacific calendar days from the day it was added, worked out in the visitor's browser). Editing,
+hiding or restoring a product, or undoing and restoring an add, never starts the 14 days again, and the products that
+were already on the site have no "New" badge.
 
 Checking the selection (change requests, not commands; each still needs `yes <code>`):
 

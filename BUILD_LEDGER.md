@@ -1757,3 +1757,355 @@ Branch rb/rf1100-20 (RF1100-20). For Michael: `media.py verify` (and `health --m
 Checks: `python3 -B -m unittest hass.tests.test_media_verify_web` ran 8 tests, OK; the wider media/health list is recorded in the PR body.
 
 Limits: verification never writes or generates a web copy; a store with no web copy stays healthy; an original already bad is reported once and its web copy is not compared; sanitizer rules and `health.py` are unchanged.
+
+## Site: catalog search matches shelf names and Organic (AV1222-01) — November 5, 2026
+
+Branch rb/av1222-01 (AV1222-01, PR #412, merged as 8c8dace13bf2cd7f15feed8097f08f293af2b97d). For guests: the catalog search also matches each card's shelf name and its Organic badge, so `organic`, `flowers` or `dairy & cheese` find cards; descriptions, the search text cap, the address and the `?q=` restore are unchanged. `storefront-mockup/shop.js`, `storefront-mockup/catalog-only-qa.cjs`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright QA_OUT_DIR=<tmp> PREVIEW_URL=<local server> node storefront-mockup/catalog-only-qa.cjs` against a local community server exited 0 with all 170 cards, as recorded in the PR; no Python test pins shop.js. PREPUSH-TESTS NOT-RUN.
+
+Limits: only the shelf name and the Organic badge were added to what search reads; the other filters and the sort are unchanged.
+
+## H06 product result check reads availability and photo (AV1222-02) — November 4, 2026
+
+Branch rb/av1222-02 (AV1222-02, PR #403, merged as 6489f3d9c1a0e3974f8b186dc53c377aa6391119). For Michael: a product change's result check also compares the card's availability word with the record and, after a photo change, the card image with the new image. A failed check reaches him through the existing `check failed` reply. `hass/preview.py`, `hass/screenshot.cjs`, `hass/conversation.py`, `hass/editor.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_product_checks hass.tests.test_preview hass.tests.test_preview_target_shapes hass.tests.test_preview_checks_shape` ran 29 tests, OK (recorded in PR #403).
+
+Limits: the stale-word rule is not re-implemented (the site's own label function decides); a product with no store check has no availability check; the product page itself is not read.
+
+## H06 store result check reads intro and selection line (AV1222-03) — November 5, 2026
+
+Branch rb/av1222-03 (AV1222-03, PR #407, merged as 8b416bf555b2f326fbcb0a26e5903652295dacf0). For Michael: the store change result check also finds the home-page intro and, after `store.confirm_selection`, the `Selection last checked` line; the failed check is named in the reply. `hass/preview.py`, `hass/screenshot.cjs`, `hass/owner_answers.py`, `hass/conversation.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_store_checks hass.tests.test_preview_store_address hass.tests.test_preview_target_shapes hass.tests.test_owner_answers hass.tests.test_owner_answers_shapes -v` OK (recorded in PR #407). prepush.py was not run.
+
+Limits: only the intro and the selection line were added; unknown check names are not shown to the owner; the notice check is unchanged.
+
+## H13 store phone (AV1222-04) — November 5, 2026
+
+Branch rb/av1222-04 (AV1222-04, PR #428, merged as 87a5611c72c2c10f5855a86c88722ae5a492a499). For Michael: `store.set_phone` takes a ten-digit US number in any common spacing and the Visit block shows it as a tap-to-call link; the stale selection line then offers the number to call; `store.clear_phone` removes it and undo restores the earlier value; a failed check is named as the phone number. The phone is described here in words and no number is quoted. `hass/ops/store.py`, `hass/content_model.py`, `hass/sitegen.py`, `hass/owner_answers.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_store_phone hass.tests.test_store_ops hass.tests.test_selection_checked hass.tests.test_content hass.tests.test_interpreter_prompt_store hass.tests.test_preview_target_shapes hass.tests.test_preview_store_checks hass.tests.test_interpreter_prompt_design` ran 89 tests; after the test_content fixture fix, `hass.tests.test_content hass.tests.test_store_phone` ran 31 tests, OK (recorded in PR #428). PREPUSH-TESTS NOT-RUN.
+
+Limits: US numbers only; the demo content has no phone, so the generated pages are unchanged until Michael sets one.
+
+## H06 hike result check reads date, meet and places (AV1222-05) — November 5, 2026
+
+Branch rb/av1222-05 (AV1222-05, PR #440, merged as bc2bf8013e9120b95e4a39ebe854d56b08c6eeb0). For Michael: a scheduled hike's result check compares the card's date line, Meet line, places-left line and the changed meeting fields with the record, not only the title. `hass/preview.py`, `hass/screenshot.cjs`, `hass/tests/test_preview_hike_results.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_hike_results` ran 19 tests, OK (recorded in PR #440).
+
+Limits: cancelled and completed hikes keep their earlier check; the date format is mirrored from community.js, so a format change there fails the check loudly; `screenshot.cjs` went a few lines over its budget.
+
+## H06 route idea result check (AV1222-06) — November 5, 2026
+
+Branch rb/av1222-06 (AV1222-06, PR #464, merged as ac12687cf00e07c8fd6d892f75a97ca81c22657f). For Michael: a route idea change is checked where /hike shows the route (a linked hike's Route line or the sample invitation); a hidden route needs no place; a route shown nowhere is said in the reply and is not reported as checked. `hass/preview.py`, `hass/screenshot.cjs`, `hass/conversation.py`, `hass/owner_answers.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_preview_route_results hass.tests.test_preview_target_shapes` ran 23 tests, OK (recorded in PR #464). PREPUSH-TESTS NOT-RUN.
+
+Limits: a route shown nowhere gets no content check; hidden is read from the route's status as it is on main.
+
+## H09 photo demo with the real previewer (AV1222-07) — November 4, 2026
+
+Branch rb/av1222-07 (AV1222-07, PR #408, merged as 867e8d0cb444a672e133fc5ec611f02f1dc3d61b). Test only: the photo demo (photo and caption, draft, yes, undo, yes) runs once through the real Chromium previewer, reading the check results from the captures, not the reply text. `hass/tests/test_demo_browser_photo.py`.
+
+Checks at PR head: `PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright python3 -B -m unittest hass.tests.test_demo_browser_photo hass.tests.test_demo_browser hass.tests.test_demo_transcript_photo -v` (recorded in PR #408; the new tests take about 25 s).
+
+Limits: the class skips when `PLAYWRIGHT_MODULE` is unset; the fixture is unchanged; no production code changed.
+
+## H04/H05 interpreter prompt lists scheduled hike details (AV1222-08) — November 4, 2026
+
+Branch rb/av1222-08 (AV1222-08, PR #389, merged as 93b49a409da8bec3fabdbdce3baede86ad29629d). The prompt lists each scheduled hike's meeting point, capacity, bring and access note (at most 12, then an ask-the-owner line), so "also bring sunscreen" can become a whole-text hike.update built from the current value. `hass/interpreter_prompt.py`, `hass/tests/fixtures/interpreter-prompt.txt`.
+
+Checks at PR head 485ed2b: `python3 -B -m unittest hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_community hass.tests.test_interpreter_prompt_shapes hass.tests.test_interpreter_cap hass.tests.test_interpreter_request_encode -v` plus the other prompt tests ran 128 tests, OK (recorded in PR #389). PREPUSH-TESTS NOT-RUN.
+
+Limits: `PROMPT_MAX_BYTES` is not raised, and the worst case with every catalog text at its limit was already over it before this unit; no clock, guest names or RSVP data are in the prompt.
+
+## H09 interpreter eval set v5 (AV1222-09) — November 5, 2026
+
+Branch rb/av1222-09 (AV1222-09, PR #434, merged as d61b69678d4855d2e0e32b61cd7da4440c14d4fd). Six more cases (phone set and clear, short number asks, and whole-text hike.update for bring, access note and meeting point) take the set from 63 to 69; the new events fixture is laid over a copy of the content and never written. `hass/tests/test_interpreter_eval.py` and `hass/tests/test_interpreter_eval_out.py` count pins moved.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out -v` ran 42 tests, OK (recorded in PR #434).
+
+Limits: the six reply rows are synthetic and no recorded model run is claimed; it runs without a model.
+
+## F03 saved purchase cost per product (AV1222-10) — November 4, 2026
+
+Branch rb/av1222-10 (AV1222-10, PR #390, merged as aaf7d30981e6d64e08dff51bf5ce7e7d42cd7f84). For Michael: `cost <id>: <pack cost> for <units>` saves a cost per product (a bad field is named; the same cost again changes nothing) and `margin <id> at <M>%` reads it. The cost is private; it is never on the website, and the notes reader skips `cost.` keys so it never reaches the interpreter. No cost is quoted here. `hass/conversation.py`, `docs/hass/COMMANDS.md`.
+
+Checks at PR head b0de00a5: `python3 -B -m unittest hass.tests.test_purchase_cost hass.tests.test_margins hass.tests.test_memory_chat hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation -v` ran 64 tests, OK (recorded in PR #390). PREPUSH-TESTS NOT-RUN.
+
+Limits: the older pack-cost form of margin still works and is unchanged; a generic remember of a cost key is refused.
+
+## F07 post hike command (AV1222-11) — November 4, 2026
+
+Branch rb/av1222-11 (AV1222-11, PR #399, merged as ddaad23f7880697c0e0c92cc78b50c6562517242). For Michael: `post hike <id>` replies with the hike's social draft in chat. Draft only; nothing is posted, nothing is stored, and it works while paused. `hass/conversation.py`, `hass/tests/test_post_hike_command.py`.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_post_hike_command hass.tests.test_post_command hass.tests.test_social_draft_hike hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation` ran 55 tests, OK (recorded in PR #399).
+
+Limits: `hass/social_draft.py` is unchanged; the help line is shorter than the spec wording because of the 70-character help limit.
+
+## H25 phone guide and limits for phone, cost and post hike (AV1222-12) — November 5, 2026
+
+Branch rb/av1222-12 (AV1222-12, PR #438, merged as 72dbe74448537346c4fcc81768ec034267177ca8). Docs and constants: `docs/hass/PHONE_GUIDE.md` explains the store phone, `post hike` and the private prices pair; `docs/hass/LIMITS.md` gains a Phone and prices section tied to code constants (`PHONE_DIGITS`, the pack cost maximum and the unit range).
+
+Checks at PR head 743ca102c01a: `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_limits_doc hass.tests.test_margins hass.tests.test_store_phone` ran 41 tests, OK, 2 skipped (recorded in PR #438). PREPUSH-TESTS NOT-RUN.
+
+Limits: the guide keeps its 110-line cap and section order; no limit value or error message changed.
+
+## H03/H17 hidden command lists hidden products and makers (AV1222-13) — November 4, 2026
+
+Branch rb/av1222-13 (AV1222-13, PR #409, merged as ab2f6cd318411dcbdfb48485815a048d1b2a2c4a). For Michael: `hidden` lists hidden products by id and hidden makers by key (at most 20 lines, then a count of the rest) with the restore line, or says nothing is hidden. Read-only, works while paused. `hass/conversation.py`, `hass/tests/test_hidden_command.py`.
+
+Checks at PR head e123c6dd: `python3 -B -m unittest hass.tests.test_hidden_command hass.tests.test_find hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_conversation` ran 48 tests, OK (recorded in PR #409). prepush.py not run.
+
+Limits: held products and visible makers never appear; the list reads stored text without the full content validation, so a name with markup shows as stored.
+
+## Site: Clear filters button in the catalog (AV1222-14) — November 5, 2026
+
+Branch rb/av1222-14 (AV1222-14, PR #425, merged as 8a53dcfd861791204a26ca2f22cd0244eed8d285). For guests: a Clear filters button shows whenever a shelf, search, maker, from or available filter is set (also in the empty state); it resets all five, drops them from the address (other parameters and the hash stay) and returns focus to the search box. `storefront-mockup/shop.js`, `storefront-mockup/style.css`, regenerated `storefront-mockup/index.html`, `storefront-mockup/catalog-only-qa.cjs`.
+
+Checks at PR head: `node storefront-mockup/catalog-only-qa.cjs` against a local server exited 0 with all 170 cards, and `python3 -B -m unittest hass.tests.test_catalog_clear_filters hass.tests.test_selection_checked hass.tests.test_generated_targets -v` ran 21 tests, OK (recorded in PR #425). PREPUSH-TESTS NOT-RUN.
+
+Limits: the hidden button keeps its space so desktop does not shift; no other filter behaviour changed.
+
+## Site: drop dead commerce CSS (AV1222-15) — November 5, 2026
+
+Branch rb/av1222-15 (AV1222-15, PR #432, merged as 02465a63ddbba690f2d67d9431fd11ed891d2344). No visible change: `storefront-mockup/style.css` loses only rules whose every selector matches nothing the site builds (merch, weekly, box, price, cart and quantity classes); no live selector was touched. New `hass/tests/test_style_no_commerce.py` fails if they return.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_style_no_commerce hass.tests.test_design_check hass.tests.test_selection_checked hass.tests.test_generated_targets` ran 40 tests, OK; `storefront-mockup/catalog-only-qa.cjs` exited 0 (recorded in PR #432). The new test was red on the old style.css.
+
+Limits: no before/after screenshots were taken; the design checker flags only the new test file; archive and QA scripts are untouched.
+
+## H04/H05 interpreter prompt lists hikes and route ideas (AV2022-01) — November 1, 2026
+
+Branch rb/av2022-01 (AV2022-01, PR #137, merged as 41ed9e45641165d1a95d18b92727780e0380782a). The prompt includes hikes and undated route ideas, never RSVP counts or guest data.
+
+Checks at PR head 9d90307a: `python3 -m unittest discover -s hass/tests -t . -v` — 978 tests in 316.516s, OK (skipped=10) (recorded in PR #137). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: Store hours/address, today's date, the club block, live model calls and interpret_check id validation are outside this unit.
+
+## H13/H05 interpreter prompt shows current hours and address (AV2022-02) — November 1, 2026
+
+Branch rb/av2022-02 (AV2022-02, PR #191, merged as 3167b924d4410829b4399a3b92475fbc821fbec9). The prompt reads current store hours and address.
+
+Checks at PR head 5ddd021a: `python3 -m unittest discover -s hass/tests -t . -v` — 1338 tests in 832.405s, OK (skipped=21) (recorded in PR #191). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No per-line store.set_hours operation, shop-name or club-organizer/sender change, or live model call; the quoted full run preceded the final main merge, after which 16 prompt tests passed.
+
+## H04/H05 interpreter knows today's Pacific date (AV2022-03) — November 1, 2026
+
+Branch rb/av2022-03 (AV2022-03, PR #195, merged as 21e06aed15dd446743fca7f9bdbae3c4eb0c0c11). The prompt supplies the current Pacific date.
+
+Checks at PR head 64f75999: `python3 -m unittest hass.tests.test_interpreter_today -v` — 10 tests, OK (recorded in PR #195).
+
+Limits: No Python date parsing, resolving relative dates ourselves, proposal-date wording changes, live model call or interpreter_eval fixture change.
+
+## H03 unstated brand, maker place or link asks first (AV2022-04) — November 4, 2026
+
+Branch rb/av2022-04 (AV2022-04, PR #346, merged as 9d92913443071cf62ee1ae349bee8245544c5a55). Unstated brand, maker place and link claims ask for owner facts first.
+
+Checks at PR head ecc16c0: `python3 -m unittest hass.tests.test_claims_sources hass.tests.test_undo hass.tests.test_claims` — 31 tests, OK after merging origin/main (recorded in PR #346).
+
+Limits: Maker name/story and product name/description term scanning are unchanged; no fetching or validating links or live model call.
+
+## H11/H12 voice notes get a please-type-it reply (AV2022-05) — November 1, 2026
+
+Branch rb/av2022-05 (AV2022-05, PR #140, merged as 76990116c47e57f4d0c2eaefdb767d6a86811074). Audio is refused, never transcribed or stored; a voice note gets a request to type instead.
+
+Checks at PR head fa8a9d27: `python3 -m unittest discover -s hass/tests -t . -v` — 995 tests in 401.986s, OK (skipped=10) (recorded in PR #140). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No transcription, audio storage, MP3/WAV/OGG detection, bridge attachment metadata or LIMITS.md wording change.
+
+## H06/H17 history lists approved changes only (AV2022-06) — November 1, 2026
+
+Branch rb/av2022-06 (AV2022-06, PR #169, merged as 341c1469c7d34b8b61112b38774d2d5686927e75). Chat history lists approved changes only.
+
+Checks at PR head b1f23cd2: `python3 -m unittest discover -s hass/tests -t . -v` — PASS, rc 0 via prepush (no full-suite count recorded); a targeted run recorded 104 tests, OK (recorded in PR #169). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No paging, history-all variant, editor CLI history change or undo-selection rule change.
+
+## H05/H17 near-approval asks for the explicit yes code (AV2022-07) — November 1, 2026
+
+Branch rb/av2022-07 (AV2022-07, PR #179, merged as ffdf942c079a4a4855e4169892cf831d46702f28). Near-approval words request yes <code>; they never approve a draft.
+
+Checks at PR head 1413841914b: `python3 -m unittest discover -s hass/tests -t . -v` — 1305 tests in 687.003s, OK (skipped=21), before the final main merge (recorded in PR #179). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No approval on these words, emoji/reaction approvals, other languages or HELP_TEXT/COMMANDS.md wording change.
+
+## H08 sender matching ignores email case and phone punctuation (AV2022-08) — November 1, 2026
+
+Branch rb/av2022-08 (AV2022-08, PR #184, merged as c708a99d5240fae5fe0a849fab258e7272879485). Owner sender matching ignores email case and phone punctuation; no configured sender value is quoted here.
+
+Checks at PR head da932439: `memcap -- python3 -m unittest hass.tests.test_ledger_rf1120 hass.tests.test_output_hygiene hass.tests.test_owner_sender_match hass.tests.test_state_db_nofollow` — 20 tests in 19.297s, OK (recorded in PR #184).
+
+Limits: No ownerChat matching, multi-owner roles, bridge sender parsing, real contact details or live BlueBubbles call.
+
+## H08/H10 BlueBubblesPhotos fetches attachments with a fake transport (AV2022-09) — November 1, 2026
+
+Branch rb/av2022-09 (AV2022-09, PR #141, merged as 5370850e8157d594d8c7fbd8f535c75fb484bd8b). BlueBubbles is loopback-only with no password in errors; attachment fetching is tested with a fake transport.
+
+Checks at PR head 99950540171662e: `python3 -m unittest discover -s hass/tests -t . -v` — 1000 tests in 390.431s, OK (skipped=10) (recorded in PR #141). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No live Mac/BlueBubbles call, service/runner wiring, HEIC conversion, storage or bridge.py edit; fake transports and repository fixtures only.
+
+## H06 maker result check reads the maker's product card (AV2022-10) — November 1, 2026
+
+Branch rb/av2022-10 (AV2022-10, PR #170, merged as dec67f5bfc0466fa7478334a92e7f14b39ebb858). Maker result checking reads the maker's product card.
+
+Checks at PR head 2104281921d: `python3 -m unittest discover -s hass/tests -t . -v` — 1207 tests in 510.607s, OK (skipped=15); gated capture tests separately ran 8 tests, OK (recorded in PR #170). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No shop.js data attributes, makers-page change, product/hike result-check change or deploy.
+
+## H06 completed and cancelled hikes get a result check (AV2022-11) — November 1, 2026
+
+Branch rb/av2022-11 (AV2022-11, PR #175, merged as 81c130c144bb46961f9a1bdff7d7acb7f0219659). Completed and cancelled hikes receive a real preview result check.
+
+Checks at PR head 162f514f: `python3 -m unittest hass.tests.test_preview_hike_results hass.tests.test_preview_store_address -v` — 17 tests in 35.932s, OK (recorded in PR #175).
+
+Limits: No community.js rendering, guest counts or RSVP server change, live-site check or deploy.
+
+## site real hikes show route and trail-information link (AV2022-12) — November 1, 2026
+
+Branch rb/av2022-12 (AV2022-12, PR #149, merged as e4a23a4076aa7725f7f76cab9377e1786121bf41). A real hike shows its route and trail-information link.
+
+Checks at PR head 1049f825: `python3 storefront-mockup/community-qa.py` — Community UI passed, exit 0; full hass discovery separately recorded 1058 tests, OK (skipped=10) (recorded in PR #149).
+
+Limits: No copying route fields into events, trail map/explorer or hike-page template change, or deploy beyond the normal on-merge path.
+
+## H21 retention counts approval and closed-memory rows (AV2022-13) — November 1, 2026
+
+Branch rb/av2022-13 (AV2022-13, PR #193, merged as a8879cb6dc088e0a25a84a0baa6b52f1f1ae4594). Retention reports counts only and deletes nothing, including approval and closed-memory row counts.
+
+Checks at PR head 02f49e4b: `python3 -m unittest discover -s hass/tests -t . -v` — 1337 tests in 841.465s, OK (skipped=21), before the last main merge; after merge, 31 retention tests were OK and prepush hass unittests passed (recorded in PR #193). Discovery uses the default pattern `-p 'test*.py'`.
+
+Limits: No deletion or pruning (an owner decision), statebackup, health output, SUPPORT.md wording or live-state access.
+
+## H25 phone guide documents commands the parser accepts (AV2022-14) — November 1, 2026
+
+Branch rb/av2022-14 (AV2022-14, PR #144, merged as 2e80eab13e4d84ad0a30088101b7e50885422c09). The owner phone guide documents commands checked against the parser.
+
+Checks at PR head 7d666798: `python3 -m unittest hass.tests.test_phone_guide hass.tests.test_commands_doc hass.tests.test_limits_doc hass.tests.test_support_doc -v` — 32 tests in 0.017s, OK (recorded in PR #144).
+
+Limits: No command, HELP_TEXT or COMMANDS.md change, owner trial, Mac setup docs, screenshots or publication beyond the repository.
+
+## H13: one dated home-page notice (AV1322-01) — November 3, 2026
+
+Branch rb/av1322-01 (AV1322-01, PR #328, merged as c2bc3b3b2a0ac262ef1f3190b76d3cc14fd93797). store.set_notice / store.clear_notice keep one dated home-page notice (text <=160, until <=60 days ahead, Pacific); the page is byte-identical with no notice; preview checks noticeShown. hass/ops/home.py, hass/content_model.py, hass/sitegen.py, template, preview.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_store_notice hass.tests.test_store_ops hass.tests.test_store_intro hass.tests.test_store_limits hass.tests.test_content hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_store -v` ran 73 tests, OK (2 skipped) (recorded in PR #328; historical evidence, not rerun for this ledger).
+
+Limits: Without JavaScript the notice remains until regeneration; no notice leaves the generated page unchanged.
+
+## H04: route.add drafts a new route idea (AV1322-02) — November 3, 2026
+
+Branch rb/av1322-02 (AV1322-02, PR #308, merged as 2ca87c38ee202619b33660785fac273a8b86ea2b). route.add drafts a new undated route idea (all fields, public https sourceUrl); slug clashes get -2/-3; undo removes the added idea (history.py change). hass/ops/routes.py, hass/ops/history.py, hass/README.md.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_route_add hass.tests.test_route_edit hass.tests.test_route_edit_titles hass.tests.test_route_edit_spacing hass.tests.test_content hass.tests.test_interpreter_prompt hass.tests.test_interpreter_prompt_community hass.tests.test_undo` ran 72 tests, OK (recorded in PR #308; historical evidence, not rerun for this ledger).
+
+Limits: Route ideas remain undated; missing source facts ask for the link and name, and undo refuses a subsequently edited idea.
+
+## H04: hide and restore a route idea (AV1322-03) — November 3, 2026
+
+Branch rb/av1322-03 (AV1322-03, PR #317, merged as 1944ae3ece6433c2b6f1df2c2a5b8cc6e0abe72b). route.hide / route.restore take an idea off and back on the generated route list; a scheduled hike linked to a hidden idea is refused; output byte-identical with none hidden. hass/ops/routes.py, hass/content_model.py, hass/sitegen.py, hass/ops/hikes.py.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_route_hide hass.tests.test_route_edit hass.tests.test_content hass.tests.test_migration_baseline_shape hass.tests.test_hike_ops hass.tests.test_generated_io hass.tests.test_interpreter_prompt_community` ran 77 tests, OK (recorded in PR #317; historical evidence, not rerun for this ledger).
+
+Limits: A scheduled hike using the idea blocks hiding it; cancelled and completed hikes do not.
+
+## H04/H17: find lists hikes and route ideas (AV1322-04) — November 3, 2026
+
+Branch rb/av1322-04 (AV1322-04, PR #313, merged as df10f4eb1b69559b5b1717521367e2fced0ec791). find <words> also lists hikes (Pacific weekday/date/time, status, ordered by start) and route ideas (by title); read-only, same answer while paused. hass/conversation.py, docs/hass/COMMANDS.md.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_find_hikes hass.tests.test_find hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_hike_ids` ran 37 tests, OK (recorded in PR #313; historical evidence, not rerun for this ledger).
+
+Limits: Read-only, including while paused; unreadable hike dates are named rather than guessed.
+
+## F04: report command in chat (AV1322-05) — November 4, 2026
+
+Branch rb/av1322-05 (AV1322-05, PR #323, merged as 8f56b35577d3aa59aba91f01ea9869c9de8c6f71). the whole message 'report' (or 'morning report') replies the morning shelf report from writer worktree content; fixed refusal line when unavailable; read-only, works paused. hass/conversation.py, docs/hass/COMMANDS.md.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_report_command hass.tests.test_morning_report hass.tests.test_morning_report_shapes hass.tests.test_morning_report_future hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_status_pause -v` ran 61 tests, OK (recorded in PR #323; historical evidence, not rerun for this ledger).
+
+Limits: Read-only, with no expiry sweep or scheduled delivery; unavailable content gets a fixed refusal.
+
+## F04: morning report names today's and tomorrow's hikes (AV1322-06) — November 3, 2026
+
+Branch rb/av1322-06 (AV1322-06, PR #311, merged as e3602ca300f599daa7285b65decdb68263439ba8). morning report gains a Hikes line for events starting today or tomorrow (Pacific) with confirmed/capacity or 'guest count unavailable'; byte-identical when there are none. hass/morning_report.py.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_morning_report_hikes hass.tests.test_morning_report hass.tests.test_morning_report_shapes hass.tests.test_morning_report_future hass.tests.test_health_guests -v` ran 44 tests, OK (recorded in PR #311; historical evidence, not rerun for this ledger).
+
+Limits: Cancelled, completed and out-of-window hikes are omitted; unavailable guest counts are never reported as zero.
+
+## F07: post command drafts a caption in chat (AV1322-07) — November 4, 2026
+
+Branch rb/av1322-07 (AV1322-07, PR #366, merged as 9e3f3aade1b4efb6bc2e4d5e79a8ca79240b37ae). post <product id> replies 'Draft post (not posted)' with social_draft's caption and the product's site photo attached; plain refusals; read-only, works paused. hass/conversation.py, docs/hass/COMMANDS.md.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_post_command hass.tests.test_social_draft hass.tests.test_social_draft_inputs hass.tests.test_social_draft_shapes hass.tests.test_social_draft_tags hass.tests.test_social_draft_text hass.tests.test_help hass.tests.test_commands_doc hass.tests.test_attachment_reply` ran 80 tests, OK (recorded in PR #366; historical evidence, not rerun for this ledger).
+
+Limits: Draft only; nothing is posted or scheduled, and symlink photos are refused.
+
+## F07: hike announcement draft (AV1322-08) — November 3, 2026
+
+Branch rb/av1322-08 (AV1322-08, PR #312, merged as df53f65af355ec4c3fa6933377d5bd62acd9e8ef). social_draft.py --hike ID prints a local hike announcement draft (title, Pacific weekday date and time, Meet at, Route line, fixed tags); ordered refusals; nothing posted, no network. hass/social_draft.py.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_social_draft_hike hass.tests.test_social_draft hass.tests.test_social_draft_inputs hass.tests.test_social_draft_shapes hass.tests.test_social_draft_tags hass.tests.test_social_draft_text -v` ran 61 tests, OK (recorded in PR #312; historical evidence, not rerun for this ledger).
+
+Limits: Draft only; nothing is posted or fetched. Cancelled, past, incomplete or tagged hikes are refused.
+
+## Site: hike page: Add to calendar link (AV1322-09) — November 3, 2026
+
+Branch rb/av1322-09 (AV1322-09, PR #318, merged as 620149050ed05e62b4e430b02d23428354f51005). each upcoming scheduled hike on /hike gets an 'Add to calendar' .ics data link (one VEVENT, RFC 5545 escaping, 75-octet folding); no server change, no new site file. storefront-mockup/community.js.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_hike_ics hass.tests.test_content_starts_at hass.tests.test_status_past_hikes hass.tests.test_https_links -v` ran 38 tests, OK (recorded in PR #318; historical evidence, not rerun for this ledger).
+
+Limits: No link for cancelled, completed, started or unreadable hikes, or the sample invitation; duration is fixed at two hours.
+
+## Site: catalog: link to one product (AV1322-10) — November 4, 2026
+
+Branch rb/av1322-10 (AV1322-10, PR #315, merged as bd41e06fa74603f1662732a499d1331a91b7dcd4). each product card ends with a 'Link to this' link; ?item=<id> focuses and centers that card (wins over filters); unknown/empty/over-80-char item is ignored. storefront-mockup/shop.js.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_https_links hass.tests.test_generated_links hass.tests.test_product_alt hass.tests.test_design_check` ran 49 tests, OK (recorded in PR #315; historical evidence, not rerun for this ledger).
+
+Limits: Unknown, empty or overlong item values are ignored; the next filter change drops the item parameter.
+
+## H25: docs: feature states from the 2026-11-02 audits (AV1322-11) — November 3, 2026
+
+Branch rb/av1322-11 (AV1322-11, PR #316, merged as 945b9fa35d702013ad4172f7d49a5662d40e7f42). docs/hass/FEATURES.md gains a State column (Done/Partly/Not built/Needs G) on the three H tables from the 2026-11-02 audits; hass/README.md H16/H17/H14 lines updated. Docs only.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_support_doc hass.tests.test_commands_doc hass.tests.test_limits_doc hass.tests.test_phone_guide -v` ran 33 tests, OK (recorded in PR #316; historical evidence, not rerun for this ledger).
+
+Limits: States describe the dated audits, not fresh live acceptance; owner and launch decisions remain held.
+
+## H25: home-page limits in LIMITS.md (AV1322-12) — November 3, 2026
+
+Branch rb/av1322-12 (AV1322-12, PR #337, merged as ff87a4c6cc52197e3a79e7f986bcd31679199e17). docs/hass/LIMITS.md gains a Home page section (intro 160, headline 40/line, story 400, notice 160, notice 60 days ahead, home photo 20 MB) tied to code constants; test_limits_doc REQUIRED set grows. Docs + constants.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_limits_doc hass.tests.test_store_limits hass.tests.test_text_limits -v` ran 26 tests, OK (recorded in PR #337; historical evidence, not rerun for this ledger).
+
+Limits: Documentation and required-claim constants only; no production limit changes.
+
+## H25: phone guide: home page and route ideas (AV1322-13) — November 4, 2026
+
+Branch rb/av1322-13 (AV1322-13, PR #372, merged as 78958c1d0622366ff50417dd981193d4e4db09c5). docs/hass/PHONE_GUIDE.md gains 'Change the home page' and 'Route ideas' sections plus one More commands paragraph; test_phone_guide SECTIONS list grows. Docs only.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_phone_guide hass.tests.test_commands_doc hass.tests.test_support_doc -v` ran 23 tests, OK (recorded in PR #372; historical evidence, not rerun for this ledger).
+
+Limits: Guide stays within its existing length cap; no live channel or publication is connected.
+
+## H09: interpreter eval v3: home page and route cases (AV1322-14) — November 3, 2026
+
+Branch rb/av1322-14 (AV1322-14, PR #338, merged as 47f90b8517a1f882c7160eae7c87bb540b16dc1e). interpreter eval set grows 40 to 55 cases (e41-e55): home-page ops (set_headline/story/home_image/notice) and route.add/hide/restore incl. the no-source question case; offline scorer unchanged. hass/interpreter_eval.py + fixtures.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_interpreter_eval hass.tests.test_interpreter_eval_cases hass.tests.test_interpreter_eval_out hass.tests.test_interpreter_request_encode` ran 37 tests, OK (recorded in PR #338; historical evidence, not rerun for this ledger).
+
+Limits: Offline synthetic cases only; no live model call, and the three deliberate wrong replies still fail.
+
+## H20: health: info when the newest backup has no content bundle (AV1322-15) — November 5, 2026
+
+Branch rb/av1322-15 (AV1322-15, PR #319, merged as 836c43ed97337201ce508aadceeaa467f51e9582). health --backups adds one info entry 'backup-content' ('content restores from Git only') when the newest complete backup's manifest lists no content.bundle; fixed words, never a path; ok/notify/exit unchanged. hass/health.py, docs/hass/SUPPORT.md.
+
+Checks at PR head: `python3 -B -m unittest hass.tests.test_health_backup_content hass.tests.test_health hass.tests.test_support_doc hass.tests.test_statebackup -v` ran 28 tests, OK (recorded in PR #319; historical evidence, not rerun for this ledger).
+
+Limits: Info only, with no path or commit in the detail; older backups are ignored and ok, notify and exit status are unchanged.
