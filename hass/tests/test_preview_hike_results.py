@@ -13,6 +13,7 @@ import unittest
 from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from hass import preview
 from hass.content_model import REPO_ROOT
@@ -25,6 +26,17 @@ BEFORE = datetime(2030, 5, 20, 12, 0, tzinfo=timezone(timedelta(hours=-7)))  # f
 COMMUNITY, RECAP = "storefront-mockup/community.json", "Windy but clear."
 ODD = 'Cass "Ridge" [loop]'
 EVENT_CHECKS = ("eventShown", "pastShown", "recapShown", "rsvpGone")
+
+
+def started_today():
+    """A start that has passed but is still on today's Pacific date (community.js keeps it listed).
+
+    now - 1h falls on yesterday's Pacific date shortly after Pacific midnight, so cap it at the
+    midpoint between Pacific midnight and now.
+    """
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(now - timedelta(hours=1), midnight + (now - midnight) / 2).astimezone(timezone.utc)
 
 
 def hike(title="Cass Hill", day=DAY):
@@ -257,7 +269,7 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         target = self.target(self.r, "hike.update", {"id": hid, "rsvpEnabled": False})
         self.assertIs(self.capture(target)["checks"]["dateShown"], True)
         data = json.loads((self.r.wt / COMMUNITY).read_text())  # same title, already started, RSVPs off: no button, no calendar link
-        started = datetime.now(timezone.utc) - timedelta(hours=1)
+        started = started_today()
         for event in data["events"]:
             event["startsAt"] = started.astimezone(timezone(timedelta(hours=-7))).isoformat()
             event["rsvpEnabled"] = False
@@ -277,7 +289,7 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         open_page = (self.r.wt / COMMUNITY).read_bytes()
         self.assertIs(self.capture(target)["checks"]["placesShown"], True)
         data = json.loads(open_page)
-        started = datetime.now(timezone.utc) - timedelta(hours=1)
+        started = started_today()
         for event in data["events"]:
             event["startsAt"] = started.astimezone(timezone(timedelta(hours=-7))).isoformat()
         started_target = {**target, "startsAt": started.isoformat()}
