@@ -1496,7 +1496,7 @@ class Conversation:
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
             lines.append(shelf.check_line(f, " - more than a week ago, the site says call to confirm"))  # AV1102-05
-        lines += self._reader_failed_lines()
+        lines += self._reader_failed_lines(now)
         lines += self._waiting_lines(now) or [NOTHING]
         lines += self._photo_lines(now)  # NB-AV-12: counts only, before Last change
         last = self.db.execute(  # the most recently approved change that has a result
@@ -1507,7 +1507,7 @@ class Conversation:
                          + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
 
-    def _reader_failed_lines(self) -> list:
+    def _reader_failed_lines(self, now) -> list:
         """AV1052-10: the last request was not read because the reader failed; read-only, never raises."""
         if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone():
             return []
@@ -1518,9 +1518,13 @@ class Conversation:
             when = f"{WEEKDAYS[at.weekday()]} {at:%H:%M}"
         except (ValueError, TypeError, OverflowError, OSError):
             when = "time unavailable"
-        if row["value"] != "1" and self._by_code(row["value"], ("needs-details",)):  # a photo caption: resending the photo
-            return [f"Last request not read: {when} - the reader was not working; the photo is kept as draft "  # is a duplicate
+        draft = row["value"] != "1" and self._by_code(row["value"], ("needs-details",))  # a photo caption
+        if draft and self._expiry(draft) > now:  # resending the photo is a duplicate while its draft is open
+            return [f"Last request not read: {when} - the reader was not working; the photo is kept as draft "
                     f"{row['value']}, so reply to it with the product and description"]
+        if draft:  # the draft lapsed (status does not sweep it): a reply would find nothing, so the photo goes again
+            return [f"Last request not read: {when} - the reader was not working and photo draft {row['value']} "
+                    "has expired; send the photo again with its caption"]
         return [f"Last request not read: {when} - the reader was not working; send it again"]
 
     def _waiting_lines(self, now) -> list:

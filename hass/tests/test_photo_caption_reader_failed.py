@@ -5,6 +5,7 @@ Run: python3 -m unittest hass.tests.test_photo_caption_reader_failed -v
 """
 
 import unittest
+from datetime import timedelta
 
 from hass.tests import test_photo_draft as base
 from hass.tests.test_photo_draft import ANSWER, PhotoInterpreter
@@ -56,6 +57,22 @@ class PhotoCaptionReaderFailedTests(unittest.TestCase):
         self.interp.down = False
         self.assertEqual(self.say(ANSWER), "proposed")
         self.assertEqual([d["state"] for d in self.drafts()].count("needs-details"), 0)
+        self.assertFalse([x for x in self.status() if x.startswith("Last request not read")])
+
+    def test_expired_caption_draft_status_says_resend_and_resending_works(self):
+        self.assertEqual(self.say(ANSWER, attachments=1), "reader-failed")
+        [draft] = self.drafts()
+        self.interp.down = False
+        ttl = self.conv.settings["approvalTtlSeconds"]
+        self.conv.clock = lambda: base.T0 + timedelta(seconds=ttl + 60)
+        [line] = [x for x in self.status() if x.startswith("Last request not read")]
+        self.assertIn(f"photo draft {draft['code']} has expired", line)
+        self.assertIn("send the photo again with its caption", line)
+        self.assertNotIn("reply to it", line)
+        self.assertEqual(self.drafts()[0]["state"], "needs-details")  # status stays read-only
+        # the advised recovery: resend the photo with its caption; the lapsed draft is swept and the caption is read
+        self.assertEqual(self.say(ANSWER, attachments=1), "proposed")
+        self.assertEqual([d["state"] for d in self.drafts()], ["expired", "proposed"])
         self.assertFalse([x for x in self.status() if x.startswith("Last request not read")])
 
     def test_failed_text_request_still_says_send_it_again(self):
