@@ -226,3 +226,12 @@ Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.
 - Site: See all from this maker (AV1102-02), an Available today filter (AV1102-03) and a next-hike line on the home page (AV1102-04).
 - `hass/acceptance.py` (AV1102-13) maps H23 and H24 to their tests; run `python3 -B hass/acceptance.py`.
 - Docs: `IMPLEMENTATION.md` (AV1102-14), the proposed trial `TRIAL.md` (AV1102-15) and `HANDOVER.md` (AV1102-16), all under `docs/hass/`.
+
+## Owner-visible behaviour added by AV1222 (ledger: `BUILD_LEDGER.md`)
+
+- Result checks (AV1222-02, -03, -05, -06): after a change, the preview reads a product's availability word and photo, the store intro and selection line, a hike's date, meet and places lines, and a route idea where /hike shows it; a route shown nowhere is said, not reported as checked.
+- Store phone (AV1222-04): `store.set_phone` and `store.clear_phone`; the number shows in the Visit block as a tap-to-call link.
+- Chat: `hidden` lists hidden products and makers (AV1222-13); `post hike <id>` replies with a draft only, nothing is posted (AV1222-11); `cost <id>: <pack cost> for <units>` saves a private cost and `margin <id> at <M>%` reads it (AV1222-10).
+- Interpreter: the prompt lists scheduled hike details (AV1222-08); eval set v5 has 69 cases (AV1222-09); the real-previewer photo demo is a test only (AV1222-07).
+- Site: catalog search matches shelf names and Organic (AV1222-01); a Clear filters button (AV1222-14); dead commerce CSS removed, no visible change (AV1222-15).
+- Docs: `PHONE_GUIDE.md` and `LIMITS.md` cover phone, cost and post hike (AV1222-12).

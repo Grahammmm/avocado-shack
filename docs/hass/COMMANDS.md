@@ -4,7 +4,7 @@ These are the only messages Hass treats as commands. Send each one as the whole 
 do not matter (`YES A1B2` is the same as `yes a1b2`). Codes are the short codes Hass puts in its replies; `A1B2` below
 is only a placeholder.
 
-A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work).
+A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work). A trailing `?` is also ignored, but only for the read-only commands `status`, `history`, `report`, `memory`, `find`, `show`, `post`, `listing`, `hidden`, `margin` and `help` (`status?`, `find eggs?` and `show a1b2?` work). A `?` never runs `yes`, `no`, `undo`, `stop`, `resume`, `remember`, `forget` or `alias`.
 The two note commands are stricter:
 
 - `remember <key>: <text>` saves the text exactly as sent, so its capitals and any final `.` or `!` are kept.
@@ -60,6 +60,11 @@ works as for any change.
 
 Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are
 missing). A draft is never applied until you reply `yes <code>`; drafts that wait too long expire and nothing changes.
+
+New products (a change request, needs `yes <code>`): a product you add shows a "New" badge on its card for its first
+14 days (counted in Pacific calendar days from the day it was added, worked out in the visitor's browser). Editing,
+hiding or restoring a product, or undoing and restoring an add, never starts the 14 days again, and the products that
+were already on the site have no "New" badge.
 
 Checking the selection (change requests, not commands; each still needs `yes <code>`):
 
