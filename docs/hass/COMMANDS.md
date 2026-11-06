@@ -46,6 +46,14 @@ A question mark means a question, never an answer. `yes a1b2?`, `no a1b2?`, `a1b
 
 Saved notes never change the site, and pause does not affect them.
 
+Cancelling a hike (a change request, needs `yes <code>`; not the `cancel <code>` command above, which only rejects a
+waiting draft): say it in your own words, for example "cancel the Point Buchon hike, rained out - we will pick a new
+date soon". `hike.cancel` takes the hike id and an optional `note`, for example `Rained out - we will pick a new date soon`.
+The note is one line of plain text, at most 160 characters, and is public site copy: the cancelled hike's card shows it
+exactly as written, above "This hike is cancelled." It is checked like other hike text (no markup, `$` or invisible
+characters), and any claim in it, such as a distance or "organic", must come from your own message. Without a note the
+card is unchanged. Cancelling notifies nobody. `undo` brings the hike back as scheduled and removes the note.
+
 Photos: send one photo per message, as JPEG or PNG, up to 20 MB. A phone photo's rotation is kept, so it shows upright
 (only that rotation tag is kept, never its location, camera or date); only a PNG with a rotation tag is refused. Any
 other file, or a photo that is too large, incomplete or unreadable,
