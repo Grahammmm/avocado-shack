@@ -27,6 +27,12 @@ ODD = 'Cass "Ridge" [loop]'
 EVENT_CHECKS = ("eventShown", "pastShown", "recapShown", "rsvpGone")
 
 
+def started_today():  # an hour ago, but never before Pacific midnight: the page shows a started hike on its own day only
+    from zoneinfo import ZoneInfo
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+    return max(now - timedelta(hours=1), now.replace(hour=0, minute=0, second=0, microsecond=0)).astimezone(timezone.utc)
+
+
 def hike(title="Cass Hill", day=DAY):
     return {"title": title, "date": day, "time": "09:00", "meetingPoint": "Test trailhead lot", "rsvpEnabled": True,
             "capacity": 12}
@@ -257,7 +263,7 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         target = self.target(self.r, "hike.update", {"id": hid, "rsvpEnabled": False})
         self.assertIs(self.capture(target)["checks"]["dateShown"], True)
         data = json.loads((self.r.wt / COMMUNITY).read_text())  # same title, already started, RSVPs off: no button, no calendar link
-        started = datetime.now(timezone.utc) - timedelta(hours=1)
+        started = started_today()
         for event in data["events"]:
             event["startsAt"] = started.astimezone(timezone(timedelta(hours=-7))).isoformat()
             event["rsvpEnabled"] = False
@@ -277,7 +283,7 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         open_page = (self.r.wt / COMMUNITY).read_bytes()
         self.assertIs(self.capture(target)["checks"]["placesShown"], True)
         data = json.loads(open_page)
-        started = datetime.now(timezone.utc) - timedelta(hours=1)
+        started = started_today()
         for event in data["events"]:
             event["startsAt"] = started.astimezone(timezone(timedelta(hours=-7))).isoformat()
         started_target = {**target, "startsAt": started.isoformat()}
