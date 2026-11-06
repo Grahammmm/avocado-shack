@@ -409,6 +409,30 @@ def parse_memory(text: str):
     return ("memory", None, None) if match and match[5] else None
 
 
+READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"}
+
+
+def _asked(text: str):
+    """AV1352-05 (H17): the message without its closing run of . ! ? when that run holds a ?, else None."""
+    cut = re.sub(r"[.!?]+$", "", text.strip())
+    return cut if cut != text.strip() and "?" in text.strip()[len(cut):] else None
+
+
+def read_command(text: str):
+    """AV1352-05 (H17): parse_command, but a closing ? is dropped for a read-only command only (never yes/no, undo, stop,
+    resume); anything else keeps today's reading of the original text."""
+    cut = _asked(text)
+    found = parse_command(cut) if cut else None
+    return found if found and found[0] in READ_ONLY else parse_command(text)
+
+
+def read_memory(text: str):
+    """AV1352-05 (H17): `memory?` lists notes; remember, forget and alias never see a stripped text."""
+    cut = _asked(text)
+    found = parse_memory(cut) if cut else None
+    return found if found and found[0] == "memory" else parse_memory(text)
+
+
 def _checked(result) -> dict:
     if isinstance(result, dict):
         if set(result) == {"ops", "revises"} and isinstance(result["ops"], list) \
@@ -656,14 +680,14 @@ class Conversation:
             self._reply(ATTACHMENT_REPLY)
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
-        now, command = self._now(), None if msg.attachments > 0 else parse_command(msg.text)
+        now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text)
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and (parse_keyword(msg.text) or coded) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing"): expired = []  # H17: read-only
-        memory = None if command or msg.attachments > 0 else parse_memory(msg.text)
+        memory = None if command or msg.attachments > 0 else read_memory(msg.text)
         if memory and memory[0] == "memory": expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval

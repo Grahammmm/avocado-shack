@@ -4,7 +4,7 @@ These are the only messages Hass treats as commands. Send each one as the whole 
 do not matter (`YES A1B2` is the same as `yes a1b2`). Codes are the short codes Hass puts in its replies; `A1B2` below
 is only a placeholder.
 
-A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work).
+A trailing `.` or `!` is ignored for every command except `remember` and `forget` (`Status.` and `Memory.` work). A trailing `?` is also ignored, but only for the read-only commands `status`, `history`, `report`, `memory`, `find`, `show`, `post`, `listing`, `hidden`, `margin` and `help` (`status?`, `find eggs?` and `show a1b2?` work). A `?` never runs `yes`, `no`, `undo`, `stop`, `resume`, `remember`, `forget` or `alias`.
 The two note commands are stricter:
 
 - `remember <key>: <text>` saves the text exactly as sent, so its capitals and any final `.` or `!` are kept.
