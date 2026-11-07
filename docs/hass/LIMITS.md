@@ -16,6 +16,12 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 ## Waiting changes
 
+- In live mode, chat cannot change product brands or producers, maker places or links, club details, trail facts,
+  route ideas, sample hikes, or the store phone or address. G can do those by hand.
+- Sentences containing origin or organic claims, health claims, awards or endorsements, trail facts, prices or
+  contact details cannot be added, removed, substituted or negated. Other sentences can change; undo is allowed.
+- A live change can touch at most **10** <!-- live_policy.MAX_RECORDS --> records.
+
 - A proposal or a question waits for your reply only for the time the operator has set. After that it expires and nothing
   happens; send the change again. The expiry is judged at the time you sent your reply, so a `yes` sent in time still
   counts if the shop computer handles it later.

@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 
 from hass import sitegen
+from hass.live_policy import COMMERCE_WORDS, EMAIL, PHONE
 from hass.content_model import REPO_ROOT, SITE_DIR, load_and_validate
 
 TEXT_EXT = {".html", ".js", ".json", ".css"}
@@ -31,14 +32,11 @@ PRIVATE = ("producer-research-log.json", "held-products.json", "community-server
 # Selectors catalog-only-qa.cjs refuses on the home page, as markup, plus the archived page's surface.
 COMMERCE_MARKUP = re.compile(r"""(?:id|class)=["'][^"']*\b(?:bag|boxes|merch|owner|order-preview|price|basket|cart|"""
                              r"""checkout|subtotal)\b|data-add(?![-\w])|data-product(?![-\w])""", re.I)
-COMMERCE_WORDS = re.compile(r"\$\s?\d|\bbasket\b|\bcheck ?out\b|\bcart\b|add to (?:bag|basket|cart)|weekly box|"
-                            r"\bmerch|\bsubtotal\b|\bpickup\b|online shop|\bprices?\b|\bpricing\b|\bstripe\b|"
-                            r"\bpaypal\b|\bshipping\b|\bsku\b|stock & orders|\borders?\b|\bbuy now\b", re.I)
+
 PRELAUNCH = re.compile(r"sandbox|before (?:a public )?launch|during setup|not been checked|not connected|"
                        r"saved locally|local service|local signup|unsubscribe|proposed mailbox|lorem|ipsum|"
                        r"\bTODO\b|\bFIXME\b", re.I)
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-PHONE = re.compile(r"(?<!\d)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}(?!\d)")
+
 PLACEHOLDER_EMAILS = {"you@example.com"}
 LOGO_SHA256 = "f958d2890a56b07894f0f53a2826cc9a57fe9c9fcfcef1a91098e419f0277387"  # assets/logo.png, kept unchanged
 # Hosts a published page may link to or name (outbound links only; nothing is loaded from them).

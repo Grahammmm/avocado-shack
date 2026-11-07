@@ -38,6 +38,12 @@ NOT_COPIED = "Copying it to the website has not been done, or did not finish"
 PARTIAL = ("If copying it was started and stopped part way, some pages may already show it; ask for help to copy it "
            "to the website again, which puts every page in place")
 NOT_LIVE = "Saved, but not on the website yet: copying it there is a separate step. Ask for help to put it on the website."
+LIVE_SHOWN = "Now showing on {site}: {code} {summary}."
+LIVE_PICTURE = "The picture is Hass's own view of the published page."
+LIVE_NO_PICTURE = "No picture this time."
+LIVE_NOT_PUBLISHED = "{code} is saved in Hass's copy but did NOT go live: {reason}. The website is unchanged. G has been told."
+LIVE_UNKNOWN = "{code} was sent to the website, but I can't confirm whether it arrived. It may or may not show. G has been told, and no other change will go live until this is sorted."
+LIVE_UNCONFIRMED = "{code} was sent to the website but I can't see it there yet. G has been told."
 UNCHANGED = "The website is as it was before"
 ROUTE_UNSHOWN = "The route idea is not shown on the site right now, so there was nothing to check."  # AV1222-06
 ROLLBACK_FAILED_WORDS = "install failed, some website files not put back - ask for help"  # RF1230-19
@@ -116,9 +122,10 @@ def preview_reason(error) -> str:
     return plain + which
 
 
-def applied_text(code, summary, checked=False, error=None) -> str:
+def applied_text(code, summary, checked=False, error=None, live_site=None) -> str:
     """The reply when an approved change is saved (the apply/approve reply point): applying never copies it to the
     website, so the reply says so instead of only 'Applied'."""
+    if live_site: return f"Saved {code}: {_summary(summary)}. I'll send a separate message about the website."
     if error is not None: return f"Applied {code}, but the preview check failed: {preview_reason(error)}.\n{NOT_LIVE}"
     return f"Applied{' and checked' if checked else ''} {code}: {_summary(summary)}\n{NOT_LIVE}"
 
@@ -146,8 +153,9 @@ def stopped_state(paused, queue) -> str:
     return " ".join(lines)
 
 
-def recovered_text(code) -> str:
+def recovered_text(code, live_site=None) -> str:
     """An approval interrupted before it was saved (editor recovery found no saved change)."""
+    if live_site: return f"{code} was interrupted and not saved; send the change again to make a new draft."
     return f"{code} was interrupted and not saved. {UNCHANGED}; send the change again to make a new draft."
 
 
