@@ -82,7 +82,10 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  check(await said('QA escaped route')==='Route: QA <b>bold</b> "quoted" · QA Esc ↗'&&await line('QA escaped route').locator('b').count()===0,'Route title not escaped');
  link=line('QA unnamed route').locator('a');
  check((await link.textContent()).replace(/\s+/g,' ').trim()==='Trail information ↗'&&await link.getAttribute('href')==='https://example.org/qa-4','Missing sourceName not labelled Trail information');
- check(await p.getByText('QA past outing',{exact:true}).count()===1&&await p.locator('#past-hikes .hike-route').count()===0,'Past hike entry changed by its trailId');
+ // AV1622-03: a linked real past hike is a trail-journal entry: its own title and recap, the route's place/stats/https link, no details row, no RSVP/calendar.
+ const entry=p.locator('#past-hikes .trail-journal-entry').filter({has:p.locator('h3',{hasText:'QA past outing'})});
+ check(await entry.count()===1&&await p.locator('#past-hikes details.past-hike').count()===0&&await p.locator('#past-hikes .hike-route,#past-hikes a.hike-ics,#past-hikes [data-rsvp]').count()===0,'Linked past hike is not a plain journal entry');
+ check(await entry.locator('h3').textContent()==='QA past outing'&&await entry.locator('a.text-link').getAttribute('href')==='https://example.org/qa-trail'&&await entry.locator('a.text-link').getAttribute('rel')==='noopener','Journal entry lost its title or trail link');
  await card('QA trail fixture').getByRole('button',{name:'RSVP to this hike ↗'}).click();await p.locator('#rsvp-name').waitFor();
  check(!(await p.locator('#hike-rsvp').evaluate(f=>f.parentElement.innerText)).includes('QA Route One'),'Route copied into the RSVP dialog');
  await p.keyboard.press('Escape');
