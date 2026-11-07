@@ -154,7 +154,7 @@ def _room_for(events, extra) -> list:
     return [*sched, *rest]
 
 
-def live(cases, url, model, out, transport=None, registry=None, content=None) -> dict:
+def live(cases, url, model, out, transport=None, registry=None, content=None, timeout=30, think=None) -> dict:
     """Record one fresh reply per case into a new file ``out`` outside the repository (operator only);
     the replies file is created 0600 and only when complete."""
     target = Path(out).expanduser().resolve()
@@ -168,7 +168,7 @@ def live(cases, url, model, out, transport=None, registry=None, content=None) ->
         if clash := next((e["id"] for e in extra if e["id"] in have), None): raise EvalError(f"event {clash} is already in the content")
         content = dataclasses.replace(content, community={**community, "events": [*_room_for(community.get("events") or [], extra), *extra]})
         prompt = interpreter_prompt.build(registry or load_registry(), content)
-        model_call = LocalInterpreter(url, model, prompt, transport=transport)
+        model_call = LocalInterpreter(url, model, prompt, timeout=timeout, transport=transport, think=think)
     except (ContentError, ValueError, OSError) as exc:
         raise EvalError(str(exc)) from None
     notes = lambda c: {"notes": c["notes"]} if c.get("notes") else {}  # noqa: E731 - AV1102-10: only when it has some

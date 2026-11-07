@@ -1,0 +1,12 @@
+# CANDIDATE ONLY (HASS-LIVE-AUDIT-1) - not installed. Copy to ~/.config/systemd/user/hass-selftest.timer to adopt.
+# 02:50 Pacific: after the nightly CI run (02:23) and before the state backup (03:30), when nobody is texting.
+[Unit]
+Description=Nightly Hass live self-test at 02:50 Pacific
+
+[Timer]
+OnCalendar=*-*-* 02:50 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target
