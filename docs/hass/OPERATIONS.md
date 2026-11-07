@@ -61,7 +61,7 @@ reads the services, timers, `health.py`, `inbox.py status`, disk and journal gro
 trip through the local model on three synthetic eval cases (a few minutes of CPU). One `PASS|WARN|FAIL` line per check
 and a `HASS-SELFTEST` summary line; exit 1 when a check failed. A check whose data cannot be read (git, systemctl, an
 invalid `health.py` or `inbox.py` report, `du`, `df`, `journalctl`) shows `unknown` and fails; it never reads as clean,
-healthy or zero. A nightly timer for it is proposed in
+healthy, zero or "not run yet"; each command's exit status is checked before its output is used. A nightly timer for it is proposed in
 `reports/hass/hass-selftest.{service,timer}.candidate` and is not installed.
 
 ## Retention proposal (H21, G decides; nothing enforces it yet)

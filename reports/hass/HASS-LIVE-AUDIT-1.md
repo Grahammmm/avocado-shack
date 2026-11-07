@@ -142,7 +142,18 @@ Failed measurements fail (revision 2): a git error is `unknown`, not clean; `hea
 (`live_selftest_parse.py health`: boolean `ok`, a `problems` list with check ids, `ok` agreeing with problems and exit
 code) before the backup-age-only WARN applies, so a crash with a traceback is a FAIL; a failed `journalctl`, `du` or
 `df` is reported as `unknown` and FAILs, never as 0 lines or 0 KB, and leaves the previous growth baseline in place.
-An empty successful journal query still counts as 0 lines. The tests cover each failure and its valid control.
+An empty successful journal query still counts as 0 lines.
+
+Revision 3 (commit `22c71a2` on `rb/hass-live-audit-1-r2`, pushed by another worker 15:26 PST with the same fix this
+card's author made in parallel; the author's duplicate script/test commit was dropped, not pushed): each acquisition's
+own exit status is checked before its output is parsed. `du` can print a partial total and exit 1 (an unreadable
+subtree), and `df` can print a usable-looking line and exit 1; either is now `unknown` and a FAIL and does not replace
+the baseline. A timer `LastTriggerUSec` or service `ExecMainStatus` query that exits non-zero is a FAIL (`last trigger
+query failed (systemctl exit N)`), not "has not run yet"; only a successful query answering empty, `n/a` or `0` is the
+never-run WARN. Tests cover, with fakes in a temp dir: health crash, git exit 128, journalctl exit 1, du partial total
+with exit 1, df output with exit 1, and a timer query exiting 1; and the valid controls: clean git, backup-age-only
+health, an empty successful journal query, and a successful never-triggered timer. Not covered: a failing `systemctl
+show -p NRestarts` with numeric output (a non-numeric or empty answer already FAILs).
 
 | Check | What it proves | Requirement covered |
 | --- | --- | --- |
@@ -199,6 +210,11 @@ HASS-SELFTEST 2026-11-07T23:05:50Z pass=7 warn=4 fail=0 skip=1
 ```
 
 (`done 44` includes the operator's L8 messages; it is a 15:05 count, not part of the 14:46 snapshot.)
+
+Revision 3 run on the live box, 2026-11-07 15:26 PST, at commit `7d2fcd5` on `rb/hass-live-audit-1-r2` (no
+`--model`; growth file in `/tmp`, second run against it): same result, `pass=7 warn=4 fail=0 skip=1`, with
+`timer:hass-health ... last run Sat 2026-11-07 15:25:00 PST` and `growth state 268 KB, free 258636 MB, hass journal
+209 lines/24h; since last run 0 h ago: state 0 KB`.
 
 Nightly candidate (not installed): `reports/hass/hass-selftest.service.candidate` and
 `reports/hass/hass-selftest.timer.candidate`, also copied to `~/agent-work/reports/hass/`. Systemd user oneshot,
