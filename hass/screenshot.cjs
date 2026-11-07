@@ -65,9 +65,9 @@ const allowed=req=>{
           Object.assign(checks,best);
         }
       }
-      else if(target.status==='completed'){  // AV1622-03: journal entry whose h3 is exactly the target's title; its dedicated recap paragraph
+      else if(target.status==='completed'){  // AV1622-03: real journal entry (has .trail-journal-recap, so never a sample) whose h3 is exactly the target's title
         const recaps=await page.locator('#past-hikes .trail-journal-entry').evaluateAll((els,title)=>els.filter(d=>
-          d.querySelector('h3')?.textContent===title).map(d=>d.querySelector('.trail-journal-recap')?.textContent),target.title);
+          d.querySelector('.trail-journal-recap')&&d.querySelector('h3')?.textContent===title).map(d=>d.querySelector('.trail-journal-recap')?.textContent),target.title);
         checks.pastShown=recaps.length>0;
         if(target.recap)checks.recapShown=recaps[0]===target.recap;
       }else if(target.status==='cancelled'){  // the id is compared in page JS, never put into a selector
