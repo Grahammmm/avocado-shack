@@ -49,7 +49,7 @@ At least 10 real examples of each are in the JSON (`pictures.catalog.examples` 1
 
 Example (`reports/hass/newitem-1/drafts.json`): *"got in some Cal Poly honey, jar of 8oz, $9"* -> `product.add{name "Cal Poly honey", brand "Cal Poly", category pantry, producerKey "Cal Poly", imageAlt "Cal Poly honey in a jar", description "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own."}` (+ `set_availability yes` when the check is current); left off: price ($9), size (8oz). Descriptions, picture and records all pass the house check.
 
-**Before/after, in a real browser** (`hass/newitem_preview.py`, run: `PLAYWRIGHT_MODULE=<playwright> python3 hass/newitem_preview.py`; output in `reports/hass/newitem-1/preview/`). For each of three synthetic cases the shop's own pipeline builds the page twice and headless Chromium shows the new card between two existing cards of the same kind, with the maker note open, on a phone (390 px) and a desktop (1280 px) page:
+**Before/after, in a real browser** (`hass/newitem_preview.py`, run: `PLAYWRIGHT_MODULE=<playwright> python3 hass/newitem_preview.py`; output in `reports/hass/newitem-1/preview/`). For each of three synthetic cases the shop's own pipeline builds the page twice and headless Chromium shows the new card next to two existing cards that the same search lists (the site now puts new products first, so they follow it), with the maker note open, on a phone (390 px) and a desktop (1280 px) page:
 
 * BEFORE = what the shop shows today: the photo with its metadata removed by the existing `media._jpeg_copy`, Michael's words as the description, no maker entry.
 * AFTER = the draft.
