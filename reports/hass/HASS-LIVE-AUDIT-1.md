@@ -211,10 +211,10 @@ HASS-SELFTEST 2026-11-07T23:05:50Z pass=7 warn=4 fail=0 skip=1
 
 (`done 44` includes the operator's L8 messages; it is a 15:05 count, not part of the 14:46 snapshot.)
 
-Revision 3 run on the live box, 2026-11-07 15:26 PST, at commit `7d2fcd5` on `rb/hass-live-audit-1-r2` (no
-`--model`; growth file in `/tmp`, second run against it): same result, `pass=7 warn=4 fail=0 skip=1`, with
-`timer:hass-health ... last run Sat 2026-11-07 15:25:00 PST` and `growth state 268 KB, free 258636 MB, hass journal
-209 lines/24h; since last run 0 h ago: state 0 KB`.
+Revision 3 run on the live box, 2026-11-07 15:27 PST, at commit `4ce2ee7` on `rb/hass-live-audit-1-r2` (no
+`--model`; growth file in `/tmp`, so no baseline comparison): same result, `pass=7 warn=4 fail=0 skip=1`, with
+`timer:hass-health ... last run Sat 2026-11-07 15:25:00 PST` and `growth state 272 KB, free 258705 MB, hass journal
+209 lines/24h`.
 
 Nightly candidate (not installed): `reports/hass/hass-selftest.service.candidate` and
 `reports/hass/hass-selftest.timer.candidate`, also copied to `~/agent-work/reports/hass/`. Systemd user oneshot,
