@@ -14,7 +14,7 @@ const el={'#upcoming-hikes':{innerHTML:''},'#past-hikes':{innerHTML:'',classList
 const un=s=>s.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 const log={scroll:[],focus:[],tabindex:[]};
 const card=id=>({id,scrollIntoView(o){log.scroll.push([id,o.block])},setAttribute(k,v){log.tabindex.push([id,k,v])},focus(o){log.focus.push([id,o.preventScroll])}});
-const cards=()=>[...(el['#upcoming-hikes'].innerHTML+el['#past-hikes'].innerHTML).matchAll(/<(?:article|details) id="([^"]*)" class="(?:hike-event|past-hike)/g)].map(m=>card(un(m[1])));
+const cards=()=>[...(el['#upcoming-hikes'].innerHTML+el['#past-hikes'].innerHTML).matchAll(/<article id="([^"]*)" class="(?:hike-event|trail-journal-entry)/g)].map(m=>card(un(m[1])));
 const form={elements:{name:{value:'A'},email:{value:'a@b.c'},partySize:{value:'1'}},querySelector:()=>({textContent:'',disabled:false}),getAttribute:()=>null,reset(){}};
 const ctx=vm.createContext({TextEncoder,location:{origin:'https://club.example',hash},
  $:s=>el[s]||null,
@@ -102,7 +102,7 @@ class HikeAnchorTest(unittest.TestCase):
                             hash="#done")
         self.assertEqual(self.ids(out["up"], "article"), ["cx"])
         self.assertIn('<article id="cx" class="hike-event hike-cancelled">', out["up"])
-        self.assertEqual(self.ids(out["past"], "details"), ["done"])
+        self.assertEqual(self.ids(out["past"], "article"), ["done"])
         self.assertEqual(out["log"]["scroll"], [["done", "start"]])
         # with no real hikes the sample invitation and archive are drawn without any anchor
         trail = {"id": "t1", "title": "T", "place": "P", "distance": "1", "difficulty": "e", "elevationLabel": "Up",
