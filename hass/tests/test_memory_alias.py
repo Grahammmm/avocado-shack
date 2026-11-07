@@ -129,6 +129,39 @@ class MemoryAliasTests(StoreMixin, ConversationTestCase):
         self.chat("alias Lion’s Måne: " + AVO, "memory-saved")  # lookup's fold: accents and curly apostrophes
         self.assertEqual(self.find("lions mane"), {"match": AVO, "via": "alias lions mane"})
 
+    def test_forget_alias_by_spaced_name(self):
+        """AV1352-07: `forget alias green jam` removes alias.green-jam, even dangling; a plain note is untouched."""
+        self.chat(f"alias Green Jam: {AVO}", "memory-saved")
+        self.chat("remember green jam: a note", "memory-saved")
+        self.chat("forget ALIAS  green jam", "memory-forgot", "Forgot alias.green-jam.")
+        self.assertEqual(self.conv.aliases(), {})
+        self.chat("forget alias green jam", "memory-none", "Nothing saved as alias.green-jam.")
+        self.chat(f"alias green jam: {AVO}", "memory-saved")
+        self.chat("forget alias.green-jam", "memory-forgot", "Forgot alias.green-jam.")
+        self.chat("alias melon: photo-product-078", "memory-saved")
+        self.edit("products.json", lambda d: d.update(products=[p for p in d["products"] if p["id"] != "photo-product-078"]))
+        self.chat("forget alias melon", "memory-forgot", "Forgot alias.melon.")
+        self.chat("forget alias $jam", "memory-none")
+        self.chat("forget alias " + "j" * 61, "memory-none")
+        self.chat("remember alias.green jam: product:" + AVO, "memory-invalid",
+                  "Not saved: send alias <name>: <id> to save an alias.")
+        self.chat("forget green jam", "memory-forgot", "Forgot green-jam.")
+
+    def test_forget_alias_name_collision_with_note(self):
+        """AV1352-07 review: note alias-green-jam and alias.green-jam both saved: forget alias green jam deletes neither."""
+        self.chat(f"alias green jam: {AVO}", "memory-saved")
+        self.chat("remember alias green jam: note", "memory-saved")
+        self.chat("forget alias green jam", "memory-ambiguous",
+                  "Both alias.green-jam (an alias) and alias-green-jam (a note) are saved; nothing was forgotten. "
+                  "Send forget alias.green-jam for the alias or forget alias-green-jam for the note.")
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 2)
+        self.chat("forget alias-green-jam", "memory-forgot", "Forgot alias-green-jam.")
+        self.assertEqual(len(self.conv.aliases()), 1)
+        self.chat("remember alias green jam: note", "memory-saved")
+        self.chat("forget alias.green-jam", "memory-forgot", "Forgot alias.green-jam.")
+        self.chat("forget alias green jam", "memory-forgot", "Forgot alias-green-jam.")  # only the note exists: it goes
+        self.assertEqual(self.conv.memory.list(), [])
+
     def test_plain_notes_are_not_aliases(self):
         self.chat("remember aliases: product:" + AVO, "memory-saved")
         self.assertEqual(self.conv.aliases(), {})

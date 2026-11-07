@@ -55,7 +55,7 @@ class MemoryUnchangedTests(StoreMixin, ConversationTestCase):
 
     def test_validation_comes_first(self):
         self.chat("remember hours: 9-5", "memory-saved")
-        self.chat("remember Bad Key: 9-5", "memory-invalid", "Not saved: key must be 1–64 of a-z 0-9 . -.")
+        self.chat("remember Bad_Key: 9-5", "memory-invalid", "Not saved: key must be 1–64 of a-z 0-9 . -.")
         self.chat("remember alias.x: 9-5", "memory-invalid", "Not saved: send alias <name>: <id> to save an alias.")
         self.assertEqual(len(self.rows()), 1)
 

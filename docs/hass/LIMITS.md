@@ -42,7 +42,7 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Route idea: each text field **600 characters** <!-- content_model.TEXT_LIMITS[routeIdea][description] -->.
 - Hiking club: name, organizer and sender **400 characters** <!-- content_model.TEXT_LIMITS[club][clubName] --> each.
 - Store: street address **80 characters** <!-- content_model.TEXT_LIMITS[store][streetAddress] -->, town **80 characters** <!-- content_model.TEXT_LIMITS[store][town] -->, each line of hours **60 characters** <!-- content_model.TEXT_LIMITS[store][hoursLine] -->, at most **7** <!-- content_model.MAX_HOURS_LINES --> lines of hours.
-- A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->.
+- A remembered note: at most **500 characters** <!-- memory.MAX_VALUE -->; spaces in its name become `-`, and the stored name stays 1-64 of a-z, 0-9, `.` or `-`.
 
 ## Phone and prices
 
