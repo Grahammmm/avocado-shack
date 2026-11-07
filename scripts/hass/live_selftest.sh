@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # HASS-LIVE-AUDIT-1: Hass live self-test for AgentOrange. Safe to run any time; an operator runs it by hand, or the
-# candidate nightly timer (deploy/hass/hass-selftest.*.candidate) runs it.
+# candidate nightly timer (reports/hass/hass-selftest.{service,timer}.candidate, not installed) runs it.
 #
-#   scripts/hass/live_selftest.sh [--synthetic-only] [--model NAME] [--model-url URL] [--log FILE]
+#   scripts/hass/live_selftest.sh [--synthetic-only] [--model NAME] [--model-url URL] [--log FILE] [--brief FILE]
 #                                 [--state-root DIR] [--growth-file FILE] [--min-free-mb MB]
 #
 # READ-ONLY on the live system: it restarts nothing, sends nothing, writes nothing in the Hass state or host dirs,
@@ -22,7 +22,8 @@
 #               the local model with the production timeout (a draft round trip; uses the CPU for a few minutes)
 #   growth      state size, free disk and Hass journal lines in 24 h, compared with the previous run (--growth-file)
 # Output: one `PASS|WARN|FAIL|SKIP <check> <detail>` line per check, then `HASS-SELFTEST <UTC> pass=.. warn=.. fail=..
-# skip=..`; --log FILE appends that last line. Exit 0 no FAIL, 1 a FAIL, 2 bad usage.
+# skip=..`; --log FILE appends that last line, --brief FILE replaces FILE with it (one line for the ops brief); a
+# FAIL adds `failed:<check,...>`. Exit 0 no FAIL, 1 a FAIL, 2 bad usage.
 # --synthetic-only runs only the synthetic check (what CI runs); it needs no live service.
 set -u
 
@@ -30,8 +31,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 STATE_ROOT="$HOME/.local/state/hass"
 GROWTH="$HOME/.local/state/hass-selftest/growth.tsv"
-MODEL="" MODEL_URL="http://127.0.0.1:11434" LOG="" SYNTH_ONLY=0 MIN_FREE_MB=1024
-PY=/usr/bin/python3
+MODEL="" MODEL_URL="http://127.0.0.1:11434" LOG="" BRIEF="" SYNTH_ONLY=0 MIN_FREE_MB=1024
+PY="${HASS_PYTHON:-/usr/bin/python3}"  # the interpreter the hass units use; tests pass their own
 [ -x "$PY" ] || PY=python3
 
 while [ $# -gt 0 ]; do
@@ -40,21 +41,22 @@ while [ $# -gt 0 ]; do
     --model) MODEL="${2:?}"; shift ;;
     --model-url) MODEL_URL="${2:?}"; shift ;;
     --log) LOG="${2:?}"; shift ;;
+    --brief) BRIEF="${2:?}"; shift ;;
     --state-root) STATE_ROOT="${2:?}"; shift ;;
     --growth-file) GROWTH="${2:?}"; shift ;;
     --min-free-mb) MIN_FREE_MB="${2:?}"; shift ;;
-    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR > 1 && /^set -u/ {exit} NR > 1' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
 done
 
 STATE="$STATE_ROOT/state" HOSTDIR="$STATE_ROOT/host" BACKUPS="$STATE_ROOT/backups"
-NPASS=0 NWARN=0 NFAIL=0 NSKIP=0
+NPASS=0 NWARN=0 NFAIL=0 NSKIP=0 FAILED=""
 say() {  # say STATUS CHECK DETAIL...
   local s="$1" c="$2"; shift 2
   printf '%s %s %s\n' "$s" "$c" "$*"
-  case "$s" in PASS) NPASS=$((NPASS + 1)) ;; WARN) NWARN=$((NWARN + 1)) ;; FAIL) NFAIL=$((NFAIL + 1)) ;; *) NSKIP=$((NSKIP + 1)) ;; esac
+  case "$s" in PASS) NPASS=$((NPASS + 1)) ;; WARN) NWARN=$((NWARN + 1)) ;; FAIL) NFAIL=$((NFAIL + 1)); FAILED="$FAILED $c" ;; *) NSKIP=$((NSKIP + 1)) ;; esac
 }
 field() {  # field NAME JSON -> the bare value of a top-level number/null field (counts only)
   printf '%s' "$2" | grep -o "\"$1\": [0-9a-z.]*" | head -1 | sed 's/.*: //'
@@ -85,7 +87,7 @@ if [ "$SYNTH_ONLY" = 0 ]; then
     st="$(systemctl --user is-active "$unit.service" 2>/dev/null)"
     restarts="$(systemctl --user show -p NRestarts --value "$unit.service" 2>/dev/null)"
     if [ "$st" != active ]; then say FAIL "service:$unit" "$st"
-    elif [ "${restarts:-0}" -gt 0 ]; then say WARN "service:$unit" "active, restarted ${restarts} times since it was started"
+    elif [ "${restarts:-0}" -gt 0 ]; then say WARN "service:$unit" "active, systemd restart counter ${restarts} (crash restarts since the unit was loaded)"
     else say PASS "service:$unit" "active, 0 restarts"; fi
   done
 
@@ -151,6 +153,8 @@ if [ "$SYNTH_ONLY" = 0 ]; then
 fi
 
 summary="HASS-SELFTEST $(date -u +%Y-%m-%dT%H:%M:%SZ) pass=$NPASS warn=$NWARN fail=$NFAIL skip=$NSKIP"
+[ "$NFAIL" = 0 ] || summary="$summary failed:$(printf '%s' "$FAILED" | sed 's/^ //; s/ /,/g')"
 echo "$summary"
 if [ -n "$LOG" ]; then printf '%s\n' "$summary" >> "$LOG"; fi
+if [ -n "$BRIEF" ]; then printf '%s\n' "$summary" > "$BRIEF.tmp.$$" && mv -f "$BRIEF.tmp.$$" "$BRIEF"; fi
 [ "$NFAIL" = 0 ]
