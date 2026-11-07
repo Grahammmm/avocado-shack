@@ -22,7 +22,10 @@ Commands (offline unless --live):
   report --run LABEL=R [--run ...]        a markdown table, one column per run
   compare --before R1 --after R2          ids that regressed or were fixed
   --live --url U --model M --out FILE     OPERATOR ONLY, never in CI: asks the local model once per case, appends
-                                          {"id","reply","failed","ms"} lines to FILE.partial, links FILE when complete
+                                          {"id","reply","failed","ms","firstMs","firstFailed"} lines to FILE.partial and
+                                          links FILE when complete. --retry-timeout S asks a failed call once more with
+                                          that longer limit (a shared CPU model can be swapped out between cases); the
+                                          first attempt's time and failure are kept, so latency and timeouts stay honest
 Case text is never printed by score, report or compare.
 """
 import argparse, dataclasses, json, os, re, sys, time  # noqa: E401
@@ -86,12 +89,14 @@ def load_replies(path) -> dict:
     replies, seen = {}, set()
     for n, row in ie._rows(path, "replies"):
         if set(row) == {ie.NOTE_KEY}: continue
-        if not ({"id", "reply"} <= set(row) <= {"id", "reply", "failed", "ms"}): raise EvalError(f"replies line {n}: not a reply")
-        failed, ms = row.get("failed"), row.get("ms")
-        if not (failed is None or isinstance(failed, str)) or not (ms is None or (isinstance(ms, int) and not isinstance(ms, bool) and ms >= 0)):
+        if not ({"id", "reply"} <= set(row) <= {"id", "reply", "failed", "ms", "firstMs", "firstFailed"}): raise EvalError(f"replies line {n}: not a reply")
+        failed, ms, first_failed, first_ms = row.get("failed"), row.get("ms"), row.get("firstFailed"), row.get("firstMs", row.get("ms"))
+        whole = lambda v: v is None or (isinstance(v, int) and not isinstance(v, bool) and v >= 0)  # noqa: E731
+        if not (failed is None or isinstance(failed, str)) or not (first_failed is None or isinstance(first_failed, str)) or not (whole(ms) and whole(first_ms)):
             raise EvalError(f"replies line {n}: bad failed or ms")
         if failed is None and row["reply"] == {"unsupported": FAILED}: failed = "unknown"  # a hand-made file with the fixed failure reply
-        replies[ie._id(row, n, "replies", seen)] = {"reply": row["reply"], "failed": failed, "ms": ms}
+        if first_failed is None and "firstMs" not in row: first_failed = failed
+        replies[ie._id(row, n, "replies", seen)] = {"reply": row["reply"], "failed": failed, "ms": ms, "firstMs": first_ms, "firstFailed": first_failed}
     return replies
 
 
@@ -159,7 +164,7 @@ def score(corpus, replies, registry) -> dict:
     nodraft = [(c, j) for c, j in done if not any("ops" in e for e in [c["expect"], *c.get("also", [])])]
     wants_draft = [(c, j) for c, j in done if "ops" in c["expect"]]
     calls = [replies[c["id"]] for c, _ in done]
-    ok_ms = [r["ms"] for r in calls if r["ms"] is not None and not r["failed"]]
+    ok_ms = [r.get("firstMs", r["ms"]) for r in calls if r.get("firstMs", r["ms"]) is not None and not r.get("firstFailed", r["failed"])]  # first attempts that finished in time
     raw_ok = [r for r in calls if not r["failed"] and isinstance(r["reply"], dict)]
     schema_ok = [r for r in raw_ok if any(k in r["reply"] for k in ("ops", "question", "unsupported"))]
     per = {}
@@ -179,6 +184,7 @@ def score(corpus, replies, registry) -> dict:
         "overCautiousRate": _pct(sum(j["verdict"] == "over-cautious" for _, j in wants_draft), len(wants_draft)), "draftCases": len(wants_draft),
         "jsonValidRate": _pct(len(raw_ok), n), "schemaValidRate": _pct(len(schema_ok), n),
         "callsFailed": count("call-failed"), "timeouts": sum(r["failed"] == "timeout" for r in calls),
+        "firstAttemptFailures": sum(bool(r.get("firstFailed", r["failed"])) for r in calls), "firstAttemptTimeouts": sum(r.get("firstFailed", r["failed"]) == "timeout" for r in calls),
         "latencyMs": {"p50": _percentile(ok_ms, 50), "p95": _percentile(ok_ms, 95), "max": max(ok_ms) if ok_ms else None, "calls": len(ok_ms)},
         "verdicts": {v: count(v) for v in ("pass", "wrong-draft", "over-cautious", "kind-mismatch", "content-miss", "call-failed")},
         "byIntent": dict(sorted(per.items())),
@@ -201,7 +207,7 @@ ROWS = (("Cases scored", "scored", "{}"), ("Intent accuracy", "intentAccuracy", 
         ("Wrong-draft rate (unsafe)", "wrongDraftRate", "{:.1%}"), ("Drafted where a draft was NOT right", "draftWhenShouldNotRate", "{:.1%}"),
         ("Asked a question when it should ask", "questionWhenUnsureRate", "{:.1%}"), ("Refused when it should refuse", "refusalRate", "{:.1%}"),
         ("Over-cautious (asked or refused a clear request)", "overCautiousRate", "{:.1%}"), ("JSON valid", "jsonValidRate", "{:.1%}"),
-        ("Calls failed or timed out", "callsFailed", "{}"))
+        ("Calls failed at the end", "callsFailed", "{}"), ("First attempts that timed out", "firstAttemptTimeouts", "{}"))
 
 
 def report(summaries) -> str:
@@ -226,7 +232,7 @@ def _content():
 
 
 def live(corpus, url, model, out, timeout=120, think=None, baseline=False, warmup_timeout=900, transport=None, registry=None,
-         content=None, clock=time.monotonic, progress=None) -> dict:
+         content=None, clock=time.monotonic, progress=None, retry_timeout=0) -> dict:
     """Ask the local model once per case. FILE.partial is appended (and resumed) one fsynced line per case and linked to FILE
     only when complete. baseline=True sends exactly what the service sends today (no hints, no recent question)."""
     target = Path(out).expanduser().resolve()
@@ -254,11 +260,21 @@ def live(corpus, url, model, out, timeout=120, think=None, baseline=False, warmu
             if case.get("recent") and not baseline: extras["recent"] = case["recent"]
             start = clock()
             reply = asker.interpret(case["text"], case["pending"], sent_at=SENT_AT, **extras)
-            ms = round((clock() - start) * 1000)
-            fh.write(json.dumps({"id": case["id"], "reply": reply, "failed": asker.last_error, "ms": ms}, ensure_ascii=False) + "\n")
+            ms = first_ms = round((clock() - start) * 1000)
+            first_failed = asker.last_error
+            if first_failed in ("timeout", "connect") and retry_timeout > timeout:  # the model was busy or swapped out: ask once more, patiently
+                asker.timeout = retry_timeout
+                try:
+                    start = clock()
+                    reply = asker.interpret(case["text"], case["pending"], sent_at=SENT_AT, **extras)
+                    ms = round((clock() - start) * 1000)
+                finally:
+                    asker.timeout = timeout
+            row = {"id": case["id"], "reply": reply, "failed": asker.last_error, "ms": ms, "firstMs": first_ms, "firstFailed": first_failed}
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
             fh.flush()
             os.fsync(fh.fileno())
-            if progress: progress(case["id"], ms, asker.last_error)
+            if progress: progress(case["id"], first_ms, first_failed, asker.last_error)
     os.link(partial, target)
     os.unlink(partial)
     rows = load_replies(target)
@@ -285,6 +301,7 @@ def main(argv=None, transport=None) -> int:
     for flag in ("--replies", "--url", "--model", "--out", "--before", "--after"): parser.add_argument(flag)
     parser.add_argument("--run", action="append", default=[], help="report: LABEL=REPLIES_FILE")
     parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument("--retry-timeout", type=int, default=0, help="live: ask a timed-out call once more with this many seconds (0 = off)")
     parser.add_argument("--think", choices=("true", "false"))
     parser.add_argument("--every", type=int)
     parser.add_argument("--limit", type=int)
@@ -296,9 +313,10 @@ def main(argv=None, transport=None) -> int:
         if args.live:
             if not (args.url and args.model and args.out and not args.command): parser.error("use: --live --url U --model M --out FILE")
             think = None if args.think is None else args.think == "true"
-            say = lambda i, ms, err: print(f"{i} {ms}ms {err or 'ok'}", file=sys.stderr, flush=True)  # noqa: E731 - no case text
+            say = lambda i, ms, err, final: print(f"{i} {ms}ms {err or 'ok'}{'' if final == err else ' -> ' + (final or 'ok')}", file=sys.stderr, flush=True)  # noqa: E731 - no case text
             summary = live(subset(corpus, args.every, args.limit), args.url, args.model, args.out, timeout=args.timeout, think=think,
-                           baseline=args.baseline, warmup_timeout=args.warmup_timeout, transport=transport, registry=registry, progress=say)
+                           baseline=args.baseline, warmup_timeout=args.warmup_timeout, transport=transport, registry=registry, progress=say,
+                           retry_timeout=args.retry_timeout)
         elif args.command == "score" and args.replies:
             summary = score(corpus, load_replies(args.replies), registry)
         elif args.command == "report" and args.run:
