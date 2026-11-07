@@ -85,8 +85,10 @@ def load_host(path, allow_port_zero=False) -> dict:
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
               and all(c in "0123456789abcdef" for c in raw["runtimeCommit"]),
-              "interpreter": isinstance(itp, dict) and set(itp) == {"url", "model"} and isinstance(itp["model"], str)
-              and 0 < len(itp["model"]) <= 100,
+              "interpreter": isinstance(itp, dict) and {"url", "model"} <= set(itp) <= {"url", "model", "timeout", "think"}
+              and isinstance(itp["model"], str) and 0 < len(itp["model"]) <= 100
+              and (type(itp.get("timeout", 30)) is int and 1 <= itp.get("timeout", 30) <= 120)
+              and type(itp.get("think", False)) is bool,
               "allowedPeers": isinstance(peers, list) and all(_ip(p) for p in peers),
               "listen": _listen(raw.get("listen"), allow_port_zero) is not None}
     if checks["interpreter"]:
@@ -238,7 +240,8 @@ class Worker:
 def interpreter_builder(cfg, worktree):
     def build():
         prompt = interpreter_prompt.build(load_registry(), load_content(Path(worktree) / "hass" / "content"))
-        return interpreter_local.LocalInterpreter(cfg["interpreter"]["url"], cfg["interpreter"]["model"], prompt)
+        return interpreter_local.LocalInterpreter(cfg["interpreter"]["url"], cfg["interpreter"]["model"], prompt,
+                                               timeout=cfg["interpreter"].get("timeout", 30), think=cfg["interpreter"].get("think"))
     return build
 
 

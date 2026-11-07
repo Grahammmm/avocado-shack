@@ -84,6 +84,17 @@ class AdapterTests(unittest.TestCase):
         self.assertIn("señora", user["content"])  # non-ASCII kept, not \u-escaped
         self.assertIn("señora".encode("utf-8"), body)
 
+    def test_think_is_sent_only_when_false(self):
+        for think, present in ((None, False), (False, True), (True, False)):
+            with self.subTest(think=think):
+                interp = self.make(think=think)
+                interp.interpret(OWNER_TEXT, PENDING)
+                sent = json.loads(self.fake.calls[0][1].decode("utf-8"))
+                self.assertEqual(("think" in sent, sent.get("think")), (present, False if present else None))
+        for bad in (0, 1, "false"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.make(think=bad)
+
     def test_good_replies_are_returned_as_is(self):
         for result in (GOOD, {"question": "Which day?"}, {"unsupported": "No."}, {"anything": 1}):
             with self.subTest(result=result):
