@@ -57,8 +57,8 @@ const SHELVES=new Set(catalog.map(p=>p.category));
 document.querySelectorAll('[data-filter]').forEach(b=>{b.hidden=b.dataset.filter!=='all'&&!SHELVES.has(b.dataset.filter)});
 // One search normalization for filtering, the address and restore: trimmed, at most 80 characters (code points).
 const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
-// AV0222-09: products the badge shows as New come first, newest addedOn first (ties and every other product keep catalog order).
-// A new array each time; the day is renderNow's, so badges and order agree for one render.
+// AV0222-09: products the badge shows as New come first, newest addedOn first (ties and every other product keep catalog sequence).
+// A new array each time; the day is renderNow's, so badges and sequence agree for one render.
 function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew(p,now)}));
  d.sort((x,y)=>x.n!==y.n?(x.n?-1:1):x.n&&x.p.addedOn!==y.p.addedOn?(x.p.addedOn>y.p.addedOn?-1:1):x.i-y.i);return d.map(x=>x.p)}
 function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return orderedProducts().filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
