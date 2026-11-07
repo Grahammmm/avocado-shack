@@ -31,3 +31,9 @@ Render the plist's `@PYTHON@`, `@REPO@`, `@CONFIG@`, `@LOGDIR@` as XML-escaped
 absolute paths. G installs it as a LaunchAgent in the dedicated user's logged-in
 GUI session; Messages needs that session. FileVault reboot still needs a person.
 No installation, launchctl, account setup or real send is part of this build.
+
+Screenshots (HASS-ATTACH-1, UNVERIFIED on a real Mac until runbook step 19): when the host sets `pictures`, up to two PNGs
+(<=1.5 MiB each, from the host's `screenshots/` dir) ride the sealed relay. The forwarder sends the text first, then each
+picture to the owner chat only via loopback BlueBubbles `POST /api/v1/message/attachment`, after checking sha256, size and the
+PNG signature. Progress is kept in the spool (`sent_pics`), so a restart never repeats the text. A picture that fails three
+times or does not verify gets one fallback text and the reply is acknowledged. Nothing is written to disk on the Mac.

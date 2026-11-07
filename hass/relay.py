@@ -3,12 +3,14 @@ Pure protocol plus one small store. The Mac pulls owner replies (the host never 
 `ack` -> sealed `acked`. Control envelopes are v2, keyed by control_key(secret), so a v1 inbound envelope never verifies
 as a control one. Nothing here opens a socket, reads the environment or logs; error messages never carry a path or bytes.
 """
-import hmac, json, os, sqlite3, stat  # noqa: E401
+import base64, hmac, json, os, sqlite3, stat  # noqa: E401
 from hashlib import sha256
+from pathlib import Path
 
 from hass import bridge, memory
 
 KEY_BYTES, MAX_KEY_FILE, MAX_TEXT, HAND_AFTER_S = 32, 128, 8192, 60
+MAX_PNG, MAX_SHOTS, PNG_SIG, B64_MAX = 1572864, 2, b"\x89PNG\r\n\x1a\n", 2097152  # HASS-ATTACH-1
 CONTROL_KEYS = {"v", "ts", "nonce", "body", "mac"}
 
 
@@ -50,29 +52,47 @@ def control_key(secret) -> bytes:
     return hmac.new(bridge._check_key(secret), b"hass relay v2", sha256).digest()
 
 
+def _shots(v) -> bool:
+    return (type(v) is list and 1 <= len(v) <= MAX_SHOTS
+            and [s.get("idx") if type(s) is dict else None for s in v] == list(range(len(v)))
+            and all(set(s) == {"idx", "sha256", "size"} and type(s["sha256"]) is str and bridge.MAC_RE.fullmatch(s["sha256"])
+                    and type(s["size"]) is int and 1 <= s["size"] <= MAX_PNG for s in v))
+
+
 def _item(i) -> bool:
-    return (type(i) is dict and set(i) == {"id", "chat", "text", "pictures"} and type(i["id"]) is int
+    return (type(i) is dict and set(i) in ({"id", "chat", "text", "pictures"}, {"id", "chat", "text", "pictures", "shots"})
+            and type(i["id"]) is int
             and type(i["chat"]) is str and type(i["text"]) is str and len(i["text"]) <= MAX_TEXT
-            and type(i["pictures"]) is int and 0 <= i["pictures"] <= 10
+            and type(i["pictures"]) is int and 0 <= i["pictures"] <= 10 and ("shots" not in i or _shots(i["shots"]))
             and not bridge.SURROGATE_RE.search(i["chat"] + i["text"]))
+
+
+def _b64(s) -> bool:
+    try: return type(s) is str and len(s) <= B64_MAX and len(base64.b64decode(s, validate=True)) <= MAX_PNG
+    except ValueError: return False
 
 
 def _ints(v, lo, hi) -> bool:
     return type(v) is list and lo <= len(v) <= hi and all(type(x) is int and x > 0 for x in v)
 
 
-SHAPES = {  # body op -> (keys, validator of the whole body)
-    "pull": ({"op", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5),
-    "ack": ({"op", "ids"}, lambda b: _ints(b["ids"], 1, 20)),
-    "replies": ({"op", "items"}, lambda b: type(b["items"]) is list and len(b["items"]) <= 5
-                and all(map(_item, b["items"]))),
-    "acked": ({"op", "ids"}, lambda b: _ints(b["ids"], 0, 20)),
+SHAPES = {  # body op -> [(keys, validator of the whole body)]; "picture" is a request or, with b64, its answer
+    "pull": [({"op", "max"}, lambda b: type(b["max"]) is int and 1 <= b["max"] <= 5)],
+    "ack": [({"op", "ids"}, lambda b: _ints(b["ids"], 1, 20))],
+    "replies": [({"op", "items"}, lambda b: type(b["items"]) is list and len(b["items"]) <= 5
+                 and all(map(_item, b["items"])))],
+    "acked": [({"op", "ids"}, lambda b: _ints(b["ids"], 0, 20))],
+    "picture": [({"op", "id", "idx"}, lambda b: type(b["id"]) is int and type(b["idx"]) is int and b["idx"] in (0, 1)),
+                ({"op", "id", "idx", "sha256", "b64"}, lambda b: type(b["id"]) is int and type(b["idx"]) is int
+                 and b["idx"] in (0, 1) and type(b["sha256"]) is str and bool(bridge.MAC_RE.fullmatch(b["sha256"]))
+                 and _b64(b["b64"]))],
+    "gone": [({"op", "id", "idx"}, lambda b: type(b["id"]) is int and type(b["idx"]) is int and b["idx"] in (0, 1))],
 }
 
 
 def _body_ok(body) -> bool:
-    shape = SHAPES.get(body.get("op")) if type(body) is dict else None
-    return shape is not None and set(body) == shape[0] and shape[1](body)
+    shapes = SHAPES.get(body.get("op")) if type(body) is dict else None
+    return shapes is not None and any(set(body) == keys and check(body) for keys, check in shapes)
 
 
 def seal_control(body, secret, *, nonce, now) -> dict:
@@ -106,11 +126,29 @@ class RelayStore:
         self.db.executescript(
             "CREATE TABLE IF NOT EXISTS relay(id INTEGER PRIMARY KEY, chat TEXT NOT NULL, text TEXT NOT NULL,"
             " pictures INTEGER NOT NULL, created_at INTEGER NOT NULL, handed_at INTEGER, acked_at INTEGER);"
-            "CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY, value TEXT);")
+            "CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY, value TEXT);"
+            "CREATE TABLE IF NOT EXISTS picture(relay_id INTEGER NOT NULL, idx INTEGER NOT NULL, sha256 TEXT NOT NULL,"
+            " size INTEGER NOT NULL, data BLOB, PRIMARY KEY(relay_id, idx));")
 
-    def add(self, chat, text, pictures, now) -> int:
-        return self.db.execute("INSERT INTO relay(chat, text, pictures, created_at) VALUES (?, ?, ?, ?)",
-                               (chat, text, pictures, int(now))).lastrowid
+    def add(self, chat, text, pictures, now, shots=()) -> int:
+        """`shots`: PNG bytes (already checked) stored with the row, in one transaction."""
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            rid = self.db.execute("INSERT INTO relay(chat, text, pictures, created_at) VALUES (?, ?, ?, ?)",
+                                  (chat, text, pictures, int(now))).lastrowid
+            self.db.executemany("INSERT INTO picture VALUES (?, ?, ?, ?, ?)",
+                                [(rid, n, sha256(d).hexdigest(), len(d), d) for n, d in enumerate(shots)])
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
+        self.db.execute("COMMIT")
+        return rid
+
+    def picture(self, rid, idx):
+        """(sha256 hex, bytes) of a stored shot whose row is not yet acknowledged, else None."""
+        row = self.db.execute("SELECT p.sha256, p.data FROM picture p JOIN relay r ON r.id = p.relay_id WHERE p.relay_id = ?"
+                              " AND p.idx = ? AND r.acked_at IS NULL AND p.data IS NOT NULL", (rid, idx)).fetchone()
+        return tuple(row) if row else None
 
     def pull(self, n, now) -> list:
         """Unacked rows never handed, or handed more than 60 s ago, oldest first; marks them handed."""
@@ -126,13 +164,19 @@ class RelayStore:
             self.db.execute("ROLLBACK")
             raise
         self.db.execute("COMMIT")
-        return [{"id": r[0], "chat": r[1], "text": r[2], "pictures": r[3]} for r in rows]
+        items = [{"id": r[0], "chat": r[1], "text": r[2], "pictures": r[3]} for r in rows]
+        for item in items:
+            shots = self.db.execute("SELECT idx, sha256, size FROM picture WHERE relay_id = ? ORDER BY idx", (item["id"],)).fetchall()
+            if shots: item["shots"] = [{"idx": a, "sha256": b, "size": c} for a, b, c in shots]
+        return items
 
     def ack(self, ids, now) -> int:
         """Idempotent; unknown ids are ignored. Returns how many rows this call newly acknowledged."""
         n = 0
         for i in ids:
             n += self.db.execute("UPDATE relay SET acked_at = ? WHERE id = ? AND acked_at IS NULL", (int(now), i)).rowcount
+            self.db.execute("UPDATE picture SET data = NULL WHERE relay_id = ?", (i,))
+        self.db.execute("DELETE FROM picture WHERE relay_id IN (SELECT id FROM relay WHERE acked_at < ?)", (int(now) - 30 * 86400,))
         return n
 
     def status(self) -> dict:
@@ -141,12 +185,36 @@ class RelayStore:
         return {"waiting": waiting, "total": total}
 
 
+def read_shot(path, base):
+    """PNG bytes of a screenshot, or None. The file must lie inside `base`, with no symlink in `base` or below it, be a
+    regular file of 1..MAX_PNG bytes and start with the PNG signature. The path is never stored or sent."""
+    try:
+        p, b = Path(os.path.abspath(os.fspath(path))), Path(os.path.abspath(base))
+        if b not in p.parents: return None
+        for part in (b, *reversed([q for q in p.parents if b in q.parents]), p):
+            if not (stat.S_ISDIR if part != p else stat.S_ISREG)(os.lstat(part).st_mode): return None
+        fd = os.open(p, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            st = os.fstat(fd)
+            data = os.read(fd, MAX_PNG + 1) if stat.S_ISREG(st.st_mode) and 1 <= st.st_size <= MAX_PNG else b""
+        finally: os.close(fd)
+    except (OSError, TypeError, ValueError):
+        return None
+    return data if 1 <= len(data) <= MAX_PNG and data.startswith(PNG_SIG) else None
+
+
 class RelaySender:
-    """Outbox adapter: send() stores the reply for the Mac to pull. Only the owner chat; no path is ever stored."""
-    def __init__(self, store, owner_chat, clock):
-        self.store, self.owner_chat, self.clock = store, owner_chat, clock
+    """Outbox adapter: send() stores the reply for the Mac to pull. Only the owner chat; no path is ever stored.
+    With `shots_dir` (host `pictures` true) up to 2 screenshots from it travel as pictures; the rest are counted."""
+    def __init__(self, store, owner_chat, clock, shots_dir=None):
+        self.store, self.owner_chat, self.clock, self.shots_dir = store, owner_chat, clock, shots_dir
 
     def send(self, chat, text, attachments=()):
         if chat != self.owner_chat or len(text) > MAX_TEXT or len(attachments) > 10 or bridge.SURROGATE_RE.search(text):
             raise RelayRefused("reply refused")
-        self.store.add(chat, text, len(attachments), self.clock())
+        shots = []
+        if self.shots_dir is not None:
+            for path in attachments[:MAX_SHOTS]:
+                data = read_shot(path, self.shots_dir)
+                if data is not None: shots.append(data)
+        self.store.add(chat, text, len(attachments) - len(shots), self.clock(), shots)
