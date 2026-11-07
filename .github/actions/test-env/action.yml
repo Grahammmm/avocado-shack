@@ -1,45 +1,33 @@
 name: avocado test environment
 description: >-
-  Playwright (cached, pinned by PLAYWRIGHT_VERSION) and a private TMPDIR on tmpfs, shared by every check job that
-  runs tests. Sets PLAYWRIGHT_MODULE and TMPDIR in the job environment. The job's last step must remove
-  $AVO_CI_TMPDIR (`if: always()`); composite actions have no post step.
+  Playwright (installed once per host and pinned PLAYWRIGHT_VERSION, never rewritten while in use) and a private
+  TMPDIR on tmpfs, shared by every check job that runs tests. Sets PLAYWRIGHT_MODULE, PLAYWRIGHT_BROWSERS_PATH,
+  CHROMIUM_PATH and TMPDIR in the job environment. The job's last step must remove $AVO_CI_TMPDIR
+  (`if: always()`); composite actions have no post step.
 runs:
   using: composite
   steps:
-    # Playwright is a test-only tool (not a repo dependency); cache the npm
-    # install and the downloaded Chromium, keyed by the pinned version.
-    - name: Cache Playwright package and browser
-      id: pw-cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/pw-tools
-          ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+    # Playwright is a test-only tool (not a repo dependency). AV-CI-FLAKE-1 (2026-11-06): it used to be an
+    # actions/cache restore into ~/pw-tools and ~/.cache/ms-playwright in every job. The 8 runners share one
+    # $HOME, so each restore rewrote the Chromium binary under the browser tests of the other jobs
+    # (`browserType.launch: spawn ETXTBSY`). install-playwright.sh explains the replacement.
+    - name: Install Playwright test tool (once per host and version)
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/install-playwright.sh"
 
     # The AgentOrange runners are unprivileged user services (no sudo), so
     # `--with-deps` / `install-deps` (which apt-get through sudo) only run on
     # GitHub-hosted runners. The self-hosted host already has Chromium's
     # system libraries installed (same pattern as skippercast's ci.yml);
     # the verify step below fails loudly if one is ever missing.
-    - name: Install Playwright test tool
-      if: steps.pw-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: |
-        mkdir -p ~/pw-tools
-        npm install --prefix ~/pw-tools --no-save --no-audit --no-fund "playwright@${PLAYWRIGHT_VERSION}"
-        ~/pw-tools/node_modules/.bin/playwright install chromium
-
     - name: Install Chromium system libraries (GitHub-hosted only)
       if: runner.environment == 'github-hosted'
       shell: bash
-      run: ~/pw-tools/node_modules/.bin/playwright install-deps chromium
+      run: '"$PLAYWRIGHT_MODULE/../.bin/playwright" install-deps chromium'
 
     - name: Verify Chromium launches (system libraries present)
       shell: bash
-      run: |
-        cd ~/pw-tools
-        node -e "require('playwright').chromium.launch().then(b => b.close())"
+      run: node -e "require(process.env.PLAYWRIGHT_MODULE).chromium.launch().then(b => b.close())"
 
     # AV-CI-SHARD-1: the hass suite is bound by disk writes, not CPU, on the shared AgentOrange host
     # (2026-11-04: NVMe 81% busy, queue depth 16.9, 7.5 of 24 cores in use). Measured 2026-11-06, the whole
@@ -55,5 +43,4 @@ runs:
         dir="$(mktemp -d "$base/avo-ci-${GITHUB_RUN_ID}-${GITHUB_JOB}-XXXXXX")"
         echo "TMPDIR=$dir" >> "$GITHUB_ENV"
         echo "AVO_CI_TMPDIR=$dir" >> "$GITHUB_ENV"
-        echo "PLAYWRIGHT_MODULE=$HOME/pw-tools/node_modules/playwright" >> "$GITHUB_ENV"
         echo "TMPDIR=$dir"
