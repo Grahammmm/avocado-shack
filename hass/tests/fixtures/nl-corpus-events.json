@@ -1,0 +1,35 @@
+[
+  {
+    "id": "hike-2026-11-14-point-buchon",
+    "title": "Point Buchon walk",
+    "startsAt": "2026-11-14T08:30:00-08:00",
+    "timezone": "America/Los_Angeles",
+    "status": "scheduled",
+    "meetingPoint": "The Avocado Shack shop",
+    "capacity": 12,
+    "bring": "Water, sturdy shoes, a hat",
+    "accessNote": "Park at the Point Buchon trailhead; the gate is locked overnight."
+  },
+  {
+    "id": "hike-2026-11-22-cass-hill",
+    "title": "Cass Hill hike",
+    "startsAt": "2026-11-22T09:00:00-08:00",
+    "timezone": "America/Los_Angeles",
+    "status": "scheduled",
+    "meetingPoint": "The Avocado Shack shop",
+    "capacity": 10,
+    "bring": "Water and a light jacket",
+    "accessNote": "Dirt road to the trailhead; slow for ruts."
+  },
+  {
+    "id": "hike-2026-11-01-fiscalini-ranch",
+    "title": "Fiscalini Ranch walk",
+    "startsAt": "2026-11-01T10:00:00-08:00",
+    "timezone": "America/Los_Angeles",
+    "status": "scheduled",
+    "meetingPoint": "The Avocado Shack shop",
+    "capacity": 15,
+    "bring": "Water and layers",
+    "accessNote": "Meet at the shop; we carpool."
+  }
+]
