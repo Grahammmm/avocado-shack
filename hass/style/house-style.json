@@ -1,0 +1,1521 @@
+{
+ "descriptions": {
+  "chars": {
+   "max": 167,
+   "min": 59,
+   "p05": 107,
+   "p25": 122,
+   "p50": 133,
+   "p75": 144,
+   "p95": 157
+  },
+  "common_first_words": [
+   [
+    "a",
+    25
+   ],
+   [
+    "dried",
+    6
+   ],
+   [
+    "avocado",
+    4
+   ],
+   [
+    "cut",
+    3
+   ],
+   [
+    "roast",
+    3
+   ],
+   [
+    "fresh",
+    3
+   ],
+   [
+    "the",
+    3
+   ],
+   [
+    "organic",
+    3
+   ],
+   [
+    "lemon",
+    3
+   ],
+   [
+    "green",
+    2
+   ],
+   [
+    "dark",
+    2
+   ],
+   [
+    "crunch",
+    2
+   ],
+   [
+    "give",
+    2
+   ],
+   [
+    "keep",
+    2
+   ],
+   [
+    "little",
+    2
+   ]
+  ],
+  "common_later_openers": [
+   [
+    "a",
+    18
+   ],
+   [
+    "keep",
+    13
+   ],
+   [
+    "break",
+    11
+   ],
+   [
+    "slice",
+    9
+   ],
+   [
+    "coffee",
+    8
+   ],
+   [
+    "butter",
+    7
+   ],
+   [
+    "eat",
+    6
+   ],
+   [
+    "put",
+    6
+   ],
+   [
+    "then",
+    5
+   ],
+   [
+    "cut",
+    5
+   ],
+   [
+    "good",
+    5
+   ],
+   [
+    "finish",
+    5
+   ],
+   [
+    "give",
+    5
+   ],
+   [
+    "let",
+    4
+   ],
+   [
+    "roast",
+    4
+   ],
+   [
+    "serve",
+    4
+   ],
+   [
+    "rehydrate",
+    4
+   ],
+   [
+    "the",
+    3
+   ],
+   [
+    "warm",
+    3
+   ],
+   [
+    "start",
+    3
+   ],
+   [
+    "spoon",
+    2
+   ],
+   [
+    "dress",
+    2
+   ],
+   [
+    "cook",
+    2
+   ],
+   [
+    "grate",
+    2
+   ],
+   [
+    "or",
+    2
+   ],
+   [
+    "tear",
+    2
+   ],
+   [
+    "clean",
+    2
+   ],
+   [
+    "brown",
+    2
+   ],
+   [
+    "simmer",
+    2
+   ],
+   [
+    "pour",
+    2
+   ],
+   [
+    "taste",
+    2
+   ],
+   [
+    "soak",
+    2
+   ],
+   [
+    "toast",
+    2
+   ],
+   [
+    "chill",
+    2
+   ],
+   [
+    "mash",
+    1
+   ],
+   [
+    "citrus",
+    1
+   ],
+   [
+    "sometimes",
+    1
+   ],
+   [
+    "small",
+    1
+   ],
+   [
+    "look",
+    1
+   ],
+   [
+    "open",
+    1
+   ]
+  ],
+  "count": 170,
+  "ends_with_period": 170,
+  "examples": [
+   {
+    "category": "fruit",
+    "description": "Creamy flesh, a little lime, enough salt. Mash it onto toast or cut it into a bowl of something bright and crunchy. A good avocado hardly needs a recipe.",
+    "id": "photo-product-001",
+    "name": "Hass avocado"
+   },
+   {
+    "category": "fruit",
+    "description": "Dark fruit with a tart edge. Eat a handful before you decide whether the rest belongs in a bowl of yogurt or a warm crumble.",
+    "id": "photo-product-098",
+    "name": "Blackberries"
+   },
+   {
+    "category": "vegetables",
+    "description": "Peppery leaves for a plate that needs an edge. Dress them lightly, or lay them over warm pizza just before it reaches the table.",
+    "id": "photo-product-070",
+    "name": "Wild Arugula"
+   },
+   {
+    "category": "vegetables",
+    "description": "Sharp raw, sweet when cooked. Slice thin for the salad, or let them soften alongside potatoes in the roasting tray.",
+    "id": "photo-product-102",
+    "name": "Red onions"
+   },
+   {
+    "category": "vegetables",
+    "description": "Chanterelles deserve a little attention. Clean gently, cook thoroughly, and keep the pan uncluttered. Butter and good bread are a sensible plan.",
+    "id": "photo-product-154",
+    "name": "Chanterelle mushrooms"
+   },
+   {
+    "category": "vegetables",
+    "description": "A hot pan is its friend. Brown the cut sides, season well, and stop before it gives up all its character.",
+    "id": "photo-product-166",
+    "name": "Zucchini"
+   },
+   {
+    "category": "dairy",
+    "description": "Rocky Butte cheese from Stepladder’s Cambria creamery. Put it beside bread and seasonal fruit, taste it on its own, and let the conversation find its way to the farm.",
+    "id": "photo-product-033",
+    "name": "Stepladder Rocky Butte cheese"
+   },
+   {
+    "category": "dairy",
+    "description": "Habanero Sierra Jack puts heat into the cheese drawer. A little goes a long way in a sandwich or a quesadilla. Taste first, then build dinner.",
+    "id": "photo-product-132",
+    "name": "Habanero Sierra Jack"
+   },
+   {
+    "category": "pantry",
+    "description": "Sweet Hickory BBQ sauce from Cal Poly. Brush it onto the food near the end of cooking, then let the grill do the last bit of work.",
+    "id": "photo-product-011",
+    "name": "Sweet Hickory BBQ sauce"
+   },
+   {
+    "category": "pantry",
+    "description": "Organic dark and robust maple syrup from a Wisconsin cooperative. This is a place for pancakes, yes, but also oatmeal and a warm slice of cornbread.",
+    "id": "photo-product-052",
+    "name": "Maple Valley dark and robust maple syrup"
+   },
+   {
+    "category": "pantry",
+    "description": "California apricot preserves for buttered toast, a bowl of yogurt, or a plain cake that deserves a little company. Keep a jar where breakfast happens.",
+    "id": "photo-product-107",
+    "name": "California Apricot preserves"
+   },
+   {
+    "category": "pantry",
+    "description": "Cal Poly’s Mustang Kick belongs beside the grill. Start with a little, taste, and let the sauce earn its place on the next bite.",
+    "id": "photo-product-119",
+    "name": "Mustang Kick BBQ sauce"
+   },
+   {
+    "category": "pantry",
+    "description": "Crack, eat, repeat. Or keep a few for a plate of vegetables or fruit where a little crunch changes the whole thing.",
+    "id": "photo-product-143",
+    "name": "Pistachios"
+   },
+   {
+    "category": "drinks",
+    "description": "Chamomile tea with Fair Hills Farm apple juice. A quiet glass for the end of a long day, when dinner is done and there is nowhere else to be.",
+    "id": "photo-product-048",
+    "name": "Fair Hills Farm chamomile tea"
+   }
+  ],
+  "hype_words_absent": [
+   "amazing",
+   "delicious",
+   "perfect",
+   "incredible",
+   "awesome",
+   "finest",
+   "premium",
+   "luxury",
+   "gourmet",
+   "must-try",
+   "unbelievable",
+   "world-class",
+   "famous",
+   "authentic",
+   "tasty",
+   "yummy",
+   "mouthwatering",
+   "irresistible",
+   "ultimate",
+   "healthy",
+   "natural",
+   "fresh-picked",
+   "farm-fresh",
+   "artisanal",
+   "limited edition"
+  ],
+  "hype_words_present": [
+   "best"
+  ],
+  "limit_chars": 600,
+  "maker_named_in_description": {
+   "mention_brand_anyway": 0,
+   "mention_maker": 42,
+   "products_with_maker": 105,
+   "products_without_maker": 65
+  },
+  "sentence_count_histogram": {
+   "2": 143,
+   "3": 27
+  },
+  "sentences": {
+   "max": 3,
+   "min": 2,
+   "p05": 2,
+   "p25": 2,
+   "p50": 2,
+   "p75": 2,
+   "p95": 3
+  },
+  "term_hits": {
+   "all natural": 0,
+   "anti-inflammatory": 0,
+   "antibiotic-free": 0,
+   "antioxidant": 0,
+   "award-winning": 0,
+   "biodynamic": 0,
+   "cage-free": 0,
+   "certified": 0,
+   "chemical-free": 0,
+   "cold pressed": 0,
+   "cures": 0,
+   "dairy-free": 0,
+   "detox": 0,
+   "estate": 1,
+   "extra virgin": 0,
+   "fair trade": 0,
+   "fairtrade": 0,
+   "family farm": 0,
+   "first press": 0,
+   "free-range": 0,
+   "gluten-free": 0,
+   "gold medal": 0,
+   "grass-fed": 0,
+   "grown in": 0,
+   "halal": 0,
+   "harvested in": 0,
+   "heals": 0,
+   "hormone-free": 0,
+   "immune": 0,
+   "immunity": 0,
+   "kosher": 0,
+   "local": 0,
+   "locally": 0,
+   "lowers cholesterol": 0,
+   "made in": 1,
+   "medicinal": 0,
+   "no preservatives": 0,
+   "non-gmo": 0,
+   "nut-free": 0,
+   "organic": 8,
+   "pasture-raised": 0,
+   "pesticide-free": 0,
+   "prevents": 0,
+   "prize-winning": 0,
+   "probiotic": 0,
+   "produced in": 0,
+   "raised in": 0,
+   "raw honey": 0,
+   "regenerative": 0,
+   "sourced from": 0,
+   "spray-free": 0,
+   "sugar-free": 0,
+   "superfood": 0,
+   "unfiltered": 1,
+   "unpasteurized": 0,
+   "unsprayed": 0,
+   "vegan": 0,
+   "weight loss": 0,
+   "wild-caught": 0
+  },
+  "texts_with": {
+   "all_caps_words": 1,
+   "colons": 13,
+   "curly_apostrophes": 31,
+   "dashes": 0,
+   "digits": 0,
+   "exclaims": 0,
+   "non_bmp": 0,
+   "questions": 0,
+   "semicolons": 11,
+   "straight_apostrophes": 0
+  },
+  "words": {
+   "max": 31,
+   "min": 10,
+   "p05": 20,
+   "p25": 22,
+   "p50": 24,
+   "p75": 26,
+   "p95": 29
+  },
+  "words_per_sentence": {
+   "max": 15.5,
+   "min": 5.0,
+   "p05": 8.0,
+   "p25": 10.5,
+   "p50": 11.5,
+   "p75": 12.5,
+   "p95": 14.5
+  }
+ },
+ "makers": {
+  "chars": {
+   "max": 297,
+   "min": 239,
+   "p05": 244,
+   "p25": 265,
+   "p50": 271,
+   "p75": 279,
+   "p95": 287
+  },
+  "common_first_words": [
+   [
+    "pasta",
+    1
+   ],
+   [
+    "there",
+    1
+   ],
+   [
+    "an",
+    1
+   ],
+   [
+    "ocean",
+    1
+   ],
+   [
+    "linn’s",
+    1
+   ],
+   [
+    "straus",
+    1
+   ],
+   [
+    "at",
+    1
+   ],
+   [
+    "alle-pia",
+    1
+   ],
+   [
+    "joseph",
+    1
+   ],
+   [
+    "corberosa",
+    1
+   ],
+   [
+    "sunshine",
+    1
+   ],
+   [
+    "dylan",
+    1
+   ],
+   [
+    "greg",
+    1
+   ],
+   [
+    "mighty",
+    1
+   ],
+   [
+    "maria",
+    1
+   ]
+  ],
+  "common_later_openers": [
+   [
+    "the",
+    11
+   ],
+   [
+    "its",
+    5
+   ],
+   [
+    "a",
+    3
+   ],
+   [
+    "they",
+    2
+   ],
+   [
+    "this",
+    2
+   ],
+   [
+    "cut",
+    2
+   ],
+   [
+    "give",
+    2
+   ],
+   [
+    "their",
+    2
+   ],
+   [
+    "or",
+    2
+   ],
+   [
+    "etto",
+    1
+   ],
+   [
+    "stepladder",
+    1
+   ],
+   [
+    "place",
+    1
+   ],
+   [
+    "slice",
+    1
+   ],
+   [
+    "fair",
+    1
+   ],
+   [
+    "organic",
+    1
+   ],
+   [
+    "something",
+    1
+   ],
+   [
+    "these",
+    1
+   ],
+   [
+    "good",
+    1
+   ],
+   [
+    "students",
+    1
+   ],
+   [
+    "add",
+    1
+   ],
+   [
+    "you",
+    1
+   ],
+   [
+    "an",
+    1
+   ],
+   [
+    "small-batch",
+    1
+   ],
+   [
+    "mushrooms",
+    1
+   ],
+   [
+    "so",
+    1
+   ],
+   [
+    "small",
+    1
+   ],
+   [
+    "put",
+    1
+   ],
+   [
+    "start",
+    1
+   ],
+   [
+    "maple",
+    1
+   ],
+   [
+    "dark",
+    1
+   ],
+   [
+    "heat",
+    1
+   ],
+   [
+    "bread",
+    1
+   ],
+   [
+    "fresh",
+    1
+   ],
+   [
+    "whole",
+    1
+   ],
+   [
+    "keitts",
+    1
+   ]
+  ],
+  "count": 26,
+  "ends_with_period": 26,
+  "examples": [
+   {
+    "key": "Etto",
+    "name": "Etto",
+    "place": "Paso Robles, California",
+    "story": "Pasta is not just a vehicle for sauce. Etto makes it in Paso Robles from organic American-grown durum wheat, pushing the dough through bronze dies and drying it slowly. The rough surface holds onto what matters: the sauce you took the trouble to cook.",
+    "url": "https://ettopastificio.com/pages/about-us"
+   },
+   {
+    "key": "Fair Hills Farm",
+    "name": "Fair Hills Farm",
+    "place": "San Miguel, California",
+    "story": "An organic orchard in San Miguel, turning a harvest into more than a pretty piece of fruit. Fair Hills presses apples into unfiltered juice and uses orchard apple juice to gently sweeten its teas. The point is the fruit: grown with care, carried through into the bottle.",
+    "url": "https://www.fairhillsfarmorganic.com/thefarm"
+   },
+   {
+    "key": "Linn's",
+    "name": "Linn's",
+    "place": "Cambria, California",
+    "story": "Linn’s story starts with a family and a Central Coast farm. They have been growing crops and making food since 1979, with the next generation still working the land. These preserves belong on real bread, with real butter. A modest breakfast can be a very good meal.",
+    "url": "https://www.linnseats.com/our-farm"
+   },
+   {
+    "key": "Cal Poly",
+    "name": "Cal Poly",
+    "place": "San Luis Obispo, California",
+    "story": "At Cal Poly, food is something you learn by making. Students work on products from cheese and chocolate to jam and barbecue sauce. This is San Luis Obispo’s hands-on food tradition: practical skills, real ingredients, and something you can actually bring home for dinner.",
+    "url": "https://fsn.calpoly.edu/our-products"
+   },
+   {
+    "key": "Joebella / Avocado Shack",
+    "name": "Joebella / Avocado Shack",
+    "place": "Atascadero, California",
+    "story": "Joseph and Isabel built Joebella around a shared devotion to coffee. They roast small batches of organic beans in Atascadero, where the café and roasting facility are certified organic. The Shack’s coffee selection puts that nearby craft within reach of your own morning routine.",
+    "url": "https://www.joebellacoffee.com/our-story"
+   },
+   {
+    "key": "Sunshine Olive",
+    "name": "Sunshine Olive",
+    "place": "Templeton, California",
+    "story": "Sunshine makes extra virgin olive oil in California, with its home in Templeton. The photographed bottles name the estate and olive variety—a useful reminder that olive oil has an origin and a character. Give it warm bread, a ripe tomato, or vegetables straight from the pan.",
+    "url": "https://sunshineoliveoil.com/"
+   },
+   {
+    "key": "Massa Organics",
+    "name": "Massa Organics",
+    "place": "Near Chico, California",
+    "story": "Greg Massa and Raquel Krach farm near Chico in the Sacramento Valley, growing organic rice and almonds while working to build healthier soil. Their medium-grain brown rice is the sort of staple worth getting right: something steady underneath vegetables, beans, or the last good spoonful of sauce.",
+    "url": "https://massaorganics.com/get-to-know-us/"
+   },
+   {
+    "key": "AG Berries",
+    "name": "AG Berries",
+    "place": "Arroyo Grande, California",
+    "story": "Maria “Trini” Iñiguez founded Arroyo Grande Berry Farm in 2016, carrying forward her brother’s dream of organic farming. The work is personal. So is the pleasure of a good berry: ripe fruit, a little acidity, and no great need to turn it into anything else.",
+    "url": "https://agberryfarm.com/"
+   },
+   {
+    "key": "Stardust Grove",
+    "name": "Stardust Grove",
+    "place": "Cambria, California",
+    "story": "Stardust Grove is a family farm in Cambria with a regenerative approach to caring for its orchard. The tubs on the Shack’s shelves bring that farm name into everyday cooking. Start with something simple: chips and guacamole, or a spoonful of pesto through a pot of pasta.",
+    "url": "https://thestardustgrove.com/"
+   },
+   {
+    "key": "Maple Valley",
+    "name": "Maple Valley",
+    "place": "Cashton, Wisconsin",
+    "story": "Not everything good has to come from down the road. Maple Valley is a cooperative with its bottling operation in Wisconsin, bringing organic maple syrup from its producers to the table. Dark and robust means a proper maple presence—on breakfast, in baking, or alongside something savory.",
+    "url": "https://www.maplevalleysyrup.coop/about-maple-valley-cooperative/"
+   },
+   {
+    "key": "Cayucos",
+    "name": "Cayucos",
+    "place": "Cayucos, California",
+    "story": "Cayucos Hot Sauce was born in a little shack across from the beach on Highway 1. A Central Coast sauce with an obvious place at the table: eggs, tacos, seafood, or whatever needs a little more life. Heat should make you want the next bite.",
+    "url": "https://cayucoshotsauce.com/pages/about-us"
+   },
+   {
+    "key": "Jayleaf",
+    "name": "Jayleaf",
+    "place": "Hollister, California",
+    "story": "Jayleaf is a family greens business with roots in Hollister. Its work centers on leafy greens, individual varieties and carefully composed mixes. Fresh leaves are not decoration: they are the meal’s sharp, green counterpoint to warm bread, rich cheese, or something just off the grill.",
+    "url": "https://www.jayleaf.com/our-story"
+   },
+   {
+    "key": "Love Beets",
+    "name": "Love Beets",
+    "place": "Rochester, New York",
+    "story": "Love Beets grew out of Guy and Katherine Shropshire’s family interest in making beets easier to enjoy. The company put down production roots in Rochester, New York, in 2016. A reminder that a familiar ingredient can still surprise you when someone gives it a little attention.",
+    "url": "https://lovebeets.com/our-story/"
+   }
+  ],
+  "fields": [
+   "name",
+   "place",
+   "story",
+   "url",
+   "hidden (optional, true only)"
+  ],
+  "hype_words_absent": [
+   "amazing",
+   "delicious",
+   "perfect",
+   "incredible",
+   "awesome",
+   "finest",
+   "premium",
+   "luxury",
+   "must-try",
+   "unbelievable",
+   "world-class",
+   "famous",
+   "authentic",
+   "tasty",
+   "yummy",
+   "mouthwatering",
+   "irresistible",
+   "ultimate",
+   "healthy",
+   "natural",
+   "fresh-picked",
+   "farm-fresh",
+   "artisanal",
+   "limited edition"
+  ],
+  "hype_words_present": [
+   "best",
+   "gourmet"
+  ],
+  "key_equals_name": 26,
+  "limits": {
+   "name": 80,
+   "place": 60,
+   "story": 600
+  },
+  "name_chars": {
+   "max": 24,
+   "min": 4,
+   "p05": 5,
+   "p25": 7,
+   "p50": 10,
+   "p75": 14,
+   "p95": 21
+  },
+  "place_chars": {
+   "max": 28,
+   "min": 18,
+   "p05": 19,
+   "p25": 19,
+   "p50": 22,
+   "p75": 25,
+   "p95": 27
+  },
+  "place_pattern_fit": 26,
+  "places": [
+   [
+    "Cambria, California",
+    3
+   ],
+   [
+    "San Luis Obispo, California",
+    3
+   ],
+   [
+    "Paso Robles, California",
+    2
+   ],
+   [
+    "California’s Central Coast",
+    2
+   ],
+   [
+    "Atascadero, California",
+    2
+   ],
+   [
+    "Arroyo Grande, California",
+    2
+   ],
+   [
+    "San Miguel, California",
+    1
+   ],
+   [
+    "Carpinteria, California",
+    1
+   ],
+   [
+    "Northern California",
+    1
+   ],
+   [
+    "Templeton, California",
+    1
+   ],
+   [
+    "Big Sur, California",
+    1
+   ],
+   [
+    "Near Chico, California",
+    1
+   ],
+   [
+    "Cashton, Wisconsin",
+    1
+   ],
+   [
+    "Glenn County, California",
+    1
+   ],
+   [
+    "Cayucos, California",
+    1
+   ],
+   [
+    "Hollister, California",
+    1
+   ],
+   [
+    "Rochester, New York",
+    1
+   ],
+   [
+    "Coachella Valley, California",
+    1
+   ]
+  ],
+  "sentence_count_histogram": {
+   "2": 1,
+   "3": 20,
+   "4": 4,
+   "5": 1
+  },
+  "sentences": {
+   "max": 5,
+   "min": 2,
+   "p05": 3,
+   "p25": 3,
+   "p50": 3,
+   "p75": 3,
+   "p95": 4
+  },
+  "texts_with": {
+   "all_caps_words": 1,
+   "colons": 10,
+   "curly_apostrophes": 15,
+   "dashes": 3,
+   "digits": 8,
+   "exclaims": 0,
+   "non_bmp": 0,
+   "questions": 0,
+   "semicolons": 4,
+   "straight_apostrophes": 0
+  },
+  "url_scheme_https": 26,
+  "with_url": 26,
+  "words": {
+   "max": 49,
+   "min": 43,
+   "p05": 43,
+   "p25": 44,
+   "p50": 46,
+   "p75": 47,
+   "p95": 48
+  },
+  "words_per_sentence": {
+   "max": 23.5,
+   "min": 9.2,
+   "p05": 11.0,
+   "p25": 14.33,
+   "p50": 15.0,
+   "p75": 15.67,
+   "p95": 16.0
+  }
+ },
+ "pictures": {
+  "catalog": {
+   "count": 170,
+   "examples": [
+    {
+     "bg_rgb": [
+      253,
+      247,
+      235
+     ],
+     "bytes": 83060,
+     "center_x": -0.0094,
+     "center_y": 0.0062,
+     "fill_h": 0.7625,
+     "fill_w": 0.9688,
+     "id": "photo-product-001",
+     "path": "assets/products/photo-product-001.webp",
+     "shadow_depth": 0.24
+    },
+    {
+     "bg_rgb": [
+      246,
+      234,
+      221
+     ],
+     "bytes": 82192,
+     "center_x": 0.1,
+     "center_y": 0.0969,
+     "fill_h": 0.7438,
+     "fill_w": 0.8,
+     "id": "photo-product-015",
+     "path": "assets/products/photo-product-015.webp",
+     "shadow_depth": 5.44
+    },
+    {
+     "bg_rgb": [
+      254,
+      249,
+      239
+     ],
+     "bytes": 49944,
+     "center_x": 0.0,
+     "center_y": -0.0187,
+     "fill_h": 0.8875,
+     "fill_w": 0.625,
+     "id": "photo-product-030",
+     "path": "assets/products/photo-product-030.webp",
+     "shadow_depth": 6.86
+    },
+    {
+     "bg_rgb": [
+      249,
+      235,
+      219
+     ],
+     "bytes": 99510,
+     "center_x": 0.0719,
+     "center_y": 0.0125,
+     "fill_h": 0.9,
+     "fill_w": 0.7812,
+     "id": "photo-product-046",
+     "path": "assets/products/photo-product-046.webp",
+     "shadow_depth": -2.03
+    },
+    {
+     "bg_rgb": [
+      252,
+      244,
+      232
+     ],
+     "bytes": 99306,
+     "center_x": 0.0,
+     "center_y": -0.0062,
+     "fill_h": 0.8625,
+     "fill_w": 0.95,
+     "id": "photo-product-060",
+     "path": "assets/products/photo-product-060.webp",
+     "shadow_depth": 1.24
+    },
+    {
+     "bg_rgb": [
+      253,
+      248,
+      236
+     ],
+     "bytes": 72714,
+     "center_x": 0.0,
+     "center_y": 0.025,
+     "fill_h": 0.6875,
+     "fill_w": 0.9125,
+     "id": "photo-product-074",
+     "path": "assets/products/photo-product-074.webp",
+     "shadow_depth": -0.35
+    },
+    {
+     "bg_rgb": [
+      251,
+      239,
+      225
+     ],
+     "bytes": 86856,
+     "center_x": 0.0094,
+     "center_y": -0.0094,
+     "fill_h": 0.9437,
+     "fill_w": 0.9062,
+     "id": "photo-product-089",
+     "path": "assets/products/photo-product-089.webp",
+     "shadow_depth": -1.5
+    },
+    {
+     "bg_rgb": [
+      254,
+      250,
+      238
+     ],
+     "bytes": 86422,
+     "center_x": 0.0,
+     "center_y": 0.0094,
+     "fill_h": 0.7688,
+     "fill_w": 0.8875,
+     "id": "photo-product-103",
+     "path": "assets/products/photo-product-103.webp",
+     "shadow_depth": 1.67
+    },
+    {
+     "bg_rgb": [
+      249,
+      240,
+      227
+     ],
+     "bytes": 49456,
+     "center_x": -0.0187,
+     "center_y": 0.0188,
+     "fill_h": 0.4625,
+     "fill_w": 0.9625,
+     "id": "photo-product-117",
+     "path": "assets/products/photo-product-117.webp",
+     "shadow_depth": 4.88
+    },
+    {
+     "bg_rgb": [
+      254,
+      246,
+      233
+     ],
+     "bytes": 80936,
+     "center_x": -0.0531,
+     "center_y": 0.0,
+     "fill_h": 0.8,
+     "fill_w": 0.8938,
+     "id": "photo-product-131",
+     "path": "assets/products/photo-product-131.webp",
+     "shadow_depth": 3.7
+    },
+    {
+     "bg_rgb": [
+      254,
+      251,
+      240
+     ],
+     "bytes": 80010,
+     "center_x": -0.0094,
+     "center_y": 0.0188,
+     "fill_h": 0.7375,
+     "fill_w": 0.9313,
+     "id": "photo-product-146",
+     "path": "assets/products/photo-product-146.webp",
+     "shadow_depth": 2.1
+    },
+    {
+     "bg_rgb": [
+      254,
+      249,
+      237
+     ],
+     "bytes": 76028,
+     "center_x": -0.0281,
+     "center_y": 0.0094,
+     "fill_h": 0.7438,
+     "fill_w": 0.8438,
+     "id": "photo-product-160",
+     "path": "assets/products/photo-product-160.webp",
+     "shadow_depth": 6.99
+    }
+   ],
+   "formats": {
+    "WEBP": 170
+   },
+   "metrics": {
+    "area_ratio": {
+     "max": 0.6434,
+     "min": 0.158,
+     "p05": 0.2296,
+     "p25": 0.3418,
+     "p50": 0.4016,
+     "p75": 0.4636,
+     "p95": 0.5637
+    },
+    "bg_b": {
+     "max": 247,
+     "min": 214,
+     "p05": 223,
+     "p25": 232,
+     "p50": 236,
+     "p75": 239,
+     "p95": 243
+    },
+    "bg_g": {
+     "max": 253,
+     "min": 234,
+     "p05": 237,
+     "p25": 244,
+     "p50": 248,
+     "p75": 249,
+     "p95": 251
+    },
+    "bg_luma": {
+     "max": 252.62,
+     "min": 236.11,
+     "p05": 238.62,
+     "p25": 244.74,
+     "p50": 248.07,
+     "p75": 249.35,
+     "p95": 251.27
+    },
+    "bg_r": {
+     "max": 255,
+     "min": 245,
+     "p05": 249,
+     "p25": 252,
+     "p50": 254,
+     "p75": 254,
+     "p95": 254
+    },
+    "bg_spread": {
+     "max": 13.751,
+     "min": 0.094,
+     "p05": 0.68,
+     "p25": 1.435,
+     "p50": 2.366,
+     "p75": 4.069,
+     "p95": 7.361
+    },
+    "bytes": {
+     "max": 158926,
+     "min": 23672,
+     "p05": 30848,
+     "p25": 48792,
+     "p50": 62172,
+     "p75": 83060,
+     "p95": 99306
+    },
+    "center_x": {
+     "max": 0.1281,
+     "min": -0.1094,
+     "p05": -0.0344,
+     "p25": 0.0,
+     "p50": 0.0125,
+     "p75": 0.0437,
+     "p95": 0.0938
+    },
+    "center_y": {
+     "max": 0.0969,
+     "min": -0.025,
+     "p05": -0.0156,
+     "p25": -0.0031,
+     "p50": 0.0062,
+     "p75": 0.0156,
+     "p95": 0.0437
+    },
+    "corner_vs_edge": {
+     "max": 59.96,
+     "min": -2.6,
+     "p05": -0.61,
+     "p25": 0.0,
+     "p50": 0.52,
+     "p75": 1.46,
+     "p95": 13.98
+    },
+    "fill_h": {
+     "max": 0.9625,
+     "min": 0.35,
+     "p05": 0.5062,
+     "p25": 0.7125,
+     "p50": 0.7937,
+     "p75": 0.875,
+     "p95": 0.9437
+    },
+    "fill_max": {
+     "max": 1.0,
+     "min": 0.6875,
+     "p05": 0.7875,
+     "p25": 0.85,
+     "p50": 0.9062,
+     "p75": 0.9437,
+     "p95": 0.9688
+    },
+    "fill_w": {
+     "max": 1.0,
+     "min": 0.225,
+     "p05": 0.4688,
+     "p25": 0.6875,
+     "p50": 0.8438,
+     "p75": 0.9375,
+     "p95": 0.9688
+    },
+    "frame_clean": {
+     "max": 1.0,
+     "min": 0.8352,
+     "p05": 0.8946,
+     "p25": 0.9266,
+     "p50": 0.9627,
+     "p75": 0.9881,
+     "p95": 1.0
+    },
+    "margin_bottom": {
+     "max": 0.2812,
+     "min": 0.025,
+     "p05": 0.0375,
+     "p25": 0.0688,
+     "p50": 0.0938,
+     "p75": 0.1313,
+     "p95": 0.225
+    },
+    "margin_left": {
+     "max": 0.4062,
+     "min": 0.0,
+     "p05": 0.0,
+     "p25": 0.0375,
+     "p50": 0.1,
+     "p75": 0.2062,
+     "p95": 0.3187
+    },
+    "margin_right": {
+     "max": 0.3688,
+     "min": 0.0,
+     "p05": 0.0,
+     "p25": 0.025,
+     "p50": 0.0625,
+     "p75": 0.1313,
+     "p95": 0.2313
+    },
+    "margin_top": {
+     "max": 0.3688,
+     "min": 0.0063,
+     "p05": 0.0187,
+     "p25": 0.0625,
+     "p50": 0.1125,
+     "p75": 0.1562,
+     "p95": 0.275
+    },
+    "shadow_depth": {
+     "max": 11.48,
+     "min": -2.03,
+     "p05": -0.35,
+     "p25": 1.31,
+     "p50": 2.89,
+     "p75": 5.61,
+     "p95": 8.57
+    },
+    "subject_luma": {
+     "max": 206.33,
+     "min": 68.31,
+     "p05": 88.51,
+     "p25": 118.94,
+     "p50": 141.11,
+     "p75": 157.56,
+     "p95": 184.75
+    },
+    "subject_sat": {
+     "max": 0.8202,
+     "min": 0.1383,
+     "p05": 0.2585,
+     "p25": 0.4039,
+     "p50": 0.4818,
+     "p75": 0.5853,
+     "p95": 0.7036
+    }
+   },
+   "modes": {
+    "RGB": 170
+   },
+   "naming": {
+    "catalog": 170
+   },
+   "sizes": {
+    "800x800": 170
+   },
+   "with_exif": 0
+  },
+  "frame": {
+   "alt_text": {
+    "catalog_illustration": "<product name> (illustration), added by shop.js",
+    "owner_photo": "imageAlt as written, no suffix; names what the photo shows, 3..200 chars, not a file name"
+   },
+   "aspect": 1.0,
+   "format_catalog": "WEBP (quality ~84, sharp fit inside 800x800)",
+   "format_owner_photo": "JPEG or PNG named photo-<16 hex>.<ext> (the only names shop.js treats as an owner photo)",
+   "height": 800,
+   "look": "one real product or group, large and centred on a smooth warm-ivory seamless background, soft diffuse top-left light, soft contact shadow, true packaging and label colours, no props, hands, text overlays, prices or borders",
+   "page_box": "square (aspect-ratio 1), object-fit contain, page colour #f5f0e6 behind the picture",
+   "width": 800
+  }
+ },
+ "records": {
+  "brand_rule_counts": {
+   "maker:ok": 105,
+   "market:ok": 62,
+   "own-brand:ok": 3
+  },
+  "categories": [
+   "fruit",
+   "vegetables",
+   "dairy",
+   "eggs",
+   "meat",
+   "pantry",
+   "drinks",
+   "bread",
+   "flowers"
+  ],
+  "highest_id_number": 174,
+  "id_pattern": "photo-product-NNN (next = highest + 1)",
+  "key_orders": [
+   [
+    "name",
+    "brand",
+    "category",
+    "id",
+    "image",
+    "description",
+    "producerKey",
+    "displayBrand",
+    "status"
+   ],
+   [
+    "id",
+    "name",
+    "brand",
+    "category",
+    "image",
+    "description",
+    "producerKey",
+    "displayBrand",
+    "status"
+   ],
+   [
+    "id",
+    "name",
+    "category",
+    "brand",
+    "image",
+    "description",
+    "producerKey",
+    "displayBrand",
+    "status"
+   ]
+  ],
+  "limits": {
+   "brand": 60,
+   "category": 40,
+   "description": 600,
+   "displayBrand": 60,
+   "imageAlt": 200,
+   "name": 80
+  },
+  "maker_example": {
+   "key": "Etto",
+   "name": "Etto",
+   "place": "Paso Robles, California",
+   "story": "Pasta is not just a vehicle for sauce. Etto makes it in Paso Robles from organic American-grown durum wheat, pushing the dough through bronze dies and drying it slowly. The rough surface holds onto what matters: the sauce you took the trouble to cook.",
+   "url": "https://ettopastificio.com/pages/about-us"
+  },
+  "maker_fields": [
+   "name",
+   "place",
+   "story",
+   "url"
+  ],
+  "name_chars": {
+   "max": 44,
+   "min": 4,
+   "p05": 6,
+   "p25": 12,
+   "p50": 18,
+   "p75": 23,
+   "p95": 29
+  },
+  "name_style": {
+   "ends_with_period": 0,
+   "sentence_case": 170
+  },
+  "product_example": {
+   "brand": "AG Berries",
+   "category": "fruit",
+   "description": "A tender berry with enough acidity to keep its sweetness interesting. Eat it fresh. Sometimes the right thing to do is almost nothing.",
+   "displayBrand": "AG Berries",
+   "id": "photo-product-057",
+   "image": "assets/products/photo-product-057.webp",
+   "name": "Raspberries",
+   "producerKey": "AG Berries",
+   "status": "active"
+  },
+  "product_internal_fields": [
+   "status",
+   "hold",
+   "available",
+   "available_on"
+  ],
+  "product_optional_public": [
+   "imageAlt",
+   "addedOn"
+  ],
+  "product_public_fields": [
+   "id",
+   "name",
+   "brand",
+   "category",
+   "image",
+   "description",
+   "producerKey",
+   "displayBrand"
+  ],
+  "products_per_shelf": {
+   "bread": 4,
+   "dairy": 20,
+   "drinks": 15,
+   "eggs": 1,
+   "flowers": 1,
+   "fruit": 13,
+   "meat": 3,
+   "pantry": 61,
+   "vegetables": 52
+  },
+  "products_with_maker_key": 105,
+  "products_without_maker_key": 65,
+  "shelf_labels": {
+   "bread": "Bread",
+   "dairy": "Dairy & cheese",
+   "drinks": "Drinks & coffee",
+   "eggs": "Eggs",
+   "flowers": "Flowers",
+   "fruit": "Fruit",
+   "meat": "Meat",
+   "pantry": "Pantry",
+   "vegetables": "Vegetables"
+  },
+  "store_fields": [
+   "hours",
+   "name",
+   "schemaVersion",
+   "streetAddress",
+   "town"
+  ],
+  "unknown_producer": {
+   "brand": "Producer not identified",
+   "displayBrand": "From the market",
+   "producerKey": null
+  }
+ },
+ "schema": 1,
+ "source": "measured from hass/content/*.json and storefront-mockup/assets/products/ by hass/house_style.py measure"
+}
