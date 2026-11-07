@@ -226,7 +226,7 @@ def _host_config(hdir: Path, now: datetime, problems: list, info: list) -> None:
         return problems.append(_problem("host-config", "host.json refused"))
     try:
         st = os.lstat(cfg["secretFile"])
-    except OSError:
+    except (OSError, ValueError):  # ValueError: an embedded NUL in the path
         problems.append(_problem("host-config", "secret file missing"))
     else:
         bad = ("type" if not stat.S_ISREG(st.st_mode) else "owner" if st.st_uid != os.getuid()
@@ -234,7 +234,7 @@ def _host_config(hdir: Path, now: datetime, problems: list, info: list) -> None:
         if bad: problems.append(_problem("host-config", f"secret file {bad}"))
     if isinstance(rel := cfg.get("release"), dict) and isinstance(stop := rel.get("stopFile"), str):
         try: mtime = datetime.fromtimestamp(os.lstat(stop).st_mtime, timezone.utc)
-        except OSError: return
+        except (OSError, ValueError): return
         if now - mtime > timedelta(hours=STOP_HOURS): problems.append(_problem("stopped-long", f"over {STOP_HOURS} h"))
         else: info.append(_problem("publishing-stopped", "stop file set"))
 

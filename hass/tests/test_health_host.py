@@ -160,6 +160,16 @@ class HostHealthTest(unittest.TestCase):
         self.host.joinpath("host.json").unlink()
         self.assertEqual(self.problems(), {"host-config": "host.json refused"})
 
+    def test_nul_in_secret_or_stop_path_is_a_host_config_problem_not_a_crash(self):
+        for key in ("secretFile", "stopFile"):
+            self.write_host()
+            path = self.host / "host.json"
+            cfg = json.loads(path.read_text())
+            (cfg if key == "secretFile" else cfg["release"])[key] = "/tmp/a\u0000b"
+            path.write_text(json.dumps(cfg))
+            path.chmod(0o600)
+            self.assertIn("host-config", self.problems(), key) if key == "secretFile" else self.problems()
+
     def test_secret_file_is_never_opened(self):
         opened, real_open, real_os_open = [], builtins.open, os.open
 
