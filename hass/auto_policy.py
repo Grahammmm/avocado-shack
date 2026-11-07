@@ -15,7 +15,8 @@ _LISTS = ("yes", "limited", "no")
 def qualifies(ops, opted_in, paused) -> tuple[bool, str]:
     """``ops`` is a draft's list of ``{"op": name, "args": {...}}``; returns ``(allowed, reason)``. Never raises: a
     pause flag other than ``False`` is "changes are paused", a non-list or misshaped selection draft is "draft
-    unreadable", an opt-in that is not a list/tuple/set of str is "opt-in list unreadable"."""
+    unreadable", an opt-in that is not a list/tuple/set of str is "opt-in list unreadable".
+    An explicit selection date is "dated check needs approval"."""
     if paused is not False:
         return False, "changes are paused"
     if not isinstance(ops, (list, tuple)):
@@ -32,6 +33,8 @@ def qualifies(ops, opted_in, paused) -> tuple[bool, str]:
         return False, "not opted in"
     if name == "store.confirm_selection":
         args = call.get("args")
+        if isinstance(args, dict) and "date" in args:
+            return False, "dated check needs approval"
         lists = [args[k] for k in _LISTS if k in args] if isinstance(args, dict) else None
         if lists is None or not all(isinstance(v, (list, tuple)) and all(isinstance(i, str) for i in v) for v in lists):
             return False, "draft unreadable"
