@@ -7,7 +7,7 @@
   start-point  --at ISO: records the inbox start point once.
   check        validates host.json, the key file and the runtime identity; opens no socket.
 Exit 0 ok, 2 config / secret / start point / runtime refused (one JSON line, field names only), 1 any other error.
-Nothing prints message text, a sender, a chat id, a URL, a secret or a path. `live` approvals are not installed here.
+Nothing prints message text, a sender, a chat id, a URL, a secret or a path.
 """
 import argparse, base64, collections, ipaddress, json, logging, os, secrets, signal, socket, socketserver, stat, subprocess, sys, threading  # noqa: E401
 from datetime import datetime, timezone
@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
 MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay")
 METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
-KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures"}
+KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "release"}
 PICTURES_PER_MIN = 10  # HASS-ATTACH-1: more picture requests in a minute get `gone` with no data
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 LIVE_REASON = "live release is not installed"
@@ -76,13 +76,12 @@ def _listen(value, allow_zero):
 def load_host(path, allow_port_zero=False) -> dict:
     """host.json: a regular 0600 file of this user, <= 64 KiB, closed keys. Returns the config plus `addr`, `peers`."""
     raw = _private_json(path)
-    if raw.get("approvals") == "live": raise HostConfigError(["approvals"], LIVE_REASON)
-    bad = sorted(set(raw) - KEYS) + sorted(KEYS - {"previewer", "pictures"} - set(raw))
+    bad = sorted(set(raw) - KEYS) + sorted(KEYS - {"previewer", "pictures", "release"} - set(raw))
     text = lambda v: isinstance(v, str) and 0 < len(v) <= 4096  # noqa: E731
     itp = raw.get("interpreter")
     peers = raw.get("allowedPeers")
     checks = {"pictures": type(raw.get("pictures", False)) is bool, "state": text(raw.get("state")), "secretFile": text(raw.get("secretFile")),
-              "approvals": raw.get("approvals") in ("hold", "private"),
+              "approvals": raw.get("approvals") in ("hold", "private", "live"),
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
               and all(c in "0123456789abcdef" for c in raw["runtimeCommit"]),
@@ -95,10 +94,21 @@ def load_host(path, allow_port_zero=False) -> dict:
         except ValueError: checks["interpreter"] = False
     bad += [name for name, ok in checks.items() if not ok and name not in bad]
     if not bad and not peers and not _listen(raw["listen"], allow_port_zero)[0].is_loopback: bad.append("allowedPeers")
+    if raw.get("approvals") == "live":
+        from hass.publish_live import release_config
+        try: raw["release"] = release_config(raw.get("release"))
+        except ValueError as exc: bad.append(str(exc))
+        for name in ("previewer", "pictures"):
+            if raw.get(name) is not True: bad.append(name)
+        try:
+            settings = conversation.load_settings(Path(raw["state"]))
+            if settings.get("liveSite") != "theavocadoman.com": bad.append("liveSite")
+            if settings.get("approvalNeedsCode") is not True: bad.append("approvalNeedsCode")
+        except (conversation.ConfigError, KeyError, TypeError): bad.append("state")
     if bad: raise HostConfigError(bad)
     ip, port = _listen(raw["listen"], allow_port_zero)
     return {**raw, "addr": (str(ip), port), "peers": frozenset(str(_ip(p)) for p in peers), "previewer": raw.get("previewer", False),
-            "pictures": raw.get("pictures", False)}
+            "pictures": raw.get("pictures", False), "hostDir": str(Path(path).resolve().parent)}
 
 
 def runtime_problem(cfg, root=ROOT) -> bool:
@@ -210,6 +220,7 @@ class Worker:
         """Rebuild the interpreter prompt when the content changed (before every message), drain the inbox, queue the replies."""
         self._refresh()
         self.rx.drain()
+        if hasattr(self.conv.editor, "reconcile"): self.conv.editor.reconcile()
         self.conv.flush(self.sender)
 
     def run(self, stop):
@@ -234,10 +245,16 @@ def interpreter_builder(cfg, worktree):
 def make_worker(cfg, store, *, editor=None, build=None, clock=_now) -> Worker:
     worktree = _worktree(cfg)
     build = build or interpreter_builder(cfg, worktree)
+    if cfg["approvals"] == "live" and editor is None:
+        from hass.publish_live import LiveEditor
+        editor = LiveEditor(cfg["state"], cfg["release"], cfg["hostDir"], clock=clock)
     conv = conversation.Conversation(cfg["state"], editor or conversation.Editor(cfg["state"]), build(), clock,
                                      previewer=preview.Previewer(worktree) if cfg["previewer"] else None)
+    if cfg["approvals"] == "live":
+        conv.editor.conv = conv
+        conv.editor.reconcile()
     rx = receiver.Receiver(state=inbox_mod.Inbox(cfg["state"], clock=clock), settings=conv,
-                           apply=cfg["approvals"] == "private")
+                           apply=cfg["approvals"] in ("private", "live"))
     return Worker(conv, rx, store, worktree, build, clock, Path(cfg["state"]).resolve() / "screenshots" if cfg["pictures"] else None)
 
 

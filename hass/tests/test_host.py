@@ -123,11 +123,26 @@ class ConfigTests(HostCase):
         with self.assertRaises(host.HostConfigError):
             host.load_host(self.hostdir / "host.json")
 
-    def test_live_mode_not_installed(self):
+    def test_live_mode_requires_release_settings(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = host.main(["check", "--host", str(self.host_json(approvals="live"))])
-        self.assertEqual((code, json.loads(out.getvalue())), (2, {"result": "refused", "reason": "live release is not installed"}))
+        self.assertEqual((code, json.loads(out.getvalue())), (2, {"result": "config", "fields": ["release", "previewer", "pictures", "liveSite", "approvalNeedsCode"]}))
+
+    def test_live_requires_picture_preview_and_named_site(self):
+        cfg = json.loads((self.repo.state / 'config.json').read_text())
+        cfg['settings'].update(liveSite='theavocadoman.com', approvalNeedsCode=True)
+        from hass import editor
+        editor._write_json(self.repo.state / 'config.json', cfg)
+        release = dict(siteCheckout='/fixture/site', siteRemote='git@github-avocadoman:Grahammmm/theavocadoman-site.git',
+                       liveUrl='https://theavocadoman.com', stopFile='/fixture/STOP')
+        for field in ('pictures', 'previewer'):
+            over = dict(approvals='live', release=release, pictures=True, previewer=True)
+            over[field] = False
+            with self.subTest(field=field), self.assertRaises(host.HostConfigError) as ctx:
+                host.load_host(self.host_json(**over))
+            self.assertIn(field, ctx.exception.fields)
+        self.assertEqual(host.load_host(self.host_json(approvals='live', release=release, pictures=True, previewer=True))['release']['dailyCap'], 10)
 
     def test_runtime_identity(self):
         ck = Path(tempfile.mkdtemp(prefix="hass-ck-"))
