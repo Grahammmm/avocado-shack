@@ -123,6 +123,26 @@ class ConfigTests(HostCase):
         with self.assertRaises(host.HostConfigError):
             host.load_host(self.hostdir / "host.json")
 
+    def test_interpreter_timeout_and_think(self):
+        base = {"url": "http://127.0.0.1:11434", "model": "m"}
+        self.assertEqual(host.load_host(self.host_json())["interpreter"], base)  # defaults: nothing added
+        ok = host.load_host(self.host_json(interpreter={**base, "timeout": 120, "think": False}))
+        self.assertEqual((ok["interpreter"]["timeout"], ok["interpreter"]["think"]), (120, False))
+        host.load_host(self.host_json(interpreter={**base, "timeout": 1}))
+        for extra in ({"timeout": 0}, {"timeout": 121}, {"timeout": "60"}, {"timeout": 60.0}, {"timeout": True},
+                      {"think": "no"}, {"think": 0}, {"other": 1}):
+            with self.subTest(extra=extra), self.assertRaises(host.HostConfigError) as ctx:
+                host.load_host(self.host_json(interpreter={**base, **extra}))
+            self.assertEqual(ctx.exception.fields, ["interpreter"])
+
+    def test_interpreter_builder_passes_timeout_and_think(self):
+        cfg = {"interpreter": {"url": "http://127.0.0.1:11434", "model": "m", "timeout": 90, "think": False}}
+        with mock.patch.object(host, "load_registry"), mock.patch.object(host, "load_content"), \
+                mock.patch.object(host.interpreter_prompt, "build", return_value="p"):
+            made = host.interpreter_builder(cfg, "/nonexistent")()
+            default = host.interpreter_builder({"interpreter": {"url": "http://127.0.0.1:11434", "model": "m"}}, "/nonexistent")()
+        self.assertEqual((made.timeout, made.think, default.timeout, default.think), (90, False, 30, None))
+
     def test_live_mode_requires_release_settings(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
