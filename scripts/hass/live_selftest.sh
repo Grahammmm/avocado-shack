@@ -21,6 +21,8 @@
 #   model       only with --model: scripts/hass/live_selftest_model.py, 3 synthetic interpreter-eval cases through
 #               the local model with the production timeout (a draft round trip; uses the CPU for a few minutes)
 #   growth      state size, free disk and Hass journal lines in 24 h, compared with the previous run (--growth-file)
+# A check whose data cannot be read (git, systemctl, health/inbox JSON via scripts/hass/live_selftest_parse.py, du,
+# df, journalctl) reports `unknown` and FAILs: a failed acquisition is never shown as clean, healthy or zero.
 # Output: one `PASS|WARN|FAIL|SKIP <check> <detail>` line per check, then `HASS-SELFTEST <UTC> pass=.. warn=.. fail=..
 # skip=..`; --log FILE appends that last line, --brief FILE replaces FILE with it (one line for the ops brief); a
 # FAIL adds `failed:<check,...>`. Exit 0 no FAIL, 1 a FAIL, 2 bad usage.
@@ -58,15 +60,22 @@ say() {  # say STATUS CHECK DETAIL...
   printf '%s %s %s\n' "$s" "$c" "$*"
   case "$s" in PASS) NPASS=$((NPASS + 1)) ;; WARN) NWARN=$((NWARN + 1)) ;; FAIL) NFAIL=$((NFAIL + 1)); FAILED="$FAILED $c" ;; *) NSKIP=$((NSKIP + 1)) ;; esac
 }
-field() {  # field NAME JSON -> the bare value of a top-level number/null field (counts only)
-  printf '%s' "$2" | grep -o "\"$1\": [0-9a-z.]*" | head -1 | sed 's/.*: //'
+PARSE="$REPO/scripts/hass/live_selftest_parse.py"  # validates health/inbox JSON; prints counts and check ids only
+is_count() { case "${1:-x}" in ''|*[!0-9]*) return 1 ;; esac; }
+tree_state() {  # prints clean, dirty, or `unknown (git exit N)`: a failed git call is never reported as clean
+  local out rc
+  out="$(git -C "$REPO" status --porcelain 2>/dev/null)"; rc=$?
+  if [ $rc != 0 ]; then echo "unknown (git status exit $rc)"; elif [ -z "$out" ]; then echo clean; else echo dirty; fi
 }
-clean_tree() { [ -z "$(git -C "$REPO" status --porcelain 2>/dev/null)" ]; }
 
 # -- runtime (before) ------------------------------------------------------------------------------------------
 if [ "$SYNTH_ONLY" = 0 ]; then
-  head="$(git -C "$REPO" rev-parse --short=12 HEAD 2>/dev/null || echo none)"
-  if clean_tree; then say PASS runtime "checkout $head clean"; else say FAIL runtime "checkout $head has local changes"; fi
+  head="$(git -C "$REPO" rev-parse --short=12 HEAD 2>/dev/null)"; rc=$?
+  tree="$(tree_state)"
+  if [ $rc != 0 ] || [ -z "$head" ]; then say FAIL runtime "cannot read the checkout head (git rev-parse exit $rc)"
+  elif [ "$tree" = clean ]; then say PASS runtime "checkout $head clean"
+  elif [ "$tree" = dirty ]; then say FAIL runtime "checkout $head has local changes"
+  else say FAIL runtime "checkout $head state $tree"; fi
 fi
 
 # -- synthetic end to end --------------------------------------------------------------------------------------
@@ -80,14 +89,18 @@ fi
 
 if [ "$SYNTH_ONLY" = 0 ]; then
   # -- runtime (after: the synthetic run left nothing behind) --------------------------------------------------
-  if clean_tree; then say PASS runtime-after "still clean"; else say FAIL runtime-after "the synthetic run changed the checkout"; fi
+  tree="$(tree_state)"
+  if [ "$tree" = clean ]; then say PASS runtime-after "still clean"
+  elif [ "$tree" = dirty ]; then say FAIL runtime-after "the checkout has local changes after the synthetic run"
+  else say FAIL runtime-after "checkout state $tree"; fi
 
   # -- services --------------------------------------------------------------------------------------------------
   for unit in hass-receiver hass-worker; do
     st="$(systemctl --user is-active "$unit.service" 2>/dev/null)"
     restarts="$(systemctl --user show -p NRestarts --value "$unit.service" 2>/dev/null)"
-    if [ "$st" != active ]; then say FAIL "service:$unit" "$st"
-    elif [ "${restarts:-0}" -gt 0 ]; then say WARN "service:$unit" "active, systemd restart counter ${restarts} (crash restarts since the unit was loaded)"
+    if [ "$st" != active ]; then say FAIL "service:$unit" "${st:-unknown}"
+    elif ! is_count "$restarts"; then say FAIL "service:$unit" "active, restart counter unknown"
+    elif [ "$restarts" -gt 0 ]; then say WARN "service:$unit" "active, systemd restart counter ${restarts} (crash restarts since the unit was loaded)"
     else say PASS "service:$unit" "active, 0 restarts"; fi
   done
 
@@ -96,10 +109,11 @@ if [ "$SYNTH_ONLY" = 0 ]; then
     st="$(systemctl --user is-active "$unit.timer" 2>/dev/null)"
     lastrun="$(systemctl --user show -p LastTriggerUSec --value "$unit.timer" 2>/dev/null)"
     status="$(systemctl --user show -p ExecMainStatus --value "$unit.service" 2>/dev/null)"
-    if [ "$st" != active ]; then say FAIL "timer:$unit" "$st"
+    if [ "$st" != active ]; then say FAIL "timer:$unit" "${st:-unknown}"
     elif [ -z "$lastrun" ] || [ "$lastrun" = n/a ] || [ "$lastrun" = 0 ]; then say WARN "timer:$unit" "active, has not run yet"
-    elif [ "$unit" = hass-health ] && [ "${status:-0}" -gt 1 ]; then say FAIL "timer:$unit" "last run exit $status"
-    elif [ "$unit" = hass-backup ] && [ "${status:-0}" -ne 0 ]; then say FAIL "timer:$unit" "last run exit $status"
+    elif ! is_count "$status"; then say FAIL "timer:$unit" "last run exit status unknown"
+    elif [ "$unit" = hass-health ] && [ "$status" -gt 1 ]; then say FAIL "timer:$unit" "last run exit $status"
+    elif [ "$unit" = hass-backup ] && [ "$status" -ne 0 ]; then say FAIL "timer:$unit" "last run exit $status"
     else say PASS "timer:$unit" "active, last run $lastrun"; fi
   done
   newest="$(find "$BACKUPS" -maxdepth 1 -name 'hass-state-*' -mmin -1560 2>/dev/null | head -1)"
@@ -107,20 +121,27 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   else say WARN backup "no backup under 26 h old"; fi
 
   # -- health (read-only: no --seen, no --alert-log) ---------------------------------------------------------------
+  # Only a valid report counts: a crash (exit 1 with a traceback and no JSON) or a report whose ok disagrees with
+  # its problems or its exit code is a FAIL, never the backup-age-only WARN.
   hout="$("$PY" -B "$REPO/hass/health.py" --state "$STATE" --backups "$BACKUPS" --writer --model "$MODEL_URL" \
-          --host-dir "$HOSTDIR" --min-free-mb "$MIN_FREE_MB" 2>&1)"; rc=$?
-  ids="$(printf '%s' "$hout" | grep -o '"check": "[a-z-]*"' | sed 's/"check": "//; s/"//' | sort -u | tr '\n' ' ')"
-  if [ $rc = 0 ]; then say PASS health "no problems"
-  elif [ $rc = 1 ] && [ "$(printf '%s' "$ids" | tr ' ' '\n' | grep -cv -e '^backup-age$' -e '^$')" = 0 ]; then say WARN health "problems: $ids"
-  elif [ $rc = 1 ]; then say FAIL health "problems: $ids"
-  else say FAIL health "health.py exit $rc (unsafe state or bad arguments)"; fi
+          --host-dir "$HOSTDIR" --min-free-mb "$MIN_FREE_MB" 2>/dev/null)"; rc=$?
+  ids="$(printf '%s\n' "$hout" | "$PY" -B "$PARSE" health 2>/dev/null)"; prc=$?
+  if [ $rc != 0 ] && [ $rc != 1 ]; then say FAIL health "health.py exit $rc (unsafe state, crash or bad arguments)"
+  elif [ $prc != 0 ]; then say FAIL health "health.py exit $rc without a valid report: ${ids:-parser exit $prc}"
+  elif [ $rc = 0 ] && [ -z "$ids" ]; then say PASS health "no problems"
+  elif [ $rc = 0 ]; then say FAIL health "health.py exit 0 but reported problems: $ids"
+  elif [ -z "$ids" ]; then say FAIL health "health.py exit 1 but reported no problems"
+  elif [ "$ids" = backup-age ]; then say WARN health "problems: $ids"
+  else say FAIL health "problems: $ids"; fi
 
   # -- inbox ---------------------------------------------------------------------------------------------------
-  iout="$("$PY" -B "$REPO/hass/inbox.py" status --state "$STATE" 2>&1)"; rc=$?
-  pending="$(field pending "$iout")" oldest="$(field oldest_pending_minutes "$iout")" done_n="$(field done "$iout")"
+  iout="$("$PY" -B "$REPO/hass/inbox.py" status --state "$STATE" 2>/dev/null)"; rc=$?
+  parsed="$(printf '%s\n' "$iout" | "$PY" -B "$PARSE" inbox 2>/dev/null)"; prc=$?
+  read -r pending oldest done_n <<< "$parsed"
   if [ $rc != 0 ]; then say FAIL inbox "inbox.py status exit $rc"
-  elif [ "${pending:-x}" = 0 ]; then say PASS inbox "pending 0, done ${done_n:-?}"
-  elif [ "${oldest:-0}" != null ] && [ "${oldest%.*}" -ge 15 ] 2>/dev/null; then say FAIL inbox "pending $pending, oldest ${oldest} min"
+  elif [ $prc != 0 ]; then say FAIL inbox "${parsed:-parser exit $prc}"
+  elif [ "$pending" = 0 ]; then say PASS inbox "pending 0, done $done_n"
+  elif [ "$oldest" != null ] && [ "$oldest" -ge 15 ]; then say FAIL inbox "pending $pending, oldest ${oldest} min"
   else say WARN inbox "pending $pending, oldest ${oldest} min"; fi
 
   # -- model draft round trip (opt-in) -------------------------------------------------------------------------
@@ -132,23 +153,33 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   fi
 
   # -- disk and log growth -------------------------------------------------------------------------------------
+  # A failed measurement is reported as unknown and FAILs; it is never counted as 0 KB or 0 journal lines, and it
+  # does not overwrite the previous run's baseline.
   now_s="$(date +%s)"
   size_kb="$(du -sk "$STATE_ROOT" 2>/dev/null | cut -f1)"
   free_mb="$(df -Pm "$STATE_ROOT" 2>/dev/null | awk 'NR == 2 {print $4}')"
-  lines="$(journalctl --user -u 'hass-*' --since -24h -o cat --no-pager 2>/dev/null | wc -l)"
-  detail="state ${size_kb:-?} KB, free ${free_mb:-?} MB, hass journal ${lines} lines/24h"
+  jout="$(journalctl --user -q -u 'hass-*' --since -24h -o cat --no-pager 2>/dev/null)"; jrc=$?
+  if [ $jrc != 0 ]; then lines=""; elif [ -z "$jout" ]; then lines=0; else lines="$(printf '%s\n' "$jout" | wc -l)"; fi
+  unknown=""
+  is_count "$size_kb" || { size_kb=""; unknown="$unknown state size (du failed);"; }
+  is_count "$free_mb" || { free_mb=""; unknown="$unknown free disk (df failed);"; }
+  is_count "$lines" || { lines=""; unknown="$unknown hass journal (journalctl exit $jrc);"; }
+  detail="state ${size_kb:-unknown} KB, free ${free_mb:-unknown} MB, hass journal ${lines:-unknown} lines/24h"
   verdict=PASS
-  [ "${free_mb:-0}" -lt "$MIN_FREE_MB" ] && verdict=FAIL
-  [ "${lines:-0}" -gt 20000 ] && [ "$verdict" = PASS ] && verdict=WARN
-  if [ -r "$GROWTH" ]; then
+  if [ -n "$unknown" ]; then verdict=FAIL; detail="$detail; not measured:${unknown%;}"
+  elif [ "$free_mb" -lt "$MIN_FREE_MB" ]; then verdict=FAIL
+  elif [ "$lines" -gt 20000 ]; then verdict=WARN; fi
+  if [ -r "$GROWTH" ] && [ -n "$size_kb" ]; then
     read -r p_s p_kb _p_free p_lines < "$GROWTH"
-    grow=$(( ${size_kb:-0} - ${p_kb:-0} ))
-    detail="$detail; since last run $(( (now_s - ${p_s:-now_s}) / 3600 )) h ago: state ${grow} KB, journal was ${p_lines:-?} lines/24h"
-    [ "$grow" -gt 51200 ] && [ "$verdict" = PASS ] && verdict=WARN
+    if is_count "$p_s" && is_count "$p_kb"; then
+      grow=$(( size_kb - p_kb ))
+      detail="$detail; since last run $(( (now_s - p_s) / 3600 )) h ago: state ${grow} KB, journal was ${p_lines:-?} lines/24h"
+      [ "$grow" -gt 51200 ] && [ "$verdict" = PASS ] && verdict=WARN
+    fi
   fi
   say "$verdict" growth "$detail"
-  if mkdir -p "$(dirname "$GROWTH")" 2>/dev/null; then
-    printf '%s %s %s %s\n' "$now_s" "${size_kb:-0}" "${free_mb:-0}" "${lines:-0}" > "$GROWTH" 2>/dev/null || true
+  if [ -z "$unknown" ] && mkdir -p "$(dirname "$GROWTH")" 2>/dev/null; then
+    printf '%s %s %s %s\n' "$now_s" "$size_kb" "$free_mb" "$lines" > "$GROWTH" 2>/dev/null || true
   fi
 fi
 
