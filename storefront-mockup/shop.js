@@ -11,7 +11,7 @@ const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{
 if(catalog.some(p=>!installedImage(p.image))){const n=document.createElement('p');n.className='catalog-note';n.textContent='Some product pictures are illustrations made from photos of our shelves, so a label or package in the store may look different.';$('.catalog-controls').before(n)}
 function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
 function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
-function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
+function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p,renderNow)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
 function card(p){
  const m=maker(p);
@@ -44,6 +44,7 @@ function refreshFreshness(now=new Date()){const today=pacificDay(now),checked=ty
 // AV1622-06: a product Hass added shows New for its first NEW_BADGE_DAYS Pacific calendar days (addedOn, same day rule as above);
 // a missing, invalid or future date shows nothing. Worked out each time a card is drawn, from the visitor's clock.
 const NEW_BADGE_DAYS=14;
+let renderNow=new Date();
 function isNew(p,now=new Date()){const a=dayNumber(p.addedOn),t=dayNumber(pacificDay(now));return a!==null&&t!==null&&t-a>=0&&t-a<NEW_BADGE_DAYS}
 // AV1102-03: the words match sitegen.AVAILABILITY_WORDS (pinned by a test); "Last confirmed ..." is never current.
 refreshFreshness();
@@ -56,8 +57,12 @@ const SHELVES=new Set(catalog.map(p=>p.category));
 document.querySelectorAll('[data-filter]').forEach(b=>{b.hidden=b.dataset.filter!=='all'&&!SHELVES.has(b.dataset.filter)});
 // One search normalization for filtering, the address and restore: trimmed, at most 80 characters (code points).
 const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
-function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return catalog.filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
-function renderCatalog(append=false){refreshFreshness();const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
+// AV0222-09: products the badge shows as New come first, newest addedOn first (ties and every other product keep catalog order).
+// A new array each time; the day is renderNow's, so badges and order agree for one render.
+function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew(p,now)}));
+ d.sort((x,y)=>x.n!==y.n?(x.n?-1:1):x.n&&x.p.addedOn!==y.p.addedOn?(x.p.addedOn>y.p.addedOn?-1:1):x.i-y.i);return d.map(x=>x.p)}
+function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return orderedProducts().filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
+function renderCatalog(append=false){refreshFreshness();const t=new Date();if(!append||pacificDay(t)!==pacificDay(renderNow)){append=false;renderNow=t}const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
 function anyFilter(){return activeCategory!=='all'||!!searchText($('#product-search').value)||!!$('#brand-filter').value||!!activeFrom||!!availBox?.checked}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
  linkedItem='';p.delete('item');const gone=$('#catalog-item-status');gone.hidden=true;gone.textContent='';  // A filter change also cancels any pending item scroll/focus.
@@ -96,7 +101,7 @@ try{const u=new URLSearchParams(location.search),shelf=[...document.querySelecto
  if(shelf&&!shelf.hidden)selectShelf(shelf);$('#product-search').value=searchText(u.get('q'));$('#brand-filter').value=mk&&[...$('#brand-filter').options].some(o=>o.value===mk)?mk:'';
  // AV1322-10: ?item=<catalog id> wins over the filters: show everything, load enough cards to reach it.
  // An unknown, empty or over-80-character id is ignored and the filters above apply as before.
- const item=u.get('item'),i=item&&[...item].length<=80?catalog.findIndex(p=>p.id===item):-1;
+ const item=u.get('item'),i=item&&[...item].length<=80?orderedProducts().findIndex(p=>p.id===item):-1;
  if(i>=0){activeFrom='';selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item;if(availBox)availBox.checked=false}
  if(availBox)availBox.checked=u.get('avail')==='1'&&i<0;
  let fix=false;

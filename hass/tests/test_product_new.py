@@ -177,4 +177,4 @@ class BadgeCompositionTests(CatalogTestCase):
         source = (SITE_DIR / "shop.js").read_text("utf-8")
         self.assertEqual(source.count("food-badges"), 1)
         self.assertEqual(source.count("${badges(p)}"), 1)
-        self.assertEqual(source.count("isNew("), 2)  # its definition and the one call inside badges()
+        self.assertEqual(source.count("isNew("), 3)  # its definition, the call inside badges() and the one in orderedProducts() (AV0222-09)
