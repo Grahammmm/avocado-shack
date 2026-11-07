@@ -160,6 +160,41 @@ When Hass could not reach the model or got no usable answer, it replies "I could
 - **Next step:** removing a file is an attended operator step: `git rm` it in the writer worktree on its branch, then commit. Health and Hass never delete it.
 - **Stop and ask:** the owner undid that photo because it showed a person, a receipt or a private place (it stays in Git history; tell the operator).
 
+The host checks below run with `--host-dir` (the HASS-SVC-1 health timer). They are read-only, never open the secret file and print no path, text or sender.
+
+### `relay-stuck`
+- **Means:** reply rows older than 15 min the Mac has not acknowledged (detail: count), or `relay.sqlite3` is a link, not a regular file or unreadable.
+- **Check first:** `mac-silent`; `systemctl --user status hass-worker hass-receiver`. **Stop and ask:** the Mac is on but rows stay (tell the operator).
+
+### `mac-silent`
+- **Means:** the forwarder's last pull is over 10 min old (detail: 10-minute step, `over 2 h` past 2 h). Mac sleep, logout and reboot are unmeasured (H07).
+- **Next step:** `over 2 h` is a Mac-physical fault: tell the operator (a G card). Shorter gaps only need watching.
+
+### `release-open`
+- **Means:** a release journal is not closed (`live`, `not-applied`, `reverted`, `closed`). Detail: the state(s) only: `not-published`, `unknown`, `unconfirmed`, or an in-progress state older than 15 min.
+- **Stop and ask:** always (a G card). Do not publish by hand while a release is open; the next change is refused until it is settled.
+
+### `release-books`
+- **Means:** `publish.json` or a journal in `releases/` fails the PUBLISH-1 checks (missing, linked, wrong mode, damaged, out of order). Every release is refused.
+- **Stop and ask:** always; G repairs the books or runs `publish_live.py adopt`.
+
+### `live-unconfirmed`
+- **Means:** a release journal is `unconfirmed` or `unknown` (detail: count): pushed, but the live site was not seen to match.
+- **Check first:** the live site by eye. **Stop and ask:** always (a G card).
+
+### `host-config`
+- **Means:** `host.json` is refused (mode, type, closed keys) or the secret file's lstat breaks D5: `missing`, `type`, `owner`, `mode` or `size`.
+- **Next step:** `python3 hass/host.py check --host HOST_JSON` names the fields. **Stop and ask:** never copy or print the secret; G fixes it.
+
+### `publishing-stopped`
+- **Means:** info: the STOP file (`~/.config/hass/STOP`) exists, so no change goes live. The chat still answers.
+
+### `stopped-long`
+- **Means:** the STOP file has existed over 24 h. **Next step:** G removes it (`rm ~/.config/hass/STOP`) or leaves it on purpose.
+
+### `alert-log`
+- **Means:** `--alert-log` is a link, inside the repo or state dir, or not in an existing folder (exit 2); or (info) the line could not be written.
+
 ## Service and Mac behaviour
 
 What is known comes from the sandbox user unit file and the Mac notes in IMPLEMENTATION.md; everything else is unmeasured and must not be assumed.
