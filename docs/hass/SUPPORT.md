@@ -12,6 +12,7 @@ When Hass could not reach the model or got no usable answer, it replies "I could
 
 - **Owner:** send the change again once the reader is back; Hass never replays it for you.
 - **Operator:** if it repeats, run `python3 hass/health.py --state DIR` and check the model there. Do not edit the queue or restart anything for this alone; contact the support person recorded privately.
+- **Slow model:** the reader waits `interpreter.timeout` seconds (default 30) and then gives up as above. If the model is slow (for example it runs on CPU), the operator may set `"timeout"` (whole seconds, 1 to 120) and, to skip the model's reasoning phase, `"think": false` in the `interpreter` object of `host.json`, run `python3 hass/host.py check --host host.json` (it rejects other keys and bad values), then restart the receiver and worker at an attended moment. The repo never edits `host.json` or restarts anything.
 
 ## Problems
 
