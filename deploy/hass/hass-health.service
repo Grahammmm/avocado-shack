@@ -1,0 +1,12 @@
+[Unit]
+Description=Hass host health check (H19)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/hass/runtime
+ExecStart=/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/health.py --state %h/.local/state/hass/state --backups %h/.local/state/hass/backups --seen %h/.local/state/hass/health.seen --writer --model http://127.0.0.1:11434 --host-dir %h/.local/state/hass/host --alert-log %h/agent-work/modes/ALERTS.log
+# exit 1 = problems found (reported in the alert log), not a failed unit; exit 2 stays a failure
+SuccessExitStatus=1
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

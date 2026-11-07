@@ -1,0 +1,10 @@
+[Unit]
+Description=Hass daily state backup (H20)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/hass/runtime
+ExecStart=/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/statebackup.py create --state %h/.local/state/hass/state --out %h/.local/state/hass/backups
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

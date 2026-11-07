@@ -1,0 +1,16 @@
+[Unit]
+Description=Hass worker: drains the inbox and queues replies (HASS-RCV-1)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/hass/runtime
+ExecStart=/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/host.py work --host %h/.local/state/hass/host/host.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

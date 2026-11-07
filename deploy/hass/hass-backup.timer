@@ -1,0 +1,9 @@
+[Unit]
+Description=Daily Hass state backup at 03:30 Pacific
+
+[Timer]
+OnCalendar=*-*-* 03:30 America/Los_Angeles
+Persistent=true
+
+[Install]
+WantedBy=timers.target

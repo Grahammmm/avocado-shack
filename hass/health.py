@@ -21,7 +21,9 @@ verify of the photo store, read-only, never inside the state dir; count only), d
 or --backups filesystem has under that many MB free; `<store>: <n> MB free` in 50-MB steps, no path), model (--model:
 one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed). Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
-(sha256 of sorted problems), notify. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
+(sha256 of sorted problems), notify. --host-dir DIR (HASS-SVC-1, read-only, no secret opened): relay-stuck,
+mac-silent, release-open, release-books, live-unconfirmed, host-config, publishing-stopped / stopped-long. --alert-log FILE
+appends `<UTC> HASS-HEALTH <fp12> <check ids>` when notify and problems. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
 fingerprint; notify only when it changed (else notify = not ok). No send; the only network use is --model's loopback
 GET. Exit 0 ok, 1 problems, 2 unsafe.
 """
@@ -32,6 +34,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import bridge, editor, interpreter_local, statebackup  # noqa: E402
+from hass import release_journal as journal  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.conversation import ConfigError, load_settings  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
@@ -167,14 +170,82 @@ def _disk_check(label, path, floor_mb, problems: list, statvfs=None) -> None:  #
     if (free_mb := st.f_bavail * st.f_frsize // 2**20) < floor_mb:  # 50-MB steps keep the fingerprint stable
         problems.append(_problem("disk-low", f"{label}: {free_mb // 50 * 50} MB free"))
 
-def _seen_path(raw, state) -> Path:
-    if Path(raw).is_symlink(): raise UnsafeState("--seen must not be a symlink")
+def _seen_path(raw, state, flag="--seen") -> Path:
+    if Path(raw).is_symlink(): raise UnsafeState(f"{flag} must not be a symlink")
     full = Path(raw).resolve()
     if full.is_relative_to(REPO_ROOT.resolve()) or full.is_relative_to(Path(state).resolve()):
-        raise UnsafeState("--seen must lie outside the repository and the state dir")
+        raise UnsafeState(f"{flag} must lie outside the repository and the state dir")
     if not full.parent.is_dir() or (full.exists() and not full.is_file()):
-        raise UnsafeState("--seen must be a file in an existing folder")
+        raise UnsafeState(f"{flag} must be a file in an existing folder")
     return full
+
+RELAY_MIN, MAC_MIN, RELEASE_MIN, STOP_HOURS = 15, 10, 15, 24  # HASS-SVC-1 windows
+IN_PROGRESS = frozenset({"intent", "applied", "built", "committed", "pushing", "pushed"})
+
+def _relay_checks(hdir: Path, now: datetime, problems: list) -> None:
+    if (kind := _regular(path := hdir / "relay.sqlite3")) is None: return
+    if not kind: return problems.append(_problem("relay-stuck", "relay store is not a regular file"))
+    try:
+        with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
+            secs = int(now.timestamp())
+            if n := db.execute("SELECT COUNT(*) FROM relay WHERE acked_at IS NULL AND created_at < ?",
+                               (secs - RELAY_MIN * 60,)).fetchone()[0]: problems.append(_problem("relay-stuck", str(n)))
+            if row := db.execute("SELECT value FROM meta WHERE name = 'last_pull_at'").fetchone():
+                if (age := (secs - int(row[0])) // 60) > MAC_MIN:
+                    problems.append(_problem("mac-silent", "over 2 h" if age > 120 else f"over {age // 10 * 10} min"))
+    except (sqlite3.DatabaseError, ValueError, TypeError):
+        problems.append(_problem("relay-stuck", "relay store unreadable"))
+
+def _release_checks(hdir: Path, now: datetime, problems: list) -> None:  # state names only; lstat, never followed
+    rdir, anchor = hdir / "releases", hdir / "publish.json"
+    if not (os.path.lexists(rdir) or os.path.lexists(anchor)): return
+    try:
+        entries = []
+        if os.path.lexists(rdir):
+            st = os.lstat(rdir)
+            if not stat.S_ISDIR(st.st_mode) or stat.S_IMODE(st.st_mode) != 0o700: raise journal.BooksError("release-books")
+            for entry in sorted(os.scandir(rdir), key=lambda e: e.name):
+                if entry.name.startswith(".release-"): continue
+                j = journal.validate(journal.read(Path(entry.path)))
+                if entry.name != j["change_id"] + ".json": raise journal.BooksError("release-books")
+                entries.append(j)
+        journal.derive(journal.read(anchor), entries)
+    except (journal.BooksError, OSError):
+        return problems.append(_problem("release-books", "release books failed their checks"))
+    limit = now - timedelta(minutes=RELEASE_MIN)
+    open_states = {j["state"] for j in entries if j["state"] not in journal.CLOSED
+                   and (j["state"] not in IN_PROGRESS or journal.instant(j["at"]) < limit)}
+    if open_states: problems.append(_problem("release-open", ",".join(sorted(open_states))))
+    if n := sum(j["state"] in ("unconfirmed", "unknown") for j in entries): problems.append(_problem("live-unconfirmed", str(n)))
+
+def _host_config(hdir: Path, now: datetime, problems: list, info: list) -> None:  # mode or type only; the key is never opened
+    from hass import host  # lazy: only --host-dir needs it
+    try:
+        cfg = host.load_host(hdir / "host.json")
+    except host.HostConfigError:
+        return problems.append(_problem("host-config", "host.json refused"))
+    try:
+        st = os.lstat(cfg["secretFile"])
+    except (OSError, ValueError):  # ValueError: an embedded NUL in the path
+        problems.append(_problem("host-config", "secret file missing"))
+    else:
+        bad = ("type" if not stat.S_ISREG(st.st_mode) else "owner" if st.st_uid != os.getuid()
+               else "mode" if st.st_mode & 0o177 else "size" if st.st_size > 128 else None)
+        if bad: problems.append(_problem("host-config", f"secret file {bad}"))
+    if isinstance(rel := cfg.get("release"), dict) and isinstance(stop := rel.get("stopFile"), str):
+        try: mtime = datetime.fromtimestamp(os.lstat(stop).st_mtime, timezone.utc)
+        except (OSError, ValueError): return
+        if now - mtime > timedelta(hours=STOP_HOURS): problems.append(_problem("stopped-long", f"over {STOP_HOURS} h"))
+        else: info.append(_problem("publishing-stopped", "stop file set"))
+
+def _alert(path: Path, problems, digest: str, now: datetime) -> None:  # ids only: no detail, text or path
+    ids = " ".join(sorted({p["check"] for p in problems}))
+    line = f"{now.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')} HASS-HEALTH {digest[:12]} {ids}\n"
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode): raise OSError("alert log is not a regular file")
+        os.write(fd, line.encode("utf-8"))
+    finally: os.close(fd)
 
 def _writer_check(state, problems: list) -> None:
     old = os.environ.get("GIT_OPTIONAL_LOCKS")
@@ -256,7 +327,7 @@ def _model_check(url, name, problems: list, transport, label=None) -> None:  # f
 
 def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False,
           inbox_unreadable_hours=24, *, model=None, model_name=None, transport=None, unverified_hours=72,
-          paused_hours=24, media=None, min_free_mb=None, label_model=None) -> tuple:
+          paused_hours=24, media=None, min_free_mb=None, label_model=None, host_dir=None) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -281,6 +352,10 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
         _unused_photos(sdir, info)
     if model: _model_check(model, model_name, problems, transport, label_model)
     if media is not None: _media_check(media, sdir, problems)
+    if host_dir is not None:
+        _relay_checks(hdir := Path(host_dir), now, problems)
+        _release_checks(hdir, now, problems)
+        _host_config(hdir, now, problems, info)
     if min_free_mb is not None:  # a missing backups dir is backup-age's problem only
         _disk_check("state", sdir, min_free_mb, problems)
         if backups is not None and os.path.isdir(backups): _disk_check("backups", backups, min_free_mb, problems)
@@ -316,7 +391,8 @@ def main(argv=None, now=None, transport=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/health.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--state", required=True)
-    for flag in ("--backups", "--seen", "--model", "--model-name", "--label-model", "--media"): parser.add_argument(flag)
+    for flag in ("--backups", "--seen", "--model", "--model-name", "--label-model", "--media", "--host-dir", "--alert-log"):
+        parser.add_argument(flag)
     for flag, default in (("--outbox-minutes", 15), ("--backup-hours", 26), ("--inbox-minutes", 15)):
         parser.add_argument(flag, type=int, default=default)
     parser.add_argument("--inbox-unreadable-hours", type=int, default=24)
@@ -342,16 +418,24 @@ def main(argv=None, now=None, transport=None) -> int:
     except UnsafeState as exc:
         _emit([_problem("seen", str(exc))], [], True)
         return 2
+    try:
+        alert_log = _seen_path(args.alert_log, args.state, "--alert-log") if args.alert_log else None
+    except UnsafeState as exc:
+        _emit([_problem("alert-log", str(exc))], [], True)
+        return 2
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
                                    args.inbox_minutes, args.writer, args.inbox_unreadable_hours, model=model,
                                    model_name=args.model_name, label_model=args.label_model, transport=transport, media=args.media,
                                    unverified_hours=args.unverified_hours, paused_hours=args.paused_hours,
-                                   min_free_mb=args.min_free_mb)
+                                   min_free_mb=args.min_free_mb, host_dir=args.host_dir)
     try:
         notify = _remember(seen, fingerprint(problems)) if seen else bool(problems)
     except OSError:  # fail open: an unrecorded fingerprint must not silence an alert; the detail names no path
         notify = True
         info.append(_problem("seen", "seen file not updated"))
+    if alert_log and notify and problems:
+        try: _alert(alert_log, problems, fingerprint(problems), now or datetime.now(timezone.utc))
+        except OSError: info.append(_problem("alert-log", "alert log not written"))
     _emit(problems, info, notify)
     return 2 if unsafe else 1 if problems else 0
 

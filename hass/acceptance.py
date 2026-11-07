@@ -24,7 +24,7 @@ MAP = {  # frozen: H id -> covering modules, or a "not covered" reason
     "H15": ("test_memory", "test_memory_source"),
     "H16": ("test_outbox_delayed", "test_late_yes", "test_writer_lock_entry"),
     "H17": ("test_status_pause", "test_help", "test_status_photos"), "H18": "needs Michael's devices",
-    "H19": ("test_health",), "H20": ("test_statebackup_drill", "test_statebackup", "test_statebackup_bundle"),
+    "H19": ("test_health", "test_health_host"), "H20": ("test_statebackup_drill", "test_statebackup", "test_statebackup_bundle"),
     "H21": ("test_retention",), "H22": ("test_interpreter_cap",),
     "H23": ("test_auto_policy",), "H24": ("test_design_check", "test_design_check_modes",
             "test_design_check_merge_base"), "H25": "release step",
