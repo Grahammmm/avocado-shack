@@ -160,7 +160,7 @@ class MemoryAliasTests(StoreMixin, ConversationTestCase):
         self.chat("remember alias green jam: note", "memory-saved")
         self.chat("forget alias.green-jam", "memory-forgot", "Forgot alias.green-jam.")
         self.chat("forget alias green jam", "memory-forgot", "Forgot alias-green-jam.")  # only the note exists: it goes
-        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 0)
+        self.assertEqual(self.conv.memory.list(), [])
 
     def test_plain_notes_are_not_aliases(self):
         self.chat("remember aliases: product:" + AVO, "memory-saved")
