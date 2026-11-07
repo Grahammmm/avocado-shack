@@ -1,0 +1,19 @@
+# CANDIDATE ONLY (HASS-LIVE-AUDIT-1) - not installed. To adopt: copy to ~/.config/systemd/user/hass-selftest.service
+# (without .candidate), then `systemctl --user daemon-reload` and enable the timer. Adoption is an operator step.
+# Read-only on the live Hass: restarts nothing, sends nothing, opens no key; writes only its own log/growth files and
+# the one-line brief file. The model round trip uses the CPU for a few minutes; drop --model to skip it.
+[Unit]
+Description=Hass nightly live self-test (HASS-LIVE-AUDIT-1, read-only)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/hass/runtime
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/hass-selftest
+ExecStart=/usr/bin/bash %h/.local/share/hass/runtime/scripts/hass/live_selftest.sh --model qwen3.6:35b-a3b-64k --log %h/.local/state/hass-selftest/selftest.log --growth-file %h/.local/state/hass-selftest/growth.tsv --brief %h/agent-work/modes/HASS-SELFTEST.line
+# exit 1 = a check failed (in the log and the brief line), not a broken unit
+SuccessExitStatus=1
+TimeoutStartSec=15min
+Nice=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
