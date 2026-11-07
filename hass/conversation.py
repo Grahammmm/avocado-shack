@@ -408,7 +408,8 @@ def parse_memory(text: str):
         if re.match(r"alias +\S", operand, re.IGNORECASE):
             name = operand[5:].strip()
             ok = memory_mod._clean(name) and len(name) <= ALIAS_NAME_MAX
-            return "forget", "alias." + catalog._fold(name).replace(" ", "-") if ok else "alias. " + name.lower(), None
+            if not ok: return "forget", "alias. " + name.lower(), None
+            return "forget", "alias." + catalog._fold(name).replace(" ", "-"), "spaced"  # may also be the note alias-<name>
         return "forget", _note_key(operand), None
     match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
     return ("memory", None, None) if match and match[5] else None
@@ -1367,6 +1368,14 @@ class Conversation:
         if verb == "cost": return self._cost(msg, key, value)
         valid = memory_mod.KEY_RE.fullmatch(key) is not None
         if verb == "forget":
+            if value == "spaced" and valid and key.startswith("alias."):  # AV1352-07: `forget alias <name>`: alias or note
+                note = "alias-" + key[6:]
+                has_alias, has_note = self.memory.get(key) is not None, valid and self.memory.get(note) is not None
+                if has_alias and has_note:  # never guess which record to erase
+                    self._reply(f"Both {key} (an alias) and {note} (a note) are saved; nothing was forgotten. "
+                                f"Send forget {key} for the alias or forget {note} for the note.")
+                    return "memory-ambiguous"
+                if has_note: key = note
             if not valid or self.memory.get(key) is None:
                 self._reply(f"Nothing saved as {key}.")
                 return "memory-none"
