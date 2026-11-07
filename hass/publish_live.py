@@ -296,12 +296,20 @@ class LiveEditor(conversation.Editor):
             self.books.write(j, 'pushed' if landed else 'unknown', pushed_at=self.clock().isoformat())
             return
 
+    @staticmethod
+    def served_path(rel):
+        # Cloudflare Pages 308-redirects /x/index.html to /x/ and /y.html to /y; request what it serves directly.
+        if rel == 'index.html': return ''
+        if rel.endswith('/index.html'): return rel[:-len('index.html')]
+        if rel.endswith('.html'): return rel[:-len('.html')]
+        return rel
+
     def live_matches(self, j):
         paths = sorted(j['manifest'])
         matched = True
         for rel in paths[:10]:
             try:
-                url = self.cfg['liveUrl'] + '/' + urllib.parse.quote(rel, safe='/') + '?hass=' + j['change_id']
+                url = self.cfg['liveUrl'] + '/' + urllib.parse.quote(self.served_path(rel), safe='/') + '?hass=' + j['change_id']
                 if sha(self.fetch(url, self.cfg['liveUrl'])) != j['manifest'][rel]: matched = False
             except (OSError, ValueError): matched = False
         return matched and len(paths) <= 10

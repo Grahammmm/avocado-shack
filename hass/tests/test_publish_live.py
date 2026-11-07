@@ -71,6 +71,9 @@ class ReleaseCase(unittest.TestCase):
 
     def fetch(self, url, base):
         rel = url.split(base + '/', 1)[1].split('?', 1)[0]
+        if rel == 'index.html' or rel.endswith('/index.html'): raise ValueError('redirect')  # Pages answers 308
+        if rel == '' or rel.endswith('/'): rel += 'index.html'
+        elif '.' not in rel.rsplit('/', 1)[-1]: rel += '.html'
         return subprocess.run(['git', '-C', str(self.bare), 'show', 'main:' + rel], capture_output=True, check=True).stdout
 
     def open(self):
@@ -326,6 +329,19 @@ class ReleaseCase(unittest.TestCase):
         self.settle()
         self.assertEqual(self.entry()['state'], 'live')
         self.assertEqual(self.live.operate('resolve', cid, resolution='live')['result'], 'wrong-state')
+
+    def test_live_check_requests_pages_urls_without_redirect(self):
+        seen = []
+        real = self.fetch
+        def spy(url, base): seen.append(url); return real(url, base)
+        self.live.fetch = spy
+        self.apply(); self.settle()
+        self.assertEqual(self.entry()['state'], 'live')
+        self.assertTrue(seen and not any('index.html' in u for u in seen))
+        self.assertEqual(self.live.served_path('hike/index.html'), 'hike/')
+        self.assertEqual(self.live.served_path('index.html'), '')
+        self.assertEqual(self.live.served_path('a/b.html'), 'a/b')
+        self.assertEqual(self.live.served_path('catalog-products.js'), 'catalog-products.js')
 
     def test_adopt_matching_date_and_real_difference(self):
         self.assertEqual(self.live.operate('adopt')['result'], 'adopted')
