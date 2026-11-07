@@ -17,7 +17,7 @@ def verb(text):
 def parser_verbs() -> set:
     """Verbs found by calling the parsers on the words in their own regexes (bare and with a code), never a copied list."""
     words = set(re.findall(r"[a-z]{2,}", conv.COMMAND_RE.pattern + conv.MEMORY_RE.pattern + conv.KEYWORD_RE.pattern))
-    return {v for w in words for text in (w, f"{w} a1b2") if (v := verb(text))}
+    return {v for w in words for text in (w, f"{w} a1b2", "photos to take") if (v := verb(text))}  # AV0222-04: the compound command
 
 
 def rows(doc: str) -> list:
