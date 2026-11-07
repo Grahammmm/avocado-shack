@@ -159,7 +159,7 @@
    ]
   },
   "check": {
-   "score": 90,
+   "score": 91,
    "pass": true,
    "failed": [
     "subject size in frame"
@@ -260,7 +260,7 @@
    ]
   },
   "check": {
-   "score": 84,
+   "score": 85,
    "pass": false,
    "failed": [
     "background even",
@@ -277,13 +277,16 @@
    "reason": "the background is not plain (its border varies by 96 levels)",
    "jpeg_quality": 90,
    "review": [
-    "Could not cut the product out (the background is not plain (its border varies by 96 levels)); it will not look like the catalog pictures."
+    "Could not cut the product out (the background is not plain (its border varies by 96 levels)); it will not look like the catalog pictures.",
+    "The picture does not pass the house-style check: no photo background left inside the product (patterned cloth, planks)"
    ]
   },
   "check": {
-   "score": 100,
-   "pass": true,
-   "failed": []
+   "score": 91,
+   "pass": false,
+   "failed": [
+    "no photo background left inside the product (patterned cloth, planks)"
+   ]
   }
  }
 }
