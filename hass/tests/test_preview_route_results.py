@@ -42,6 +42,7 @@ class ReplyTests(unittest.TestCase):
     def reply(self, unshown):
         said = []
         fake = mock.MagicMock()
+        fake.settings = {}  # live mode is absent in this existing offline reply fixture
         fake.previewer = object()
         fake._drafts.return_value = [{"code": "C1", "summary": "renamed the route"}]
         fake.verify.return_value = ("/tmp/shot.png", None, unshown)

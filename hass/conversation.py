@@ -17,6 +17,7 @@ from hass import claims, interpret_check, label_reader, margins, media, morning_
 from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
+from hass import live_policy  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
@@ -324,10 +325,15 @@ def load_settings(sdir, photos=False) -> dict:
     cap = settings.get("interpreterDailyCap")  # H22: optional; absent or null means no cap (no default enables it)
     if cap is not None and (type(cap) is not int or not 1 <= cap <= 10000):
         problems.append("interpreterDailyCap must be an integer 1-10000")
+    site, needs_code = settings.get("liveSite"), settings.get("approvalNeedsCode", False)
+    if site is not None and (not isinstance(site, str) or not re.fullmatch(r"[a-z0-9.-]{3,253}", site) or "." not in site):
+        problems.append("liveSite must be a hostname")
+    if type(needs_code) is not bool or site is not None and needs_code is not True:
+        problems.append("approvalNeedsCode must be a bool and true with liveSite")
     if problems: raise ConfigError("; ".join(problems))
     return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
-            "interpreterDailyCap": cap}
+            "interpreterDailyCap": cap, **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings})}
 
 
 def parse_keyword(text: str):
@@ -507,19 +513,23 @@ def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty
         (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
 
 
-def _record_lines(draft: dict, undo: bool = False) -> list:  # AV0022-08: proposal_text and show
+def _record_lines(draft: dict, undo: bool = False, full_before=False) -> list:  # AV0022-08: proposal_text and show
     lines = []
     for r in draft["records"]:
         lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
             f"{r['collection']} {r['key']}: photo: " + ("the previous photo" if undo else "the photo from your message")
             if f == "image" and (PHOTO_PATH_RE.fullmatch(str(a)) or undo and PHOTO_PATH_RE.fullmatch(str(b))) else
-            f"{r['collection']} {r['key']}: {f} {_value(b)} {_arrow(a)}" for f, b, a in (
+            f"{r['collection']} {r['key']}: {f} {(_full if full_before else _value)(b)} {_arrow(a)}" for f, b, a in (
                 (f, *(map(_hike_time, (b, a)) if f == "startsAt" else (b, a))) for f, b, a in _changes(r))]
     return lines + [f"Warning: {w}" for w in draft.get("warnings") or []]
 
 
-def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False) -> str:
-    lines = [head or f"Draft {code}:"] + _record_lines(draft, undo)
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None) -> str:
+    lines = [head or f"Draft {code}:"] + _record_lines(draft, undo, full_before=bool(live_site))
+    if live_site:
+        reasons = live_policy.check(draft)
+        return "\n".join(lines + [f"Expires {_local(expires_at)}.", live_policy.refusal(reasons) if reasons else
+                               f"Reply yes {code} and this goes live on {live_site} within a few minutes."])
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
     return "\n".join(lines)
@@ -618,7 +628,7 @@ class Conversation:
 
     def _proposal_reply(self, row, draft, prefix=""):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
-        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row)), []
+        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite")), []
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
@@ -742,6 +752,10 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         verb, code = keyword
+        if verb == "approve" and code is None and self.settings.get("approvalNeedsCode"):
+            self._reply("To put a change live, reply yes <code>, for example yes a1b2.")
+            self._record(msg, "no-target")
+            return "no-target", None
         # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
         states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
         targets = [r for r in self._drafts(f"state IN {states}") if code is None or r["code"] == code]
@@ -772,6 +786,10 @@ class Conversation:
             return "no-target", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
             self._reply(f"{target['code']} repeats a draft that was closed; reply yes {target['code']} to apply it.")
+            self._record(msg, "no-target")
+            return "no-target", None
+        if self.settings.get("liveSite") and (reasons := live_policy.check(self.editor.show(target["change_id"]).get("draft"))):
+            self._reply(live_policy.refusal(reasons))
             self._record(msg, "no-target")
             return "no-target", None
         self.db.execute(
@@ -1023,7 +1041,8 @@ class Conversation:
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
-            if self.previewer is None: self._reply(answers.applied_text(row["code"], row["summary"]))  # SHOP-4
+            if self.previewer is None or self.settings.get("liveSite"):
+                self._reply(answers.applied_text(row["code"], row["summary"], live_site=self.settings.get("liveSite")))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "stale":
             again = self.editor.prepare(json.loads(row["ops_json"]))
@@ -1052,7 +1071,7 @@ class Conversation:
                         self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
                     else:
                         self._move(row, "failed", reason=INTERRUPTED)
-                        self._reply(answers.recovered_text(row["code"]))  # SHOP-4: apply never touches the website
+                        self._reply(answers.recovered_text(row["code"], live_site=self.settings.get("liveSite")))
         self._verify_pending()
         return [self._row(r["row_id"])["state"] for r in rows]
 
@@ -1094,12 +1113,17 @@ class Conversation:
             with self._tx():
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
-                    text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)))  # SHOP-4
-                    self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
+                    text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)), live_site=self.settings.get("liveSite"))
+                    if not self.settings.get("liveSite"): self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
                 else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
-                    self._reply(answers.applied_text(row["code"], row["summary"], error=error))
+                    if not self.settings.get("liveSite"): self._reply(answers.applied_text(row["code"], row["summary"], error=error, live_site=self.settings.get("liveSite")))
+
+    def screenshot(self, change_id) -> str | None:
+        row = self.db.execute("SELECT screenshot FROM drafts WHERE change_id = ? AND state IN ('applied', 'verified') "
+                              "AND screenshot IS NOT NULL ORDER BY row_id DESC LIMIT 1", (change_id,)).fetchone()
+        return row[0] if row else None
 
     def _history_search(self, query: str) -> str:
         """AV2152-02: up to ten newest owner-approved changes whose summary holds every word; read-only."""

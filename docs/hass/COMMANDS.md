@@ -1,5 +1,10 @@
 # Hass commands (owner card)
 
+In live mode, proposals show the full previous text and name the site the change goes live on.
+Approval must name the draft: `yes a1b2`, not a bare `yes`. A bare `no` still cancels.
+A protected change says it cannot go live from chat. A saved reply is not a website outcome;
+Hass sends a separate message about the website.
+
 These are the only messages Hass treats as commands. Send each one as the whole message. Capital letters in the command
 do not matter (`YES A1B2` is the same as `yes a1b2`). Codes are the short codes Hass puts in its replies; `A1B2` below
 is only a placeholder.
