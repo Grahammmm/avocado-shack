@@ -76,6 +76,11 @@ def find_maker(message: str, makers: dict):
     return max(hits)[1] if hits else None
 
 
+def stated_shelf(text: str):
+    """The shelf he named ("on the pantry shelf"), else None."""
+    return next((c for c in CATEGORIES if re.search(rf"\b{re.escape(SHELF_LABELS[c].split()[0].lower())}\b\s+shelf", text, re.I)), None)
+
+
 def extract_facts(message: str, content) -> dict:
     """The plain-regex reader: what the message says, nothing more. Every key of FACT_KEYS is present (None when unsaid)."""
     text = " ".join(message.split())
@@ -83,7 +88,14 @@ def extract_facts(message: str, content) -> dict:
     key = find_maker(text, content.makers)
     index = kind_index(content)
     words = re.findall(r"[\w’'-]+", text)
-    kinds = [w for w in words if _fold(w) in index]
+    thing = None  # the product phrase: what he "got in" (maker/story/serving words after it are not the product)
+    if (m := THING_RE.search(text)): thing = re.sub(r"(?i)^in\s+", "", m.group("thing").strip(" ,"))
+    if thing and thing.split()[-1].lower() in VAGUE: thing = None
+    if thing:
+        kinds = [w for w in re.findall(r"[\w’'-]+", thing) if _fold(w) in index]
+    else:  # no "got in X": the first sentence up to the maker ("from/by/made") only, never his story
+        head = re.split(r"(?i)\b(?:from|by|made)\b|[.!?;]", text, maxsplit=1)[0]
+        kinds = [w for w in re.findall(r"[\w’'-]+", head) if _fold(w) in index]
     facts["kind"] = _fold(kinds[-1]) if kinds else None
     if (m := PRICE_RE.search(text)): facts["price"] = m.group(0)
     if (m := SIZE_RE.search(text)): facts["size"] = m.group(0)
@@ -93,18 +105,14 @@ def extract_facts(message: str, content) -> dict:
             facts["availability"] = word
             break
     if (m := USE_RE.search(text)): facts["use"] = f"{m.group(1).lower()} {m.group(2).strip().lower()}"
-    shelf_hit = next((c for c in CATEGORIES if re.search(rf"\b{re.escape(SHELF_LABELS[c].split()[0].lower())}\b\s+shelf", text, re.I)), None)
-    facts["shelf"] = shelf_hit
+    facts["shelf"] = stated_shelf(text)
     if key:
         facts["maker"] = content.makers[key]["name"]
     elif (m := NEW_MAKER_RE.search(text)):
         facts["maker"] = m.group("name").strip(" .,")
         facts["place"] = (m.group("place") or "").strip(" .,") or None
-    thing = None
-    if (m := THING_RE.search(text)): thing = m.group("thing").strip(" ,")
-    if thing and thing.split()[-1].lower() in VAGUE: thing = None
-    if not facts["kind"] and thing:
-        facts["kind"] = _fold(thing.split()[-1])
+    if thing:
+        if not facts["kind"]: facts["kind"] = _fold(thing.split()[-1])
         phrase = thing
     elif facts["kind"]:
         at = max(i for i, w in enumerate(words) if _fold(w) == facts["kind"])
@@ -171,10 +179,12 @@ def ground(facts: dict, message: str, content) -> tuple:
         if not ok:
             kept[key] = None
             dropped.append(key)
-    for key, allowed in (("availability", ("yes", "limited", "no")), ("shelf", CATEGORIES)):
-        if kept.get(key) and kept[key] not in allowed:
-            kept[key] = None
-            dropped.append(key)
+    if kept.get("availability") and not (kept["availability"] in AVAILABILITY_WORDS and re.search(AVAILABILITY_WORDS[kept["availability"]], message, re.I)):
+        kept["availability"] = None  # not an allowed value, or his words do not say it
+        dropped.append("availability")
+    if kept.get("shelf") and kept["shelf"] != stated_shelf(message):
+        kept["shelf"] = None  # only a shelf he named; otherwise it comes from the kind (or one question)
+        dropped.append("shelf")
     if kept.get("kind") and _fold(kept["kind"]) not in low:
         kept["kind"], _ = None, dropped.append("kind")
     if kept.get("url") and not str(kept["url"]).startswith("https://"):
@@ -220,6 +230,29 @@ def grounded_text(text: str, allowed: str) -> list:
     return seen
 
 
+FUNCTION_WORDS = frozenset(STOP | set("on onto into to it its is are was be as your you little some any each over under up out off then there their his her one two "
+                            "first before after".split()))
+CLAIM_MARKERS = re.compile(r"\b(?:with added|added|made with|contains?|containing|includes?|including|infused|blend of|mixed with|flavou?red|ingredients?)\b", re.I)
+
+
+def serving_vocabulary(content) -> frozenset:
+    """Stemmed words the shop already uses in the serving sentences (not the first sentence) of live descriptions."""
+    return frozenset(_stem(w) for p in content.products if p.get("status") == "active"
+                     for s in hs.sentences(p["description"])[1:] for w in re.findall(r"[\w’'-]+", s))
+
+
+def ungrounded_claims(text: str, allowed: str, vocabulary) -> list:
+    """Words that assert something Michael did not say. The first sentence (what it is, who makes it) may use only his words;
+    later serving sentences may also use the shop's own serving words, but never an ingredient/contents phrase."""
+    known = {_stem(w) for w in re.findall(r"[\w’'-]+", _fold(allowed))} | {_stem(w) for w in FUNCTION_WORDS}
+    bad = []
+    for n, sent in enumerate(hs.sentences(text)):
+        pool = known if n == 0 else known | vocabulary
+        bad += [w for w in re.findall(r"[\w’'-]+", _fold(sent)) if _stem(w) not in pool and w not in bad]
+        if n and (m := CLAIM_MARKERS.search(sent)) and not CLAIM_MARKERS.search(allowed): bad.append(m.group(0))
+    return bad
+
+
 def compose(facts: dict, content, spec: dict, message: str, writer=None) -> dict:
     """{"text", "source": template|writer, "serving_from": id|None, "writer_rejected": str|None}."""
     maker = content.makers.get(find_maker(facts.get("maker") or "", content.makers) or "", {})
@@ -230,7 +263,7 @@ def compose(facts: dict, content, spec: dict, message: str, writer=None) -> dict
     if writer is not None:
         examples = [s for _id, s in index.get(facts.get("kind") or "", {}).get("serving", [])[:4]] or [e["description"] for e in spec["descriptions"]["examples"][:4]]
         text = (writer(writer_prompt(facts, spec, examples)) or "").strip()
-        bad = grounded_text(text, allowed)
+        bad = grounded_text(text, allowed) + [w for w in ungrounded_claims(text, allowed, serving_vocabulary(content)) if w not in grounded_text(text, allowed)]
         check = hs.check_description(text, spec, name=facts.get("name"), owner_text=message)
         if not bad and check["pass"]:
             return {"text": text, "source": "writer", "serving_from": None, "writer_rejected": None}

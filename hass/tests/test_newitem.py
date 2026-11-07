@@ -177,6 +177,32 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(good["description"]["source"], "writer")
         self.assertIn("Examples" if False else "Real examples", newitem.writer_prompt(good["facts"], SPEC, ["x."]))
 
+    def test_the_product_phrase_is_not_a_story_word(self):
+        from hass import newitem_demo
+        r = self.draft(newitem_demo.MESSAGES["bottle-grey-wall-tilted"])
+        product = next(o for o in r["ops"] if o["op"] == "product.add")["args"]
+        self.assertEqual((product["name"], product["category"]), ("Bee Happy Farm wildflower hot sauce", "pantry"))
+        self.assertEqual(r["facts"]["kind"], "sauce")
+
+    def test_writer_cannot_invent_ingredients_even_in_lowercase(self):
+        for text in ("Honey from Cal Poly with added peanuts and sesame. Spoon a little onto buttered toast.",
+                     "Honey from Cal Poly in San Luis Obispo. Spoon a little onto toast with added peanuts."):
+            r = self.draft(HONEY, writer=lambda prompt, t=text: t)
+            self.assertEqual(r["description"]["source"], "template", text)
+            self.assertTrue(r["description"]["writer_rejected"])
+            self.assertNotIn("peanut", str(r["ops"]))
+
+    def test_unstated_shelf_and_availability_are_dropped(self):
+        r = self.draft("Cal Poly honey", facts={"name": "Cal Poly honey", "maker": "Cal Poly", "kind": "honey", "shelf": "vegetables", "availability": "yes"},
+                       selection_checked=True)
+        self.assertEqual({"shelf", "availability"} - set(r["dropped"]), set())
+        product = next(o for o in r["ops"] if o["op"] == "product.add")["args"]
+        self.assertEqual(product["category"], "pantry")
+        self.assertNotIn("product.set_availability", [o["op"] for o in r["ops"]])
+        said = self.draft("got in some Cal Poly honey for the vegetables shelf", facts={"name": "Cal Poly honey", "maker": "Cal Poly", "kind": "honey",
+                                                                                         "shelf": "vegetables", "availability": "yes"}, selection_checked=True)
+        self.assertEqual(next(o for o in said["ops"] if o["op"] == "product.add")["args"]["category"], "vegetables")
+
     def test_unnamed_producer_follows_the_catalog_pattern(self):
         r = self.draft("got some honey")
         product = r["ops"][0]["args"]
