@@ -11,7 +11,7 @@ const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{
 if(catalog.some(p=>!installedImage(p.image))){const n=document.createElement('p');n.className='catalog-note';n.textContent='Some product pictures are illustrations made from photos of our shelves, so a label or package in the store may look different.';$('.catalog-controls').before(n)}
 function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
 function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
-function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p,renderNow)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
+function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p,pinNow||undefined)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
 function brand(p){return p.displayBrand||(p.brand==='Producer not identified'?'From the market':p.brand)}
 function card(p){
  const m=maker(p);
@@ -44,8 +44,8 @@ function refreshFreshness(now=new Date()){const today=pacificDay(now),checked=ty
 // AV1622-06: a product Hass added shows New for its first NEW_BADGE_DAYS Pacific calendar days (addedOn, same day rule as above);
 // a missing, invalid or future date shows nothing. Worked out each time a card is drawn, from the visitor's clock.
 const NEW_BADGE_DAYS=14;
-let renderNow=new Date();
-function isNew(p,now=new Date()){const a=dayNumber(p.addedOn),t=dayNumber(pacificDay(now));return a!==null&&t!==null&&t-a>=0&&t-a<NEW_BADGE_DAYS}
+let renderNow=new Date(),pinNow=null;  // pinNow: the render day, set only while cards are drawn
+const isNew=(p,now=new Date())=>{const a=dayNumber(p.addedOn),t=dayNumber(pacificDay(now));return a!==null&&t!==null&&t-a>=0&&t-a<NEW_BADGE_DAYS};
 // AV1102-03: the words match sitegen.AVAILABILITY_WORDS (pinned by a test); "Last confirmed ..." is never current.
 refreshFreshness();
 const CURRENT=new Set(['Available today','Limited','Sold out']),AVAIL=new Set(['Available today','Limited']);let availBox=null;
@@ -61,8 +61,9 @@ const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 // A new array each time; the day is renderNow's, so badges and sequence agree for one render.
 function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew(p,now)}));
  d.sort((x,y)=>x.n!==y.n?(x.n?-1:1):x.n&&x.p.addedOn!==y.p.addedOn?(x.p.addedOn>y.p.addedOn?-1:1):x.i-y.i);return d.map(x=>x.p)}
+function drawCards(l){pinNow=renderNow;try{return l.map(card).join('')}finally{pinNow=null}}
 function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return orderedProducts().filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
-function renderCatalog(append=false){refreshFreshness();const t=new Date();if(!append||pacificDay(t)!==pacificDay(renderNow)){append=false;renderNow=t}const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',list.slice(visibleCount,end).map(card).join(''));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
+function renderCatalog(append=false){refreshFreshness();const t=new Date();if(!append||pacificDay(t)!==pacificDay(renderNow)){append=false;renderNow=t}const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',drawCards(list.slice(visibleCount,end)));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
 function anyFilter(){return activeCategory!=='all'||!!searchText($('#product-search').value)||!!$('#brand-filter').value||!!activeFrom||!!availBox?.checked}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
  linkedItem='';p.delete('item');const gone=$('#catalog-item-status');gone.hidden=true;gone.textContent='';  // A filter change also cancels any pending item scroll/focus.

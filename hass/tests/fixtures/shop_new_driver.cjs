@@ -18,5 +18,5 @@ ctx.cases=cases;
 ctx.RealDate=Date;
 const out=vm.runInContext(`cases.map(c=>{const D=RealDate,fake=new D(c.now);
   Date=class extends D{constructor(...a){a.length?super(...a):super(+fake)}static now(){return +fake}};
-  try{renderNow=new Date();return badges(c.product)}finally{Date=D}})`,ctx);
+  try{return badges(c.product)}finally{Date=D}})`,ctx);
 process.stdout.write(JSON.stringify(Array.from(out))+'\n');
