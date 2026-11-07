@@ -19,6 +19,8 @@ before any agent sends a message (the fleet AGENTS.md/CLAUDE.md rule: no outboun
   default `reply` raises `NotConnected`, so replies stay unsent in the conversation outbox.
 - Tests: `python3 -B -m unittest hass.tests.test_receiver`.
 
+Full G-only setup, live gates and stop commands: [MAC_RUNBOOK.md](MAC_RUNBOOK.md).
+
 ## 2. What G must do to connect the channel
 
 1. Choose the Mac and the Apple account that will carry the owner's messages, and keep that Mac powered and online.
