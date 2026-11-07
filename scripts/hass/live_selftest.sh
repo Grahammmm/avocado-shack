@@ -107,11 +107,12 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   # -- timers ----------------------------------------------------------------------------------------------------
   for unit in hass-health hass-backup; do
     st="$(systemctl --user is-active "$unit.timer" 2>/dev/null)"
-    lastrun="$(systemctl --user show -p LastTriggerUSec --value "$unit.timer" 2>/dev/null)"
-    status="$(systemctl --user show -p ExecMainStatus --value "$unit.service" 2>/dev/null)"
+    lastrun="$(systemctl --user show -p LastTriggerUSec --value "$unit.timer" 2>/dev/null)"; lrc=$?
+    status="$(systemctl --user show -p ExecMainStatus --value "$unit.service" 2>/dev/null)"; src=$?
     if [ "$st" != active ]; then say FAIL "timer:$unit" "${st:-unknown}"
+    elif [ $lrc != 0 ]; then say FAIL "timer:$unit" "last trigger query failed (systemctl exit $lrc)"
     elif [ -z "$lastrun" ] || [ "$lastrun" = n/a ] || [ "$lastrun" = 0 ]; then say WARN "timer:$unit" "active, has not run yet"
-    elif ! is_count "$status"; then say FAIL "timer:$unit" "last run exit status unknown"
+    elif [ $src != 0 ] || ! is_count "$status"; then say FAIL "timer:$unit" "last run exit status unknown (systemctl exit $src)"
     elif [ "$unit" = hass-health ] && [ "$status" -gt 1 ]; then say FAIL "timer:$unit" "last run exit $status"
     elif [ "$unit" = hass-backup ] && [ "$status" -ne 0 ]; then say FAIL "timer:$unit" "last run exit $status"
     else say PASS "timer:$unit" "active, last run $lastrun"; fi
@@ -156,13 +157,19 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   # A failed measurement is reported as unknown and FAILs; it is never counted as 0 KB or 0 journal lines, and it
   # does not overwrite the previous run's baseline.
   now_s="$(date +%s)"
-  size_kb="$(du -sk "$STATE_ROOT" 2>/dev/null | cut -f1)"
-  free_mb="$(df -Pm "$STATE_ROOT" 2>/dev/null | awk 'NR == 2 {print $4}')"
+  # Producer exit statuses are kept (a pipeline reports only its last stage): du can print a partial total and exit
+  # 1 on an unreadable subtree, which is not a measurement.
+  dout="$(du -sk "$STATE_ROOT" 2>/dev/null)"; drc=$?
+  size_kb="$(printf '%s\n' "$dout" | cut -f1)"
+  [ $drc = 0 ] || size_kb=""
+  fout="$(df -Pm "$STATE_ROOT" 2>/dev/null)"; frc=$?
+  free_mb="$(printf '%s\n' "$fout" | awk 'NR == 2 {print $4}')"
+  [ $frc = 0 ] || free_mb=""
   jout="$(journalctl --user -q -u 'hass-*' --since -24h -o cat --no-pager 2>/dev/null)"; jrc=$?
   if [ $jrc != 0 ]; then lines=""; elif [ -z "$jout" ]; then lines=0; else lines="$(printf '%s\n' "$jout" | wc -l)"; fi
   unknown=""
-  is_count "$size_kb" || { size_kb=""; unknown="$unknown state size (du failed);"; }
-  is_count "$free_mb" || { free_mb=""; unknown="$unknown free disk (df failed);"; }
+  is_count "$size_kb" || { size_kb=""; unknown="$unknown state size (du exit $drc);"; }
+  is_count "$free_mb" || { free_mb=""; unknown="$unknown free disk (df exit $frc);"; }
   is_count "$lines" || { lines=""; unknown="$unknown hass journal (journalctl exit $jrc);"; }
   detail="state ${size_kb:-unknown} KB, free ${free_mb:-unknown} MB, hass journal ${lines:-unknown} lines/24h"
   verdict=PASS

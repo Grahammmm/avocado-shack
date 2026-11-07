@@ -44,13 +44,24 @@ FAKE_SYSTEMCTL = """#!/bin/sh
 case "$*" in
   *is-active*) echo active ;;
   *NRestarts*) echo 0 ;;
-  *LastTriggerUSec*) echo 'Sat 2026-11-07 14:40:03 PST' ;;
+  *LastTriggerUSec*)
+    case "${PROBE_TIMER:-ok}" in fail) exit 1 ;; never) echo 'n/a' ;; *) echo 'Sat 2026-11-07 14:40:03 PST' ;; esac ;;
   *ExecMainStatus*) echo 0 ;;
 esac
 """
 FAKE_JOURNALCTL = """#!/bin/sh
 case "${PROBE_JOURNAL:-empty}" in fail) exit 1 ;; lines) printf 'a\\nb\\nc\\n' ;; esac
 exit 0
+"""
+
+
+FAKE_DU = """#!/bin/sh
+case "${PROBE_DU:-ok}" in partial) echo "123	$2"; exit 1 ;; esac
+exec /usr/bin/du "$@"
+"""
+FAKE_DF = """#!/bin/sh
+case "${PROBE_DF:-ok}" in partial) printf 'Filesystem 1M-blocks Used Available Capacity Mounted\\nx 10 1 9999 1%% /\\n'; exit 1 ;; esac
+exec /usr/bin/df "$@"
 """
 
 
@@ -77,7 +88,7 @@ class LiveModeAcquisitionFailures(unittest.TestCase):
         bins = self.tmp / "bin"
         bins.mkdir()
         for name, body in (("python", FAKE_PY), ("git", FAKE_GIT), ("systemctl", FAKE_SYSTEMCTL),
-                           ("journalctl", FAKE_JOURNALCTL)):
+                           ("journalctl", FAKE_JOURNALCTL), ("du", FAKE_DU), ("df", FAKE_DF)):
             (bins / name).write_text(body)
             (bins / name).chmod(0o700)
         self.state = self.tmp / "hass"
@@ -133,6 +144,31 @@ class LiveModeAcquisitionFailures(unittest.TestCase):
         self.assertIn("not measured: hass journal (journalctl exit 1)", lines["growth"])
         self.assertNotIn("journal 0 lines", lines["growth"])
         self.assertEqual(self.growth.read_text(), "1 2 3 4\n")  # the previous baseline is kept
+
+    def test_du_partial_total_with_nonzero_exit_fails_and_keeps_baseline(self):
+        self.growth.write_text("1 2 3 4\n")
+        r, lines = self.run_live(PROBE_DU="partial")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertTrue(lines["growth"].startswith("FAIL growth "), lines["growth"])
+        self.assertIn("not measured: state size (du exit 1)", lines["growth"])
+        self.assertIn("state unknown KB", lines["growth"])
+        self.assertEqual(self.growth.read_text(), "1 2 3 4\n")
+
+    def test_df_partial_output_with_nonzero_exit_fails_and_keeps_baseline(self):
+        self.growth.write_text("1 2 3 4\n")
+        r, lines = self.run_live(PROBE_DF="partial")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("not measured: free disk (df exit 1)", lines["growth"])
+        self.assertEqual(self.growth.read_text(), "1 2 3 4\n")
+
+    def test_timer_query_failure_fails_but_never_triggered_timer_only_warns(self):
+        r, lines = self.run_live(PROBE_TIMER="fail")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(lines["timer:hass-health"], "FAIL timer:hass-health last trigger query failed (systemctl exit 1)")
+        self.assertIn("failed:timer:hass-health,timer:hass-backup", r.stdout)
+        r, lines = self.run_live(PROBE_TIMER="never")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(lines["timer:hass-health"], "WARN timer:hass-health active, has not run yet")
 
 
 if __name__ == "__main__":
