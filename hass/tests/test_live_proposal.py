@@ -93,7 +93,7 @@ class LiveProposalTests(ConversationTestCase):
                 with self.assertRaises(conv.ConfigError): conv.load_settings(self.repo.state)
         for extra in ({}, {"liveSite": SITE, "approvalNeedsCode": True}):
             self.set_settings({**SETTINGS, **extra})
-            self.assertEqual(conv.load_settings(self.repo.state)["liveSite"], extra.get("liveSite"))
+            self.assertEqual(conv.load_settings(self.repo.state).get("liveSite"), extra.get("liveSite"))
 
     def test_live_saved_wording_only(self):
         row, _ = self.propose("hours")

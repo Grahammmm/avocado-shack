@@ -333,7 +333,7 @@ def load_settings(sdir, photos=False) -> dict:
     if problems: raise ConfigError("; ".join(problems))
     return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
-            "interpreterDailyCap": cap, "liveSite": site, "approvalNeedsCode": needs_code}
+            "interpreterDailyCap": cap, **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings})}
 
 
 def parse_keyword(text: str):
