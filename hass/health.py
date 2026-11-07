@@ -1,7 +1,7 @@
 """Hass private state health check that alerts once per change (H19).
 
     python3 hass/health.py --state DIR [--backups DIR] [--seen FILE] [--outbox-minutes 15] [--backup-hours 26]
-                           [--inbox-minutes 15] [--paused-hours 24] [--writer] [--model URL [--model-name NAME]]
+                           [--inbox-minutes 15] [--paused-hours 24] [--writer] [--model URL [--model-name NAME] [--label-model NAME]]
                            [--media DIR] [--min-free-mb MB]   (minutes/hours windows: each 1 to 100 years)
 
 Read-only (sqlite mode=ro, never writer.lock, nothing created). Checks: state (unsafe: stop, exit 2), settings,
@@ -236,7 +236,7 @@ def _model_get(url, timeout) -> tuple:  # (status, body) via bridge's opener: no
         exc.close()
         return exc.code, b""
 
-def _model_check(url, name, problems: list, transport) -> None:  # NB-AV-06: fixed details, never the URL or reply
+def _model_check(url, name, problems: list, transport, label=None) -> None:  # fixed details, never the URL or reply
     try:
         status, raw = (transport or _model_get)(url + "/api/tags", 3)
     except Exception:  # noqa: BLE001 - refused, reset, timeout: the model cannot be reached
@@ -247,14 +247,16 @@ def _model_check(url, name, problems: list, transport) -> None:  # NB-AV-06: fix
         if not isinstance(models := json.loads(raw)["models"], list): raise ValueError
     except (ValueError, TypeError, KeyError, RecursionError):
         return problems.append(_problem("model", "bad reply"))
-    want = name if not name or ":" in name else f"{name}:latest"  # a name without a tag means :latest
     names = {m["name"] for m in models if isinstance(m, dict) and isinstance(m.get("name"), str)}  # skip malformed
-    if want and want not in names:
-        problems.append(_problem("model", "model not installed"))
+    missing = [role for role, want in (("interpreter", name), ("label", label))
+               if want and (want if ":" in want else f"{want}:latest") not in names]
+    if missing:
+        detail = " and ".join(missing) + (" models not installed" if len(missing) == 2 else " model not installed")
+        problems.append(_problem("model", detail if label is not None else "model not installed"))
 
 def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inbox_minutes=15, writer=False,
           inbox_unreadable_hours=24, *, model=None, model_name=None, transport=None, unverified_hours=72,
-          paused_hours=24, media=None, min_free_mb=None) -> tuple:
+          paused_hours=24, media=None, min_free_mb=None, label_model=None) -> tuple:
     """(problems, info, unsafe) for one state dir; never writes it (open_state would create a missing dir)."""
     now, problems, info = now or datetime.now(timezone.utc), [], []
     try:
@@ -277,7 +279,7 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
     if writer:
         _writer_check(sdir, problems)
         _unused_photos(sdir, info)
-    if model: _model_check(model, model_name, problems, transport)
+    if model: _model_check(model, model_name, problems, transport, label_model)
     if media is not None: _media_check(media, sdir, problems)
     if min_free_mb is not None:  # a missing backups dir is backup-age's problem only
         _disk_check("state", sdir, min_free_mb, problems)
@@ -314,7 +316,7 @@ def main(argv=None, now=None, transport=None) -> int:
     parser = argparse.ArgumentParser(prog="hass/health.py", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--state", required=True)
-    for flag in ("--backups", "--seen", "--model", "--model-name", "--media"): parser.add_argument(flag)
+    for flag in ("--backups", "--seen", "--model", "--model-name", "--label-model", "--media"): parser.add_argument(flag)
     for flag, default in (("--outbox-minutes", 15), ("--backup-hours", 26), ("--inbox-minutes", 15)):
         parser.add_argument(flag, type=int, default=default)
     parser.add_argument("--inbox-unreadable-hours", type=int, default=24)
@@ -330,6 +332,7 @@ def main(argv=None, now=None, transport=None) -> int:
     if max(args.outbox_minutes, args.inbox_minutes) > MAX_WINDOW_HOURS * 60 or max(hours) > MAX_WINDOW_HOURS:
         parser.error(f"minutes must be at most {MAX_WINDOW_HOURS * 60} and hours at most {MAX_WINDOW_HOURS} (100 years)")
     if args.model_name is not None and not (args.model and args.model_name): parser.error("--model-name needs --model")
+    if args.label_model is not None and not (args.model and args.label_model): parser.error("--label-model needs --model")
     try:
         model = None if args.model is None else interpreter_local.check_url(args.model)
     except ValueError:
@@ -341,7 +344,7 @@ def main(argv=None, now=None, transport=None) -> int:
         return 2
     problems, info, unsafe = check(args.state, args.backups, args.outbox_minutes, args.backup_hours, now,
                                    args.inbox_minutes, args.writer, args.inbox_unreadable_hours, model=model,
-                                   model_name=args.model_name, transport=transport, media=args.media,
+                                   model_name=args.model_name, label_model=args.label_model, transport=transport, media=args.media,
                                    unverified_hours=args.unverified_hours, paused_hours=args.paused_hours,
                                    min_free_mb=args.min_free_mb)
     try:
