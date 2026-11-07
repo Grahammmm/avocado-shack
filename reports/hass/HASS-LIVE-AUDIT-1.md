@@ -179,8 +179,8 @@ HASS-SELFTEST 2026-11-07T22:45:19Z pass=7 warn=4 fail=1 skip=0 failed:model
 
 (That run was from the PR worktree; after merge the operator runs it from the runtime checkout.)
 
-Revision 2 run on the live box, 2026-11-07 15:05 PST, at commit `8c52d15` (no `--model`, so no CPU load; growth file
-in `/tmp`, so no baseline comparison):
+Revision 2 run on the live box, 2026-11-07 15:05 PST, at commit `8c52d15` (round-2 commit on `rb/hass-live-audit-1`,
+same script as the follow-up PR; no `--model`, so no CPU load; growth file in `/tmp`, so no baseline comparison):
 
 ```
 PASS runtime checkout 8c52d1509374 clean
