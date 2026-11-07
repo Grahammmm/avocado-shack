@@ -52,6 +52,16 @@ Each live publish is an info line, never a page. What to check for each id is in
 
 Backups are restored into a new directory; the live state is never overwritten.
 
+## Live self-test (HASS-LIVE-AUDIT-1)
+
+`scripts/hass/live_selftest.sh` checks the running system with synthetic data only and changes nothing: it restarts
+nothing, sends nothing and opens no key. It runs the Mac forwarder, host server and worker code end to end in temp dirs
+(status, a draft, reply retry without a duplicate, a stranger ignored, cancelled and expired codes doing nothing), then
+reads the services, timers, `health.py`, `inbox.py status`, disk and journal growth. `--model NAME` adds a draft round
+trip through the local model on three synthetic eval cases (a few minutes of CPU). One `PASS|WARN|FAIL` line per check
+and a `HASS-SELFTEST` summary line; exit 1 when a check failed. A nightly timer for it is proposed in
+`reports/hass/hass-selftest.{service,timer}.candidate` and is not installed.
+
 ## Retention proposal (H21, G decides; nothing enforces it yet)
 
 | Data | Proposed period |
