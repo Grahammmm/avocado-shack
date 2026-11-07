@@ -179,6 +179,27 @@ HASS-SELFTEST 2026-11-07T22:45:19Z pass=7 warn=4 fail=1 skip=0 failed:model
 
 (That run was from the PR worktree; after merge the operator runs it from the runtime checkout.)
 
+Revision 2 run on the live box, 2026-11-07 15:05 PST, at commit `8c52d15` (no `--model`, so no CPU load; growth file
+in `/tmp`, so no baseline comparison):
+
+```
+PASS runtime checkout 8c52d1509374 clean
+PASS synthetic {"failed": 0, "ran": 6, "synthetic": "pass"}
+PASS runtime-after still clean
+PASS service:hass-receiver active, 0 restarts
+WARN service:hass-worker active, systemd restart counter 26 (crash restarts since the unit was loaded)
+PASS timer:hass-health active, last run Sat 2026-11-07 15:05:06 PST
+WARN timer:hass-backup active, has not run yet
+WARN backup no backup under 26 h old
+WARN health problems: backup-age
+PASS inbox pending 0, done 44
+SKIP model no --model given
+PASS growth state 244 KB, free 258875 MB, hass journal 197 lines/24h
+HASS-SELFTEST 2026-11-07T23:05:50Z pass=7 warn=4 fail=0 skip=1
+```
+
+(`done 44` includes the operator's L8 messages; it is a 15:05 count, not part of the 14:46 snapshot.)
+
 Nightly candidate (not installed): `reports/hass/hass-selftest.service.candidate` and
 `reports/hass/hass-selftest.timer.candidate`, also copied to `~/agent-work/reports/hass/`. Systemd user oneshot,
 02:50 Pacific (after nightly CI at 02:23, before the 03:30 backup), `Nice=10`, `TimeoutStartSec=15min`, same
