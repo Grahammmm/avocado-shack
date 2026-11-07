@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Mac-side Hass forwarder. BlueBubbles REST shapes remain UNVERIFIED on a real Mac."""
-import argparse, hmac, ipaddress, json, os, re, secrets, signal, sqlite3, stat, sys, threading, time  # noqa: E401
+import argparse, base64, functools, hashlib, hmac, ipaddress, json, os, re, secrets, signal, sqlite3, stat, sys, threading, time  # noqa: E401
 import urllib.error, urllib.parse, urllib.request
 from dataclasses import asdict
 from datetime import datetime
@@ -8,9 +8,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hass import bridge, relay  # noqa: E402
+from hass import bridge, bridge_attach, relay  # noqa: E402
 
 MAX_BODY = 256 * 1024
+MAX_REPLY, PIC_RETRY = 2621440, (10, 30)  # HASS-ATTACH-1: picture reply cap (2.5 MiB); waits after the 1st and 2nd failure
+GAVE_UP = "The picture for that message didn't come through. What the message says is still right."
 KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile"}
 NOTICE = "Hass can't reach its computer right now, so nothing has changed yet. Your messages are saved and will be handled when it's back."
 
@@ -61,13 +63,13 @@ def load_config(path):
     return cfg
 
 
-def request_json(url, body=None):
+def request_json(url, body=None, limit=1024 * 1024):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
         with bridge._OPENER.open(req, timeout=10) as r:
-            raw = r.read(1024 * 1024 + 1)
-            if len(raw) > 1024 * 1024: raise ValueError("response-size")
+            raw = r.read(limit + 1)
+            if len(raw) > limit: raise ValueError("response-size")
             return json.loads(raw)
     except Exception: raise bridge.BridgeError("transport-error") from None
 
@@ -89,6 +91,8 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS fetch(guid TEXT,event TEXT,created_at REAL,tries INTEGER DEFAULT 0,next_try_at REAL DEFAULT 0,PRIMARY KEY(guid,event));"
             "CREATE TABLE IF NOT EXISTS meta(name TEXT PRIMARY KEY,value REAL);"
             "CREATE TABLE IF NOT EXISTS sent(reply_id INTEGER PRIMARY KEY,sent_at REAL);"
+            "CREATE TABLE IF NOT EXISTS sent_pics(reply_id INTEGER,idx INTEGER,sent_at REAL,PRIMARY KEY(reply_id,idx));"
+            "CREATE TABLE IF NOT EXISTS pic_tries(reply_id INTEGER,idx INTEGER,tries INTEGER,next_try_at REAL,PRIMARY KEY(reply_id,idx));"
             "CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY,seen_at REAL);"
             "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);")
         for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0)):
@@ -126,11 +130,14 @@ class Spool:
 
 
 class Forwarder:
-    def __init__(self, cfg, spool, clock=time.time, transport=request_json, sender=None):
+    def __init__(self, cfg, spool, clock=time.time, transport=request_json, sender=None, attach=None):
         self.cfg, self.spool, self.clock, self.transport = cfg, spool, clock, transport
         spool.clock = clock
         self.secret = key_read(cfg["secretFile"])
         self.sender = sender or bridge.BlueBubblesSender(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
+        self.attach = attach or bridge_attach.BlueBubblesAttachmentSender(
+            f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], cfg["ownerChat"])
+        self.big = functools.partial(request_json, limit=MAX_REPLY) if transport is request_json else transport
         self.next_poll = self.next_pull = 0
         self.query_offset, self.query_high = 0, 0
 
@@ -139,7 +146,7 @@ class Forwarder:
         sep = "&" if "?" in path else "?"
         return self.transport(f'http://127.0.0.1:{self.cfg["bbPort"]}{path}{sep}{urllib.parse.urlencode({"password": password})}', body)["data"]
 
-    def post(self, path, env): return self.transport(self.cfg["receiverUrl"] + path, env)
+    def post(self, path, env, big=False): return (self.big if big else self.transport)(self.cfg["receiverUrl"] + path, env)
 
     def fetch(self):
         row = self.spool.db.execute("SELECT guid,event,created_at,tries,next_try_at FROM fetch ORDER BY created_at,rowid LIMIT 1").fetchone()
@@ -201,11 +208,39 @@ class Forwarder:
         else:
             db.execute("UPDATE inbound SET state='done',payload=NULL,done_at=? WHERE rowid=?", (now, row[0]))
 
-    def control(self, body, expected):
+    def control(self, body, expected, big=False):
         env = relay.seal_control(body, self.secret, nonce=secrets.token_hex(16), now=self.clock())
-        answer = relay.unseal_control(self.post("/v1/relay", env), self.secret, now=self.clock(), seen=self.spool)
-        if answer["op"] != expected: raise ValueError("relay-op")
+        answer = relay.unseal_control(self.post("/v1/relay", env, big), self.secret, now=self.clock(), seen=self.spool)
+        if answer["op"] not in (expected if type(expected) is tuple else (expected,)): raise ValueError("relay-op")
         return answer
+
+    def fetch_picture(self, rid, shot):
+        """The verified PNG bytes of one shot, or None when the host has none (gone) or the bytes do not match what was announced."""
+        ans = self.control({"op": "picture", "id": rid, "idx": shot["idx"]}, ("picture", "gone"), True)
+        if ans["op"] == "gone" or (ans["id"], ans["idx"]) != (rid, shot["idx"]): return None
+        data = base64.b64decode(ans["b64"])
+        ok = hashlib.sha256(data).hexdigest() == ans["sha256"] == shot["sha256"] and len(data) == shot["size"] and data.startswith(relay.PNG_SIG)
+        return data if ok else None
+
+    def deliver_shots(self, item):
+        """Send each shot not yet done: True when every shot is sent or given up. A failure waits 10 s, then 30 s; the third gives up."""
+        db, rid = self.spool.db, item["id"]
+        for shot in item.get("shots", ()):
+            key = (rid, shot["idx"])
+            if db.execute("SELECT 1 FROM sent_pics WHERE reply_id=? AND idx=?", key).fetchone(): continue
+            tries = db.execute("SELECT tries,next_try_at FROM pic_tries WHERE reply_id=? AND idx=?", key).fetchone() or (0, 0)
+            if tries[1] > self.clock(): return False
+            try:
+                data = self.fetch_picture(rid, shot)
+                if data is not None: self.attach.send_png(item["chat"], data, f"hass-{rid}-{shot['idx']}.png")
+            except (bridge.BridgeError, ValueError, KeyError, TypeError):
+                data, fails = b"", tries[0] + 1
+                if fails < 3:
+                    db.execute("INSERT OR REPLACE INTO pic_tries VALUES (?,?,?,?)", (*key, fails, self.clock() + PIC_RETRY[fails - 1]))
+                    return False
+            if not data: self.sender.send(item["chat"], GAVE_UP)  # gone, bad bytes or a third failure: said once
+            db.execute("INSERT INTO sent_pics VALUES (?,?,?)", (*key, self.clock()))
+        return True
 
     def pull(self):
         ids = []
@@ -215,7 +250,7 @@ class Forwarder:
                 if not self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=?", (item["id"],)).fetchone():
                     self.sender.send(item["chat"], item["text"], (None,) * item["pictures"])
                     self.spool.db.execute("INSERT INTO sent VALUES (?,?)", (item["id"], self.clock()))
-                ids.append(item["id"])
+                if self.deliver_shots(item): ids.append(item["id"])
         finally:
             if ids: self.control({"op": "ack", "ids": ids}, "acked")
 

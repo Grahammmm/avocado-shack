@@ -102,6 +102,7 @@ When Hass could not reach the model or got no usable answer, it replies "I could
 
 ### `model`
 - **Means:** with `--model` (a loopback address only): the local model did not answer `/api/tags` within 3 s (`unreachable`), answered with an error status (`http <status>`), sent something that is not a model list (`bad reply`), or the `--model-name` model is missing (`model not installed`; a name without a tag means `:latest`). No URL or reply text is printed.
+- `--label-model NAME` checks the FAV-03 label reader's vision model on the same server in that one reply: `interpreter model not installed`, `label model not installed`, or `interpreter and label models not installed`; without `--model-name`, only the label model is checked. Names without a tag mean `:latest`; no model name is printed.
 - **Check first:** `ollama list` on Agent Orange, and whether the Ollama service is running; re-run the check once.
 - **Next step:** none in the repo: health only reads and never restarts or changes the model.
 - **Stop and ask:** always before restarting Ollama, pulling or changing a model, or editing its service (attended; tell the operator).
