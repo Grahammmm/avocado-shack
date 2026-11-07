@@ -104,12 +104,12 @@
     {
      "op": "product.add",
      "args": {
-      "name": "Bee Happy Farm peppers",
+      "name": "Bee Happy Farm wildflower hot sauce",
       "brand": "Bee Happy Farm",
-      "category": "vegetables",
-      "description": "Peppers from Bee Happy Farm in Templeton. Try it on eggs.",
+      "category": "pantry",
+      "description": "Wildflower hot sauce from Bee Happy Farm in Templeton. Try it on eggs.",
       "photo": "91c700264e60552f4dd0b346c9d315e79d9f5f348c8b64a81841d3f91627cf3d",
-      "imageAlt": "Bee Happy Farm peppers in a bottle",
+      "imageAlt": "Bee Happy Farm wildflower hot sauce in a bottle",
       "producerKey": "Bee Happy Farm"
      }
     },
@@ -133,8 +133,8 @@
      "why": "the site shows no sizes"
     }
    ],
-   "reply": "New item draft: Bee Happy Farm peppers, on the Vegetables shelf.\nDescription: Peppers from Bee Happy Farm in Templeton. Try it on eggs.\nNew maker: Bee Happy Farm, Templeton, California. Their note: Bee Happy Farm grows the peppers themselves.\nPicture: made to match the shop's other pictures.\nOn the card: Available today\nLeft off the site: price ($8): the site shows no prices.\nLeft off the site: size (6oz): the site shows no sizes.",
-   "alt": "Bee Happy Farm peppers in a bottle"
+   "reply": "New item draft: Bee Happy Farm wildflower hot sauce, on the Pantry shelf.\nDescription: Wildflower hot sauce from Bee Happy Farm in Templeton. Try it on eggs.\nNew maker: Bee Happy Farm, Templeton, California. Their note: Bee Happy Farm grows the peppers themselves.\nPicture: made to match the shop's other pictures.\nOn the card: Available today\nLeft off the site: price ($8): the site shows no prices.\nLeft off the site: size (6oz): the site shows no sizes.",
+   "alt": "Bee Happy Farm wildflower hot sauce in a bottle"
   }
  },
  "bag-bench-small": {
@@ -159,7 +159,7 @@
    ]
   },
   "check": {
-   "score": 90,
+   "score": 91,
    "pass": true,
    "failed": [
     "subject size in frame"
@@ -260,7 +260,7 @@
    ]
   },
   "check": {
-   "score": 84,
+   "score": 85,
    "pass": false,
    "failed": [
     "background even",
@@ -277,13 +277,16 @@
    "reason": "the background is not plain (its border varies by 96 levels)",
    "jpeg_quality": 90,
    "review": [
-    "Could not cut the product out (the background is not plain (its border varies by 96 levels)); it will not look like the catalog pictures."
+    "Could not cut the product out (the background is not plain (its border varies by 96 levels)); it will not look like the catalog pictures.",
+    "The picture does not pass the house-style check: no photo background left inside the product (patterned cloth, planks)"
    ]
   },
   "check": {
-   "score": 100,
-   "pass": true,
-   "failed": []
+   "score": 91,
+   "pass": false,
+   "failed": [
+    "no photo background left inside the product (patterned cloth, planks)"
+   ]
   }
  }
 }

@@ -177,11 +177,109 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(good["description"]["source"], "writer")
         self.assertIn("Examples" if False else "Real examples", newitem.writer_prompt(good["facts"], SPEC, ["x."]))
 
+    def test_the_item_is_read_from_the_item_sentence_not_from_the_maker_story(self):
+        r = self.draft("Just got in wildflower hot sauce from Bee Happy Farm in Templeton, California. Great on eggs. They grow the peppers themselves. 6oz bottle $8")
+        self.assertEqual(r["facts"]["name"], "Bee Happy Farm wildflower hot sauce")  # not "...peppers", from the story sentence
+        self.assertTrue(r["description"]["text"].startswith("Wildflower hot sauce from Bee Happy Farm in Templeton."))
+
+    def test_the_draft_ops_apply_through_the_real_op_handlers_and_the_site_generator(self):
+        from datetime import datetime  # noqa: PLC0415
+        from hass import newitem_preview, sitegen  # noqa: PLC0415
+        from hass.content_model import SHOP_TZ, shop_today  # noqa: PLC0415
+        r = self.draft("Just got in wildflower hot sauce from Bee Happy Farm in Templeton, California. Great on eggs. They grow the peppers themselves.", selection_checked=True)
+        now = datetime.now(SHOP_TZ)
+        after, product = newitem_preview.apply_in_memory(CONTENT, r["ops"], r["image"]["path"], now)
+        self.assertEqual((product["name"], product["producerKey"], product["imageAlt"]), ("Bee Happy Farm wildflower hot sauce", "Bee Happy Farm", r["alt"]))
+        self.assertEqual(after.makers["Bee Happy Farm"]["story"], "Bee Happy Farm grows the peppers themselves.")
+        self.assertEqual(len(CONTENT.products) + 1, len(after.products))  # the loaded catalog itself is untouched
+        files = sitegen.render(after, today=shop_today(now))
+        self.assertIn(product["description"], files["storefront-mockup/catalog-products.js"].decode("utf-8"))
+        self.assertEqual(sitegen.availability_label(product, after.store, shop_today(now)), "Available today")
+
     def test_unnamed_producer_follows_the_catalog_pattern(self):
         r = self.draft("got some honey")
         product = r["ops"][0]["args"]
         self.assertEqual((product["brand"], "producerKey" in product), ("Producer not identified", False))
         self.assertEqual(hs.description_metrics(r["description"]["text"])["sentences"], 2)
+
+
+class GroundingTests(unittest.TestCase):
+    """Review round 1 (PR 504): fact-only text, polarity, and shelf/availability that are never taken on trust."""
+    def draft(self, message=HONEY, **kw):
+        return newitem.draft(message, b"synthetic-photo-bytes", content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
+
+    def test_a_writer_cannot_add_an_ingredient_or_a_history(self):
+        for text in ("Honey blended with cinnamon and vanilla. Spoon a little onto buttered toast.",
+                     "Honey from a century-old family business. Spoon a little onto buttered toast.",
+                     "Honey from Cal Poly in San Luis Obispo. Stir into tea blended with cinnamon.",
+                     "Honey from Cal Poly in San Luis Obispo. Honey made by the family since long ago."):
+            with self.subTest(text):
+                r = self.draft(writer=lambda prompt, t=text: t)
+                self.assertEqual((r["description"]["source"], r["status"]), ("template", "draft"))
+                self.assertTrue(r["description"]["writer_rejected"])
+                self.assertNotRegex(r["description"]["text"].lower(), r"cinnamon|vanilla|century|family|since")
+
+    def test_a_denied_claim_is_not_written_as_a_claim(self):
+        message = HONEY + ". It is not organic."
+        r = self.draft(message, writer=lambda prompt: "Organic honey from Cal Poly. Spoon a little onto buttered toast.")
+        self.assertEqual(r["description"]["source"], "template")
+        self.assertNotIn("organic", r["description"]["text"].lower())
+        self.assertNotIn("claim", {x["what"] for x in r["left_off"]})  # nothing was affirmed, so nothing is "left off"
+        self.assertFalse(hs.check_description("Organic honey from Cal Poly. Spoon a little onto toast.", SPEC, owner_text=message)["pass"])
+        said = self.draft(HONEY + ". It is organic.", writer=lambda prompt: "Organic honey from Cal Poly. Spoon a little onto buttered toast.")
+        self.assertIn("claim", {x["what"] for x in said["left_off"]})  # affirmed by him, and still only on request (existing rule)
+        self.assertEqual(self.draft(message, facts={"name": "Organic honey", "kind": "honey"})["dropped"], ["name"])
+
+    def test_a_denied_story_is_never_turned_into_a_claim(self):
+        message = "got in honey from Bee Happy Farm in Templeton, California. They do not keep bees on the hill."
+        model = {"name": "Bee Happy Farm honey", "maker": "Bee Happy Farm", "place": "Templeton, California", "kind": "honey",
+                 "story": "Bee Happy Farm keeps bees on the hill."}
+        r = self.draft(message, facts=model)
+        self.assertIn("story", r["dropped"])
+        self.assertEqual(r["maker"]["story"], "Bee Happy Farm is based in Templeton, California.")
+        plain = self.draft(message)  # the plain reader keeps his polarity
+        self.assertEqual(plain["maker"]["story"], "Bee Happy Farm does not keep bees on the hill.")
+        mixed = self.draft(message.replace("They do not keep bees on the hill.", "They keep bees on the hill. They do not sell wax."),
+                           facts={**model, "story": "Bee Happy Farm sells wax."})
+        self.assertIn("story", mixed["dropped"])
+        self.assertIn("story", self.draft(message, facts={**model, "story": "The hill keeps Bee Happy Farm bees."})["dropped"])  # order matters
+
+    def test_the_model_cannot_choose_the_shelf_or_the_availability(self):
+        model = {"name": "Cal Poly honey", "maker": "Cal Poly", "kind": "honey", "shelf": "meat", "availability": "no"}
+        r = self.draft(HONEY, facts=model, selection_checked=True)
+        self.assertEqual((r["shelf"], r["product"]["category"]), ("Pantry", "pantry"))
+        self.assertEqual({"shelf", "availability"} & set(r["dropped"]), {"shelf", "availability"})
+        self.assertEqual([o["args"]["available"] for o in r["ops"] if o["op"] == "product.set_availability"], ["yes"])  # "got in" is his word
+        none = self.draft("some Cal Poly honey, jar of 8oz", facts={**model, "availability": "yes"}, selection_checked=True)
+        self.assertNotIn("product.set_availability", [o["op"] for o in none["ops"]])  # nothing he said supports any availability
+        named = self.draft("got in Cal Poly honey for the dairy shelf", facts={**model, "shelf": "dairy"}, selection_checked=True)
+        self.assertEqual(named["product"]["category"], "dairy")  # he named it
+        self.assertEqual(self.draft("sold out of Cal Poly honey", facts={**model, "availability": "yes"}, selection_checked=True)["facts"]["availability"], "no")
+        self.assertIsNone(self.draft("we did not get in Cal Poly honey, not sold out", facts={**model, "availability": "no"})["facts"]["availability"])
+
+    def test_the_good_writer_text_is_still_accepted(self):
+        r = self.draft(writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little onto buttered toast.")
+        self.assertEqual((r["description"]["source"], r["description"]["writer_rejected"]), ("writer", None), r["description"])
+
+
+@unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
+class ImageCheckTests(unittest.TestCase):
+    def test_a_kept_photo_background_never_passes(self):
+        committed = hs.REPO_ROOT / "reports" / "hass" / "newitem-1" / "rendered"
+        for name in ("bag-red-cloth", "jar-dark-wood"):
+            with self.subTest(name):
+                out = hs.check_image((committed / f"{name}.jpg").read_bytes(), SPEC)
+                self.assertFalse(out["pass"], out)
+                self.assertTrue(out["hard_failures"])
+        out = hs.check_image((committed / "bag-red-cloth.jpg").read_bytes(), SPEC)
+        self.assertIn("no photo background left inside the product (patterned cloth, planks)", out["hard_failures"])
+        for good in ("jar-white-sheet", "bottle-grey-wall-tilted", "jar-phone-rotated"):
+            self.assertTrue(hs.check_image((committed / f"{good}.jpg").read_bytes(), SPEC)["pass"], good)
+
+    def test_a_fresh_red_cloth_render_is_flagged_by_both_the_renderer_and_the_check(self):
+        out = newitem_render.render(syn.make_photo(**dict(syn.cases())["bag-red-cloth"]), SPEC)
+        self.assertEqual(out["report"]["isolation"], "fallback")
+        self.assertFalse(hs.check_image(out["jpeg"], SPEC)["pass"])
 
 
 @unittest.skipUnless(HAVE_PIL, "Pillow is not installed")

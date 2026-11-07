@@ -71,6 +71,32 @@ def _sat(c) -> float:
 
 
 # ---------------------------------------------------------------- pictures
+MIN_PATCH = 12  # px (of the 160x160 working copy) a background-coloured patch needs to count
+
+
+def _enclosed_patches(mask) -> tuple:
+    """(count, share of the frame) of background-coloured patches that do not reach the picture's edge: air inside a handle
+    or between grouped goods in a catalog picture, but dozens of them where a patterned photo background (a checkered cloth,
+    a plank table) is still around the product, because its pale squares look like the ivory."""
+    n = len(mask)
+    seen = [[False] * n for _ in range(n)]
+    sizes = []
+    for y0 in range(n):
+        for x0 in range(n):
+            if mask[y0][x0] or seen[y0][x0]: continue
+            seen[y0][x0], stack, cells, edge = True, [(x0, y0)], 0, False
+            while stack:
+                x, y = stack.pop()
+                cells += 1
+                edge = edge or x in (0, n - 1) or y in (0, n - 1)
+                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                    if 0 <= nx < n and 0 <= ny < n and not mask[ny][nx] and not seen[ny][nx]:
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            if not edge and cells >= MIN_PATCH: sizes.append(cells)
+    return len(sizes), round(sum(sizes) / (n * n), 4)
+
+
 def image_metrics(im) -> dict:
     """Measured facts of one PIL image: size, background, uniformity, subject box, centring, shadow, light, colour."""
     Image, _ = _pil()
@@ -99,6 +125,7 @@ def image_metrics(im) -> dict:
         return {**out, "subject_found": False}
     x0, x1, y0, y1 = xs[0], xs[-1] + 1, ys[0], ys[-1] + 1
     area = sum(map(sum, mask))
+    out["holes"], out["hole_area"] = _enclosed_patches(mask)
     subject = [at(x, y) for y in range(y0, y1) for x in range(x0, x1) if mask[y][x]]
     below = [_luma(bg) - _luma(at(x, y)) for y in range(y1, min(WORK, y1 + 10))
              for x in range(x0 + (x1 - x0) // 4, x1 - (x1 - x0) // 4) if not mask[y][x]]
@@ -140,7 +167,7 @@ def measure_images(products, site=SITE) -> dict:
         exif += m["has_exif"]
         names["catalog" if CATALOG_IMAGE_RE.fullmatch(p["image"]) else "owner" if OWNER_IMAGE_RE.fullmatch(p["image"]) else "other"] += 1
     keys = ("bg_spread", "fill_w", "fill_h", "fill_max", "center_x", "center_y", "margin_top", "margin_bottom", "margin_left",
-            "margin_right", "area_ratio", "subject_luma", "subject_sat", "shadow_depth", "bg_luma", "corner_vs_edge", "frame_clean", "bytes")
+            "margin_right", "area_ratio", "subject_luma", "subject_sat", "shadow_depth", "bg_luma", "corner_vs_edge", "frame_clean", "holes", "hole_area", "bytes")
     found = [r for r in rows if r.get("subject_found")]
     stats = {k: percentiles([r[k] for r in found if r.get(k) is not None]) for k in keys}
     stats["bg_r"], stats["bg_g"], stats["bg_b"] = (percentiles([r["bg_rgb"][i] for r in found]) for i in range(3))
@@ -308,6 +335,8 @@ def check_image(data: bytes, spec=None) -> dict:
         _c("background even", m["bg_spread"] <= m_spec["bg_spread"]["p95"] * 1.5 + 1, f"spread {m['bg_spread']}", 2),
         _c("clean ivory around the product (no photo background left)", m["frame_clean"] >= m_spec["frame_clean"]["min"] * .97,
            f"{m['frame_clean']:.2f} of the outer frame (catalog lowest {m_spec['frame_clean']['min']:.2f})", 3, True),
+        _c("no photo background left inside the product (patterned cloth, planks)", m["holes"] <= m_spec["holes"]["max"] + 6 and m["hole_area"] <= m_spec["hole_area"]["max"] * 1.5,
+           f"{m['holes']} background patches covering {m['hole_area']:.3f} (catalog most {m_spec['holes']['max']:.0f}, {m_spec['hole_area']['max']:.3f})", 3, True),
         _c("subject size in frame", _within(m["fill_max"], m_spec["fill_max"], scale=.25) and m["fill_max"] <= 1.0, f"{m['fill_max']:.2f} of the frame", 3),
         _c("subject area", m_spec["area_ratio"]["min"] * .85 <= m["area_ratio"] <= m_spec["area_ratio"]["max"] * 1.1, f"{m['area_ratio']:.2f} of the frame", 2),
         _c("centred sideways", abs(m["center_x"]) <= m_spec["center_x"]["p95"] + .04, f"{m['center_x']:+.3f}", 2),
@@ -332,7 +361,7 @@ def check_description(text: str, spec=None, *, name=None, maker_name=None, owner
     d = spec["descriptions"]
     m = description_metrics(text)
     owner = claims.fold(owner_text or "")
-    terms = [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if _has_term(text, t) and not _has_term(owner, t)]
+    terms = [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if _has_term(text, t) and not claims._affirmed(claims._pattern(t), owner)]
     hype = [w for w in d["hype_words_absent"] if re.search(rf"(?<!\w){re.escape(w)}(?!\w)", claims.fold(text))]
     bad_text = [b for b in FORBIDDEN_TEXT if b in text]
     checks = [

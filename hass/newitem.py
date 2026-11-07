@@ -83,18 +83,15 @@ def extract_facts(message: str, content) -> dict:
     key = find_maker(text, content.makers)
     index = kind_index(content)
     words = re.findall(r"[\w’'-]+", text)
-    kinds = [w for w in words if _fold(w) in index]
+    lead = re.findall(r"[\w’'-]+", re.split(r"(?<=[.!?])\s+", text)[0])  # the item sentence: later sentences are about the maker or its use
+    kinds = [w for w in lead if _fold(w) in index] or [w for w in words if _fold(w) in index]
     facts["kind"] = _fold(kinds[-1]) if kinds else None
     if (m := PRICE_RE.search(text)): facts["price"] = m.group(0)
     if (m := SIZE_RE.search(text)): facts["size"] = m.group(0)
     facts["container"] = next((c for c in CONTAINERS if _has(text, c)), None)
-    for word, rx in AVAILABILITY_WORDS.items():
-        if re.search(rx, text, re.I):
-            facts["availability"] = word
-            break
+    facts["availability"] = _availability_evidence(_fold(text))
     if (m := USE_RE.search(text)): facts["use"] = f"{m.group(1).lower()} {m.group(2).strip().lower()}"
-    shelf_hit = next((c for c in CATEGORIES if re.search(rf"\b{re.escape(SHELF_LABELS[c].split()[0].lower())}\b\s+shelf", text, re.I)), None)
-    facts["shelf"] = shelf_hit
+    facts["shelf"] = _shelf_evidence(_fold(text))
     if key:
         facts["maker"] = content.makers[key]["name"]
     elif (m := NEW_MAKER_RE.search(text)):
@@ -107,9 +104,10 @@ def extract_facts(message: str, content) -> dict:
         facts["kind"] = _fold(thing.split()[-1])
         phrase = thing
     elif facts["kind"]:
-        at = max(i for i, w in enumerate(words) if _fold(w) == facts["kind"])
+        src = lead if any(_fold(w) == facts["kind"] for w in lead) else words
+        at = max(i for i, w in enumerate(src) if _fold(w) == facts["kind"])
         variety = []
-        for w in reversed(words[max(0, at - 2):at]):  # lowercase describing words right before the thing, up to two
+        for w in reversed(src[max(0, at - 2):at]):  # lowercase describing words right before the thing, up to two
             if w[:1].islower() and w.lower() not in STOP and w.lower() not in CONTAINERS and not w[0].isdigit(): variety.insert(0, w)
             else: break
         phrase = " ".join([*variety, facts["kind"]])
@@ -154,32 +152,90 @@ def _stem(word: str) -> str:
     return word
 
 
+def _stems(text) -> list:
+    return [_stem(w) for w in re.findall(r"[\w’'-]+", _fold(text))]
+
+
+AUX = frozenset("is are was were has have had does do did goes go".split())  # the verbs "they" -> "Maker" may change; never a fact on their own
+NEGSET = frozenset(claims.NEGATORS)
+
+
+def _unaffirmed_terms(text: str, low: str) -> list:
+    """Claim terms in `text` that the (folded) owner message does not affirm: absent, or only said with a negator (\"not organic\")."""
+    return [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if hs._has_term(text, t) and not claims._affirmed(claims._pattern(t), low)]
+
+
+def _asserted(value: str, low: str) -> bool:
+    """The value is in the message and at least one occurrence is not negated (the claims gate's own negator rule)."""
+    return claims._affirmed(claims._pattern(value), low)
+
+
+def _story_ok(story: str, maker, message: str) -> bool:
+    """Each story sentence must come from ONE sentence Michael wrote: its words in his order (a verb may only change its
+    ending, 'keep' -> 'keeps'), the same negation (\"do not keep bees\" never becomes \"keeps bees\"), no claim term he did not affirm."""
+    low = _fold(message)
+    sources = [s for s in re.split(r"(?<=[.!?])\s+", message) if s.strip()]
+    if _unaffirmed_terms(story, low): return False
+    for sent in hs.sentences(story):
+        folded = _fold(sent)
+        lead = _fold(maker or "")
+        if lead and folded.startswith(lead + " "): folded = folded[len(lead) + 1:]  # the subject Hass put in place of "they"
+        words = [w for w in re.findall(r"[\w’'-]+", folded)]
+        content = [_stem(w) for w in words if w not in NEGSET and w not in AUX]
+        negated = any(w in NEGSET for w in words)
+        if not content: return False
+        for src in sources:
+            swords = re.findall(r"[\w’'-]+", _fold(src))
+            if any(w in NEGSET for w in swords) != negated: continue
+            it = iter(_stem(w) for w in swords)
+            if all(any(c == s for s in it) for c in content): break  # in order, each word his
+        else:
+            return False
+    return True
+
+
+def _availability_evidence(low: str):
+    """The availability word his own words support (no > limited > yes, a negated phrase does not count), else None."""
+    return next((word for word in ("no", "limited", "yes") if claims._affirmed(re.compile(AVAILABILITY_WORDS[word], re.I), low)), None)
+
+
+def _shelf_evidence(low: str):
+    """The shelf he named (\"on the pantry shelf\", \"dairy section\"), else None."""
+    for c in CATEGORIES:
+        word = re.escape(SHELF_LABELS[c].split()[0].lower())
+        if claims._affirmed(re.compile(rf"\b{word}\b\s+(?:shelf|section|aisle)|\b(?:shelf|section|aisle)\s*:?\s*{word}\b"), low): return c
+    return None
+
+
 def ground(facts: dict, message: str, content) -> tuple:
-    """(facts kept, [what was dropped]): a value must be traceable to the message (or be a maker/kind the catalog knows)."""
+    """(facts kept, [what was dropped]): a value must be traceable to the message (or be a maker/kind the catalog knows),
+    not negated there, and a claim word only counts when he affirmed it. Shelf and availability are never taken on trust
+    from a reader: they must be what his words support (the shelf he named; the availability his phrases show), else None."""
     kept, dropped = dict(facts), []
     low = _fold(message)
     for key in ("name", "maker", "place", "story", "container", "size", "price", "use", "url"):
         value = kept.get(key)
         if not value: continue
-        if key == "name":  # his product words, with the maker first: every word of it is his
-            ok = all(_fold(w) in low for w in re.findall(r"[\w’'-]+", value))
-        elif key == "story":  # his sentences; a verb may only change its ending (keep -> keeps) when "they" became the maker
-            known = {_stem(w) for w in re.findall(r"[\w’'-]+", low)} | {_stem(w) for w in re.findall(r"[\w’'-]+", _fold(kept.get("maker") or ""))}
-            ok = all(_stem(w) in known or w.lower() in ("is", "has", "does", "goes") for w in re.findall(r"[\w’'-]+", _fold(value)))
+        if key == "name":  # his product words, with the maker first: every word of it is his, no claim word he did not affirm
+            ok = all(_fold(w) in low for w in re.findall(r"[\w’'-]+", value)) and not _unaffirmed_terms(value, low)
+        elif key == "story":
+            ok = _story_ok(value, kept.get("maker"), message)
         else:
             ok = _fold(value) in low
+            if ok and key in ("maker", "place", "use"): ok = _asserted(value, low) and not _unaffirmed_terms(value, low)
         if not ok:
             kept[key] = None
             dropped.append(key)
-    for key, allowed in (("availability", ("yes", "limited", "no")), ("shelf", CATEGORIES)):
-        if kept.get(key) and kept[key] not in allowed:
-            kept[key] = None
-            dropped.append(key)
-    if kept.get("kind") and _fold(kept["kind"]) not in low:
+    if kept.get("kind") and not (_fold(kept["kind"]) in low and _asserted(kept["kind"], low)):
         kept["kind"], _ = None, dropped.append("kind")
+    for key, evidence in (("availability", _availability_evidence(low)), ("shelf", _shelf_evidence(low))):
+        if kept.get(key) != evidence:
+            if kept.get(key): dropped.append(key)
+            kept[key] = evidence
     if kept.get("url") and not str(kept["url"]).startswith("https://"):
         kept["url"], _ = None, dropped.append("url")
     return kept, dropped
+
 
 
 # ---------------------------------------------------------------- writing in the shop's voice
@@ -190,7 +246,7 @@ def _town(place: str):
 
 def _serving_ok(sentence: str, owner_text: str) -> bool:
     inner = re.findall(r"(?<=[a-z,;:] )[A-Z][\w’'-]*", sentence)  # a capitalised word mid-sentence names something
-    terms = [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if hs._has_term(sentence, t) and not hs._has_term(owner_text, t)]
+    terms = _unaffirmed_terms(sentence, _fold(owner_text))
     return len(sentence.split()) >= 4 and not inner and not terms and not any(c.isdigit() for c in sentence) and sentence.endswith(".")
 
 
@@ -208,6 +264,43 @@ def writer_prompt(facts: dict, spec: dict, examples: list) -> str:
              "Use ONLY these facts. Never add an organic, local, origin, ingredient, award, health or story claim that is not in them."]
     shown = "\n".join(f"- {e}" for e in examples)
     return "\n".join(rules) + "\nReal examples from the shop:\n" + shown + "\nFacts (JSON): " + json.dumps({k: v for k, v in facts.items() if v}, ensure_ascii=False)
+
+
+CONNECTIVES = frozenset("from in by a an the of and at near".split())  # the only glue a fact sentence may add to the facts' own words
+PROVENANCE = frozenset("""blended blend made make makes infused mixed brewed aged roasted baked grown grow grows raised harvested picked since
+    years year generations generation family owned founded handmade homemade traditional recipe ingredient ingredients contains containing
+    wild raw pure natural pasture century old heirloom batch artisan sourced from by near""".split())  # origin / make-up / history words: only ever from the facts
+
+
+def _fact_vocab(facts: dict, maker: dict) -> set:
+    """Word stems of the structured facts (and the maker record) only: NOT the whole message, so a claim he denied or never made is not in it."""
+    return {s for text in (facts.get("name"), facts.get("maker"), facts.get("place"), facts.get("kind"), facts.get("container"), facts.get("use"),
+                           maker.get("name"), maker.get("place")) if text for s in _stems(text)}
+
+
+def writer_problems(text: str, facts: dict, maker: dict, message: str, content) -> list:
+    """Why a model-written description may not be used ([] = it may). The first sentence (who makes it, where) is fact-only: every
+    word is one of the facts' own words or plain glue. Later sentences are serving suggestions in the catalog's own words. Nothing in
+    either may be an ingredient, origin or history word the facts lack, a claim he did not affirm, a negation or a number."""
+    low, facts_vocab = _fold(message), _fact_vocab(facts, maker)
+    catalog = {s for p in content.products if p.get("status") == "active" for s in _stems(p["description"])}
+    openers = {s[0] for p in content.products if p.get("status") == "active" for s in (_stems(x) for x in hs.sentences(p["description"])[1:]) if s}
+    sents, problems = hs.sentences(text), []
+    if _unaffirmed_terms(text, low): problems.append("claim word he did not affirm: " + ", ".join(_unaffirmed_terms(text, low)))
+    if any(w in NEGSET for w in re.findall(r"[\w’'-]+", _fold(text))): problems.append("a negation (the facts are written plainly)")
+    fact_first = bool(facts.get("maker") or facts.get("place"))
+    for n, sent in enumerate(sents):
+        words = _stems(sent)
+        if n == 0 and fact_first:
+            extra = [w for w in words if w not in facts_vocab and w not in {_stem(c) for c in CONNECTIVES}]
+            if extra: problems.append("sentence 1 says more than the facts: " + ", ".join(dict.fromkeys(extra)))
+            continue
+        bad_origin = [w for w in words if w in {_stem(p) for p in PROVENANCE} and w not in facts_vocab]
+        unknown = [w for w in words if w not in catalog and w not in facts_vocab and w not in {_stem(c) for c in CONNECTIVES}]
+        if bad_origin: problems.append(f"sentence {n + 1} states origin, ingredient or history: " + ", ".join(dict.fromkeys(bad_origin)))
+        if unknown: problems.append(f"sentence {n + 1} uses words the shop never uses: " + ", ".join(dict.fromkeys(unknown)))
+        if words and words[0] not in openers and words[0] not in facts_vocab and n: problems.append(f"sentence {n + 1} is not a serving suggestion like the others")
+    return problems
 
 
 def grounded_text(text: str, allowed: str) -> list:
@@ -231,10 +324,11 @@ def compose(facts: dict, content, spec: dict, message: str, writer=None) -> dict
         examples = [s for _id, s in index.get(facts.get("kind") or "", {}).get("serving", [])[:4]] or [e["description"] for e in spec["descriptions"]["examples"][:4]]
         text = (writer(writer_prompt(facts, spec, examples)) or "").strip()
         bad = grounded_text(text, allowed)
+        problems = writer_problems(text, facts, maker, message, content)
         check = hs.check_description(text, spec, name=facts.get("name"), owner_text=message)
-        if not bad and check["pass"]:
+        if not bad and not problems and check["pass"]:
             return {"text": text, "source": "writer", "serving_from": None, "writer_rejected": None}
-        rejected = ("not in Michael's words: " + ", ".join(bad)) if bad else "failed: " + ", ".join(c["name"] for c in check["checks"] if not c["ok"])[:120]
+        rejected = (("not in Michael's words: " + ", ".join(bad)) if bad else "; ".join(problems) if problems else "failed: " + ", ".join(c["name"] for c in check["checks"] if not c["ok"]))[:240]
     kind_phrase = _cap(re.sub(rf"^{re.escape(facts.get('maker') or '~')}\s+", "", facts.get("name") or "", flags=re.I) or facts.get("kind") or "")
     first = None
     if facts.get("maker") and kind_phrase and kind_phrase.lower() != _fold(facts["maker"]):
@@ -322,7 +416,7 @@ def draft(message: str, photo: bytes, *, content, spec=None, facts=None, label=N
         ops.append({"op": "product.set_availability", "args": {"id": pid, "available": facts["availability"]}})
     left_off = [{"what": "price", "value": facts["price"], "why": "the site shows no prices"}] if facts.get("price") else []
     left_off += [{"what": "size", "value": facts["size"], "why": "the site shows no sizes"}] if facts.get("size") else []
-    said = [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if hs._has_term(message, t)]
+    said = [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if claims._affirmed(claims._pattern(t), _fold(message))]
     left_off += [{"what": "claim", "value": t, "why": "a claim like this goes on a card only when you ask for it by name and it is documented"} for t in said]
     if facts.get("availability") and not selection_checked:
         left_off.append({"what": "availability", "value": facts["availability"], "why": "the shelf check is not done today; say 'check the selection' first"})
