@@ -73,7 +73,7 @@ class LocalInterpreter:
     """The Conversation interpreter contract: interpret(text, pending) -> dict. Transport is
     (url, body_bytes, headers, timeout) -> (status, body_bytes); the default never uses a proxy or follows a redirect."""
 
-    def __init__(self, base_url, model, system_prompt, timeout=30, transport=None, clock=None):
+    def __init__(self, base_url, model, system_prompt, timeout=30, transport=None, clock=None, think=None):
         self.url = check_url(base_url) + CHAT_PATH
         if not (isinstance(model, str) and 0 < len(model) <= MAX_MODEL and not any(c.isspace() for c in model)):
             raise ValueError(f"model must be a name of 1-{MAX_MODEL} characters without spaces")
@@ -81,8 +81,9 @@ class LocalInterpreter:
             raise ValueError("system prompt must be non-empty text")
         if type(timeout) is not int or not 1 <= timeout <= 120:
             raise ValueError("timeout must be a whole number of seconds from 1 to 120")
+        if think is not None and type(think) is not bool: raise ValueError("think must be true, false or unset")
         if clock is not None and not callable(clock): raise ValueError("clock must be callable")
-        self.model, self.system_prompt, self.timeout = model, system_prompt, timeout
+        self.model, self.system_prompt, self.timeout, self.think = model, system_prompt, timeout, think
         self.transport = transport or urllib_transport
         self.clock = clock if clock is not None else (lambda: datetime.now(timezone.utc))
         self.last_error = None
@@ -105,10 +106,11 @@ class LocalInterpreter:
             if isinstance(notes, list) and notes: fields["notes"] = notes  # AV1102-09: owner preferences, never claims
             if isinstance(aliases, list) and aliases: fields["aliases"] = aliases  # AV0007-06: identifiers, never claims
             user = json.dumps(fields, ensure_ascii=False)
-            return json.dumps({"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
-                                                                 {"role": "user", "content": user}],
-                               "stream": False, "format": "json", "options": {"temperature": 0}},
-                              ensure_ascii=False).encode("utf-8")
+            body = {"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
+                                                      {"role": "user", "content": user}],
+                    "stream": False, "format": "json", "options": {"temperature": 0}}
+            if self.think is False: body["think"] = False  # HASS-INTERP-TIMEOUT-1: sent only when the operator set it false
+            return json.dumps(body, ensure_ascii=False).encode("utf-8")
         except (TypeError, ValueError, UnicodeError, RecursionError):
             raise _Failed("request") from None
 
