@@ -14,7 +14,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass import claims, interpret_check, label_reader, margins, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
-from hass.content_model import ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
+from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -30,7 +30,8 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(post)(?:\s+(hike\s+\S+|\S+))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
                         r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
                         r"|(hidden)"  # AV1222-13 (H03): group 17
-                        r"|(listing)(?:\s+(\S+))?")  # AV1622-09 (H17): groups 18/19; one token, the id is re-read from the original text
+                        r"|(listing)(?:\s+(\S+))?"  # AV1622-09 (H17): groups 18/19; one token, the id is re-read from the original text
+                        r"|(photos to take)")  # AV0222-04 (H10/H17): group 20
 HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as sold out".',  # AV1537-03, test_help
     'yes [code] - apply the waiting draft: "yes a1b2"',
     'no [code] - cancel the waiting draft or question: "no a1b2"',
@@ -52,10 +53,12 @@ HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as 
     'margin <id> at <m>% - price idea: "margin photo-product-001 at 35%"',  # AV1102-12, AV1222-10: saved cost
     'hidden - hidden products and makers, ids: "hidden"',  # AV1222-13
     'listing <id> - what the site shows for one id: "listing Etto"',  # AV1622-09
+    'photos to take - products needing a photo: "photos to take"',  # AV0222-04
     'help (or commands, ?) - this list: "help"'))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
 MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory)|(alias)(?:\s+(.*))?"
                        r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
+PHOTOS_TO_TAKE_MAX = 10  # AV0222-04: names listed by `photos to take`
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
 ALIAS_LIST_MAX = 20  # AV0222-05: `memory` lists this many aliases apart from the notes (LIMITS.md)
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
@@ -367,6 +370,7 @@ def parse_command(text: str):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[20]: return "photos", None  # AV0222-04
     if match[1]:  # AV2152-02: bare history stays (history, None); history <words> keeps the words in their own case
         stripped = re.sub(r"[.!]+$", "", text.strip())
         if stripped.lower() != "history": return "history", stripped[7:].strip()
@@ -692,7 +696,7 @@ class Conversation:
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and (parse_keyword(msg.text) or coded) is not None else now
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
-        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing")
+        if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         memory = None if command or msg.attachments > 0 else read_memory(msg.text)
         if memory and memory[0] == "memory": expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
@@ -1114,6 +1118,7 @@ class Conversation:
         if verb == "margin": return self._margin(code)
         if verb == "hidden": return self._hidden()
         if verb == "listing": return self._listing(code)
+        if verb == "photos": return self._photos_to_take()
         if verb == "history" and code is not None: return self._history_search(code)
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
@@ -1304,6 +1309,30 @@ class Conversation:
             text = "Catalog unavailable right now; nothing changed."
         self._reply(text)
         return "listing"
+
+    def _photos_to_take(self) -> str:
+        """AV0222-04 (H10/H17): active products whose image is not an installed photo-<16 hex> file, by shelf in site order;
+        saved content only, read-only, works while paused. A filename convention, not proof of where a picture came from."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
+            order = tuple(SHELF_LABELS)
+            todo = sorted((p for p in content.active_products() if not HOME_IMAGE_RE.fullmatch(p["image"])),
+                          key=lambda p: (order.index(p["category"]), p["name"].casefold(), p["id"]))
+            lines, shelf = [], None
+            for p in todo[:PHOTOS_TO_TAKE_MAX]:
+                if p["category"] != shelf:
+                    shelf = p["category"]
+                    lines.append(f"{SHELF_LABELS[shelf]}:")
+                lines.append(f"- {' '.join(str(p['name']).split())}")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._reply("Catalog unavailable right now; nothing changed.")
+            return "photos"
+        more = [f"... and {len(todo) - PHOTOS_TO_TAKE_MAX} more"] if len(todo) > PHOTOS_TO_TAKE_MAX else []
+        self._reply("\n".join([f"Photos to take: {len(todo)} active products still use catalog pictures.",
+                              "From saved listings, not a live website check."] + lines + more
+                             + ["To replace one, send a photo with the product name as its caption."]))
+        return "photos"
 
     def _hidden(self) -> str:
         """AV1222-13 (H03): read-only list of hidden products then hidden makers; held products and visible makers never."""
