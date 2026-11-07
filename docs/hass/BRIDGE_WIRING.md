@@ -50,7 +50,7 @@ private yes, then `private`, later `live`), `pictures` (true; required for live)
 
 1. **Data path:** it does not; the Mac initiates. AgentOrange only listens on 8795, restricted by `allowedPeers` and the Tailscale access-control rule (only this Mac may reach `agentorange:8795`).
 2. **Files:** code bundle and `envelope.key` move by Taildrop (`tailscale file cp`), UNVERIFIED on this tailnet; USB fallback in the runbook.
-3. **Optional shell access:** only if G chose step 10 of [MAC_MINI_FINAL_STEPS.md](MAC_MINI_FINAL_STEPS.md) (Remote Login for the `hass` user with AgentOrange's **public** key). Not needed and not used by the bridge.
+3. **Optional shell access:** only if G chose step 11 of [MAC_MINI_FINAL_STEPS.md](MAC_MINI_FINAL_STEPS.md) (Remote Login for the `hass` user with AgentOrange's **public** key). Not needed and not used by the bridge.
 4. **Health:** AgentOrange `hass-health.timer` reports `mac-silent` when the forwarder stops posting (HASS-SVC-1); on the Mac `hass_forwarder.py check` expects `{"reachable":2}`.
 
 ## Checker and installer

@@ -33,7 +33,7 @@ class MacKitTests(unittest.TestCase):
         for bad in (r'\bsudo\b', r'defaults\s+write', r'pmset\s+-a', r'launchctl\s+(bootstrap|load|kickstart|bootout)',
                     r'\brm\b', r'\bmv\b', r'\bkill', r'\btee\b', r'\btouch\b', r'\bmkdir\b', r'\bssh\b', r'\bcsrutil\b'):
             self.assertIsNone(re.search(bad, text), bad)
-        for item in ('sw_vers', 'MobileMeAccounts', 'BlueBubbles', 'pgrep', 'tailscale', 'Tailscale', 'pmset -g', 'df -k'):
+        for item in ('sw_vers', 'socketfilterfw', 'BlueBubbles', 'pgrep', 'tailscale', 'Tailscale', 'pmset -g', 'df -k'):
             self.assertIn(item, text)
         for word in ('PASS', 'FAIL', 'WARN'):
             self.assertIn(word, text)

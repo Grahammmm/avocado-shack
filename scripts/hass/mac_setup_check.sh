@@ -29,17 +29,12 @@ else
   fail "not macOS (sw_vers missing)"
 fi
 
-# 2. Messages / Apple Account signed in. Heuristic only (UNVERIFIED): the iCloud account list for this user.
-#    This is a necessary, not sufficient, sign. The real proof is the self-test message in the final steps.
-if defaults read MobileMeAccounts Accounts >/dev/null 2>&1; then
-  n="$(defaults read MobileMeAccounts Accounts 2>/dev/null | grep -c 'AccountID')"
-  if [ "${n:-0}" -ge 1 ]; then
-    pass "an Apple Account is signed in for this user ($n); confirm Messages > Settings > iMessage shows it"
-  else
-    fail "no Apple Account signed in for this user"
-  fi
+# 2. Messages signed in. A script cannot prove this (UNVERIFIED), and Messages-only sign-in is valid without
+#    system-wide iCloud, so this is ADVISORY (never a FAIL): the real proof is the two-way self-test in the final steps.
+if [ -f "$HOME/Library/Preferences/com.apple.madrid.plist" ] || defaults read com.apple.imservice.iMessage >/dev/null 2>&1; then
+  pass "Messages iMessage preferences exist for this user (weak hint only; step 4 two-way test is the proof)"
 else
-  fail "no Apple Account signed in for this user"
+  warn "MANUAL CHECK: could not detect iMessage sign-in. Open Messages > Settings > iMessage and confirm the Apple Account is shown, and that the step 4 test worked both ways"
 fi
 
 # 3. BlueBubbles installed and running.
@@ -66,14 +61,25 @@ case "$code" in
   200|401|403) pass "BlueBubbles answers on loopback port $BB_PORT (HTTP $code; 401/403 just means the password is required)" ;;
   *) fail "nothing answers on loopback port $BB_PORT (got '${code:-none}'); set BB_PORT if the app uses another port" ;;
 esac
+# Isolation (runbook step 8): loopback-only must be VERIFIED and the macOS firewall must be on. Unknown = FAIL (stop, check by hand).
 if command -v lsof >/dev/null 2>&1; then
-  wide="$(lsof -nP -iTCP:"$BB_PORT" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 && $9 !~ /^(127\.0\.0\.1|\[::1\]|localhost):/ {print "x"}' | head -1)"
-  if [ -n "$wide" ]; then
-    warn "port $BB_PORT listens beyond loopback; the runbook wants loopback only (turn on the macOS firewall, step 8)"
+  listing="$(lsof -nP -iTCP:"$BB_PORT" -sTCP:LISTEN 2>/dev/null)"
+  if [ -z "$listing" ]; then
+    fail "cannot see a listener on port $BB_PORT to verify loopback-only; check by hand: lsof -nP -iTCP -sTCP:LISTEN"
+  elif printf '%s\n' "$listing" | awk 'NR>1 && $9 !~ /^(127\.0\.0\.1|\[::1\]|localhost):/ {found=1} END {exit !found}'; then
+    fail "port $BB_PORT listens beyond loopback; STOP and do not continue until it is loopback-only (runbook step 8)"
   else
     pass "port $BB_PORT is loopback only (as the runbook wants)"
   fi
+else
+  fail "lsof missing: cannot verify loopback-only; check by hand (runbook step 8)"
 fi
+fw="$(/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>/dev/null)"
+case "$fw" in
+  *"enabled"*|*"State = 1"*|*"State = 2"*) pass "macOS firewall is on" ;;
+  *"disabled"*|*"State = 0"*) fail "macOS firewall is off; turn it on (System Settings > Network > Firewall), runbook step 8" ;;
+  *) fail "cannot read macOS firewall state (UNVERIFIED command); confirm by hand in System Settings > Network > Firewall, runbook step 8" ;;
+esac
 ts=""
 for p in /Applications/Tailscale.app/Contents/MacOS/Tailscale "$(command -v tailscale 2>/dev/null)"; do
   if [ -n "$p" ] && [ -x "$p" ]; then ts="$p"; break; fi
