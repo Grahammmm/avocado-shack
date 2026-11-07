@@ -107,6 +107,18 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  for(const v of ['nope','',encodeURIComponent(id40)+'x','a'.repeat(81)]){await open('?item='+v);await page.waitForTimeout(150);s=await shown();
   assert.deepEqual(s.ids,plain.ids,'unknown item '+v.length);assert.equal(s.focused,null);assert.equal(s.y,plain.y,'nothing scrolls');}
  await open('?item=nope&shelf=pantry&q=jam');s=await shown();assert.deepEqual([s.pressed,s.q,s.focused],['pantry','jam',null],'unknown item: URL filters apply as before');
+// AV1352-02: a nonempty id of at most 80 characters that is not listed gets one neutral status line and loses ?item; empty, 81-character and known ids behave as before.
+const GONE='That item is not in our catalog right now. Here is everything else.',note=()=>page.evaluate(()=>{const n=[...document.querySelectorAll('#catalog-item-status')];return {count:n.length,text:n[0]?.textContent,hidden:n[0]?.hidden,role:n[0]?.getAttribute('role'),aboveGrid:n[0]?.nextElementSibling?.id==='catalog-grid'}});
+await open('?item=gone-fixture&shelf=pantry&q=jam&utm=x&utm=y#market');let n=await note();
+assert.deepEqual([n.count,n.text,n.hidden,n.role,n.aboveGrid],[1,GONE,false,'status',true],'unknown item: one status line above the cards');
+a=await addr();assert.equal(a.search,'?shelf=pantry&q=jam&utm=x&utm=y','dead item dropped, other params kept');assert.equal(a.href.endsWith('#market'),true,'hash kept');
+s=await shown();assert.deepEqual([s.pressed,s.q,s.focused],['pantry','jam',null],'filters apply as before');assert.ok(!(await page.content()).includes('gone-fixture</'),'id not echoed');
+await page.locator('[data-filter="fruit"]').click();n=await note();assert.deepEqual([n.count,n.hidden,n.text],[1,true,''],'next filter change hides the line');
+await open('?item=gone-fixture');await page.evaluate(()=>scrollTo(0,300));await page.evaluate(()=>loadMore());n=await note();assert.equal(n.hidden,false,'scroll and loadMore keep the line');
+await page.reload();n=await note();assert.equal(n.hidden,true,'reload has no line');
+for(const v of ['','z'.repeat(81),'a'.repeat(81)]){await open('?item='+v);n=await note();assert.equal(n.hidden,true,'no line for '+v.length);assert.equal((await addr()).search,'?item='+v,'address unchanged for '+v.length)}
+await open('?item='+encodeURIComponent(id40));n=await note();assert.equal(n.hidden,true,'known id: no line');assert.equal((await addr()).params.item,id40);
+await open('?item='+'a'.repeat(80));assert.equal((await note()).hidden,false,'80 characters is still reported');
  await open('?item='+encodeURIComponent(id40)+'&utm=x');await page.locator('[data-filter="fruit"]').click();
  assert.deepEqual((await addr()).params,{utm:'x',shelf:'fruit'},'a filter change drops item');
  await open('?item='+encodeURIComponent(id40));await page.locator('#product-search').fill('jam');assert.deepEqual((await addr()).params,{q:'jam'},'typing drops item');
