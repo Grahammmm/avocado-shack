@@ -192,6 +192,16 @@ class DraftTests(unittest.TestCase):
             self.assertTrue(r["description"]["writer_rejected"])
             self.assertNotIn("peanut", str(r["ops"]))
 
+    def test_writer_cannot_assert_contents_in_a_later_sentence(self):
+        for text in ("Honey from Cal Poly in San Luis Obispo. It has butter and cream.",
+                     "Honey from Cal Poly in San Luis Obispo. The toast is buttered."):
+            r = self.draft(HONEY, writer=lambda prompt, t=text: t)
+            self.assertEqual(r["description"]["source"], "template", text)
+            self.assertTrue(r["description"]["writer_rejected"])
+            self.assertNotIn("cream", str(r["ops"]))
+        control = self.draft(HONEY, writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little onto buttered toast.")
+        self.assertEqual(control["description"]["source"], "writer")
+
     def test_unstated_shelf_and_availability_are_dropped(self):
         r = self.draft("Cal Poly honey", facts={"name": "Cal Poly honey", "maker": "Cal Poly", "kind": "honey", "shelf": "vegetables", "availability": "yes"},
                        selection_checked=True)

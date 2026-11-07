@@ -241,13 +241,28 @@ def serving_vocabulary(content) -> frozenset:
                      for s in hs.sentences(p["description"])[1:] for w in re.findall(r"[\w’'-]+", s))
 
 
-def ungrounded_claims(text: str, allowed: str, vocabulary) -> list:
+def serving_openers(content) -> frozenset:
+    """Stemmed first words of the serving sentences of live descriptions (Spoon, Try, Keep, ...): the shop's imperative verbs."""
+    return frozenset(_stem(re.findall(r"[\w’'-]+", s)[0]) for p in content.products if p.get("status") == "active"
+                     for s in hs.sentences(p["description"])[1:] if re.findall(r"[\w’'-]+", s)
+                     ) - {_stem(w) for w in FUNCTION_WORDS}
+
+
+def _is_serving_suggestion(sent: str, openers) -> bool:
+    words = re.findall(r"[\w’'-]+", _fold(sent))
+    return bool(words) and _stem(words[0]) in openers
+
+
+def ungrounded_claims(text: str, allowed: str, vocabulary, openers=frozenset()) -> list:
     """Words that assert something Michael did not say. The first sentence (what it is, who makes it) may use only his words;
     later serving sentences may also use the shop's own serving words, but never an ingredient/contents phrase."""
     known = {_stem(w) for w in re.findall(r"[\w’'-]+", _fold(allowed))} | {_stem(w) for w in FUNCTION_WORDS}
     bad = []
     for n, sent in enumerate(hs.sentences(text)):
         pool = known if n == 0 else known | vocabulary
+        if n and not _is_serving_suggestion(sent, openers):  # a later sentence is a suggestion ("Spoon a little onto toast."), never an assertion ("It has butter.")
+            bad.append("assertion: " + " ".join(sent.split()[:4]))
+            continue
         bad += [w for w in re.findall(r"[\w’'-]+", _fold(sent)) if _stem(w) not in pool and w not in bad]
         if n and (m := CLAIM_MARKERS.search(sent)) and not CLAIM_MARKERS.search(allowed): bad.append(m.group(0))
     return bad
@@ -263,7 +278,7 @@ def compose(facts: dict, content, spec: dict, message: str, writer=None) -> dict
     if writer is not None:
         examples = [s for _id, s in index.get(facts.get("kind") or "", {}).get("serving", [])[:4]] or [e["description"] for e in spec["descriptions"]["examples"][:4]]
         text = (writer(writer_prompt(facts, spec, examples)) or "").strip()
-        bad = grounded_text(text, allowed) + [w for w in ungrounded_claims(text, allowed, serving_vocabulary(content)) if w not in grounded_text(text, allowed)]
+        bad = grounded_text(text, allowed) + [w for w in ungrounded_claims(text, allowed, serving_vocabulary(content), serving_openers(content)) if w not in grounded_text(text, allowed)]
         check = hs.check_description(text, spec, name=facts.get("name"), owner_text=message)
         if not bad and check["pass"]:
             return {"text": text, "source": "writer", "serving_from": None, "writer_rejected": None}
