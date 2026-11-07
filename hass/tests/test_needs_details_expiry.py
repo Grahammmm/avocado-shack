@@ -54,10 +54,10 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
     def test_expired_question_leaves_status_and_pending(self):
         q = self.ask()
         self.assertIn(f"{q['code']} needs details:", self.status())
-        self.assertEqual(self.say("hello"), "unsupported")
+        self.assertEqual(self.say("hello there"), "unsupported")
         self.assertEqual(self.interp.pendings[-1], [q["code"]])
         self.now = T0 + TTL + timedelta(seconds=1)
-        self.assertEqual(self.say("hello"), "unsupported")
+        self.assertEqual(self.say("hello there"), "unsupported")
         self.replies()
         self.assertEqual(self.interp.pendings[-1], [])
         self.assertEqual(self.state(q)["state"], "expired")
@@ -72,7 +72,7 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
         self.assertEqual((len(self.drafts()), self.state(q)["state"]), (1, "proposed"))
         second = self.ask_at(T0 + TTL)
         self.now = second["created"] + TTL  # exactly at expires_at
-        self.assertEqual(self.say("hello"), "unsupported")
+        self.assertEqual(self.say("hello there"), "unsupported")
         self.replies()
         self.assertEqual(self.state(second["row"])["state"], "expired")
 
@@ -128,7 +128,7 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
         self.make_legacy(q)
         self.now = T0 + TTL - timedelta(seconds=1)
         self.assertIn(f"{q['code']} needs details:", self.status())
-        self.assertEqual(self.say("hello"), "unsupported")
+        self.assertEqual(self.say("hello there"), "unsupported")
         self.replies()
         self.assertEqual(self.interp.pendings[-1], [q["code"]])
         self.assertEqual(self.state(q)["state"], "needs-details")

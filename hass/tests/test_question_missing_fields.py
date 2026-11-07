@@ -115,7 +115,7 @@ class ConversationBase(unittest.TestCase):
         return [dict(r) for r in self.conv.db.execute("SELECT * FROM drafts ORDER BY row_id")]
 
     def waiting(self):  # what the interpreter is shown for a harmless message
-        self.assertEqual(self.say("hello"), "unsupported")
+        self.assertEqual(self.say("hello there"), "unsupported")
         self.replies()
         return self.interp.pendings[-1]
 

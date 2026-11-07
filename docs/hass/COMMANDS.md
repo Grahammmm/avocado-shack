@@ -67,6 +67,13 @@ the card label only, not the maker link. Example: `Add Test Orchard quince, bran
 still asks for any other missing required fact and never invents one; the draft still needs `yes <code>`, and `undo`
 works as for any change.
 
+Two kinds of whole message are not change requests and never reach the interpreter or the daily count: only thanks or
+a greeting (`thanks`, `thank you`, `great, thanks`, `hi`, `hello`, `good morning`, any case, with a final `.`, `!` or
+`?`), or only emoji. Emoji that are all thumbs-up, OK-hand or check marks get the near-approval answer (nothing is
+applied; reply `yes <code>` to approve). Anything else of this kind gets `Nothing changed. Send a change in plain
+words, or help.` They work while paused and after the daily limit, and nothing is approved. A message with any other
+word, such as `thanks, make the eggs sold out`, is read as below.
+
 Any other message is read as a change request. Hass replies with a draft and its code (or a question if details are
 missing). A draft is never applied until you reply `yes <code>`; drafts that wait too long expire and nothing changes.
 
