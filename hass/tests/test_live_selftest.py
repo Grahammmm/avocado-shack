@@ -93,6 +93,7 @@ exec /usr/bin/find "$@"
 """
 FAKE_DATE = """#!/bin/sh
 [ "${PROBE_BAD:-}" = date ] && [ "$1" = +%s ] && { echo 1794000000; exit 1; }
+[ "${PROBE_BAD:-}" = date-utc ] && [ "$1" = -u ] && { echo 2026-11-08T00:00:00Z; exit 1; }
 exec /usr/bin/date "$@"
 """
 
@@ -108,6 +109,7 @@ BAD_READS = (
     ("inbox", "inbox", ()), ("parse-inbox", "inbox", ()),
     ("model", "model", ("--model", "m")),
     ("date", "growth", ()), ("du", "growth", ()), ("df", "growth", ()), ("journalctl", "growth", ()),
+    ("date-utc", "clock", ()),
 )
 SPECIFIC = {  # the wording the disposition names for the systemctl reads
     "is-active-service": "hass-receiver.service state unknown (systemctl exit 1)",
@@ -115,6 +117,7 @@ SPECIFIC = {  # the wording the disposition names for the systemctl reads
     "nrestarts": "restart counter unknown (systemctl exit 1)",
     "last-trigger": "last trigger query failed (systemctl exit 1)",
     "exec-main-status": "last run exit status unknown (systemctl exit 1)",
+    "date-utc": "summary clock unknown (date exit 1)",
 }
 
 

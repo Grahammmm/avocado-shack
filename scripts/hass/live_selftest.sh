@@ -205,7 +205,9 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   fi
 fi
 
-summary="HASS-SELFTEST $(date -u +%Y-%m-%dT%H:%M:%SZ) pass=$NPASS warn=$NWARN fail=$NFAIL skip=$NSKIP"
+stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; drc=$?  # the summary clock is an acquisition too
+case "$drc:$stamp" in 0:????-??-??T??:??:??Z) ;; *) stamp=unknown-time; say FAIL clock "summary clock unknown (date exit $drc)" ;; esac
+summary="HASS-SELFTEST $stamp pass=$NPASS warn=$NWARN fail=$NFAIL skip=$NSKIP"
 [ "$NFAIL" = 0 ] || summary="$summary failed:$(printf '%s' "$FAILED" | sed 's/^ //; s/ /,/g')"
 echo "$summary"
 if [ -n "$LOG" ]; then printf '%s\n' "$summary" >> "$LOG"; fi
