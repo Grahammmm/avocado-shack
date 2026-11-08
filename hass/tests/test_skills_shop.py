@@ -182,6 +182,19 @@ class HoursRules(unittest.TestCase):
                 ops = shop.plan_hours({"hours": weekly}, ctx_for(store={"hours": H0}, texts=[said]))
                 self.assertEqual(ops, [{"op": "store.set_hours", "args": {"hours": weekly}}])
 
+    def test_a_weekly_word_about_another_day_does_not_make_a_one_off_closure_weekly(self):
+        weekly = ["Monday–Wednesday 9am–6pm", "Thursday closed", "Friday 9am–6pm", "Saturday 9am–5pm · Closed Sunday"]
+        for said in ("closed this Thursday only, open every Friday 9am–6pm", "closed this Thursday only and open Fridays 9am–6pm",
+                     "closed next Thursday but from now on open Friday 9am–6pm"):
+            with self.subTest(said=said):
+                with self.assertRaises(shop.SkillStop) as caught:
+                    shop.plan_hours({"hours": weekly}, ctx_for(store={"hours": H0}, texts=[said]))
+                self.assertEqual((caught.exception.kind, caught.exception.reply), ("question", shop.HOLIDAY_REPLY))
+        for said in ("closed every Thursday, open every Friday 9am–6pm", "closed Thursdays from now on, open every Friday 9am–6pm"):
+            with self.subTest(control=said):  # every closed day is weekly: the hours are planned
+                ops = shop.plan_hours({"hours": weekly}, ctx_for(store={"hours": H0}, texts=[said]))
+                self.assertEqual(ops, [{"op": "store.set_hours", "args": {"hours": weekly}}])
+
     def test_contact_removal_with_an_unchanged_address_part_still_plans_the_removal(self):
         store = {"phone": "8055550100", "streetAddress": "1023 Example Street", "town": "Los Osos"}
         ops = shop.plan_contact({"clear": True, "town": "Los Osos"}, ctx_for(store=store, texts=["take off the phone"]))
@@ -461,6 +474,19 @@ class PagesRules(unittest.TestCase):
                 ops = pages.plan_home(headline, ctx_for(store={}, texts=[source]))
                 self.assertEqual([o["op"] for o in ops], ["store.set_headline"])
                 self.assertTrue(pages.plan_about(story, ctx_for(store={}, texts=[source])))
+
+    def test_a_rejection_written_with_a_colon_still_governs_the_boast(self):
+        headline = {"headline": ["Best produce", "Come on in"]}
+        story = {"story": "We are the best at finding good food for everyone."}
+        for source in ("Don't say: best. Say a friendly market.", "Remove this word: best. Say a friendly market."):
+            with self.subTest(source=source):
+                for plan, slots in ((pages.plan_home, headline), (pages.plan_about, story)):
+                    with self.assertRaises(shop.SkillStop) as caught:
+                        plan(slots, ctx_for(store={}, texts=[source]))
+                    self.assertEqual((caught.exception.kind, "best" in caught.exception.reply.casefold()), ("question", True))
+        ops = pages.plan_home(headline, ctx_for(store={}, texts=["Say: best produce."]))  # an affirmed colon instruction
+        self.assertEqual([o["op"] for o in ops], ["store.set_headline"])
+        self.assertTrue(pages.plan_about(story, ctx_for(store={}, texts=["Say: best produce."])))
 
     def test_the_story_boasts_follow_the_same_rule(self):
         story = {"story": "We are the best at finding good food, and we are award-winning."}

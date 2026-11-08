@@ -58,7 +58,8 @@ def _price_stop(*values):
     return None
 
 
-_CLAUSE = re.compile(r"[.!?;:\n]")
+# a colon does not end a clause: "Don't say: best" and "Remove this word: best" keep the rejection with their word
+_CLAUSE = re.compile(r"[.!?;\n]")
 
 
 def _negator(word: str) -> bool:

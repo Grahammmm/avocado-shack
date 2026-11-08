@@ -234,6 +234,9 @@ ONE_OFF_RE = re.compile(rf"\b(?:this|next|coming)\s+{_WEEKDAY}\b|\b{_WEEKDAY}(?:
 EVERY_RE = re.compile(r"\b(?:every|each|always|weekly|permanent(?:ly)?|from now on|all year|going forward|"
                       rf"{_WEEKDAY}s)\b", re.I)
 CLOSED_RE = re.compile(r"\b(?:closed?|closing|closures?|shut|off|not open)\b", re.I)
+# the parts of one clause: a weekly word only counts for the one-off day in its own part ("closed this Thursday only, open
+# every Friday" stays a one-off Thursday)
+_PART_RE = re.compile(r"[,&]|\b(?:and|but|then|while|plus|though|although|whereas)\b", re.I)
 
 
 def _line_problem(i, line):
@@ -312,7 +315,8 @@ def check_hours_holiday(slots, texts, ctx):
     for clause in re.split(r"[.!?;\n]", said):
         if CLOSED_RE.search(clause) and (DATE_RE.search(clause) or RELATIVE_DAY_RE.search(clause)):
             return SkillStop(HOLIDAY_REPLY, "question")
-        if CLOSED_RE.search(clause) and ONE_OFF_RE.search(clause) and not EVERY_RE.search(clause):
+        one_off = [p for p in _PART_RE.split(clause) if ONE_OFF_RE.search(p)] or ([clause] if ONE_OFF_RE.search(clause) else [])
+        if CLOSED_RE.search(clause) and any(not EVERY_RE.search(p) for p in one_off):
             return SkillStop(HOLIDAY_REPLY, "question")
     return None
 
