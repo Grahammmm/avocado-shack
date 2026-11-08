@@ -179,25 +179,26 @@ def _asserted(value: str, low: str) -> bool:
     return claims._affirmed(claims._pattern(value), low)
 
 
+PRONOUN_START = re.compile(r"(?i)^(they|he|she|it|we|i|our|my|their|his|her)\b")
+JOINERS = re.compile(r"(?i)\b(but|and|or|so|that|which|who|whom|whose|because|while|though|although|if|when|whereas|then|yet|except|unless)\b|[,;:()—]")
+
+
 def _story_ok(story: str, maker, message: str) -> bool:
-    """Each story sentence must come from ONE sentence Michael wrote: its words in his order (a verb may only change its
-    ending, 'keep' -> 'keeps'), the same negation (\"do not keep bees\" never becomes \"keeps bees\"), no claim term he did not affirm."""
+    """A story sentence is kept only if its meaning is provably Michael's, by construction, never by word matching: it is ONE of his
+    own sentences word for word (its subject a name, not a pronoun), or ONE of his simple 'They/He/She <verb> ...' sentences with only
+    the pronoun replaced by the maker's name (the single conjugation _third_person does). A sentence with any joiner (but, and, that,
+    which, a comma ...) cannot be rewritten, since a negator or a subject could land on the wrong clause: it is dropped and the one-line
+    'is based in' note is used. Claim terms he did not affirm are refused either way."""
     low = _fold(message)
-    sources = [s for s in re.split(r"(?<=[.!?])\s+", message) if s.strip()]
+    sources = [s.strip() for s in re.split(r"(?<=[.!?])\s+", message) if s.strip()]
     if _unaffirmed_terms(story, low): return False
-    for sent in hs.sentences(story):
-        folded = _fold(sent)
-        lead = _fold(maker or "")
-        if lead and folded.startswith(lead + " "): folded = folded[len(lead) + 1:]  # the subject Hass put in place of "they"
-        words = [w for w in re.findall(r"[\w’'-]+", folded)]
-        content = [_stem(w) for w in words if w not in NEGSET and w not in AUX]
-        negated = any(w in NEGSET for w in words)
-        if not content: return False
+    sents = hs.sentences(story)
+    if not sents: return False
+    for sent in sents:
+        want = _fold(sent)
         for src in sources:
-            swords = re.findall(r"[\w’'-]+", _fold(src))
-            if any(w in NEGSET for w in swords) != negated: continue
-            it = iter(_stem(w) for w in swords)
-            if all(any(c == s for s in it) for c in content): break  # in order, each word his
+            if _fold(src) == want and not PRONOUN_START.match(src.strip()): break  # his own sentence, as he wrote it
+            if maker and re.match(r"(?i)(they|he|she)\b", src) and not JOINERS.search(src) and _fold(_third_person(src, maker)) == want: break  # only the pronoun
         else:
             return False
     return True
@@ -360,6 +361,21 @@ def ungrounded_claims(text: str, allowed: str, vocabulary, openers=frozenset()) 
     return bad
 
 
+def writer_unproven(text: str, first, pool: list, use) -> list:
+    """Sentences of a model-written description that are NOT provably safe ([] = every sentence is). Heuristic word checks cannot
+    prove a sentence's meaning (roles, clauses, semicolons), so a model's text is accepted only as a CHOICE among pieces whose
+    provenance is known: the deterministic fact sentence built from the facts (exactly), and the shop's own serving sentences
+    for this kind, 'Try it <his use>.' and the two generic lines (each exactly, comma/semicolon clauses included)."""
+    allowed = {_fold(s) for s in [*pool, *GENERIC_SERVING, *([f"Try it {use}."] if use else [])]}
+    allowed_first = {_fold(first)} if first else allowed
+    sents = hs.sentences(text)
+    bad = []
+    for n, sent in enumerate(sents):
+        ok = _fold(sent) in (allowed_first if n == 0 else allowed)
+        if not ok: bad.append(" ".join(sent.split()[:6]))
+    return bad or ([] if sents else ["empty"])
+
+
 def compose(facts: dict, content, spec: dict, message: str, writer=None) -> dict:
     """{"text", "source": template|writer, "serving_from": id|None, "writer_rejected": str|None}."""
     maker = content.makers.get(find_maker(facts.get("maker") or "", content.makers) or "", {})
@@ -367,25 +383,28 @@ def compose(facts: dict, content, spec: dict, message: str, writer=None) -> dict
     allowed = " ".join([message, maker.get("name", ""), maker.get("place", ""), facts.get("name") or "", facts.get("maker") or ""])
     index = kind_index(content)
     rejected = None
+    kind_phrase = _cap(re.sub(rf"^{re.escape(facts.get('maker') or '~')}\s+", "", facts.get("name") or "", flags=re.I) or facts.get("kind") or "")
+    first = None
+    if facts.get("maker") and kind_phrase and kind_phrase.lower() != _fold(facts["maker"]):
+        town = _town(place)
+        first = f"{kind_phrase} from {facts['maker']}" + (f" in {town}" if town else "") + "."
+    pool = [(i, s) for i, s in index.get(facts.get("kind") or "", {}).get("serving", []) if _serving_ok(s, message)]
     if writer is not None:
         examples = [s for _id, s in index.get(facts.get("kind") or "", {}).get("serving", [])[:4]] or [e["description"] for e in spec["descriptions"]["examples"][:4]]
         text = (writer(writer_prompt(facts, spec, examples)) or "").strip()
         bad = grounded_text(text, allowed) + [w for w in ungrounded_claims(text, allowed, serving_vocabulary(content), serving_openers(content)) if w not in grounded_text(text, allowed)]
         problems = writer_problems(text, facts, maker, message, content)
         check = hs.check_description(text, spec, name=facts.get("name"), owner_text=message)
-        if not bad and not problems and check["pass"]:
+        pieces = writer_unproven(text, first, [s for _i, s in pool], facts.get("use"))
+        if not bad and not problems and not pieces and check["pass"]:
             return {"text": text, "source": "writer", "serving_from": None, "writer_rejected": None}
-        rejected = (("not in Michael's words: " + ", ".join(bad)) if bad else "; ".join(problems) if problems else "failed: " + ", ".join(c["name"] for c in check["checks"] if not c["ok"]))[:240]
-    kind_phrase = _cap(re.sub(rf"^{re.escape(facts.get('maker') or '~')}\s+", "", facts.get("name") or "", flags=re.I) or facts.get("kind") or "")
-    first = None
-    if facts.get("maker") and kind_phrase and kind_phrase.lower() != _fold(facts["maker"]):
-        town = _town(place)
-        first = f"{kind_phrase} from {facts['maker']}" + (f" in {town}" if town else "") + "."
+        rejected = (("not in Michael's words: " + ", ".join(bad)) if bad else "; ".join(problems) if problems else
+                    ("not built from the facts and the shop's own serving sentences: " + "; ".join(pieces)) if pieces else
+                    "failed: " + ", ".join(c["name"] for c in check["checks"] if not c["ok"]))[:240]
     serving, source_id = [], None
     if facts.get("use"):
         serving = [f"Try it {facts['use']}."]
     else:
-        pool = [(i, s) for i, s in index.get(facts.get("kind") or "", {}).get("serving", []) if _serving_ok(s, message)]
         serving = [s for _i, s in pool[:1 if first else 2]]  # without a maker sentence the catalog uses two serving sentences
         source_id = pool[0][0] if pool else None
     if len(serving) + bool(first) < 2:  # the catalog never has one-sentence descriptions of this kind

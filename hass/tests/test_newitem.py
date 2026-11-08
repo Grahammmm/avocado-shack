@@ -173,7 +173,7 @@ class DraftTests(unittest.TestCase):
         bad = self.draft(HONEY, writer=lambda prompt: "Organic raw honey from the hills of Paso Robles. Amazing!")
         self.assertEqual(bad["description"]["source"], "template")
         self.assertTrue(bad["description"]["writer_rejected"])
-        good = self.draft(HONEY, writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little onto buttered toast.")
+        good = self.draft(HONEY, writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.")
         self.assertEqual(good["description"]["source"], "writer")
         self.assertIn("Examples" if False else "Real examples", newitem.writer_prompt(good["facts"], SPEC, ["x."]))
 
@@ -217,7 +217,7 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(r["description"]["source"], "template", text)
             self.assertTrue(r["description"]["writer_rejected"])
             self.assertNotIn("cream", str(r["ops"]))
-        control = self.draft(HONEY, writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little onto buttered toast.")
+        control = self.draft(HONEY, writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.")
         self.assertEqual(control["description"]["source"], "writer")
 
     def test_unstated_shelf_and_availability_are_dropped(self):
@@ -293,8 +293,56 @@ class GroundingTests(unittest.TestCase):
         self.assertIsNone(self.draft("we did not get in Cal Poly honey, not sold out", facts={**model, "availability": "no"})["facts"]["availability"])
 
     def test_the_good_writer_text_is_still_accepted(self):
-        r = self.draft(writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little onto buttered toast.")
+        r = self.draft(writer=lambda prompt: "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.")
         self.assertEqual((r["description"]["source"], r["description"]["writer_rejected"]), ("writer", None), r["description"])
+
+
+class SourcePreservingTests(unittest.TestCase):
+    """Review round 2 (PR 504): meaning is kept by construction (exact pieces), never by word matching."""
+    BEES = "got in honey from Bee Happy Farm in Templeton, California. "
+    MODEL = {"name": "Bee Happy Farm honey", "maker": "Bee Happy Farm", "place": "Templeton, California", "kind": "honey"}
+
+    def draft(self, message=HONEY, **kw):
+        return newitem.draft(message, b"synthetic-photo-bytes", content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
+
+    def story(self, tail, story):
+        return self.draft(self.BEES + tail, facts={**self.MODEL, "story": story})
+
+    def test_a_negator_cannot_move_to_another_predicate(self):
+        r = self.story("They keep bees but do not sell honey.", "Bee Happy Farm does not keep bees.")
+        self.assertIn("story", r["dropped"])
+        self.assertEqual(r["maker"]["story"], "Bee Happy Farm is based in Templeton, California.")
+
+    def test_a_relative_clause_cannot_give_the_maker_a_new_predicate(self):
+        r = self.story("They buy honey from farms that keep bees.", "Bee Happy Farm keeps bees.")
+        self.assertIn("story", r["dropped"])
+        self.assertNotIn("keeps bees", r["maker"]["story"])
+
+    def test_compound_sentences_are_never_rewritten_even_by_the_plain_reader(self):
+        r = self.draft(self.BEES + "They keep bees but do not sell honey.")
+        self.assertEqual(r["maker"]["story"], "Bee Happy Farm is based in Templeton, California.")
+
+    def test_a_simple_sentence_still_gets_only_its_pronoun_replaced(self):
+        r = self.draft(self.BEES + "They keep bees on the hill.")
+        self.assertEqual((r["maker"]["story"], r["dropped"]), ("Bee Happy Farm keeps bees on the hill.", []))
+        verbatim = self.draft(self.BEES + "Bee Happy Farm keeps bees on the hill.", facts={**self.MODEL, "story": "Bee Happy Farm keeps bees on the hill."})
+        self.assertEqual(verbatim["maker"]["story"], "Bee Happy Farm keeps bees on the hill.")
+
+    def test_the_writer_cannot_swap_the_maker_and_the_place(self):
+        r = self.draft(writer=lambda prompt: "Honey from San Luis Obispo in Cal Poly. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.")
+        self.assertEqual(r["description"]["source"], "template")
+        self.assertTrue(r["description"]["writer_rejected"])
+        self.assertTrue(r["description"]["text"].startswith("Honey from Cal Poly in San Luis Obispo."))
+
+    def test_the_writer_cannot_add_a_clause_after_a_serving_sentence(self):
+        for text in ("Honey from Cal Poly in San Luis Obispo. Spoon a little onto toast; it has butter and cream.",
+                     "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own and it has butter.",
+                     "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own. Add butter and cream."):
+            with self.subTest(text):
+                r = self.draft(writer=lambda prompt, t=text: t)
+                self.assertEqual(r["description"]["source"], "template")
+                self.assertNotIn("cream", r["description"]["text"])
+                self.assertNotIn("butter and", r["description"]["text"])
 
 
 @unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
