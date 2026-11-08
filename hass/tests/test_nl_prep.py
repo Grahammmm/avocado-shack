@@ -5,6 +5,7 @@ Run: python3 -m unittest hass.tests.test_nl_prep -v
 
 import json
 import unittest
+from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -271,6 +272,19 @@ class RecentQuestionTests(ConversationTestCase):
     def test_a_missing_table_or_bad_row_is_no_recent_not_a_crash(self):
         self.conv.db.execute("DROP TABLE outbox")
         self.assertIsNone(self.conv._recent_question(self.now))
+
+
+class GuideTests(unittest.TestCase):
+    """docs/hass/NATURAL_LANGUAGE.md says the same numbers and commands the code uses."""
+    DOCS = Path(__file__).resolve().parents[2] / "docs" / "hass"
+
+    def test_the_guide_is_linked_and_states_the_real_question_window(self):
+        guide = (self.DOCS / "NATURAL_LANGUAGE.md").read_text("utf-8")
+        self.assertIn("](NATURAL_LANGUAGE.md)", (self.DOCS / "README.md").read_text("utf-8"))
+        self.assertIn(f"{conversation.RECENT_MINUTES} minutes <!-- conversation.RECENT_MINUTES -->", guide)
+        for command in ("`status`", "`undo`", "`no a1b2`", "`yes a1b2`"):
+            self.assertIn(command, guide)
+        self.assertNotIn("$", guide.replace("`", "").replace("prices", ""))  # no price is promised anywhere on the page
 
 
 if __name__ == "__main__":
