@@ -159,6 +159,11 @@ def _q(text) -> str:
     return voice.quote(text)
 
 
+def _said(name, text) -> bool:
+    """True when ``name`` is among his words (case, accents and punctuation ignored)."""
+    return bool(re.search(r"(?<!\w)" + re.escape(_fold(name)) + r"(?!\w)", _fold(text)))
+
+
 def _join(names, last="or") -> str:
     names = list(names)
     return names[0] if len(names) == 1 else ", ".join(names[:-1]) + f" {last} " + names[-1]
@@ -350,8 +355,7 @@ def question(slot_name, slots, ctx) -> str:
         verb = "grew" if slots.get("form") == "fresh" else "makes"
         what = "these " + name.lower() if name.endswith("s") else "this " + name.lower() if name else "it"
         last = last_maker(content)
-        noun = "farm" if slots.get("form") == "fresh" else "maker"
-        offer = f" (Say \u201csame\u201d for {_q(content.makers[last]['name'])}, the {noun} from last time.)" if last else ""
+        offer = f" (Last time it was {_q(content.makers[last]['name'])}. Say the name again to use them.)" if last else ""
         return f"Who {verb} {what}?{offer}" if name else ASK["maker"]
     if slot_name == "place":
         choice = _soft_maker(slots.get("maker"), ctx) if _clean(slots.get("maker")) else None
@@ -482,6 +486,8 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if not _clean(slots.get("maker")):
         raise Refusal(question("maker", slots, ctx), "question")
     choice = resolve_maker(slots["maker"], content, getattr(ctx, "aliases", None))
+    if choice.get("same") and not _said(choice["name"], message):  # the claims gate wants a maker in his own words: he is asked to say it
+        raise Refusal(f"Please say the name, so I use the right one: {_q(choice['name'])}.", "question")
     ops: list = []
     set_lines: list = []
     say: list = []
@@ -634,6 +640,17 @@ def _picture_notes(ctx, sha) -> tuple:
         say, warn = picture_review(data, bool(getattr(ctx, "house_render", False)))
         out += list(say) + list(warn)
     return tuple(out)
+
+
+def set_phrases(slots, ctx) -> list:
+    """The plain phrases for the dispatcher's "I set: ..." line (D8): what Hass chose because he did not say. Never raises."""
+    try:
+        return list(describe_add(dict(slots), ctx).set_lines)
+    except Refusal:
+        return []
+
+
+SET_PHRASES = {"item.add": set_phrases}
 
 
 def notes(name, slots, ctx) -> dict:
