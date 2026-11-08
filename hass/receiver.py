@@ -12,7 +12,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import bridge  # noqa: E402
+from hass import bridge, stagelog  # noqa: E402
 
 CONNECT_DOC = "docs/hass/CONNECT.md"
 REJECTED = {  # bridge.EnvelopeError code -> plain words
@@ -74,6 +74,7 @@ class Receiver:
 
     def __init__(self, *, state, settings, reply=not_connected, apply=False):
         self.inbox, self.conversation, self.reply, self._codes = state, settings, reply, {}
+        self.stage = stagelog.off  # HASS-FAST-1: host.py swaps in a StageLog; the default records nothing
         self.apply = apply  # HASS-RCV-1: False holds every owner approval (SHOP-3); True lets the Conversation apply it
 
     def send(self, chat, text, attachments=()):
@@ -112,6 +113,7 @@ class Receiver:
         queued = self.inbox.enqueue(msg)
         if queued == "duplicate": return _result("duplicate", "this message id was already received; not queued again"), None
         if queued == "history": return _result("history", "sent before the recorded start point; kept as history only"), None
+        self.stage("receiver-accepted", msg.provider_id)  # HASS-FAST-1: stage time only (hashed id); nothing else
         return None, msg
 
     def accept(self, raw, *, secret, now) -> dict:

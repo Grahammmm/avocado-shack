@@ -36,6 +36,7 @@ Closed key set (any other key is refused):
 | `secretFile` | absolute path | `envelope.key`: 64 hex, 0600, copied once to AgentOrange |
 | `spoolDir` | absolute path | `spool`, 0700, must exist |
 | `webhookPort` | integer, optional | 8796, loopback |
+| `ack` | boolean, optional | true: send one text 👀 when an owner message is stored (HASS-FAST-1); false switches it off |
 | `webhookTokenFile` | absolute path | `webhook.token`: 64 hex, 0600; the BlueBubbles webhook is `http://127.0.0.1:8796/bb/<token>` for new-message and updated-message only |
 
 BlueBubbles settings that the kit assumes: server password set; Private API **off**; SIP untouched; no proxy/tunnel/dynamic DNS; webhooks as above.
