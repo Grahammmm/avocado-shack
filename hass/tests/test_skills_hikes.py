@@ -346,6 +346,28 @@ class Rules(unittest.TestCase):
         self.assertEqual(self.hit("hike-no-invention", {"hike": CASS["id"], "no_limit": True}, texts=["make Cass Hill moderate"])[0], not_said)
         self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=["Cass Hill sign-up, unlimited"]))
 
+    def test_no_limit_is_his_latest_word_on_the_limit(self):
+        """Review round 3: a withdrawn or negated "no limit" is not evidence for unlimited; the latest word wins."""
+        base = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate, sign-up on"
+        not_said = hikes.R_SPOTS_NOT_SAID
+        for said in (base + ", no limit. Actually limit to 15 spots", base + ", not unlimited, 15 spots", base + ", no limit, cap at 15",
+                     base + ", unlimited. No, max 15", base + ", it's no longer unlimited", base + ", no limit. Actually it isn't unlimited"):
+            with self.subTest(said):
+                self.assertEqual(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=[said])[0], not_said)
+                self.assertEqual(self.hit("hike-no-invention", {"hike": CASS["id"], "signup": True, "no_limit": True}, texts=[said])[0], not_said)
+        for said in (base + ", no limit", base + ", unlimited", base + ", 15 spots. Actually no limit", base + ", max 15. Make it unlimited",
+                     base + ", no limit. Actually not 15 spots, no limit"):
+            with self.subTest(said):
+                self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=[said]))
+                self.assertIsNone(self.hit("hike-no-invention", {"hike": CASS["id"], "signup": True, "no_limit": True}, texts=[said]))
+        # the number he finally settled on is the positive control
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 15}, texts=[base + ", no limit. Actually limit to 15 spots"]))
+        self.assertIsNone(self.hit("hike-no-invention", {"hike": CASS["id"], "signup": True, "capacity": 15}, texts=[base + ", not unlimited, 15 spots"]))
+        # the helper on its own
+        for said, want in (("no limit", True), ("unlimited", True), ("not unlimited", False), ("no limit. Actually limit to 15 spots", False),
+                           ("15 spots. no limit", True), ("make Cass Hill moderate", False), ("no limit on sign ups", True)):
+            self.assertIs(hikes._said_unlimited(said), want, said)
+
     def test_the_same_rule_guards_an_edit(self):
         edit = {"hike": CASS["id"]}
         self.assertEqual(self.hit("hike-no-invention", {**edit, "signup": True}, texts=["turn off sign-up for Cass Hill"])[0], hikes.R_SIGNUP_UNCLEAR)

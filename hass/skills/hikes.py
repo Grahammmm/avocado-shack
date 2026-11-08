@@ -333,6 +333,25 @@ def _said_limits(said):
     return effective
 
 
+_NO_LIMIT_NEGATED = re.compile(r"(?:\bnot|\bnever|n't|\bno\s+longer)\s+(?:be\s+|really\s+|actually\s+|going\s+to\s+be\s+)?(?:"
+                               + _NO_LIMIT.pattern + r")", re.I)
+
+
+def _said_unlimited(said):
+    """Whether the owner's LATEST word on the guest limit is "no limit": \"no limit\" / \"unlimited\" turns it on, a later
+    number tied to guests (\"actually limit to 15 spots\") or a negation (\"not unlimited\", \"no longer unlimited\") turns it
+    off again, and an earlier \"no limit\" that was withdrawn never counts."""
+    state = False
+    for clause in _clauses(said):
+        if _NO_LIMIT_NEGATED.search(clause):
+            state = False
+        elif _NO_LIMIT.search(clause):
+            state = True
+        elif _said_limits(clause):
+            state = False
+    return state
+
+
 def rule_no_invention(slots, texts, ctx):
     """The E2E-HIKE-1 finding: the model added sign-up and a guest limit nobody asked for. A word or a number somewhere in
     the text is not evidence: sign-up on needs his latest sign-up instruction to be on ("sign-up off" never turns it on), a
@@ -358,7 +377,7 @@ def rule_no_invention(slots, texts, ctx):
             return R_SIGNUP_UNCLEAR, "other"
         if cap is not None and (no_limit or cap not in limits):
             return R_SPOTS_NOT_SAID, "other"
-        if no_limit and cap is None and not _NO_LIMIT.search(said):
+        if no_limit and cap is None and not _said_unlimited(said):  # latest word wins: a withdrawn or negated "no limit" is not said
             return R_SPOTS_NOT_SAID, "other"
     return None
 
