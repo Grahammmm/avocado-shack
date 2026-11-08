@@ -230,6 +230,7 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
     one the owner sent in this request."""
     out = Filled()
     out.slots = dict(current)
+    replaced: set = set()  # names given a new value that passed every check: only these skip the re-read of held facts
     slots = {s.name: s for s in skill.slots}
     for name, value in (new or {}).items():
         slot = slots.get(name)
@@ -238,11 +239,13 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
         if slot.kind == "attachment":
             if isinstance(value, str) and value in attachments:
                 out.slots[name] = value
+                replaced.add(name)
             continue
         if slot.kind in kinds.RESOLVERS:
             res = _resolve(slot, value, ctx)
             if res.status == "one":
                 out.slots[name] = res.value
+                replaced.add(name)
                 continue
             if out.problem is None:  # the first slot that needs an answer is the one asked; the others are still kept
                 out.problem, out.problem_slot = res.reply, name
@@ -260,7 +263,8 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
             out.slots.pop(name, None)
             continue
         out.slots[name] = value.strip() if isinstance(value, str) else value
-    out.left_off += [n for n in drop_denied(skill, out.slots, set(new or {}), texts) if n not in out.left_off]
+        replaced.add(name)
+    out.left_off += [n for n in drop_denied(skill, out.slots, replaced, texts) if n not in out.left_off]
     return out
 
 

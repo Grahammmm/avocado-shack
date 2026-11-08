@@ -750,6 +750,15 @@ class RetainedFactTests(SkillCase):
         self.assertNotIn("difficulty", json.loads(self.drafts()[-1]["ops_json"])[0]["args"])
         self.assertIn("Left off (you didn't say it): difficulty.", reply)
 
+    def test_a_null_difficulty_in_the_completing_reply_does_not_keep_the_denied_easy(self):
+        self.script(OPEN1, skill_reply("hike.add", title="Mill Creek hike", place="Mill Creek trailhead", day=SATURDAY, difficulty="easy"))
+        self.assertEqual(self.say(OPEN1), "question")
+        text = "it is not easy, we set off at eight sharp"
+        self.script(text, skill_reply("hike.add", time="08:00", difficulty=None))
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say(text), "proposed")
+        self.assertNotIn("difficulty", json.loads(self.drafts()[-1]["ops_json"])[0]["args"])
+
     def test_an_earlier_denied_required_place_is_asked_again(self):
         self.script(OPEN1, skill_reply("hike.add", title="Mill Creek hike", place="Mill Creek trailhead", day=SATURDAY))
         self.say(OPEN1)
