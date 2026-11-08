@@ -97,7 +97,8 @@ class ShelfCheckStatusTests(StoreMixin, ConversationTestCase):
         one, two = self.propose("hours")[0], self.propose("desc")[0]
         self.checked(date(2026, 11, 1))
         lines = self.status()
-        self.assertEqual(lines[:3], ["Everything is ready.", "Waiting for your yes: the opening hours for Avocado Shack (reply yes b299)", "Waiting for your yes: the description for Hass avocado (reply yes 5717)"])
+        self.assertEqual(lines[:3], ["Everything is ready.", f"Waiting for your yes: the opening hours for Avocado Shack (reply yes {one['code']})",  # the code follows the content hash, so it is read, not pinned
+                                  f"Waiting for your yes: the description for Hass avocado (reply yes {two['code']})"])
         self.assertEqual(len(self.shelf(lines)), 1)
         self.assertEqual(lines[3:], ["Your last shelf check was Sunday, November 1."])
         self.assertIn(f"reply yes {one['code']}", lines[1])

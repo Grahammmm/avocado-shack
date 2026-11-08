@@ -15,7 +15,7 @@ REFUSED, MISSING = "config.json must be a regular file up to 1 MiB", "config.jso
 MIB = 1024 * 1024
 EXPECTED = {"ownerSenders": ("owner@example.invalid",), "ownerKeys": frozenset({"owner@example.invalid"}),
             "ownerChat": "chat@example.invalid", "approvalTtlSeconds": 600, "mediaRoot": None, "guestCountsDb": None,
-            "interpreterDailyCap": None}
+            "interpreterDailyCap": None, "skillsMode": "ops-only", "houseRender": False}  # SKILLS-FW-3
 
 
 def in_thread(fn, timeout=5):
