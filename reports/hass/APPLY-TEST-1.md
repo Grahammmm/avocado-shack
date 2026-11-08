@@ -705,17 +705,37 @@ Other observations from the real path (first run): the first proposal of a draft
 
 Goal: Mike's `yes` applies a change to the **writer branch only**; nothing goes on the website. Read-only first, then one flip, then the test messages, then the revert.
 
+**Where commands run.** The code lives in the runtime worktree `~/.local/share/hass/runtime` (detached at `runtimeCommit`); the writer worktree `~/.local/share/hass/writer` (branch `hass/live`) holds content only. Run every `python3 hass/...` command as `cd "$RT"` first (or call `"$RT/hass/..."`). Never run code from the writer. Paths below are the ones in the installed units (`systemctl --user cat hass-worker hass-health hass-backup`); if `systemctl cat` shows a different path, use that one. Set these once in the shell you use for the whole test:
+
+```
+export H="$HOME/.local/state/hass"
+export RT="$HOME/.local/share/hass/runtime"
+export WR="$HOME/.local/share/hass/writer"
+export STATE="$H/state"                 # the "state" value in host.json
+export HOSTDIR="$H/host"
+export HOSTJSON="$HOSTDIR/host.json"
+export BACKUPS="$H/backups"
+export E391=0a8114cc1bb27214ef4bfedab16a6515d9d85344   # the code this report exercised
+health() { python3 -B "$RT/hass/health.py" --state "$STATE" --backups "$BACKUPS" --seen "$H/health.seen" --writer --model http://127.0.0.1:11434 --host-dir "$HOSTDIR" --alert-log "$HOME/agent-work/modes/ALERTS.log"; }
+cd "$RT"
+```
+
+(`health` is the `hass-health` unit's own command line, so it gives the same answer as the timer. It writes one line to `ALERTS.log` only if the problem set changed, as the timer does.)
+
 **Before (nothing changes):**
-1. Read the units to learn the real paths: `systemctl --user cat hass-worker` (the `--host <host.json>` path; writer is `~/.local/share/hass/writer`, branch `hass/live`, runtime `~/.local/share/hass/runtime`).
-2. `python3 hass/host.py check --host <host.json>` and `python3 hass/health.py --host-dir <dir>` both clean; `systemctl --user status hass-receiver hass-worker`.
-3. Record the base: `git -C ~/.local/share/hass/writer rev-parse HEAD` (call it BASE) and `git -C ~/.local/share/hass/writer status --porcelain` (must be empty). Write BASE in the test notes.
-4. Backup: `python3 hass/statebackup.py create`, then `python3 hass/statebackup.py verify <backup>`.
+1. **Runtime commit check.** `grep runtimeCommit "$HOSTJSON"` and `git -C "$RT" rev-parse HEAD` must show the same 40 characters (the host refuses to start otherwise). Write it in the test notes as RC. Compare with the code this report ran:
+   - **RC equals `$E391`**: proceed. (On 2026-11-08 the live runtime was at exactly 0a8114c, read-only check.)
+   - **RC is newer** (`git -C "$RT" merge-base --is-ancestor $E391 HEAD && echo newer-or-same`): run `git -C "$RT" log --oneline $E391..HEAD -- hass/` and read it. Proceed, but treat any message whose area those commits touch as "different code than the report", and write RC next to every result. (For example #532, stock, merged after 0a8114c; the sold-out flow had already run in this report.)
+   - **RC is older or not related** (the command above prints nothing): do **not** run messages b to f. The items, makers, hikes or stock skills (#515, #517, #527, #528) may be missing, so the results would not be comparable. Ask the operator to move the runtime first (attended, HASS-SYNC-1), then start again from step 1.
+2. `python3 -B hass/host.py check --host "$HOSTJSON"` clean; `health` clean (`publishing-stopped` after step 5 is info, not a problem); `systemctl --user status hass-receiver hass-worker` both active.
+3. Record the base: `git -C "$WR" rev-parse HEAD` (call it BASE) and `git -C "$WR" status --porcelain` (must print nothing). Write BASE in the test notes. Also `git -C "$WR" branch --show-current` must print `hass/live`.
+4. Backup: `python3 -B hass/statebackup.py create --state "$STATE" --out "$BACKUPS"`; it prints one JSON line naming the new `hass-state-<UTC stamp>` folder. Then `python3 -B hass/statebackup.py list --out "$BACKUPS"` (newest line) and `python3 -B hass/statebackup.py verify "$BACKUPS/hass-state-<UTC stamp>"` must say ok. Write that folder name in the test notes as BK.
 5. Extra stop for publishing: `touch ~/.config/hass/STOP` (stops all live publishing; the chat keeps answering). Keep it in place for the whole test.
 6. Tell Mike first: replies will end "It's saved, but not on the website yet. Please ask Graham." and that is correct.
 
 **Flip (operator, one restart):**
-7. Edit only the `"approvals"` value in the live `host.json` from `"hold"` to `"private"`. Leave every other key as it is (state, secretFile, listen, allowedPeers, previewer, pictures, runtimeCommit, interpreter). `host.py check` again.
-8. `systemctl --user restart hass-worker` (the receiver only stores and never applies, so it does not need a restart). Confirm the worker is running and `health.py` is clean.
+7. Copy `cp -p "$HOSTJSON" "$HOSTDIR/host.json.bak-pre-private"`, then edit only the `"approvals"` value in `$HOSTJSON` from `"hold"` to `"private"`. Leave every other key as it is (state, secretFile, listen, allowedPeers, previewer, pictures, runtimeCommit, interpreter, release). `python3 -B hass/host.py check --host "$HOSTJSON"` again must be clean.
+8. `systemctl --user restart hass-worker` (the receiver only stores and never applies, so it does not need a restart). `systemctl --user is-active hass-worker` says active, and `health` is clean.
 
 **Messages Mike (or the operator on Mike's phone) sends, in this order. Each: read the draft, send `yes` (or the code if asked), then look at the reply, then `undo` and `yes`:**
 a. `status` (one reply, no change).
@@ -729,18 +749,20 @@ h. Two drafts: `Hide the figs`, `Hide the blackberries`, bare `yes` (expect the 
 i. Let one draft sit past its expiry, then `yes` (expect "timed out").
 **Do not send in this test (known defects, see follow-ups):** weekly specials, a photo or new item with a picture, any statement of origin/organic/health/award/phone/email (private mode does not run the live-policy check), "take X off ... we ran out" (can mean sold out).
 
-**What to inspect after each step (read-only):**
-- `git -C ~/.local/share/hass/writer log --oneline BASE..HEAD` and `git -C ... show --stat HEAD` (one signed-off commit per `yes`, only `hass/content` and generated site files).
-- `git -C ~/.local/share/hass/writer status --porcelain` empty; `python3 hass/sitegen.py --check` and `python3 hass/migration_check.py` run in the writer exit 0.
-- `python3 hass/editor.py history` lists the changes; `python3 hass/health.py` clean; `~/.config/hass/STOP` still there; the live site and its release journal untouched (no `release`/publish entries; `git -C <live deploy checkout> status` unchanged).
+**What to inspect after each step (read-only; run from `$RT` with the variables set above):**
+- `git -C "$WR" log --oneline BASE..HEAD` and `git -C "$WR" show --stat HEAD` (one signed-off commit per `yes`, only `hass/content` and generated site files).
+- `git -C "$WR" status --porcelain` prints nothing; `python3 -B hass/sitegen.py --check --repo "$WR"` and `python3 -B hass/migration_check.py --repo "$WR"` both exit 0 (`echo $?`).
+- `python3 -B hass/editor.py history --state "$STATE"` lists the changes; `health` is clean; `~/.config/hass/STOP` is still there; the live site and its release journal are untouched (no `release`/publish entries in `$HOSTDIR/stages.jsonl`, `$HOSTDIR/publish.json` unchanged; `git -C <live deploy checkout> status` unchanged).
 - Every reply read by a person against `docs/hass/VOICE.md`; correspondence log has no `voice-fallback` entries for the test.
 
 **Revert (operator):**
-1. In `host.json` set `"approvals"` back to `"hold"`; `systemctl --user restart hass-worker`.
-2. `python3 hass/editor.py recover` (settles any journal; never re-applies).
-3. On the writer worktree only (branch `hass/live`, never `main`): `git -C ~/.local/share/hass/writer reset --hard BASE`. Check `git status` empty and `sitegen --check` ok.
-4. If the state folder should look as if nothing happened: restore the step 4 backup into a new directory with `statebackup.py restore ... --paused` and swap it in (attended); otherwise leave the drafts as history.
-5. Remove `~/.config/hass/STOP` only when G says publishing may resume.
+1. In `$HOSTJSON` set `"approvals"` back to `"hold"` (or restore `host.json.bak-pre-private`, which is the same file apart from that value). `python3 -B hass/host.py check --host "$HOSTJSON"` clean.
+2. Stop the worker for the rest of the revert, so nothing runs against the writer while it is reset: `systemctl --user stop hass-worker`.
+3. Settle any half-done change: `python3 -B hass/editor.py recover --state "$STATE"` (settles a journal; never re-applies).
+4. On the writer worktree only (branch `hass/live`, never `main`): `git -C "$WR" reset --hard BASE`. This takes no editor lock, which is why the worker is stopped. Then `git -C "$WR" status --porcelain` prints nothing, `git -C "$WR" rev-parse HEAD` equals BASE, `python3 -B hass/sitegen.py --check --repo "$WR"` exits 0.
+5. `systemctl --user start hass-worker`, then `health` clean (this includes `--writer`, which checks the writer worktree the same way the editor would).
+6. The state folder: leave the drafts and changes as history (recommended; they are private and do nothing). If G wants the state back as it was, that is an attended restore, not part of this test: `python3 -B hass/statebackup.py verify "$BACKUPS/<BK>"` first, then follow the restore drill in `docs/hass/OPERATIONS.md` (restore goes into a new directory and a separate drill worktree; it refuses the live writer).
+7. Remove `~/.config/hass/STOP` only when G says publishing may resume.
 
 ## Defects as follow-up cards (name: one-line spec)
 
