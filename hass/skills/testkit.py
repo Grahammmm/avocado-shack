@@ -49,7 +49,7 @@ CODES = ("write-before-yes", "wrong-diff", "edit-undeclared", "undo-not-identica
          "stale-row", "bad-row", "bad-plan", "no-skill")
 FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "skip-later-preview")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a revision whose preview is never requested
 PLAN_KEYS = {"id", "plan", "kind", "slots", "ctx", "expect_ops", "expect_error", "version", "note", "must_fail"}
-CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan"}
+CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "seed"}
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
                "left_off", "set_line", "ops", "diff", "files", "preview", "residue", "allow_words"}
 KINDS = ("clean", "vague", "typo", "multi", "refuse", "photo", "turns")
@@ -149,7 +149,7 @@ def _declared_edits(skill):
 
 
 def _residue_declared(skill):
-    r = getattr(skill, "residue", None)
+    r = getattr(skill, "residue", None) or getattr(getattr(skill, "undo", None), "residue", None)  # a toy has .residue, a real Skill .undo.residue
     return isinstance(r, str) and r.strip().lower().rstrip(".") not in ("", "none")
 
 
@@ -196,6 +196,7 @@ class SkillInterpreter:
 
     def __init__(self, mapping, skills, ctx_for):
         self.mapping, self.skills, self.ctx_for, self.used, self.errors = mapping, skills, ctx_for, [], []
+        self.said = []  # the owner's texts so far: a skill's rules read them (the dispatcher's ctx.texts)
 
     def _plan(self, call):
         skill = self.skills.get(call.get("skill"))
@@ -205,6 +206,7 @@ class SkillInterpreter:
 
     def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
         reply = copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
+        self.said.append(text)
         try:
             if "skill" in reply: return {"ops": self._plan(reply), "revises": reply.get("revises")}
             if "calls" in reply:
@@ -218,7 +220,7 @@ class SkillInterpreter:
 class Scratch:
     """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry."""
 
-    def __init__(self, mapping, skills, fault=None):
+    def __init__(self, mapping, skills, fault=None, seed=None):
         from hass import conversation, editor
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo  # the H02 throwaway repo the demo transcript uses
@@ -226,6 +228,7 @@ class Scratch:
         cfg = json.loads((self.repo.state / "config.json").read_text("utf-8"))
         editor._write_json(self.repo.state / "config.json", {**cfg, "settings": SETTINGS})
         self.wt, self.now, self.n, self.out = self.repo.wt, START, 0, FixtureAdapter()
+        if seed: self._seed_or_clean(seed)
         self.interp = SkillInterpreter(mapping, skills, self._ctx)
         self.previewer = RecordingPreviewer(skip_after=1 if fault == "skip-later-preview" else None)
         self.turn_previews = []  # the preview requests each message caused, in message order
@@ -233,9 +236,31 @@ class Scratch:
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now, self.previewer)
         self.Inbound = conversation.Inbound
 
+    def _seed_or_clean(self, seed):
+        try: self._seed(seed)
+        except BaseException:  # a seed that does not validate must not leave the scratch repo behind
+            self.repo.cleanup()
+            raise
+
+    def _seed(self, seed):
+        """A row's `seed` ({content file: {top-level key: value}}, for example a hike that is already on the page) is
+        written into the scratch content, validated, regenerated and committed BEFORE the row starts: the row's
+        start state, so its undo check and its diff are measured from there."""
+        from hass import sitegen
+        from hass.content_model import load_and_validate
+        for stem, keys in seed.items():
+            path = self.wt / "hass" / "content" / f"{stem}.json"
+            data = json.loads(path.read_text("utf-8"))
+            data.update(copy.deepcopy(keys))
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
+        content = load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup")  # a bad seed stops the row here
+        sitegen.write_files(sitegen.render(content, self.wt / "hass" / "templates"), self.wt)
+        _git(self.wt, "add", "-A")
+        _git(self.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "seed")
+
     def _ctx(self):
         from hass.content_model import load_and_validate
-        return types.SimpleNamespace(today="2026-11-08", now=self.now,
+        return types.SimpleNamespace(today="2026-11-08", now=self.now, texts=list(self.interp.said),
                                      content=load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup"))
 
     def say(self, text):
@@ -360,7 +385,12 @@ def run_case_row(row, skills, skill=None, selftest=False):
     names = {c.get("skill") for r in row["replies"] for c in ([r] + list(r.get("calls", []))) if isinstance(c, dict) and "skill" in c}
     if skill is not None and "version" in row and getattr(skill, "version", None) not in (None, row["version"]):
         res.fail("stale-row", f"row written for version {row['version']}, skill is version {skill.version}"); return res
-    scratch = Scratch(mapping, skills, row.get("fault"))
+    seed = row.get("seed")
+    if seed is not None and not (isinstance(seed, dict) and all(k in ("products", "makers", "community", "store") and isinstance(v, dict) for k, v in seed.items())):
+        res.fail("bad-row", "seed must be {products|makers|community|store: {top-level key: value}}"); return res
+    try: scratch = Scratch(mapping, skills, row.get("fault"), seed)
+    except Exception as exc:  # noqa: BLE001 - a seed the content rules refuse is a bad row, not a crash
+        res.fail("bad-row", f"the seed could not be applied: {type(exc).__name__}: {str(exc)[:200]}"); return res
     try: _drive(row, expect, scratch, skills, skill, names, res)
     finally: scratch.close()
     return res
