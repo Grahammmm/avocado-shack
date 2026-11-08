@@ -728,8 +728,15 @@ class ThreadedAck(AckCase):
         for _ in range(60):
             self.f.cycle()
             if self.pending() == 0: break
-        self.assertTrue(self.until(lambda: len(self.states()) == 25 and set(self.states().values()) == {"sent"}))
+        self.assertTrue(self.until(lambda: len(self.states()) == 25 and set(self.states().values()) == {"sent"}, 20))
         self.assertEqual((len(self.eyes()), len(self.posts)), (25, 25))
+
+    def test_a_burst_is_worked_off_by_one_wake_up_not_one_tick_per_three_rows(self):
+        for i in range(12): self.enqueue(f"b{i}")
+        with mock.patch.object(fwd, "ACK_TICK", 60):    # the timer never fires: only the one kick wakes the thread
+            self.start()
+            self.f.ack_kick()
+            self.assertTrue(self.until(lambda: len(self.eyes()) == 12 and set(self.states().values()) == {"sent"}, 20))
 
     def test_the_thread_survives_a_broken_table_and_a_raising_sender(self):
         self.start()

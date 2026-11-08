@@ -342,7 +342,7 @@ class Forwarder:
         db = spool.db
         for _ in range(3):
             row = db.execute("SELECT provider_id,created_at FROM ack WHERE state='pending' ORDER BY created_at,rowid LIMIT 1").fetchone()
-            if row is None: return
+            if row is None: return False
             now, (pid, created) = self.clock(), row
 
             def close(state): db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='pending'", (state, now, pid))
@@ -360,6 +360,7 @@ class Forwarder:
                 state = "failed"
             db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=?", (state, self.clock(), pid))
             self.stage("ack-end", pid, outcome=state)
+        return True  # three rows done: more may be waiting (the ack thread goes straight round again; inline callers stop here)
 
     def ack_kick(self):
         """Tell the ack thread there is work; with no thread running (unit tests) do the work here instead."""
@@ -390,7 +391,7 @@ class Forwarder:
                     if spool is None:
                         spool = Spool(self.spool.directory, self.clock())
                         spool.clock, spool.stage = self.clock, self.stage
-                    self._ack(spool)
+                    while self._ack(spool) and not self.ack_stop.is_set(): pass  # a burst is worked off without waiting a tick per three
                 except Exception:  # noqa: BLE001 - the thread outlives any single failure (a locked file, a full disk)
                     print("retry", file=sys.stderr)
         finally:
