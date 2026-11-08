@@ -47,6 +47,16 @@ want me to bring it back instead?"; a held twin is refused).
 * Claims (organic, local, origins) pass only when he said them; the claims gate in the editor checks the draft again and the
   live policy still stops a live release of a new product (brand, displayBrand and producerKey are protected: live class
   `private-only`, D4).
+* **One photo, one product:** when his words ("add the lemon curd and the plum jam", a name that lists two products, `&`, `+`, or
+  "both" beside an "and" in the name) put two products on the one photo, the skill itself asks "One photo can go on one product.
+  Which one is this photo for?", whatever the interpreter returned. A single name with an "and" in it ("Salt and vinegar chips") is
+  one product.
+* **The house description is enforced, not only reported:** a description (his own, or the drafted one) with a digit or price, a
+  hype word, `!` or `?`, a length outside the shop's measured 59 to 167 characters or a sentence count outside 2 to 3 is not
+  drafted; he is asked: "That description won't match the others on the site: ... Could you send a different one?" A claim word
+  he did not say is left to the claims gate, which asks him about it.
+* **Preview:** the proposal screenshot is of the new product card (its picture and neighbours), also when a new maker is added
+  with it (`preview.proposal_record`); the maker record comes first in the change only because the product needs it.
 * **D6, the picture:** with the house render on (`houseRender`, SKILLS-PIC-1), a photo the render cannot make house-style gets a
   kind retake line ("I couldn't separate the product from the background ... A new photo on a plain surface ... If this one is
   fine, just reply yes."); a small one: "This photo is small ...". With the render off (today), the photo goes on as sent and a photo
@@ -74,12 +84,11 @@ Built against the SKILLS-FW-3 dispatcher (PR 526) and the FW-2 router (PR 525), 
 **Known gaps until FW-3 grows three small hooks** (the test kit plays them; the live chat does not yet): the dispatcher must show
 `Refusal.reply` instead of a generic "Sorry", call `notes()` so the shelf-check, "Left off" and picture lines are shown, and call
 `question()` so the "same as last time" offer is made. "Same as last time" also meets the claims gate, which wants the maker
-named in his own words: today he is asked once to name the farm, then the draft follows (case `same-farm-tomatoes`). A draft that
-adds a new maker previews the maker first (the conversation previews the first record), not the new card.
+named in his own words: today he is asked once to name the farm, then the draft follows (case `same-farm-tomatoes`).
 
 ## Cases (`item.add.jsonl`)
 
-13 conversation rows through the real Conversation and Editor and 4 plan rows: the ten spec sentences (clean, misspelled,
+13 conversation rows through the real Conversation and Editor and 6 plan rows: the ten spec sentences (clean, misspelled,
 vague "add this", a photo with no words, twin, price and size, unknown maker, one question at a time, two items on one photo,
 organic said), a photo with the name as its caption, same farm as last time, a hidden maker, and today's check already
 recorded; 8 rows end in an approved draft that is undone. They use the synthetic photos of #504

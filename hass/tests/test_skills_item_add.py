@@ -10,7 +10,7 @@ import copy
 import unittest
 from types import SimpleNamespace
 
-from hass import live_policy, skills, voice
+from hass import live_policy, preview, skills, voice
 from hass.content_model import REPO_ROOT, load_and_validate
 from hass.ops import load_registry
 from hass.skills import item_add as ia
@@ -65,7 +65,10 @@ class Declaration(unittest.TestCase):
 
     def test_every_owner_sentence_passes_the_voice_rules(self):
         fixed = list(ia.ASK.values()) + [ia.ONE_PHOTO, ia.NO_LAST_FARM, ia.STORE_LINE, ia.NO_BYTES, ia.RETAKE_BUSY,
-                                         ia.RETAKE_SMALL, ia.RETAKE_OTHER, ia.AS_TAKEN, ia.PICTURE_OK, ia.SHORT_DESC, ia.MANY_ITEMS]
+                                         ia.RETAKE_SMALL, ia.RETAKE_OTHER, ia.AS_TAKEN, ia.PICTURE_OK, ia.MANY_ITEMS,
+                                         ia.description_refusal(["it has a number in it", "it has sales words",
+                                                                 "it has an exclamation or question mark",
+                                                                 "it is shorter than the others on the site"]).reply]
         fixed += [reply.replace("<Product>", "Cal Poly honey").replace("<Maker>", "Etto") for _why, reply in ia.ITEM_ADD.refuse]
         asked = [ia.question(s, {"name": "Tomatoes", "form": "fresh", "maker": "Smith Farm"}, ctx()) for s in ia.ASK]
         for text in fixed + asked:
@@ -184,6 +187,117 @@ class Plan(unittest.TestCase):
         first = ia.plan_add(given, ctx("new honey from Cal Poly, it's in"))
         self.assertEqual(given, slots)
         self.assertEqual(ia.plan_add(dict(slots), ctx("new honey from Cal Poly, it's in")), first)
+
+
+class OnePhotoOneProduct(unittest.TestCase):
+    """Rule one-photo: the skill itself asks which product the photo is for, whatever the model returned (finding 1)."""
+
+    def test_two_products_in_his_message_ask_which_one_even_for_a_complete_plan(self):
+        text = "add the lemon curd and the plum jam, both in stock"
+        got = refusal({**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}, text)
+        self.assertEqual((got.reply, got.kind, got.backlog), (ia.ONE_PHOTO, "question", None))
+        with self.assertRaises(ia.Refusal):
+            ia.plan_add({**FULL, "name": "Lemon curd", "maker": "Linn's"}, ctx(text))  # no ops, from plan_add too
+
+    def test_a_name_that_lists_two_products_asks_which_one(self):
+        for name in ("Lemon curd and the plum jam", "Lemon curd & plum jam", "Lemon curd + plum jam", "Lemon curd, and plum jam"):
+            with self.subTest(name=name):
+                self.assertEqual(refusal({**FULL, "name": name, "maker": "Linn's"}, "new jams from Linn's, in stock").reply, ia.ONE_PHOTO)
+
+    def test_and_in_the_name_with_both_in_his_words_asks_which_one(self):
+        self.assertEqual(refusal({**FULL, "name": "Lemon curd and plum jam", "maker": "Linn's"}, "got both from Linn's").reply, ia.ONE_PHOTO)
+
+    def test_one_product_whose_name_has_and_is_not_two_products(self):
+        for name in ("Salt and vinegar chips", "Mac and cheese"):
+            with self.subTest(name=name):
+                done = ia.describe_add({**FULL, "name": name, "maker": "Linn's", "shelf": "pantry"}, ctx(f"new {name.lower()} from Linn's, in stock"))
+                self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+
+    def test_a_missing_name_still_asks_which_one_when_he_named_two(self):
+        self.assertEqual(refusal({"photo": SHA}, "add the lemon curd and the plum jam").reply, ia.ONE_PHOTO)
+
+
+class HouseDescriptionIsEnforced(unittest.TestCase):
+    """Rule house-description: the hard checks refuse or ask, they do not only warn (finding 2)."""
+
+    BAD = {"digits": "Lemon curd from Linn's in Cambria, 100 jars today. Spoon it onto warm buttered toast with tea.",
+           "hype": "Tasty lemon curd from Linn's in Cambria. Spoon it onto warm buttered toast and enjoy a little tea.",
+           "exclaim": "Lemon curd from Linn's in Cambria! Spoon it onto warm buttered toast and enjoy a little tea.",
+           "question": "Lemon curd from Linn's in Cambria. Would you spoon it onto warm buttered toast with some tea?",
+           "short": "Lemon curd from Linn's. Try it.",
+           "long": "Lemon curd from Linn's in Cambria. " + "Spoon it onto warm buttered toast and sit with a cup of tea. " * 3,
+           "one sentence": "Lemon curd from Linn's in Cambria that goes well on warm buttered toast with a cup of tea at breakfast.",
+           "four sentences": "Lemon curd from Linn's in Cambria. Spoon it onto toast. Fold it into cream. Eat it with tea for breakfast."}
+
+    def test_each_hard_failure_is_asked_again_and_makes_no_ops(self):
+        for what, text in self.BAD.items():
+            with self.subTest(what=what):
+                got = refusal({**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry", "description": text}, "new lemon curd from Linn's, in stock")
+                self.assertEqual(got.kind, "question")
+                self.assertTrue(got.reply.startswith("That description won't match the others on the site:"), got.reply)
+                self.assertTrue(got.reply.endswith("Could you send a different one?"))
+                self.assertEqual(voice.check(voice.plain(got.reply)), [])
+
+    def test_the_reviewers_example_names_every_reason(self):
+        got = refusal({**FULL, "name": "Lemon curd", "maker": "Linn's", "description": "The best 100 jars of lemon curd! Tasty stuff for everyone."},
+                      "new lemon curd from Linn's, in stock")
+        for reason in ("a number", "sales words", "an exclamation or question mark", "shorter than the others"):
+            self.assertIn(reason, got.reply)
+
+    def test_the_reasons_are_the_spec_numbers(self):
+        def two(n):  # two plain sentences, n characters in all
+            body = ("Spoon it onto toast " * 20)[:n - 25].rstrip()
+            return "Honey from Linn's here. " + body + "a" * (n - 25 - len(body)) + "."
+        self.assertEqual(len(two(58)), 58)
+        self.assertIn("shorter", " ".join(ia.description_problems(two(58))))  # 59 is the shortest on the site
+        self.assertEqual(ia.description_problems(two(59)), [])
+        self.assertEqual(ia.description_problems(two(167)), [])  # and 167 the longest
+        self.assertIn("longer", " ".join(ia.description_problems(two(168))))
+        self.assertEqual(ia.description_problems(FULL["description"]), [])
+        self.assertEqual(ia.description_problems("Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own."), [])
+        self.assertIn("longer", " ".join(ia.description_problems("Honey from here. " + "Spoon a little onto buttered toast. " * 5)))
+
+    def test_a_claim_word_is_left_to_the_claims_gate_not_refused_here(self):
+        self.assertEqual(ia.description_problems("Organic raspberry jam from Linn's in Cambria. Butter the toast first."), [])
+
+    def test_a_good_description_of_his_own_goes_through(self):
+        done = ia.describe_add({**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry",
+                                "description": "Lemon curd from Linn's in Cambria. Spoon it onto warm buttered toast."}, ctx("new lemon curd from Linn's, in stock"))
+        self.assertEqual(done.ops[0]["op"], "product.add")
+
+    def test_the_drafted_description_passes_its_own_hard_checks(self):
+        for name, maker, said in (("Cal Poly honey", "Cal Poly", "new honey from Cal Poly"), ("Jam", "don't know", "new jam, dont know who makes it")):
+            text = ia.house_description({"name": name, "maker": maker}, ctx(said))
+            self.assertEqual(ia.description_problems(text, said), [], text)
+
+
+class PreviewShowsTheNewProduct(unittest.TestCase):
+    """The proposal screenshot is of the new product card (with its picture and neighbours), also beside a new maker (finding 3)."""
+
+    def draft(self, slots):
+        scratch = testkit.Scratch({}, {"item.add": ia.ITEM_ADD}, photos=["reports/hass/newitem-1/synthetic/jar-white-sheet.jpg"])
+        try:
+            plan = ia.plan_add(slots, SimpleNamespace(today="2026-11-08", next_product_id="photo-product-175", content=CONTENT))
+            out = scratch.editor.prepare(plan)
+            self.assertEqual(out["result"], "ok", out)
+            return out["draft"]["records"]
+        finally:
+            scratch.close()
+
+    def test_a_new_maker_comes_first_but_the_product_is_what_is_shown(self):
+        records = self.draft(dict(FULL))
+        self.assertEqual([r["collection"] for r in records][:2], ["makers", "products"])
+        target = preview.target_for(preview.proposal_record(records))
+        self.assertEqual((target["kind"], target["id"], target["name"]), ("product", "photo-product-175", "Wildflower honey"))
+
+    def test_a_saved_maker_shows_the_product_as_before(self):
+        records = self.draft({**FULL, "maker": "Cal Poly", "place": None})
+        self.assertEqual(preview.proposal_record(records), records[0])
+        self.assertEqual(preview.target_for(records[0])["kind"], "product")
+
+    def test_a_maker_alone_still_shows_the_maker(self):
+        record = {"collection": "makers", "key": "Etto", "before": None, "after": {"name": "Etto", "place": "Templeton, California"}}
+        self.assertIs(preview.proposal_record([record]), record)
 
 
 class Picture(unittest.TestCase):

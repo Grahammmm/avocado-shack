@@ -770,7 +770,7 @@ class Conversation:
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
-            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(draft["records"][0], shop_today(), store=rendered.get("store")),
+            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(preview_mod.proposal_record(draft["records"]), shop_today(), store=rendered.get("store")),
                                           self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
                 if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
             shots = [shot["png"]] if shot.get("png") else []

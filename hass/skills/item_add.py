@@ -92,8 +92,15 @@ RETAKE_OTHER = ("The picture won't quite match the others. A new photo on a plai
 AS_TAKEN = ("I'll use the photo as you took it, so it may look different from the other pictures. A photo on a plain surface, "
             "with the product in the middle, would look better. If this one is fine, just reply yes.")
 PICTURE_OK = "The picture is tidied up to match the other pictures on the site."
-SHORT_DESC = "Your description is shorter or longer than the others on the site. You can send a different one."
 MANY_ITEMS = "I can add one product at a time. Which one do you want first?"
+# One photo is one product (rule one-photo): he names two products in one message, or the name slot lists two. A determiner
+# before each product ("the lemon curd and the plum jam") or a list sign (& +) is what tells two products from one name such
+# as "Salt and vinegar chips"; "both" in his message with "and" in the name says the same.
+_NOUN = r"[\w'\u2019-]+(?:\s+[\w'\u2019-]+){0,3}?"
+TWO_IN_MESSAGE = re.compile(rf"\b(?:add|adding|got(?:\s+in)?|have|new)\s+(?:the|a|an|some)\s+{_NOUN}\s+and\s+(?:the|a|an|some)\s+\w",
+                            re.IGNORECASE)
+TWO_IN_NAME = re.compile(r"\band\s+(?:the|a|an|some|another|their)\s+\w|\s[&+]\s|,\s+and\s|\bplus\s+(?:the|a|an|some)\s+\w", re.IGNORECASE)
+BOTH_WORD = re.compile(r"\b(?:both|each\s+of\s+them|two\s+(?:new\s+)?(?:items|products|things))\b", re.IGNORECASE)
 
 
 class Refusal(ValueError):
@@ -403,11 +410,54 @@ def _next_id(ctx, content):
     return newitem.next_product_id(content) if content is not None else None
 
 
+# -- one photo, one product -------------------------------------------------------------------------------------------
+def several_products(raw_name, message) -> bool:
+    """True when his words (or the name the model gave) put two products on the one photo."""
+    name = _clean(raw_name)
+    if name and TWO_IN_NAME.search(name):
+        return True
+    if name and re.search(r"\band\b", name, re.IGNORECASE) and BOTH_WORD.search(message or ""):
+        return True
+    return bool(TWO_IN_MESSAGE.search(message or ""))
+
+
+# -- the description: the house hard checks (reports/hass/SKILLS-SPEC.md 3.1, rule house-description) ------------------
+def description_problems(text, owner_text="") -> list:
+    """The plain-words reasons a description cannot go on the site, [] when it can. Hard: no digit or price, no ``!`` or ``?``,
+    no hype word, and the shop's own length (the measured minimum and maximum) and sentence count. An unstated claim word is
+    left to the claims gate, which asks him about it, so it is not a reason here."""
+    spec = hs.load_spec()["descriptions"]
+    check = hs.check_description(text, owner_text=owner_text)
+    failed = {c["name"] for c in check["checks"] if not c["ok"]}
+    why = []
+    if "no price or number" in failed:
+        why.append("it has a number in it")
+    if "no hype words" in failed:
+        why.append("it has sales words")
+    if "no exclamation or question marks" in failed:
+        why.append("it has an exclamation or question mark")
+    chars = hs.description_metrics(text)["chars"]
+    if chars < spec["chars"]["min"]:
+        why.append("it is shorter than the others on the site")
+    elif chars > spec["chars"]["max"]:
+        why.append("it is longer than the others on the site")
+    if "sentence count like the others" in failed:
+        why.append(f"it should be {spec['sentences']['min']} or {spec['sentences']['max']} sentences")
+    return why
+
+
+def description_refusal(why) -> Refusal:
+    return Refusal(f"That description won't match the others on the site: {_join(why, 'and')}. "
+                   "Could you send a different one?", "question")
+
+
 # -- the plan ----------------------------------------------------------------------------------------------------------
 def describe_add(slots: dict, ctx=None) -> Outcome:
     if not isinstance(slots, dict):
         raise Refusal(ASK["name"], "question")
     content, message = _content(ctx), _message(ctx)
+    if several_products(slots.get("name"), message):  # one photo is one product, whatever the model returned
+        raise Refusal(ONE_PHOTO, "question")
     slots, filled = _filled(slots, ctx)
 
     # 1. name: his words, no price or size
@@ -481,6 +531,8 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if not description:
         raise Refusal(question("description", slots, ctx), "question")
     description = _text(description, "description", "description")
+    if (why := description_problems(description, message)):
+        raise description_refusal(why)
     if "description" in filled:
         set_lines.append(f"the description to \u201c{_q(description)}\u201d, and you can send a different one if you like")
 
@@ -525,7 +577,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if price or size:
         parts = ([f"the price ({_join(price, 'and')})"] if price else []) + ([f"the size ({_join(size, 'and')})"] if size else [])
         left.append(f"{_join(parts, 'and')}, because the website shows no prices or sizes")
-    return Outcome(ops, tuple(set_lines), tuple(left), tuple(say), _picture_notes(ctx, sha, description))
+    return Outcome(ops, tuple(set_lines), tuple(left), tuple(say), _picture_notes(ctx, sha))
 
 
 def plan_add(slots: dict, ctx=None) -> list:
@@ -575,15 +627,12 @@ def picture_review(data: bytes, house_render: bool) -> tuple:
         return (), (NO_BYTES,)
 
 
-def _picture_notes(ctx, sha, description) -> tuple:
+def _picture_notes(ctx, sha) -> tuple:
     out = []
     data = _original(ctx, sha)
     if data is not None:
         say, warn = picture_review(data, bool(getattr(ctx, "house_render", False)))
         out += list(say) + list(warn)
-    check = hs.check_description(description, owner_text=_message(ctx))
-    if not check["pass"] and not (set(check["hard_failures"]) <= {"no unstated claim term"}):
-        out.append(SHORT_DESC)
     return tuple(out)
 
 
