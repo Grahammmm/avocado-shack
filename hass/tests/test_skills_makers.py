@@ -185,6 +185,12 @@ class Pronouns(unittest.TestCase):
             "They also grow figs.": f"{name} also grows figs.",
             "They don't use sprays.": f"{name} doesn't use sprays.",
             "They can ship anywhere.": f"{name} can ship anywhere.",
+            "They can bake and sell bread.": f"{name} can bake and sell bread.",  # a modal keeps the owner's later verbs
+            "They don't spray and sell only fresh fruit.": f"{name} doesn't spray and sell only fresh fruit.",
+            "They want to bake and sell bread.": f"{name} wants to bake and sell bread.",  # infinitive
+            "They bake bread that locals love and buy.": f"{name} bakes bread that locals love and buy.",  # other subject
+            "They grow figs and customers pick and eat them.": f"{name} grows figs and customers pick and eat them.",
+            "They bake bread, and sell it at the market.": f"{name} bakes bread, and sells it at the market.",
             "She started it in her kitchen.": f"{name} started it in her kitchen.",
             "Her bread is dark.": f"{name}\u2019s bread is dark.",
             "Their honey is dark.": f"{name}\u2019s honey is dark.",

@@ -133,10 +133,17 @@ _PRESENT = {"make", "keep", "grow", "roast", "bake", "sell", "brew", "press", "p
             "mill", "blend", "pour", "stock", "farm", "tend", "care", "believe", "take", "bring", "send", "build", "find",
             "need", "want", "live", "choose", "turn", "feed", "freeze", "preserve", "dry", "ferment", "pack", "gather",
             "forage", "tap", "bottle", "carry", "treat", "show", "look", "begin", "think", "know", "like", "stir", "mix"}
+_AUX = {"can", "could", "will", "would", "should", "may", "might", "must", "shall", "can't", "won't", "do", "does", "did",
+        "don't", "doesn't", "didn't"}
 _PRONOUN = re.compile(r"(They(?:['\u2019](?:re|ve|ll))?|She|He|His|Her|Their)(?=[\s,]|$)")
 _STRICT = "make|keep|grow|roast|bake|sell|brew|harvest|raise|own|serve|offer|produce|ship|supply|gather|preserve|ferment|forage|bring|build|choose|carry"
 # the second verb of "They bake and sell": a verb that is rarely a noun, or any listed verb after an adverb ("and now dry")
 _CONJ = re.compile(rf"\b(and|but|or) (?:(?P<adv>(?:now|also|still|then|often|always|only|just|even) )?)(?P<verb>(?(adv)(?:{'|'.join(sorted(_PRESENT))})|(?:{_STRICT})))\b")
+
+# where the maker stops being the subject of the verbs: an infinitive, a modal / auxiliary, a relative or subordinate clause,
+# or a comma / semicolon that does not just continue with "and|but|or <verb>"
+_CLAUSE = re.compile(r"\s(?:to|that|which|who|whom|whose|because|so|when|while|if|although|though|since|before|after|until|unless|where"
+                     r"|can|could|will|would|should|may|might|must|shall|do|does|did|is|are|was|were|has|have|had)\b|;|,(?!\s+(?:and|but|or)\s)")
 
 
 def _third(verb: str):
@@ -179,7 +186,11 @@ def _sentence(text: str, name: str) -> str:
     if head is None or verb is None:
         return text
     tail = " ".join([verb + words[0][head.end():], *words[1:]])
-    tail = _CONJ.sub(lambda m: f"{m.group(1)} {m.group(2) or ''}{_third(m.group(3))}", tail)  # "... and now dry pasta"
+    if head.group(0).lower() not in _AUX:  # after a modal or "don't" the next verb stays as he wrote it ("can bake and sell")
+        cut = _CLAUSE.search(tail)
+        cut = cut.start() if cut else len(tail)
+        same, rest = tail[:cut], tail[cut:]  # only the verbs that share the maker as subject, before any "to", "that", comma clause...
+        tail = _CONJ.sub(lambda m: f"{m.group(1)} {m.group(2) or ''}{_third(m.group(3))}", same) + rest  # "... and now dry pasta"
     return " ".join([name, *skipped, tail])
 
 
