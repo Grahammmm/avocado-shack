@@ -8,8 +8,11 @@ changes: nothing is written before the owner's own `yes <code>` (no writer commi
 Run: python3 -m unittest hass.tests.test_skill_dispatch -v
 """
 import json
+import sys
+import types
 import unittest
 from datetime import timedelta
+from unittest import mock
 
 from hass import conversation
 from hass.skills import dispatch
@@ -66,6 +69,28 @@ def registry_of(*skills):
     return Registry(skills={s.name: s for s in skills})
 
 
+class StubRouter(types.ModuleType):
+    """Stands in for hass.skills.router (SKILLS-FW-2, a separate PR) with its signature: ``candidates(text, hints, open_request,
+    attachment, skills)`` -> up to three (name, score), best first. By default it backs what the scripted model says for the
+    owner's text (the skill, or every skill of its calls, first at 10.0), so the agreement rule stays out of the way; a test
+    that wants a split or an outsider sets ``ranking``."""
+
+    def __init__(self, interp):
+        super().__init__("hass.skills.router")
+        self.interp, self.ranking, self.seen = interp, None, []
+
+    def candidates(self, text, hints=None, open_request=None, attachment=None, skills=()):
+        self.seen.append(text)
+        if self.ranking is not None:
+            return list(self.ranking)
+        keys = [k for k in self.interp.mapping if text.endswith(k)]
+        reply = self.interp.mapping[max(keys, key=len)] if keys else {}
+        names = [c["skill"] for c in reply["calls"]] if "calls" in reply else [reply["skill"]] if "skill" in reply else []
+        names = list(dict.fromkeys(names))
+        rest = [s.name for s in skills.active() if s.name not in names]
+        return [(n, 10.0 if i < len(names) else 1.0) for i, n in enumerate((names + rest)[:3])] if names else []
+
+
 def skill_reply(name, revises=None, **slots):
     return {"skill": name, "slots": slots, "revises": revises}
 
@@ -84,6 +109,10 @@ class SkillCase(ConversationTestCase):
         self.interp = Scripted({}, self.asked)
         self.editor = Clocked(self.repo.state, lambda: self.now)
         self.registry = registry_of(*self.SKILLS)
+        self.router = StubRouter(self.interp)
+        patcher = mock.patch.dict(sys.modules, {"hass.skills.router": self.router})
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.conv = self.open()
 
     def open(self, ed=None):
@@ -431,6 +460,149 @@ class OnlyTheOwnerTests(SkillCase):
         self.assertEqual(self.table(), before)
         self.assertEqual(len(self.asked), 1)  # the model was never asked about them
         self.assertIsNone(self.conv.requests.get("someone-else", self.now))
+
+
+class QueuedCallsTests(SkillCase):
+    """RETURN item 2: calls the owner has not finished are kept and asked one at a time, across answers, approvals and restarts."""
+    THREE = "add the Mill hike, the Pine hike and the Ocean hike on Saturday"
+
+    def three(self):
+        calls = [{"skill": "hike.add", "slots": {"title": f"{n} hike", "place": n, "day": SATURDAY}} for n in ("Mill", "Pine", "Ocean")]
+        self.script(self.THREE, {"calls": calls, "revises": None})
+
+    def test_three_incomplete_calls_become_three_drafts_asked_one_at_a_time(self):
+        self.three()
+        self.assertEqual(self.say(self.THREE), "question")
+        self.assertEqual(self.replies(), ["What time does it start?"])
+        self.assertEqual(len(self.live()["calls"]), 2)
+        for time, left in (("8am", 1), ("9am", 0), ("10am", 0)):
+            self.now += timedelta(minutes=1)
+            self.assertEqual(self.say(time), "proposed")
+            replies = self.replies()
+            self.assertEqual(len(replies), 1 if time == "10am" else 2, replies)
+            if time != "10am":
+                self.assertEqual(replies[1], "What time does it start?")
+            self.assertEqual(len(self.live()["calls"]), left)
+        titles = [json.loads(d["ops_json"])[0]["args"]["title"] for d in self.drafts() if d["state"] == "proposed"]
+        self.assertEqual(sorted(titles), ["Mill hike", "Ocean hike", "Pine hike"])
+        self.nothing_written()
+
+    def test_the_queue_survives_an_approval_and_a_restart(self):
+        self.three()
+        self.say(self.THREE)
+        self.replies()
+        self.assertEqual(self.say("8am"), "proposed")
+        self.replies()
+        self.conv = self.open()  # the service restarts: the queue is in the store, not in memory
+        self.assertEqual(len(self.live()["calls"]), 1)
+        self.assertEqual(self.say("yes"), "approved")
+        self.replies()
+        self.conv = self.open()
+        self.assertEqual((self.live()["skill"], self.live()["asked_slot"], len(self.live()["calls"])), ("hike.add", "time", 1))
+        self.assertEqual(self.say("9am"), "proposed")
+        self.replies()
+        self.assertEqual(self.live()["skill"], "hike.add")  # the third is asked now
+        self.assertEqual(self.live()["calls"], [])
+        self.assertEqual(self.say("10am"), "proposed")
+        self.assertEqual(self.commits(), 1)  # only the approved one was ever written
+
+    def test_a_question_that_cannot_be_answered_does_not_lose_the_calls_behind_it(self):
+        self.three()
+        self.say(self.THREE)
+        self.replies()
+        for n in range(dispatch.openreq.MAX_UNRESOLVED):  # "banana" is no time: the third time the ask is given up
+            self.script(f"banana{n}", skill_reply("hike.add", time=f"banana{n}"))
+            self.say(f"banana{n}")
+        self.assertEqual(len(self.live()["calls"]), 1)  # the first was written down as stuck; the second is asked, the third waits
+        self.assertEqual(self.live()["slots"]["title"], "Pine hike")
+
+
+class NegationTests(SkillCase):
+    """RETURN item 3: an owner-word fact the owner denied is never written."""
+
+    def test_the_word_check_reads_negation_in_one_message_and_across_messages(self):
+        yes, no = dispatch.traceable, lambda v, t: not dispatch.traceable(v, t)
+        self.assertTrue(no("easy", ["the hike is not easy"]))
+        self.assertTrue(no("easy", ["it isn't easy", "meet at 8"]))
+        self.assertTrue(no("easy", ["never really easy"]))
+        self.assertTrue(no("easy", ["without an easy bit"]))
+        self.assertTrue(yes("easy", ["not hard, easy"]))
+        self.assertTrue(yes("easy", ["not steep. easy hike"]))
+        self.assertTrue(yes("easy", ["the hike is not easy", "sorry, it is easy after all"]))  # the newest mention decides
+        self.assertTrue(no("easy", ["easy hike", "no wait, it is not easy"]))
+        self.assertTrue(yes("Mill Creek trailhead", ["meet at the Mill Creek trailhead, not the parking lot"]))
+        self.assertTrue(no("parking lot", ["meet at the Mill Creek trailhead, not the parking lot"]))
+        self.assertTrue(no("steep", ["it is flat"]))  # never said at all
+
+    def test_a_denied_difficulty_is_left_off_the_draft_and_said_so(self):
+        text = "add a hike Saturday at 8am, Mill Creek trailhead, not easy"
+        self.script(text, skill_reply("hike.add", **MILL))
+        draft, reply = self.propose(text)
+        self.assertNotIn("difficulty", json.loads(draft["ops_json"])[0]["args"])
+        self.assertIn("Left off (you didn't say it): difficulty.", reply)
+
+    def test_a_denied_value_stays_denied_in_a_later_turn_and_a_correction_brings_it_back(self):
+        first = "add a hike Saturday at 8am, Mill Creek trailhead, it is not easy"
+        self.script(first, skill_reply("hike.add", **{**MILL, "place": "Mill Creek trailhead"}))
+        draft, _ = self.propose(first)
+        self.assertNotIn("difficulty", json.loads(draft["ops_json"])[0]["args"])
+        self.script("sorry, it is easy", skill_reply("hike.add", difficulty="easy"))
+        self.assertEqual(self.say("sorry, it is easy"), "proposed")
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"])[0]["args"]["difficulty"], "easy")
+
+
+class AgreementTests(SkillCase):
+    """RETURN item 4: the router's second opinion is required; without it, or against it, the owner is asked and nothing is drafted."""
+    SAYS = "add a hike Saturday at 8am, Mill Creek trailhead, easy"
+
+    def setUp(self):
+        super().setUp()
+        self.script(self.SAYS, skill_reply("hike.add", **MILL))
+
+    def asked_nothing_drafted(self, question):
+        self.assertEqual(self.say(self.SAYS), "question")
+        self.assertEqual(self.replies(), [question])
+        self.assertEqual([d for d in self.drafts() if d["state"] == "proposed"], [])
+        self.assertEqual(self.live()["skill"], None)
+        self.nothing_written()
+
+    def test_a_missing_router_asks_instead_of_drafting_and_the_owners_choice_then_stands(self):
+        sys.modules["hass.skills.router"] = None  # import fails: the module is absent
+        self.asked_nothing_drafted("Do you want to add a hike?")
+        self.assertEqual(self.say(self.SAYS), "proposed")  # asked again with the same words: that is the owner's choice
+
+    def test_a_failing_router_asks_too(self):
+        def boom(*a, **k):
+            raise RuntimeError("router down")
+        self.router.candidates = boom
+        self.asked_nothing_drafted("Do you want to add a hike?")
+
+    def test_a_pick_outside_the_routers_top_three_is_asked(self):
+        self.router.ranking = [("item.describe", 10.0)]
+        self.asked_nothing_drafted("Do you want to change an item's description, or add a hike?")
+
+    def test_a_split_leading_pair_is_asked_whichever_was_picked(self):
+        self.router.ranking = [("hike.add", 10.0), ("item.describe", 9.5)]
+        self.asked_nothing_drafted("Do you want to add a hike, or change an item's description?")
+
+    def test_a_pick_just_behind_the_leader_is_asked(self):
+        self.router.ranking = [("item.describe", 10.0), ("hike.add", 9.5)]
+        self.asked_nothing_drafted("Do you want to change an item's description, or add a hike?")
+
+    def test_a_clear_agreement_drafts(self):
+        self.router.ranking = [("hike.add", 10.0), ("item.describe", 5.0)]
+        self.assertEqual(self.say(self.SAYS), "proposed")
+        self.assertEqual(self.router.seen, [self.SAYS])
+
+    def test_several_calls_need_the_router_too(self):
+        text = "add the Mill hike on Saturday and change the bread"
+        self.script(text, {"calls": [{"skill": "hike.add", "slots": {"title": "Mill hike", "place": "Mill", "day": SATURDAY, "time": "08:00"}},
+                                     {"skill": "item.describe", "slots": {"product": "bread"}}], "revises": None})
+        self.router.ranking = [("hike.add", 10.0)]
+        self.assertEqual(self.say(text), "question")
+        self.assertEqual(self.replies(), ["Do you want to add a hike, or change an item's description?"])
+        self.nothing_written()
+        self.assertEqual([d for d in self.drafts() if d["state"] == "proposed"], [])
 
 
 if __name__ == "__main__":

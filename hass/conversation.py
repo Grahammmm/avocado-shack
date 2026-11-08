@@ -1887,7 +1887,15 @@ class Conversation:
         """SKILLS-FW-3 (spec 3.32): the last ten things Hass could not do, newest first, as number, day and one line. Read-only;
         never the stored message. No table made to answer it."""
         from hass.skills.backlog import EMPTY_LIST, Backlog
-        self._reply(Backlog(self.db, self._now).owner_list() if self._backlog_table() else EMPTY_LIST)
+        rows = Backlog(self.db, self._now).rows() if self._backlog_table() else []
+        if not rows:
+            self._reply(EMPTY_LIST)
+            return "backlog"
+        def day(iso):  # "Nov 8": the owner never sees a computer date
+            try: return f"{datetime.fromisoformat(iso):%b} {datetime.fromisoformat(iso).day}"
+            except (TypeError, ValueError): return "a day I can't read"
+        self._reply("Written down so far, newest first:\n" + "\n".join(f"{r['id']}. {day(r['received_at'])} - {r['summary']}" for r in rows)
+                    + "\nSay " + voice.quote("forget backlog.3") + " (with that number) to remove one.")
         return "backlog"
 
     def _backlog_forget(self, number: int) -> str:

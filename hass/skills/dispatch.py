@@ -35,6 +35,7 @@ from hass.skills.model import MAX_OPS
 MODES = ("ops-only", "both", "skills-first")
 DEFAULT_MODE = "ops-only"
 MAX_CALLS = MAX_OPS
+NEAR_TIE = 0.10  # the router's top two within 10%: the owner is asked (same figure as hass/skills/router.py)
 
 # which op families a skill group owns: in skills-first a raw-ops reply is refused for these (spec 2.4)
 GROUP_OPS = {"item": ("product",), "stock": ("product", "store"), "hike": ("hike",), "maker": ("maker",),
@@ -128,10 +129,32 @@ def _fold_words(text) -> set:
     return {nl_prep.stem(w) for w in re.findall(r"[a-z0-9]+", nl_prep.fold(text or ""))}
 
 
+NEGATORS = frozenset("not no never none nothing nobody neither nor without cannot cant wont dont doesnt didnt isnt arent wasnt werent "
+                     "hasnt havent hadnt wouldnt shouldnt couldnt aint".split())
+CLAUSE_SPLIT = re.compile(r"[.,;:!?()\n]+|\b(?:but|and|though|although|however|instead|actually)\b")
+NEGATION_WINDOW = 3  # a negator up to three words before a word denies it ("is not easy", "not too easy", "never really hard")
+_FILLER_STEMS = frozenset(nl_prep.stem(w) for w in nl_prep.NAME_STOP)  # "meet at the gate, not the lot" still says "the"
+
+
+def _stem_clauses(text) -> list:
+    """A text as (stemmed word, denied) pairs in order: ``denied`` is true when a negator stands up to NEGATION_WINDOW words
+    before the word inside its clause. Words are cut exactly as ``_fold_words`` cuts them."""
+    out = []
+    for clause in CLAUSE_SPLIT.split(re.sub(r"n['\u2019]t\b", " not", nl_prep.fold(text or ""))):
+        words = re.findall(r"[a-z0-9]+", clause)
+        for i, w in enumerate(words):
+            out.append((nl_prep.stem(w), any(p in NEGATORS for p in words[max(0, i - NEGATION_WINDOW):i])))
+    return out
+
+
 def traceable(value, texts) -> bool:
-    """Owner words: every word of ``value`` is a word the owner said (stemmed, accents and case ignored)."""
-    said = _fold_words(" ".join(texts))
-    return all(w in said for w in _fold_words(value))
+    """Owner words: every word of ``value`` is a word the owner said (stemmed, accents and case ignored) and the owner's LAST
+    mention of it did not deny it ("the hike is not easy" never makes ``easy`` a fact; a later "it is easy after all" does)."""
+    last = {}
+    for text in texts:  # oldest first: the newest mention of a word decides
+        for stem, denied in _stem_clauses(text):
+            last[stem] = denied
+    return all(w in last if w in _FILLER_STEMS else last.get(w) is False for w in _fold_words(value))
 
 
 def _slot_limit(slot):
@@ -323,25 +346,41 @@ class Dispatcher:
         return [s for s in self.registry.active() if any(sl.kind == "attachment" and sl.from_attachment for sl in s.slots)]
 
     # routing agreement (spec 2.5 step 3) -------------------------------------------------------------------
-    def _agreement(self, text, req, skill_name, attachments):
-        """None to accept the model's skill, or the one question that asks which task the owner means."""
+    def _router_names(self, texts, req, attachments):
+        """The router's top three skill names, best first, as ``[(name, score)]``; None when the router is missing or fails."""
         try:
             router = importlib.import_module("hass.skills.router")
-            found = candidates_of(router.candidates(text, {}, req, bool(attachments)))
-        except Exception:  # noqa: BLE001 - no router, or it failed: the model's skill stands (the owner approves any draft)
+            return candidates_of(router.candidates(" ".join(texts), {}, req, bool(attachments), self.registry))
+        except Exception:  # noqa: BLE001 - agreement cannot be established; the caller asks instead of guessing
             return None
-        if not found:
+
+    def _agreement(self, texts, req, picks, attachments, has_slots=True):
+        """None to accept the model's skill(s) ``picks``, else ``(question, offered names)``: the one question that asks which task
+        the owner means. Nothing is drafted on a pick the code cannot back: the router missing or failing, a pick outside its
+        top three, a split between the leading two, or no second opinion and nothing filled in. When the owner already chose
+        among the names we offered, the pick he then makes stands."""
+        if req is not None and not req["skill"] and set(picks) <= set((req["ask"] or {}).get("agree") or ()):
             return None
-        names = [n for n, _ in found]
-        best = found[0]
-        pick = dict(found).get(skill_name)
-        if skill_name not in names or (skill_name != best[0] and pick is not None and best[1] <= pick * 1.10):
-            first = self.registry.get(skill_name)
-            other = self.registry.get(best[0] if best[0] != skill_name else (names[1] if len(names) > 1 else ""))
-            if first is None or other is None:
+        found = self._router_names(texts, req, attachments)
+        names = [n for n, _ in found or []]
+        if found is None or (not found and not has_slots):
+            offered = list(dict.fromkeys(picks))
+        elif not found:
+            return None
+        else:
+            best, near = found[0], len(found) > 1 and found[0][1] - found[1][1] <= NEAR_TIE * found[0][1]
+            if any(p not in names for p in picks):
+                offered = list(dict.fromkeys([best[0], *picks]))[:3]
+            elif len(picks) == 1 and near:  # the leading pair is ambiguous, whichever one was picked
+                offered = [found[0][0], found[1][0]]
+            elif len(picks) == 1 and picks[0] != best[0] and best[1] - dict(found)[picks[0]] <= NEAR_TIE * best[1]:
+                offered = [best[0], picks[0]]
+            else:
                 return None
-            return f"Do you want to {first.label}, or {other.label}?"
-        return None
+        labels = list(dict.fromkeys(self.registry.get(n).label for n in offered if self.registry.get(n) is not None))
+        if not labels:
+            return NOT_SURE, []
+        return "Do you want to " + ", or ".join(labels) + "?", offered
 
     # entry points --------------------------------------------------------------------------------------------
     def cheap(self, msg, now):
@@ -383,14 +422,20 @@ class Dispatcher:
             self.conv._reply(PHOTO_MISMATCH.format(labels=labels))
             return "question"
         if not same:
-            asked = self._agreement(msg.text, req, name, attachments)
+            asked = self._agreement(_joined(req, msg), req, [name], attachments, has_slots=any(v not in (None, "", []) for v in result["slots"].values()))
             if asked:
-                texts = _joined(req, msg)
-                self.conv.requests.put(owner, msg.provider_id, now, texts=texts, skill=None, question=asked, attachments=attachments)
-                self.conv._reply(asked)
-                return "question"
+                return self._ask_which(msg, now, req, asked, attachments)
         revises = result.get("revises") or (req["draft_code"] if same and req["state"] == "drafted" else None)
         return self._advance(msg, now, req if same else None, skill, result["slots"], revises, prior=None if same else req)
+
+    def _ask_which(self, msg, now, req, asked, attachments):
+        """Nothing is drafted: the owner is asked which task he means. The names offered are kept on the request, so the pick he
+        then makes (the model's next reply) is the owner's own choice and stands."""
+        question, offered = asked
+        self.conv.requests.put(self._owner(), msg.provider_id, now, texts=_joined(req, msg), skill=None, question=question,
+                               ask={"agree": offered} if offered else None, attachments=attachments)
+        self.conv._reply(question)
+        return "question"
 
     # the common step: slots in -> question, refusal, backlog or draft ----------------------------------------
     def _advance(self, msg, now, req, skill, new_slots, revises, ctx=None, prior=None, resolved=False):
@@ -441,7 +486,8 @@ class Dispatcher:
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
             return "question"
-        return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off)
+        return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off,
+                           queued=req["calls"] if req else ())
 
     def _ask(self, msg, now, req, skill, slots, texts, attachments, *, skill_slot, problem, ask, revises):
         """Ask the one question for ``skill_slot`` and keep the request. A slot asked three times and still open closes it."""
@@ -452,7 +498,11 @@ class Dispatcher:
             example = next((t.text for t in skill.triggers if getattr(t, "tag", "") == "clean"), skill.triggers[0].text)
             if req:
                 conv.requests.mark(req["request_id"], "closed", now)
-            return self._backlog(msg, now, None, "", "stuck", reply=STUCK.format(example=example), texts=texts)
+            stuck = self._backlog(msg, now, None, "", "stuck", reply=STUCK.format(example=example), texts=texts)
+            queued = [c for c in (req["calls"] if req else []) if self.registry.get(c.get("skill")) is not None]
+            if queued:  # this ask is given up; the owner's other asks are not
+                self._queue_only(msg, now, None, queued[0], queued[1:], texts, attachments, None)
+            return stuck
         question = question_for(slot, problem, ask)
         conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=req["request_id"] if req else None,
                           skill=skill.name, slots=slots, asked_slot=skill_slot, question=question, ask=ask,
@@ -475,16 +525,32 @@ class Dispatcher:
         code = conv._last_draft_code
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
+            if queued:  # the shelf-check question now holds the open request: the queued asks wait on it, not lost
+                conv.requests.put(owner, msg.provider_id, now, texts=live["texts"], request_id=live["request_id"], pending=live["pending"],
+                                  question=live["question"], calls=list(queued), legacy=True)
             return disposition  # the shelf-check question took the open request over (Conversation._ask_shelf)
         if disposition == "proposed":
+            if queued:  # the proposal waits for his yes while the next of his asks is asked, one at a time
+                return self._next_queued(msg, now, rid, queued, texts, attachments, disposition)
             rid = conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=rid, state="drafted", skill=skill.name,
-                                    slots=slots, attachments=attachments, draft_code=code, calls=list(queued))
+                                    slots=slots, attachments=attachments, draft_code=code)
         elif disposition in ("needs-details", "claim-question", "question"):
             rid = conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=rid, skill=skill.name, slots=slots,
                                     question=conv._said, attachments=attachments, draft_code=code if disposition == "needs-details" else None,
                                     calls=list(queued))
-        elif req is not None:
-            conv.requests.mark(req["request_id"], "closed", now)
+        else:
+            if req is not None:
+                conv.requests.mark(req["request_id"], "closed", now)
+            if queued:
+                return self._next_queued(msg, now, None, queued, texts, attachments, disposition)
+        return disposition
+
+    def _next_queued(self, msg, now, rid, queued, texts, attachments, disposition):
+        """The current call is done: the next queued call becomes the open request and its one question is asked. Calls whose
+        skill is gone are skipped. Returns ``disposition`` (what happened to the call just handled)."""
+        live = [c for c in queued if self.registry.get(c.get("skill")) is not None]
+        if live:
+            self._queue_only(msg, now, {"request_id": rid} if rid is not None else None, live[0], live[1:], texts, attachments, None)
         return disposition
 
     # several asks in one message ------------------------------------------------------------------------------
@@ -492,6 +558,11 @@ class Dispatcher:
         conv, owner = self.conv, self._owner()
         texts = _joined(req, msg)
         attachments = req["attachments"] if req else []
+        asked = None if any(self.registry.get(c.get("skill")) is None for c in result["calls"]) else self._agreement(
+            texts, req, [c.get("skill") for c in result["calls"]], attachments,
+            has_slots=any(v not in (None, "", []) for c in result["calls"] for v in c["slots"].values()))
+        if asked:
+            return self._ask_which(msg, now, req, asked, attachments)
         ctx = self._ctx(now, texts)
         ops, defaults, left, waiting = [], [], [], []
         for call in result["calls"]:

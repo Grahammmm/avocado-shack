@@ -84,7 +84,7 @@ class BacklogTests(unittest.TestCase):
         self.assertEqual(self.store.owner_list(), backlog.EMPTY_LIST)
         n = self.store.record("other", "add a gift card option", "t")
         reply = self.store.owner_list()
-        self.assertIn(f"{n}. Nov 8 - add a gift card option", reply)
+        self.assertIn(f"{n}. 2026-11-08 - add a gift card option", reply)
         for jargon in ("backlog_", "sqlite", "reason", "unknown-skill"):
             self.assertNotIn(jargon, reply)
 
