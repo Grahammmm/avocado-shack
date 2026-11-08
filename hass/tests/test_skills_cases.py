@@ -142,6 +142,22 @@ class RowRules(unittest.TestCase):
         self.assertEqual(run_case_row(row, self.skills).codes, ["bad-row"])
 
 
+class ReviewFixes(unittest.TestCase):
+    def test_selftest_needs_exactly_the_one_expected_code(self):
+        res = testkit.Result("x"); res.row = {"must_fail": "wrong-diff"}
+        res.fail("wrong-diff", "one"); res.fail("jargon", "two")
+        self.assertFalse(judge_selftest([res])[0][1])
+        only = testkit.Result("y"); only.row = {"must_fail": "wrong-diff"}
+        only.fail("wrong-diff", "one"); only.fail("wrong-diff", "again")
+        self.assertTrue(judge_selftest([only])[0][1])
+
+    def test_a_plan_row_may_supply_its_own_today(self):
+        skills = {s.name: s for s in load_skill_module(TOY)}
+        row = {"id": "p", "slots": {}, "ctx": {"today": "2030-01-01"}}
+        res = testkit.run_plan_row(row, skills, skills["toy.describe"], {})
+        self.assertNotIn("TypeError", " ".join(m for _, m in res.problems))
+
+
 class Helpers(unittest.TestCase):
     def test_plain_words(self):
         self.assertEqual(plain_words_problems("Which product do you mean, and what should the new text say?"), [])

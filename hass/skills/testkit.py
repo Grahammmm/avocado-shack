@@ -303,7 +303,7 @@ def run_plan_row(row, skills, skill=None, registry=None):
     if registry is None:
         from hass.ops import load_registry
         registry = load_registry()
-    ctx, slots = types.SimpleNamespace(today="2026-11-08", **(row.get("ctx") or {})), row["slots"]
+    ctx, slots = types.SimpleNamespace(**{"today": "2026-11-08", **(row.get("ctx") or {})}), row["slots"]
     before, given = copy.deepcopy(slots), copy.deepcopy(slots)
     try: ops = skill.plan(given, ctx)
     except Exception as exc:  # noqa: BLE001
@@ -584,7 +584,7 @@ def judge_selftest(results):
     out = []
     for r in results:
         want = r.row.get("must_fail")
-        ok = r.ok if want is None else (not r.ok and want in r.codes)
+        ok = r.ok if want is None else (not r.ok and set(r.codes) == {want})
         out.append((r, ok, want))
     return out
 
