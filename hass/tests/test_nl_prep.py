@@ -129,6 +129,18 @@ class HintTests(unittest.TestCase):
             self.assertNotIn("alreadyTrue", self.ask(text), text)
         self.assertNotIn("alreadyTrue", nl_prep.make_hinter(tiny(hours=()))("saturday 9 to 5", MONDAY))
 
+    def test_a_two_day_hours_request_is_a_fact_only_when_every_change_is_already_true(self):
+        for text in ("Saturday 9 to 5 and Sunday 10 to 2", "Sunday 10 to 2 and Saturday 9 to 5", "9 to 5 on saturday and 10 to 2 on sunday"):
+            self.assertNotIn("alreadyTrue", self.ask(text), text)
+        self.assertEqual(self.ask("Saturday 9 to 5 and Wednesday 9 to 6")["alreadyTrue"], ["Saturday already 9am–5pm", "Wednesday already 9am–6pm"])
+        self.assertEqual(self.ask("saturday and wednesday 9 to 5").get("alreadyTrue"), None)
+
+    def test_a_shared_prefix_is_not_resolved_to_one_product(self):
+        hint = nl_prep.make_hinter(SimpleNamespace(products=[product(1, "Lemons"), product(2, "Lemonade", "drinks")], makers={},
+                                                   community={}, store={"hours": []}))
+        self.assertNotIn("products", hint("lem is out", MONDAY))
+        self.assertEqual(hint("lemons is out", MONDAY)["products"][0]["is"]["id"], "photo-product-001")
+
     def test_asked_range(self):
         for text, want in (("9 to 5", ("9am", "5pm")), ("8:30-4pm", ("8:30am", "4pm")), ("10am until 2pm", ("10am", "2pm")),
                            ("11 to 3", ("11am", "3pm")), ("noon to 5", None), ("sat 13 to 5", None), ("no range", None)):

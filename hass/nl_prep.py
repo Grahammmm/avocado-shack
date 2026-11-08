@@ -110,8 +110,9 @@ class _Index:
         if token in self.vocab: return token, False
         if SLIPS.get(token) in self.vocab: return SLIPS[token], True
         if len(token) >= PREFIX_MIN - 1:
-            longer = sorted((v for v in self.vocab_list if v.startswith(token)), key=len)
-            if longer: return longer[0], True
+            longer = [v for v in self.vocab_list if v.startswith(token)]
+            if len(longer) == 1: return longer[0], True
+            if longer: return None, False  # several words start this way (lem: lemon, lemonade): the owner has not chosen, so no hint
         if len(token) >= FUZZY_MIN:
             close = difflib.get_close_matches(token, self.vocab_list, n=1, cutoff=FUZZY_CUTOFF)
             if close: return close[0], True
@@ -365,23 +366,38 @@ def asked_range(text):
     return _clock(h1, m1, a1 + "m"), _clock(h2, m2, a2 + "m")
 
 
+def _day_shows(index, wd, asked):
+    """The Store line text for weekday ``wd`` when it shows exactly ``asked``, else None."""
+    for line in index.hours:
+        for part in line.split("\u00b7"):
+            m = re.match(r"\s*([A-Za-z]+)(?:\s*[\u2013-]\s*([A-Za-z]+))?\s+(.+?)\s*$", part)
+            if not m: continue
+            first = next((i for i, n in enumerate(WEEKDAY_NAMES) if n.lower().startswith(m.group(1).lower()[:3])), None)
+            last = first if m.group(2) is None else next((i for i, n in enumerate(WEEKDAY_NAMES) if n.lower().startswith(m.group(2).lower()[:3])), None)
+            if first is None or last is None or not first <= wd <= last: continue
+            shown = re.sub(r"\s*[\u2013-]\s*", "\u2013", m.group(3).lower().replace(" ", ""))
+            if shown == f"{asked[0]}\u2013{asked[1]}": return m.group(3)
+    return None
+
+
 def hours_hints(text, index):
-    """The Store already shows the days and hours the owner asks for: a fact for "it already says that", never a draft."""
-    asked, days = asked_range(text), [WEEKDAYS[name] for _, name in WEEKDAY_RE.findall(fold(text))]
-    if not (asked and days and index.hours): return None
-    names = WEEKDAY_NAMES
-    same = []
-    for wd in sorted({d for d in days}):
-        for line in index.hours:
-            for part in line.split("\u00b7"):
-                m = re.match(r"\s*([A-Za-z]+)(?:\s*[\u2013-]\s*([A-Za-z]+))?\s+(.+?)\s*$", part)
-                if not m: continue
-                first = next((i for i, n in enumerate(names) if n.lower().startswith(m.group(1).lower()[:3])), None)
-                last = first if m.group(2) is None else next((i for i, n in enumerate(names) if n.lower().startswith(m.group(2).lower()[:3])), None)
-                if first is None or last is None or not first <= wd <= last: continue
-                shown = re.sub(r"\s*[\u2013-]\s*", "\u2013", m.group(3).lower().replace(" ", ""))
-                if shown == f"{asked[0]}\u2013{asked[1]}": same.append(f"{names[wd]} already {m.group(3)}")
-    return same or None
+    """The Store already shows EVERY day and hours the owner asks for: a fact for "it already says that", never a draft.
+    Each day is matched to its own range (the nearest one); any change not already true, or any pairing in doubt, gives no hint."""
+    t = fold(text)
+    ranges = [(m.start(), m.end(), asked_range(m.group(0))) for m in RANGE_RE.finditer(t)]
+    days = [(m.start(), m.end(), WEEKDAYS[m.group(2)]) for m in WEEKDAY_RE.finditer(t)]
+    if not (ranges and days and index.hours) or any(r[2] is None for r in ranges): return None
+    same, used = [], set()
+    for start, end, wd in days:
+        dist = sorted((max(r[0] - end, start - r[1], 0), k) for k, r in enumerate(ranges))
+        if len(dist) > 1 and dist[0][0] == dist[1][0]: return None  # equally near two ranges: cannot tell which is meant
+        k = dist[0][1]
+        shown = _day_shows(index, wd, ranges[k][2])
+        if shown is None: return None  # this day is asked to change (or is not on the Store)
+        used.add(k)
+        same.append(f"{WEEKDAY_NAMES[wd]} already {shown}")
+    if len(used) != len(ranges): return None  # a requested range no day was matched to
+    return list(dict.fromkeys(same)) or None
 
 
 def make_hinter(content):
