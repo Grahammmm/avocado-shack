@@ -119,23 +119,33 @@ class Questions(unittest.TestCase):
         for slots, want in steps:
             with self.subTest(want=want):
                 got = refusal(slots)
-                self.assertEqual((voice.plain(got.reply).split(" (Say")[0], got.kind), (want, "question"))
+                self.assertEqual((voice.plain(got.reply).split(" (Last")[0], got.kind), (want, "question"))
 
-    def test_the_farm_question_offers_same_as_last_time(self):
+    def test_the_farm_question_offers_the_last_maker_by_name(self):
         content = with_last("Fair Hills Farm")
         asked = voice.plain(ia.question("maker", {"name": "Tomatoes", "form": "fresh"}, ctx(content=content)))
-        self.assertEqual(asked, "Who grew these tomatoes? (Say \u201csame\u201d for Fair Hills Farm, the farm from last time.)")
+        self.assertEqual(asked, "Who grew these tomatoes? (Last time it was Fair Hills Farm. Say the name again to use them.)")
         packaged = voice.plain(ia.question("maker", {"name": "Lemon curd", "form": "packaged"}, ctx()))
-        self.assertTrue(packaged.endswith("(Say \u201csame\u201d for Etto, the maker from last time.)"), packaged)
+        self.assertTrue(packaged.endswith("(Last time it was Etto. Say the name again to use them.)"), packaged)
 
-    def test_same_uses_the_maker_of_the_last_product_added(self):
+    def test_same_uses_the_maker_of_the_last_product_added_once_he_says_the_name(self):
         content = with_last("Fair Hills Farm")
+        said = ctx("same farm as last time, Fair Hills Farm", content=content)
         done = ia.describe_add({**FULL, "name": "Heirloom tomatoes", "form": "fresh", "maker": "same farm as last time",
-                                "shelf": "vegetables"}, ctx("same farm as last time", content=content))
+                                "shelf": "vegetables"}, said)
         add = next(op for op in done.ops if op["op"] == "product.add")["args"]
         self.assertEqual((add["producerKey"], add["brand"]), ("Fair Hills Farm", "Fair Hills Farm"))
         self.assertIn("the maker to Fair Hills Farm, the same as last time", [voice.plain(s) for s in done.set_lines])
         self.assertNotIn("maker.add", [op["op"] for op in done.ops])
+        self.assertEqual([voice.plain(p) for p in ia.set_phrases({**FULL, "maker": "same", "shelf": "vegetables"}, said)][:1],
+                         ["the maker to Fair Hills Farm, the same as last time"])
+
+    def test_same_without_the_name_in_his_words_asks_him_to_say_it(self):
+        content = with_last("Fair Hills Farm")
+        got = refusal({**FULL, "name": "Heirloom tomatoes", "form": "fresh", "maker": "same farm as last time", "shelf": "vegetables"},
+                      "same farm as last time", content=content)
+        self.assertEqual((voice.plain(got.reply), got.kind), ("Please say the name, so I use the right one: Fair Hills Farm.", "question"))
+        self.assertEqual(voice.check(voice.plain(got.reply)), [])
 
     def test_same_with_no_saved_maker_asks(self):
         content = copy.deepcopy(CONTENT)
