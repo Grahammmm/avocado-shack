@@ -5,7 +5,7 @@
 // allowed; every other request (any POST, anything off 127.0.0.1) is aborted. Prints {"checks": {...}}.
 // Maker: its place search, then all cards if none names it; card text compared (never a selector built from the name).
 // hidden → makerHidden (no card names it); else makerName + makerPlace; a maker with no active card adds no maker check.
-// Hike: scheduled → eventShown; completed → pastShown (+ recapShown if a recap); cancelled → rsvpGone (no RSVP button).
+// Hike: scheduled → eventShown; completed → pastShown (journal entry, exact h3 title) (+ recapShown if a recap, in .trail-journal-recap); cancelled → rsvpGone (no RSVP button).
 'use strict';
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
 if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
@@ -65,9 +65,9 @@ const allowed=req=>{
           Object.assign(checks,best);
         }
       }
-      else if(target.status==='completed'){  // past hike whose summary title is exactly the target's; its recap paragraph
-        const recaps=await page.locator('#past-hikes .past-hike').evaluateAll((els,title)=>els.filter(d=>
-          d.querySelector('summary span')?.textContent===title).map(d=>d.querySelector(':scope>p')?.textContent),target.title);
+      else if(target.status==='completed'){  // AV1622-03: real journal entry (has .trail-journal-recap, so never a sample) whose h3 is exactly the target's title
+        const recaps=await page.locator('#past-hikes .trail-journal-entry').evaluateAll((els,title)=>els.filter(d=>
+          d.querySelector('.trail-journal-recap')&&d.querySelector('h3')?.textContent===title).map(d=>d.querySelector('.trail-journal-recap')?.textContent),target.title);
         checks.pastShown=recaps.length>0;
         if(target.recap)checks.recapShown=recaps[0]===target.recap;
       }else if(target.status==='cancelled'){  // the id is compared in page JS, never put into a selector

@@ -49,6 +49,18 @@ function sampleHistory(item,index){
  const t=trailById(item.trailId);if(!t)return '';
  return `<article class="trail-journal-entry"><div class="trail-journal-marker" aria-hidden="true">${index===0?'↗':'≈'}</div><div class="trail-journal-copy"><p class="trail-place">${esc(t.place)} <span>· ${esc(item.dateLabel)}</span></p><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p><dl class="trail-journal-stats">${metric('Distance',t.distance)}${metric('Difficulty',t.difficulty)}${metric(t.elevationLabel,t.elevation)}${metric('Allow',t.duration)}</dl><a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">Explore this trail <span aria-hidden="true">↗</span></a></div></article>`;
 }
+// AV1622-03: a real completed hike is a trail-journal entry (same markup as sampleHistory). Its own title and recap lead; a matching public route idea adds place/stats/link, else its own fields. Empty stats are omitted.
+function pastEntry(e,index){
+ const t=trailById(e.trailId),own=(k)=>set(e[k])?e[k]:null;
+ const tz=e.timezone||'America/Los_Angeles',ms=Date.parse(e.startsAt);
+ const month=Number.isNaN(ms)?'':new Date(ms).toLocaleDateString('en-US',{timeZone:tz,month:'long',year:'numeric'});
+ const place=t?(set(t.place)?t.place:null):own('meetingPoint');
+ const rows=t?[['Distance',t.distance],['Difficulty',t.difficulty],[set(t.elevationLabel)?t.elevationLabel:'Elevation',t.elevation],['Allow',t.duration]]:[['Distance',e.distance],['Difficulty',e.difficulty],['Allow',e.duration]];
+ const stats=rows.filter(x=>set(x[1])).map(([k,v])=>metric(k,v)).join('');
+ let https=false;if(t){try{https=new URL(t.sourceUrl).protocol==='https:'}catch{}}
+ const when=month?`<span>${place?'· ':''}<time datetime="${esc(e.startsAt)}">${esc(month)}</time></span>`:'';
+ return `<article${anchor(e)} class="trail-journal-entry"><div class="trail-journal-marker" aria-hidden="true">${index===0?'↗':'≈'}</div><div class="trail-journal-copy"><p class="trail-place">${place?esc(place)+' ':''}${when}</p><h3>${esc(e.title)}</h3><p class="trail-journal-recap">${esc(e.recap||e.description||'')}</p>${stats?`<dl class="trail-journal-stats">${stats}</dl>`:''}${https?`<a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">Explore this trail <span aria-hidden="true">↗</span></a>`:''}</div></article>`;
+}
 // AV1422-08: the 1.8 MB aerial and route file load only once the map is within one screen of view.
 function mountWhenNear(host){
  if(!host||host.dataset.observing)return;host.dataset.observing='true';
@@ -61,7 +73,7 @@ const anchor=e=>{const id=e&&e.id;if(typeof id!=='string'||id===''||staticIds.ha
 // Once per page load, after the first render: scroll to and focus the card the address names; unknown, malformed or static ids do nothing.
 function jump(){let want;try{want=decodeURIComponent((location.hash||'').slice(1))}catch{return}
  if(!want||staticIds.has(want))return;
- const card=[...document.querySelectorAll('#upcoming-hikes .hike-event[id], #past-hikes .past-hike[id]')].find(x=>x.id===want);if(!card)return;
+ const card=[...document.querySelectorAll('#upcoming-hikes .hike-event[id], #past-hikes .trail-journal-entry[id]')].find(x=>x.id===want);if(!card)return;
  card.scrollIntoView({block:'start'});card.setAttribute('tabindex','-1');card.focus({preventScroll:true})}
 function render(){
  usedIds.clear();
@@ -72,8 +84,8 @@ function render(){
  const past=club.events.filter(e=>e.status==='completed').sort((a,b)=>new Date(b.startsAt)-new Date(a.startsAt));
  const samplePast=samplesOn&&!past.length&&preview?.enabled&&(preview.past||[]).some(e=>trailById(e.trailId));
  $('#history-context').textContent=samplePast?'Sample archive · these outings are not confirmed club history.':'Places and memories from our walks together.';
- $('#past-hikes').classList.toggle('trail-journal',!!samplePast);
- $('#past-hikes').innerHTML=past.length?past.map(e=>`<details${anchor(e)} class="past-hike"><summary><span>${esc(e.title)}</span><time>${esc(new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:e.timezone||'America/Los_Angeles',month:'long',day:'numeric',year:'numeric'}))}</time></summary><p>${esc(e.recap||e.description||'')}</p>${details(e)}</details>`).join(''):samplePast?preview.past.map(sampleHistory).join(''):'<p class="club-small history-empty">We’re gathering the club’s past outings. Routes and stories will appear here as Michael shares them.</p>';
+ $('#past-hikes').classList.toggle('trail-journal',!!(past.length||samplePast));
+ $('#past-hikes').innerHTML=past.length?past.map(pastEntry).join(''):samplePast?preview.past.map(sampleHistory).join(''):'<p class="club-small history-empty">We’re gathering the club’s past outings. Routes and stories will appear here as Michael shares them.</p>';
  mountWhenNear(document.querySelector('[data-trail-explorer]'));
  if(!jumped){jumped=true;jump()}
  const form=$('#preview-hike-rsvp');
