@@ -196,8 +196,9 @@ class DraftTests(unittest.TestCase):
         self.assertIn(product["description"], files["storefront-mockup/catalog-products.js"].decode("utf-8"))
         self.assertEqual(sitegen.availability_label(product, after.store, shop_today(now)), "Available today")
     def test_the_product_phrase_is_not_a_story_word(self):
-        from hass import newitem_demo
-        r = self.draft(newitem_demo.MESSAGES["bottle-grey-wall-tilted"])
+        # Same text as newitem_demo.MESSAGES["bottle-grey-wall-tilted"]; inlined because newitem_demo needs Pillow.
+        r = self.draft("Just got in wildflower hot sauce from Bee Happy Farm in Templeton, California. Great on eggs. "
+                       "They grow the peppers themselves. 6oz bottle $8")
         product = next(o for o in r["ops"] if o["op"] == "product.add")["args"]
         self.assertEqual((product["name"], product["category"]), ("Bee Happy Farm wildflower hot sauce", "pantry"))
         self.assertEqual(r["facts"]["kind"], "sauce")
