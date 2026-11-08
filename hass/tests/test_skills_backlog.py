@@ -97,6 +97,20 @@ class BacklogTests(unittest.TestCase):
         self.assertFalse(self.store.forget(True))
         self.assertEqual([r["id"] for r in self.store.rows()], [b])
 
+    def test_numbers_are_not_reused_after_forget_or_purge(self):
+        a = self.store.record("other", "a", "t1")
+        self.assertTrue(self.store.forget(a))
+        b = self.store.record("other", "b", "t2")
+        self.assertNotEqual(a, b)
+        self.assertFalse(self.store.forget(a))  # stale forget for A leaves B
+        self.assertEqual([r["id"] for r in self.store.rows()], [b])
+        self.clock.now = self.clock.now + timedelta(days=200)
+        self.assertEqual(self.store.purge(), 1)  # purge the highest row
+        c = self.store.record("other", "c", "t3")
+        self.assertGreater(c, b)
+        self.assertFalse(self.store.forget(b))
+        self.assertEqual([r["id"] for r in self.store.rows()], [c])
+
     def test_retention_is_ninety_days(self):
         self.assertEqual(backlog.RETENTION_DAYS, 90)
         self.store.record("other", "old", "t")

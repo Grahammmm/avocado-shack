@@ -123,6 +123,10 @@ class ResolverTests(unittest.TestCase):
             with self.subTest(said=said):
                 self.assertEqual(kinds.availability(said).value, want)
         self.assertEqual(kinds.availability("maybe").status, "none")
+        for said in ("not available", "not in stock", "not out", "isn't in stock", "isn't available", "never in stock"):
+            with self.subTest(said=said):
+                self.assertEqual(kinds.availability(said).status, "none")
+                self.assertIn("in stock", kinds.availability(said).reply)
 
     def test_day_and_clock(self):
         self.assertEqual(kinds.day("tomorrow", TODAY).value, "2026-11-09")

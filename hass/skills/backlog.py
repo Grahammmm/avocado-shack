@@ -32,7 +32,7 @@ RETENTION_DAYS = 90  # D7
 LIST_MAX = 10  # the owner's 'backlog' command shows the last ten
 HIDDEN = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b\u200e\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
 
-TABLE = """CREATE TABLE IF NOT EXISTS backlog(id INTEGER PRIMARY KEY, received_at TEXT NOT NULL,
+TABLE = """CREATE TABLE IF NOT EXISTS backlog(id INTEGER PRIMARY KEY AUTOINCREMENT, received_at TEXT NOT NULL,
   reason TEXT NOT NULL CHECK(reason IN ('unknown-skill','policy','unsupported-page','stuck','price','other')),
   summary TEXT NOT NULL, text TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','closed')))"""
 
@@ -87,7 +87,7 @@ class Backlog:
         return [dict(zip(names, r)) for r in cur.fetchall()]
 
     def forget(self, number) -> bool:
-        """Remove one row by its number. True when a row was removed."""
+        """Remove one row by its number (numbers are never reused, so a stale forget cannot hit a newer row). True when a row was removed."""
         if isinstance(number, bool) or not isinstance(number, int):
             return False
         return self.db.execute("DELETE FROM backlog WHERE id = ?", (number,)).rowcount == 1

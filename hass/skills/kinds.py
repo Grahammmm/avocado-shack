@@ -21,6 +21,7 @@ WORDS_FOR_AVAILABILITY = {
     "limited": ("low", "limited", "running low", "few", "almost out", "last"),
     "no": ("out", "sold out", "gone", "none", "no more", "unavailable"),
 }
+NEGATION = re.compile(r" (not|never|without|no longer|\w+n't|isnt|arent|wasnt|werent|dont|doesnt|cant|cannot|hasnt|havent) ")
 SHELF_WORDS = {"vegetable": "vegetables", "veggies": "vegetables", "veg": "vegetables", "produce": "vegetables",
                "egg": "eggs", "drink": "drinks", "flower": "flowers", "pantry": "pantry"}
 CLOCK_RE = re.compile(r"([01]?\d|2[0-3]):([0-5]\d)")
@@ -140,6 +141,8 @@ def availability(text) -> Resolved:
     if (text or "").strip() in AVAILABILITY:
         return Resolved("one", value=text.strip())
     found = {k for k, words in WORDS_FOR_AVAILABILITY.items() if any(f" {w} " in t for w in words)}
+    if found and NEGATION.search(t):  # 'not available', 'not out': never assert the opposite stock state, ask
+        return Resolved("none", reply="Is it in stock, running low, or sold out?")
     if "limited" in found and "no" in found and "almost out" in t:
         found.discard("no")
     if "no" in found and " no more " in t:
