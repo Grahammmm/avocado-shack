@@ -228,6 +228,7 @@ class Outbox:
     strict = os.environ.get("HASS_VOICE_STRICT") == "1"  # tests and CI: a message that breaks a voice rule raises
     msg_id = None  # provider id of the owner message being answered (for the correspondence log)
     emoji_ok = False  # the owner used an emoji first
+    private_chat = None  # HASS-VOICE-1: G's own chat (set by Conversation); a reply there that cannot be sent never blocks the owner's
 
     def __init__(self, db, now):
         self.db, self._now = db, now
@@ -250,11 +251,17 @@ class Outbox:
         return self.db.execute("SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id").fetchall()
 
     def flush(self, adapter) -> int:
-        """A raised send error propagates and leaves that row and every later row unsent."""
+        """A raised send error propagates and leaves that row and every later row unsent, except a private row (G's chat):
+        if that cannot be sent it is dropped and logged, so it never holds up an owner reply."""
         sent = 0
         for row in self.unsent():
             head = self._late(row["reply_to"]) or self._delayed(row["created_at"])  # the longer wait is the one named
-            adapter.send(row["chat"], head + row["text"], json.loads(row["attachments"]))
+            try: adapter.send(row["chat"], head + row["text"], json.loads(row["attachments"]))
+            except Exception:
+                if row["chat"] != self.private_chat or self.private_chat is None: raise
+                self.db.execute("DELETE FROM outbox WHERE id = ?", (row["id"],))
+                if self.log: self.log.record("error", "g-reply-not-sent")
+                continue
             self.db.execute("UPDATE outbox SET sent_at = ? WHERE id = ?", (_iso(self._now()), row["id"]))
             self._slow(row)
             sent += 1
@@ -373,6 +380,14 @@ def load_settings(sdir, photos=False) -> dict:
     g_keys = [sender_key(g) for g in g_senders] if isinstance(g_senders, list) else []
     if g_senders is not None and (not isinstance(g_senders, list) or None in g_keys or set(g_keys) & set(keys)):
         problems.append("gSenders must be a list of sender addresses that are not owner senders")
+    g_chat = settings.get("gChat")  # HASS-VOICE-1: G's own one-to-one chat; the only place `problems` and `weekly` are answered
+    if g_keys and g_senders is not None:
+        if not isinstance(g_chat, str) or not g_chat.strip(): problems.append("gChat must be set to G's own chat when gSenders is set")
+        elif g_chat == chat: problems.append("gChat must not be the owner chat")
+        elif ";+;" in g_chat: problems.append("gChat is a group chat; it must be G's one-to-one chat")
+        elif (direct := re.fullmatch(r"[^;]+;-;([^;]+)", g_chat)) and sender_key(direct[1]) not in g_keys:
+            problems.append("gChat is a one-to-one chat with an address that is not in gSenders")
+    elif g_chat is not None: problems.append("gChat needs gSenders")
     site, needs_code = settings.get("liveSite"), settings.get("approvalNeedsCode", False)
     if site is not None and (not isinstance(site, str) or not re.fullmatch(r"[a-z0-9.-]{3,253}", site) or "." not in site):
         problems.append("liveSite must be a hostname")
@@ -382,7 +397,7 @@ def load_settings(sdir, photos=False) -> dict:
     return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
             "interpreterDailyCap": cap, **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
-            **({"gKeys": frozenset(g_keys)} if g_keys else {})}
+            **({"gKeys": frozenset(g_keys), "gChat": g_chat} if g_keys and isinstance(g_chat, str) else {})}
 
 
 def parse_keyword(text: str):
@@ -570,6 +585,9 @@ def _summary(draft: dict) -> str:
         if r.get("before") is None and isinstance(r.get("after"), dict):
             parts.append(f"a new {word or 'entry'}" + (f": {name}" if name else ""))
             continue
+        if _removed(r):
+            parts.append(f"taking away the {word or 'entry'}" + (f": {name}" if name else ""))
+            continue
         fields = list(dict.fromkeys(voice.field_phrase(f) for f, _b, _a in _changes(r)))
         what = ", ".join(fields[:3]) + (" and more" if len(fields) > 3 else "")
         parts.append(f"{what} for {name or WHOLE_WORDS.get(r.get('collection'), 'this')}")
@@ -609,10 +627,21 @@ def _change_line(r: dict, field, b, a, undo: bool, full_before: bool) -> str:
     return f"{who}, {phrase}: from {q(old)} to {q(new)}"
 
 
-def _record_lines(draft: dict, undo: bool = False, full_before=False) -> list:  # AV0022-08: proposal_text and show
+def _removed(r: dict) -> bool:
+    return isinstance(r.get("before"), dict) and r.get("after") is None
+
+
+def _removal(r: dict, done: bool = False) -> str:
+    """A whole record going away (an undo of something added) is said as that, never as a list of fields going to nothing."""
+    word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _name(r)
+    if done: return f"The {word} {q(name)} was removed." if name else f"That {word} was removed."
+    return f"Remove the {word} {q(name)}." if name else f"Remove this {word}."
+
+
+def _record_lines(draft: dict, undo: bool = False, full_before=False, done: bool = False) -> list:  # AV0022-08: proposal_text and show
     lines = []
     for r in draft["records"]:
-        lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
+        lines += [_removal(r, done)] if _removed(r) else _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
             _change_line(r, f, b, a, undo, full_before) for f, b, a in _changes(r)]
     return lines + [f"Heads up: {voice.explain_warning(w)}" for w in draft.get("warnings") or []]
 
@@ -653,6 +682,7 @@ class Conversation:
             self.db.execute("UPDATE drafts SET proposed_at = ? WHERE proposed_at IS NULL AND state = 'proposed'",
                             (_iso(self._now()),))  # the clock is read only when such a draft exists
         self.outbox = Outbox(self.db, self._now)
+        self.outbox.private_chat = self.settings.get("gChat")
         self.log = self.outbox.log = corrlog.CorrLog(self.sdir, self._now)  # HASS-VOICE-1: the correspondence log (state folder only)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.recover()
@@ -932,6 +962,7 @@ class Conversation:
         """HASS-VOICE-1: `problems` (the last ten problem moments) and `weekly` (the week's three most common) from G's own number
         only (settings gSenders, never an owner sender). They read the correspondence log and nothing else; Mike never sees them."""
         if msg.from_me or msg.kind != "new" or msg.attachments > 0 or sender_key(msg.sender) not in self.settings.get("gKeys", ()): return None
+        if msg.chat != self.settings.get("gChat") or msg.chat == self.settings["ownerChat"]: return None  # only G's own chat; never Mike's
         word = msg.text.strip().lower().rstrip(".!")
         if word not in ("problems", "weekly"): return None
         text = corrlog.problems_text(self.log) if word == "problems" else corrlog.weekly_line(self.log)
@@ -1790,7 +1821,7 @@ class Conversation:
                 text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=now)
                 shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
             else:
-                text, shot = "\n".join(["Here's what was saved:"] + _record_lines(draft, _is_undo(row))), row["screenshot"]
+                text, shot = "\n".join(["Here's what was saved:"] + _record_lines(draft, _is_undo(row), done=True)), row["screenshot"]
             return text, [str(shot)] if shot and Path(shot).is_file() else []
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return "I can't find the details of that change any more.", []

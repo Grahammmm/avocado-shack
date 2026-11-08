@@ -17,7 +17,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from hass import conversation, corrlog, morning_report, voice
+from hass import conversation, corrlog, morning_report, relay, voice
 from hass.tests.test_conversation import CHAT, OWNER, SETTINGS, T0, ConversationTestCase
 
 G = "g@example.invalid"
@@ -327,7 +327,7 @@ class Moments(ConversationTestCase):
 class GOnly(ConversationTestCase):
     def setUp(self):
         super().setUp()
-        self.set_settings({**SETTINGS, "gSenders": [G]})
+        self.set_settings({**SETTINGS, "gSenders": [G], "gChat": "chat-g"})
         self.conv = self.open()
         self.conv.log.record("error", "save-failed")
         self.conv.log.record("slow", "reply-over-20s")
@@ -381,6 +381,94 @@ class GOnly(ConversationTestCase):
         self.conv = self.open()
         self.say("problems", chat="chat-g", sender=G)
         self.assertEqual(self.replies(), [])
+
+    def test_g_asking_in_mikes_chat_gets_no_answer_and_mike_sees_nothing(self):
+        for word in ("problems", "weekly"):
+            self.assertEqual(self.say(word, chat=CHAT, sender=G), "ignored")
+        self.assertEqual(self.replies(), [])
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0], 0)
+
+    def test_g_asking_in_any_other_chat_gets_no_answer(self):
+        self.assertEqual(self.say("problems", chat="some-other-chat", sender=G), "ignored")
+        self.assertEqual(self.replies(), [])
+
+    def test_the_answer_goes_to_gs_chat_only(self):
+        self.say("problems", chat="chat-g", sender=G)
+        self.conv.flush(self.out)
+        self.assertEqual([m["chat"] for m in self.out.sent], ["chat-g"])
+
+    def test_g_chat_must_be_set_and_must_be_gs_own_one_to_one_chat(self):
+        for chat in (None, "", CHAT, "x;+;group", f"x;-;{OWNER}", 5):
+            with self.subTest(chat=chat):
+                self.set_settings({**SETTINGS, "gSenders": [G], **({} if chat is None else {"gChat": chat})})
+                with self.assertRaises(conversation.ConfigError):
+                    self.open()
+        self.set_settings({**SETTINGS, "gSenders": [G], "gChat": f"any;-;{G}"})
+        self.open()
+        self.set_settings({**SETTINGS, "gChat": "chat-g"})
+        with self.assertRaises(conversation.ConfigError):
+            self.open()
+
+
+class GDelivery(ConversationTestCase):
+    """The real relay sender: G's chat is delivered text only; every other chat is still refused; a G reply that cannot be
+    sent never holds up the one for Mike."""
+    GCHAT = "chat-g"
+
+    def setUp(self):
+        super().setUp()
+        self.set_settings({**SETTINGS, "gSenders": [G], "gChat": self.GCHAT})
+        self.conv = self.open()
+        self.conv.log.record("error", "save-failed")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.store = relay.RelayStore(Path(tmp.name))
+
+    def sender(self, g_chat):
+        return relay.RelaySender(self.store, CHAT, lambda: 1, None, g_chat)
+
+    def queued(self):
+        return [tuple(r) for r in self.store.db.execute("SELECT chat, text FROM relay ORDER BY id")]
+
+    def test_g_reply_and_owner_reply_both_go_through_the_relay(self):
+        self.say("problems", chat=self.GCHAT, sender=G)
+        self.say("status")
+        self.assertEqual(self.conv.flush(self.sender(self.GCHAT)), 2)
+        self.assertEqual([c for c, _ in self.queued()], [self.GCHAT, CHAT])
+
+    def test_the_relay_refuses_other_chats_and_pictures_for_g(self):
+        sender = self.sender(self.GCHAT)
+        for chat, attachments in (("somebody-else", ()), (self.GCHAT, ("a.png",))):
+            with self.assertRaises(relay.RelayRefused):
+                sender.send(chat, "hello", attachments)
+        with self.assertRaises(relay.RelayRefused):
+            self.sender(None).send(self.GCHAT, "hello")
+        with self.assertRaises(relay.RelayRefused):
+            self.sender(CHAT).send("somebody-else", "hello")
+        self.assertEqual(self.queued(), [])
+
+    def test_g_replies_that_nobody_collects_never_crowd_out_mikes(self):
+        sender = self.sender(self.GCHAT)
+        for n in range(relay.G_PENDING_MAX):
+            sender.send(self.GCHAT, f"problems {n}")
+        self.say("problems", chat=self.GCHAT, sender=G)
+        self.say("status")
+        self.assertEqual(self.conv.flush(sender), 1)  # G's third is dropped, Mike's goes
+        self.assertEqual([c for c, _ in self.queued()].count(self.GCHAT), relay.G_PENDING_MAX)
+        self.assertEqual([c for c, _ in self.queued()][-1], CHAT)
+
+    def test_a_g_reply_that_cannot_be_sent_does_not_block_mikes_reply(self):
+        self.say("problems", chat=self.GCHAT, sender=G)
+        self.say("status")
+        self.assertEqual(self.conv.flush(self.sender(None)), 1)  # a relay that does not know G's chat refuses its row
+        self.assertEqual([c for c, _ in self.queued()], [CHAT])
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM outbox WHERE sent_at IS NULL").fetchone()[0], 0)
+
+    def test_a_refused_owner_reply_still_stops_the_queue(self):
+        self.say("status")
+        with self.assertRaises(relay.RelayRefused):
+            self.conv.flush(relay.RelaySender(self.store, "some-other-chat", lambda: 1))
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM outbox WHERE sent_at IS NULL").fetchone()[0], 1)
 
 
 class MikesReport(unittest.TestCase):

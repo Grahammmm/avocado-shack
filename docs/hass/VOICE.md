@@ -55,6 +55,6 @@ prompt (`VOICE_RULES` in `hass/interpreter_prompt.py`).
 `<state>/correspondence/<day>.jsonl` (state folder only, never copied off the box, kept 90 days, append-only). One row per problem
 moment: time, kind (did not understand, could not do, asked a question he had already answered, an error, a slow reply over 20
 seconds, a wording check fallback, Mike corrected me or said no), a short reason code, and message ids. At most 80 characters of
-what Mike wrote, with numbers, addresses and links blanked. G only: send `problems` from G's number (set `gSenders` in the config;
-it must not be an owner number) for the last ten, or `weekly` for the three most common problems with one suggested fix each;
+what Mike wrote, with numbers, addresses and links blanked. G only: send `problems` from G's number in G's own chat (set `gSenders` and `gChat` in the config;
+the number must not be an owner number and the chat must not be Mike's) for the last ten, or `weekly` for the three most common problems with one suggested fix each;
 `python3 hass/morning_report.py --for-g STATE` adds the same weekly line under the morning report. Mike never sees any of it.

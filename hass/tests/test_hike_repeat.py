@@ -13,7 +13,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from hass import interpreter_prompt
+from hass import interpreter_prompt, voice
 from hass.content_model import SITE_DIR, load_and_validate
 from hass.ops import NeedsDetails, NotFound, Refused, hikes, load_registry
 from hass.tests.test_editor import git
@@ -160,7 +160,8 @@ class ArgumentTests(RepeatTestCase):
                 self.legacy(repo, drop)
                 result = self.rejected(repo, "needs-details", REPEAT)
                 self.assertEqual(result["missing"], missing)
-                self.assertIn("update that hike first", result["question"])
+                self.assertIn("Update that hike first", result["question"])
+                self.assertEqual(voice.check(result["question"]), [])
                 self.assertEqual(sorted(events(repo)), [SRC_ID])  # no value was invented
 
 
@@ -172,6 +173,7 @@ class StartAndTwinTests(RepeatTestCase):
         self.assertIn("does not exist in Pacific time", gap["question"])
         fold = self.rejected(repo, "needs-details", {**REPEAT, "date": "2026-11-01", "time": "01:30"})
         self.assertIn("happens twice", fold["question"])
+        self.assertEqual(voice.check(fold["question"]) + voice.check(gap["question"]), [])
         self.assertEqual(self.rejected(repo, "refused", {**REPEAT, "date": "2026-10-29"})["reason"], "start is in the past")
         far = self.rejected(repo, "needs-details", {**REPEAT, "date": "2027-12-30"})
         self.assertEqual(far["missing"], ["date"])

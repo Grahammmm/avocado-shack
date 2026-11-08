@@ -229,6 +229,72 @@ class DeliveryTests(ForwarderCase):
         self.assertEqual((self.sender.calls, self.acks), ([], []))
 
 
+class GChatTests(ForwarderCase):
+    """HASS-VOICE-1: an optional second chat, G's own, carries the `problems` answers: text only, one chat, never Mike's."""
+    G_CHAT = "iMessage;-;g@example.invalid"
+
+    def setUp(self):
+        super().setUp()
+        self.cfg = {**self.cfg, "gChat": self.G_CHAT}
+        self.f = fwd.Forwarder(self.cfg, self.spool, lambda: self.now, self.transport, self.sender)
+
+    def test_config_takes_a_valid_g_chat_only(self):
+        self.config.write_text(json.dumps(self.cfg))
+        self.assertEqual(fwd.load_config(self.config)["gChat"], self.G_CHAT)
+        for bad in (OWNER_CHAT, "iMessage;+;group", "g@example.invalid", 5, None, ""):
+            with self.subTest(bad=bad):
+                self.config.write_text(json.dumps({**self.cfg, "gChat": bad}))
+                with self.assertRaises(ValueError): fwd.load_config(self.config)
+
+    def test_a_message_in_g_chat_is_read_only_when_g_chat_is_set(self):
+        self.enqueue("g1", chats=[{"guid": self.G_CHAT}], text="problems")
+        self.f.deliver()
+        self.assertEqual([e["body"]["chat"] for e in self.posts], [self.G_CHAT])
+        self.enqueue("o1")
+        self.f.deliver()
+        self.assertEqual([e["body"]["chat"] for e in self.posts], [self.G_CHAT, OWNER_CHAT])
+        plain = fwd.Forwarder({k: v for k, v in self.cfg.items() if k != "gChat"}, self.spool, lambda: self.now, self.transport, self.sender)
+        self.enqueue("g2", chats=[{"guid": self.G_CHAT}], text="problems")
+        before = self.spool.status()["dropped_events"]
+        plain.fetch()
+        self.assertEqual(len(self.posts), 2)
+        self.assertGreaterEqual(self.spool.status()["dropped_events"], before)
+
+    def test_g_chat_gets_text_only_and_every_other_chat_is_still_refused(self):
+        self.items = [{"id": 1, "chat": self.G_CHAT, "text": "the last problems", "pictures": 0},
+                      {"id": 2, "chat": self.G_CHAT, "text": "with a picture", "pictures": 1},
+                      {"id": 3, "chat": "iMessage;-;other@example.invalid", "text": "refuse", "pictures": 0},
+                      {"id": 4, "chat": OWNER_CHAT, "text": "for Mike", "pictures": 0}]
+        self.f.pull()
+        self.assertEqual(self.sender.calls, [(self.G_CHAT, "the last problems", ()), (OWNER_CHAT, "for Mike", ())])
+        self.assertEqual(self.acks, [1, 4])
+
+    def test_a_failed_send_to_g_does_not_hold_back_mikes_later_reply(self):
+        real = self.sender.send
+        def send(chat, text, attachments=()):
+            if chat == self.G_CHAT: raise bridge.BridgeError("transport-error")
+            real(chat, text, attachments)
+        self.sender.send = send
+        self.items = [{"id": 1, "chat": self.G_CHAT, "text": "for G", "pictures": 0},
+                      {"id": 2, "chat": OWNER_CHAT, "text": "for Mike", "pictures": 0}]
+        self.f.pull()
+        self.assertEqual(self.sender.calls, [(OWNER_CHAT, "for Mike", ())])
+        self.assertEqual(self.acks, [1, 2])  # G's is given up, not handed out again every 60 s
+        self.assertIsNone(self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=1").fetchone())
+
+    def test_a_failed_send_to_mike_still_stops_the_pull_unacked(self):
+        self.sender.fail = True
+        self.items = [{"id": 1, "chat": OWNER_CHAT, "text": "for Mike", "pictures": 0}]
+        with self.assertRaises(bridge.BridgeError): self.f.pull()
+        self.assertEqual(self.acks, [])
+
+    def test_without_g_chat_a_g_reply_is_not_sent(self):
+        plain = fwd.Forwarder({k: v for k, v in self.cfg.items() if k != "gChat"}, self.spool, lambda: self.now, self.transport, self.sender)
+        self.items = [{"id": 1, "chat": self.G_CHAT, "text": "the last problems", "pictures": 0}]
+        plain.pull()
+        self.assertEqual((self.sender.calls, self.acks), ([], []))
+
+
 class InterfaceTests(ForwarderCase):
     def test_serve_doorbell_during_network_cycle_and_graceful_cancel(self):
         old_umask = os.umask(0o077)

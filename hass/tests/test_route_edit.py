@@ -7,7 +7,7 @@ Run: python3 -m unittest hass.tests.test_route_edit -v
 
 import json
 
-from hass import migration_check
+from hass import migration_check, voice
 from hass.content_model import load_and_validate
 from hass.ops.routes import ROUTE_EDITABLE
 from hass.tests.test_hike_ops import HIKE, HIKE_ID, HikeTestCase
@@ -71,7 +71,8 @@ class RouteEditTests(HikeTestCase):
         repo = self.repo()
         result = self.assertRejected(repo, "needs-details", (EDIT, {"id": CASS}))
         self.assertEqual(result["missing"], list(ROUTE_EDITABLE))
-        self.assertEqual(result["question"], "What should change on this route idea?")
+        self.assertEqual(voice.plain(result["question"]), f"What would you like to change about the route idea {self.ideas(repo)[CASS]['title']}?")
+        self.assertEqual(voice.check(result["question"]), [])
         current = self.ideas(repo)[CASS]
         same = {"id": CASS, "difficulty": current["difficulty"], "distance": current["distance"]}
         result = self.assertRejected(repo, "refused", (EDIT, same))
