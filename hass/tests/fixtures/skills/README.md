@@ -42,6 +42,10 @@ the file name is not the skill name.
   reply carrying the exception's `reply` text.
 * `version`: the skill version the row was written for; a different skill version fails the row as `stale-row`.
 * `approve: false` stops after the draft and the wrong-code check (no apply, no undo).
+* `seed`: `{"community": {"events": [...]}}` (a content file name: `products`, `makers`, `community` or `store`, then the
+  top-level keys to replace). Put a record on the scratch page before the row starts: validated, regenerated and committed,
+  so the row's diff and its undo are measured from that start state. A seed the content rules refuse is a `bad-row`. Use it
+  when the repository content has none of what the skill acts on (it has no hikes).
 
 `expect` fields (all optional except `diff` when the row ends in a draft):
 
