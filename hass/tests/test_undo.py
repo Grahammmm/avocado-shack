@@ -81,12 +81,12 @@ class UndoTests(H06TestCase):
         self.assertEqual((a["state"], b["state"], self.commits()), ("verified", "verified", 2))
         self.assertEqual(self.say(f"undo {a['code']}"), "proposed")
         [reply] = self.sent()
-        self.assertTrue(reply["text"].startswith(f"Undo {a['code']}:\nDraft "), reply["text"])
+        self.assertTrue(reply["text"].startswith("To undo that, I'd change it back:\nHere's the change I'd make:"), reply["text"])
         self.assertEqual(len(reply["attachments"]), 1)
         self.assertEqual(self.say("yes"), "approved")
         [done] = self.sent()
         rev = self.drafts()[-1]
-        self.assertEqual(done["text"], f"Applied and checked {rev['code']}: {rev['summary']}\n{conversation.answers.NOT_LIVE}")
+        self.assertEqual(done["text"], f"Saved and checked: {rev['summary']}\n{conversation.answers.NOT_LIVE}")
         self.assertEqual(self.product("photo-product-001")["description"], ORIGINAL)
         self.assertEqual(self.content("store")["hours"], NEW_HOURS)
         self.assertEqual(self.commits(), 3)
@@ -98,9 +98,10 @@ class UndoTests(H06TestCase):
         self.assertEqual(listed[0]["ops"], [f'history.revert {{"changeId": "{a["change_id"]}"}}'])
         self.assertEqual(self.say("history"), "history")
         lines = self.replies()[0].splitlines()
-        self.assertEqual([line.split()[0] for line in lines[1:]], [rev["code"], b["code"], a["code"]])
+        self.assertEqual(lines[1:], [f"- {r['summary']}: saved, but I'm not sure it's on the website" for r in (rev, b)]
+                         + [f"- {a['summary']}: undone"])
         self.assertEqual(self.say(f"undo {a['code']}"), "not-drafted")
-        self.assertIn("already undone", self.replies()[0])
+        self.assertEqual(self.replies(), ["I couldn't undo that, so nothing changed. Could you say it another way?"])
         self.assertEqual((len(self.drafts()), self.commits()), (3, 3))
 
     def test_conflict_is_refused_without_a_draft(self):
@@ -108,7 +109,7 @@ class UndoTests(H06TestCase):
         self.apply("desc2")
         self.assertEqual(self.say(f"undo {a['code']}"), "not-drafted")
         [reply] = self.replies()
-        self.assertEqual(reply, f"Not undone: conflict: products photo-product-001 changed after {a['change_id']}")
+        self.assertEqual(reply, "That has changed since, so I can't undo it cleanly. Please ask Graham.")
         self.assertEqual((len(self.drafts()), self.commits()), (2, 2))
 
     def test_result_is_persisted_before_the_reply(self):
@@ -123,7 +124,7 @@ class UndoTests(H06TestCase):
         self.conv = self.open()  # restart
         [sent] = self.sent()
         self.assertEqual((sent["text"].split(":")[0], sent["attachments"]),
-                         (f"Applied and checked {row['code']}", [row["screenshot"]]))
+                         ("Saved and checked", [row["screenshot"]]))
         self.assertEqual((self.sent(), self.commits()), ([], 1))
 
     def test_undo_of_an_addition_hides_it(self):

@@ -37,6 +37,7 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 - A search by name offers at most **10** <!-- ops.catalog.MAX_CANDIDATES --> matching listings; use more words to narrow it.
 - `find` takes at most **60 characters** <!-- conversation.FIND_TEXT_MAX --> of words to look for.
 - An alias name is at most **60 characters** <!-- conversation.ALIAS_NAME_MAX -->.
+- `photos to take` names the first **5** <!-- conversation.PHOTOS_TO_TAKE_MAX --> products that still need a photo, then says to ask again for the next few.
 
 ## Text sizes
 
@@ -76,6 +77,20 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Undoing an older change to the shop details (hours, address, intro, headline, story, home photo, notice, phone or shelf check date) puts back only the details that change wrote, and keeps later edits to the other details.
 - If a later edit gave one of those same details a different value, the undo is refused until that later edit is undone. A notice, with its dates, counts as one detail.
 - Changes to products, hikes, makers and routes are still undone one whole item at a time.
+- Weekly specials (the "This week's specials" box at the top of the page) are one saved detail: undoing an older specials change is refused if you changed the specials again after it. Undo the newer change first.
+- A special shows through its last day (Pacific) and never after, even if nobody removes it. At most 6 show on one day, each runs at most 31 days, and the title and deal line are at most 60 characters with no links, email addresses or phone numbers. Only the deal line may have a price, and it appears exactly as typed.
+
+## Problems log (for Graham, not for Mike)
+
+- Hass keeps a private log of the moments where talking with Mike went wrong (it did not understand, could not do something, asked
+  again, a slow reply, a reply it was not happy with, or Mike said no / that's wrong). It is kept on this machine only, in the
+  `correspondence` folder inside the Hass state folder, for 90 days. It holds at most 80 characters of what Mike wrote, with
+  numbers, addresses and links blanked. The state backup does not copy that folder.
+- Only the numbers listed as `gSenders` in the config can ask about it. Send `problems` for the last ten, or `weekly` for the
+  three most common problems with one suggested fix each; the morning report made for G adds the weekly line under it. `gSenders` is empty by default, so nothing answers until it is set; a number may not be both in `gSenders` and
+  an owner number. G's chat must also be forwarded by the bridge. Mike never sees any of this.
+- `history` lines no longer show change codes, so an older change cannot be undone by code from the chat; `undo` takes back the
+  last change.
 
 ## What Hass never does
 

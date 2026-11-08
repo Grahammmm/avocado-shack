@@ -60,12 +60,14 @@ class DemoBrowserTests(unittest.TestCase):
         original = demo._description(repo.state)
         rows = self.run_chain(repo)
         texts = [r["text"] for r in rows]
-        self.assertEqual(self.kinds(texts), demo.EXPECTED)
+        checked = "Saved and checked: "  # with a real preview the saved reply says it was checked
+        self.assertEqual([checked if t.startswith(checked) else k for t, k in zip(texts, self.kinds(texts))],
+                         [checked if k == "Saved:" else k for k in demo.EXPECTED])
         for i in (1, 4):
-            self.assertTrue(texts[i].startswith("Applied and checked "), texts[i])
+            self.assertTrue(texts[i].startswith(checked), texts[i])
         state = repo.state.resolve()
-        for i, row in enumerate(rows):  # draft and applied replies carry one private PNG; the rest none
-            expected = 1 if texts[i].startswith(("Draft ", "Applied ")) or "\nDraft " in texts[i] else 0
+        for i, row in enumerate(rows):  # draft and saved replies carry one private PNG; the rest none
+            expected = 1 if "Here's the change I'd make:" in texts[i] or texts[i].startswith(checked) else 0
             self.assertEqual(len(row["attachments"]), expected, (i, texts[i]))
             for name in row["attachments"]:
                 png = Path(name)
@@ -86,15 +88,15 @@ class DemoBrowserTests(unittest.TestCase):
         repo = self.site()
         rows = self.run_chain(repo, MISSING_PLAYWRIGHT)
         texts = [r["text"] for r in rows]
-        self.assertIn("\nPreview unavailable: ", texts[0])  # draft reply: no preview, no PNG
+        self.assertIn("\nI couldn't make a picture of how it will look.", texts[0])  # draft reply: no preview, no PNG
         edit, undo = self.drafts(repo)
-        for i, draft in ((1, edit), (4, undo)):  # both apply replies name the failed check
-            self.assertTrue(texts[i].startswith(f"Applied {draft['code']}, but the preview check failed: "), texts[i])
+        for i in (1, 4):  # both saved replies say the check did not pass
+            self.assertTrue(texts[i].startswith("I saved it, but the preview check didn't pass: "), texts[i])
         self.assertTrue(all(not r["attachments"] for r in rows))  # no screenshot was made
         self.assertNotIn("verified", {edit["state"], undo["state"]})
         self.assertEqual((edit["state"], undo["state"]), ("reverted", "applied"))  # what main does: the undo still runs
         self.assertTrue(undo["reason"].startswith("not verified: "), undo["reason"])
-        self.assertEqual(self.kinds(texts)[2:4], ["Recent changes:", "Undo "])
+        self.assertEqual(self.kinds(texts)[2:4], ["Here's what we changed lately:", "To undo that, I'd change it back:"])
         for draft in (edit, undo):  # not retried: one commit per change, two since "full site"
             self.assertEqual(git(repo.wt, "log", "--format=%s", "--grep", draft["change_id"]).splitlines(),
                              [f"hass content: {draft['change_id']}"])

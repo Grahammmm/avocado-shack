@@ -7,7 +7,10 @@ Run: python3 -m unittest hass.tests.test_media_audio -v
 
 import unittest
 
-from hass import media
+from hass import media, voice
+
+AUDIO = "That looks like a voice note. I can't understand voice notes yet, so nothing was saved. Could you type the change instead?"
+UNSUPPORTED = "I can't use that kind of photo, so nothing was saved. Could you send a screenshot of it instead? On an iPhone you can also set Camera, then Formats, to Most Compatible."
 from hass.tests import test_photo_limits as limits
 from hass.tests.test_photo_draft import ANSWER
 from hass.tests.test_set_photo import PhotoRepo
@@ -39,14 +42,14 @@ class IsAudioTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertTrue(media.is_audio(data))
                 with self.assertRaises(media.Refused) as cm: media.check_photo(data)
-                self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", limits.AUDIO))
+                self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", AUDIO))
 
     def test_other_unknown_files_keep_the_camera_advice(self):
         for name, data in NOT_AUDIO.items():
             with self.subTest(name):
                 self.assertFalse(media.is_audio(data))  # short bytes: no IndexError
                 with self.assertRaises(media.Refused) as cm: media.check_photo(data)
-                self.assertEqual((cm.exception.code, cm.exception.reply), ("unsupported-type", limits.UNSUPPORTED))
+                self.assertEqual((cm.exception.code, cm.exception.reply), ("unsupported-type", UNSUPPORTED))
 
     def test_size_checks_come_first(self):
         self.assertFalse(media.is_audio(b""))
@@ -65,7 +68,7 @@ class IsAudioTests(unittest.TestCase):
         self.addCleanup(repo.cleanup)
         for name, data in AUDIO_SAMPLES.items():
             with self.subTest(name), self.assertRaises(media.Refused) as cm: repo.store(data)
-            self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", limits.AUDIO))
+            self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", AUDIO))
         self.assertFalse((repo.media / "originals").exists())
         self.assertFalse((repo.media / "web").exists())
 
@@ -80,7 +83,7 @@ class VoiceNoteEndToEndTests(unittest.TestCase):
         self.photos.data = AUDIO_SAMPLES["m4a"]
         self.assertEqual(self.say(ANSWER, pid="voice"), "photo-refused:audio")
         self.assertEqual(self.disposition("voice"), "photo-refused:audio")
-        self.assertEqual(self.replies(), [limits.AUDIO])
+        self.assertEqual(self.replies(), [AUDIO])
         self.assertEqual(self.photos.calls, [("voice", 1)])
         self.assertNothingKept()  # no originals/web files, no draft, interpreter never called
 
@@ -90,7 +93,7 @@ class VoiceNoteEndToEndTests(unittest.TestCase):
                 with self.subTest(name, caption=caption):
                     self.photos.data = data
                     self.assertEqual(self.say(caption, pid=f"a{i}-{caption}"), "photo-refused:audio")
-                    self.assertEqual(self.replies(), [limits.AUDIO])
+                    self.assertEqual(self.replies(), [AUDIO])
         self.assertEqual(self.say(pid="a0-"), "duplicate")  # a redelivered voice note is not answered twice
         self.assertEqual(self.replies(), [])
         self.assertNothingKept()
@@ -98,7 +101,7 @@ class VoiceNoteEndToEndTests(unittest.TestCase):
     def test_a_heic_photo_still_gets_the_camera_advice(self):
         self.photos.data = NOT_AUDIO["heic"]
         self.assertEqual(self.say(ANSWER), "photo-refused:unsupported-type")
-        self.assertEqual(self.replies(), [limits.UNSUPPORTED])
+        self.assertEqual(self.replies(), [UNSUPPORTED])
         self.assertNothingKept()
 
 

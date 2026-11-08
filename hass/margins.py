@@ -105,6 +105,26 @@ def render(r):
     return "\n".join([f"{s['name']} = {s['expression']} = {s['value']}" for s in r["steps"]] + below + [r["note"]])
 
 
+def say(r) -> str:
+    """The chat answer: the price to charge, what it earns, and that nothing changes until he says so. No steps."""
+    price, cost = D(r["price"]), D(str(r["sellable_cost"]).rstrip("."))
+    paid = cost.quantize(CENT, ROUND_CEILING)
+    if r.get("below_cost") is True:
+        return f"At ${price} you would lose money: each one costs you about ${paid}. This is only an idea. Nothing changes unless you ask."
+    earns = (price - cost).quantize(CENT, ROUND_FLOOR)
+    return (f"Charge ${price}. Each one costs you about ${paid}, so you would earn about ${earns} on each, roughly {r['margin_actual_pct']}%. "
+            "This is only an idea. Prices are not shown on the website, and nothing changes unless you ask.")
+
+
+def plain_input_error(exc) -> str:
+    """What was wrong with a number, in plain words (the field names inside the calculator are technical)."""
+    text = str(exc)
+    for key, word in (("pack cost", "the pack price"), ("units", "how many are in a pack"), ("shrink", "the shrink"), ("margin", "the margin"),
+                      ("price", "the price")):
+        if text.startswith(key): return f"Please check {word}: it needs to be a plain number in a sensible range."
+    return "Please check the numbers: they need to be plain numbers in a sensible range."
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="margins", description="Private price and margin calculator (suggestion only).")
     for flag in ("--pack-cost", "--units", "--shrink", "--margin", "--round-to", "--price"):

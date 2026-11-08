@@ -14,8 +14,8 @@ from hass.tests.test_commands_doc import verb
 from hass.tests.test_conversation import T0, ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
-USAGE = "Send post hike and a hike id, e.g. post hike hike-2026-11-14-point-buchon (find <words> gives ids)."
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
+USAGE = "Which hike is the post for? Say it like post hike Point Buchon."
 
 
 def hike(hid, **changes):
@@ -28,7 +28,7 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(conversation.parse_command("POST HIKE Hike-A!"), ("post", "HIKE Hike-A"))
         self.assertEqual(conversation.parse_command("post hike"), ("post", "hike"))
         self.assertEqual(conversation.parse_command("post photo-product-001"), ("post", "photo-product-001"))
-        for text in ("post hike a b", "post hikes a b", "please post hike a"):
+        for text in ("please post hike a",):
             self.assertIsNone(verb(text), text)
 
     def test_no_product_id_is_hike(self):
@@ -57,36 +57,36 @@ class PostHikeTests(StoreMixin, ConversationTestCase):
         self.assertTrue(self.want["draft"], self.want)
         with mock.patch("socket.socket", side_effect=AssertionError("network")):
             text, files = self.post("post hike h-ok")
-        self.assertEqual((text, files), (f"Draft post (not posted; copy it yourself):\n{self.want['caption']}", []))
+        self.assertEqual((text, files), (f"Here's a post you can copy. I haven't posted anything.\n{self.want['caption']}", []))
         self.assertEqual((self.drafts(), self.commits(), self.approvals()), ([], 0, 0))
 
     def test_refusals_are_plain_words(self):
-        for send, words in (("post hike nope", "No hike nope; send find <words> for ids."),
-                            ("post hike h-cancelled", "h-cancelled is cancelled; nothing to announce."),
+        for send, words in (("post hike nope", "I don't know a hike called nope. Try find and a word from its name."),
+                            ("post hike h-cancelled", "h-cancelled is cancelled, so there is nothing to announce."),
                             ("post hike h-done", "h-done has already happened."),
                             ("post hike h-past", "h-past has already happened."),
-                            ("post hike h-draft", "h-draft is not scheduled yet."),
-                            ("post hike h-tag", "Cannot draft a post for h-tag: free text has a hashtag or account name.")):
+                            ("post hike h-draft", "h-draft isn't scheduled yet."),
+                            ("post hike h-tag", "I can't make a post for h-tag right now. Nothing was posted.")):
             with self.subTest(send=send):
                 self.assertEqual(self.post(send), (words, []))
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_usage_and_case(self):
         self.assertEqual(self.post("post hike"), (USAGE, []))
-        self.assertEqual(self.post("POST HIKE H-OK"), ("No hike H-OK; send find <words> for ids.", []))
-        self.assertTrue(self.post("Post Hike h-ok")[0].startswith("Draft post (not posted"))
+        self.assertEqual(self.post("POST HIKE H-OK"), ("I don't know a hike called H-OK. Try find and a word from its name.", []))
+        self.assertTrue(self.post("Post Hike h-ok")[0].startswith("Here's a post you can copy. I haven't posted anything."))
 
     def test_works_while_paused_and_keeps_a_waiting_draft(self):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         tables = self.tables()
         text, _ = self.post("post hike h-ok")
-        self.assertTrue(text.startswith("Draft post (not posted") and "paused" not in text.lower(), text)
+        self.assertTrue(text.startswith("Here's a post you can copy. I haven't posted anything.") and "paused" not in text.lower(), text)
         self.assertEqual((self.drafts(), self.tables(), self.commits(), self.approvals()), ([], tables, 0, 0))
 
     def test_product_post_still_works(self):
         pid = json.loads((self.repo.wt / "hass" / "content" / "products.json").read_text("utf-8"))["products"][0]["id"]
-        self.assertEqual(self.post(f"post {pid}x")[0], f"No product {pid}x; send find <words> for ids.")
+        self.assertEqual(self.post(f"post {pid}x")[0], f"I don't know a product called {pid}x. Try find and a word from its name.")
 
     def test_unreadable_catalog_gives_the_fixed_line(self):
         self.path.write_text("{not json", "utf-8")

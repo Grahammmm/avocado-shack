@@ -5,12 +5,13 @@ Run: python3 -B -m unittest hass.tests.test_margin_chat -v
 
 import unittest
 
-from hass import conversation, margins
+from hass import conversation, margins, voice
 from hass.tests.test_commands_doc import verb
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-USAGE = 'Send: margin <pack cost> for <units> at <margin>% (optional: shrink <S>%), e.g. "margin 24.00 for 12 at 35%".'
+USAGE = "Tell me what you pay for a pack, how many are in it and the margin you want, like margin 24 for 12 at 35%."
+NOTE = "This is only an idea. Prices are not shown on the website, and nothing changes unless you ask."
 
 
 class CountingInterpreter(conversation.FixtureInterpreter):
@@ -49,49 +50,59 @@ class MarginChatTests(StoreMixin, ConversationTestCase):
                 [tuple(r) for r in self.conv.db.execute("SELECT * FROM usage")] if "usage" in self.tables() else [])
 
     def test_reply_is_the_cli_arithmetic_and_ends_with_the_note(self):
-        want, before = margins.render(margins.compute("24.00", "12", "0", "35")), self.stored()
+        want, before = margins.say(margins.compute("24.00", "12", "0", "35")), self.stored()
         self.assertEqual(self.margin("margin 24.00 for 12 at 35%"), want)
-        self.assertTrue(want.endswith(margins.NOTE))
-        self.assertIn("suggested_price = round up to the cent", want)
+        self.assertTrue(want.endswith(NOTE))
+        self.assertIn("Charge $3.08.", want)
         self.assertEqual(self.stored(), before)
         self.assertEqual(CountingInterpreter.calls, 0)
 
     def test_dollar_sign_case_and_shrink_match_the_cli(self):
-        want = margins.render(margins.compute("24", "12", "5", "35"))
+        want = margins.say(margins.compute("24", "12", "5", "35"))
         self.assertEqual(self.margin("MARGIN $24 for 12 at 35% shrink 5%"), want)
         self.assertEqual(self.margin("margin   24  for 12   at 35 %  shrink 5 %."), want)
-        self.assertNotEqual(want, margins.render(margins.compute("24", "12", "0", "35")))
+        self.assertNotEqual(want, margins.say(margins.compute("24", "12", "0", "35")))
 
     def test_bad_numbers_are_named_by_field(self):
         before = self.stored()
-        for text, want in (("margin 24.00 for 0 at 35%", "Not calculated: units must be 1 to 10000."),
-                           ("margin 24.001 for 12 at 35%", "Not calculated: pack cost"),
-                           ("margin 24 for 12 at 95%", "Not calculated: margin must be 0 to 90."),
-                           ("margin 24 for 12 at 35% shrink 91%", "Not calculated: shrink must be 0 to 90."),
-                           ("margin 24 for 1.5 at 35%", "Not calculated: units"),
-                           ("margin 24 for 12 at 35.555%", "Not calculated: margin")):
+        for text, want in (("margin 24.00 for 0 at 35%", "I couldn't work that out. Please check how many are in a pack: it needs to be a plain number in a sensible range."),
+                           ("margin 24.001 for 12 at 35%", "I couldn't work that out. Please check the pack price:"),
+                           ("margin 24 for 12 at 95%", "I couldn't work that out. Please check the margin:"),
+                           ("margin 24 for 12 at 35% shrink 91%", "I couldn't work that out. Please check the shrink:"),
+                           ("margin 24 for 1.5 at 35%", "I couldn't work that out. Please check how many are in a pack:"),
+                           ("margin 24 for 12 at 35.555%", "I couldn't work that out. Please check the margin:")):
             with self.subTest(text=text):
                 reply = self.margin(text)
                 self.assertTrue(reply.startswith(want) and reply.endswith("."), reply)
-                self.assertNotIn(margins.NOTE, reply)
+                self.assertNotIn(NOTE, reply)
         self.assertEqual(self.stored(), before)
         self.assertEqual(CountingInterpreter.calls, 0)
 
     def test_text_not_in_the_form_gets_the_usage_without_interpreter_or_usage_row(self):
         before = self.stored()
-        for text in ("margin 24 for twelve at 35%", "margin", "margin 24 for 12 at 35", "margin 24 for 12", "margin a1b2",
+        for text in ("margin 24 for twelve at 35%", "margin $24 for twelve at 35%", "margin +24 for twelve at 35%", "margin", "margin 24 for 12 at 35", "margin 24 for 12", "margin a1b2",
                      "margin 24 for 12 at 35% shrink", "margin 24 for 12 at 35% shrink 5% extra"):
             with self.subTest(text=text):
                 self.assertEqual(self.margin(text), USAGE)
         self.assertEqual(CountingInterpreter.calls, 0)
         self.assertEqual(self.stored(), before)
 
+    def test_saved_cost_still_accepts_a_product_name(self):
+        self.assertEqual(self.say("cost Hass avocado: 24 for 12"), "memory-saved")
+        self.replies()
+        before = self.stored()
+        reply = self.margin("margin Hass avocado at 35%")
+        self.assertTrue(reply.startswith("Using the cost you gave me "), reply)
+        self.assertTrue(reply.endswith(margins.say(margins.compute("24", "12", "0", "35"))), reply)
+        self.assertEqual(self.stored(), before)
+        self.assertEqual(CountingInterpreter.calls, 0)
+
     def test_works_while_paused_and_writes_nothing(self):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         before = self.stored()
-        self.assertEqual(self.margin("margin 24.00 for 12 at 35%"), margins.render(margins.compute("24.00", "12", "0", "35")))
-        self.assertEqual(self.margin("margin 24 for 0 at 35%"), "Not calculated: units must be 1 to 10000.")
+        self.assertEqual(self.margin("margin 24.00 for 12 at 35%"), margins.say(margins.compute("24.00", "12", "0", "35")))
+        self.assertEqual(self.margin("margin 24 for 0 at 35%"), "I couldn't work that out. Please check how many are in a pack: it needs to be a plain number in a sensible range.")
         self.assertEqual(self.margin("margin"), USAGE)
         self.assertEqual(self.stored(), before)
 
@@ -101,10 +112,10 @@ class MarginChatTests(StoreMixin, ConversationTestCase):
         self.assertEqual(CountingInterpreter.calls, 1)
 
     def test_help_has_the_margin_line_and_its_example_runs(self):
-        [line] = [ln for ln in conversation.HELP_TEXT.splitlines() if ln.startswith("margin ")]
+        [line] = [ln for ln in voice.plain(conversation.HELP_TEXT).splitlines() if ln.startswith("margin ")]
         self.assertLessEqual(len(line), 70)
-        self.assertTrue(line.endswith('"margin photo-product-001 at 35%"'))  # AV1222-10: the product form
-        self.assertTrue(self.margin("margin 24 for 12 at 35%").endswith(margins.NOTE))
+        self.assertEqual(line, "margin Hass avocado at 35% - a price idea from the cost you saved")  # AV1222-10: the product form
+        self.assertTrue(self.margin("margin 24 for 12 at 35%").endswith(NOTE))
 
 
 if __name__ == "__main__":

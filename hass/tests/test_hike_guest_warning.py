@@ -112,7 +112,7 @@ class ProposalWarningTests(H06TestCase):
         for text in ("call off the hike", "rsvps off"):
             with self.subTest(text):
                 _draft, reply = self.propose(text)
-                self.assertIn(f"\nWarning: {THREE}\n", reply)
+                self.assertIn("\nHeads up: 3 guests have signed up, and nobody is told automatically.\n", reply)
                 for secret in ("walker", "Walker Name", "example.invalid"):
                     self.assertNotIn(secret, reply)
                 self.assertEqual(self.say("no"), "rejected")

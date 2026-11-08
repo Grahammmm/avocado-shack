@@ -25,7 +25,7 @@ class RevisesExpiredVsUnknownTests(h16.NeedsDetailsExpiryTests):
     def test_unknown_code_still_asks(self):
         q = self.ask()
         self.assertEqual(self.answer("done", "ZZZZ"), "question")
-        self.assertEqual(self.replies(), ["I could not find draft ZZZZ waiting; reply with the change again."])
+        self.assertEqual(self.replies(), ["I can't find that change any more. Could you tell me the change again?"])
         self.assertEqual([(d["code"], d["state"]) for d in self.drafts()], [(q["code"], "needs-details")])
 
 

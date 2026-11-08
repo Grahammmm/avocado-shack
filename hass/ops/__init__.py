@@ -12,9 +12,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from hass.content_model import ID_RE, IMAGE_RE, SITE_DIR, _https, _text
+from hass.content_model import ID_RE, IMAGE_RE, SITE_DIR, _https, _text, special_text_problem
 
-KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "date", "time", "image")
+KINDS = ("id", "maker_key", "text", "text_list", "url", "enum", "bool", "int", "date", "time", "image", "deal")  # deal: AVO-SPECIALS-1 owner deal line
 # clocks are ASCII HH:MM (consumed by time.fromisoformat); \d would also match Unicode digits
 TIME_RE = re.compile(r"([01][0-9]|2[0-3]):[0-5][0-9]")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -124,7 +124,7 @@ def has_control_chars(value) -> bool:
 
 def _check_value(problems, where, arg: Arg, value, makers, site_dir):
     kind = arg.kind
-    if kind in ("id", "maker_key", "text", "url", "enum", "date", "time", "image") and not isinstance(value, str):
+    if kind in ("id", "maker_key", "text", "deal", "url", "enum", "date", "time", "image") and not isinstance(value, str):
         problems.append(f"{where}: must be a string ({kind})")
         return
     if kind == "id" and not ID_RE.fullmatch(value):
@@ -133,6 +133,9 @@ def _check_value(problems, where, arg: Arg, value, makers, site_dir):
         problems.append(f"{where}: not a maker in makers.json")
     elif kind == "text":
         _text(problems, where, value)
+    elif kind == "deal":  # the one text that may carry a price ($); markup, links and contact details stay out
+        if (why := special_text_problem(value, deal=True)):
+            problems.append(f"{where}: {why}")
     elif kind == "text_list":
         if not isinstance(value, list) or not value:
             problems.append(f"{where}: must be a non-empty list of text")

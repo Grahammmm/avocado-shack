@@ -31,7 +31,7 @@ class AmountValues(unittest.TestCase):
         found = keep({"name": "12 oz", "brand": "Linn's"}, CATS)
         self.assertEqual(found, {"brand": "Linn's"})
         line = question(found)
-        self.assertTrue(line.startswith("The label looks like: Linn's. Is that right?"), line)
+        self.assertTrue(line.startswith("The label looks like \ue000Linn's\ue001. Is that right?"), line)
         self.assertNotIn("12 oz", line)
 
     def test_two_dropped_prices_leave_nothing(self):

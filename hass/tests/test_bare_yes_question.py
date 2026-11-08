@@ -14,7 +14,7 @@ from hass.tests.test_conversation import T0
 
 class BareYesQuestionTests(h16.NeedsDetailsExpiryTests):
     def still(self, row):
-        return f"{row['code']} still needs details: {row['summary']}"
+        return f"I still need an answer from you first. {row['summary']}"
 
     def assert_nothing_applied(self):
         approvals = self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0]
@@ -46,7 +46,7 @@ class BareYesQuestionTests(h16.NeedsDetailsExpiryTests):
         draft, _reply = self.propose("desc")
         self.assertEqual(self.say("yes"), "approved")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Applied {draft['code']}"), reply)
+        self.assertTrue(reply.startswith(f"Saved: {draft['summary']}"), reply)
         self.assertNotIn(q["code"], reply)
         self.assertEqual(self.state(q)["state"], "needs-details")
         self.assertEqual(self.say("yes"), "no-target")  # now only the question waits
@@ -56,7 +56,7 @@ class BareYesQuestionTests(h16.NeedsDetailsExpiryTests):
         q = self.ask()
         self.now = T0 + h16.TTL + timedelta(seconds=1)
         self.assertEqual(self.say("yes"), "no-target")
-        self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual(self.state(q)["state"], "expired")
         self.assertEqual(self.say("yes"), "no-target")  # already swept: nothing is waiting
         self.assertEqual(self.replies(), [conversation.NOTHING])

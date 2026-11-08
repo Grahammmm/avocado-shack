@@ -40,6 +40,7 @@ from hass.content_model import (  # noqa: E402
     DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
     checked_on, iso_day, load_and_validate, shop_today,
 )
+from hass import specials  # noqa: E402
 from hass.notice import NOTICE_JS, slots as notice_slots, stale_paths  # noqa: E402,F401
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
@@ -195,9 +196,10 @@ def render_template(text: str, slots: dict[str, str]) -> str:
     return out
 
 
-def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, notice_today=None) -> dict[str, bytes]:
+def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, notice_today=None,
+           specials_today=None) -> dict[str, bytes]:
     """Return {repo-relative path: bytes} for every generated site file. ``today`` (default: the shop's current date)
-    decides selection staleness and notice expiry; ``notice_today`` overrides only notice expiry for artifact checks."""
+    decides selection staleness and notice expiry; ``notice_today`` and ``specials_today`` override only notice and specials expiry for artifact checks."""
     today = today or shop_today()
     files = {
         SITE_PREFIX + "catalog-products.js": _catalog_js(content),
@@ -205,7 +207,8 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, n
         SITE_PREFIX + "producers.json": _producers_json(content),
         SITE_PREFIX + "community.json": _community_json(content),
     }
-    slots = {**store_slots(content.store, notice_today or today), "selection.checkedNote": checked_note(content.store, today)}
+    slots = {**store_slots(content.store, notice_today or today), "selection.checkedNote": checked_note(content.store, today),
+             **specials.slots(content.store, content.products, specials_today or today)}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")
         files[SITE_PREFIX + rel] = render_template(text, slots).encode("utf-8")

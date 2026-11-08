@@ -14,7 +14,7 @@ from hass.tests.test_undo import H06TestCase
 
 FAR = "2062-11-07"
 PST = timezone(timedelta(hours=-8))
-QUESTION = "2062-11-07 is more than 400 days away; check the year. What date should it be?"
+QUESTION = "November 7, 2062 is more than 400 days away; check the year. What date should it be?"
 
 
 class FarFutureTests(HikeTestCase):
@@ -37,9 +37,9 @@ class FarFutureTests(HikeTestCase):
         repo.run(("hike.create", {**HIKE, "date": "2027-12-20", "time": "09:00"}))
         self.assertEqual(repo.event("hike-2027-12-20-test-hike")["startsAt"], "2027-12-20T09:00:00-08:00")
         self.asks(repo, ("hike.create", {**HIKE, "title": "Later", "date": "2027-12-20", "time": "09:01"}),
-                  question="2027-12-20 is more than 400 days away; check the year. What date should it be?")
+                  question="December 20, 2027 is more than 400 days away; check the year. What date should it be?")
         self.asks(repo, ("hike.create", {**HIKE, "title": "Next day", "date": "2027-12-21"}),
-                  question="2027-12-21 is more than 400 days away; check the year. What date should it be?")
+                  question="December 21, 2027 is more than 400 days away; check the year. What date should it be?")
 
     def test_update_to_far_date_asks_but_other_edits_are_unaffected(self):
         repo = self.repo()

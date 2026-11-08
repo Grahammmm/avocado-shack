@@ -7,7 +7,7 @@ Run: python3 -m unittest hass.tests.test_claims -v
 
 import unittest
 
-from hass import claims, conversation
+from hass import claims, conversation, voice
 from hass.tests.test_conversation import ConversationTestCase, _ops
 
 ADD = "add avocados from Ava's, description: creamy"
@@ -84,10 +84,9 @@ class UnstatedTests(unittest.TestCase):
 
     def test_question_names_two_hits_then_counts(self):
         one = claims.question([("products p1 description", "organic")])
-        self.assertEqual(one, 'I did not draft that: "organic" in products p1 description is not in your message. '
-                              "Is it true? Send the change again with it in your words, or without it.")
+        self.assertEqual(one, 'You didn\'t say \ue000"organic"\ue001 in your message. Is that true? Send the change again with it in your own words, or without it.')
         many = claims.question([("a", "organic"), ("b", "local"), ("c", "estate"), ("d", "maker")])
-        self.assertIn('"organic" in a and "local" in b and 2 more are not in your message', many)
+        self.assertIn('You didn\'t say "organic" and "local" (and a few more) in your message', voice.plain(many))
         self.assertNotIn("estate", many)
 
 
@@ -104,7 +103,7 @@ class ClaimConversationTests(ConversationTestCase):
         self.interp.mapping[text] = mapping
         self.assertEqual(self.say(text), "claim-question")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("I did not draft that: "), reply)
+        self.assertTrue(reply.startswith("You didn't say "), reply)
         self.assertEqual(self.drafts(), before)
         return reply
 
@@ -115,14 +114,14 @@ class ClaimConversationTests(ConversationTestCase):
 
     def test_added_organic_description_asks_and_owner_words_propose(self):
         reply = self.asks(ADD, _ops(("product.add", {**NEW, "description": "Organic creamy avocados"})))
-        self.assertRegex(reply, r'"organic" in products photo-product-\d+ description is not in your message')
+        self.assertRegex(reply, r'You didn\'t say "organic" in your message')
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
         self.proposes("add organic avocados from Ava’s, creamy",
                       _ops(("product.add", {**NEW, "description": "Organic creamy avocados"})))
 
     def test_unnamed_maker_asks_and_named_maker_proposes(self):
         ops = _ops(("product.edit", {"id": P1, "producerKey": "Linn's"}))
-        self.assertIn(f'"maker" in products {P1} producerKey', self.asks("set its producer", ops))
+        self.assertIn('You didn\'t say "maker" in your message', self.asks("set its producer", ops))
         self.proposes("these are from Linn’s", ops)
 
     def test_revision_with_a_claim_leaves_the_waiting_draft(self):
