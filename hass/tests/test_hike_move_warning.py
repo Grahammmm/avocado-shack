@@ -128,7 +128,7 @@ class ProposalMoveWarningTests(H06TestCase):
 
     def test_proposal_shows_the_warning_and_no_guest_details(self):
         draft, reply = self.propose("move the hike")
-        self.assertIn(f"\nWarning: {MOVED}\n", reply)
+        self.assertIn("\nHeads up: 3 guests have signed up for the old time, and nobody is told automatically.\n", reply)
         for secret in ("walker", "Walker Name", "example.invalid"):
             self.assertNotIn(secret, reply)
         self.assertEqual(self.say(f"yes {draft['code']}"), "approved")

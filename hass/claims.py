@@ -254,11 +254,12 @@ def unstated(draft: dict, owner_text, makers, routes=None, sources=None) -> list
 
 
 def question(hits) -> str:
-    """One owner question naming the first two hits (field and term), then how many more."""
-    named = " and ".join(f'"{term}" in {where}' for where, term in hits[:2])
-    more = f" and {len(hits) - 2} more" if len(hits) > 2 else ""
-    if len(hits) == 1:
-        return (f"I did not draft that: {named} is not in your message. Is it true? "
-                "Send the change again with it in your words, or without it.")
-    return (f"I did not draft that: {named}{more} are not in your message. Are they true? "
-            "Send the change again with them in your words, or without them.")
+    """One owner question naming the first two claim words that his message did not contain."""
+    from hass.voice import quote
+    terms = list(dict.fromkeys(term for _where, term in hits))
+    named = " and ".join(quote(f'"{t}"') for t in terms[:2])
+    if len(terms) == 1:
+        return f"You didn't say {named} in your message. Is that true? Send the change again with it in your own words, or without it."
+    more = " (and a few more)" if len(terms) > 2 else ""
+    return (f"You didn't say {named}{more} in your message. Are they true? "
+            "Send the change again with them in your own words, or without them.")

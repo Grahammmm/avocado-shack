@@ -373,7 +373,9 @@ class EndToEndTests(host_tests.HostCase):
         fw.pull()
         self.assertEqual((len(self.drafts()), len(sender.calls), self.store.status()["waiting"]), (1, 1, 0))
         self.assertEqual(sender.calls[0][0], OWNER_CHAT)
-        self.assertIn(self.drafts()[0]["code"], sender.calls[0][1])
+        self.assertIn("Here's the change I'd make:", sender.calls[0][1])
+        self.assertIn("  now: Ripe and creamy.", sender.calls[0][1])
+        self.assertIn("Reply yes to save it", sender.calls[0][1])
 
 
 if __name__ == "__main__": unittest.main()

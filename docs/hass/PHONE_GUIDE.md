@@ -12,7 +12,7 @@ Each message stands on its own. A command (such as `status`) must be the whole m
 2. Hass replies with a draft and its code, or with a question if a detail is missing. Answer the question in plain words.
 3. Read the draft. When it looks right, approve it with its code.
    Send: `yes a1b2`
-4. Hass replies again when the change is applied and checked.
+4. Hass replies again when the change is saved and whether it is on the website.
 
 Tip: Hass never invents organic claims or farm origins. If you want one on the page, say it in your own words.
 
@@ -100,11 +100,11 @@ Tip: an undo is a draft like any other, so nothing goes back until you say yes.
 
 Tip: resuming never applies a waiting draft by itself, and drafts that wait too long expire with nothing changed.
 
-More commands, each as its own message: `report` replies your morning shelf report, `post photo-product-001` a draft photo caption, and `post hike` plus a hike's code a hike announcement draft. None of them posts anything.
-Send: `post hike hike-2026-11-14-point-buchon`
+More commands, each as its own message: `report` replies your morning shelf report, `post Hass avocado` a draft photo caption, and `post hike` plus a hike's name a hike announcement draft. None of them posts anything.
+Send: `post hike Point Buchon`
 
 Prices (private): save what you paid, then ask for a suggested price. The cost is private; it is never on the website.
-Send: `cost photo-product-001: 24.00 for 12`
-Send: `margin photo-product-001 at 35%`
+Send: `cost Hass avocado: 24 for 12`
+Send: `margin Hass avocado at 35%`
 
 Forgot a command? Send `help`. For what Hass cannot do yet see [Known limits](LIMITS.md), and for every command see [the command card](COMMANDS.md).

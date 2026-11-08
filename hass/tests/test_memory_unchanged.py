@@ -13,7 +13,7 @@ from hass.tests.test_conversation import ConversationTestCase
 from hass.tests.test_memory import Clock
 from hass.tests.test_status_pause import StoreMixin
 
-SAME = "Already saved hours: 9-5; nothing changed."
+SAME = 'I already have hours as 9-5, so nothing changed.'
 
 
 class MemoryUnchangedTests(StoreMixin, ConversationTestCase):
@@ -33,12 +33,12 @@ class MemoryUnchangedTests(StoreMixin, ConversationTestCase):
         self.chat("remember hours: 9-5", "memory-unchanged", SAME, pid="u2")
         self.assertEqual(self.rows(), [first])  # one active row, nothing superseded, original created_at kept
         self.assertEqual(self.disposition("u2"), "memory-unchanged")  # the message is still recorded
-        self.chat("memory", "memory-list", "Saved (1):\nhours: 9-5 (fact, since 2026-11-02)\nAliases (0):")
+        self.chat("memory", "memory-list", "Notes I'm keeping:\n- hours: 9-5 (since Monday, Nov 2 at 9 am)\nI don't have any nicknames.")
         self.assertFalse(self.conv.db.in_transaction)
 
     def test_different_text_is_still_an_update(self):
         self.chat("remember hours: 9-5", "memory-saved")
-        self.chat("remember hours: 9-6", "memory-updated", "Updated hours (was: 9-5). Send forget hours to remove it.")
+        self.chat("remember hours: 9-6", "memory-updated", 'Updated hours. It was 9-5. Say forget hours to remove it.')
         self.assertEqual([(r["value"], r["superseded_at"] is None) for r in self.rows()], [("9-5", False), ("9-6", True)])
 
     def test_case_and_spacing_differences_are_updates(self):
@@ -50,18 +50,18 @@ class MemoryUnchangedTests(StoreMixin, ConversationTestCase):
     def test_after_forget_the_same_text_is_a_new_save(self):
         self.chat("remember hours: 9-5", "memory-saved")
         self.chat("forget hours", "memory-forgot")
-        self.chat("remember hours: 9-5", "memory-saved", "Saved hours: 9-5. Send forget hours to remove it.")
+        self.chat("remember hours: 9-5", "memory-saved", 'Saved hours: 9-5. Say forget hours to remove it.')
         self.assertEqual([(r["value"], r["forgotten_at"] is None) for r in self.rows()], [("", False), ("9-5", True)])
 
     def test_validation_comes_first(self):
         self.chat("remember hours: 9-5", "memory-saved")
-        self.chat("remember Bad_Key: 9-5", "memory-invalid", "Not saved: key must be 1–64 of a-z 0-9 . -.")
-        self.chat("remember alias.x: 9-5", "memory-invalid", "Not saved: send alias <name>: <id> to save an alias.")
+        self.chat("remember Bad_Key: 9-5", "memory-invalid", "I couldn't save that. A note's name can only use letters, numbers, dots and dashes, and has to be short.")
+        self.chat("remember alias.x: 9-5", "memory-invalid", "To save a nickname, say it like alias jam: Linn's blueberry preserves")
         self.assertEqual(len(self.rows()), 1)
 
     def test_alias_same_target_is_refused_and_recorded(self):  # RF1650-4: was an "Updated alias" row (AVB-15 left it)
         self.chat("alias green jam: photo-product-001", "memory-saved", pid="a1")
-        self.chat("alias green jam: photo-product-001", "memory-invalid", "Not saved: already remembered.", pid="a2")
+        self.chat("alias green jam: photo-product-001", "memory-invalid", "I couldn't save that nickname. Could you try a shorter one?", pid="a2")
         self.assertEqual(len(self.rows()), 1)
         self.assertEqual(self.disposition("a2"), "memory-invalid")  # the message is recorded, not rolled back
         self.assertFalse(self.conv.db.in_transaction)

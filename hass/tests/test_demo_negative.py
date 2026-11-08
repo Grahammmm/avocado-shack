@@ -23,7 +23,7 @@ from hass.tests.test_editor import WriterRepo
 FIXTURES = REPO_ROOT / "hass" / "tests" / "fixtures"
 TRANSCRIPT, MAPPING = FIXTURES / "conversation-demo-negative.jsonl", FIXTURES / "conversation-demo-negative-interpreter.json"
 DISPOSITIONS = ["ignored", "proposed", "rejected", "duplicate", "proposed", "no-target", "question", "status"]
-KINDS = ["Draft ", "Cancelled ", "Draft ", "expired at ", "Which product", "Changes: on"]
+KINDS = ["Here's the change I'd make:", "Okay, I've cancelled that.", "Here's the change I'd make:", "That change timed out", "Which product", "Everything is ready."]
 ASK = "Which product or maker should I change, and what should it say?"
 
 
@@ -93,10 +93,10 @@ class NegativeDemoTests(unittest.TestCase):
         a, b = run["db"].execute("SELECT * FROM drafts ORDER BY row_id").fetchall()  # the unclear request opened no draft
         self.assertEqual((a["state"], a["reason"], b["state"]), ("rejected", "owner", "expired"))
         # fixture_chat sends each reply at its own row's time, so no reply is older than DELAYED_AFTER_S and
-        # none carries the AVB-07 (H16) "(Delayed reply, ...)" prefix (that path is covered by the outbox tests)
-        self.assertEqual(texts[1], f"Cancelled {a['code']}; nothing changed.")
-        self.assertFalse(any(t.startswith("(Delayed reply") for t in texts), texts)
-        self.assertEqual(texts[3], f"{b['code']} expired at 2026-11-02 09:14 PST; nothing changed.")  # 09:04 + 600 s
+        # none carries the delayed reply prefix (that path is covered by the outbox tests)
+        self.assertEqual(texts[1], "Okay, I've cancelled that. Nothing changed.")
+        self.assertFalse(any(t.startswith("Sorry for the wait.") for t in texts), texts)
+        self.assertEqual(texts[3], "That change timed out today at 9:14 am, so nothing changed. Tell me again if you still want it.")  # 09:04 + 600 s
         self.assertEqual(texts[4], ASK)
         self.assertNotIn(b["code"], "".join(texts[4:]))  # the question and status name no draft code
         self.assertIn(conversation.NOTHING, texts[5])  # status: nothing pending, no last change

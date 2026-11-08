@@ -120,7 +120,7 @@ class ReleaseCase(unittest.TestCase):
         self.restart()
         self.assertEqual(self.entry()['state'], 'live')
         self.assertEqual(self.messages[0][1], ['fixture-picture.png'])
-        self.assertIn('Now showing', self.messages[0][0])
+        self.assertIn('Your change is on the website now.', self.messages[0][0])
         for _ in range(3): self.live.reconcile()
         self.assertEqual(len(self.messages), 1)
         self.now += timedelta(seconds=61)

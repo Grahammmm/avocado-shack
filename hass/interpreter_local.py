@@ -25,7 +25,7 @@ CHAT_PATH, MAX_BODY, MAX_MODEL = "/api/chat", 256 * 1024, 100
 MAX_EARLIER = 4  # HASS-HIKE-FLOW-1: owner texts of the open request that go out with an answer (Conversation keeps the same)
 APIS, OPENAI_PATH, MAX_TOKENS = ("ollama", "openai"), "/v1/chat/completions", 2000  # HASS-INTERP-OPENAI-1
 HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
-FAILED = "I could not work that out right now, so nothing was drafted. Please try again in a few minutes."
+FAILED = "I couldn't work that out just now, so nothing was changed. Please try again in a few minutes."
 URL_ERROR = "interpreter URL must be loopback http"
 
 

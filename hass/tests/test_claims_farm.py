@@ -76,7 +76,7 @@ class FarmConversationTests(ConversationTestCase):
                 self.interp.mapping[text] = _ops(("product.edit", {"id": P1, "description": "Cage-free eggs"}))
                 self.assertEqual(self.say(text), "claim-question")
                 [reply] = self.replies()
-                self.assertIn(f'"cage-free" in products {P1} description', reply)
+                self.assertIn('You didn\'t say "cage-free" in your message. Is that true?', reply)
                 self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_owner_words_still_propose(self):

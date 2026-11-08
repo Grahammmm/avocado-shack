@@ -7,12 +7,12 @@ import json
 import unittest
 from datetime import timedelta
 
-from hass import conversation
+from hass import conversation, voice
 from hass.tests.test_conversation import T0, ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
-RESTORE = 'To bring one back, send a change in plain words: "restore <id>".'
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
+RESTORE = 'To bring one back, tell me, like Bring back {}.'
 
 
 class HiddenParseTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class HiddenParseTests(unittest.TestCase):
             self.assertIsNone(conversation.parse_command(text), text)
 
     def test_help_line_and_read_only_verb(self):
-        self.assertIn('hidden - hidden products and makers, ids: "hidden"', conversation.HELP_TEXT.splitlines())
+        self.assertIn("lists what's hidden", voice.plain(conversation.HELP_TEXT))
 
 
 class HiddenTests(StoreMixin, ConversationTestCase):
@@ -77,8 +77,8 @@ class HiddenTests(StoreMixin, ConversationTestCase):
         with open(self.repo.wt / "hass" / "content" / "makers.json", encoding="utf-8") as f:
             maker_name = json.load(f)["makers"][key]["name"]
         names = self.names()
-        self.assertEqual(self.hidden(), [f"product {a}: {names[a]}", f"product {b}: {names[b]}",
-                                         f"maker {key}: {maker_name}", RESTORE])
+        self.assertEqual(self.hidden(), ["These are hidden right now:", f"- {names[a]}", f"- {names[b]}",
+                                         f"- {maker_name} (maker)", RESTORE.format(names[a])])
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_more_than_twenty_products(self):
@@ -86,22 +86,22 @@ class HiddenTests(StoreMixin, ConversationTestCase):
         if len(ids) < 23: self.skipTest("fixture has fewer than 23 products")
         self.set_state(hidden=ids[:23])
         lines = self.hidden()
-        self.assertEqual(len(lines), 22)
-        self.assertTrue(lines[0].startswith(f"product {ids[0]}: "))
-        self.assertEqual(lines[-2:], ["… and 3 more.", RESTORE])
+        self.assertEqual(len(lines), 23)
+        self.assertTrue(lines[1].startswith(f"- {self.names()[ids[0]]}"))
+        self.assertEqual(lines[-2:], ["And a few more.", RESTORE.format(self.names()[ids[0]])])
 
     def test_makers_fill_after_products_and_share_the_cap(self):
         ids, keys = self.ids(), self.maker_keys()
         self.set_state(hidden=ids[:19], makers=keys[:3])
         lines = self.hidden()
-        self.assertEqual(len(lines), 22)
-        self.assertEqual([ln.split(":")[0] for ln in lines[18:20]], [f"product {ids[18]}", f"maker {keys[0]}"])
-        self.assertEqual(lines[-2:], ["… and 2 more.", RESTORE])
+        self.assertEqual(len(lines), 23)
+        self.assertEqual(lines[19:21], [f"- {self.names()[ids[18]]}", f"- {keys[0]} (maker)"])
+        self.assertEqual(lines[-2:], ["And a few more.", RESTORE.format(self.names()[ids[0]])])
 
     def test_nothing_hidden(self):
-        self.assertEqual(self.hidden(), ["Nothing is hidden."])
+        self.assertEqual(self.hidden(), ["Nothing is hidden right now."])
         self.set_state(held=(self.ids()[0],))  # held alone is not hidden
-        self.assertEqual(self.hidden("Hidden."), ["Nothing is hidden."])
+        self.assertEqual(self.hidden("Hidden."), ["Nothing is hidden right now."])
 
     def test_paused_and_lapsed_draft_keep_state(self):
         draft, _reply = self.propose("hours")
@@ -111,7 +111,7 @@ class HiddenTests(StoreMixin, ConversationTestCase):
         self.set_state(hidden=(self.ids()[0],))
         control = [dict(r) for r in self.conv.db.execute("SELECT * FROM control")]
         self.now = T0 + timedelta(seconds=601)  # lapsed; no other message has swept it yet
-        self.assertEqual(len(self.hidden("HIDDEN")), 2)
+        self.assertEqual(len(self.hidden("HIDDEN")), 3)
         self.assertEqual([dict(r) for r in self.conv.db.execute("SELECT * FROM control")], control)
         self.assertEqual((self.drafts()[0]["state"], self.approvals(), self.editor.applies), ("proposed", 0, 0))
         self.assertEqual(self.say(f"yes {draft['code']}"), "no-target")  # a later message still expires it
@@ -133,7 +133,7 @@ class HiddenTests(StoreMixin, ConversationTestCase):
     def test_name_with_markup_or_newline_is_one_stored_line(self):
         pid = self.ids()[0]
         self.set_state(hidden=(pid,), names={pid: "<b>Jam</b>\nsecond   line"})
-        self.assertEqual(self.hidden(), [f"product {pid}: <b>Jam</b> second line", RESTORE])
+        self.assertEqual(self.hidden(), ["These are hidden right now:", "- <b>Jam</b> second line", RESTORE.format("<b>Jam</b> second line")])
 
 
 if __name__ == "__main__":

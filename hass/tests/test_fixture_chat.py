@@ -50,9 +50,9 @@ class FixtureChatPreviewTests(BrowserCase):
         self.assertEqual((run.returncode, run.stderr), (0, ""))
         self.assertEqual(len(rows), 2)
         [row] = self.drafts()
-        self.assertIn("\nPreview unavailable: ", rows[0]["text"])
+        self.assertIn("\nI couldn't make a picture of how it will look.", rows[0]["text"])
         self.assertEqual(rows[0]["attachments"], [])
-        self.assertTrue(rows[1]["text"].startswith(f"Applied {row['code']}, but the preview check failed: "), rows[1])
+        self.assertTrue(rows[1]["text"].startswith("I saved it, but the preview check didn't pass: "), rows[1])
         self.assertEqual((row["state"], self.commits()), ("applied", 1))
         self.assertTrue(row["reason"].startswith("not verified: "), row["reason"])
         with self.subTest("uninitialised state dir"):
@@ -68,8 +68,8 @@ class FixtureChatPreviewTests(BrowserCase):
         self.assertEqual((run.returncode, run.stderr), (0, ""))
         [row] = self.drafts()
         self.assertEqual([r["attachments"] for r in rows], [[], []])
-        self.assertNotIn("Preview unavailable", rows[0]["text"])
-        self.assertEqual(rows[1]["text"], f"Applied {row['code']}: {row['summary']}\n{NOT_LIVE}")
+        self.assertNotIn("I couldn't make a picture of how it will look.", rows[0]["text"])
+        self.assertEqual(rows[1]["text"], f"Saved: {row['summary']}\n{NOT_LIVE}")
         self.assertFalse((self.repo.state / "screenshots").exists())
         self.assertEqual((row["state"], self.commits()), ("applied", 1))
 
@@ -83,7 +83,7 @@ class FixtureChatPreviewTests(BrowserCase):
         result = self.repo.state / "screenshots" / f"{row['change_id']}-result.png"
         self.assertEqual([r["chat"] for r in rows], [CHAT, CHAT])
         self.assertEqual(rows[0]["attachments"], [str(proposal)])
-        self.assertTrue(rows[1]["text"].startswith(f"Applied and checked {row['code']}"), rows[1])
+        self.assertTrue(rows[1]["text"].startswith("Saved and checked:"), rows[1])
         self.assertEqual(rows[1]["attachments"], [str(result)])
         for png in (proposal, result):
             self.assertEqual(png.read_bytes()[:8], PNG_SIGNATURE)

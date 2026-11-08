@@ -50,6 +50,7 @@
 "test_content_starts_at": 1,
 "test_content_text_chars": 1,
 "test_conversation": 3,
+"test_corrlog": 23,
 "test_demo_browser": 17,
 "test_demo_browser_photo": 34,
 "test_demo_negative": 2,
@@ -382,6 +383,7 @@
 "test_undo_twice": 3,
 "test_unknown_approval_code": 2,
 "test_verify_all_records": 3,
+"test_voice": 17,
 "test_writer_lock_entry": 2,
 "test_yes_before_proposal": 5
 }

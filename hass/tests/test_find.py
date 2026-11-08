@@ -7,12 +7,12 @@ import json
 import unittest
 from datetime import timedelta
 
-from hass import conversation
+from hass import conversation, voice
 from hass.tests.test_conversation import T0, ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
 DRIED, FRESH = "photo-product-046", "photo-product-150"
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
 
 
 class FindParseTests(unittest.TestCase):
@@ -54,34 +54,38 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.edit("makers.json", maks)
 
     def test_one_match_and_folded_query(self):
-        self.assertEqual(self.find("find DRIED LION'S MANE"), [f"product {DRIED}: Dried lion’s mane mushrooms (active)"])
-        self.assertEqual(self.find("find LIONS MANE."), [f"product {DRIED}: Dried lion’s mane mushrooms (active)",
-                                                         f"product {FRESH}: Lion’s mane mushrooms (active)"])
+        self.assertEqual(self.find("find DRIED LION'S MANE"), ["Dried lion’s mane mushrooms (on the website)"])
+        self.assertEqual(self.find("find LIONS MANE."), ["Dried lion’s mane mushrooms (on the website)",
+                                                         "Lion’s mane mushrooms (on the website)"])
         self.assertEqual(self.drafts(), [])
 
     def test_seven_products_six_makers_gives_ten_lines_and_count(self):
         self.rename("Zzqx", products=7, makers=6)
         lines = self.find("find zzqx")
         self.assertEqual(len(lines), 11)
-        self.assertEqual([ln.split()[0] for ln in lines[:10]], ["product"] * 7 + ["maker"] * 3)  # products first
-        self.assertEqual(lines[10], "… 3 more; add a word.")
-        ids = [ln.split(":")[0].split(" ", 1)[1] for ln in lines[:7]]
-        self.assertEqual(ids, sorted(ids))
+        doc = json.loads((self.repo.wt / "hass/content/products.json").read_text())
+        products = sorted(doc["products"], key=lambda p: p["id"])[:7]
+        self.assertEqual(lines[:7], [f"{p['name']} (on the website)" for p in products])  # products first
+        makers = json.loads((self.repo.wt / "hass/content/makers.json").read_text())["makers"]
+        self.assertEqual(lines[7:10], [f"{makers[k]['name']} (on the website)" for k in sorted(makers)[:3]])
+        self.assertEqual(lines[10], "There are more. Add a word to narrow it down.")
+        names = [ln.removesuffix(" (on the website)") for ln in lines[:7]]
+        self.assertEqual(names, [p["name"] for p in products])
 
     def test_lookup_cap_is_never_shown_as_an_exact_count(self):
         self.rename("Qwvx", products=12)  # lookup returns only its first 10
         lines = self.find("find qwvx")
-        self.assertEqual((len(lines), lines[-1]), (11, "… maybe more; add a word."))
+        self.assertEqual((len(lines), lines[-1]), (11, "There are more. Add a word to narrow it down."))
         self.rename("Pzzt", products=12, makers=12)
         lines = self.find("find pzzt")
-        self.assertEqual((len(lines), lines[-1]), (11, "… 10 or more; add a word."))
+        self.assertEqual((len(lines), lines[-1]), (11, "There are more. Add a word to narrow it down."))
 
     def test_no_match_and_usage(self):
-        self.assertEqual(self.find("find Zzqx Nothing"), ['No product, maker, hike or route idea matches "Zzqx Nothing".'])
+        self.assertEqual(self.find("find Zzqx Nothing"), ["I couldn't find anything called Zzqx Nothing."])
         for text in ("find", "Find.", "find    ", "find " + "x" * 61):
             with self.subTest(text=text[:12]):
-                self.assertEqual(self.find(text), [conversation.FIND_USAGE])
-        self.assertEqual(self.find("find " + "x" * 60), [f'No product, maker, hike or route idea matches "{"x" * 60}".'])
+                self.assertEqual(self.find(text), [voice.plain(conversation.FIND_USAGE)])
+        self.assertEqual(self.find("find " + "x" * 60), [f"I couldn't find anything called {'x' * 60}."])
 
     def test_hidden_and_held_records_show_their_status(self):
         def prods(doc):
@@ -90,10 +94,10 @@ class FindTests(StoreMixin, ConversationTestCase):
                 if p.get("producerKey") == "Etto": p["status"] = "hidden"
         self.edit("products.json", prods)
         self.edit("makers.json", lambda doc: doc["makers"]["Etto"].update(name="Etto Zzhid", hidden=True))
-        self.assertEqual(self.find("find zzhid"), [f"product {FRESH}: Zzhid mushrooms (hidden)",
-                                                   "maker Etto: Etto Zzhid (hidden)"])
+        self.assertEqual(self.find("find zzhid"), ["Zzhid mushrooms (hidden)",
+                                                   "Etto Zzhid (hidden)"])
         self.assertEqual(self.find("find raw milk white cheddar"),
-                         ["product photo-product-040: Raw milk white cheddar (held)"])
+                         ["Raw milk white cheddar (on hold)"])
 
     def test_broken_or_invalid_content_is_unavailable(self):
         path = self.repo.wt / "hass" / "content" / "products.json"
@@ -120,7 +124,7 @@ class FindTests(StoreMixin, ConversationTestCase):
 
     def test_reply_has_only_id_name_status_and_no_memory_table(self):
         lines = self.find("find etto")
-        self.assertIn("maker Etto: Etto (visible)", lines)
+        self.assertIn("Etto (on the website)", lines)
         text = "\n".join(lines)
         for leak in ("https", "Paso Robles", "Pasta is", "assets/"):
             self.assertNotIn(leak, text)
@@ -130,7 +134,7 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.say(f"alias green jam: {DRIED}"), "memory-saved")
         self.replies()
         self.assertEqual(self.find("find Green Jam"),
-                         [f"product {DRIED}: Dried lion’s mane mushrooms (active) (your alias)"])
+                         ["Dried lion’s mane mushrooms (on the website, your nickname)"])
 
 
 if __name__ == "__main__":

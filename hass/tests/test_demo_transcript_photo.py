@@ -27,12 +27,12 @@ FIXTURES = REPO_ROOT / "hass" / "tests" / "fixtures"
 DEMO, MAPPING = FIXTURES / "conversation-demo-photo.jsonl", FIXTURES / "conversation-demo-photo-interpreter.json"
 SHA = hashlib.sha256((MEDIA / "pixel.jpg").read_bytes()).hexdigest()
 CODE, INSTALLED = SHA[:4], f"assets/products/photo-{SHA[:16]}.jpg"
-ASKED = f"{PHOTO_QUESTION} Reply with the product and description (draft {CODE})."
+ASKED = PHOTO_QUESTION
 QUESTION = "Please provide: a few words saying what the photo shows"  # the editor's question when the caption names only the product
-KINDS = (ASKED, QUESTION, "That photo is already in draft ", "Draft ", "Applied and checked ", "Applied ",
-         "Recent changes:", "Undo ")
-EXPECTED = [ASKED, QUESTION, "That photo is already in draft ", "Draft ", "Applied ", "Recent changes:", "Undo ",
-            "Applied "]
+KINDS = (ASKED, QUESTION, "I already have that photo, and I'm waiting on you. ", "Here's the change I'd make:", "Saved and checked: ", "Saved: ",
+         "Here's what we changed lately:", "To undo that, I'd change it back:")
+EXPECTED = [ASKED, QUESTION, "I already have that photo, and I'm waiting on you. ", "Here's the change I'd make:", "Saved: ", "Here's what we changed lately:", "To undo that, I'd change it back:",
+            "Saved: "]
 REFUSED = "fixture_chat: fixture line 1: photos must name regular files directly inside --photos\n"
 
 
@@ -85,12 +85,12 @@ class PhotoDemoTranscriptTests(unittest.TestCase):
         self.assertEqual([self.kind(t) for t in texts], EXPECTED)
         edit, undo = self.query(repo, "SELECT * FROM drafts ORDER BY row_id")  # the second sending: no second draft
         self.assertEqual(edit["code"], CODE)
-        self.assertEqual(texts[2], f"That photo is already in draft {CODE}. {texts[1]}")
-        self.assertTrue(texts[3].startswith(f"Draft {CODE}:"), texts[3])
-        self.assertTrue(texts[4].startswith(f"Applied {CODE}:"), texts[4])
-        self.assertIn(f"{CODE} applied: products {PID}", texts[5])
-        self.assertTrue(texts[6].startswith(f"Undo {CODE}:\nDraft {undo['code']}:"), texts[6])
-        self.assertTrue(texts[7].startswith(f"Applied {undo['code']}:"), texts[7])
+        self.assertEqual(texts[2], f"I already have that photo, and I'm waiting on you. {texts[1]}")
+        self.assertTrue(texts[3].startswith("Here's the change I'd make:"), texts[3])
+        self.assertTrue(texts[4].startswith("Saved: the photo, the photo description for Hass avocado"), texts[4])
+        self.assertIn("the photo, the photo description for Hass avocado: saved", texts[5])
+        self.assertTrue(texts[6].startswith("To undo that, I'd change it back:\nHere's the change I'd make:"), texts[6])
+        self.assertTrue(texts[7].startswith("Saved:"), texts[7])
         self.assertEqual((edit["state"], json.loads(undo["ops_json"])[0]["op"]), ("reverted", "history.revert"))
         after = repo.product(PID)
         self.assertEqual((after["image"], after.get("imageAlt")), (before["image"], before.get("imageAlt")))
@@ -151,7 +151,7 @@ class PhotoDemoTranscriptTests(unittest.TestCase):
         for message in adapter.inbound(): conv.handle(message)
         conv.flush(adapter)
         checked = adapter.sent[-1]
-        self.assertTrue(checked["text"].startswith(f"Applied and checked {CODE}:"), checked["text"])
+        self.assertTrue(checked["text"].startswith("Saved and checked: the photo, the photo description for Hass avocado"), checked["text"])
         self.assertEqual(checked["attachments"], [str(png)])
         self.assertEqual(self.query(repo, f"SELECT state FROM drafts WHERE code = '{CODE}'")[0]["state"], "verified")
 

@@ -54,7 +54,7 @@ class ConversationNumberingTests(ConversationTestCase):
         self.interp.mapping["hours"] = _ops((SET_HOURS, {"hours": ["a" * 61, "Closed Sunday"]}))
         self.assertEqual(self.say("hours"), "not-drafted")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Not drafted: " + LONG.format(1)), reply)
+        self.assertEqual(reply, "That's too long for the website. Could you make it a bit shorter?")
         self.assertEqual(self.drafts(), [])
 
 

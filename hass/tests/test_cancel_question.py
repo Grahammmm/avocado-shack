@@ -26,12 +26,12 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
     def test_bare_no_cancels_the_only_question_and_a_later_fill_starts_fresh(self):
         q = self.ask()
         self.assertEqual(self.say("No!"), "rejected")  # wording: capitals and a trailing "!" are the same keyword
-        self.assertEqual(self.replies(), [f"Cancelled {q['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual(self.closed(q), ("rejected", "owner"))
         self.assertEqual(self.say("no"), "no-target")  # duplicate cancel: nothing is waiting any more
         self.assertEqual(self.replies(), [conversation.NOTHING])
         self.assertEqual(self.say(f"cancel {q['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{q['code']} was cancelled (owner); nothing changed."])
+        self.assertEqual(self.replies(), ["That one was cancelled, so nothing changed."])
         self.assertNotIn(q["code"], self.status())
         self.assertEqual(self.answer("done", q["code"]), "proposed")  # the late fill is a new request
         self.replies()
@@ -41,21 +41,21 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.assertEqual(new["state"], "proposed")
         self.assertNotEqual(new["code"], q["code"])
         self.assertEqual(self.say(f"yes {q['code']}"), "no-target")  # the cancelled question never reopens
-        self.assertEqual(self.replies(), [f"{q['code']} was cancelled (owner); nothing changed."])
+        self.assertEqual(self.replies(), ["That one was cancelled, so nothing changed."])
         self.assert_nothing_applied()
 
     def test_code_names_only_one_of_a_proposal_and_a_question(self):
         draft, _reply = self.propose("hours")
         q = self.ask()
         self.assertEqual(self.say(f"CANCEL {q['code']}."), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {q['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.closed(q), self.state(draft)["state"]), (("rejected", "owner"), "proposed"))
         q2 = self.ask_at(self.now)["row"]
         self.assertEqual(self.say(f"reject {draft['code']}"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {draft['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.closed(draft), self.state(q2)["state"]), (("rejected", "owner"), "needs-details"))
         self.assertEqual(self.say("cancel beef"), "no-target")  # an unknown code closes nothing
-        self.assertEqual(self.replies(), ["No draft beef."])
+        self.assertEqual(self.replies(), ["I don't have a change with that code."])
         self.assertEqual(self.state(q2)["state"], "needs-details")
         self.assert_nothing_applied()
 
@@ -64,14 +64,13 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         q = self.ask()
         self.assertEqual(self.say("no"), "no-target")
         [reply] = self.replies()
-        self.assertEqual(reply.splitlines(), ["Which draft do you mean?", f"{draft['code']}: {draft['summary']}",
-                                              f"{q['code']}: needs details: {q['summary']}",
-                                              "Reply yes <code> or no <code>."])
+        self.assertEqual(reply.splitlines(), ["Which one do you mean? Reply yes or no and its code.", f"yes {draft['code']}: {draft['summary']}",
+                                              f"I'm waiting for details: {q['summary']}"])
         self.assertEqual((self.state(draft)["state"], self.state(q)["state"]), ("proposed", "needs-details"))
 
     def test_yes_never_approves_a_question(self):
         q = self.ask()
-        still = f"{q['code']} still needs details: {q['summary']}"
+        still = f"I still need an answer from you first. {q['summary']}"
         self.assertEqual(self.say("yes"), "no-target")  # bare yes repeats the only waiting question (AV1737-05)
         self.assertEqual(self.replies(), [still])
         for text in (f"yes {q['code']}", f"Approve {q['code']}!", f"approved {q['code']}."):
@@ -87,7 +86,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
     def test_expired_question_is_not_cancelled(self):
         q = self.ask()
         self.now = T0 + h16.TTL + timedelta(seconds=1)
-        expired = f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."
+        expired = "That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."
         self.assertEqual(self.say("no"), "no-target")
         self.assertEqual(self.replies(), [expired])
         self.assertEqual(self.say("cancel"), "no-target")
@@ -101,7 +100,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.replies()
         q = self.ask()
         self.assertEqual(self.say("no"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {q['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual(self.closed(q), ("rejected", "owner"))
         self.assert_nothing_applied()
 
@@ -110,7 +109,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.assertEqual(self.say("no"), "rejected")
         self.replies()
         self.assertEqual(self.answer("done", draft["code"]), "question")  # scope: only questions start fresh
-        self.assertEqual(self.replies(), [f"I could not find draft {draft['code']} waiting; reply with the change again."])
+        self.assertEqual(self.replies(), ["I can't find that change any more. Could you tell me the change again?"])
         self.assertEqual(len(self.drafts()), 1)
 
 

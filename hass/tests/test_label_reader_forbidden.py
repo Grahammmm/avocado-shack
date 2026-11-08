@@ -58,7 +58,7 @@ class ForbiddenReadTests(unittest.TestCase):
         labels, transport = reader(recorded({"name": "Avocado <b>Oil</b>", "brand": None, "category": "Oils"}))
         found = labels.read(JPG, CATS)
         self.assertEqual((found, labels.last_error, len(transport.calls)), ({"category": "oils"}, None, 1))
-        self.assertEqual(question(found), "The label looks like: oils. Is that right? Say which product it is either way.")
+        self.assertEqual(question(found), "The label looks like \ue000oils\ue001. Is that right? Either way, tell me which product it is.")
         self.assertNotIn("Avocado", question(found))
 
     def test_read_with_every_field_forbidden_is_empty_without_an_error(self):

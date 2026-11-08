@@ -14,6 +14,7 @@ import copy
 import re
 import unicodedata
 
+from hass import voice
 from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS, checked_on, shop_today
 from hass.field_words import field_list
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
@@ -161,7 +162,7 @@ def _product_edit(content, args, ctx):
     clear_alt = bool(args.get("clearImageAlt")) and "imageAlt" in product  # clearing an absent alt is no change
     if not changes and not clear_alt:
         fields = list(PRODUCT_EDITABLE) + ["producerKey", "clearProducer", "clearImageAlt"]
-        return NeedsDetails(fields, f"What should change on {args['id']}? Give at least one of: " + field_list(fields))
+        return NeedsDetails(fields, f"What would you like to change about {voice.quote(product['name'])}?")
     changes = _drop_unchanged(changes, product, args["id"], more=clear_alt)
     if isinstance(changes, Refused):
         return changes

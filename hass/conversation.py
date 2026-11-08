@@ -17,7 +17,7 @@ from hass import claims, interpret_check, label_reader, margins, media, morning_
 from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, checked_on, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
-from hass import live_policy  # noqa: E402
+from hass import corrlog, live_policy, voice  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
@@ -29,73 +29,74 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
                         r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
                         r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
-                        r"|(post)(?:\s+(hike\s+\S+|\S+))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
+                        r"|(post)(?:\s+((?:hike\s+)?\S+(?:\s+\S+){0,5}))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
                         r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
                         r"|(hidden)"  # AV1222-13 (H03): group 17
-                        r"|(listing)(?:\s+(\S+))?"  # AV1622-09 (H17): groups 18/19; one token, the id is re-read from the original text
+                        r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; multiword names need a catalog check
                         r"|(photos to take)")  # AV0222-04 (H10/H17): group 20
-HELP_TEXT = "\n".join(('Send a change in plain words: "Stop showing the eggs as sold out".',  # AV1537-03, test_help
-    'yes [code] - apply the waiting draft: "yes a1b2"',
-    'no [code] - cancel the waiting draft or question: "no a1b2"',
-    'status (or did it work?) - last change, waiting drafts: "status"',
-    'history [words] - recent or matching changes: "history hours"',
-    'undo [code] - draft an undo of an applied change: "undo a1b2"',
-    'stop changes (or pause changes) - nothing applies: "stop changes"',
-    'resume changes - let approvals apply again: "resume changes"',
-    'remember <key>: <text> - save a note: "remember parking: back lot"',
-    'forget <key> - delete a saved note: "forget parking"',
-    'memory - saved notes and aliases: "memory"',
-    'alias <name>: <id> - name an id: "alias jam: photo-product-001"',
-    'cost <id>: <$> for <n> - save: "cost photo-product-001: 24 for 12"',  # AV1222-10
-    'find <words> - products/makers/hikes/route ideas: "find lion\'s mane"',
-    'show <code> - repeat a draft and its screenshot: "show a1b2"',
-    'report - the morning shelf report: "report"',
-    'post <id> - draft a caption, posts nothing: "post photo-product-001"',
-    'post hike <id> - hike draft: "post hike hike-2026-11-14-point-buchon"',  # AV1222-11
-    'margin <id> at <m>% - price idea: "margin photo-product-001 at 35%"',  # AV1102-12, AV1222-10: saved cost
-    'hidden - hidden products and makers, ids: "hidden"',  # AV1222-13
-    'listing <id> - what the site shows for one id: "listing Etto"',  # AV1622-09
-    'photos to take - products needing a photo: "photos to take"',  # AV0222-04
-    'help (or commands, ?) - this list: "help"'))
+q = voice.quote  # HASS-VOICE-1: words Mike typed himself, or commands he types, are shown as they are and never judged
+HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: " + q('"Stop showing the eggs as sold out"') + ".",  # AV1537-03, test_help
+    "Other things you can say:",
+    q("yes") + " - go ahead with the change waiting for you",
+    q("no") + " - cancel it",
+    q("status") + " - what I did last and what is waiting for you",
+    q("history") + " - what we changed lately, or " + q("history hours") + " to look for one",
+    q("undo") + " - take back the last change",
+    q("stop changes") + " - I won't change anything until you say " + q("resume changes"),
+    q("report") + " - the morning shelf report",
+    q("find lion's mane") + " - look something up",
+    q("photos to take") + " - the products that still need a photo",
+    q("remember parking: back lot") + " - I'll keep a note; " + q("forget parking") + " removes it; " + q("notes") + " lists them",
+    q("alias jam: Linn's blueberry preserves") + " - a nickname for a product or maker",
+    q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",
+    q("margin Hass avocado at 35%") + " - a price idea from the cost you saved",
+    q("post Hass avocado") + " or " + q("post hike Point Buchon") + " - a caption to copy; I post nothing",
+    q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
+    q("show") + " and a word from the change - repeat a waiting change",
+    q("help") + " - this list"))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
-MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory)|(alias)(?:\s+(.*))?"
+MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory|notes)|(alias)(?:\s+(.*))?"
                        r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
-PHOTOS_TO_TAKE_MAX = 10  # AV0222-04: names listed by `photos to take`
+PHOTOS_TO_TAKE_MAX = 5  # AV0222-04, HASS-VOICE-1: names listed by `photos to take` (a short list, then ask again)
 MEMORY_LIST_MAX, HISTORY_MAX = 20, 5  # AV1537-14: docs/hass/LIMITS.md states these (test_limits_doc)
 ALIAS_LIST_MAX = 20  # AV0222-05: `memory` lists this many aliases apart from the notes (LIMITS.md)
 HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV2022-06: owner-approved changes only
 FIND_TEXT_MAX, ALIAS_NAME_MAX = 60, 60  # AV0022-15: docs/hass/LIMITS.md states these (test_limits_doc)
 HIDDEN_MAX = 20  # AV1222-13: lines of the hidden list
 LISTING_DESC_MAX = 120  # AV1622-09: characters of a product description in `listing`
-LISTING_USAGE = "Send listing and an id from find."
-LISTING_NONE = "No listing with that id; send find <words>."
-LISTING_MANY = "That id matches more than one listing; send find <words>."
+STATUS_PLAIN = {"active": "on the website", "hidden": "hidden", "held": "on hold", "visible": "on the website",
+                "scheduled": "coming up", "cancelled": "cancelled", "completed": "done", "idea": "just an idea", "draft": "not finished"}
+LISTING_USAGE = "Which one? Say it like " + q("listing Etto") + "."
+LISTING_NONE = "I don't know that one. Try " + q("find") + " and a word from its name."
+LISTING_MANY = "That fits more than one thing. Could you say a bit more of its name?"
 HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX = 10, 60  # AV2152-02 (H06/H17): `history <words>`; docs/hass/COMMANDS.md
-HISTORY_USAGE = f"Send history and 1–{HISTORY_TEXT_MAX} characters, e.g. history opening hours."
-FIND_MAX, FIND_USAGE = 10, f"Send find and 1–{FIND_TEXT_MAX} characters, e.g. find lion's mane."  # AV1537-04
-POST_USAGE = "Send post and a product id, e.g. post photo-product-001."  # AV1322-07
-HIKE_USAGE = "Send post hike and a hike id, e.g. post hike hike-2026-11-14-point-buchon (find <words> gives ids)."  # AV1222-11
-HIKE_REFUSALS = {"no such hike": "No hike {id}; send find <words> for ids.", "hike is cancelled": "{id} is cancelled; nothing to announce.",
-                 "hike already happened": "{id} has already happened.", "not scheduled": "{id} is not scheduled yet."}  # other reasons: "Cannot draft a post for <id>: <reason>."
-POST_REFUSALS = {"no such product": "No product {id}; send find <words> for ids.", "not on the site": "{id} is not on the site.",
-                 "no photo on the site": "{id} has no photo on the site."}  # other build() reasons: "Cannot draft a post for <id>: <reason>."
+HISTORY_USAGE = "Tell me a word or two to look for, like " + q("history opening hours") + "."
+FIND_MAX, FIND_USAGE = 10, "Tell me a word or two to look for, like " + q("find lion's mane") + "."  # AV1537-04
+POST_USAGE = "Which product is the post for? Say it like " + q("post Hass avocado") + "."  # AV1322-07
+HIKE_USAGE = "Which hike is the post for? Say it like " + q("post hike Point Buchon") + "."  # AV1222-11
+HIKE_REFUSALS = {"no such hike": "I don't know a hike called {id}. Try " + q("find") + " and a word from its name.",
+                 "hike is cancelled": "{id} is cancelled, so there is nothing to announce.",
+                 "hike already happened": "{id} has already happened.", "not scheduled": "{id} isn't scheduled yet."}  # other reasons: POST_CANT
+POST_REFUSALS = {"no such product": "I don't know a product called {id}. Try " + q("find") + " and a word from its name.",
+                 "not on the site": "{id} isn't on the website right now.",
+                 "no photo on the site": "{id} has no photo on the website yet, so I can't make a post for it."}  # other reasons: POST_CANT
+POST_CANT = "I can't make a post for {id} right now. Nothing was posted."
 _NUM = r"[-+]?[0-9.][0-9.,_]*(?:e[-+]?[0-9]+)?"  # AV1102-12: looks like a number; margins.compute is the only validator
 MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")
-MARGIN_ID_RE = re.compile(rf"([a-z0-9][a-z0-9-]*)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")  # AV1222-10: saved cost
+MARGIN_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")  # AV1222-10: saved cost
 COST_RE = re.compile(r"\$?(\S+)\s+for\s+(\S+)", re.IGNORECASE)  # AV1222-10: margins.compute is the only number validator
-COST_USAGE = "send cost <id>: <pack cost> for <units>, e.g. cost photo-product-001: 24.00 for 12"
+COST_USAGE = "Tell me the product, what you pay for a pack and how many are in it, like " + q("cost Hass avocado: 24 for 12") + "."
 PRIVATE_PREFIXES = ("alias.", "cost.")  # AV1222-10: memory keys the interpreter never sees
-MARGIN_USAGE = 'Send: margin <pack cost> for <units> at <margin>% (optional: shrink <S>%), e.g. "margin 24.00 for 12 at 35%".'
-PAUSED_LINE = "Changes are paused; send resume changes before yes."
-ATTACHMENT_REPLY = ("Photos, voice notes and files are not supported yet, so nothing changed. "
-                    "Please send the change as text.")
-NOT_READ_REPLY = ("I only read new messages, so that reaction or edit changed nothing. "
-                  "Send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
-PHOTO_QUESTION = ("Which product is this photo for, and how would you describe the photo in a few words (for people who "
-                  "cannot see it)?")  # NB-AV-09 (H12): asked by every new photo draft
+MARGIN_USAGE = "Tell me what you pay for a pack, how many are in it and the margin you want, like " + q("margin 24 for 12 at 35%") + "."
+PAUSED_LINE = "Changes are paused, so nothing will be saved yet. Say " + q("resume changes") + " first, then yes."
+ATTACHMENT_REPLY = ("I can't read photos, voice notes or files yet, so nothing changed. "
+                    "Could you type the change instead?")
+NOT_READ_REPLY = ("I only notice new messages, so I missed that tap or edit and nothing changed. "
+                  "Please send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
+PHOTO_QUESTION = "Which product is this photo for, and what does it show? A few words is fine."  # NB-AV-09 (H12): asked by every new photo draft
 PHOTO_PATH_RE = re.compile(r"assets/products/photo-[0-9a-f]{16}\.(jpg|png)")
 PHOTO_OPS = ("product.set_photo", "product.add")  # AV0022-04: ops in a photo-draft answer that get the draft's photo
-FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was changed. Please send it again."
+FETCH_FAILED = "I couldn't get that photo after trying three times, so nothing changed. Could you send it again?"
 # H17 pause flag. Created by the first `pause` (not in SCHEMA) so the H05 store keeps its four tables until then.
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
@@ -104,22 +105,27 @@ USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NO
 # backend. Short codes and seconds only: never the owner's text, the prompt, a URL or a model reply.
 AUDIT = """CREATE TABLE IF NOT EXISTS interpreter_audit(provider_id TEXT PRIMARY KEY, at TEXT NOT NULL, backend TEXT NOT NULL,
   fallback INTEGER NOT NULL, primary_error TEXT, error TEXT, seconds REAL)"""
-DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
-               "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
+DAILY_LIMIT = ("I've read as many new requests as I can for today, so I couldn't read that one and nothing changed. "
+               "Yes, no, undo and status still work. Please send it again tomorrow, or ask Graham.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
 MAX_INTERPRETER_ALIASES = 50  # AV0007-06: live owner aliases the interpreter sees (newest first)
 MAX_NOTES = 20  # AV1102-09: saved notes the interpreter sees (newest first)
-TOO_LONG = (f"That message is over {MAX_OWNER_TEXT} characters, so I did not read it and nothing changed. "
-            "Send a shorter change.")
+TOO_LONG = "That message is too long for me to read, so nothing changed. Could you send a shorter one?"
 OPS_PENDING_MAX = 4096  # AV0022-03: bytes of a draft's ops_json sent in `pending`; larger -> "opsOmitted": true
 TRANSITIONS = {"needs-details": {"proposed", "rejected", "expired"}, "proposed": {"approved", "rejected", "expired"},
                "approved": {"applied", "failed", "rejected"}, "applied": {"verified", "reverted"},
                "verified": {"reverted"}}
 INTERRUPTED = "interrupted; not applied; approve a new draft"
-NOTHING = "Nothing is waiting for approval."
-SOCIAL_REPLY = "Nothing changed. Send a change in plain words, or help."  # AV0007-07
-UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
+NOTHING = "Nothing is waiting for your yes."
+SOCIAL_REPLY = "Nothing changed. Tell me what you'd like to change, or say " + q("help") + "."  # AV0007-07
+CANT_READ = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
+UNREADABLE = {"unsupported": "Sorry, I didn't understand that. Could you say it another way?"}
 VALUE_CUT = 120
+HOSTILE_RE = re.compile(r"\b(?:ignore|disregard|forget|override|bypass)\b[^.!?]{0,40}\b(?:rules|instructions|guidelines|approval|safeguards?|previous|above)\b"
+                        r"|\b(?:publish|approve|apply|post)\s+(?:everything|all\s+(?:of\s+)?(?:it|changes|drafts))\b|\bskip\s+(?:the\s+)?approvals?\b"
+                        r"|\b(?:system|developer)\s+prompt\b|\bjailbreak\b|\bact\s+as\b[^.!?]{0,30}\b(?:admin|root|developer)\b", re.I)
+HOSTILE_REPLY = "I can only publish changes you approve one at a time. Nothing was changed."  # HASS-VOICE-1: no model call, no draft
+CORRECTION_RE = re.compile(r"(?:no[,.!]|nope|that'?s (?:wrong|not right|not what)|not what i (?:meant|said|asked)|wrong\b|i didn'?t (?:mean|ask|say)|you got (?:it|that) wrong)", re.I)
 RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question stays open for a short answer; longest kept
 # HASS-HIKE-FLOW-1: the open request. While a question of ours is open, the owner's texts of that request are kept (this
 # private store only) so the short answer is read with the request it answers. Gone after RECENT_MINUTES, when a draft or
@@ -168,7 +174,7 @@ class _Held(Exception):
         self.code = code
 
 
-HELD_REPLY = "{code} was not applied: approvals are not acted on until the channel is connected. It still waits."
+HELD_REPLY = "I can't save changes yet, because I'm not fully connected. Your change is still waiting for you."  # {code} is not shown
 
 
 @dataclass(frozen=True)
@@ -218,10 +224,25 @@ class FixtureInterpreter:
 class Outbox:
     """Replies stored in the same transaction as the result; flush() sends them in order and marks each sent."""
 
+    log = None  # HASS-VOICE-1: a corrlog.CorrLog (set by Conversation); None logs nothing
+    strict = os.environ.get("HASS_VOICE_STRICT") == "1"  # tests and CI: a message that breaks a voice rule raises
+    msg_id = None  # provider id of the owner message being answered (for the correspondence log)
+    emoji_ok = False  # the owner used an emoji first
+
     def __init__(self, db, now):
         self.db, self._now = db, now
 
-    def add(self, chat, text, attachments=(), reply_to=None):
+    def clean(self, text, long_ok=False, ids_ok=False, why="reply") -> str:
+        """HASS-VOICE-1: the text to store: a message that breaks a voice rule becomes voice.SAFE_LINE and is logged."""
+        broken = voice.check(text, emoji_ok=self.emoji_ok, long_ok=long_ok, ids_ok=ids_ok)
+        if not broken: return voice.plain(text)
+        if self.strict: raise voice.VoiceError(f"{'; '.join(broken)}: {voice.plain(text)!r}")
+        if self.log: self.log.record("voice-fallback", "breaks-" + re.sub(r"[^a-z0-9]+", "-", broken[0].lower()).strip("-")[:30],
+                                     msg=self.msg_id)
+        return voice.SAFE_LINE
+
+    def add(self, chat, text, attachments=(), reply_to=None, *, long_ok=False, ids_ok=False):
+        text = self.clean(text, long_ok, ids_ok)
         self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
                         (chat, text, json.dumps(list(attachments)), _iso(self._now()), reply_to))
 
@@ -235,8 +256,16 @@ class Outbox:
             head = self._late(row["reply_to"]) or self._delayed(row["created_at"])  # the longer wait is the one named
             adapter.send(row["chat"], head + row["text"], json.loads(row["attachments"]))
             self.db.execute("UPDATE outbox SET sent_at = ? WHERE id = ?", (_iso(self._now()), row["id"]))
+            self._slow(row)
             sent += 1
         return sent
+
+    def _slow(self, row):
+        """HASS-VOICE-1: a reply that left more than corrlog.SLOW_SECONDS after the message it answers is a problem moment."""
+        if not self.log: return
+        try: seconds = (self._now() - datetime.fromisoformat(row["reply_to"])).total_seconds()
+        except (TypeError, ValueError): return
+        if seconds > corrlog.SLOW_SECONDS: self.log.record("slow", "reply-over-20s", reply=row["id"], seconds=seconds)
 
     def _late(self, reply_to) -> str:
         """AV0022-10 (H16): send-time heading naming the owner message a reply answers, when sent over LATE_AFTER
@@ -244,15 +273,13 @@ class Outbox:
         try: sent, now = datetime.fromisoformat(reply_to), self._now()
         except (TypeError, ValueError): return ""
         if sent.tzinfo is None or now - sent <= LATE_AFTER: return ""
-        at = sent.astimezone(LOCAL_TZ)
-        day = at.strftime("%Y-%m-%d") if now - sent > timedelta(days=6) else WEEKDAYS[at.weekday()]
-        return f"Late reply to your message from {day} {at:%H:%M}:\n"
+        return f"Sorry for the wait. This answers your message from {voice.natural(sent, now)}:\n"
 
     def _delayed(self, created_at) -> str:
         """AVB-07 (H16): send-time prefix for a reply held over DELAYED_AFTER_S; bad, naive or future -> ''."""
         try: age = (self._now() - datetime.fromisoformat(created_at)).total_seconds()
         except (TypeError, ValueError): return ""
-        return f"(Delayed reply, written {_local(created_at)}) " if age > DELAYED_AFTER_S else ""
+        return "Sorry for the wait. " if age > DELAYED_AFTER_S else ""
 
 
 def _iso(dt: datetime) -> str:
@@ -342,6 +369,10 @@ def load_settings(sdir, photos=False) -> dict:
     cap = settings.get("interpreterDailyCap")  # H22: optional; absent or null means no cap (no default enables it)
     if cap is not None and (type(cap) is not int or not 1 <= cap <= 10000):
         problems.append("interpreterDailyCap must be an integer 1-10000")
+    g_senders = settings.get("gSenders")  # HASS-VOICE-1: optional; only these numbers may ask for `problems` (never an owner number)
+    g_keys = [sender_key(g) for g in g_senders] if isinstance(g_senders, list) else []
+    if g_senders is not None and (not isinstance(g_senders, list) or None in g_keys or set(g_keys) & set(keys)):
+        problems.append("gSenders must be a list of sender addresses that are not owner senders")
     site, needs_code = settings.get("liveSite"), settings.get("approvalNeedsCode", False)
     if site is not None and (not isinstance(site, str) or not re.fullmatch(r"[a-z0-9.-]{3,253}", site) or "." not in site):
         problems.append("liveSite must be a hostname")
@@ -350,7 +381,8 @@ def load_settings(sdir, photos=False) -> dict:
     if problems: raise ConfigError("; ".join(problems))
     return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
-            "interpreterDailyCap": cap, **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings})}
+            "interpreterDailyCap": cap, **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
+            **({"gKeys": frozenset(g_keys)} if g_keys else {})}
 
 
 def parse_keyword(text: str):
@@ -391,7 +423,7 @@ def parse_near(text: str):
     return None if not match else match[2] or ""
 
 
-def parse_command(text: str):
+def parse_command(text: str, *, listing_names=False):
     """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
@@ -400,7 +432,10 @@ def parse_command(text: str):
     if match[1]:  # AV2152-02: bare history stays (history, None); history <words> keeps the words in their own case
         stripped = re.sub(r"[.!]+$", "", text.strip())
         if stripped.lower() != "history": return "history", stripped[7:].strip()
-    if match[18]: return "listing", re.sub(r"[.!]+$", "", text.strip())[7:].strip() if match[19] else ""  # AV1622-09: the id in its own case
+    if match[18]:
+        ident = re.sub(r"[.!]+$", "", text.strip())[7:].strip() if match[19] else ""
+        # Several words need a catalog check in the message flow, not just a syntax match.
+        return ("listing", ident) if listing_names or len(ident.split()) <= 1 else None
     if match[17]: return "hidden", None  # AV1222-13
     if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
     if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
@@ -454,12 +489,12 @@ def _asked(text: str):
     return cut if cut != text.strip() and "?" in text.strip()[len(cut):] else None
 
 
-def read_command(text: str):
+def read_command(text: str, *, listing_names=False):
     """AV1352-05 (H17): parse_command, but a closing ? is dropped for a read-only command only (never yes/no, undo, stop,
     resume); anything else keeps today's reading of the original text."""
     cut = _asked(text)
-    found = parse_command(cut) if cut else None
-    return found if found and found[0] in READ_ONLY else parse_command(text)
+    found = parse_command(cut, listing_names=listing_names) if cut else None
+    return found if found and found[0] in READ_ONLY else parse_command(text, listing_names=listing_names)
 
 
 def read_memory(text: str):
@@ -491,7 +526,7 @@ def _is_undo(row) -> bool:
 
 
 def _value(v) -> str:
-    text = "(none)" if v is None else v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, sort_keys=True)
+    text = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, sort_keys=True) if isinstance(v, dict) else voice.value_words(v)
     return text if len(text) <= VALUE_CUT else text[:VALUE_CUT - 3] + "..."
 
 
@@ -502,12 +537,6 @@ def _full(v) -> str:
     return v if isinstance(v, str) else _value(v)
 
 
-def _arrow(v) -> str:
-    """`→ <new value>`; a value with a line break goes on its own lines, indented two spaces."""
-    parts = (text := _full(v)).splitlines()
-    return "→\n  " + "\n  ".join(parts) if text and parts != [text] else "→ " + text
-
-
 def _changes(record: dict):
     before, after = record.get("before"), record.get("after")
     if isinstance(before, dict) and isinstance(after, dict):
@@ -515,40 +544,88 @@ def _changes(record: dict):
     return [("record", before, after)]
 
 
+COLLECTION_WORDS = {"products": "product", "makers": "maker", "events": "hike", "routeIdeas": "route idea"}
+WHOLE_WORDS = {"store": "the shop details", "home": "the home page"}
+
+
+def _name(record: dict):
+    """The record's own name or title as the shop writes it (spacing folded), or None."""
+    for side in (record.get("before"), record.get("after")):
+        for key in ("name", "title"):
+            if isinstance(side, dict) and isinstance(side.get(key), str) and side[key].strip(): return " ".join(side[key].split())
+    return record.get("key") if record.get("collection") == "makers" and isinstance(record.get("key"), str) else None
+
+
+def _subject(record: dict) -> str:
+    """Who or what a change is about, for Mike: the name he knows (marked as his words) or the part of the shop."""
+    name = _name(record)
+    return q(name) if name else WHOLE_WORDS.get(record.get("collection"), "this")
+
+
 def _summary(draft: dict) -> str:
-    text = "; ".join(f"{r['collection']} {r['key']}: " + ", ".join(f for f, _b, _a in _changes(r))
-                     for r in draft["records"])
-    return _value(text or "no records")
+    """One plain phrase for a draft, stored with it and shown in status and history: `the description for Hass avocado`."""
+    parts = []
+    for r in draft["records"]:
+        name, word = _name(r), COLLECTION_WORDS.get(r.get("collection"), "")
+        if r.get("before") is None and isinstance(r.get("after"), dict):
+            parts.append(f"a new {word or 'entry'}" + (f": {name}" if name else ""))
+            continue
+        fields = list(dict.fromkeys(voice.field_phrase(f) for f, _b, _a in _changes(r)))
+        what = ", ".join(fields[:3]) + (" and more" if len(fields) > 3 else "")
+        parts.append(f"{what} for {name or WHOLE_WORDS.get(r.get('collection'), 'this')}")
+    return _value("; ".join(parts) or "no changes")
 
 
-def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's non-empty fields, sorted, one per line (≤ 40)
-    rows = [(k, _hike_time(v) if k == "startsAt" else v) for k, v in sorted(r["after"].items()) if v not in (None, "", [])]
-    rows = [("photo", "the photo from your message") if k == "image" and PHOTO_PATH_RE.fullmatch(str(v)) else (k, v)
-            for k, v in rows]
-    more = [f"  … and {len(rows) - 40} more fields"] if len(rows) > 40 else []
-    return [f"{r['collection']} {r['key']}: new"] + [f"  {k}: " + "\n    ".join(
-        (v if isinstance(v, str) else _value(v)).splitlines()) for k, v in rows[:40]] + more
+def _when(field, value):
+    """A start or end time is written as a day and time; any other value is None here."""
+    return voice.natural_iso(value) if field in ("startsAt", "endsAt") and isinstance(value, str) else None
+
+
+def _shown(field, v, cut=True) -> str:
+    """A stored value in Mike's words (a time as a day and time, yes/no, status words); long text is cut unless cut is False."""
+    if v is None: return "nothing"
+    if (w := _when(field, v)): return w
+    if isinstance(v, str) and field != "status": return v if not cut or len(v) <= VALUE_CUT else v[:VALUE_CUT - 3] + "..."
+    return voice.value_words(v, field)
+
+
+def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's visible fields, one per line (at most 40)
+    rows = [(k, v) for k, v in sorted(r["after"].items()) if v not in (None, "", []) and k not in voice.SKIP_FIELDS and k in voice.FIELDS]
+    word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _name(r)
+    lines = [f"A new {word}" + (f": {q(name)}" if name else "")]
+    for k, v in rows[:40]:
+        photo = k == "image" and PHOTO_PATH_RE.fullmatch(str(v))
+        lines.append(f"  {voice.field_phrase(k)}: " + ("the photo from your message" if photo else q(_shown(k, v, False)).replace("\n", "\n    ")))
+    return lines + (["  and a few more details"] if len(rows) > 40 else [])
+
+
+def _change_line(r: dict, field, b, a, undo: bool, full_before: bool) -> str:
+    who, phrase = _subject(r), voice.field_phrase(field)
+    if field == "image" and (PHOTO_PATH_RE.fullmatch(str(a)) or undo and PHOTO_PATH_RE.fullmatch(str(b))):
+        return f"{who}: the photo goes back to the previous one" if undo else f"{who}: the photo will be the one from your message"
+    old, new = _shown(field, b, not full_before), _shown(field, a, False)
+    if "\n" in new or "\n" in old or len(old) + len(new) > 70:
+        return f"{who}, {phrase}:\n  was: " + q(old).replace("\n", "\n    ") + "\n  now: " + q(new).replace("\n", "\n    ")
+    return f"{who}, {phrase}: from {q(old)} to {q(new)}"
 
 
 def _record_lines(draft: dict, undo: bool = False, full_before=False) -> list:  # AV0022-08: proposal_text and show
     lines = []
     for r in draft["records"]:
         lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
-            f"{r['collection']} {r['key']}: photo: " + ("the previous photo" if undo else "the photo from your message")
-            if f == "image" and (PHOTO_PATH_RE.fullmatch(str(a)) or undo and PHOTO_PATH_RE.fullmatch(str(b))) else
-            f"{r['collection']} {r['key']}: {f} {(_full if full_before else _value)(b)} {_arrow(a)}" for f, b, a in (
-                (f, *(map(_hike_time, (b, a)) if f == "startsAt" else (b, a))) for f, b, a in _changes(r))]
-    return lines + [f"Warning: {w}" for w in draft.get("warnings") or []]
+            _change_line(r, f, b, a, undo, full_before) for f, b, a in _changes(r)]
+    return lines + [f"Heads up: {voice.explain_warning(w)}" for w in draft.get("warnings") or []]
 
 
-def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None) -> str:
-    lines = [head or f"Draft {code}:"] + _record_lines(draft, undo, full_before=bool(live_site))
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None, now=None) -> str:
+    lines = [head or "Here's the change I'd make:"] + _record_lines(draft, undo, full_before=bool(live_site))
+    wait = f"I'll hold this for you until {voice.natural_iso(expires_at, now)}."
     if live_site:
         reasons = live_policy.check(draft)
-        return "\n".join(lines + [f"Expires {_local(expires_at)}.", live_policy.refusal(reasons) if reasons else
-                               f"Reply yes {code} and this goes live on {live_site} within a few minutes."])
+        return "\n".join(lines + [wait, live_policy.refusal(reasons) if reasons else
+                                 f"Reply {q('yes ' + code)} to put it on the website (it should show within a few minutes), or {q('no ' + code)} to cancel."])
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
-    lines += [f"Expires {_local(expires_at)}.", f"Reply {yes} to apply, no to cancel, or send a correction."]
+    lines += [wait, f"Reply {q(yes)} to save it, or no to cancel. If something's wrong, tell me what to fix."]
     return "\n".join(lines)
 
 
@@ -576,6 +653,7 @@ class Conversation:
             self.db.execute("UPDATE drafts SET proposed_at = ? WHERE proposed_at IS NULL AND state = 'proposed'",
                             (_iso(self._now()),))  # the clock is read only when such a draft exists
         self.outbox = Outbox(self.db, self._now)
+        self.log = self.outbox.log = corrlog.CorrLog(self.sdir, self._now)  # HASS-VOICE-1: the correspondence log (state folder only)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.recover()
 
@@ -640,12 +718,25 @@ class Conversation:
         if not row["draft_hash"]: return False
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
-    def _reply(self, text, attachments=()):
-        self.outbox.add(self.settings["ownerChat"], text, attachments, self._answering or None)
+    def _reply(self, text, attachments=(), **flags):
+        self.outbox.add(self.settings["ownerChat"], text, attachments, self._answering or None, **flags)
+
+    def _problem(self, kind, reason, **extra):
+        """HASS-VOICE-1: one row in the correspondence log (state folder only) for the message being answered."""
+        self.log.record(kind, reason, msg=self.outbox.msg_id, **extra)
+
+    def _plain(self, technical, doing="make that change") -> str:
+        """The refusal text in everyday words; a reason we have no words for gets the generic line. Always logged."""
+        sentence, code = voice.explain(technical)
+        self._problem("could-not-do", code)
+        return sentence if code != "unmapped" else f"I couldn't {doing}, so nothing changed. Could you say it another way?"
+
+    def _when(self, iso) -> str:
+        return voice.natural_iso(iso, self._now())
 
     def _proposal_reply(self, row, draft, prefix=""):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
-        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite")), []
+        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=self._now()), []
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
@@ -653,9 +744,11 @@ class Conversation:
                                           self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
                 if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
             shots = [shot["png"]] if shot.get("png") else []
-            if not shot["ok"]: text += f"\nPreview unavailable: {shot['error']}"
+            if not shot["ok"]:
+                self._problem("error", "preview-failed")
+                text += "\nI couldn't make a picture of how it will look."
         if self._paused(): text += "\n" + PAUSED_LINE
-        self._reply(text, shots)
+        self._reply(text, shots, long_ok=True)
 
     def _record(self, msg, disposition, owner=True):
         self.db.execute("INSERT INTO messages(provider_id, disposition, received_at) VALUES (?, ?, ?)",
@@ -683,8 +776,9 @@ class Conversation:
 
     def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
         self._answering = msg.received_at
+        self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)
         try: return self._handle_message(msg, last_try, apply)
-        finally: self._answering = None
+        finally: self._answering, self.outbox.msg_id, self.outbox.emoji_ok = None, None, False
 
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
@@ -711,6 +805,7 @@ class Conversation:
     def _handle(self, msg, last_try=False):
         if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone():
             return "duplicate", None
+        if (g := self._for_g(msg)) is not None: return g, None
         owner = msg.chat == self.settings["ownerChat"] and sender_key(msg.sender) in self.settings["ownerKeys"]
         if owner and not msg.from_me and msg.kind in ("edited", "reaction"):  # AV1737-03: never read, never approves
             self._reply(NOT_READ_REPLY)
@@ -724,7 +819,11 @@ class Conversation:
             self._reply(ATTACHMENT_REPLY)
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
-        now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text)
+        now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text, listing_names=True)
+        if command and command[0] == "listing" and command[1] and len(command[1].split()) >= 2 and not self._listing_names_something(command[1]):
+            command = None  # A sentence is not a listing request unless it names something in the catalog.
+        if command and command[0] == "post" and len(command[1].split()) >= 2 and not self._post_names_something(command[1]):
+            command = None  # HASS-VOICE-1: "post a sale on social media" is a sentence for the interpreter, not a product or hike name
         self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
@@ -753,16 +852,16 @@ class Conversation:
         if keyword is None and (near := "" if social == "near" else parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
             codes = [r["code"] for r in self._drafts("state = 'proposed'")
                      if self._expiry(r) > now and near in ("", r["code"])]
-            self._reply(f"Nothing was applied. To apply {codes[0]}, reply yes {codes[0]}." if len(codes) == 1 else
-                        f"Nothing was applied. Reply yes <code> with one of: {', '.join(codes)}." if codes else NOTHING)
+            self._reply(f"I haven't changed anything yet. To go ahead, reply {q('yes ' + codes[0])}." if len(codes) == 1 else
+                        "I haven't changed anything yet. Which one do you want?\n" + self._choices(codes) if codes else NOTHING, long_ok=True)
             self._record(msg, "near-approval")
             return "near-approval", None
         if keyword is None and phone is not None:  # AV1352-04: a question or a lone code is never an answer
             live = [r["code"] for r in self._drafts("state = 'proposed'") if self._expiry(r) > now]
             if phone[0] is not None or phone[1] in live:
                 one = phone[1] if phone[1] in live else live[0] if len(live) == 1 else None
-                self._reply(f"Nothing was changed. To apply {one}, reply yes {one}; to cancel it, no {one}." if one else
-                            f"Nothing was changed. Reply yes <code> or no <code> with one of: {', '.join(live)}." if live else NOTHING)
+                self._reply(f"I haven't changed anything yet. To go ahead, reply {q('yes ' + one)}, or {q('no ' + one)} to cancel." if one else
+                            "I haven't changed anything yet. Which one do you mean?\n" + self._choices(live) if live else NOTHING, long_ok=True)
                 self._record(msg, "near-approval")
                 return "near-approval", None
         if keyword is None:
@@ -775,7 +874,7 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         if verb == "approve" and code is None and self.settings.get("approvalNeedsCode"):
-            self._reply("To put a change live, reply yes <code>, for example yes a1b2.")
+            self._reply("To put a change on the website, reply yes and its code, like " + q("yes a1b2") + ".")
             self._record(msg, "no-target")
             return "no-target", None
         # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
@@ -785,7 +884,8 @@ class Conversation:
         asks = [] if verb != "approve" or targets else [self._by_code(code, ("needs-details",))] if code else \
             [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > cutoff]  # AV1737-05: bare yes
         if asks := [a for a in asks if a is not None]:  # a waiting question is never approved; it is repeated
-            self._reply("\n".join(f"{a['code']} still needs details: {a['summary']}" for a in asks))
+            self._reply("\n".join("I still need an answer from you first. " + q(a["summary"]) for a in asks),
+                        long_ok=True)
             self._record(msg, "no-target")
             return "no-target", None
         if len(targets) != 1:
@@ -795,20 +895,20 @@ class Conversation:
         target = targets[0]
         if verb == "reject":
             self._move(target, "rejected", reason="owner")
-            self._reply(f"Cancelled {target['code']}; nothing changed.")
+            self._reply("Okay, I've cancelled that. Nothing changed.")
+            self._problem("corrected", "said-no")
             self._record(msg, "rejected")
             return "rejected", None
         if self._paused():  # H17: no approval row, no state move; the draft keeps its expiry
-            self._reply(f"Changes are paused; {target['code']} was not applied. "
-                        f"Send resume changes, then yes {target['code']}.")
+            self._reply(f"Changes are paused, so I haven't saved that. Say {q('resume changes')}, then reply {q('yes ' + target['code'])}.")
             self._record(msg, "paused")
             return "paused", None
         if cutoff != now and cutoff < self._proposed_at(target):  # AVB-03 (H05): a yes sent before the draft existed
-            self._reply(f"That yes was sent before {target['code']} was proposed; reply yes {target['code']} to apply it.")
+            self._reply(f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply {q('yes ' + target['code'])}.")
             self._record(msg, "no-target")
             return "no-target", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
-            self._reply(f"{target['code']} repeats a draft that was closed; reply yes {target['code']} to apply it.")
+            self._reply(f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it.")
             self._record(msg, "no-target")
             return "no-target", None
         if self.settings.get("liveSite") and (reasons := live_policy.check(self.editor.show(target["change_id"]).get("draft"))):
@@ -823,24 +923,41 @@ class Conversation:
         self._record(msg, "approved")
         return "approved", self._row(target["row_id"])
 
+    def _choices(self, codes) -> str:
+        """One line per waiting change: the words to reply with, then what the change is."""
+        rows = [self._by_code(c, ("proposed",)) for c in codes]
+        return "\n".join(q(f"yes {c}") + ": " + (q(r["summary"]) if r else "") for c, r in zip(codes, rows))
+
+    def _for_g(self, msg):
+        """HASS-VOICE-1: `problems` (the last ten problem moments) and `weekly` (the week's three most common) from G's own number
+        only (settings gSenders, never an owner sender). They read the correspondence log and nothing else; Mike never sees them."""
+        if msg.from_me or msg.kind != "new" or msg.attachments > 0 or sender_key(msg.sender) not in self.settings.get("gKeys", ()): return None
+        word = msg.text.strip().lower().rstrip(".!")
+        if word not in ("problems", "weekly"): return None
+        text = corrlog.problems_text(self.log) if word == "problems" else corrlog.weekly_line(self.log)
+        self.outbox.add(msg.chat, text, (), self._answering or None, long_ok=True, ids_ok=True)
+        self._record(msg, "g-" + word, owner=False)
+        return "g-" + word
+
     def _no_target(self, code, targets, expired) -> str:
         if targets:
-            return "\n".join(["Which draft do you mean?"] + [f"{r['code']}: " + ("needs details: " if r["state"] ==
-                             "needs-details" else "") + r["summary"] for r in targets]
-                             + ["Reply yes <code> or no <code>."])
+            return "\n".join(["Which one do you mean? Reply yes or no and its code."] + [
+                (q(f"yes {r['code']}") + ": " + q(r["summary"])) if r["state"] == "proposed" else "I'm waiting for details: " + r["summary"]
+                for r in targets])
         if code and self._by_code(code) is None:  # AV2152-01 (H05/H17): a code that matches no draft; never guessed
             waiting = self._drafts("state = 'proposed'")
-            return "\n".join([f"No draft {code}."] + (["Waiting drafts:"] + [
-                f"{r['code']}: {r['summary']}; reply yes {r['code']}." for r in waiting] if waiting else []))
+            return "\n".join(["I don't have a change with that code."] + (["These are waiting for you:"] + [
+                q(f"yes {r['code']}") + ": " + q(r["summary"]) for r in waiting] if waiting else []))
         named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired]
         return "\n".join(self._state_text(r) for r in named if r is not None) or NOTHING
 
     def _state_text(self, row) -> str:
-        code, state = row["code"], row["state"]
-        if state == "expired": return f"{code} expired at {_local(row['expires_at'])}; nothing changed."
-        if state == "rejected" and row["replaced_by"]: return f"{code} was replaced by {row['replaced_by']}."
-        if state == "rejected": return f"{code} was cancelled ({row['reason']}); nothing changed."
-        return f"{code} is {state}."
+        state = row["state"]
+        if state == "expired": return f"That change timed out {self._when(row['expires_at'])}, so nothing changed. Tell me again if you still want it."
+        if state == "rejected" and row["replaced_by"]: return "That one was replaced by a newer one."
+        if state == "rejected": return "That one was cancelled, so nothing changed."
+        return {"approved": "That one is being saved.", "applied": "That one is already saved.", "verified": "That one is already saved.",
+                "failed": "That one couldn't be saved.", "reverted": "That one was undone."}.get(state, "I'm not sure where that one stands.")
 
     def _registry(self):
         """The editor's ops registry (production: load_registry()), loaded once per conversation."""
@@ -914,6 +1031,14 @@ class Conversation:
             return out
         except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return []
+
+    def _asked_again(self, text, msg):
+        """HASS-VOICE-1: the question about to be sent is the one we sent last time to this owner a moment ago: log it."""
+        try:
+            last = self.db.execute("SELECT text, created_at FROM outbox WHERE id < (SELECT MAX(id) FROM outbox) ORDER BY id DESC LIMIT 1").fetchone()
+            if last and last["text"] == voice.plain(text) and self._now() - datetime.fromisoformat(last["created_at"]) <= timedelta(minutes=RECENT_MINUTES):
+                self._problem("asked-again", "same-question")
+        except (sqlite3.Error, ValueError, TypeError, KeyError): pass
 
     def _recent_question(self, now):
         """HASS-NL-1: {"question": text} when the newest owner message was answered with a question of ours at most
@@ -1034,6 +1159,10 @@ class Conversation:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
             self._reply(TOO_LONG)
             return "too-long"
+        if HOSTILE_RE.search(msg.text):  # a calm no, decided here: the model is never asked and nothing is drafted or counted
+            self._reply(HOSTILE_REPLY)
+            self._problem("could-not-do", "refused-request")
+            return "unsupported"
         cap = self.settings["interpreterDailyCap"]
         if cap is not None:  # H22: counted before the call in this transaction, so a failed call still counts
             day, calls = self._calls(now)
@@ -1042,6 +1171,7 @@ class Conversation:
                 return "daily-limit"
             self.db.execute(USAGE)
             self.db.execute("INSERT INTO usage VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET calls = calls + 1", (day,))
+        if CORRECTION_RE.match(msg.text.strip()): self._problem("corrected", "owner-corrected")
         pending = [{"code": r["code"], "state": r["state"], ("question" if r["state"] == "needs-details" else "summary"):
                     r["summary"], **_pending_ops(r["ops_json"]),  # AV0022-03: + "ops" or "opsOmitted"
                     **({"missing": _missing_ids(r["missing_json"])} if r["state"] == "needs-details" else {})}  # AV0007-03
@@ -1080,15 +1210,20 @@ class Conversation:
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])
+                cant = "can't do that" in result[key].lower()
+                if key == "unsupported" or cant:
+                    self._problem("error" if failed else "could-not-do" if cant else "did-not-understand",
+                                  "reader-failed" if failed else "no-skill" if cant else "unclear")
+                else: self._asked_again(result[key], msg)
                 return "reader-failed" if failed and key == "unsupported" else key
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
         photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
                      None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
         calls = [c for c in result["ops"] if c["op"] in PHOTO_OPS] if photo else []  # AV0022-04: a new product too
         if len(calls) > 1:  # AV0022-04: one photo, one product; nothing changes until the owner says which
-            return self._reply("One photo can go on one product; say which.") or "photo-many-ops"
+            return self._reply("A photo can go on one product at a time. Which product is it for?") or "photo-many-ops"
         if any(c["args"].setdefault("photo", photo) != photo for c in calls):
-            return self._reply("That draft is for another photo.") or "photo-mismatch"
+            return self._reply("That answer goes with a different photo, so nothing changed. Which product is this photo for?") or "photo-mismatch"
         out = self.editor.prepare(result["ops"])
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
@@ -1106,11 +1241,12 @@ class Conversation:
                 # An incomplete correction still supersedes the proposal it names: it can no longer be approved.
                 if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
+            self._asked_again(out["question"], msg)
             return "needs-details"
         if out["result"] == "refused" and out.get("reason") == catalog.NOT_CHECKED_TODAY and not ({"store.confirm_selection"} & {c["op"] for c in result["ops"]}):
             return self._ask_shelf(msg, now, result, earlier)  # HASS-SHELFCHECK-FLOW-1: ask, keep the change, write nothing
         if out["result"] != "ok":
-            self._reply(f"Not drafted: {_reason(out)}")
+            self._reply(self._plain(_reason(out)))
             return "not-drafted"
         draft = out["draft"]
         if hits := claims.unstated(draft, " ".join([*earlier, msg.text]), self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts; HASS-HIKE-FLOW-1: the owner's earlier texts of this request count as stated
@@ -1140,8 +1276,8 @@ class Conversation:
         except media.Refused as exc:
             return self._reply(exc.reply) or f"photo-refused:{exc.code}"
         dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
-        if dup: return self._reply(f"That photo is already in draft {dup[0]['code']}." + (
-            f" {dup[0]['summary']}" if dup[0]["state"] == "needs-details" else "")) or "photo-duplicate"
+        if dup: return self._reply("I already have that photo, and I'm waiting on you. " + (
+            dup[0]["summary"] if dup[0]["state"] == "needs-details" else "It's in a change waiting for your yes.")) or "photo-duplicate"
         caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
         try:  # H12: a photo that is an active or hidden product's picture opens no draft; unreadable worktree: as before
             image = re.compile(rf"assets/products/photo-{sha[:16]}\.(jpg|png)")
@@ -1149,7 +1285,8 @@ class Conversation:
                        .products if isinstance(p, dict)), key=lambda p: str(p.get("id")))
                        if p.get("status") in ("active", "hidden") and isinstance(p.get("image"), str)
                        and image.fullmatch(p["image"])), None)
-            said = on and f"That photo is already on {on['id']} ({on['name']}). To change that product, say what to change."
+            if on is not None and "id" not in on: raise KeyError("id")  # a matching record must still be readable
+            said = on and f"That photo is already on {q(on['name'])}. To change that product, tell me what to change."
         except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): said = None  # no id/name: as unreadable
         if said:
             self._reply(said)
@@ -1158,7 +1295,7 @@ class Conversation:
                         " (?, 'needs-details', ?, ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
                             [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now),
                             json.dumps(["id", "imageAlt"])))  # AV0007-03: set_photo's required args besides the photo
-        self._reply(f"{PHOTO_QUESTION} Reply with the product and description (draft {code}).")
+        self._reply(PHOTO_QUESTION)
         if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
         if not caption: return "photo-draft"
         self._photo_draft = code  # AV1052-10: if the reader fails on this caption, status names this draft
@@ -1195,14 +1332,16 @@ class Conversation:
             if again["result"] == "ok":
                 new = self._propose(again["draft"], row["sender"], now)
                 self._move(row, "rejected", reason="stale", replaced_by=new["code"])
-                self._proposal_reply(new, again["draft"], f"The site changed since {row['code']}; "
-                                                          f"please approve {new['code']}.\n")
+                self._proposal_reply(new, again["draft"], "The website changed while that was waiting, so I've written it up again. "
+                                                          "Please look it over:\n")
             else:
                 self._move(row, "rejected", reason="stale")
-                self._reply(f"The site changed since {row['code']}; not applied: {_reason(again)}")
+                self._reply("The website changed while that was waiting, and now I can't make this change. Nothing changed. "
+                            + self._plain(_reason(again)))
         else:
             self._move(row, "failed", reason=_reason(out))
-            self._reply(f"Not applied: {_reason(out)}")
+            self._problem("error", "save-failed")
+            self._reply("I couldn't save that change, so nothing changed. Please try again, or ask Graham if it keeps happening.")
 
     def recover(self) -> list:
         """Settle drafts left `approved` by a crash from the editor's change record, then verify (once) any applied
@@ -1283,18 +1422,18 @@ class Conversation:
             folded = catalog._fold(r["summary"])
             if all(w in folded for w in words): found.append(r)
             if len(found) >= HISTORY_SEARCH_MAX: break
-        self._reply("\n".join(["Matching changes:"] + [
-            f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
-            for r in found]) if found else f'No approved changes match "{query}".')
+        self._reply("\n".join(["These match:"] + [
+            f"- {q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
+            for r in found]) if found else f"I found no changes that match {q(query)}.", long_ok=True)
         return "history"
 
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":
-            self._reply(HELP_TEXT)
+            self._reply(HELP_TEXT, long_ok=True)
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
-        if verb == "show": return self._reply(*self._show(code, now)) or "show"
+        if verb == "show": return self._reply(*self._show(code, now), long_ok=True) or "show"
         if verb == "report": return self._report(msg, now)
         if verb == "post": return self._post(code)
         if verb == "margin": return self._margin(code)
@@ -1305,22 +1444,22 @@ class Conversation:
         if verb == "history":
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
-            self._reply("\n".join(["Recent changes:"] + [  # SHOP-4: where it is now instead of the commit
-                f"{r['code']} {r['state']}: {r['summary']} - {answers.history_words(dict(r), self._install(r))}"
-                for r in rows]) if rows else "No approved changes yet.")
+            self._reply("\n".join(["Here's what we changed lately:"] + [  # SHOP-4: where it is now instead of the commit
+                f"- {q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
+                for r in rows]) if rows else "We haven't made any changes yet.", long_ok=True)
             return "history"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")  # AV0022-07: skip undos
                 if code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code]
         if not done:
-            self._reply(f"Nothing to undo for {code}." if code else "Nothing to undo.")
+            self._reply("I don't have a change with that code to undo." if code else "There's nothing to undo.")
             return "no-target"
         out = self.editor.prepare([{"op": "history.revert", "args": {"changeId": done[-1]["change_id"]}}])
         if out["result"] != "ok":
-            self._reply(f"Not undone: {_reason(out)}")
+            self._reply(self._plain(_reason(out), "undo that"))
             return "not-drafted"
         same = self._drafts("state = 'proposed' AND change_id = ?", out["draft"]["change_id"])
         row = same[0] if same else self._propose(out["draft"], msg.sender, now)
-        self._proposal_reply(row, out["draft"], f"Undo {done[-1]['code']}:\n")
+        self._proposal_reply(row, out["draft"], "To undo that, I'd change it back:\n")
         return "proposed"
 
     def _report(self, msg, now) -> str:
@@ -1335,10 +1474,11 @@ class Conversation:
             text = morning_report.render(facts)
             ask = facts["checked_on"] != shop_today(now).isoformat() and not facts["future"] and self._report_asked(msg, now)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
-            text = "Shelf report unavailable right now; nothing changed."
-        waiting = self._waiting_lines(now) + [l for l in self._photo_lines(now) if l.startswith("Photos waiting")]
-        self._reply(f"{text}\n\n" + "\n".join(["Waiting for you:"] + waiting if waiting else ["Waiting for you: nothing"])
-                    + (f"\n\n{SHELF_ASK}" if ask else ""))
+            self._problem("error", "report-unreadable")
+            text = "I can't read the shelf report right now, so I can't tell you what's on the shelves. Nothing has changed."
+        waiting = self._waiting_lines(now) + [l for l in self._photo_lines(now) if "waiting for details" in l]
+        self._reply(f"{text}\n\n" + "\n".join(["Waiting for you:"] + waiting if waiting else ["Nothing is waiting for you."])
+                    + (f"\n\n{SHELF_ASK}" if ask else ""), long_ok=True)
         return "report"
 
     def _report_asked(self, msg, now) -> bool:
@@ -1356,12 +1496,13 @@ class Conversation:
         """AV1102-12 (F03): margins.render for one purchase line, text in and text out. Read-only: nothing is stored or
         drafted, no interpreter call or usage count; works while paused."""
         found = MARGIN_RE.fullmatch(rest)
-        by_id = None if found else MARGIN_ID_RE.fullmatch(rest)  # AV1222-10: the saved cost of a product
+        by_id = None if found else MARGIN_ID_RE.fullmatch(rest.strip())  # AV1222-10: the saved cost of a product (by name or id)
         try:
-            text = margins.render(margins.compute(found[1], found[2], found[4] or "0", found[3])) if found else \
+            text = margins.say(margins.compute(found[1], found[2], found[4] or "0", found[3])) if found else \
                 self._margin_saved(*by_id.groups()) if by_id else MARGIN_USAGE
         except margins.InputError as exc:
-            text = f"Not calculated: {exc}."
+            self._problem("did-not-understand", "margin-numbers")
+            text = "I couldn't work that out. " + margins.plain_input_error(exc)
         self._reply(text)
         return "margin"
 
@@ -1369,11 +1510,43 @@ class Conversation:
         """AV1222-10: margins for the saved cost.<id> (read-only; the memory table is not created for a read)."""
         has_table = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
         if self.memory is None and has_table: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
+        typed, ident = ident, self._pick("product", ident)
         row = next((r for r in self.memory.list() if r["key"] == f"cost.{ident}"), None) if has_table else None
-        if row is None: return f"No cost saved for {ident}; send cost {ident}: <pack cost> for <units> first."
+        if row is None: return f"I don't have a cost saved for {q(typed)}. Tell me first, like " + q(f"cost {typed}: 24 for 12") + "."
         pack, _, units = row["value"].partition(" for ")
         since = datetime.fromisoformat(row["created_at"]).astimezone(LOCAL_TZ)
-        return f"Using cost from {since:%Y-%m-%d}: {row['value']}.\n" + margins.render(margins.compute(pack, units, shrink or "0", margin))
+        return f"Using the cost you gave me {voice.natural(since, self._now())}.\n" + margins.say(margins.compute(pack, units, shrink or "0", margin))
+
+    def _listing_names_something(self, text) -> bool:
+        """Like post, a multiword listing needs a known name; unreadable content gets the usual read error."""
+        try:
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            return True
+        return any(self._pick(kind, text, content) != text for kind in ("product", "maker")) \
+            or self._pick_hike(content, text) != text or self._pick_hike(content, text, "routeIdeas") != text \
+            or self._title_matches(content, text)
+
+    @staticmethod
+    def _title_matches(content, text) -> bool:
+        """True when some hike or route idea title holds every word, even if several do (the listing then says it is not sure)."""
+        words = catalog._fold(text).split()
+        if not words or not isinstance(content.community, dict): return False
+        return any(isinstance(e, dict) and isinstance(e.get("title"), str) and all(w in catalog._fold(e["title"]) for w in words)
+                   for key in ("events", "routeIdeas") for e in (content.community.get(key) if isinstance(content.community.get(key), list) else []))
+
+    def _post_names_something(self, text) -> bool:
+        """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
+        or hike; anything else keeps going to the interpreter as before. Unreadable content counts as a name so the usual
+        'can't read' answer follows."""
+        try:
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            return True
+        words = text.split()
+        if words[0].lower() == "hike" and len(words) == 2: return True  # one id after 'hike': the usual 'I don't know a hike' answer
+        if words[0].lower() == "hike": return self._pick_hike(content, text[4:].strip()) != text[4:].strip()
+        return self._pick("product", text, content) != text
 
     def _post(self, pid) -> str:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
@@ -1383,33 +1556,69 @@ class Conversation:
         try:
             if not pid: raise LookupError
             wt = editor_mod._load(str(self.sdir))[2]
-            out = social_draft.build(load_content(wt / "hass" / "content"), pid, wt / "storefront-mockup")
+            content = load_content(wt / "hass" / "content")
+            out = social_draft.build(content, self._pick("product", pid, content), wt / "storefront-mockup")
             if out["draft"] and stat.S_ISREG(os.lstat(photo := wt / "storefront-mockup" / out["image"]).st_mode):
-                text = f"Draft post (not posted):\n{out['caption']}\nPhoto description: {out['alt']}"
+                text = f"Here's a post you can copy. I haven't posted anything.\n{q(out['caption'])}\nWhat the photo shows: {q(out['alt'])}"
             else:  # a refusal, or a photo that is itself a link: never attached
                 reason = out.get("reason", "no photo on the site")
-                text = POST_REFUSALS[reason].format(id=pid) if reason in POST_REFUSALS else f"Cannot draft a post for {pid}: {reason}."
+                text = POST_REFUSALS[reason].format(id=q(pid)) if reason in POST_REFUSALS else POST_CANT.format(id=q(pid))
+                if reason not in POST_REFUSALS: self._problem("could-not-do", "post-refused")
                 photo = None
                 if reason == "cannot read content": raise OSError
         except LookupError:
             text = POST_USAGE
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
-            text, photo = "Catalog unavailable right now; nothing changed.", None
-        self._reply(text, [str(photo)] if photo else [])
+            self._problem("error", "shop-list-unreadable")
+            text, photo = CANT_READ, None
+        self._reply(text, [str(photo)] if photo else [], long_ok=True)
         return "post"
 
     def _post_hike(self, hid) -> str:
         """AV1222-11 (F07): social_draft.build_hike's caption for one scheduled upcoming hike. Read-only, nothing is stored."""
         try:
             if not hid: raise LookupError
-            out = social_draft.build_hike(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), hid, self._now())
-            if out["draft"]: text = f"Draft post (not posted; copy it yourself):\n{out['caption']}"
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+            out = social_draft.build_hike(content, self._pick_hike(content, hid), self._now())
+            if out["draft"]: text = f"Here's a post you can copy. I haven't posted anything.\n{q(out['caption'])}"
             elif out["reason"] == "cannot read content": raise OSError
-            else: text = HIKE_REFUSALS[out["reason"]].format(id=hid) if out["reason"] in HIKE_REFUSALS else f"Cannot draft a post for {hid}: {out['reason']}."
+            else:
+                text = HIKE_REFUSALS[out["reason"]].format(id=q(hid)) if out["reason"] in HIKE_REFUSALS else POST_CANT.format(id=q(hid))
+                if out["reason"] not in HIKE_REFUSALS: self._problem("could-not-do", "post-refused")
         except LookupError: text = HIKE_USAGE
-        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError): text = "Catalog unavailable right now; nothing changed."
-        self._reply(text)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shop-list-unreadable")
+            text = CANT_READ
+        self._reply(text, long_ok=True)
         return "post"
+
+    def _pick(self, kind, text, content=None) -> str:
+        """The id for what Mike typed: an exact id or maker key as before, else the one record whose name or nickname fits
+        (catalog.lookup); anything else comes back unchanged so the usual 'I don't know that one' answer follows."""
+        try:
+            content = content or load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+            ids = {p["id"] for p in content.products} if kind == "product" else set(content.makers)
+            if text in ids: return text
+            has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
+            found = catalog.lookup(content, kind, text, aliases=self.aliases() if has_memory else None)
+            matched = found.get("match")
+            # Maker keys keep their exact case; only names and nicknames are folded.
+            if kind == "maker" and isinstance(matched, str) and not found.get("via") \
+                    and catalog._fold(text) not in catalog._fold(content.makers[matched]["name"]):
+                return text
+            return matched if isinstance(matched, str) else text
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            return text
+
+    def _pick_hike(self, content, text, key="events") -> str:
+        """A hike's (or, with key="routeIdeas", a route idea's) id from what Mike typed: an exact id, else the one whose
+        title holds every word."""
+        events = content.community.get(key) if isinstance(content.community, dict) else None
+        events = [e for e in events if isinstance(e, dict)] if isinstance(events, list) else []
+        if any(e.get("id") == text for e in events): return text
+        words = catalog._fold(text).split()
+        hits = [e for e in events if words and isinstance(e.get("title"), str) and all(w in catalog._fold(e["title"]) for w in words)]
+        return hits[0]["id"] if len(hits) == 1 and isinstance(hits[0].get("id"), str) else text
 
     def _find(self, query) -> str:
         """AV1537-04: read-only lookup, products then makers; id/name/status only, never a draft or a memory table."""
@@ -1435,8 +1644,8 @@ class Conversation:
                 found = catalog.lookup(content, kind, query, aliases=aliases)
                 ids = [found["match"]] if "match" in found else [c["id"] for c in found["candidates"]]
                 capped |= len(ids) >= catalog.MAX_CANDIDATES
-                lines += [f"{kind} {i}: {records[kind][i][0]} ({records[kind][i][1]})"
-                          + (" (your alias)" if found.get("via") else "") for i in ids]
+                lines += [f"{q(records[kind][i][0])} ({STATUS_PLAIN.get(records[kind][i][1], 'not sure')}"
+                          + (", your nickname" if found.get("via") else "") + ")" for i in ids]
             words = catalog._fold(query).split()  # AV1322-04: hikes by start, then route ideas by title
             def hits(recs): return [r for r in recs if isinstance(r, dict) and isinstance(r.get("title"), str)
                                     and words and all(w in catalog._fold(r["title"]) for w in words)]
@@ -1448,19 +1657,18 @@ class Conversation:
                     return None
             dated = sorted(((e, when(e)) for e in hits(content.community["events"])),
                            key=lambda pair: (pair[1] is None, pair[1].timestamp() if pair[1] else 0))
-            lines += [f"hike {e.get('id')}: {e['title']} (" + (f"{at:%A %b} {at.day}, {at.hour % 12 or 12}:{at:%M} "
-                      f"{'am' if at.hour < 12 else 'pm'}" if at else "date unreadable") + f", {e.get('status')})"
-                      for e, at in dated]
-            lines += [f"route {r.get('id')}: {r['title']} ({r.get('status')})"
+            lines += [f"{q(e['title'])} (hike, " + (voice.natural(at, self._now()) if at else "no date I can read")
+                      + f", {STATUS_PLAIN.get(e.get('status'), 'not sure')})" for e, at in dated]
+            lines += [f"{q(r['title'])} (route idea, {STATUS_PLAIN.get(r.get('status'), 'not sure')})"
                       for r in sorted(hits(content.community["routeIdeas"]), key=lambda r: catalog._fold(r["title"]))]
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
-            self._reply("Catalog unavailable right now; nothing changed.")
+            self._problem("error", "shop-list-unreadable")
+            self._reply(CANT_READ)
             return "find"
         more = len(lines) - FIND_MAX
-        tail = [f"… {more} or more; add a word." if capped else f"… {more} more; add a word."] if more > 0 else \
-            ["… maybe more; add a word."] if capped else []
+        tail = ["There are more. Add a word to narrow it down."] if more > 0 or capped else []
         self._reply("\n".join(lines[:FIND_MAX] + tail) if lines
-                    else f'No product, maker, hike or route idea matches "{query}".')
+                    else f"I couldn't find anything called {q(query)}.", long_ok=True)
         return "find"
 
     def _listing(self, ident) -> str:
@@ -1473,6 +1681,10 @@ class Conversation:
             wt = editor_mod._load(str(self.sdir))[2]
             content = load_content(wt / "hass" / "content")
             validate(content, wt / "storefront-mockup")
+            typed, ident = ident, self._pick("product", ident, content)
+            if not any(p.get("id") == ident for p in content.products): ident = self._pick("maker", typed, content)
+            if ident == typed: ident = self._pick_hike(content, typed)
+            if ident == typed: ident = self._pick_hike(content, typed, "routeIdeas")
             found = [("product", p) for p in content.products if p.get("id") == ident]
             found += [("maker", m) for k, m in content.makers.items() if k == ident]
             found += [(kind, r) for kind, key in (("hike", "events"), ("route idea", "routeIdeas"))
@@ -1480,7 +1692,7 @@ class Conversation:
             if len(found) != 1: text = LISTING_NONE if not found else LISTING_MANY
             else:
                 kind, rec = found[0]
-                nope = "not set"
+                nope = "nothing yet"
                 if kind == "product":
                     maker = content.makers.get(rec.get("producerKey"))
                     desc = rec.get("description")
@@ -1490,23 +1702,25 @@ class Conversation:
                         if bad: raise ValueError(bad[0])
                     desc = nope if not isinstance(desc, str) or not desc else desc[:LISTING_DESC_MAX] + ("…" if len(desc) > LISTING_DESC_MAX else "")
                     avail = (sitegen.availability_label(rec, content.store, shop_today(self._now())) or "not confirmed") \
-                        if rec["status"] == "active" else "not shown on site"
+                        if rec["status"] == "active" else "not showing"
                     fields = [("Name", rec["name"]), ("Maker", (maker or {}).get("name") or rec.get("brand") or nope),
-                              ("Shelf", rec.get("category") or nope), ("Description", desc), ("Availability", avail),
-                              ("Status", rec["status"])]
+                              ("Shelf", SHELF_LABELS.get(rec.get("category"), rec.get("category")) or nope), ("Description", desc),
+                              ("Availability", avail), ("Status", STATUS_PLAIN.get(rec["status"], "not sure"))]
                 elif kind == "maker":
                     fields = [("Name", rec["name"]), ("Place", rec.get("place") or nope),
-                              ("Active products", sum(1 for p in content.products if p["status"] == "active" and p.get("producerKey") == ident)),
-                              ("Status", "hidden" if rec.get("hidden") else "visible")]
+                              ("Products showing", sum(1 for p in content.products if p["status"] == "active" and p.get("producerKey") == ident)),
+                              ("Status", "hidden" if rec.get("hidden") else "on the website")]
                 elif kind == "hike":
-                    fields = [("Title", rec["title"]), ("Start", _hike_time(rec["startsAt"])), ("Status", rec["status"]),
-                              ("Meeting point", rec.get("meetingPoint") or nope), ("Capacity", rec.get("capacity", nope))]
+                    fields = [("Title", rec["title"]), ("Starts", voice.natural_iso(rec["startsAt"], self._now())),
+                              ("Status", STATUS_PLAIN.get(rec["status"], "not sure")),
+                              ("Meeting place", rec.get("meetingPoint") or nope), ("Guest limit", rec.get("capacity", nope))]
                 else:
-                    fields = [("Title", rec["title"]), ("Place", rec.get("place") or nope), ("Status", rec["status"])]
-                text = "\n".join(["Saved listing (not a live website check):", f"{kind} {ident}"] + [f"{k}: {v}" for k, v in fields])
+                    fields = [("Title", rec["title"]), ("Place", rec.get("place") or nope), ("Status", STATUS_PLAIN.get(rec["status"], "not sure"))]
+                text = "\n".join(["This is from my saved copy, not a live look at the website:"] + [f"{k}: {q(v)}" for k, v in fields])
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
-            text = "Catalog unavailable right now; nothing changed."
-        self._reply(text)
+            self._problem("error", "shop-list-unreadable")
+            text = CANT_READ
+        self._reply(text, long_ok=True)
         return "listing"
 
     def _photos_to_take(self) -> str:
@@ -1520,17 +1734,18 @@ class Conversation:
                           key=lambda p: (order.index(p["category"]), p["name"].casefold(), p["id"]))
             lines, shelf = [], None
             for p in todo[:PHOTOS_TO_TAKE_MAX]:
-                if p["category"] != shelf:
-                    shelf = p["category"]
-                    lines.append(f"{SHELF_LABELS[shelf]}:")
-                lines.append(f"- {' '.join(str(p['name']).split())}")
+                lines.append(f"- {q(' '.join(str(p['name']).split()))} ({SHELF_LABELS[p['category']]})")
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
-            self._reply("Catalog unavailable right now; nothing changed.")
+            self._problem("error", "shop-list-unreadable")
+            self._reply(CANT_READ)
             return "photos"
-        more = [f"... and {len(todo) - PHOTOS_TO_TAKE_MAX} more"] if len(todo) > PHOTOS_TO_TAKE_MAX else []
-        self._reply("\n".join([f"Photos to take: {len(todo)} active products still use catalog pictures.",
-                              "From saved listings, not a live website check."] + lines + more
-                             + ["To replace one, send a photo with the product name as its caption."]))
+        if not todo:
+            self._reply("Every product on the website has your own photo.")
+            return "photos"
+        more = ["When you've sent those, ask again and I'll show the next few."] if len(todo) > PHOTOS_TO_TAKE_MAX else []
+        self._reply("\n".join(["Some products still show a stock picture instead of your own photo. The first few:"] + [
+            l if l.startswith("- ") else f"{l}" for l in lines] + more
+            + ["To replace one, send a photo with the product's name as the caption."]), long_ok=True)
         return "photos"
 
     def _hidden(self) -> str:
@@ -1538,40 +1753,47 @@ class Conversation:
         try:  # the current catalog from the writer worktree, as _find
             content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
             one = lambda name: " ".join(str(name).split())  # stored text on one line
-            lines = [f"product {p['id']}: {one(p['name'])}" for p in sorted(content.products, key=lambda p: p["id"])
+            lines = [f"- {q(one(p['name']))}" for p in sorted(content.products, key=lambda p: p["id"])
                      if p["status"] == "hidden"]
-            lines += [f"maker {k}: {one(m['name'])}" for k, m in sorted(content.makers.items()) if m.get("hidden") is True]
+            first = next((one(p["name"]) for p in sorted(content.products, key=lambda p: p["id"]) if p["status"] == "hidden"), None)
+            lines += [f"- {q(one(m['name']))} (maker)" for k, m in sorted(content.makers.items()) if m.get("hidden") is True]
+            first = first or next((one(m["name"]) for k, m in sorted(content.makers.items()) if m.get("hidden") is True), "")
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
-            self._reply("Catalog unavailable right now; nothing changed.")
+            self._problem("error", "shop-list-unreadable")
+            self._reply(CANT_READ)
             return "hidden"
-        more = [f"… and {len(lines) - HIDDEN_MAX} more."] if len(lines) > HIDDEN_MAX else []
-        self._reply("\n".join(lines[:HIDDEN_MAX] + more + ['To bring one back, send a change in plain words: "restore <id>".'])
-                    if lines else "Nothing is hidden.")
+        more = ["And a few more."] if len(lines) > HIDDEN_MAX else []
+        self._reply("\n".join(["These are hidden right now:"] + lines[:HIDDEN_MAX] + more
+                               + ["To bring one back, tell me, like " + q(f"Bring back {first}") + "."])
+                    if lines else "Nothing is hidden right now.", long_ok=True)
         return "hidden"
 
     def _show(self, code, now) -> tuple:
         """AV0022-08 (H17): (text, attachments) repeating one draft's stored proposal lines and its saved screenshot.
         Read-only: no state move, no expiry sweep, never prepared or rendered again; works while paused."""
-        if not re.fullmatch(r"[0-9a-f]{4,12}", code): return "Send show and a draft code, e.g. show a1b2.", []
-        if (row := self._by_code(code)) is None: return f"No draft {code}.", []
+        if not code:  # `show` on its own: the newest change that is waiting for a yes
+            waiting = [r for r in self._drafts("state = 'proposed'") if self._expiry(r) > now]
+            if not waiting: return NOTHING, []
+            code = waiting[-1]["code"]
+        if not re.fullmatch(r"[0-9a-f]{4,12}", code): return "Say " + q("show") + " on its own to see the change that is waiting for you.", []
+        if (row := self._by_code(code)) is None: return "I don't have a change with that code.", []
         state = row["state"]
         if state in ("proposed", "needs-details") and self._expiry(row) <= now:  # lapsed, not swept: words it only
             return self._state_text({**dict(row), "state": "expired", "expires_at": _iso(self._expiry(row))}), []
-        if state == "needs-details": return f"{code} still needs details: {row['summary']}", []
+        if state == "needs-details": return "I'm waiting for details: " + row["summary"], []
         if state not in ("proposed", "applied", "verified"): return self._state_text(row), []
         try:
             out = self.editor.show(row["change_id"])
             rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
-            draft = {"records": rec["records"], "warnings": rec.get("warnings")}
+            draft = {"records": rec["records"], "warnings": rec.get("warnings"), "ops": rec.get("ops") or json.loads(row["ops_json"])}  # ops: the live check reads them
             if state == "proposed":
-                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), f"Draft {code} (waiting):", undo=_is_undo(row))
+                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=now)
                 shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
             else:
-                sha = f" ({row['commit'][:7]})" if row["commit"] else ""
-                text, shot = "\n".join([f"Applied {code}{sha}:"] + _record_lines(draft, _is_undo(row))), row["screenshot"]
+                text, shot = "\n".join(["Here's what was saved:"] + _record_lines(draft, _is_undo(row))), row["screenshot"]
             return text, [str(shot)] if shot and Path(shot).is_file() else []
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
-            return f"{code}: the draft details are not available any more.", []
+            return "I can't find the details of that change any more.", []
 
     # -- H15: remember, forget, memory ---------------------------------------------------------------------------
     def _memory(self, msg, verb, key, value) -> str:
@@ -1583,13 +1805,13 @@ class Conversation:
             every = self.memory.list() if has_table else []
             rows = [r for r in every if not r["key"].startswith("alias.")]
             aliases = [r for r in every if r["key"].startswith("alias.")]
-            lines = [f"{r['key']}: {r['value']} ({r['kind']}, since "
-                     f"{datetime.fromisoformat(r['created_at']).astimezone(LOCAL_TZ):%Y-%m-%d})"
+            lines = [f"- {q(r['key'])}: {q(r['value'])} (since {voice.natural(datetime.fromisoformat(r['created_at']), self._now())})"
                      for r in rows[:MEMORY_LIST_MAX]]
-            more = [f"… and {len(rows) - MEMORY_LIST_MAX} more."] if len(rows) > MEMORY_LIST_MAX else []
-            notes = "\n".join([f"Saved ({len(rows)}):"] + lines + more) if rows else "Nothing saved."
-            amore = [f"... and {len(aliases) - ALIAS_LIST_MAX} more"] if len(aliases) > ALIAS_LIST_MAX else []
-            self._reply("\n".join([notes, f"Aliases ({len(aliases)}):"] + self._alias_lines(aliases[:ALIAS_LIST_MAX]) + amore))
+            more = ["And a few more."] if len(rows) > MEMORY_LIST_MAX else []
+            notes = "\n".join(["Notes I'm keeping:"] + lines + more) if rows else "I'm not keeping any notes."
+            amore = ["And a few more."] if len(aliases) > ALIAS_LIST_MAX else []
+            self._reply("\n".join([notes] + (["Nicknames:"] + self._alias_lines(aliases[:ALIAS_LIST_MAX]) + amore if aliases else
+                                            ["I don't have any nicknames."])), long_ok=True)
             return "memory-list"
         if self.memory is None: self.memory = memory_mod.Memory.on_connection(self.db, self.clock)
         if verb == "alias": return self._alias(msg, key, value)
@@ -1600,96 +1822,111 @@ class Conversation:
                 note = "alias-" + key[6:]
                 has_alias, has_note = self.memory.get(key) is not None, valid and self.memory.get(note) is not None
                 if has_alias and has_note:  # never guess which record to erase
-                    self._reply(f"Both {key} (an alias) and {note} (a note) are saved; nothing was forgotten. "
-                                f"Send forget {key} for the alias or forget {note} for the note.")
+                    self._reply(f"I have both a nickname and a note called {q(key[6:])}, so I forgot neither. "
+                                f"Say {q('forget alias ' + key[6:])} for the nickname or {q('forget ' + note)} for the note.")
                     return "memory-ambiguous"
                 if has_note: key = note
             if not valid or self.memory.get(key) is None:
-                self._reply(f"Nothing saved as {key}.")
+                self._reply(f"I don't have a note called {q(key)}.")
                 return "memory-none"
             self.memory.forget(key)
-            self._reply(f"Forgot {key}.")
+            self._reply(f"Okay, I've forgotten {q(key)}.")
             return "memory-forgot"
-        problem = "key must be 1–64 of a-z 0-9 . -" if not valid else None
+        problem = "A note's name can only use letters, numbers, dots and dashes, and has to be short." if not valid else None
         if valid and (not memory_mod._clean(value) or len(value) > memory_mod.MAX_VALUE):
-            problem = f"text must be 1–{memory_mod.MAX_VALUE} plain characters"
-        if valid and key.startswith("alias."): problem = "send alias <name>: <id> to save an alias"
-        if valid and key.startswith("cost."): problem = "send cost <id>: <pack cost> for <units> to save a cost"  # AV1222-10
+            problem = "The note needs to be short, plain text."
+        if valid and key.startswith("alias."): problem = "To save a nickname, say it like " + q("alias jam: Linn's blueberry preserves")
+        if valid and key.startswith("cost."): problem = COST_USAGE  # AV1222-10
         old, source = (self.memory.get(key) if valid else None), f"owner-stated:{msg.provider_id}"
         if problem is None and old is not None and old == value:  # AVB-15: the same text again changes nothing
-            self._reply(f"Already saved {key}: {value}; nothing changed.")
+            self._reply(f"I already have {q(key)} as {q(value)}, so nothing changed.")
             return "memory-unchanged"
         try:
             if problem is None and old is None: self.memory.remember(key, value, "fact", source)
             elif problem is None: self.memory.correct(key, value, source)
         except ValueError as exc:
-            problem = str(exc)
+            problem = self._memory_words(exc)
         if problem:
-            self._reply(f"Not saved: {problem}.")
+            self._problem("could-not-do", "note-refused")
+            self._reply(f"I couldn't save that. {problem}" if not problem.startswith("To save") else problem)
             return "memory-invalid"
-        self._reply((f"Saved {key}: {value}." if old is None else f"Updated {key} (was: {old}).")
-                    + f" Send forget {key} to remove it.")
+        self._reply((f"Saved {q(key)}: {q(value)}." if old is None else f"Updated {q(key)}. It was {q(old)}.")
+                    + f" Say {q('forget ' + key)} to remove it.")
         return "memory-saved" if old is None else "memory-updated"
+
+    def _memory_words(self, exc) -> str:
+        """A note store refusal in plain words (the store's own text is technical)."""
+        return "Please keep it short and plain, and try again."
 
     def _cost(self, msg, ident, rest) -> str:
         """AV1222-10 (F03): `cost <id>: <pack> for <units>` saves memory cost.<id> = "<pack> for <units>" (the dated,
         owner-stated, private purchase cost for an existing product, any status). Never the site or the interpreter."""
-        found, key, product, problem, value = COST_RE.fullmatch(rest), f"cost.{ident}", None, None, ""
+        typed, product, problem, value = ident, None, None, ""
+        found = COST_RE.fullmatch(rest)
         try:
             if not found or not ident: problem = COST_USAGE
             else:
                 shown = margins.compute(found[1], found[2], "0", "0")["inputs"]  # validates and normalises both numbers
                 value = f"{shown['pack_cost']} for {shown['units']}"
                 content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+                ident = self._pick("product", ident, content)
                 product = next((p for p in content.products if p["id"] == ident), None)
-                problem = None if product else f"no product {ident}"
+                problem = None if product else f"I don't know a product called {q(typed)}. Try {q('find')} and a word from its name."
         except margins.InputError as exc:
-            problem = str(exc)
+            problem = "I couldn't read those numbers. " + margins.plain_input_error(exc)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
-            problem = "the catalog is unavailable"
-        old, source = None, f"owner-stated:{msg.provider_id}"
+            problem = CANT_READ
+        key, old, source = f"cost.{ident}", None, f"owner-stated:{msg.provider_id}"
         try:
             old = self.memory.get(key) if product else None
             if product and old == value:
-                self._reply(f"Already saved cost for {ident}: {value}; nothing changed.")
+                self._reply(f"I already have that cost for {q(product['name'])}, so nothing changed.")
                 return "memory-unchanged"
             if product: self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
-        except ValueError as exc:  # e.g. an id too long for a memory key
-            problem = str(exc)
+        except ValueError:  # e.g. an id too long for a memory key
+            problem = "I couldn't keep that one. Could you say it another way?"
         if problem:
-            self._reply(f"Not saved: {problem}.")
+            self._problem("could-not-do", "cost-refused")
+            self._reply(f"I couldn't save that. {problem}" if not problem.startswith(("Tell me", "I ")) else problem)
             return "memory-invalid"
-        self._reply((f"Saved cost for {ident} ({product['name']}): {value}" if old is None else
-                     f"Updated cost for {ident} ({product['name']}): {value} (was: {old})")
-                    + f" (private; never on the website). Send forget {key} to remove it.")
+        pack, _, units = value.partition(" for ")
+        self._reply((f"Saved. {q(product['name'])} costs you {pack} for {units}." if old is None else
+                     f"Updated. {q(product['name'])} now costs you {pack} for {units}.")
+                    + f" That stays private and is never on the website. Say {q('forget cost.' + ident)} to remove it.")
         return "memory-saved" if old is None else "memory-updated"
 
     def _alias(self, msg, name, ident) -> str:
         """`alias <name>: <id>` saves memory alias.<slug> = product:<id> | maker:<key>, only if that record exists now."""
         key, found = "alias." + catalog._fold(name).replace(" ", "-"), []
-        problem = (f"alias name must be 1–{ALIAS_NAME_MAX} plain letters, digits, spaces, . or -" if not memory_mod._clean(name)
+        problem = ("A nickname needs to be short, with just letters, numbers and spaces." if not memory_mod._clean(name)
                    or len(name) > ALIAS_NAME_MAX or not memory_mod.KEY_RE.fullmatch(key[6:]) or not memory_mod.KEY_RE.fullmatch(key)
-                   else "send alias <name>: <product id or maker key>" if not ident else None)
+                   else "Which product or maker is it for? Say it like " + q("alias jam: Linn's blueberry preserves") + "." if not ident else None)
+        typed = ident
         try:  # the current catalog, read from the writer worktree as _hike_lines does
             content = None if problem else load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+            if content is not None:
+                ident = self._pick("product", ident, content)
+                if not any(p["id"] == ident for p in content.products) and ident not in content.makers: ident = self._pick("maker", typed, content)
             found = [] if problem else [("product", p, p["status"]) for p in content.products if p["id"] == ident] + (
                 [("maker", m, "hidden" if m.get("hidden") else "visible")] if (m := content.makers.get(ident)) else [])
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
-            problem = "the catalog is unavailable"
-        problem = problem or (f"no product or maker {ident}" if not found
-                              else f"{ident} is both a product and a maker" if len(found) > 1 else None)
+            problem = CANT_READ
+        problem = problem or (f"I don't know a product or maker called {q(typed)}. Try {q('find')} and a word from its name." if not found
+                              else f"{q(typed)} fits both a product and a maker. Could you say a bit more of the name?" if len(found) > 1 else None)
         if problem:
-            self._reply(f"Not saved: {problem}.")
+            self._problem("could-not-do", "nickname-refused")
+            self._reply(f"I couldn't save that. {problem}" if not problem.startswith(("Which", "I ", "A nick")) and CANT_READ not in problem else problem)
             return "memory-invalid"
         old, value, source = self.memory.get(key), f"{found[0][0]}:{ident}", f"owner-stated:{msg.provider_id}"
         try: self.memory.remember(key, value, "fact", source) if old is None else self.memory.correct(key, value, source)
-        except ValueError as exc:
-            self._reply(f"Not saved: {exc}.")
+        except ValueError:
+            self._problem("could-not-do", "nickname-refused")
+            self._reply("I couldn't save that nickname. Could you try a shorter one?")
             return "memory-invalid"
         kind, rec, status = found[0]
-        target = f"{kind} {ident} ({rec['name']}" + ("" if status in ("active", "visible") else f", {status}") + ")"
-        self._reply((f"Saved alias {name} → " if old is None else f"Updated alias {name} (was: {old}) → ")
-                    + f"{target}. Send forget {key} to remove it.")
+        target = f"{q(rec['name'])}" + ("" if status in ("active", "visible") else f" ({STATUS_PLAIN.get(status, status)})")
+        self._reply((f"Saved. {q(name)} now means " if old is None else f"Updated. {q(name)} now means ") + f"{target}."
+                    + f" Say {q('forget alias ' + name)} to remove it.")
         return "memory-saved" if old is None else "memory-updated"
 
     def _alias_lines(self, rows) -> list:
@@ -1717,16 +1954,16 @@ class Conversation:
         for slug, kind, ident, ok in parsed:
             name = slug.replace("-", " ")
             if not ok:
-                lines.append(f"{name} -> alias unreadable - send forget alias.{slug}")
+                lines.append(f"- {q(name)}: I can't read this one. Say {q('forget alias ' + name)} to remove it.")
             elif records is None:
-                lines.append(f"{name} -> target unavailable right now ({ident})")
+                lines.append(f"- {q(name)}: I can't look up what it means right now.")
             elif (found := records[kind].get(ident)) is None:
-                lines.append(f"{name} -> {ident} (no longer on the site - send forget alias.{slug})")
+                lines.append(f"- {q(name)}: it points to something that is no longer on the website. Say {q('forget alias ' + name)} to remove it.")
             elif not safe(found[0]):
-                lines.append(f"{name} -> target unavailable right now ({ident})")
+                lines.append(f"- {q(name)}: I can't show what it means right now.")
             else:
-                mark = " [hidden]" if found[1] == "hidden" else " [held]" if found[1] == "held" else ""
-                lines.append(f"{name} -> {found[0]} ({ident}){mark}")
+                mark = " (hidden)" if found[1] == "hidden" else " (on hold)" if found[1] == "held" else ""
+                lines.append(f"- {q(name)} means {q(found[0])}{mark}")
         return lines
 
     def aliases(self) -> dict:
@@ -1768,7 +2005,7 @@ class Conversation:
     def _control(self, msg, now, verb) -> str:
         since = self._paused()
         if verb == "status":
-            self._reply(self._status(now, since))
+            self._reply(self._status(now, since), long_ok=True)
         elif verb == "pause" and since:
             self._reply(answers.stopped_state(since, self._queue(msg)))
         elif verb == "pause":
@@ -1777,31 +2014,33 @@ class Conversation:
                             (_iso(now), msg.provider_id))
             self._reply(answers.stopped_state(_iso(now), self._queue(msg)))
         elif not since:
-            self._reply("Changes are not paused.")
+            self._reply("Changes are already on.")
         else:  # resume never applies anything by itself
             self.db.execute("DELETE FROM control WHERE name = 'paused'")
             codes = [r["code"] for r in self._drafts("state = 'proposed'")]
-            self._reply("Changes resumed." + (f"\nWaiting for approval: {', '.join(codes)}; reply yes <code> to apply."
-                                              if codes else ""))
+            self._reply("Changes are back on." + ("\nWaiting for your yes:\n" + self._choices(codes) if len(codes) > 1 else
+                                                    f"\nOne change is waiting. Reply {q('yes ' + codes[0])} to save it." if codes else ""), long_ok=True)
         return verb
 
     def _status(self, now, since) -> str:
         """Read-only: pause state, waiting drafts, the last apply result and confirmed guests of upcoming hikes."""
-        lines = [f"Changes: paused since {_local(since)}" if since else "Changes: on"]
-        if (cap := self.settings["interpreterDailyCap"]) is not None:
-            lines.append(f"Interpreter today: {self._calls(now)[1]} of {cap}")  # H22, only with a cap
+        reader = self._reader_failed_lines(now)
+        lines = [f"Changes are paused since {self._when(since)}. Say {q('resume changes')} when you're ready." if since
+                 else "I'm having trouble reading your messages." if reader else "Everything is ready."]
+        if (cap := self.settings["interpreterDailyCap"]) is not None and self._calls(now)[1] >= 0.8 * cap:  # H22, only near the cap
+            lines.append("I'm close to the number of new requests I can read today.")
+        waiting = self._waiting_lines(now)
+        lines += waiting or [NOTHING]
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
-            lines.append(shelf.check_line(f, " - more than a week ago, the site says call to confirm"))  # AV1102-05
-        lines += self._reader_failed_lines(now)
-        lines += self._waiting_lines(now) or [NOTHING]
+            lines.append(shelf.check_line(f))  # AV1102-05
+        lines += reader
         lines += self._photo_lines(now)  # NB-AV-12: counts only, before Last change
         last = self.db.execute(  # the most recently approved change that has a result
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
         if last:  # SHOP-4: did it work, in plain words (whether it is on the website now), never the commit
-            lines.append(f"Last change: {last['code']} {last['summary']} - "
-                         + answers.did_it_work(dict(last), self._install(last), now))
+            lines.append(f"Last change: {q(last['summary'])}. " + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
 
     def _reader_failed_lines(self, now) -> list:
@@ -1811,23 +2050,20 @@ class Conversation:
         row = self.db.execute("SELECT set_at, value FROM control WHERE name = 'reader-failed'").fetchone()
         if not row: return []
         try:
-            at = datetime.fromisoformat(row["set_at"]).astimezone(LOCAL_TZ)
-            when = f"{WEEKDAYS[at.weekday()]} {at:%H:%M}"
+            when = voice.natural(datetime.fromisoformat(row["set_at"]), now)
         except (ValueError, TypeError, OverflowError, OSError):
-            when = "time unavailable"
+            when = "a time I can't read"
         draft = row["value"] != "1" and self._by_code(row["value"], ("needs-details",))  # a photo caption
         if draft and self._expiry(draft) > now:  # resending the photo is a duplicate while its draft is open
-            return [f"Last request not read: {when} - the reader was not working; the photo is kept as draft "
-                    f"{row['value']}, so reply to it with the product and description"]
+            return [f"I couldn't read your request from {when}. I'm keeping the photo, so just reply with the product and what the photo shows."]
         if draft:  # the draft lapsed (status does not sweep it): a reply would find nothing, so the photo goes again
-            return [f"Last request not read: {when} - the reader was not working and photo draft {row['value']} "
-                    "has expired; send the photo again with its caption"]
-        return [f"Last request not read: {when} - the reader was not working; send it again"]
+            return [f"I couldn't read your request from {when}, and the photo's time ran out. Please send the photo again with its caption."]
+        return [f"I couldn't read your request from {when}. Could you send it again?"]
 
     def _waiting_lines(self, now) -> list:
         """AV1102-11: one line per unexpired draft waiting for yes or for details; `status` and `report` share it."""
-        return [f"{r['code']} waiting (expires {_local(r['expires_at'])}): {r['summary']}" if r["state"] == "proposed"
-                else f"{r['code']} needs details: {r['summary']}"
+        return [f"Waiting for your yes: {q(r['summary'])} (reply {q('yes ' + r['code'])})" if r["state"] == "proposed"
+                else "I'm waiting for details: " + r["summary"]
                 for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
 
     def _photo_lines(self, now) -> list:
@@ -1839,15 +2075,15 @@ class Conversation:
             return isinstance(ops, list) and bool(ops) and all(
                 isinstance(c, dict) and c.get("op") == "product.set_photo" for c in ops)
         n = sum(self._expiry(r) > now and photo_only(r["ops_json"]) for r in self._drafts("state = 'needs-details'"))
-        lines, path = [f"Photos waiting for details: {n}"] if n else [], self.sdir / "inbox.sqlite3"
+        lines, path = [f"{'A photo is' if n == 1 else 'Some photos are'} waiting for details from you."] if n else [], self.sdir / "inbox.sqlite3"
         if not path.is_file(): return lines
         try:
             with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=1)) as db:
                 if "tries" not in {r[1] for r in db.execute("PRAGMA table_info(inbound)")}: return lines
                 m = db.execute("SELECT COUNT(*) FROM inbound WHERE state = 'pending' AND tries > 0").fetchone()[0]
         except sqlite3.Error:
-            return lines + ["Photos still downloading: unavailable"]
-        return lines + ([f"Photos still downloading: {m}"] if m else [])
+            return lines + ["I can't tell whether any photos are still coming in."]
+        return lines + ([f"{'A photo is' if m == 1 else 'Some photos are'} still coming in."] if m else [])
 
     def _hike_lines(self, now) -> list:
         """Scheduled hikes after now with seat totals only (never names or emails); unknown counts are never guessed.
@@ -1860,7 +2096,7 @@ class Conversation:
             upcoming = [e for start, e in scheduled if start > now]
             passed = [e for start, e in scheduled if start <= now]  # the site hides these too (`>` rule)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, editor_mod.UnsafeState):
-            return ["Hikes: unavailable"]
+            return ["I can't read the hike list right now."]
         path, counts = self.settings.get("guestCountsDb"), None
         if any(e.get("rsvpEnabled") for e in upcoming) and isinstance(path, str) and path:  # RSVP-off only: never opened
             try:
@@ -1869,14 +2105,15 @@ class Conversation:
                 counts = None
         lines = []
         for e in upcoming:
-            head = f"Hike {e.get('title')} {_hike_time(e['startsAt'])}: "
-            limit = e.get("capacity") if e.get("capacity") is not None else "no limit"
-            lines.append(head + ("RSVPs off" if not e.get("rsvpEnabled") else "guest count unavailable" if counts is None
-                                 else f"{counts.get(e.get('id'), 0)} confirmed of {limit}"))
+            head = f"{q(e.get('title'))}, {voice.natural_iso(e['startsAt'], now)}: "
+            limit = e.get("capacity")
+            n = counts.get(e.get("id"), 0) if counts is not None else 0
+            lines.append(head + ("sign-ups are off" if not e.get("rsvpEnabled") else "I can't see how many guests have signed up" if counts is None
+                                 else f"{n} {'guest has' if n == 1 else 'guests have'} signed up" + (f", with room for {limit}" if limit is not None else "")))
         for e in passed[:5]:
             title = e.get("title")
-            lines.append(f"Hike {title} {_hike_time(e['startsAt'])} has passed but is still scheduled; "
-                         f'send "complete {title}" or "cancel {title}" in your own words.')
+            lines.append(f"{q(title)} was {voice.natural_iso(e['startsAt'], now)} and is still listed as coming up. "
+                         "Tell me if it happened or was cancelled.")
         if len(passed) > 5:
-            lines.append(f"… and {len(passed) - 5} more past hikes still scheduled.")
+            lines.append("A few more past hikes are still listed as coming up.")
         return lines

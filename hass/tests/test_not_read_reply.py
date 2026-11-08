@@ -76,7 +76,7 @@ class NotReadTests(StoreMixin, ConversationTestCase):
         self.not_read("Liked", "reaction")
         self.assertEqual(self.say("yes"), "approved")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Applied {self.draft['code']}"), reply)
+        self.assertTrue(reply.startswith("Saved: the description for Hass avocado"), reply)
         self.assertEqual((self.drafts()[0]["state"], self.commits()), ("applied", 1))
 
     def test_reaction_does_not_sweep_an_expired_draft(self):

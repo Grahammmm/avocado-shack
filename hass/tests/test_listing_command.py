@@ -7,17 +7,17 @@ import json
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from hass import conversation, sitegen
+from hass import conversation, sitegen, voice
 from hass.content_model import load_content
 from hass.tests.test_commands_doc import verb
 from hass.tests.test_conversation import T0, ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
-HEAD = "Saved listing (not a live website check):"
-NONE = "No listing with that id; send find <words>."
-MANY = "That id matches more than one listing; send find <words>."
-USAGE = "Send listing and an id from find."
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
+HEAD = 'This is from my saved copy, not a live look at the website:'
+NONE = "I don't know that one. Try find and a word from its name."
+MANY = "That fits more than one thing. Could you say a bit more of its name?"
+USAGE = 'Which one? Say it like listing Etto.'
 
 
 class ListingTests(StoreMixin, ConversationTestCase):
@@ -57,7 +57,8 @@ class ListingTests(StoreMixin, ConversationTestCase):
     def fields(self, ident):
         lines = self.listing(ident)
         self.assertEqual(lines[0], HEAD)
-        return lines[1], dict(ln.split(": ", 1) for ln in lines[2:])
+        fields = dict(ln.split(": ", 1) for ln in lines[1:])
+        return fields.get("Name", fields.get("Title")), fields
 
     def checked(self, day="2026-11-02"):
         self.edit("store.json", lambda doc: doc.update(selection_checked_on=day))
@@ -69,11 +70,11 @@ class ListingTests(StoreMixin, ConversationTestCase):
             desc = "x" * n
             self.product(pid, description=desc)
             head, f = self.fields(pid)
-            self.assertEqual((head, f["Description"]), (f"product {pid}", "x" * min(n, 120) + tail), n)
+            self.assertEqual((head, f["Description"]), ("Hass avocado", "x" * min(n, 120) + tail), n)
         held = {"hold": {"reason": "fixture", "source": "https://example.com/"}, "status": "held"}
         self.product(pid, **held, description="<DEL>", producerKey="<DEL>", displayBrand="<DEL>", brand="Brand B")  # held may omit them
         head, f = self.fields(pid)
-        self.assertEqual((f["Description"], f["Shelf"], f["Maker"], f["Status"]), ("not set", "fruit", "Brand B", "held"))
+        self.assertEqual((f["Description"], f["Shelf"], f["Maker"], f["Status"]), ("nothing yet", "Fruit", "Brand B", "on hold"))
         self.assertEqual(list(f), ["Name", "Maker", "Shelf", "Description", "Availability", "Status"])
         self.product(pid, status="active", hold="<DEL>", description="d", producerKey=None, displayBrand="Brand B")
         maker_key = self.maker_key()
@@ -86,6 +87,10 @@ class ListingTests(StoreMixin, ConversationTestCase):
 
     def maker_name(self, key):
         return json.loads((self.cdir / "makers.json").read_text("utf-8"))["makers"][key]["name"]
+
+    def test_product_name_with_several_words(self):
+        self.assertEqual(self.fields("Hass avocado")[0], "Hass avocado")
+        self.assertEqual(self.listing(text="listing Hass avocado?")[0], HEAD)
 
     def test_availability_matches_shared_helper(self):
         pid = self.pid()
@@ -113,7 +118,7 @@ class ListingTests(StoreMixin, ConversationTestCase):
             extra = {"hold": {"reason": "fixture", "source": "https://example.com/"}} if status == "held" else {}
             self.product(pid, status=status, **extra)
             f = self.fields(pid)[1]
-            self.assertEqual((f["Availability"], f["Status"]), ("not shown on site", status))
+            self.assertEqual((f["Availability"], f["Status"]), ("not showing", "on hold" if status == "held" else status))
 
     # -- maker -----------------------------------------------------------------------------------------------------
     def test_maker_exact_case_and_active_count(self):
@@ -125,11 +130,12 @@ class ListingTests(StoreMixin, ConversationTestCase):
         for i, status in zip(ids, ("active", "active", "hidden")):
             self.product(i, producerKey="MixedCase", status=status)
         head, f = self.fields("MixedCase")
-        self.assertEqual(head, "maker MixedCase")
-        self.assertEqual(f, {"Name": "Mixed Case Co", "Place": "Cayucos", "Active products": "2", "Status": "visible"})
-        self.assertEqual(self.listing("mixedcase"), [NONE])  # exact case only
+        self.assertEqual(head, "Mixed Case Co")
+        self.assertEqual(f, {"Name": "Mixed Case Co", "Place": "Cayucos", "Products showing": "2", "Status": "on the website"})
+        self.assertEqual(self.listing("mixedcase"), [NONE])  # keys keep their exact case
+        self.assertEqual(self.fields("mixed case co")[0], "Mixed Case Co")  # names do not
         head, f = self.fields("NoProducts")
-        self.assertEqual((f["Place"], f["Active products"], f["Status"]), ("Morro Bay", "0", "hidden"))
+        self.assertEqual((f["Place"], f["Products showing"], f["Status"]), ("Morro Bay", "0", "hidden"))
 
     # -- hike and route idea ---------------------------------------------------------------------------------------
     def event(self, eid, **fields):
@@ -141,23 +147,38 @@ class ListingTests(StoreMixin, ConversationTestCase):
         self.event("hike-a", startsAt="2026-11-14T09:00:00-08:00", meetingPoint="Trailhead lot", capacity=12)
         self.event("hike-b", startsAt="2026-07-04T23:30:00-07:00", status="cancelled")  # DST offset; validation allows only Pacific offsets
         head, f = self.fields("hike-a")
-        self.assertEqual(head, "hike hike-a")
-        self.assertEqual(f, {"Title": "Fixture hike", "Start": "Sat 2026-11-14 09:00 PST", "Status": "scheduled",
-                             "Meeting point": "Trailhead lot", "Capacity": "12"})
+        self.assertEqual(head, "Fixture hike")
+        self.assertEqual(f, {"Title": "Fixture hike", "Starts": "Saturday, Nov 14 at 9 am", "Status": "coming up",
+                             "Meeting place": "Trailhead lot", "Guest limit": "12"})
         head, f = self.fields("hike-b")
-        self.assertEqual((f["Start"], f["Status"], f["Meeting point"], f["Capacity"]),
-                         ("Sat 2026-07-04 23:30 PDT", "cancelled", "not set", "not set"))  # DST offset
+        self.assertEqual((f["Starts"], f["Status"], f["Meeting place"], f["Guest limit"]),
+                         ("Saturday, Jul 4 at 11:30 pm", "cancelled", "nothing yet", "nothing yet"))  # DST offset
         self.edit("community.json", lambda doc: doc["routeIdeas"][0].update(status="hidden"))
         rid = json.loads((self.cdir / "community.json").read_text("utf-8"))["routeIdeas"][0]
         head, f = self.fields(rid["id"])
-        self.assertEqual((head, f), (f"route idea {rid['id']}", {"Title": rid["title"], "Place": rid["place"], "Status": "hidden"}))
+        self.assertEqual((head, f), (rid["title"], {"Title": rid["title"], "Place": rid["place"], "Status": "hidden"}))
+
+    def test_route_idea_by_title(self):
+        """A route idea is found by its title, one word or several, without the interpreter; two matches are not guessed."""
+        for title in ("Zebrawalk", "Zebra Coastal Walk"):
+            self.edit("community.json", lambda doc, t=title: doc["routeIdeas"][0].update(title=t))
+            head, f = self.fields(title)
+            self.assertEqual((head, f["Title"]), (title, title))
+        self.edit("community.json", lambda doc: doc["routeIdeas"].append(dict(doc["routeIdeas"][0], id="route-twin")))
+        self.edit("community.json", lambda doc: doc["routeIdeas"][0].update(title="Zebrawalk"))
+        self.edit("community.json", lambda doc: doc["routeIdeas"][1].update(title="Zebrawalk"))
+        self.assertEqual(self.listing("Zebrawalk"), [NONE])  # two routes share the title: no guess
+        for r in (0, 1): self.edit("community.json", lambda doc, r=r: doc["routeIdeas"][r].update(title="Zebra Coastal Walk"))
+        self.calls.clear()
+        self.assertEqual(self.listing("Zebra Coastal Walk"), [NONE])  # several words, two routes: still no guess, no interpreter
+        self.assertEqual(self.calls, [])
 
     # -- usage, unknown, collision, lookalikes ---------------------------------------------------------------------
     def test_usage_unknown_collision_and_lookalikes(self):
         self.assertEqual(self.listing(text="listing"), [USAGE])
         self.assertEqual(self.listing("no-such-id"), [NONE])
         pid = self.pid()
-        self.assertEqual(self.fields(f"{pid}!".replace("!", ""))[0], f"product {pid}")
+        self.assertEqual(self.fields(f"{pid}!".replace("!", ""))[0], "Hass avocado")
         self.assertEqual(self.listing(text=f"Listing {pid}!")[0], HEAD)  # case of the verb and a final ! do not matter
         self.assertEqual(self.listing(text=f"listing {pid.upper()}"), [NONE])  # the id is not folded or repaired
         self.edit("community.json", lambda doc: doc["events"].append(
@@ -220,8 +241,8 @@ class ListingTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.replies(), [])
 
     def test_help_and_card(self):
-        line = 'listing <id> - what the site shows for one id: "listing Etto"'
-        self.assertIn(line, conversation.HELP_TEXT.splitlines())
+        line = "listing Etto - what's shown for one thing; hidden lists what's hidden"
+        self.assertIn(line, voice.plain(conversation.HELP_TEXT).splitlines())
         self.assertLessEqual(len(line), 70)
         self.assertEqual(verb("listing Etto"), "listing")
 

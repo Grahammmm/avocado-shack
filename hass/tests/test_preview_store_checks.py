@@ -55,13 +55,13 @@ class ReplyTests(unittest.TestCase):
 
     def test_failed_checks_are_named_in_check_name_order(self):
         self.assertEqual(self.reason("introShown, selectionShown"),
-                         "the preview did not show the change as expected: the home-page intro, the selection checked line (store store)")
+                         "the preview didn't show the change the way it should: the home-page intro, the shelf check line")
         self.assertIn("the home-page intro", self.reason("introShown"))
 
     def test_unknown_key_is_not_shown(self):
         text = self.reason("fooShown")
         self.assertNotIn("fooShown", text)
-        self.assertEqual(text, "the preview did not show the change as expected (store store)")
+        self.assertEqual(text, "the preview didn't show the change the way it should")
         mixed = self.reason("fooShown, introShown")
         self.assertIn("the home-page intro", mixed)
         self.assertNotIn("foo", mixed)

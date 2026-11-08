@@ -95,7 +95,7 @@ class HeldApprovalTests(ReceiverTestCase):
         self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0], 0)
         self.assertEqual(self.reply.calls, [])
         held = self.conv.db.execute("SELECT text FROM outbox WHERE sent_at IS NULL ORDER BY id").fetchall()
-        self.assertEqual(sum(f"{code} was not applied" in r["text"] for r in held), 2)  # stored unsent
+        self.assertEqual(sum("I can't save changes yet" in r["text"] for r in held), 2)  # stored unsent
         self.assertEqual([r["state"] for r in self.inbound_rows()], ["done"] * 3)
         self.assertEqual(self.yes("FAKE-YES-CODE", f"yes {code}", NOW + 7)["result"], "duplicate")  # recorded once
         self.assertEqual(self.editor.applies, 0)

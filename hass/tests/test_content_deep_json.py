@@ -40,15 +40,15 @@ class DeepConversationTests(StoreMixin, H06TestCase):
     def test_deep_community_status_still_replies(self):  # 1, 4
         self.past("Past hike")
         valid = self.status_unchanged()
-        self.assertEqual(valid[-1], ph.passed("Past hike", "Sun 2026-11-01 09:00 PST"))  # 4: main's status
+        self.assertEqual(valid[-1], "Past hike was yesterday at 9 am and is still listed as coming up. Tell me if it happened or was cancelled.")  # 4: main's status
         self.content("community.json").write_text(DEEP, "utf-8")
         deep = self.status_unchanged()
-        self.assertEqual(deep, [x for x in valid if not x.startswith(("Hike", "…", "Shelf check"))] + ["Hikes: unavailable"])
+        self.assertEqual(deep, [x for x in valid if not x.startswith(("Past hike", "…", "I still need your shelf check."))] + ["I can't read the hike list right now."])
         self.assertNotIn("RecursionError", "\n".join(deep))
 
     def test_events_string_is_unavailable(self):  # 5: valid JSON, wrong shape (existing path)
         self.content("community.json").write_text(json.dumps({"events": "scheduled"}), "utf-8")
-        self.assertEqual(self.status_unchanged()[-1], "Hikes: unavailable")
+        self.assertEqual(self.status_unchanged()[-1], "I can't read the hike list right now.")
 
     def deepen_makers_after_prepare(self):  # a hand edit or damaged checkout landing before the claim check
         real = self.editor.prepare
@@ -69,8 +69,8 @@ class DeepConversationTests(StoreMixin, H06TestCase):
         before = (self.drafts(), self.approvals())
         self.assertEqual(self.say(LINNS), "claim-question")  # _makers() is None: every maker change asks
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("I did not draft that: "), reply)
-        self.assertIn('"maker" in products photo-product-001 producerKey', reply)
+        self.assertTrue(reply.startswith("You didn't say "), reply)
+        self.assertIn('"maker" in your message. Is that true?', reply)
         self.assertEqual((self.drafts(), self.approvals(), self.commits()), before + (0,))
         status, files, commits = self.worktree()
         self.assertEqual((status.strip(), files[0].decode("utf-8"), commits), ("M hass/content/makers.json", DEEP, 0))
@@ -80,7 +80,7 @@ class DeepConversationTests(StoreMixin, H06TestCase):
         self.interp.mapping[LINNS] = LINNS_OPS
         self.assertEqual(self.say(LINNS), "not-drafted")
         [reply] = self.replies()
-        self.assertIn("nested too deeply", reply)
+        self.assertIn("I couldn't make that change, so nothing changed. Could you say it another way?", reply)
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
 
