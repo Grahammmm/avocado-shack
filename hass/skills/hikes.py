@@ -255,15 +255,63 @@ def rule_no_invention(slots, texts, ctx):
     said = " ".join(t for t in (texts or ()) if isinstance(t, str))
     if not said.strip():
         return None
-    if slots.get("signup") is True and not _SIGNUP_WORDS.search(said):
+    if slots.get("signup") is True and not _said_signup(said):
         return R_SIGNUP_NOT_SAID, "other"
     cap = slots.get("capacity")
-    if isinstance(cap, int) and not isinstance(cap, bool):
-        numbers = {int(n) for n in re.findall(r"\d+", said)} | {h["value"] for h in nl_prep.number_hints(said)
-                                                                if isinstance(h.get("value"), int)}
-        if cap not in numbers:
-            return R_SPOTS_NOT_SAID, "other"
+    if isinstance(cap, int) and not isinstance(cap, bool) and cap not in _said_limits(said):
+        return R_SPOTS_NOT_SAID, "other"
     return None
+
+
+_CLAUSE_SPLIT = re.compile(r"[.;!?\n,]+|\s+(?:but|however|though)\s+", re.I)
+_NEGATED = re.compile(r"\b(?:no|not|never|without|nobody|none|cannot|skip|off|disabled?|closed?)\b|n't\b", re.I)
+_NO_LIMIT = re.compile(r"\b(?:no|without\s+a|without\s+any|without)\s+(?:limit|cap|max(?:imum)?)\b|\bunlimited\b", re.I)
+_DATE_TIME = re.compile(r"\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b|\b\d{1,2}:\d{2}\s*(?:[ap]\.?m\.?)?|"
+                        r"\b\d{1,2}\s*[ap]\.?m\b\.?|\b\d{1,2}(?:st|nd|rd|th)\b|\b(?:19|20)\d\d\b|"
+                        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|"
+                        r"\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b|"
+                        r"\b(?:at|around|about|by|from|until|till)\s+\d{1,2}\b|\bo'?clock\b", re.I)
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60}
+_UNITS = {w: v for w, v in nl_prep.WORD_NUMBERS.items() if 0 < v < 10}
+_NUM_WORD = re.compile(r"\b(?:(" + "|".join(_TENS) + r")[\s-]+(" + "|".join(_UNITS) + r")|(" +
+                       "|".join(sorted(nl_prep.WORD_NUMBERS, key=len, reverse=True)) + r"))\b", re.I)
+_COUNTED = r"(?:spots?|spaces?|seats?|places?|people|persons?|guests?|hikers?|folks|attendees|participants|rsvps?|sign-?ups?)"
+_LIMIT_AFTER = re.compile(r"\b(\d+)\s+(?:(?:more|open|available|total|extra)\s+)?" + _COUNTED + r"\b", re.I)
+_LIMIT_BEFORE = re.compile(r"\b(?:max(?:imum)?|limit(?:ed)?(?:\s+to|\s+of)?|capacity(?:\s+of)?|cap(?:ped)?(?:\s+at|\s+of)?|"
+                           r"up\s+to|at\s+most|no\s+more\s+than|only)\s*(?:of\s+|to\s+)?(\d+)\b", re.I)
+
+
+def _clauses(said):
+    return [c for c in _CLAUSE_SPLIT.split(said.replace("\u2019", "'")) if c and c.strip()]
+
+
+def _said_signup(said):
+    """True only when a clause of the owner's words has a sign-up word and does not negate it ("no sign up",
+    "don't let people sign up" and "without rsvps" do not turn sign-up on); "no limit on sign ups" still counts."""
+    for clause in _clauses(said):
+        clause = _NO_LIMIT.sub(" ", clause)
+        if _SIGNUP_WORDS.search(clause) and not _NEGATED.search(clause):
+            return True
+    return False
+
+
+def _words_to_digits(text):
+    def one(m):
+        if m.group(1):
+            return str(_TENS[m.group(1).lower()] + _UNITS[m.group(2).lower()])
+        return str(nl_prep.WORD_NUMBERS[m.group(3).lower()])
+    return _NUM_WORD.sub(one, text)
+
+
+def _said_limits(said):
+    """The guest limits the owner's words state: a number right next to a counted noun ("12 spots", "twelve people") or
+    a limit word ("max 12", "up to 20"). A date, a clock time or a year in the same words never counts."""
+    found = set()
+    for clause in _clauses(said):
+        text = _words_to_digits(_DATE_TIME.sub(" ", clause.lower()))
+        for pat in (_LIMIT_AFTER, _LIMIT_BEFORE):
+            found.update(int(m.group(1)) for m in pat.finditer(text))
+    return found
 
 
 RULES = {"no-price": rule_no_price, "hike-in-future": rule_in_future, "hike-twin": rule_twin,

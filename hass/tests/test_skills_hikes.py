@@ -233,6 +233,31 @@ class Rules(unittest.TestCase):
         self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 10}))  # his words unknown: no verdict
         self.assertIsNone(self.hit("hike-no-invention", {"signup": False}, texts=said))
 
+    def test_negated_sign_up_words_do_not_turn_sign_up_on(self):
+        for said in ("hike Dec 12 10am Cayucos Pier, no sign up", "Dec 12 10am hike, don't let people sign up",
+                     "hike Saturday 9am, without rsvps", "hike Saturday, sign ups are off", "hike Saturday, people can't sign up",
+                     "hike Saturday. Not taking reservations"):
+            with self.subTest(said):
+                self.assertEqual(self.hit("hike-no-invention", {"signup": True}, texts=[said])[0], hikes.R_SIGNUP_NOT_SAID)
+        for said in ("hike Saturday 9am, sign up please", "hike Saturday, people can sign up, no limit",
+                     "hike Saturday, no limit on sign ups", "hike Saturday. No parking fee. Let guests sign up"):
+            with self.subTest(said):
+                self.assertIsNone(self.hit("hike-no-invention", {"signup": True}, texts=[said]))
+
+    def test_a_guest_limit_must_be_the_number_he_gave_for_guests_not_a_date_or_time(self):
+        for said in ("sign up please, hike Dec 12 10am", "sign up, hike on the 12th at 10", "sign up, hike 12/12 at 10:30",
+                     "sign up, hike 2026-12-12 at 10", "sign up, hike December 12, meet 8am", "sign up, 12 December"):
+            with self.subTest(said):
+                for cap in (12, 10, 8, 30, 2026):
+                    hit = self.hit("hike-no-invention", {"signup": True, "capacity": cap}, texts=[said])
+                    self.assertEqual(hit[0] if hit else None, hikes.R_SPOTS_NOT_SAID, (said, cap))
+        for said, cap in (("sign up, Dec 12 10am, 12 spots", 12), ("sign up, Dec 12 at 10, max 20", 20), ("sign up, twelve people", 12),
+                          ("sign up, up to twenty five", 25), ("sign up with a limit of 8", 8), ("sign up, Dec 12 10am, 10 guests", 10)):
+            with self.subTest(said):
+                self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": cap}, texts=[said]))
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 10},
+                                  texts=["sign up, Dec 12 10am, 12 spots"])[0], hikes.R_SPOTS_NOT_SAID)
+
     def test_a_plan_cannot_draft_what_a_rule_refuses(self):
         for plan, slots, event in ((hikes.plan_add, {"title": "Cass Hill", "day": "2026-11-21", "clock": "09:00", "meeting_point": "x"}, "already a hike called"),
                                    (hikes.plan_edit, {"hike": CALLED["id"], "bring": "hat"}, "cancelled"),
