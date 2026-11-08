@@ -20,7 +20,7 @@ ACK_TEXT = "\N{EYES}"
 ACK_MAX_AGE = 120   # a message older than this when accepted (catch-up after sleep or an outage) is never acked
 ACK_STALE = 30      # an ack still unsent this long after it was queued is dropped, not sent late
 ACK_TIMEOUT = 4     # seconds one ack send may block the loop (an ack never waits the 10 s of a reply)
-STATE_TTL = 30      # the host's "changes are paused" answer is trusted this long; older or missing means no ack
+STATE_TTL = 2       # the host's "changes are paused" answer is trusted this long; older, failed or missing means ask again, and no ack until answered
 PAUSE_HOLD = 60     # after the owner's own pause command, no ack for this long (the host has not read it yet)
 PULL_SLOW, PULL_FAST, FAST_WINDOW = 5, 1, 180  # reply pull every 5 s, every 1 s for 3 minutes after an owner message
 CATCH_UP_EVERY = 15  # was 60: the safety net that finds a message the BlueBubbles webhook did not announce
@@ -304,11 +304,11 @@ class Forwarder:
     def state(self):
         """HASS-FAST-1: ask the host whether changes are paused (a sealed read-only `state`). Any failure, including an
         older host that does not know the op, just leaves the answer unknown, which means no 👀 (never a guess)."""
-        try:
-            paused = self.control({"op": "state"}, "state")["paused"]
-            if type(paused) is bool: self.paused, self.paused_at = paused, self.clock()
-        except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError):
-            pass
+        paused = None
+        try: paused = self.control({"op": "state"}, "state")["paused"]
+        except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): pass
+        if type(paused) is bool: self.paused, self.paused_at = paused, self.clock()
+        else: self.paused = None  # fail closed: a failed refresh never leaves the last "not paused" answer standing
 
     def ack_allowed(self, now):
         """(may send, final). A pause command just seen or a paused host is a final no; no fresh host answer is a no for now."""
@@ -333,6 +333,9 @@ class Forwarder:
             def close(state): db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='pending'", (state, now, pid))
             if now - created > ACK_STALE: close("stale"); continue
             if not self.cfg.get("ack", True): close("off"); continue
+            if now >= self.spool.get("hold_until") and (self.paused is None or now - self.paused_at > STATE_TTL):
+                self.state()  # ask the host right now (own thread: a slow reply send cannot delay this)
+                now = self.clock()
             allowed, final = self.ack_allowed(now)
             if not allowed:
                 if final: close("paused"); continue
@@ -347,19 +350,33 @@ class Forwarder:
             db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=?", (state, self.clock(), pid))
             self.stage("ack-end", pid)
 
-    def cycle(self):
+    def cycle(self, ack=True):
+        """One pass. `ack=False` is the serve loop: acknowledgements run on their own thread (ack_loop), so a slow reply or
+        picture send, or a failing 👀 send, never delays the other."""
         fast = self.clock() < self.spool.get("fast_until")  # an owner message arrived in the last FAST_WINDOW seconds
         if fast: self.next_pull = min(self.next_pull, self.clock() + PULL_FAST)  # do not finish a slow wait first
-        for attr, delay, action in (("next_poll", CATCH_UP_EVERY, self.catch_up), ("next_state", PULL_SLOW, self.state),
+        for attr, delay, action in (("next_poll", CATCH_UP_EVERY, self.catch_up),
                                     ("next_pull", PULL_FAST if fast else PULL_SLOW, self.pull)):
             if self.clock() >= getattr(self, attr):
                 setattr(self, attr, self.clock() + delay)
                 try: action()
                 except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
-        for action in (self.fetch, self.ack, self.deliver):
+        for action in ((self.fetch, self.ack, self.deliver) if ack else (self.fetch, self.deliver)):
             try: action()
             except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
         self.spool.db.execute("DELETE FROM nonces WHERE seen_at<?", (self.clock() - 86400,))
+
+
+def ack_loop(cfg, stop, stage=None, **kw):
+    """HASS-FAST-1: the 👀 thread. Its own spool connection and Forwarder; the durable pending -> sending -> sent claim in the
+    ack table (one atomic UPDATE) keeps it at most once per message however the two threads interleave."""
+    spool = Spool(cfg["spoolDir"], kw.get("clock", time.time)())
+    try:
+        fwd = Forwarder(cfg, spool, stage=stage, **kw)
+        while not stop.is_set():
+            fwd.ack()
+            stop.wait(0.1)
+    finally: spool.db.close()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -431,13 +448,17 @@ def main(argv=None):
                 with Server(cfg, spool) as srv:
                     thread = threading.Thread(target=srv.serve_forever, daemon=True)
                     thread.start()
+                    acker = threading.Thread(target=ack_loop, args=(cfg, stop, fwd.stage), daemon=True)
+                    acker.start()
                     try:
                         while not stop.is_set():
-                            fwd.cycle()
+                            fwd.cycle(ack=False)
                             stop.wait(0.2)
                     finally:
+                        stop.set()
                         srv.shutdown()
                         thread.join()
+                        acker.join(timeout=15)
         finally: spool.db.close()
         return 0
     except Exception:

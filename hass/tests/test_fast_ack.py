@@ -244,6 +244,141 @@ class AckNeverBlocks(AckCase):
         self.assertEqual((fwd.ACK_TEXT, len(fwd.ACK_TEXT)), (EYES, 1))
 
 
+class HostAnswers(AckCase):
+    """A fake host that answers the sealed `state` op (and nothing else the ack path needs)."""
+
+    def setUp(self):
+        super().setUp()
+        self.host_paused, self.host_down, self.state_calls = False, False, 0
+        plain = self.transport
+
+        def transport(url, body=None):
+            if url.endswith("/v1/relay") and relay.unseal_control(body, ft.KEY, now=self.now, seen=set())["op"] == "state":
+                self.state_calls += 1
+                if self.host_down: raise bridge.BridgeError("transport-error")
+                return relay.seal_control({"op": "state", "paused": self.host_paused}, ft.KEY, nonce=os.urandom(16).hex(), now=self.now)
+            return plain(url, body)
+        self.transport = self.f.transport = transport
+        self.f.paused = None
+
+
+class FailClosedOnPause(HostAnswers):
+    def test_a_failed_refresh_forgets_the_old_not_paused_answer(self):
+        self.host_ok()
+        self.host_down = True
+        self.f.state()
+        self.assertIsNone(self.f.paused)
+
+    def test_host_pauses_between_polls_so_no_ack_even_inside_the_old_ttl(self):
+        self.enqueue("m1")
+        self.f.ack()
+        self.assertEqual(len(self.eyes()), 1)
+        self.host_paused = True
+        self.now += fwd.STATE_TTL + 1             # the host paused after the last answer
+        self.enqueue("m2")
+        self.f.ack()
+        self.assertEqual((len(self.eyes()), self.states()["m2"]), (1, "paused"))
+
+    def test_host_unreachable_after_a_not_paused_answer_waits_and_never_sends(self):
+        self.enqueue("m1")
+        self.f.ack()
+        self.host_down = True
+        self.now += fwd.STATE_TTL + 1
+        self.enqueue("m2")
+        self.f.ack()
+        self.assertEqual((len(self.eyes()), self.states()["m2"], self.f.paused), (1, "pending", None))
+        self.host_down = False                      # the host answers again (not paused): the waiting row is sent
+        self.f.ack()
+        self.assertEqual((len(self.eyes()), self.states()["m2"]), (2, "sent"))
+
+    def test_composed_pause_resume_and_outage_transitions(self):
+        sent = []
+        for paused, down, want in ((False, False, True), (True, False, False), (False, True, False), (False, False, True)):
+            with self.subTest(paused=paused, down=down):
+                self.now += fwd.STATE_TTL + 1
+                self.host_paused, self.host_down = paused, down
+                before = len(self.eyes())
+                self.enqueue(f"t{self.now}")
+                self.f.ack()
+                sent.append(len(self.eyes()) - before)
+                self.assertEqual(sent[-1], int(want))
+                self.spool.db.execute("UPDATE ack SET state='stale' WHERE state='pending'")  # an unanswered row is dropped, not carried over
+
+    def test_a_pause_command_just_seen_wins_over_a_fresh_not_paused_answer(self):
+        self.enqueue("c", text="stop changes")
+        self.enqueue("after")
+        self.f.ack()
+        self.assertEqual(self.eyes(), [])
+
+
+class AckIndependentOfOtherWork(HostAnswers):
+    """The 👀 runs on its own thread (ack_loop): a slow pull, slow reply sends or failing 👀 sends do not delay each other."""
+
+    def start_acks(self, sender):
+        stop = threading.Event()
+        thread = threading.Thread(target=fwd.ack_loop, args=(self.cfg, stop), kwargs=dict(clock=lambda: self.now, transport=self.transport, sender=sender))
+        thread.start()
+        self.addCleanup(thread.join, 10)
+        self.addCleanup(stop.set)
+        return stop
+
+    def wait(self, cond, secs=5.0):
+        end = threading.Event()
+        for _ in range(int(secs / 0.02)):
+            if cond(): return True
+            end.wait(0.02)
+        return False
+
+    def test_a_slow_reply_pull_does_not_hold_the_ack(self):
+        self.enqueue("m1")
+        self.sender.send = self._send
+        self.start_acks(self.sender)
+        seen = []
+
+        def control(body, expected, big=False):
+            if body["op"] == "pull": seen.append(self.wait(lambda: len(self.eyes()) == 1))  # the pull is stuck until the 👀 is out
+            return {"op": "replies", "items": []}
+        with mock.patch.object(self.f, "control", side_effect=control):
+            self.f.cycle(ack=False)
+        self.assertEqual(seen, [True])
+        self.assertEqual(self.order.count("ack"), 1)
+
+    def test_cycle_without_ack_never_sends_one(self):
+        self.enqueue("m1")
+        with mock.patch.object(self.f, "control", return_value={"op": "replies", "items": []}):
+            self.f.cycle(ack=False)
+        self.assertEqual((self.eyes(), len(self.posts), self.states()), ([], 1, {"m1": "pending"}))
+
+    def test_a_stuck_ack_send_does_not_stop_the_message_being_delivered(self):
+        self.enqueue("m1")
+        gate, entered = threading.Event(), threading.Event()
+
+        class Stuck:
+            def send(self, chat, text, attachments=()):
+                entered.set()
+                gate.wait(10)
+                raise bridge.BridgeError("transport-error")  # and then it fails, as a 4 s timeout would
+        self.addCleanup(gate.set)
+        self.start_acks(Stuck())
+        self.assertTrue(entered.wait(5))
+        with mock.patch.object(self.f, "control", return_value={"op": "replies", "items": []}):
+            self.f.cycle(ack=False)
+        self.assertEqual(len(self.posts), 1)       # delivered while the 👀 send is still stuck
+        gate.set()
+        self.assertTrue(self.wait(lambda: self.states().get("m1") == "failed"))
+        self.assertEqual(len(self.posts), 1)
+
+    def test_the_two_threads_still_send_one_ack_per_message(self):
+        self.enqueue("m1")
+        self.enqueue("m1")
+        stop = self.start_acks(self.sender)
+        self.assertTrue(self.wait(lambda: len(self.eyes()) >= 1))
+        self.f.paused, self.f.paused_at = False, self.now
+        self.f.ack()                               # the main thread's own pass meets the claimed row
+        stop.set()
+        self.assertEqual(len(self.eyes()), 1)
+
+
 class CycleOrderAndPolling(AckCase):
     def setUp(self):
         super().setUp()
