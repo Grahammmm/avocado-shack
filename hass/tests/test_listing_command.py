@@ -158,6 +158,19 @@ class ListingTests(StoreMixin, ConversationTestCase):
         head, f = self.fields(rid["id"])
         self.assertEqual((head, f), (rid["title"], {"Title": rid["title"], "Place": rid["place"], "Status": "hidden"}))
 
+    def test_route_idea_by_title(self):
+        """HASS-VOICE-1: find no longer prints route idea ids, so listing takes a route idea by title (one or several words)."""
+        def go(doc):
+            doc["routeIdeas"][0].update(title="Zorbaloo")
+            doc["routeIdeas"][1].update(title="Quillfeather Ridge Loop")
+        self.edit("community.json", go)
+        route = json.loads((self.cdir / "community.json").read_text("utf-8"))["routeIdeas"]
+        for rec in route[:2]:
+            head, f = self.fields(rec["title"])
+            self.assertEqual((head, f["Title"], f["Place"]), (rec["title"], rec["title"], rec["place"]))
+        head, _ = self.fields("quillfeather ridge")  # several words, any case, part of the title
+        self.assertEqual(head, "Quillfeather Ridge Loop")
+
     # -- usage, unknown, collision, lookalikes ---------------------------------------------------------------------
     def test_usage_unknown_collision_and_lookalikes(self):
         self.assertEqual(self.listing(text="listing"), [USAGE])

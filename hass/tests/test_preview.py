@@ -79,7 +79,7 @@ class PreviewTests(BrowserCase):
         self.assertEqual((result["ok"], result["checks"]["productShown"], result["checks"]["description"]),
                          (True, True, True))
         self.assertEqual((sent["text"], sent["attachments"]),
-                         (f"Applied and checked {row['code']}: {row['summary']}\n{conversation.answers.NOT_LIVE}",
+                         (f"Saved and checked: {row['summary']}\n{conversation.answers.NOT_LIVE}",
                           [row["screenshot"]]))
 
 
@@ -89,11 +89,11 @@ class VerifyFailureTests(BrowserCase):
 
     def test_failed_check_is_reported_not_retried(self):
         draft, reply = self.propose("desc")
-        self.assertIn("\nPreview unavailable: ", reply)
+        self.assertIn("\nI couldn't make a picture of how it will look.", reply)
         self.assertEqual(self.say("yes"), "approved")
         [reply] = self.replies()
         [row] = self.drafts()
-        self.assertTrue(reply.startswith(f"Applied {row['code']}, but the preview check failed: "), reply)
+        self.assertTrue(reply.startswith("I saved it, but the preview check didn't pass: "), reply)
         self.assertEqual((row["state"], self.commits()), ("applied", 1))
         self.assertTrue(row["reason"].startswith("not verified: "), row["reason"])
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now,

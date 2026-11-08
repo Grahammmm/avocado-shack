@@ -20,11 +20,16 @@ from hass.tests.test_editor import git
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 MISSING_PLAYWRIGHT = "/nonexistent/hass-test/playwright"
+SAVED_CHECKED = "Saved and checked: "
 
 
 @unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")
 class DemoBrowserTests(unittest.TestCase):
-    fresh, kinds, db = demo.DemoTranscriptTests.fresh, demo.DemoTranscriptTests.kinds, demo.DemoTranscriptTests.db
+    fresh, db = demo.DemoTranscriptTests.fresh, demo.DemoTranscriptTests.db
+
+    def kinds(self, texts):  # the demo's kinds, with the real check's "Saved and checked: " in place of "Saved:"
+        known = tuple(k for k in demo.KINDS if k != "Saved:") + (SAVED_CHECKED,)
+        return [next((k for k in known if t.startswith(k)), t) for t in texts]
 
     def site(self):  # the writer worktree gets the full tracked storefront (as test_preview.make_previewer)
         repo = self.fresh()
@@ -60,12 +65,12 @@ class DemoBrowserTests(unittest.TestCase):
         original = demo._description(repo.state)
         rows = self.run_chain(repo)
         texts = [r["text"] for r in rows]
-        self.assertEqual(self.kinds(texts), demo.EXPECTED)
+        self.assertEqual(self.kinds(texts), [(SAVED_CHECKED if k == "Saved:" else k) for k in demo.EXPECTED])  # a real check says so
         for i in (1, 4):
-            self.assertTrue(texts[i].startswith("Applied and checked "), texts[i])
+            self.assertTrue(texts[i].startswith(SAVED_CHECKED), texts[i])
         state = repo.state.resolve()
         for i, row in enumerate(rows):  # draft and applied replies carry one private PNG; the rest none
-            expected = 1 if texts[i].startswith(("Draft ", "Applied ")) or "\nDraft " in texts[i] else 0
+            expected = 1 if texts[i].startswith(("Here's the change I'd make:", "To undo that, I'd change it back:", SAVED_CHECKED)) else 0
             self.assertEqual(len(row["attachments"]), expected, (i, texts[i]))
             for name in row["attachments"]:
                 png = Path(name)
@@ -86,15 +91,15 @@ class DemoBrowserTests(unittest.TestCase):
         repo = self.site()
         rows = self.run_chain(repo, MISSING_PLAYWRIGHT)
         texts = [r["text"] for r in rows]
-        self.assertIn("\nPreview unavailable: ", texts[0])  # draft reply: no preview, no PNG
+        self.assertIn("\nI couldn't make a picture of how it will look.", texts[0])  # draft reply: no preview, no PNG
         edit, undo = self.drafts(repo)
-        for i, draft in ((1, edit), (4, undo)):  # both apply replies name the failed check
-            self.assertTrue(texts[i].startswith(f"Applied {draft['code']}, but the preview check failed: "), texts[i])
+        for i in (1, 4):  # both apply replies name the failed check
+            self.assertTrue(texts[i].startswith("I saved it, but the preview check didn't pass: "), texts[i])
         self.assertTrue(all(not r["attachments"] for r in rows))  # no screenshot was made
         self.assertNotIn("verified", {edit["state"], undo["state"]})
         self.assertEqual((edit["state"], undo["state"]), ("reverted", "applied"))  # what main does: the undo still runs
         self.assertTrue(undo["reason"].startswith("not verified: "), undo["reason"])
-        self.assertEqual(self.kinds(texts)[2:4], ["Recent changes:", "Undo "])
+        self.assertEqual(self.kinds(texts)[2:4], ["Here's what we changed lately:", "To undo that, I'd change it back:"])
         for draft in (edit, undo):  # not retried: one commit per change, two since "full site"
             self.assertEqual(git(repo.wt, "log", "--format=%s", "--grep", draft["change_id"]).splitlines(),
                              [f"hass content: {draft['change_id']}"])

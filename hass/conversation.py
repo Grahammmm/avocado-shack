@@ -1524,7 +1524,7 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             return True
         return any(self._pick(kind, text, content) != text for kind in ("product", "maker")) \
-            or self._pick_hike(content, text) != text
+            or self._pick_hike(content, text) != text or self._pick_hike(content, text, "routeIdeas") != text
 
     def _post_names_something(self, text) -> bool:
         """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
@@ -1601,9 +1601,10 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             return text
 
-    def _pick_hike(self, content, text) -> str:
-        """A hike's id from what Mike typed: an exact id, else the one hike whose title holds every word."""
-        events = content.community.get("events") if isinstance(content.community, dict) else None
+    def _pick_hike(self, content, text, key="events") -> str:
+        """A hike's (or, with key="routeIdeas", a route idea's) id from what Mike typed: an exact id, else the one
+        whose title holds every word."""
+        events = content.community.get(key) if isinstance(content.community, dict) else None
         events = [e for e in events if isinstance(e, dict)] if isinstance(events, list) else []
         if any(e.get("id") == text for e in events): return text
         words = catalog._fold(text).split()
@@ -1674,6 +1675,7 @@ class Conversation:
             typed, ident = ident, self._pick("product", ident, content)
             if not any(p.get("id") == ident for p in content.products): ident = self._pick("maker", typed, content)
             if ident == typed: ident = self._pick_hike(content, typed)
+            if ident == typed: ident = self._pick_hike(content, typed, "routeIdeas")  # route ideas by title too
             found = [("product", p) for p in content.products if p.get("id") == ident]
             found += [("maker", m) for k, m in content.makers.items() if k == ident]
             found += [(kind, r) for kind, key in (("hike", "events"), ("route idea", "routeIdeas"))
