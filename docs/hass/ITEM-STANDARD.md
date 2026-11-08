@@ -61,7 +61,7 @@ One rule set, three classes, so "the picture check" and "the existing pictures" 
 
 * **Hard** (a NEW render or photo that fails any of these is not accepted): 800 x 800; no EXIF, colour profile or alpha; at most 160 KB; background within 28 levels of #fef8ec; clean frame at least 90%.
 * **Soft** (advice only: a plain retake tip to Mike, never a refusal): file 31 to 99 KB; background within 17; background variation at most 6; longest side 79% to 97% of the frame; centre within 4% down and 10% across; margin below at least 2.5%; subject area 20% to 60%; shadow at most 7.5 levels; subject at least 80% of the frame so it reads in the 112 px phone thumbnail.
-* **Grandfathered**: an existing picture that fails a hard check is named in `hass/style/item-standard.json` (`grandfathered`: id, the check, the measured value, the reason). The catalog run reports it as "passes, grandfathered", not as a failure.
+* **Grandfathered**: an existing picture that fails a hard check is named in `hass/style/house-style.json` (`grandfathered`: id, the check, the measured value, the reason). That one file is the only place the list lives; `hass/style/item-standard.json` holds the fields and the asking order and has no picture numbers. The catalog run reports it as "passes, grandfathered", not as a failure.
 
 Result on the 170 active pictures: **all pass size, metadata, file size and background**; **167 pass every hard check; 3 fail one, the clean-frame check, and are the named exceptions: 015 Brian's sourdough bread (86.5%), 110 Cookies and Cream chocolate (88.7%, tan background #f9e9d6), 093 Avocado Shack (Hands) (89.9%)**. Each of the three is also in the least-typical list below, and all three sit on a warmer tan background (#f6ecdf, #f8ede1, #f9e9d6). 54 of 170 miss at least one soft check (counts: file size 18, background beyond 17 levels 9, background variation 5, subject size 12, centre down 9, centre across 7, subject area 7, thumbnail fill 11); that is expected, the soft values are the edges of the usual range, and the pictures G likes include them.
 
@@ -154,18 +154,34 @@ summary     Turn Mike's answer about a missing farm, maker, town or about text i
 triggers    "Smith Farm in Arroyo Grande" · "the tomatoes are from Smith Farm" · "same farm as last time"
             · "Smth Farm in Arroyo Grande" (typo) · "they're in Arroyo Grande" (vague, only with an open question)
             · "the peppers and the zucchini are from them too" (multi) · "I don't know" (recorded, no draft)
-slots       item        product_ref   required  default derive:open_gap  ask "Which item is that for?"
-            maker_name  text (maker name limit)  owner_words  required unless:unknown  default derive:last_maker_if_same
-                                              ask "Who grew the {item} this week?" (fresh) or "Who makes the {item}?" (packaged)
-            town        text "Town, State"  owner_words  required: false  (code asks when a new maker has none)
-            also        list of product_ref  optional, at most 6 on the same shelf with the same gap
-            same        bool  optional ("same farm", "same as last time")
-            unknown     bool  optional ("I don't know", "no idea")
-rules       gap-still-open · owner-words-only · town-state · maker-not-held · no-claim-words · answers-only-the-asked-field
-plan        known maker:   [product.edit{id, brand, producerKey, displayBrand}] per item (the item.edit maker slot, reused)
-            new maker:     [maker.add{key, name, place, story}] first (story = fallback sentence "<name> is based in <town>.", D5), then the product.edit
-            town only:     [maker.edit{key, place}]
-            unknown:       [] (no op; records `unknown` in the private state)
+slots       subject     gap_subject = product_ref | maker_ref   required   default derive:open_gap.subject
+                        (typed: the kind and id come from the open question; Mike's answer never has to name them. Only with NO open question and no item or maker in his
+                        words does Hass ask "Which item is that for?")
+            field       enum producer | town | state   required   default derive:open_gap.field     (never asked; with no open question: `producer` when his words name a producer,
+                        `town` when they give only a place for a maker Hass can identify)
+            maker       maker_ref   optional   default derive:known_maker   (the maker already tied to the subject: the maker itself for a maker subject; the item's `producerKey`
+                        for a product subject; else the maker on file whose name matches his words)
+            maker_name  text (maker name limit)  owner_words
+                        required  IF field = producer AND NOT (same OR unknown OR maker matched on file); otherwise NOT required and NEVER asked
+                        ask "Who grew the {item} this week?" (fresh) or "Who makes the {item}?" (packaged)
+            town        text "Town, State"  owner_words
+                        required  IF field IN (town, state) OR the maker is new (being added now) and has none on file; ask "Which town is {maker} in?"
+            state       text  required only when the town has no state and the catalog cannot supply it; ask "Which state is {town} in?" (kept as a partial value of the open question, so the
+                        town is not asked again)
+            also        list of product_ref  optional, only when subject is a product and field = producer; at most 6 on the same shelf with the same gap
+            same        bool  optional ("same farm", "same as last time"; only when field = producer)
+            unknown     bool  optional ("I don't know", "no idea"; allowed for every field, binds to the field that was asked, and for a town or state question to the MAKER, so no item is asked)
+rules       gap-still-open · owner-words-only · town-state · maker-not-held · no-claim-words · answers-only-the-asked-field · known-is-never-asked
+            · town-gap-belongs-to-the-maker (the answer to a town question never needs an item, and never asks for the producer again)
+plan        by (subject kind, field) — exactly one branch applies:
+            product, producer, maker on file:   [product.edit{id, brand, producerKey, displayBrand}] per item (the item.edit maker slot, reused)
+            product, producer, new maker:       [maker.add{key, name, place, story}] first (story = fallback sentence "<name> is based in <town>.", D5), then the product.edit
+            product, town (producer known):     [maker.edit{key = the item's maker, place}]   (the maker comes from `known_maker`; the producer name is NOT asked or changed)
+            product, town, brand text but no maker on file (e.g. a cider shown with a name and no maker record):
+                                                [maker.add{key, name = the item's saved brand text, place, story}], then [product.edit{id, producerKey}]
+            maker, town (a maker question):     [maker.edit{key = the subject, place}]   (no item, no producer asked)
+            maker or product, state:            same op as the town branch, carrying the completed "Town, State"
+            unknown (any field):                [] (no op; records `unknown` for THAT subject and field in the private state)
 edits       hass/content/products.json  products[id].brand, .producerKey, .displayBrand
             hass/content/makers.json    makers[key]  (new maker or place)
             generated: storefront-mockup/catalog-products.js, index.html
@@ -176,9 +192,23 @@ refuse      the maker is hidden → "<name> is hidden. Bring them back first." �
 cases       hass/tests/fixtures/skills/gap/gap.fill.jsonl   (10+ rows)
 ```
 
-Scenarios the fixture must contain (each a multi-turn row, real `Conversation` and `Editor` on a scratch tree): 1 farm and town in one answer, new maker; 2 farm only, then "Which town is Smith Farm in?", then the town; 3 a maker already on file (no `maker.add`); 4 "same farm as last time" with the saved maker; 5 up to 6 items on one shelf in one draft; 6 `I don't know` (no draft, recorded, not asked for 60 days); 7 typo and vague answer joined to the open question ("Smth Farm", "they're in Arroyo Grande"); 8 refusals: hidden maker, unsaid "organic", a town without a state; 9 the answer arrives after Mike answered it another way (nothing is drafted, "It already says ..."); 10 undo of the draft returns the tree to the earlier state apart from the declared residue; 11 the open question expired and the answer is a new request; 12 `no` cancels the open question and starts the 7-day rest.
+Scenarios the fixture must contain (each a multi-turn row, real `Conversation` and `Editor` on a scratch tree): 1 farm and town in one answer, new maker; 2 farm only, then "Which town is Smith Farm in?", then the town (a product-linked town follow-up, scenario 14); 3 a maker already on file (no `maker.add`); 4 "same farm as last time" with the saved maker; 5 up to 6 items on one shelf in one draft; 6 `I don't know` on a producer question (no draft, recorded, not asked for 60 days); 7 typo and vague answer joined to the open question ("Smth Farm", "they're in Arroyo Grande"); 8 refusals: hidden maker, unsaid "organic", a town without a state; 9 the answer arrives after Mike answered it another way (nothing is drafted, "It already says ..."); 10 undo of the draft returns the tree to the earlier state apart from the declared residue; 11 the open question expired and the answer is a new request; 12 `no` cancels the open question and starts the 7-day rest.
 
-**How an answer finds its item.** The open question is stored as an `open_requests` row (skill `gap.fill`, the item or maker, the asked field, the question, `expires_at`). The next message from that owner is read against it **after** the stop words are checked (so `later` can never be taken as a farm named "Later"). Code reads the easy answers first (a maker already on file, "Name in Town", "Name, Town, State", "same", "don't know", `no`); everything else goes to the interpreter in continue mode with the snapshot. A gap question lives until 8 pm the next day (a small `ttl` in `openreq.py`, ITEMSTD-5 owns it after FW-3 merges), not 30 minutes. The answer fills only the asked field and the next gap field of the **same** item (so "Smith Farm in Arroyo Grande" fills farm and town); it never fills a different item's field.
+The answer-binding scenarios (added because a question can belong to a maker as well as an item; each is a multi-turn row with the exact open question, Mike's answer and the expected plan, and **none of them may ask for an item or a producer that the open question already identifies**):
+
+| # | Open question (subject, field) | Mike says | Declared path | Expected |
+|---|---|---|---|---|
+| 13 | maker `Straus`, town: "Which town is Straus in? The website says Northern California." | "Petaluma, California" | `subject` = maker Straus, `field` = town, `maker` = Straus (derived), `town` filled, `maker_name` not required, no item asked | one draft `[maker.edit{key: Straus, place: "Petaluma, California"}]`; reply "Straus in Petaluma, California. Reply yes to save it, or no to cancel."; every Straus item shows it after the yes |
+| 14 | product `the tomatoes`, field town, after he answered "Smith Farm" alone: the open request keeps the partial value `maker_name = Smith Farm` (nothing is saved until his yes): "Which town is Smith Farm in?" | "Arroyo Grande" | `subject` = the tomatoes, `field` = town, `maker_name` derived from the partial value of the open request (NOT asked again), `town` filled; state taken from the catalog, or `state` asked as "Which state is Arroyo Grande in?" with the town kept | one draft `[maker.add{key: Smith Farm, place, story}, product.edit{id, producerKey}]`; no second farm question; no second item question |
+| 14b | product `Straus plain yogurt` whose maker Straus is on file with a region only, asked through the item: "Which town is Straus in?" | "Petaluma, California" | the town gap belongs to the maker: the open request is rebound to (maker Straus, town) with `via_item` for the wording only; `maker_name` not required, no producer asked | `[maker.edit{key: Straus, place}]` (the same draft as scenario 13); the gap closes for every Straus item at once, and a later question about another Straus item is not asked |
+| 15 | maker `Straus`, town | "I don't know" | `unknown` binds to (Straus, town); no product asked | `[]`, recorded for 60 days; reply "OK, I'll leave the town for now."; `what's missing` later lists it as "you weren't sure"; the item pages are untouched |
+| 16 | product `Zero non-alcoholic cider`, town, brand text `SLO Cider` and no maker on file: "Which town is SLO Cider in?" | "San Luis Obispo" | `field` = town; `known_maker` = none on file, so the branch is `maker.add` from the item's saved brand text; the producer name is not asked | `[maker.add{key: SLO Cider, name: SLO Cider, place: "San Luis Obispo, California"}, product.edit{producerKey}]`, state from the catalog or asked once |
+| 17 | maker `Straus`, town: answer names the wrong kind of thing | "Smith Farm in Arroyo Grande" | `answers-only-the-asked-field`: the asked field is Straus's town, so Hass reads the place and asks to confirm: "Is Straus in Arroyo Grande?"; it never creates a Smith Farm record from a town answer | one confirm question (counted as the follow-up of the same gap), then `[maker.edit]` on yes; on no, nothing changes |
+| 18 | maker `Straus`, town, but the maker was hidden since the question was asked | "Petaluma, California" | rule `maker-not-held` | refusal "Straus is hidden. Bring them back first.", no draft |
+
+The three turns that must each have one complete declared path are the maker-only town answer (13), the product-linked town follow-up (14 and 14b) and the maker-town `I don't know` (15); every one of 13 to 16 asserts, in the fixture, that no reply contains "Which item", "Who grew" or "Who makes".
+
+**How an answer finds its item and its maker.** The open question is stored as an `open_requests` row: skill `gap.fill`, `subject_kind` (product or maker), `subject_id`, `field` (producer, town or state), `via_item` (the item it was asked through, wording only), `partial` (values already given, such as a farm name waiting for its town, or a town waiting for its state), the question text and `expires_at`. The next message from that owner is read against it **after** the stop words are checked (so `later` can never be taken as a farm named "Later"). The slots `subject`, `field` and `maker` are filled by code from that row, never from his words and never by asking: a producer question binds to the product; **a town or state question always binds to the maker** (a town belongs to the maker, so a question asked through an item is rebound to the item's maker, or to the producer name in `partial` when the maker is new), and `maker_name` is asked only for a producer question. Code reads the easy answers first (a maker already on file, "Name in Town", "Name, Town, State", a bare "Town, State" for a town question, "same", "don't know", `no`); everything else goes to the interpreter in continue mode with the snapshot, which may only fill the slots the open row still lacks. A gap question lives until 8 pm the next day (a small `ttl` in `openreq.py`, ITEMSTD-5 owns it after FW-3 merges), not 30 minutes. The answer fills only the asked field and the next gap field of the **same** subject (so "Smith Farm in Arroyo Grande" to a farm question fills farm and town; a bare town to a town question fills only the town); it never fills a different item's field.
 
 **What an answer does.** The producer name and town come only from his words (claims gate unchanged: no "organic" or "family farm" unless he said it). A maker already on file is reused; a new maker needs a name and a town and gets the D5 fallback about text. A town without a state takes the state of the same town already in the catalog; otherwise Hass asks "Which state?" and never guesses. The draft says it in his words: "Smith Farm in Arroyo Grande, for the tomatoes. Reply yes to save it, or no to cancel." The description is not rewritten automatically. For fresh produce the site shows no week, so when the farm changes next week Mike just says so ("the tomatoes are from Jones Farm now", `item.edit`); `gap.fill` offers "Same farm as last time?" and never assumes it.
 
@@ -257,7 +287,7 @@ Fixed asking order: name, shelf (only a yes/no when in doubt), producer, produce
 
 | Table | Columns | Used for |
 |---|---|---|
-| `gap_state` | owner, subject (product or maker), field, state (open, answered, unknown, paused), asked_count, last_asked_at, answered_at, unknown_until, paused_until | never ask the same thing twice: before every question the gap is recomputed from the current content, so an answer given any other way clears it |
+| `gap_state` | owner, subject_kind (product or maker), subject (product id or maker key), field (producer, town, state), state (open, answered, unknown, paused), asked_count, last_asked_at, answered_at, unknown_until, paused_until | never ask the same thing twice: producer gaps are stored on the product, **town gaps on the maker** (so one town answer, or one "I don't know", covers every item of that maker and no other item re-asks it); before every question the gap is recomputed from the current content, so an answer given any other way clears it |
 | `gap_budget` | owner, pacific_day, count | the three a day |
 | `owner_gap` | owner, stopped, quiet_until, ignored_in_a_row | `stop asking` and the quiet week |
 
@@ -302,6 +332,11 @@ Replies to the stop words:
 > OK, I'll ask about missing details again.
 > There's nothing I'm waiting on.
 > It already says Smith Farm. Nothing to change.
+> Straus in Petaluma, California. Reply yes to save it, or no to cancel.
+> OK, I'll leave the town for now.
+> Is Straus in Arroyo Grande?
+> Straus is hidden. Bring them back first.
+> Which town is Straus in? The website says Northern California.
 > Smith Farm in Arroyo Grande, for the tomatoes. Reply yes to save it, or no to cancel.
 > Blueberries, from the market for now. Still missing: who grew them. I'll ask again tomorrow. Reply yes to save it, or no to cancel.
 
