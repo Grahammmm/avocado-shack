@@ -190,6 +190,7 @@ class Pronouns(unittest.TestCase):
             "They want to bake and sell bread.": f"{name} wants to bake and sell bread.",  # infinitive
             "They bake bread that locals love and buy.": f"{name} bakes bread that locals love and buy.",  # other subject
             "They grow figs and customers pick and eat them.": f"{name} grows figs and customers pick and eat them.",
+            "They grow figs and customers bake and sell pies.": f"{name} grows figs and customers bake and sell pies.",
             "They bake bread, and sell it at the market.": f"{name} bakes bread, and sells it at the market.",
             "She started it in her kitchen.": f"{name} started it in her kitchen.",
             "Her bread is dark.": f"{name}\u2019s bread is dark.",

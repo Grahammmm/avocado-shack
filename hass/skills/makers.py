@@ -143,7 +143,9 @@ _CONJ = re.compile(rf"\b(and|but|or) (?:(?P<adv>(?:now|also|still|then|often|alw
 # where the maker stops being the subject of the verbs: an infinitive, a modal / auxiliary, a relative or subordinate clause,
 # or a comma / semicolon that does not just continue with "and|but|or <verb>"
 _CLAUSE = re.compile(r"\s(?:to|that|which|who|whom|whose|because|so|when|while|if|although|though|since|before|after|until|unless|where"
-                     r"|can|could|will|would|should|may|might|must|shall|do|does|did|is|are|was|were|has|have|had)\b|;|,(?!\s+(?:and|but|or)\s)")
+                     r"|can|could|will|would|should|may|might|must|shall|do|does|did|is|are|was|were|has|have|had)\b|;|,(?!\s+(?:and|but|or)\s)"
+                     # a coordinated clause with its own subject: "and customers bake" (anything but a verb or adverb after and|but|or)
+                     rf"|\s(?:and|but|or)\s+(?!(?:(?:now|also|still|then|often|always|only|just|even)\s+)?(?:{'|'.join(sorted(_PRESENT))})\b)")
 
 
 def _third(verb: str):
