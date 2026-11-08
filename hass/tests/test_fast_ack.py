@@ -1,7 +1,7 @@
-"""HASS-FAST-1 tests: the 👀 ack on the Mac forwarder (one per owner message, never a stranger / group / echo / edit /
-old message, never while paused or unknown, never blocks), the host `state` op, and the read-only stage log.
-Synthetic only: fake BlueBubbles, fake sender, loopback sockets on port 0, temp dirs. No Mac, no real message.
-Run: python3 -B -m unittest hass.tests.test_fast_ack"""
+"""HASS-FAST-1 / HASS-TAPBACK-1 tests: the ack is ONE real tapback (BlueBubbles react call) on the owner's message and never a text
+(one per owner message, never a stranger / group / echo / edit / old message, never while paused or unknown, never blocks), the host
+`state` op, and the read-only stage log. Synthetic only: fake BlueBubbles, fake reactor, loopback sockets on port 0, temp dirs.
+No Mac, no real message. Run: python3 -B -m unittest hass.tests.test_fast_ack"""
 import contextlib, io, json, os, sqlite3, tempfile, threading, time, unittest  # noqa: E401
 from datetime import timedelta
 from pathlib import Path
@@ -14,20 +14,39 @@ from hass.tests.test_bridge import OWNER_CHAT
 from hass.tests.test_conversation import OWNER, STRANGER
 from mac import hass_forwarder as fwd
 
-NOW, EYES = ft.NOW, "\N{EYES}"
+NOW = ft.NOW
+INFO_ON = {"private_api": True, "helper_connected": True, "server_version": "1.9.9"}
+
+
+class Reactor:
+    """Synthetic BlueBubbles react endpoint: records (chat, guid, reaction); `fail` makes the next calls raise."""
+    def __init__(self): self.calls, self.fail = [], None
+
+    def react(self, chat, guid, reaction):
+        if self.fail: raise self.fail
+        self.calls.append((chat, guid, reaction))
 
 
 class AckCase(ft.ForwarderCase):
     def setUp(self):
         super().setUp()
-        self.order, self.state_asked = [], 0
+        self.order, self.state_asked, self.info, self.info_asked = [], 0, dict(INFO_ON), 0
+        self.reactor = self.f.reactor = Reactor()
         self.sender.send = self._send
         self.host_ok()
+
+    def restart(self, spool=None):
+        """A new Forwarder on the same spool file (a process restart), with its own synthetic reactor sharing the call log."""
+        if spool is None:
+            spool = fwd.Spool(self.root, self.now)
+            self.addCleanup(spool.db.close)
+        again = fwd.Forwarder(self.cfg, spool, lambda: self.now, self.transport, self.sender, reactor=self.reactor)
+        return again
 
     def _send(self, chat, text, attachments=()):
         if self.sender.fail: raise bridge.BridgeError("transport-error")
         self.sender.calls.append((chat, text, attachments))
-        self.order.append("ack" if text == EYES else "reply")
+        self.order.append("reply")
 
     def host_ok(self, paused=False): self.answer = paused  # what the fake host says to the next `state` question; None: unreachable
 
@@ -36,52 +55,65 @@ class AckCase(ft.ForwarderCase):
             self.state_asked += 1
             if self.answer is None: raise bridge.BridgeError("transport-error")
             return relay.seal_control({"op": "state", "paused": self.answer}, ft.KEY, nonce=os.urandom(16).hex(), now=self.now)
+        if "/api/v1/server/info" in url:  # the GET-only probe: no body
+            self.assertIsNone(body)
+            self.info_asked += 1
+            if self.info is None: raise bridge.BridgeError("transport-error")
+            return {"data": self.info}
         return super().transport(url, body)
 
-    def eyes(self): return [c for c in self.sender.calls if c[1] == EYES]
+    def taps(self): return list(self.reactor.calls)
+
+    def out(self):
+        """Everything the forwarder sent to the owner chat: taps AND texts. An ack must never add a text."""
+        return self.reactor.calls + self.sender.calls
+
+    def clear(self): self.reactor.calls.clear(), self.sender.calls.clear()
 
     def states(self): return dict(self.spool.db.execute("SELECT provider_id,state FROM ack").fetchall())
 
+    def probe_again(self): self.f.probe_cache = None
+
 
 class WhoGetsAnAck(AckCase):
-    def test_owner_message_gets_one_eyes_before_the_receiver_is_involved(self):
+    def test_owner_message_gets_one_tapback_before_the_receiver_is_involved_and_no_text(self):
         self.enqueue("m1")
         self.f.ack()
-        self.assertEqual(self.sender.calls, [(OWNER_CHAT, EYES, ())])
-        self.assertEqual((self.posts, self.states()), ([], {"m1": "sent"}))  # nothing posted to the receiver yet
+        self.assertEqual(self.taps(), [(OWNER_CHAT, "m1", "like")])  # the default reaction: thumbs up, on that message
+        self.assertEqual((self.sender.calls, self.posts, self.states()), ([], [], {"m1": "sent"}))  # no text; nothing posted to the receiver yet
         self.f.ack()
         self.f.deliver()
         self.f.ack()
-        self.assertEqual((len(self.eyes()), len(self.posts)), (1, 1))
+        self.assertEqual((len(self.taps()), len(self.posts), self.sender.calls), (1, 1, []))
 
     def test_stranger_sender_in_the_owner_chat_gets_no_ack_but_is_still_forwarded_as_before(self):
         self.enqueue("s", handle={"address": STRANGER})
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {}))
+        self.assertEqual((self.out(), self.states()), ([], {}))
         self.f.deliver()
         self.assertEqual([e["body"]["sender"] for e in self.posts], [STRANGER])  # the host, not the Mac, rules on strangers
 
     def test_other_chat_group_unknown_sender_echo_edit_and_reaction_get_no_ack(self):
         self.enqueue("other", chats=[{"guid": "iMessage;-;stranger@example.invalid"}])
         self.enqueue("group", chats=[{"guid": "iMessage;+;group"}])
-        self.enqueue("echo", isFromMe=True)  # Hass's own message, including its own 👀
+        self.enqueue("echo", isFromMe=True)  # Hass's own message
         self.enqueue("nohandle", handle=None)
         self.enqueue("react", associatedMessageType="love")
         self.enqueue("lookalike", handle={"address": "owner@example.invalid.evil"})
         edit = self.message("edit", dateEdited=int(self.now * 1000))
         self.spool.accept({"type": "updated-message", "data": edit}, OWNER_CHAT, self.now)
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {}))
+        self.assertEqual((self.out(), self.states()), ([], {}))
 
     def test_sender_spelling_is_compared_like_the_host_does(self):
         self.enqueue("case", handle={"address": "Owner@Example.INVALID"})
         self.f.ack()
-        self.assertEqual(len(self.eyes()), 1)
+        self.assertEqual(len(self.taps()), 1)
 
     def test_attachment_only_owner_message_is_acked_too(self):
         self.enqueue("pic", text="\ufffc", attachments=[{"guid": "a1"}])
         self.f.ack()
-        self.assertEqual(len(self.eyes()), 1)
+        self.assertEqual(self.taps(), [(OWNER_CHAT, "pic", "like")])
 
     def test_a_message_found_late_by_catch_up_is_stored_but_never_acked(self):
         self.now += 600
@@ -90,13 +122,13 @@ class WhoGetsAnAck(AckCase):
         self.spool.doorbell({"type": "new-message", "data": {"guid": "late"}}, self.now)
         self.f.fetch()
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.pending()), ([], 1))
+        self.assertEqual((self.out(), self.pending()), ([], 1))
 
     def test_an_ack_that_waited_too_long_is_dropped_not_sent_late(self):
         self.enqueue("m1")
         self.now += fwd.ACK_STALE + 1
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "stale"}))
+        self.assertEqual((self.out(), self.states()), ([], {"m1": "stale"}))
 
 
 class OneAckPerMessage(AckCase):
@@ -112,32 +144,49 @@ class OneAckPerMessage(AckCase):
         self.f.ack()
         reopened = fwd.Spool(self.root, self.now)
         self.addCleanup(reopened.db.close)
-        restarted = fwd.Forwarder(self.cfg, reopened, lambda: self.now, self.transport, self.sender)
+        restarted = self.restart(reopened)
         self.spool.accept({"type": "new-message", "data": self.messages["m1"]}, OWNER_CHAT, self.now)
         reopened.accept({"type": "new-message", "data": self.messages["m1"]}, OWNER_CHAT, self.now)
         restarted.ack()
-        self.assertEqual((len(self.eyes()), self.spool.db.execute("SELECT COUNT(*) FROM ack").fetchone()[0]), (1, 1))
+        self.assertEqual((len(self.taps()), self.spool.db.execute("SELECT COUNT(*) FROM ack").fetchone()[0], self.sender.calls), (1, 1, []))
+
+    def test_the_sent_mark_survives_a_restart_the_same_message_is_never_tapped_again(self):
+        self.enqueue("m1")
+        self.f.ack()
+        self.assertEqual(self.states(), {"m1": "sent"})
+        self.spool.db.close()                      # the process ends ...
+        reopened = fwd.Spool(self.root, self.now)  # ... and a new one opens the same file
+        self.addCleanup(reopened.db.close)
+        restarted = self.restart(reopened)
+        for _ in range(2):                         # the webhook, the catch-up poll and the spool all hand it over again
+            reopened.doorbell({"type": "new-message", "data": {"guid": "m1"}}, self.now)
+            restarted.fetch()
+            self.query = [self.messages["m1"]]
+            restarted.catch_up()
+            restarted.ack()
+        self.assertEqual(self.taps(), [(OWNER_CHAT, "m1", "like")])
+        self.assertEqual(dict(reopened.db.execute("SELECT provider_id,state FROM ack").fetchall()), {"m1": "sent"})
 
     def test_a_crash_between_claim_and_send_never_sends_the_ack_again(self):
         self.enqueue("m1")
         self.spool.db.execute("UPDATE ack SET state='sending'")  # the process died inside the send
         self.f.ack()
-        self.assertEqual(self.sender.calls, [])
+        self.assertEqual(self.out(), [])
 
     def test_a_pending_ack_survives_a_restart_and_is_sent_once(self):
         self.enqueue("m1")
         reopened = fwd.Spool(self.root, self.now)
         self.addCleanup(reopened.db.close)
-        restarted = fwd.Forwarder(self.cfg, reopened, lambda: self.now, self.transport, self.sender)
+        restarted = self.restart(reopened)
         restarted.ack()
         restarted.ack()
-        self.assertEqual(len(self.eyes()), 1)
+        self.assertEqual(len(self.taps()), 1)
 
     def test_two_messages_two_acks(self):
         self.enqueue("a")
         self.enqueue("b")
         self.f.ack()
-        self.assertEqual(len(self.eyes()), 2)
+        self.assertEqual(self.taps(), [(OWNER_CHAT, "a", "like"), (OWNER_CHAT, "b", "like")])
 
 
 class NotWhenPausedOrUnknown(AckCase):
@@ -145,10 +194,10 @@ class NotWhenPausedOrUnknown(AckCase):
         self.host_ok(None)
         self.enqueue("m1")
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "unknown"}))
+        self.assertEqual((self.out(), self.states()), ([], {"m1": "unknown"}))
         self.host_ok(False)  # the host is back a moment later: still not sent (fail closed, not late)
         self.f.ack()
-        self.assertEqual(self.sender.calls, [])
+        self.assertEqual(self.out(), [])
 
     def test_the_host_is_asked_fresh_for_every_ack_nothing_is_cached(self):
         self.enqueue("a")
@@ -159,26 +208,26 @@ class NotWhenPausedOrUnknown(AckCase):
         self.host_ok(False)
         self.enqueue("c")
         self.f.ack()
-        self.assertEqual((self.state_asked, len(self.eyes()), self.states()), (3, 2, {"a": "sent", "b": "paused", "c": "sent"}))
+        self.assertEqual((self.state_asked, len(self.taps()), self.states()), (3, 2, {"a": "sent", "b": "paused", "c": "sent"}))
 
     def test_paused_host_means_no_ack_at_all(self):
         self.host_ok(paused=True)
         self.enqueue("m1")
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "paused"}))
+        self.assertEqual((self.out(), self.states()), ([], {"m1": "paused"}))
         self.host_ok(paused=False)
         self.f.ack()
-        self.assertEqual(self.sender.calls, [])  # the closed row is not reopened
+        self.assertEqual(self.out(), [])  # the closed row is not reopened
 
     def test_a_pause_command_stored_here_and_not_yet_handed_to_the_host_blocks_it_and_everything_after_it(self):
         asked = self.state_asked
         for text in ("stop changes", "pause", "Pause changes.", "stop", "STOP!"):
             with self.subTest(text=text):
-                self.sender.calls.clear()
+                self.clear()
                 self.enqueue("c" + text[:3], text=text)
                 self.enqueue("after" + text[:3])
                 self.f.ack()
-                self.assertEqual(self.sender.calls, [])
+                self.assertEqual(self.out(), [])
                 self.spool.db.execute("UPDATE inbound SET state='done',payload=NULL")  # handed to the host; the host's queue takes over
         self.assertEqual(self.state_asked, asked)  # all ten are stopped here, before the host is even asked
 
@@ -187,7 +236,7 @@ class NotWhenPausedOrUnknown(AckCase):
         self.spool.db.execute("UPDATE inbound SET payload='not json' WHERE provider_id='a'")
         self.enqueue("b")
         self.f.ack()
-        self.assertEqual(self.sender.calls, [])
+        self.assertEqual(self.out(), [])
 
     def test_an_earlier_unresolved_doorbell_holds_the_ack_but_not_a_later_one(self):
         def accept(guid):
@@ -195,26 +244,26 @@ class NotWhenPausedOrUnknown(AckCase):
         accept("m1")
         self.spool.doorbell({"type": "new-message", "data": {"guid": "earlier"}}, self.now - 1)  # its fetch keeps failing: content unknown
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "paused"}))
+        self.assertEqual((self.out(), self.states()), ([], {"m1": "paused"}))
         self.spool.db.execute("DELETE FROM fetch")
         accept("m2")
         self.spool.doorbell({"type": "new-message", "data": {"guid": "later"}}, self.now + 5)
         self.f.ack()
-        self.assertEqual(len(self.eyes()), 1)
+        self.assertEqual(len(self.taps()), 1)
 
     def test_a_status_or_free_text_message_does_not_hold_the_ack(self):
         for text in ("status", "resume changes", "Stop showing the eggs as sold out"):
             with self.subTest(text=text):
-                self.sender.calls.clear()
+                self.clear()
                 self.enqueue("m" + str(len(text)), text=text)
                 self.f.ack()
-                self.assertEqual(len(self.eyes()), 1)
+                self.assertEqual(len(self.taps()), 1)
 
     def test_switched_off_by_config(self):
         self.f.cfg = {**self.cfg, "ack": False}
         self.enqueue("m1")
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states(), self.pending(), self.state_asked), ([], {"m1": "off"}, 1, 0))
+        self.assertEqual((self.out(), self.states(), self.pending(), self.state_asked, self.info_asked), ([], {"m1": "off"}, 1, 0, 0))
 
     def test_host_paused_reads_the_answer_and_every_failure_is_unknown(self):
         self.assertIs(self.f.host_paused(self.spool), False)
@@ -233,24 +282,90 @@ class NotWhenPausedOrUnknown(AckCase):
         self.f.transport = self.f.quick = old_host
         self.enqueue("m1")
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "unknown"}))
+        self.assertEqual((self.out(), self.states()), ([], {"m1": "unknown"}))
 
 
-class AckNeverBlocks(AckCase):
-    def test_send_failure_is_recorded_not_retried_and_the_message_still_goes_through(self):
+class NeverAText(AckCase):
+    """G, 2026-11-08: "mark my message, not send me a message". Whatever goes wrong, the ack is a tapback or nothing."""
+
+    def test_private_api_off_means_no_react_call_and_no_text(self):
+        self.info = {"private_api": False, "helper_connected": False, "server_version": "1.9.9"}
         self.enqueue("m1")
-        self.sender.fail = True
-        self.f.ack()                       # does not raise
-        self.sender.fail = False
+        with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()
+        self.assertEqual((self.out(), self.states()), ([], {"m1": "private_api_off"}))
+        self.assertIn("ack_skipped reason=private_api_off", err.getvalue())
+        self.f.deliver()
+        self.assertEqual(len(self.posts), 1)           # the message itself still goes through
+
+    def test_helper_not_connected_means_no_react_call_and_no_text(self):
+        self.info = {"private_api": True, "helper_connected": False}
+        self.enqueue("m1")
+        with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()
+        self.assertEqual((self.out(), self.states()), ([], {"m1": "helper_disconnected"}))
+        self.assertIn("ack_skipped reason=helper_disconnected", err.getvalue())
+
+    def test_a_probe_that_cannot_answer_or_answers_oddly_is_not_on(self):
+        for n, info in enumerate((None, {}, {"private_api": "true", "helper_connected": True}, {"private_api": 1, "helper_connected": 1}, [])):
+            with self.subTest(info=info):
+                self.info = info
+                self.probe_again()
+                self.enqueue(f"u{n}")
+                with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()
+                self.assertEqual(self.out(), [])
+                self.assertEqual(self.states()[f"u{n}"], "private_api_unknown")
+                self.assertIn("ack_skipped reason=private_api_unknown", err.getvalue())
+
+    def test_the_probe_is_shared_by_a_burst_and_asked_again_after_its_ttl(self):
+        for name in "abc": self.enqueue(name)
+        self.f.ack()
+        self.assertEqual((len(self.taps()), self.info_asked), (3, 1))
+        self.now += fwd.PROBE_TTL + 1
+        self.enqueue("d")
+        self.f.ack()
+        self.assertEqual((len(self.taps()), self.info_asked), (4, 2))
+
+    def test_private_api_switched_on_later_is_noticed_and_off_later_is_noticed(self):
+        self.info = {"private_api": False, "helper_connected": False}
+        self.enqueue("a")
+        with contextlib.redirect_stderr(io.StringIO()): self.f.ack()
+        self.info = dict(INFO_ON)
+        self.now += fwd.PROBE_TTL + 1
+        self.enqueue("b")
+        self.f.ack()
+        self.info = {"private_api": False, "helper_connected": False}
+        self.now += fwd.PROBE_TTL + 1
+        self.enqueue("c")
+        with contextlib.redirect_stderr(io.StringIO()): self.f.ack()
+        self.assertEqual((self.taps(), self.sender.calls, self.states()), ([(OWNER_CHAT, "b", "like")], [], {"a": "private_api_off", "b": "sent", "c": "private_api_off"}))
+
+    def test_a_react_failure_sends_nothing_else_logs_a_reason_and_never_retries(self):
+        self.enqueue("m1")
+        self.reactor.fail = bridge.BridgeError("http-error", 500)
+        with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()           # does not raise
+        self.reactor.fail = None
         self.f.ack()
         self.f.deliver()
-        self.assertEqual((self.states(), self.sender.calls, len(self.posts)), ({"m1": "failed"}, [], 1))
+        self.assertEqual((self.states(), self.out(), len(self.posts)), ({"m1": "react_failed"}, [], 1))
+        self.assertIn("ack_skipped reason=react_failed", err.getvalue())
+        self.assertNotIn("m1", err.getvalue())         # a reason code only
 
-    def test_any_error_type_from_the_sender_is_swallowed(self):
+    def test_any_error_type_from_the_reactor_is_swallowed_and_is_never_a_text(self):
         self.enqueue("m1")
-        self.sender.send = mock.Mock(side_effect=RuntimeError("boom"))
-        self.f.ack()
-        self.assertEqual(self.states(), {"m1": "failed"})
+        self.reactor.react = mock.Mock(side_effect=RuntimeError("boom"))
+        with contextlib.redirect_stderr(io.StringIO()): self.f.ack()
+        self.assertEqual((self.states(), self.sender.calls), ({"m1": "react_failed"}, []))
+
+    def test_a_react_failure_does_not_block_or_delay_the_real_delivery(self):
+        self.reactor.fail = bridge.BridgeError("transport-error")
+        self.message("m1")
+        self.spool.doorbell({"type": "new-message", "data": {"guid": "m1"}}, self.now)
+        with mock.patch.object(self.f, "control", side_effect=lambda body, expected, big=False, **kw: (
+                {"op": "state", "paused": False} if body["op"] == "state" else {"op": "replies", "items": []})):
+            with contextlib.redirect_stderr(io.StringIO()): self.f.cycle()
+        self.assertEqual((len(self.posts), self.sender.calls, self.states()), (1, [], {"m1": "react_failed"}))
+        self.items = [{"id": 7, "chat": OWNER_CHAT, "text": "the real reply", "pictures": 0}]
+        self.f.pull()
+        self.assertEqual((self.sender.calls, self.acks), ([(OWNER_CHAT, "the real reply", ())], [7]))  # the only text ever sent is the reply
 
     def test_a_broken_ack_table_never_loses_the_message(self):
         self.spool.db.execute("DROP TABLE ack")
@@ -258,18 +373,136 @@ class AckNeverBlocks(AckCase):
         with contextlib.redirect_stderr(io.StringIO()):
             self.f.ack()
             self.f.deliver()
-        self.assertEqual(len(self.posts), 1)
+        self.assertEqual((len(self.posts), self.out()), (1, []))
 
-    def test_the_default_ack_sender_clamps_the_blocking_time(self):
+    def test_a_missing_or_malformed_message_guid_means_no_call(self):
+        bad = ["", " ", "has space", "new\nline", "a" * 129, "../etc/passwd", "p:0/ABC", "x;y", "-leading-dash", "q?x=1", "tab\tx", "ünï", None, 7, b"x"]
+        for n, guid in enumerate(bad):
+            with self.subTest(guid=guid):
+                if isinstance(guid, str): self.assertFalse(fwd.valid_guid(guid))
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.f._ack_row(self.spool, guid, self.now)
+                self.assertEqual(self.out(), [])
+                self.assertIn("ack_skipped reason=bad_guid", err.getvalue())
+        self.assertFalse(fwd.valid_guid("\ud800"))     # a lone surrogate (the spool cannot even store one)
+        self.assertEqual(self.info_asked, 0)           # not even the probe: nothing about a bad guid leaves the Mac
+        for guid in ("m1", "9F3A6B1C-1234-4DEF-8ABC-0123456789AB", "A" * 128): self.assertTrue(fwd.valid_guid(guid), guid)
+
+    def test_a_message_whose_guid_is_malformed_is_still_delivered_but_gets_no_tapback(self):
+        self.enqueue("bad.guid")
+        with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()
+        self.f.deliver()
+        self.assertEqual((self.out(), self.states(), len(self.posts), self.info_asked), ([], {"bad.guid": "bad_guid"}, 1, 0))
+        self.assertIn("ack_skipped reason=bad_guid", err.getvalue())
+
+    def test_the_reactor_refuses_bad_arguments_before_any_network_call(self):
+        calls = []
+        r = fwd.BlueBubblesReactor("http://127.0.0.1:1234", self.root / "password", transport=lambda *a: calls.append(a) or 200)
+        for chat, guid, reaction in ((OWNER_CHAT, "", "like"), (OWNER_CHAT, "bad guid", "like"), (OWNER_CHAT, "m1", "-like"), (OWNER_CHAT, "m1", "eyes"),
+                                     (OWNER_CHAT, "m1", "\N{EYES}"), (OWNER_CHAT, "m1", ""), (OWNER_CHAT, "m1", None), ("", "m1", "like"), (None, "m1", "like")):
+            with self.subTest(guid=guid, reaction=reaction), self.assertRaises(ValueError): r.react(chat, guid, reaction)
+        self.assertEqual(calls, [])
+
+    def test_there_is_no_text_ack_left_in_the_code(self):
+        self.assertFalse(hasattr(fwd, "ACK_TEXT"))
+        self.assertNotIn("acker", fwd.Forwarder.__init__.__code__.co_varnames)
+        self.assertFalse(any(hasattr(fwd.BlueBubblesReactor, name) for name in ("send", "send_text", "send_png")))
+        source = Path(fwd.__file__).read_text()
+        self.assertEqual([i for i, line in enumerate(source.splitlines()) if "message/text" in line], [])  # the forwarder itself never names the text endpoint
+        self.assertNotIn("\N{EYES}", source.split("# HASS-TAPBACK-1", 1)[1].split("\n\n", 1)[1])         # no 👀 constant below the explanatory comment
+
+
+class WireShape(AckCase):
+    """The real reactor and the real probe path against a synthetic BlueBubbles transport: the exact calls."""
+
+    def setUp(self):
+        super().setUp()
+        self.wire = []
+
+        def post(url, body, headers, timeout):
+            self.wire.append(("POST", url, json.loads(body), headers, timeout))
+            return 200
+        self.f.reactor = fwd.BlueBubblesReactor("http://127.0.0.1:1234", self.root / "password", transport=post)
+
+    def test_one_post_to_the_react_endpoint_with_the_four_documented_fields_and_nothing_else(self):
+        self.enqueue("9F3A6B1C-1234-4DEF-8ABC-0123456789AB")
+        self.f.ack()
+        (verb, url, body, headers, timeout), = self.wire
+        self.assertEqual(verb, "POST")
+        self.assertEqual(url, "http://127.0.0.1:1234/api/v1/message/react?password=synthetic-not-a-real-password")
+        self.assertEqual(body, {"chatGuid": OWNER_CHAT, "selectedMessageGuid": "9F3A6B1C-1234-4DEF-8ABC-0123456789AB", "reaction": "like", "partIndex": 0})
+        self.assertEqual((headers, timeout), ({"Content-Type": "application/json"}, fwd.ACK_TIMEOUT))
+        self.assertEqual([p for p, _ in self.calls if p.startswith("/api/v1/") and "message/text" in p], [])
+        self.assertEqual(self.sender.calls, [])
+
+    def test_a_non_2xx_answer_or_a_transport_error_is_a_failed_react_not_a_text(self):
+        for status in (400, 401, 404, 500, 302, None, "200"):
+            with self.subTest(status=status):
+                self.wire.clear()
+                self.f.reactor.transport = lambda *a, status=status: status
+                self.enqueue(f"f{status}")
+                with contextlib.redirect_stderr(io.StringIO()): self.f.ack()
+                self.assertEqual((self.states()[f"f{status}"], self.sender.calls), ("react_failed", []))
+
+        def boom(*a): raise OSError("http://127.0.0.1:1234/api/v1/message/react?password=synthetic-not-a-real-password")
+        self.f.reactor.transport = boom
+        self.enqueue("boom")
+        with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()
+        self.assertEqual(self.states()["boom"], "react_failed")
+        self.assertNotIn("synthetic-not-a-real-password", err.getvalue())
+        with self.assertRaises(bridge.BridgeError) as cm: self.f.reactor.react(OWNER_CHAT, "m1", "like")
+        self.assertNotIn("synthetic", repr(cm.exception.args))
+        self.assertIsNone(cm.exception.__cause__)
+
+    def test_an_unreadable_password_file_is_a_failed_react_not_a_call(self):
+        self.f.reactor.password_file = self.root / "missing"
+        self.enqueue("m1")
+        with contextlib.redirect_stderr(io.StringIO()): self.f.ack()
+        self.assertEqual((self.wire, self.states(), self.sender.calls), ([], {"m1": "react_failed"}, []))
+
+    def test_the_configured_reaction_is_what_goes_on_the_wire(self):
+        self.f.cfg = {**self.cfg, "ack_reaction": "love"}
+        self.enqueue("m1")
+        self.f.ack()
+        self.assertEqual(self.wire[0][2]["reaction"], "love")
+
+    def test_the_default_reactor_has_a_short_clamp_and_the_probe_a_short_timeout(self):
         seen = []
         with mock.patch.object(bridge, "_urllib_transport", side_effect=lambda u, b, h, t: seen.append(t) or 200):
-            f = fwd.Forwarder(self.cfg, self.spool, lambda: self.now, self.transport)
-            f.acker.send(OWNER_CHAT, EYES)
-            f.sender.send(OWNER_CHAT, "reply")
-        self.assertEqual(seen, [fwd.ACK_TIMEOUT, bridge.SEND_TIMEOUT])
+            f = fwd.Forwarder(self.cfg, self.spool, lambda: self.now, self.transport, self.sender)
+            f.reactor.react(OWNER_CHAT, "m1", "like")
+        self.assertEqual(seen, [fwd.ACK_TIMEOUT])
+        opened = []
 
-    def test_the_ack_text_is_exactly_one_eyes_emoji(self):
-        self.assertEqual((fwd.ACK_TEXT, len(fwd.ACK_TEXT)), (EYES, 1))
+        class Opener:
+            def open(self, req, timeout=None):
+                opened.append((req.get_method(), req.data, timeout))
+                raise OSError("down")
+        with mock.patch.object(bridge, "_OPENER", Opener()):
+            f = fwd.Forwarder(self.cfg, self.spool, lambda: self.now, fwd.request_json, self.sender)
+            self.assertEqual(f.tapback_blocker(), "private_api_unknown")
+        self.assertEqual(opened, [("GET", None, fwd.ACK_STATE_TIMEOUT)])
+
+
+class AllowlistedReaction(AckCase):
+    def test_every_standard_tapback_is_allowed_and_only_those(self):
+        self.assertEqual(set(fwd.TAPBACKS), {"love", "like", "dislike", "laugh", "emphasize", "question"})
+        self.assertEqual(fwd.ACK_REACTION, "like")
+        for n, name in enumerate(fwd.TAPBACKS):
+            with self.subTest(name=name):
+                self.f.cfg = {**self.cfg, "ack_reaction": name}
+                self.enqueue(f"r{n}")
+                self.f.ack()
+        self.assertEqual([t[2] for t in self.taps()], list(fwd.TAPBACKS))
+
+    def test_a_reaction_outside_the_allowlist_sends_nothing_even_if_it_got_past_the_config_check(self):
+        for n, bad in enumerate(("-like", "eyes", "\N{EYES}", "LIKE", "", " like", None, 1, ["like"])):
+            with self.subTest(bad=bad):
+                self.f.cfg = {**self.cfg, "ack_reaction": bad}
+                self.enqueue(f"b{n}")
+                with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()
+                self.assertIn("reason=bad_reaction", err.getvalue())
+        self.assertEqual((self.out(), set(self.states().values())), ([], {"bad_reaction"}))
 
 
 class CycleOrderAndPolling(AckCase):
@@ -283,6 +516,8 @@ class CycleOrderAndPolling(AckCase):
             if url.endswith("/v1/inbound"): self.order.append("post")
             return orig(url, body)
         self.f.transport = transport
+        plain = self.reactor.react
+        self.reactor.react = lambda chat, guid, reaction: (self.order.append("ack"), plain(chat, guid, reaction))[1]
 
     def test_one_cycle_fetches_acks_then_posts_in_that_order_without_a_thread(self):
         self.message("m1")
@@ -342,9 +577,16 @@ class ConfigAndCheck(ft.ForwarderCase):
                 self.load(ack=bad)
         with self.assertRaises(ValueError): self.load(other=1)
 
-    def test_ackcheck_is_read_only_and_always_names_text(self):
+    def test_ack_reaction_key_is_optional_and_checked_against_the_allowlist(self):
+        self.assertNotIn("ack_reaction", self.load())            # absent: the code default 'like' applies
+        for name in fwd.TAPBACKS: self.assertEqual(self.load(ack_reaction=name)["ack_reaction"], name)
+        for bad in ("-like", "eyes", "\N{EYES}", "Like", "", "like ", None, 0, True, ["like"], {"like": 1}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.load(ack_reaction=bad)
+
+    def test_ackcheck_is_read_only_and_names_the_tapback_and_the_server_version(self):
         for info, possible in (({"private_api": False, "helper_connected": False}, False), ({"private_api": True, "helper_connected": False}, False),
-                               ({"private_api": True, "helper_connected": True}, True), ({}, False)):
+                               ({"private_api": True, "helper_connected": True, "server_version": "1.9.9"}, True), ({}, False)):
             with self.subTest(info=info), mock.patch.object(fwd, "request_json", return_value={"data": info}) as rj, \
                     contextlib.redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(fwd.main(["ackcheck", "--config", str(self.config)]), 0)
@@ -352,8 +594,17 @@ class ConfigAndCheck(ft.ForwarderCase):
             self.assertTrue(url.startswith("http://127.0.0.1:1234/api/v1/server/info?password="))
             self.assertEqual(kwargs, {})  # a GET: no body
             self.assertEqual(json.loads(out.getvalue()),
-                             {"ackMethod": "text", "helperConnected": bool(info.get("helper_connected")),
-                              "privateApi": bool(info.get("private_api")), "tapbackPossible": possible})
+                             {"ackMethod": "tapback", "ackReaction": "like", "helperConnected": bool(info.get("helper_connected")),
+                              "privateApi": bool(info.get("private_api")), "serverVersion": info.get("server_version"),
+                              "supportedReactions": list(fwd.TAPBACKS), "tapbackPossible": possible})
+            self.assertNotIn("synthetic-not-a-real-password", out.getvalue())
+
+    def test_ackcheck_shows_the_configured_reaction_and_ignores_an_odd_version_string(self):
+        self.load(ack_reaction="laugh")
+        with mock.patch.object(fwd, "request_json", return_value={"data": {"private_api": True, "helper_connected": True, "server_version": "x y\n"}}), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(fwd.main(["ackcheck", "--config", str(self.config)]), 0)
+        self.assertEqual((json.loads(out.getvalue())["ackReaction"], json.loads(out.getvalue())["serverVersion"]), ("laugh", None))
 
     def test_ackcheck_failure_prints_the_fixed_error_only(self):
         with mock.patch.object(fwd, "request_json", side_effect=bridge.BridgeError("transport-error")), \
@@ -449,11 +700,13 @@ class EndToEnd(host_tests.HostCase):
                         secretFile=str(self.root / "key"), webhookTokenFile=str(self.root / "token"), spoolDir=str(self.root), webhookPort=0)
         self.spool = fwd.Spool(self.root, self.t())
         self.addCleanup(self.spool.db.close)
-        self.sent, self.messages = [], {}
+        self.sent, self.messages, self.tapped = [], {}, []  # texts the Mac sent; tapbacks the Mac reacted with
         sender = mock.Mock()
         sender.send.side_effect = lambda chat, text, att=(): self.sent.append(text)
+        reactor = mock.Mock()
+        reactor.react.side_effect = lambda chat, guid, reaction: self.tapped.append((chat, guid, reaction))
         self.log = stagelog.StageLog(self.root / "stages.jsonl", clock=self.t)
-        self.f = fwd.Forwarder(self.cfg, self.spool, self.t, self.transport, sender, stage=self.log)
+        self.f = fwd.Forwarder(self.cfg, self.spool, self.t, self.transport, sender, stage=self.log, reactor=reactor)
         self.work.stage = self.log
         self.srv.receiver.stage = self.log
 
@@ -470,6 +723,7 @@ class EndToEnd(host_tests.HostCase):
             thread.join()
             if "e" in box: raise box["e"]
             return box["r"]
+        if "/api/v1/server/info" in url: return {"data": dict(INFO_ON)}
         return {"data": self.messages[url.split("/api/v1/message/")[1].split("?")[0]]}
 
     def owner_text(self, guid, text, sender=OWNER):
@@ -489,16 +743,15 @@ class EndToEnd(host_tests.HostCase):
         self.assertIs(self.f.host_paused(self.spool), False)
         self.owner_text("m1", "hours")
         self.f.ack()
-        self.assertEqual((self.sent, self.relay_rows()), ([EYES], []))  # 👀 out; the receiver has seen nothing yet
+        self.assertEqual((self.sent, self.tapped, self.relay_rows()), ([], [(OWNER_CHAT, "m1", "like")], []))  # tapback out, never a text; the receiver has seen nothing yet
         self.f.deliver()
         self.assertEqual(len(self.inbound_rows()), 1)
         self.now += timedelta(seconds=1)
         self.work.cycle()
         self.f.pull()
-        self.assertEqual(self.sent[0], EYES)
-        self.assertEqual(len(self.sent), 2)
+        self.assertEqual(len(self.sent), 1)  # the reply is the only text; the tapback was not one
         self.assertEqual(len(self.drafts()), 1)  # the normal draft path is unchanged
-        self.assertEqual(self.f.pull() or len(self.sent), 2)  # nothing more to send, no second 👀
+        self.assertEqual((self.f.pull() or len(self.sent), len(self.tapped)), (1, 1))  # nothing more to send, no second tapback, no text
         rows = stagelog.table(stagelog.read(self.root / "stages.jsonl"))
         stages = [set(s) for _, s in rows]
         self.assertEqual(len(rows), 1)
@@ -516,16 +769,16 @@ class EndToEnd(host_tests.HostCase):
     def test_pause_stops_the_eyes_and_resume_brings_them_back_and_a_replay_adds_none(self):
         self.owner_text("a", "status")
         self.go()
-        self.assertEqual(self.sent.count(EYES), 1)
+        self.assertEqual(len(self.tapped), 1)
         self.now += timedelta(seconds=1)
         self.owner_text("p", "stop changes")
         self.go()                                   # the pause command is read by the host in this step; it gets no 👀 itself
-        self.assertEqual(self.sent.count(EYES), 1)
+        self.assertEqual(len(self.tapped), 1)
         self.assertTrue(host.paused_flag(self.repo.state))
-        before = self.sent.count(EYES)
+        before = len(self.tapped)
         self.owner_text("b", "status")
         self.go()
-        self.assertEqual(self.sent.count(EYES), before)  # paused: seen by nobody, still answered
+        self.assertEqual(len(self.tapped), before)  # paused: seen by nobody, still answered
         self.assertTrue(any("paused" in s.lower() for s in self.sent))
         self.owner_text("r", "resume changes")
         self.go()
@@ -533,23 +786,23 @@ class EndToEnd(host_tests.HostCase):
         self.now += timedelta(seconds=1)
         self.owner_text("c", "status")
         self.go()
-        self.assertEqual(self.sent.count(EYES), before + 1)
+        self.assertEqual(len(self.tapped), before + 1)
         self.owner_text("c", "status")              # the same message again (webhook, catch-up, replay)
         self.go()
-        self.assertEqual(self.sent.count(EYES), before + 1)
+        self.assertEqual(len(self.tapped), before + 1)
 
     def test_pause_set_on_the_host_between_two_polls_stops_the_next_eyes_at_once(self):
         """The reviewer's case: the last answer was 'not paused', then the pause lands on the real host store, then a fresh owner
         message is accepted before anything else polls. No cached answer exists, so the host is asked again and says paused."""
         self.owner_text("a", "status")
         self.f.ack()
-        self.assertEqual(self.sent, [EYES])
+        self.assertEqual((self.sent, len(self.tapped)), ([], 1))
         self.conv.db.execute(conv_control())
         self.conv.db.execute("INSERT INTO control(name,value,set_at,provider_id) VALUES ('paused','1','2026-11-02T17:00:00+00:00','synthetic')")
         self.assertTrue(host.paused_flag(self.repo.state))
         self.owner_text("after-pause", "status")
         self.f.ack()
-        self.assertEqual(self.sent, [EYES])
+        self.assertEqual((self.sent, len(self.tapped)), ([], 1))
         self.assertEqual(dict(self.spool.db.execute("SELECT provider_id,state FROM ack").fetchall()), {"a": "sent", "after-pause": "paused"})
 
     def test_a_pause_command_queued_at_the_host_behind_a_slow_interpretation_stops_the_eyes_before_it_is_read(self):
@@ -565,7 +818,7 @@ class EndToEnd(host_tests.HostCase):
         self.assertTrue(host.paused_flag(self.repo.state))
         self.owner_text("next", "status")
         self.f.ack()                                # the spool no longer holds the pause command (it is done); only the host knows
-        self.assertEqual(self.sent, [EYES])        # only the 'slow' one, sent before the pause command existed
+        self.assertEqual((self.sent, [t[1] for t in self.tapped]), ([], ["slow"]))  # only the 'slow' one, tapped before the pause command existed
         self.assertEqual(self.spool.db.execute("SELECT state FROM ack WHERE provider_id='next'").fetchone()[0], "paused")
 
     def test_a_failed_state_question_means_no_eyes_even_after_an_unpaused_answer(self):
@@ -574,7 +827,7 @@ class EndToEnd(host_tests.HostCase):
         self.owner_text("b", "status")
         with mock.patch.object(self.f, "quick", side_effect=bridge.BridgeError("transport-error")):
             self.f.ack()
-        self.assertEqual(self.sent, [EYES])
+        self.assertEqual((self.sent, len(self.tapped)), ([], 1))
         self.assertEqual(self.spool.db.execute("SELECT state FROM ack WHERE provider_id='b'").fetchone()[0], "unknown")
 
     def test_the_hosts_own_replies_never_cause_an_ack(self):
@@ -586,7 +839,7 @@ class EndToEnd(host_tests.HostCase):
         self.spool.doorbell({"type": "new-message", "data": {"guid": "echo1"}}, self.t())
         self.f.fetch()
         self.go()
-        self.assertEqual(self.sent.count(EYES), 1)
+        self.assertEqual(len(self.tapped), 1)
 
     # -- HASS-FAST-1-FIX item 2: the worker moves a pause from the inbox queue into the control flag while the host reads --
     def _requeue_pause(self, guid):
@@ -654,7 +907,7 @@ class EndToEnd(host_tests.HostCase):
         ctx, fired = self._after_step(k, lambda: self._worker_moves_the_pause([]))
         with ctx: self.f.ack()
         self.assertEqual(fired, [k])
-        self.assertEqual((self.sent, self.spool.db.execute("SELECT state FROM ack WHERE provider_id='next'").fetchone()[0]), ([], "paused"))
+        self.assertEqual((self.sent, self.tapped, self.spool.db.execute("SELECT state FROM ack WHERE provider_id='next'").fetchone()[0]), ([], [], "paused"))
         self.work.cycle()
         self.assertTrue(host.paused_flag(self.repo.state))
 
@@ -754,11 +1007,11 @@ class ThreadedAck(AckCase):
     def test_a_slow_failing_ack_send_does_not_delay_the_post_to_the_receiver(self):
         sends = []
 
-        def slow(chat, text, attachments=()):
+        def slow(chat, guid, reaction):
             sends.append(time.monotonic())
             time.sleep(1.2)
             raise bridge.BridgeError("transport-error")
-        self.sender.send = slow
+        self.reactor.react = slow
         self.start()
         self.message("m1")
         self.spool.doorbell({"type": "new-message", "data": {"guid": "m1"}}, self.now)
@@ -767,7 +1020,7 @@ class ThreadedAck(AckCase):
         elapsed = time.monotonic() - started
         self.assertEqual(len(self.posts), 1)             # delivered while the ack send is still sleeping
         self.assertLess(elapsed, 0.8)
-        self.assertTrue(self.until(lambda: self.states().get("m1") == "failed", 4))  # the failure is recorded, nothing retried
+        self.assertTrue(self.until(lambda: self.states().get("m1") == "react_failed", 4))  # the failure is recorded, nothing retried
         self.assertEqual(len(sends), 1)
 
     def test_a_slow_reply_pull_does_not_delay_the_eyes_after_acceptance(self):
@@ -775,8 +1028,8 @@ class ThreadedAck(AckCase):
         accepted, sent = [], []
         original = self.spool.owner_arrived
         self.spool.owner_arrived = lambda *a: (accepted.append(time.monotonic()), original(*a))[1]
-        plain = self.sender.send
-        self.sender.send = lambda chat, text, attachments=(): (sent.append(time.monotonic()) if text == EYES else None, plain(chat, text, attachments))[1]
+        plain = self.reactor.react
+        self.reactor.react = lambda chat, guid, reaction: (sent.append(time.monotonic()), plain(chat, guid, reaction))[1]
         self.query = [self.message("poll-owner")]
         self.f.pull = lambda: time.sleep(1.5)            # a reply send / picture work that takes a while
         started = time.monotonic()
@@ -792,23 +1045,23 @@ class ThreadedAck(AckCase):
         self.message("m1")
         self.spool.doorbell({"type": "new-message", "data": {"guid": "m1"}}, self.now)   # a webhook announced it; fetch accepts it
         order = []
-        plain = self.sender.send
-        self.sender.send = lambda chat, text, attachments=(): (order.append("ack"), plain(chat, text, attachments))[1]
+        plain = self.reactor.react
+        self.reactor.react = lambda chat, guid, reaction: (order.append("ack"), plain(chat, guid, reaction))[1]
 
         def slow_query():
             time.sleep(0.8)
             order.append("catch-up-done")
         self.f.catch_up = slow_query
         self.f.cycle()
-        self.assertTrue(self.until(lambda: self.eyes()))
+        self.assertTrue(self.until(lambda: self.taps()))
         self.assertEqual(order, ["ack", "catch-up-done"])
 
     def test_the_eyes_go_out_before_the_slow_work_returns(self):
         self.start()
         self.enqueue("m1")
         order = []
-        plain = self.sender.send
-        self.sender.send = lambda chat, text, attachments=(): (order.append("ack"), plain(chat, text, attachments))[1]
+        plain = self.reactor.react
+        self.reactor.react = lambda chat, guid, reaction: (order.append("ack"), plain(chat, guid, reaction))[1]
 
         def slow_pull():
             time.sleep(0.6)
@@ -845,12 +1098,12 @@ class ThreadedAck(AckCase):
         attempts started at 0.13 / 0.92 / 1.71 / 2.49 s and were confirmed at 0.93 / 1.72 / 2.51 / 3.29 s."""
         clock = self.real_clock()
         seen = self.record_stages()
-        plain = self._send
+        plain = self.reactor.react
 
-        def slow(chat, text, attachments=()):
+        def slow(chat, guid, reaction):
             time.sleep(0.8)
-            plain(chat, text, attachments)
-        self.sender.send = slow
+            plain(chat, guid, reaction)
+        self.reactor.react = slow
         self.start()
         self.queue_acks(clock, ["b1", "b2", "b3", "b4"])
         self.f.ack_kick()
@@ -863,19 +1116,19 @@ class ThreadedAck(AckCase):
         self.assertLess(attempts[-1] - attempts[0], 0.8, times)       # ... all four together (one send after another: 0.8 s apart each)
         self.assertGreaterEqual(confirmed[0], 0.8)                     # the sends really took their 0.8 s
         self.assertLess(confirmed[-1], fwd.ACK_BUDGET, times)          # and each confirmation is inside the 2 s budget
-        self.assertEqual(len(self.eyes()), 4)
+        self.assertEqual(len(self.taps()), 4)
 
     def slow_sender(self, seconds):
         """A BlueBubbles stand-in whose send really takes `seconds`; the returned dict holds how many sends overlapped at most."""
-        box, lock, plain = {"now": 0, "peak": 0}, threading.Lock(), self._send
+        box, lock, plain = {"now": 0, "peak": 0}, threading.Lock(), self.reactor.react
 
-        def slow(chat, text, attachments=()):
+        def slow(chat, guid, reaction):
             with lock: box["now"] += 1; box["peak"] = max(box["peak"], box["now"])  # noqa: E702
             try: time.sleep(seconds)
             finally:
                 with lock: box["now"] -= 1
-            plain(chat, text, attachments)
-        self.sender.send = slow
+            plain(chat, guid, reaction)
+        self.reactor.react = slow
         return box
 
     def test_twelve_messages_with_0_4_s_sends_start_side_by_side_not_one_after_another(self):
@@ -892,7 +1145,7 @@ class ThreadedAck(AckCase):
         # side by side the last attempt starts after about 0.4 s (0.41 s here); one after another it would start after 11 x 0.4 = 4.4 s.
         # On a machine under heavy load a slow row may be recorded `late`; the bound leaves room for that and still excludes a queue.
         self.assertLess(max(a for a, _ in times.values()), 2.0, sorted(times.values()))
-        self.assertEqual(len(self.eyes()), 12)
+        self.assertEqual(len(self.taps()), 12)
 
     def test_the_largest_burst_one_catch_up_page_can_accept_is_worked_in_parallel_one_send_each_none_dropped(self):
         """50 at once (the catch-up page size). The sends run side by side (a serial queue never overlaps two), every message is
@@ -905,9 +1158,9 @@ class ThreadedAck(AckCase):
         names = [f"p{i}" for i in range(fwd.CATCH_UP_PAGE)]
         self.queue_acks(clock, names)
         self.f.ack_kick()
-        self.assertTrue(self.until(lambda: len(self.states()) == len(names) and set(self.states().values()) <= {"sent", "late"} and len(self.eyes()) == len(names), 30), set(self.states().values()))
+        self.assertTrue(self.until(lambda: len(self.states()) == len(names) and set(self.states().values()) <= {"sent", "late"} and len(self.taps()) == len(names), 30), set(self.states().values()))
         time.sleep(0.3)
-        self.assertEqual(len(self.eyes()), len(names))   # one each, never two
+        self.assertEqual(len(self.taps()), len(names))   # one each, never two
         self.assertGreaterEqual(box["peak"], 4, box)  # a serial queue peaks at 1
 
     def test_an_ack_whose_budget_has_passed_is_sent_but_recorded_late_not_as_a_success(self):
@@ -915,23 +1168,23 @@ class ThreadedAck(AckCase):
         self.queue_acks(clock, ["old"], age=fwd.ACK_BUDGET + 1)       # waited 3 s before anything looked at it
         self.f.ack()
         self.assertEqual(self.states(), {"old": "late"})
-        self.assertEqual(len(self.eyes()), 1)                          # not dropped silently: it still goes out, once
+        self.assertEqual(len(self.taps()), 1)                          # not dropped silently: it still goes out, once
         self.f.ack()
-        self.assertEqual(len(self.eyes()), 1)
+        self.assertEqual(len(self.taps()), 1)
         self.queue_acks(clock, ["slow"])
-        plain = self._send
-        self.sender.send = lambda chat, text, attachments=(): (time.sleep(0.5), plain(chat, text, attachments))[1]
+        plain = self.reactor.react
+        self.reactor.react = lambda chat, guid, reaction: (time.sleep(0.5), plain(chat, guid, reaction))[1]
         with mock.patch.object(fwd, "ACK_BUDGET", 0.3):               # attempted at once, but confirmed after the budget
             self.f.ack()
         self.assertEqual(self.states(), {"old": "late", "slow": "late"})
         self.queue_acks(clock, ["ontime"])
-        self.sender.send = plain
+        self.reactor.react = plain
         self.f.ack()
         self.assertEqual(self.states()["ontime"], "sent")
         self.queue_acks(clock, ["ancient"], age=fwd.ACK_STALE + 1)    # past the outer limit: recorded stale, not sent
-        before = len(self.eyes())
+        before = len(self.taps())
         self.f.ack()
-        self.assertEqual((self.states()["ancient"], len(self.eyes())), ("stale", before))
+        self.assertEqual((self.states()["ancient"], len(self.taps())), ("stale", before))
 
     def test_a_late_ack_is_visible_in_the_stage_log_outcome(self):
         clock = self.real_clock()
@@ -946,8 +1199,8 @@ class ThreadedAck(AckCase):
             self.start()
             self.queue_acks(clock, [f"w{i}" for i in range(7)])
             self.f.ack_kick()
-            self.assertTrue(self.until(lambda: len(self.states()) == 7 and set(self.states().values()) <= {"sent", "late"} and len(self.eyes()) == 7, 10), self.states())
-        self.assertEqual(len(self.eyes()), 7)
+            self.assertTrue(self.until(lambda: len(self.states()) == 7 and set(self.states().values()) <= {"sent", "late"} and len(self.taps()) == 7, 10), self.states())
+        self.assertEqual(len(self.taps()), 7)
 
     def test_a_row_left_checking_by_a_dead_worker_is_retried_once_after_a_while_and_a_fresh_one_is_left_alone(self):
         clock = self.real_clock()
@@ -957,12 +1210,12 @@ class ThreadedAck(AckCase):
         self.f.ack_kick()
         self.assertTrue(self.until(lambda: self.states().get("dead") == "sent"))
         time.sleep(0.3)
-        self.assertEqual((self.states()["busy"], len(self.eyes())), ("checking", 1))
+        self.assertEqual((self.states()["busy"], len(self.taps())), ("checking", 1))
 
     def test_two_threads_one_spool_still_one_ack_per_message(self):
         other = fwd.Spool(self.root, self.now)
         self.addCleanup(other.db.close)
-        second = fwd.Forwarder(self.cfg, other, lambda: self.now, self.transport, self.sender)
+        second = fwd.Forwarder(self.cfg, other, lambda: self.now, self.transport, self.sender, reactor=self.reactor)
         for fw in (self.f, second): fw.start_ack()
         self.addCleanup(second.stop_ack)
         self.addCleanup(self.f.stop_ack)
@@ -970,7 +1223,7 @@ class ThreadedAck(AckCase):
         for fw in (self.f, second): fw.ack_kick()
         self.assertTrue(self.until(lambda: set(self.states().values()) == {"sent"} and len(self.states()) == 12))
         time.sleep(0.3)
-        self.assertEqual(len(self.eyes()), 12)
+        self.assertEqual(len(self.taps()), 12)
 
     def test_heavy_main_loop_writes_and_the_ack_thread_share_the_spool_without_loss(self):
         self.start()
@@ -984,22 +1237,23 @@ class ThreadedAck(AckCase):
             self.f.cycle()
             if self.pending() == 0 and not self.spool.db.execute("SELECT 1 FROM fetch").fetchone(): break
         self.assertTrue(self.until(lambda: len(self.states()) == 25 and set(self.states().values()) == {"sent"}, 20))
-        self.assertEqual((len(self.eyes()), len(self.posts)), (25, 25))
+        self.assertEqual((len(self.taps()), len(self.posts)), (25, 25))
 
     def test_a_burst_is_worked_off_by_one_wake_up_not_one_tick_per_three_rows(self):
         for i in range(12): self.enqueue(f"b{i}")
         with mock.patch.object(fwd, "ACK_TICK", 60):    # the timer never fires: only the one kick wakes the thread
             self.start()
             self.f.ack_kick()
-            self.assertTrue(self.until(lambda: len(self.eyes()) == 12 and set(self.states().values()) == {"sent"}, 20))
+            self.assertTrue(self.until(lambda: len(self.taps()) == 12 and set(self.states().values()) == {"sent"}, 20))
 
     def test_the_thread_survives_a_broken_table_and_a_raising_sender(self):
         self.start()
-        self.sender.send = mock.Mock(side_effect=RuntimeError("boom"))
+        real = self.reactor.react
+        self.reactor.react = mock.Mock(side_effect=RuntimeError("boom"))
         self.enqueue("a")
         self.f.ack_kick()
-        self.assertTrue(self.until(lambda: self.states().get("a") == "failed"))
-        self.sender.send = self._send
+        self.assertTrue(self.until(lambda: self.states().get("a") == "react_failed"))
+        self.reactor.react = real
         self.enqueue("b")
         self.f.ack_kick()
         self.assertTrue(self.until(lambda: self.states().get("b") == "sent"))
@@ -1017,7 +1271,7 @@ class ThreadedAck(AckCase):
     def test_without_a_thread_kick_runs_the_ack_inline(self):
         self.enqueue("m1")
         self.f.ack_kick()
-        self.assertEqual(len(self.eyes()), 1)
+        self.assertEqual(len(self.taps()), 1)
 
     def test_the_state_question_and_the_ack_send_have_their_own_short_timeouts(self):
         seen = []
