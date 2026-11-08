@@ -163,6 +163,72 @@ class HoursRules(unittest.TestCase):
         shop.plan_hours(slots, ctx_for(store={"hours": H0}, texts=["fridays till 7"]))
         self.assertEqual(slots, before)
 
+    # NOTE: the shared test kit gives a plan no ``ctx.texts`` (see PagesRules), so the owner's texts are supplied here.
+    def test_a_closure_on_a_date_is_a_notice_not_the_weekly_hours(self):
+        for text, new in (("closed November 12", [H0[0], "Saturday 9am–5pm · Closed Sunday; Closed November 12"]),
+                          ("closed Thanksgiving", [H0[0], "Saturday 9am–5pm · Closed Sunday; Closed Thanksgiving"]),
+                          ("we're closed on the 12th", [H0[0], H0[1] + "; Closed the 12th"]),
+                          ("closed 11/12 for inventory", [H0[0], H0[1], "Closed 11/12"]),
+                          ("closed 12 Nov", [H0[0], H0[1], "Closed 12 Nov"]),
+                          ("closed tomorrow", [H0[0], "Saturday 9am–6pm · Closed Sunday"]),
+                          ("closed Dec 24th", [H0[0], "Saturday 9am–5pm · Closed Sunday", "Closed Dec 24"])):
+            with self.subTest(text=text):
+                with self.assertRaises(shop.SkillStop) as caught:
+                    shop.plan_hours({"hours": new}, ctx_for(store={"hours": H0}, texts=[text]))
+                self.assertEqual((caught.exception.kind, caught.exception.reply), ("question", shop.HOLIDAY_REPLY))
+        with self.assertRaises(shop.SkillStop) as caught:  # the dated piece alone is enough, with or without his words
+            shop.plan_hours({"hours": [H0[0], H0[1] + "; Closed November 12"]}, ctx_for(store={"hours": H0}))
+        self.assertEqual(caught.exception.reply, shop.HOLIDAY_REPLY)
+
+    def test_weekly_hours_still_go_through(self):
+        for text, new in (("we're open till 7 on fridays now", ["Monday–Thursday 9am–6pm", "Friday 9am–7pm", H0[1]]),
+                          ("closed sundays and mondays", ["Tuesday–Friday 9am–6pm", "Saturday 9am–5pm · Closed Sunday · Closed Monday"]),
+                          ("sat 9 to 5, open 9 to 6 Mon to Fri, closed Sunday", H0),
+                          ("closed Sundays now", [H0[0], "Saturday 9am–5pm · Closed Sunday"]),
+                          ("Friday 8:30 to 5/6 pm", ["Monday–Thursday 9am–6pm", "Friday 8:30am–6pm", H0[1]])):
+            with self.subTest(text=text):
+                try:
+                    ops = shop.plan_hours({"hours": new}, ctx_for(store={"hours": H0}, texts=[text]))
+                except shop.SkillStop as stop:
+                    self.assertNotEqual(stop.reply, shop.HOLIDAY_REPLY)
+                else:
+                    self.assertEqual([o["op"] for o in ops], ["store.set_hours"])
+        ops = shop.plan_hours({"hours": ["Monday–Thursday 9am–6pm", "Friday 9am–7pm", H0[1]]},
+                              ctx_for(store={"hours": H0}, texts=["fridays till 7"]))
+        self.assertEqual([o["op"] for o in ops], ["store.set_hours"])
+
+
+class ContactRules(unittest.TestCase):
+    STORE = {"phone": "8055550100", "streetAddress": "1023 Example Street", "town": "Morro Bay"}
+
+    def ops(self, slots):
+        return shop.plan_contact(slots, ctx_for(store=dict(self.STORE), texts=["take the phone off"]))
+
+    def test_taking_the_phone_off_alone(self):
+        self.assertEqual(self.ops({"clear": True}), [{"op": "store.clear_phone", "args": {}}])
+
+    def test_taking_the_phone_off_beside_an_unchanged_address_keeps_the_removal(self):
+        self.assertEqual(self.ops({"clear": True, "town": "Morro Bay"}), [{"op": "store.clear_phone", "args": {}}])
+        self.assertEqual(self.ops({"clear": True, "town": "Morro Bay", "street_address": "1023  Example Street"}),
+                         [{"op": "store.clear_phone", "args": {}}])
+
+    def test_taking_the_phone_off_beside_a_new_address_does_both(self):
+        self.assertEqual(self.ops({"clear": True, "town": "Los Osos"}),
+                         [{"op": "store.clear_phone", "args": {}}, {"op": "store.set_address", "args": {"town": "Los Osos"}}])
+
+    def test_an_unchanged_address_alone_is_still_already_true(self):
+        for slots in ({"town": "Morro Bay"}, {"town": "Morro Bay", "street_address": "1023 Example Street"},
+                      {"phone": "805 555 0100", "town": "Morro Bay"}):
+            with self.subTest(slots=slots):
+                with self.assertRaises(shop.SkillStop) as caught:
+                    self.ops(slots)
+                self.assertTrue(caught.exception.reply.startswith("It already says that:"))
+
+    def test_nothing_to_take_off_is_still_said(self):
+        with self.assertRaises(shop.SkillStop) as caught:
+            shop.plan_contact({"clear": True, "town": "Morro Bay"}, ctx_for(store={"town": "Morro Bay"}))
+        self.assertIn("nothing to take off", caught.exception.reply)
+
 
 class NoticeRules(unittest.TestCase):
     def test_today_to_sixty_days_ahead_and_not_a_day_more(self):
@@ -331,6 +397,35 @@ class PagesRules(unittest.TestCase):
             pages.plan_about({"story": "We are the best at finding good food."}, ctx_for(store={}, texts=["rewrite it"]))
         self.assertEqual(caught.exception.kind, "question")
         self.assertTrue(pages.plan_about({"story": "Organic avocados from our friends nearby."}, ctx_for(store={}, texts=["x"])))  # hass/claims.py asks for that
+
+    # NOTE: the shared test kit (testkit.Scratch._ctx) gives a plan no ``ctx.texts``, so the case rows cannot judge the rules that
+    # read his words. The regressions below hand the plans the joined owner texts themselves.
+    def test_a_boast_needs_the_whole_word_said_and_not_negated(self):
+        headline = {"headline": ["Best produce", "Come on in"]}
+        for source in ("Do not call us the best. Say: a small friendly market.", "Bestow a warm welcome on visitors.",
+                       "we aren't the best, just friendly", "never say best", "Bestest produce around"):
+            with self.subTest(source=source):
+                with self.assertRaises(shop.SkillStop) as caught:
+                    pages.plan_home(headline, ctx_for(store={}, texts=[source]))
+                self.assertEqual((caught.exception.kind, "best" in caught.exception.reply.casefold()), ("question", True))
+        for source in ("make the headline Best produce, Come on in", "we are the best. do not say organic", "Say the BEST produce"):
+            with self.subTest(control=source):
+                ops = pages.plan_home(headline, ctx_for(store={}, texts=[source]))
+                self.assertEqual([o["op"] for o in ops], ["store.set_headline"])
+
+    def test_the_story_boasts_follow_the_same_rule(self):
+        story = {"story": "We are the best at finding good food, and we are award-winning."}
+        for source in ("Do not call us the best. Say: a small friendly market.", "Bestow a warm welcome on visitors."):
+            with self.subTest(source=source):
+                with self.assertRaises(shop.SkillStop):
+                    pages.plan_about(story, ctx_for(store={}, texts=[source]))
+        self.assertTrue(pages.plan_about(story, ctx_for(store={}, texts=["we are the best, and we are Award Winning"])))
+        with self.assertRaises(shop.SkillStop):  # one affirmed boast does not carry the other
+            pages.plan_about(story, ctx_for(store={}, texts=["we are the best"]))
+        self.assertTrue(pages.plan_about({"story": "A family-owned market since 2019, open all week."},
+                                         ctx_for(store={}, texts=["family owned, since 2019"])))
+        with self.assertRaises(shop.SkillStop):
+            pages.plan_about({"story": "A family-owned market since 2019, open all week."}, ctx_for(store={}, texts=["since 20190"]))
 
     def test_the_story_is_one_paragraph_of_at_most_the_limit(self):
         for story in ("First part of the story is here.\n\nSecond part is here.", "x y " * 120):

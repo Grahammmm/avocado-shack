@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 
 from hass import media
+from hass.claims import NEGATORS, fold
 from hass.content_model import DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, MAX_HEADLINE_LINE, MAX_INTRO, MAX_STORY
 from hass.ops import photos
 from hass.ops.store import _line_key, _spaced
@@ -57,14 +58,35 @@ def _price_stop(*values):
     return None
 
 
+_CLAUSE = re.compile(r"[.!?;:\n]")
+
+
+def _negator(word: str) -> bool:
+    return word in NEGATORS or word.endswith("n't")
+
+
+def _said_affirmed(claim: str, texts) -> bool:
+    """True when some text of the owner has ``claim`` as whole words (spacing and hyphens alike) and no negator earlier
+    in the same clause: "Do not call us the best" and "Bestow a warm welcome" do not say "best". Fail-closed."""
+    words = [re.escape(w) for w in re.split(r"[\s-]+", fold(claim)) if w]
+    rx = re.compile(r"(?<!\w)" + r"[\s-]+".join(words) + r"(?!\w)")
+    for text in texts:
+        for clause in _CLAUSE.split(fold(text)):
+            for m in rx.finditer(clause):
+                before = [w.strip(",\"()") for w in clause[:m.start()].split()]
+                if not any(_negator(w) for w in before):
+                    return True
+    return False
+
+
 def _claim_stop(values, texts):
-    """claim-in-his-words: a claim word in the text must be a word the owner said. Skipped without his texts."""
+    """claim-in-his-words: a claim word in the text must be a word the owner said (whole words, not negated).
+    Skipped without his texts."""
     if not texts:
         return None
-    said = " ".join(texts).casefold()
     for value in values:
         for m in CLAIM_RE.finditer(value):
-            if m.group(0).casefold() not in said:
+            if not _said_affirmed(m.group(0), texts):
                 return SkillStop(CLAIM_REPLY.format(word=m.group(0)), "question")
     return None
 

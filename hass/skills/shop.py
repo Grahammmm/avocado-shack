@@ -220,6 +220,13 @@ HOLIDAY_REPLY = ("A closed day on a date is a notice, not the usual hours. What 
                  "and what is the last day it should stay up?")
 HOLIDAY_RE = re.compile(r"\b(?:thanksgiving|christmas|xmas|new years?|easter|memorial day|labor day|independence day|"
                         r"july (?:4|4th|fourth)|fourth of july|veterans day|holiday|holidays)\b", re.I)
+_MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|"
+          r"nov(?:ember)?|dec(?:ember)?)")
+# a day on the calendar: "November 12", "Nov. 12th", "12 November", "11/12", "the 12th" (never a weekday: "closed Sundays" is the hours)
+DATE_RE = re.compile(rf"\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}\b|"
+                     r"(?<![\d:/])\d{1,2}/\d{1,2}(?:/\d{2,4})?(?![\d:/])|\bthe\s+\d{1,2}(?:st|nd|rd|th)\b", re.I)
+RELATIVE_DAY_RE = re.compile(r"\b(?:today|tonight|tomorrow|this (?:week|weekend|coming)|next (?:week|weekend))\b", re.I)
+CLOSED_RE = re.compile(r"\b(?:closed?|closing|closures?|shut|off|not open)\b", re.I)
 
 
 def _line_problem(i, line):
@@ -284,9 +291,20 @@ def check_hours_price(slots, texts, ctx):
 def check_hours_holiday(slots, texts, ctx):
     """holiday-is-notice: a closed day on a date or holiday is a notice, not the weekly hours."""
     store = store_of(ctx)
+    old = (store or {}).get("hours") or []
+    old_pieces = {_line_key(p) for line in old for p in re.split(r"\s*[·;]\s*", line) if p.strip()}
+    for line in slots["hours"]:  # a date in an hours line is never weekly hours (a piece the site already has is left alone)
+        for piece in re.split(r"\s*[·;]\s*", line):
+            if piece.strip() and _line_key(piece) not in old_pieces and DATE_RE.search(piece):
+                return SkillStop(HOLIDAY_REPLY, "question")
+    if store is None or _same(slots["hours"], old):
+        return None
     said = " ".join(texts)
-    if store is not None and HOLIDAY_RE.search(said) and not _same(slots["hours"], store.get("hours") or []):
+    if HOLIDAY_RE.search(said):
         return SkillStop(HOLIDAY_REPLY, "question")
+    for clause in re.split(r"[.!?;\n]", said):
+        if CLOSED_RE.search(clause) and (DATE_RE.search(clause) or RELATIVE_DAY_RE.search(clause)):
+            return SkillStop(HOLIDAY_REPLY, "question")
     return None
 
 
@@ -427,6 +445,8 @@ def check_contact_already(slots, texts, ctx):
     same = []
     if "phone" in slots and store.get("phone") == phone_digits(slots["phone"]):
         same.append(f"the phone is {say_phone(store['phone'])}")
+    if slots.get("clear"):
+        return None  # taking the phone off is a change in itself; an unchanged address beside it is only left out of the draft
     given = {ADDRESS_KEYS[f]: slots[f] for f in ADDRESS_KEYS if slots.get(f)}
     if given and all(_spaced(store.get(f, "")) == _spaced(v) for f, v in given.items()):
         same.append("the address is " + ", ".join(store[f] for f in ("streetAddress", "town") if f in given))
@@ -455,6 +475,8 @@ def plan_contact(slots, ctx):
         if "$" in value:
             raise SkillStop(PRICE_REPLY, "refused", "price")
     clean = {k: v for k, v in (("phone", phone), ("street_address", street), ("town", town)) if v}
+    if clear:
+        clean["clear"] = True  # the not-already-true rule must see that a removal is asked for, not only the address
     store = store_of(ctx)
     if phone:
         if (stop := CONTACT_CHECKS["phone-ten-digits"](clean, texts_of(ctx), ctx)):

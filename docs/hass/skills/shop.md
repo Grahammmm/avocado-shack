@@ -41,8 +41,10 @@ One slot: `hours`, the **whole** new list (1 to 7 lines, 60 characters each). Th
 * `hours-no-conflict`: one day with two different statements ("Mon to Sun 9 to 6 and Mon to Fri 8 to 5") is a question.
 * `not-already-true`: the same lines as now (spacing aside): "It already says that: Saturday 9am–5pm. Did you mean
   something else?" and nothing is drafted.
-* `holiday-is-notice`: a closed day on a date or a holiday ("closed Thanksgiving") is a notice, so the hours are not
-  changed and he is asked what the notice should say and until when.
+* `holiday-is-notice`: a closed day on a date or a holiday ("closed Thanksgiving", "closed November 12", "closed the
+  12th", "closed 11/12", "closed tomorrow") is a notice, so the hours are not changed and he is asked what the notice
+  should say and until when. A date written into an hours line is caught too, even when his words are not at hand.
+  Plain weekly words ("closed Sundays") are still hours.
 * `no-price`: a price or a deal in an hours line is refused.
 
 An empty list is refused ("I can't take the hours off the site. What should they say?"). More than 7 lines, a line over
@@ -83,7 +85,8 @@ Slots: `phone`, `clear` (take the phone off), `street_address`, `town`. Checks:
   ("555-0100") gets "I need the area code and seven more digits"; ten digits that cannot be a real number
   ("123-456-7890") gets "That doesn't look like a real US phone number".
 * `not-already-true`: a phone, street or town the site already shows. A part that is already there is left out of the
-  draft; if everything is already there, nothing is drafted.
+  draft; if everything is already there, nothing is drafted. Taking the phone off is a change in itself, so "take the
+  phone off, town Morro Bay" (the town unchanged) drafts only the phone removal.
 
 A phone and "take it off" together is a question. Street and town are at most 80 characters and need letters. Edits:
 `store.json` `phone`, `streetAddress`, `town`; the home page and, for the address, the hike page. Undo restores them.
@@ -100,7 +103,8 @@ Slots: `headline` (two lines, 40 characters each, 2 letters each), `intro` (3 le
 "What should the second line say?"), `intro-text`, `no-price`, `claim-in-his-words`, `not-already-true`.
 
 `claim-in-his-words`: a boast such as "best", "number one", "finest", "award-winning", "family-owned" or "since 2019" is
-only used if he said that word himself, otherwise he is asked what to say. Origin, organic and health words are not
+only used if he said that word himself (the whole word or phrase, not part of another word such as "bestow", and not
+negated: "do not call us the best" does not say "best"), otherwise he is asked what to say. Origin, organic and health words are not
 repeated here; `hass/claims.py` already asks for those. Parts of a request that are already true are left out of the
 draft. A reset writes the shipped words, because there is no "clear" op: the store file then holds the shipped text and
 the page looks as before. Undoing the earlier change is the exact way back, and the skill says so.
