@@ -322,6 +322,8 @@ def _said_limits(said):
         if _NO_LIMIT.search(clause):
             effective = set()
         text = _words_to_digits(_DATE_TIME.sub(" ", _NO_LIMIT.sub(" ", clause.lower())))
+        for m in _REPLACED.finditer(text):
+            effective.discard(int(re.search(r"\d+", m.group(0)).group(0)))  # a retracted number is no longer said
         text = _REPLACED.sub(" ", text)
         if _NEGATED.search(re.sub(r"\bno\s+more\s+than\b", "at most", text)):
             continue

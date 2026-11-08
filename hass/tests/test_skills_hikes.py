@@ -274,6 +274,8 @@ class Rules(unittest.TestCase):
         self.assertIsNone(no(12, "sign up please, 12 spots"))
         self.assertIsNone(no(12, "sign up please, max 12"))
         self.assertIsNone(no(12, "sign up please, at most 12 people"))
+        self.assertEqual(no(12, "sign up please, 12 spots", "actually not 12 spots; sign up stays on")[0], hikes.R_SPOTS_NOT_SAID)
+        self.assertIsNone(no(20, "sign up please, 12 spots", "actually not 12 spots, 20 spots"))
 
     def test_the_latest_sign_up_instruction_wins(self):
         self.assertEqual(self.hit("hike-no-invention", {"signup": True}, texts=["sign up please", "actually no sign ups"])[0],
