@@ -20,16 +20,11 @@ from hass.tests.test_editor import git
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 MISSING_PLAYWRIGHT = "/nonexistent/hass-test/playwright"
-SAVED_CHECKED = "Saved and checked: "
 
 
 @unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")
 class DemoBrowserTests(unittest.TestCase):
-    fresh, db = demo.DemoTranscriptTests.fresh, demo.DemoTranscriptTests.db
-
-    def kinds(self, texts):  # the demo's kinds, with the real check's "Saved and checked: " in place of "Saved:"
-        known = tuple(k for k in demo.KINDS if k != "Saved:") + (SAVED_CHECKED,)
-        return [next((k for k in known if t.startswith(k)), t) for t in texts]
+    fresh, kinds, db = demo.DemoTranscriptTests.fresh, demo.DemoTranscriptTests.kinds, demo.DemoTranscriptTests.db
 
     def site(self):  # the writer worktree gets the full tracked storefront (as test_preview.make_previewer)
         repo = self.fresh()
@@ -65,12 +60,14 @@ class DemoBrowserTests(unittest.TestCase):
         original = demo._description(repo.state)
         rows = self.run_chain(repo)
         texts = [r["text"] for r in rows]
-        self.assertEqual(self.kinds(texts), [(SAVED_CHECKED if k == "Saved:" else k) for k in demo.EXPECTED])  # a real check says so
+        checked = "Saved and checked: "  # with a real preview the saved reply says it was checked
+        self.assertEqual([checked if t.startswith(checked) else k for t, k in zip(texts, self.kinds(texts))],
+                         [checked if k == "Saved:" else k for k in demo.EXPECTED])
         for i in (1, 4):
-            self.assertTrue(texts[i].startswith(SAVED_CHECKED), texts[i])
+            self.assertTrue(texts[i].startswith(checked), texts[i])
         state = repo.state.resolve()
-        for i, row in enumerate(rows):  # draft and applied replies carry one private PNG; the rest none
-            expected = 1 if texts[i].startswith(("Here's the change I'd make:", "To undo that, I'd change it back:", SAVED_CHECKED)) else 0
+        for i, row in enumerate(rows):  # draft and saved replies carry one private PNG; the rest none
+            expected = 1 if "Here's the change I'd make:" in texts[i] or texts[i].startswith(checked) else 0
             self.assertEqual(len(row["attachments"]), expected, (i, texts[i]))
             for name in row["attachments"]:
                 png = Path(name)
@@ -93,7 +90,7 @@ class DemoBrowserTests(unittest.TestCase):
         texts = [r["text"] for r in rows]
         self.assertIn("\nI couldn't make a picture of how it will look.", texts[0])  # draft reply: no preview, no PNG
         edit, undo = self.drafts(repo)
-        for i in (1, 4):  # both apply replies name the failed check
+        for i in (1, 4):  # both saved replies say the check did not pass
             self.assertTrue(texts[i].startswith("I saved it, but the preview check didn't pass: "), texts[i])
         self.assertTrue(all(not r["attachments"] for r in rows))  # no screenshot was made
         self.assertNotIn("verified", {edit["state"], undo["state"]})

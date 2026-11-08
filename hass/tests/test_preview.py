@@ -57,7 +57,7 @@ class PreviewTests(BrowserCase):
         self.assertEqual(sent["attachments"], [str(png)])
         self.assertEqual(png.read_bytes()[:8], PNG_SIGNATURE)
         self.assertEqual(stat.S_IMODE(png.stat().st_mode), 0o600)
-        self.assertNotIn("Preview unavailable", sent["text"])
+        self.assertNotIn("I couldn't make a picture", sent["text"])
         self.assertEqual(self.previewer.results[-1]["checks"],
                          {p + k: True for p in ("", "desktop:") for k in ("productShown", "description", "availabilityShown", "noPageErrors", "noPosts")})
         server = self.previewer.last_server

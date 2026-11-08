@@ -159,17 +159,15 @@ class ListingTests(StoreMixin, ConversationTestCase):
         self.assertEqual((head, f), (rid["title"], {"Title": rid["title"], "Place": rid["place"], "Status": "hidden"}))
 
     def test_route_idea_by_title(self):
-        """HASS-VOICE-1: find no longer prints route idea ids, so listing takes a route idea by title (one or several words)."""
-        def go(doc):
-            doc["routeIdeas"][0].update(title="Zorbaloo")
-            doc["routeIdeas"][1].update(title="Quillfeather Ridge Loop")
-        self.edit("community.json", go)
-        route = json.loads((self.cdir / "community.json").read_text("utf-8"))["routeIdeas"]
-        for rec in route[:2]:
-            head, f = self.fields(rec["title"])
-            self.assertEqual((head, f["Title"], f["Place"]), (rec["title"], rec["title"], rec["place"]))
-        head, _ = self.fields("quillfeather ridge")  # several words, any case, part of the title
-        self.assertEqual(head, "Quillfeather Ridge Loop")
+        """A route idea is found by its title, one word or several, without the interpreter; two matches are not guessed."""
+        for title in ("Zebrawalk", "Zebra Coastal Walk"):
+            self.edit("community.json", lambda doc, t=title: doc["routeIdeas"][0].update(title=t))
+            head, f = self.fields(title)
+            self.assertEqual((head, f["Title"]), (title, title))
+        self.edit("community.json", lambda doc: doc["routeIdeas"].append(dict(doc["routeIdeas"][0], id="route-twin")))
+        self.edit("community.json", lambda doc: doc["routeIdeas"][0].update(title="Zebrawalk"))
+        self.edit("community.json", lambda doc: doc["routeIdeas"][1].update(title="Zebrawalk"))
+        self.assertEqual(self.listing("Zebrawalk"), [NONE])  # two routes share the title: no guess
 
     # -- usage, unknown, collision, lookalikes ---------------------------------------------------------------------
     def test_usage_unknown_collision_and_lookalikes(self):
