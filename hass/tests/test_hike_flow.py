@@ -81,20 +81,21 @@ class CompleteRequestTests(FlowCase):
 
     def test_the_first_live_text_is_a_draft_with_every_field_and_an_unlisted_place(self):
         draft, reply = self.propose(LIVE1)
-        for line in ("title: Mill Creek hike", "meetingPoint: Mill Creek trailhead", "startsAt: Sat 2026-11-07 08:00 PST", "difficulty: easy",
-                     "bring: Water", "rsvpEnabled: false"):
+        for line in ("A new hike: Mill Creek hike", "the meeting place: Mill Creek trailhead", "the start time: Saturday, Nov 7 at 8 am", "how hard it is: easy",
+                     "what to bring: Water", "whether guests can sign up: no"):
             self.assertIn(line, reply)
         self.assertNotIn("trailId", reply)  # a place that is not a route idea is plain text, never forced onto a listed trail
         self.assertNotIn("capacity", reply)
-        self.assertIn("Reply yes to apply", reply)
+        self.assertIn("Reply yes to save", reply)
         self.assertEqual(draft["state"], "proposed")
         self.nothing_written()
 
     def test_create_a_new_hike_on_a_route_idea_is_a_new_hike_with_the_route_linked(self):
         draft, reply = self.propose(LIVE3)
-        self.assertIn("events hike-2026-11-07-fiscalini-ranch-hike: new", reply)
-        self.assertIn("trailId: idea-fiscalini-bluff", reply)
-        self.assertIn("bring: Water", reply)
+        self.assertIn("A new hike: Fiscalini Ranch hike", reply)
+        self.assertIn("the route idea: Fiscalini Ranch", reply)
+        self.assertEqual(json.loads(draft["ops_json"])[0]["args"]["trailId"], "idea-fiscalini-bluff")
+        self.assertIn("what to bring: Water", reply)
         self.nothing_written()
 
     def test_yes_applies_it_and_only_yes(self):
@@ -115,7 +116,7 @@ class AnswerAfterQuestionTests(FlowCase):
         self.now += timedelta(minutes=2)
         draft, reply = self.propose("8am")
         self.assertEqual(self.asked[-1], ("8am", {"question": Q_TIME["question"], "earlier": [OPEN1]}))
-        self.assertIn("meetingPoint: Mill Creek trailhead", reply)
+        self.assertIn("the meeting place: Mill Creek trailhead", reply)
         self.assertEqual(self.open_asks(), [])  # the draft closed the open request: no owner text is kept
         self.nothing_written()
 
@@ -216,12 +217,12 @@ class EditAndCancelTests(FlowCase):
 
     def test_edit_a_hikes_time_is_a_one_line_draft(self):
         draft, reply = self.propose("push the Mill Creek hike to 10am")
-        self.assertIn("startsAt Sat 2026-11-07 08:00 PST → Sat 2026-11-07 10:00 PST", reply)
+        self.assertIn("the start time: from Saturday, Nov 7 at 8 am to Saturday, Nov 7 at 10 am", reply)
         self.assertEqual(self.commits(), 0)
 
     def test_cancel_a_hike_is_a_draft_with_the_note(self):
         draft, reply = self.propose("cancel the Mill Creek hike, it's going to rain")
-        self.assertIn("status scheduled → cancelled", reply)
+        self.assertIn("whether it shows: from scheduled to cancelled", reply)
         self.assertIn("It's going to rain", reply)
         self.assertEqual(self.commits(), 0)
 

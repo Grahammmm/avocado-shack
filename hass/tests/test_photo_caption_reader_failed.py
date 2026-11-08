@@ -44,10 +44,11 @@ class PhotoCaptionReaderFailedTests(unittest.TestCase):
         [draft] = self.drafts()
         self.assertEqual(draft["state"], "needs-details")
         code = draft["code"]
-        line = [x for x in self.status() if x.startswith("Last request not read")]
+        line = [x for x in self.status() if x.startswith("I couldn't read your request from")]
         self.assertEqual(len(line), 1, line)
-        self.assertIn(f"draft {code}", line[0])
-        self.assertIn("reply to it with the product and description", line[0])
+        self.assertIn("I'm keeping the photo", line[0])
+        self.assertEqual(self.conv.db.execute("SELECT value FROM control WHERE name = 'reader-failed'").fetchone()[0], code)
+        self.assertIn("reply with the product and what the photo shows", line[0])
         self.assertNotIn("send it again", line[0])
         # resending the same photo is only a duplicate: no second draft, the caption is still unread
         calls = len(self.interp.texts)
@@ -57,7 +58,7 @@ class PhotoCaptionReaderFailedTests(unittest.TestCase):
         self.interp.down = False
         self.assertEqual(self.say(ANSWER), "proposed")
         self.assertEqual([d["state"] for d in self.drafts()].count("needs-details"), 0)
-        self.assertFalse([x for x in self.status() if x.startswith("Last request not read")])
+        self.assertFalse([x for x in self.status() if x.startswith("I couldn't read your request from")])
 
     def test_expired_caption_draft_status_says_resend_and_resending_works(self):
         self.assertEqual(self.say(ANSWER, attachments=1), "reader-failed")
@@ -65,20 +66,20 @@ class PhotoCaptionReaderFailedTests(unittest.TestCase):
         self.interp.down = False
         ttl = self.conv.settings["approvalTtlSeconds"]
         self.conv.clock = lambda: base.T0 + timedelta(seconds=ttl + 60)
-        [line] = [x for x in self.status() if x.startswith("Last request not read")]
-        self.assertIn(f"photo draft {draft['code']} has expired", line)
+        [line] = [x for x in self.status() if x.startswith("I couldn't read your request from")]
+        self.assertIn("the photo's time ran out", line)
         self.assertIn("send the photo again with its caption", line)
         self.assertNotIn("reply to it", line)
         self.assertEqual(self.drafts()[0]["state"], "needs-details")  # status stays read-only
         # the advised recovery: resend the photo with its caption; the lapsed draft is swept and the caption is read
         self.assertEqual(self.say(ANSWER, attachments=1), "proposed")
         self.assertEqual([d["state"] for d in self.drafts()], ["expired", "proposed"])
-        self.assertFalse([x for x in self.status() if x.startswith("Last request not read")])
+        self.assertFalse([x for x in self.status() if x.startswith("I couldn't read your request from")])
 
     def test_failed_text_request_still_says_send_it_again(self):
         self.assertEqual(self.say("nonsense"), "reader-failed")
-        [line] = [x for x in self.status() if x.startswith("Last request not read")]
-        self.assertTrue(line.endswith("send it again"), line)
+        [line] = [x for x in self.status() if x.startswith("I couldn't read your request from")]
+        self.assertTrue(line.endswith("Could you send it again?"), line)
 
 
 if __name__ == "__main__":

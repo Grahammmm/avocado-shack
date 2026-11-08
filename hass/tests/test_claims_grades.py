@@ -33,7 +33,7 @@ class GradeTermTests(unittest.TestCase):
     def test_unsaid_extra_virgin_is_named_with_its_field(self):
         hits = claims.unstated(edit("", "Extra virgin olive oil"), "add Sunshine oil", MAKERS)
         self.assertEqual(hits, [("products p1 description", "extra virgin")])
-        self.assertIn('"extra virgin" in products p1 description is not in your message', claims.question(hits))
+        self.assertIn('You didn\'t say \ue000"extra virgin"\ue001 in your message. Is that true?', claims.question(hits))
 
     def test_owner_spellings_count_as_said(self):
         for owner in ("it is extra-virgin", "Extra Virgin oil", "extra\u2011virgin", "EXTRA  VIRGIN"):
@@ -65,7 +65,7 @@ class GradeTermTests(unittest.TestCase):
         hits = claims.unstated(edit("", "Vegan and organic"), "", MAKERS)
         self.assertEqual([t for _w, t in hits], ["organic", "vegan"])
         q = claims.question(hits)
-        self.assertIn('"organic" in products p1 description and "vegan" in products p1 description are not', q)
+        self.assertIn('You didn\'t say \ue000"organic"\ue001 and \ue000"vegan"\ue001 in your message. Are they true?', q)
         self.assertNotIn("more", q)
 
     def test_a_pure_revert_is_not_checked(self):
@@ -88,8 +88,8 @@ class GradeConversationTests(ConversationTestCase):
         self.interp.mapping[text] = _ops(("product.edit", {"id": P1, "description": "smooth, unfiltered honey"}))
         self.assertEqual(self.say(text), "claim-question")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("I did not draft that: "), reply)
-        self.assertIn(f'"unfiltered" in products {P1} description', reply)
+        self.assertTrue(reply.startswith("You didn't say "), reply)
+        self.assertIn('"unfiltered" in your message. Is that true?', reply)
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_owner_words_still_propose(self):

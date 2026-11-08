@@ -54,7 +54,7 @@ class NearApprovalTests(H06TestCase):
         self.assertEqual(last, "near-approval")
 
     def one(self, code):
-        return f"Nothing was applied. To apply {code}, reply yes {code}."
+        return f"I haven't changed anything yet. To go ahead, reply yes {code}."
 
     def test_ok_with_one_proposal_names_its_yes_code(self):
         draft = self.proposal()
@@ -70,7 +70,7 @@ class NearApprovalTests(H06TestCase):
 
     def test_two_proposals_are_listed_in_row_order(self):
         one, two = self.proposal("hours"), self.proposal("desc")
-        self.near("ok", f"Nothing was applied. Reply yes <code> with one of: {one['code']}, {two['code']}.")
+        self.near("ok", f"I haven't changed anything yet. Which one do you want?\nyes {one['code']}: the opening hours for Avocado Shack\nyes {two['code']}: the description for Hass avocado")
         self.near(f"ok {two['code']}", self.one(two["code"]))  # the named code picks one of them
 
     def test_nothing_waiting_a_question_or_a_wrong_code_gets_nothing(self):
@@ -131,8 +131,7 @@ class NearApprovalTests(H06TestCase):
         self.replies()
         self.near("go ahead", self.one(code))
         self.assertEqual(self.say(f"yes {code}"), "paused")
-        self.assertEqual(self.replies(), [f"Changes are paused; {code} was not applied. "
-                                          f"Send resume changes, then yes {code}."])
+        self.assertEqual(self.replies(), [f"Changes are paused, so I haven't saved that. Say resume changes, then reply yes {code}."])
         self.assertEqual((self.approvals(), self.drafts()[-1]["state"]), (0, "proposed"))
 
     def test_duplicate_delivery_of_a_near_approval_is_not_answered_twice(self):

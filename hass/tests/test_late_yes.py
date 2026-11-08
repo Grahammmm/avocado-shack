@@ -14,7 +14,7 @@ from hass.tests.test_editor import DESC, _req
 
 EXPIRES = T0 + timedelta(seconds=600)  # SETTINGS approvalTtlSeconds is 600: the draft expires 09:10 PST
 LATE = T0 + timedelta(minutes=40)  # the service handles the queued reply at 09:40 PST
-LATE_HEAD = "Late reply to your message from Monday 09:09:\n"  # AV0022-10: a reply sent over 15 min after the message
+LATE_HEAD = "Sorry for the wait. This answers your message from today at 9:09 am:\n"  # AV0022-10: a reply sent over 15 min after the message
 
 
 class LateYesTests(ConversationTestCase):
@@ -23,7 +23,7 @@ class LateYesTests(ConversationTestCase):
         self.conv = self.open()
         self.base = self.count()
         self.draft, _reply = self.propose("hours")
-        self.expired_reply = f"{self.draft['code']} expired at 2026-11-02 09:10 PST; nothing changed."
+        self.expired_reply = "That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."
 
     def late(self, text, received_at, now=LATE, attachments=0):
         self.now, self.n = now, self.n + 1
@@ -44,7 +44,7 @@ class LateYesTests(ConversationTestCase):
     def test_yes_sent_in_time_and_handled_late_approves_on_the_handling_clock(self):
         self.assertEqual(self.late("yes", (EXPIRES - timedelta(seconds=1)).isoformat()), "approved")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(LATE_HEAD + f"Applied {self.draft['code']}:"), reply)
+        self.assertTrue(reply.startswith(LATE_HEAD + "Saved: the opening hours for Avocado Shack"), reply)
         self.assertEqual((self.state(), self.commits()), ("applied", 1))
         [row] = self.approvals()
         self.assertEqual((row["approved_at"], row["expires_at"]), (conversation._iso(LATE), self.draft["expires_at"]))
@@ -55,7 +55,7 @@ class LateYesTests(ConversationTestCase):
         self.assertEqual((self.state(), self.commits()), ("applied", 1))
 
     def test_yes_sent_exactly_at_expiry_is_expired(self):
-        self.assert_expired(EXPIRES.isoformat(), head="Late reply to your message from Monday 09:10:\n")
+        self.assert_expired(EXPIRES.isoformat(), head="Sorry for the wait. This answers your message from today at 9:10 am:\n")
 
     def test_received_at_in_the_future_is_judged_at_now(self):
         self.assert_expired((LATE + timedelta(minutes=20)).isoformat())
@@ -70,7 +70,7 @@ class LateYesTests(ConversationTestCase):
 
     def test_no_sent_in_time_and_handled_late_cancels(self):
         self.assertEqual(self.late("no", (EXPIRES - timedelta(seconds=1)).isoformat()), "rejected")
-        self.assertEqual(self.replies(), [LATE_HEAD + f"Cancelled {self.draft['code']}; nothing changed."])
+        self.assertEqual(self.replies(), [LATE_HEAD + "Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.state(), self.drafts()[0]["reason"], self.commits()), ("rejected", "owner", 0))
 
     def test_text_correction_sent_in_time_is_still_swept_at_now(self):
@@ -97,8 +97,7 @@ class LateYesTests(ConversationTestCase):
         self.replies()
         code = self.draft["code"]
         self.assertEqual(self.late("yes", (EXPIRES - timedelta(seconds=1)).isoformat()), "paused")
-        self.assertEqual(self.replies(), [LATE_HEAD + f"Changes are paused; {code} was not applied. "
-                                          f"Send resume changes, then yes {code}."])
+        self.assertEqual(self.replies(), [LATE_HEAD + f"Changes are paused, so I haven't saved that. Say resume changes, then reply yes {code}."])
         self.assertEqual((self.state(), self.approvals(), self.commits()), ("proposed", [], 0))
         self.assertEqual(self.late("resume changes", LATE.isoformat()), "resume")  # the next message sweeps it
         self.replies()
@@ -113,7 +112,7 @@ class LateYesTests(ConversationTestCase):
         stale, new = self.drafts()
         self.assertEqual((stale["state"], stale["reason"], self.commits()), ("rejected", "stale", 0))
         self.assertEqual(new["state"], "proposed")
-        self.assertTrue(reply.startswith(LATE_HEAD + f"The site changed since {self.draft['code']}; please approve {new['code']}."))
+        self.assertTrue(reply.startswith(LATE_HEAD + "The website changed while that was waiting, so I've written it up again. Please look it over:"))
 
 
 if __name__ == "__main__":

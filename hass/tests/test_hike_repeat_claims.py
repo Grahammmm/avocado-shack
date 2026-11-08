@@ -139,7 +139,8 @@ class RepeatConversationTests(ConversationTestCase):
         rows, result = [], self.say(SAY)
         self.assertEqual(result, "proposed")
         self.assertEqual(self.replies()[0].count("is not in your message"), 0)
-        self.assertIn(NEW_ID, self.drafts()[-1]["summary"])
+        self.assertEqual(self.drafts()[-1]["summary"], "a new hike: Cerro Alto loop")
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"])[0]["args"], REPEAT)
         self.assertEqual(self.say("yes"), "approved")
         events = {e["id"]: e for e in json.loads((self.repo.wt / "hass/content/community.json").read_text("utf-8"))["events"]}
         self.assertEqual(events[NEW_ID]["description"], SOURCE_ARGS["description"])
@@ -148,7 +149,7 @@ class RepeatConversationTests(ConversationTestCase):
     def test_the_same_words_in_a_plain_create_still_ask(self):
         rows, result = self.ask("add the same loop again", ("hike.create", {**SOURCE_ARGS, "date": "2027-03-13"}))
         self.assertEqual(result, "claim-question")
-        self.assertIn("not in your message", self.replies()[0])
+        self.assertIn("in your message. Are they true?", self.replies()[0])
         self.assertEqual(self.drafts(), rows)
 
     def test_mixed_draft_and_forged_copy_still_checked(self):
@@ -156,9 +157,9 @@ class RepeatConversationTests(ConversationTestCase):
         product = ("product.edit", {"id": "photo-product-001", "description": "Organic and creamy."})
         other = ("hike.create", {**SOURCE_ARGS, "title": "Other loop", "date": "2027-03-20", "trailId": "idea-cass-hill"})
         for name, ops, named in (("later update", (("hike.repeat", REPEAT), update), '"9 miles"'),
-                                 ("product edit", (("hike.repeat", REPEAT), product), "products photo-product-001"),
-                                 ("another hike create", (("hike.repeat", REPEAT), other), "events hike-2027-03-20-other-loop"),
-                                 ("create first", (other, ("hike.repeat", REPEAT)), "events hike-2027-03-20-other-loop")):
+                                 ("product edit", (("hike.repeat", REPEAT), product), '"organic"'),
+                                 ("another hike create", (("hike.repeat", REPEAT), other), '"dogs allowed"'),
+                                 ("create first", (other, ("hike.repeat", REPEAT)), '"dogs allowed"')):
             with self.subTest(case=name):
                 rows, result = self.ask(f"mixed {name}", *ops)
                 self.assertEqual(result, "claim-question")
@@ -184,7 +185,7 @@ class RepeatConversationTests(ConversationTestCase):
     def test_an_interpreter_flag_exempts_nothing(self):
         rows, result = self.ask("flagged", ("hike.repeat", {**REPEAT, "copied": True}))
         self.assertEqual(result, "question")  # an unknown argument asks; no draft row exists
-        self.assertIn("copied", self.replies()[0])
+        self.assertEqual(self.replies(), ["I can't do that kind of change yet. You can ask Graham."])
         self.assertEqual(self.drafts(), rows)
 
 

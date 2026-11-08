@@ -11,8 +11,8 @@ from hass import owner_answers as answers
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests.test_owner_answers import INTERNAL, NOW, row
 
-UNDER_WAY = "You said yes; it is still being saved, so nothing has changed on the website yet."
-WAITING = "Waiting for your OK - nothing has changed yet."
+UNDER_WAY = "You said yes, but it isn't saved yet, so nothing has changed on the website."
+WAITING = "It's waiting for your yes. Nothing has changed yet."
 INSTALLED = {"state": "installed", "installed_at": "2026-11-02T17:05:00+00:00", "commit": "d" * 40, "files": 3}
 FAILED = {"state": "failed", "reason": "write failed: PermissionError"}
 
@@ -23,7 +23,7 @@ class ApprovedAnswerTests(unittest.TestCase):
         for inst in (None, INSTALLED, FAILED, {}, [], "installed"):  # an install entry never upgrades it to "Done"
             with self.subTest(install=inst):
                 self.assertEqual(answers.did_it_work(row("approved"), inst, NOW), UNDER_WAY)
-                self.assertEqual(answers.history_words(row("approved"), inst), "approved, not saved yet")
+                self.assertEqual(answers.history_words(row("approved"), inst), "you said yes, but it isn't saved yet")
 
     def test_approved_is_not_pending(self):
         self.assertNotIn("approved", answers.PENDING)
@@ -34,7 +34,7 @@ class ApprovedAnswerTests(unittest.TestCase):
             for inst in (None, INSTALLED):
                 with self.subTest(state=state, install=inst):
                     self.assertEqual(answers.did_it_work(row(state), inst, NOW), WAITING)
-                    self.assertEqual(answers.history_words(row(state), inst), "waiting for your OK")
+                    self.assertEqual(answers.history_words(row(state), inst), "waiting for your yes")
 
     def test_other_states_unchanged(self):
         self.assertEqual(answers.did_it_work(row("reverted"), INSTALLED, NOW), "That change was undone.")
@@ -42,7 +42,7 @@ class ApprovedAnswerTests(unittest.TestCase):
         self.assertEqual(answers.did_it_work(row("verified"), INSTALLED, NOW),
                          "Done. \ue000store store: hours\ue001 is on the website now (I checked today at 9:05 am).")
         for state, inst, want in (("verified", INSTALLED, "on the website"), ("failed", None,
-                                  "not saved; website unchanged"), ("reverted", None, "undone")):
+                                  "I couldn't save it, so nothing changed"), ("reverted", None, "undone")):
             self.assertEqual(answers.history_words(row(state), inst), want)
 
     def test_words_are_plain_and_never_claim_it_is_applied(self):

@@ -175,7 +175,7 @@ class ConversationWithLocalInterpreterTests(ConversationTestCase):
     def test_good_reply_becomes_a_proposal(self):
         draft, reply = self.propose("please change the hours")
         self.assertEqual(draft["state"], "proposed")
-        self.assertIn(draft["code"], reply)
+        self.assertIn("Here's the change I'd make:\nAvocado Shack, the opening hours:", reply)
         self.fake.result = (200, chat_reply(json.dumps({"question": "Which day should change?"})))
         self.assertEqual(self.say("and the other thing"), "question")
         self.assertEqual(self.replies(), ["Which day should change?"])

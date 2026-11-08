@@ -12,7 +12,7 @@ from hass.tests.test_conversation import CHAT, GROUP, OWNER, SETTINGS, STRANGER,
 from hass.tests.test_editor import HOURS, _req
 
 MISSING = "a1b3"
-NO_DRAFT = f"No draft {MISSING}."
+NO_DRAFT = "I don't have a change with that code."
 
 
 class CountingInterpreter(conversation.FixtureInterpreter):
@@ -32,7 +32,7 @@ class UnknownCodeTestCase(ConversationTestCase):
         self.interp = self.conv.interpreter = CountingInterpreter(self.interp.mapping)
 
     def waiting(self, *drafts):
-        return ["Waiting drafts:"] + [f"{d['code']}: {d['summary']}; reply yes {d['code']}." for d in drafts]
+        return ["These are waiting for you:"] + [f"yes {d['code']}: {d['summary']}" for d in drafts]
 
     def unknown(self, text=f"yes {MISSING}", **kwargs):
         self.assertEqual(self.say(text, **kwargs), "no-target")
@@ -59,8 +59,8 @@ class UnknownCodeTestCase(ConversationTestCase):
         self.assertNotEqual(two["code"], MISSING)
         expected = "\n".join([NO_DRAFT] + self.waiting(one, two))
         self.assertEqual(self.unknown(f"no {MISSING}"), [expected])
-        self.assertEqual(expected.splitlines()[2:], [f"{one['code']}: {one['summary']}; reply yes {one['code']}.",
-                                                    f"{two['code']}: {two['summary']}; reply yes {two['code']}."])
+        self.assertEqual(expected.splitlines()[2:], [f"yes {one['code']}: {one['summary']}",
+                                                    f"yes {two['code']}: {two['summary']}"])
         self.assert_untouched(self.drafts(), calls=2)
 
     def test_unknown_code_never_approves_or_cancels(self):
@@ -98,8 +98,8 @@ class UnknownCodeTestCase(ConversationTestCase):
         self.assertEqual(self.say(f"yes {applied['code']}"), "approved")
         self.replies()
         other, _r = self.propose("desc")
-        self.assertEqual(self.unknown(f"yes {applied['code']}"), [f"{applied['code']} is applied."])
-        self.assertEqual(self.unknown(f"no {applied['code']}"), [f"{applied['code']} is applied."])
+        self.assertEqual(self.unknown(f"yes {applied['code']}"), ["That one is already saved."])
+        self.assertEqual(self.unknown(f"no {applied['code']}"), ["That one is already saved."])
         self.assertEqual((self.commits(), self.editor.applies, self.drafts()[-1]["state"], other["code"] != applied["code"]),
                          (1, 1, "proposed", True))
 
@@ -119,16 +119,16 @@ class UnknownCodeTestCase(ConversationTestCase):
         one, _r = self.propose("hours")
         two, _r = self.propose("desc")
         [reply] = self.unknown("yes")
-        self.assertTrue(reply.startswith("Which draft do you mean?"), reply)
+        self.assertTrue(reply.startswith("Which one do you mean? Reply yes or no and its code."), reply)
         self.assertEqual(self.say(f"no {one['code']}"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {one['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual(self.say(f"yes {two['code']}"), "approved")
-        self.assertTrue(self.replies()[0].startswith(f"Applied {two['code']}"))
+        self.assertTrue(self.replies()[0].startswith("Saved:"))
         self.assertEqual((self.commits(), self.editor.applies), (1, 1))
         self.assertEqual(self.say("half"), "needs-details")
         self.replies()
         q = self.drafts()[-1]
-        self.assertEqual(self.unknown("yes"), [f"{q['code']} still needs details: {q['summary']}"])
+        self.assertEqual(self.unknown("yes"), [f"I still need an answer from you first. {q['summary']}"])
 
     def test_cutoff_pause_and_daily_cap(self):
         old, _r = self.propose("hours")

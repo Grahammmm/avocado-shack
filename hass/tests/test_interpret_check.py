@@ -38,20 +38,20 @@ class CheckTests(unittest.TestCase):
     def test_unknown_op_and_unknown_argument_are_named(self):
         self.assertEqual(ask([call("product.colour", id="p1")]), {"question": (
             "I can't do that kind of change yet. You can ask Graham.")})
-        self.assertAsks(ask([call("product.edit", id="p1", colour="green")]), '"product.edit.colour"', AGAIN)
+        self.assertAsks(ask([call("product.edit", id="p1", colour="green")]), "I can't do that kind of change yet. You can ask Graham.")
         # a later call is checked too: the first problem wins, in call order
-        self.assertAsks(ask([call("product.edit", id="p1"), call("hike.nope")]), '"hike.nope"')
+        self.assertAsks(ask([call("product.edit", id="p1"), call("hike.nope")]), "I can't do that kind of change yet. You can ask Graham.")
 
     def test_wrong_kind_names_the_field(self):
-        cases = [(call("hike.update", id="h1", capacity="ten"), "hike.update.capacity should be a whole number"),
-                 (call("hike.update", id="h1", capacity=True), "hike.update.capacity should be a whole number"),
-                 (call("hike.update", id="h1", capacity=2.5), "hike.update.capacity should be a whole number"),
-                 (call("hike.update", id="h1", rsvpEnabled="yes"), "hike.update.rsvpEnabled should be a yes/no"),
-                 (call("hike.update", id="h1", rsvpEnabled=1), "hike.update.rsvpEnabled should be a yes/no"),
-                 (call("store.set_hours", hours="9-5 daily"), "store.set_hours.hours should be a list of text"),
-                 (call("store.set_hours", hours=["9-5", 7]), "store.set_hours.hours should be a list of text"),
-                 (call("product.edit", id=7), "product.edit.id should be text"),
-                 (call("product.edit", id="p1", producerKey=None), "product.edit.producerKey should be text")]
+        cases = [(call("hike.update", id="h1", capacity="ten"), "I need the guest limit as a whole number"),
+                 (call("hike.update", id="h1", capacity=True), "I need the guest limit as a whole number"),
+                 (call("hike.update", id="h1", capacity=2.5), "I need the guest limit as a whole number"),
+                 (call("hike.update", id="h1", rsvpEnabled="yes"), "I need whether guests can sign up as yes or no"),
+                 (call("hike.update", id="h1", rsvpEnabled=1), "I need whether guests can sign up as yes or no"),
+                 (call("store.set_hours", hours="9-5 daily"), "I need the opening hours as a list of words"),
+                 (call("store.set_hours", hours=["9-5", 7]), "I need the opening hours as a list of words"),
+                 (call("product.edit", id=7), "I need a detail as words"),
+                 (call("product.edit", id="p1", producerKey=None), "I need the maker as words")]
         for bad, text in cases:
             with self.subTest(bad=bad):
                 self.assertEqual(ask([bad]), {"question": f"{text}. {AGAIN}"})
@@ -60,7 +60,7 @@ class CheckTests(unittest.TestCase):
     def test_revises_must_name_a_waiting_draft(self):
         ops = [call("store.set_hours", hours=["9-5"])]
         self.assertEqual(ask(ops, "beef"), {"question": "I can't find that change any more. Could you tell me the change again?"})
-        self.assertAsks(ask(ops, "beef", {"cafe", "beefcafe"}), "draft beef waiting")
+        self.assertAsks(ask(ops, "beef", {"cafe", "beefcafe"}), "I can't find that change any more. Could you tell me the change again?")
         self.assertIn("ops", ask(ops, "beef", {"beef"}))
         self.assertIn("ops", ask(ops, None, ()))
 
@@ -79,7 +79,7 @@ class CheckTests(unittest.TestCase):
             text = out["question"]
             self.assertLessEqual(len(text), 200, text)
             self.assertFalse(any(ord(c) < 32 or 127 <= ord(c) < 160 for c in text), repr(text))
-            self.assertIn("xxx...", text)
+            self.assertNotIn("xxx", text)
 
 
 class ProductionConversationTests(ConversationTestCase):
@@ -101,13 +101,13 @@ class ProductionConversationTests(ConversationTestCase):
         return reply
 
     def test_registry_problems_ask_before_any_draft(self):
-        self.assertIn('"product.colour"', self.asked("colour", _ops(("product.colour", {"id": "photo-product-001"}))))
-        self.assertIn('"product.edit.colour"', self.asked("edit", _ops(("product.edit", {"id": "photo-product-001",
+        self.assertIn("I can't do that kind of change yet. You can ask Graham.", self.asked("colour", _ops(("product.colour", {"id": "photo-product-001"}))))
+        self.assertIn("I can't do that kind of change yet. You can ask Graham.", self.asked("edit", _ops(("product.edit", {"id": "photo-product-001",
                                                                                          "colour": "green"}))))
-        self.assertIn("hike.update.capacity should be a whole number",
+        self.assertIn("I need the guest limit as a whole number",
                       self.asked("cap", _ops(("hike.update", {"id": "h1", "capacity": "ten"}))))
-        self.assertIn("did not find a change", self.asked("empty", {"ops": [], "revises": None}))
-        self.assertIn("draft beef waiting", self.asked("rev", {**_ops(("product.edit", {"id": "photo-product-001",
+        self.assertIn("couldn't find a change", self.asked("empty", {"ops": [], "revises": None}))
+        self.assertIn("I can't find that change any more. Could you tell me the change again?", self.asked("rev", {**_ops(("product.edit", {"id": "photo-product-001",
                                                                                         "name": "Hass"})),
                                                                "revises": "beef"}))
         self.assertEqual(self.commits(), 0)
@@ -116,8 +116,8 @@ class ProductionConversationTests(ConversationTestCase):
         self.interp.mapping["maker"] = _ops(("product.edit", {"id": "photo-product-001", "producerKey": "no-such-maker"}))
         self.assertEqual(self.say("maker"), "not-drafted")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Not drafted: "), reply)
-        self.assertIn("producerKey", reply)
+        self.assertTrue(reply.startswith("I couldn't make that change, so nothing changed."), reply)
+        self.assertIn("Could you say it another way?", reply)
 
 
 class FixtureConversationTests(ConversationTestCase):
@@ -139,7 +139,7 @@ class FixtureConversationTests(ConversationTestCase):
     def test_test_registry_is_the_one_checked(self):
         self.interp.mapping["prod"] = _ops(("product.edit", {"id": "photo-product-001", "name": "Hass"}))
         self.assertEqual(self.say("prod"), "question")
-        self.assertIn('"product.edit"', self.replies()[0])
+        self.assertIn("I can't do that kind of change yet. You can ask Graham.", self.replies()[0])
 
 
 if __name__ == "__main__":

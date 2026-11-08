@@ -225,7 +225,8 @@ class ServeTests(HostCase):
         self.assertEqual(len(self.drafts()), 1)
         rows = self.store.db.execute("SELECT chat, text FROM relay").fetchall()
         self.assertEqual((len(rows), rows[0][0]), (1, OWNER_CHAT))
-        self.assertIn(self.drafts()[0]["code"], rows[0][1])
+        self.assertIn("Reply yes to save it, or no to cancel.", rows[0][1])
+        self.assertEqual(self.drafts()[0]["code"], "f48c")
         self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM outbox WHERE sent_at IS NULL").fetchone()[0], 0)
 
     def test_replay_bad_mac_stale_oversize_wrong_path_peer(self):
@@ -273,7 +274,7 @@ class WorkTests(HostCase):
         srv, work = self.server(), self.worker(False)
         code, _ = self.draft_then_yes(srv, work, NOW + 5)
         self.assertEqual((self.editor.applies, self.commits(), [d["state"] for d in self.drafts()]), (0, 0, ["proposed"]))
-        self.assertEqual(sum(f"{code} was not applied" in t for t in self.relay_rows()), 1)
+        self.assertEqual(sum("I can't save changes yet" in t for t in self.relay_rows()), 1)
 
     def test_private_mode_yes_applies_once(self):
         srv, work = self.server(), self.worker(True)
@@ -281,7 +282,7 @@ class WorkTests(HostCase):
         draft = self.drafts()[0]
         self.assertEqual((out, self.editor.applies, draft["state"]), ((200, "queued"), 1, "applied"))
         self.assertEqual(git(self.repo.wt, "log", "-1", "--format=%s"), f"hass content: {draft['change_id']}")
-        self.assertTrue(any(t.startswith(f"Applied {code}") for t in self.relay_rows()))
+        self.assertTrue(any(t.startswith("Saved:") for t in self.relay_rows()))
         self.assertEqual(self.inbound(srv, self.owner_says(f"yes {code}", "FAKE-YES", NOW + 5)), (200, "duplicate"))  # same provider id
         work.cycle()
         self.assertEqual((self.editor.applies, self.commits()), (1, 1))
@@ -302,7 +303,7 @@ class WorkTests(HostCase):
         srv, work = self.server(), self.worker(True)
         code, _ = self.draft_then_yes(srv, work, NOW + 601)
         self.assertEqual((self.editor.applies, self.commits(), self.drafts()[0]["state"]), (0, 0, "expired"))
-        self.assertTrue(any("expired" in t for t in self.relay_rows()))
+        self.assertTrue(any("timed out" in t for t in self.relay_rows()))
         # stale: a hand edit lands between the proposal and the yes
         self.inbound(srv, self.owner_says("desc", "FAKE-D", NOW + 602))
         work.cycle()

@@ -21,8 +21,7 @@ def hides(n):
 
 
 def too_many(n):
-    return {"question": f"That is {n} changes in one message; I can take at most 20 at a time. "
-                        "Please send them in smaller groups."}
+    return {"question": "That's a lot of changes at once. Could you send them a few at a time?"}
 
 
 def ask(ops, revises=None, pending=()):
@@ -55,7 +54,7 @@ class CountTests(unittest.TestCase):
     def test_under_the_limit_other_questions_unchanged(self):
         self.assertEqual(ask(hides(20), revises="dead"),
                          {"question": "I can't find that change any more. Could you tell me the change again?"})
-        self.assertIn("did not find a change", ask([])["question"])
+        self.assertIn("couldn't find a change", ask([])["question"])
 
     def test_prompt_limit_matches_editor_limit(self):
         self.assertEqual(interpreter_prompt.MAX_OPS, editor.MAX_OPS)
@@ -90,7 +89,7 @@ class ConversationCountTests(ConversationTestCase):
         with mock.patch.object(self.editor, "prepare", wraps=self.editor.prepare) as prepare:
             self.say("twenty")
         prepare.assert_called_once()
-        self.assertFalse(any("smaller groups" in r for r in self.replies()))
+        self.assertFalse(any("a few at a time" in r for r in self.replies()))
 
 
 if __name__ == "__main__":

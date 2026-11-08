@@ -15,6 +15,8 @@ from hass.tests.test_photo_draft import ANSWER
 from hass.tests.test_set_photo import PhotoRepo
 
 PAD = b"\0" * 64
+AUDIO = "That looks like a voice note. I can't understand voice notes yet, so nothing was saved. Could you type the change instead?"
+UNSUPPORTED = "I can't use that kind of photo, so nothing was saved. Could you send a screenshot of it instead? On an iPhone you can also set Camera, then Formats, to Most Compatible."
 NEW_AUDIO = {
     "wav": b"RIFF\x24\x08\x00\x00WAVEfmt " + PAD,
     "id3 mp3": b"ID3\x04\x00\x00\x00\x00\x00\x00" + PAD,
@@ -47,14 +49,14 @@ class NewAudioFormatTests(unittest.TestCase):
                 self.assertTrue(media.is_audio(data))
                 self.assertIsNone(media.sniff(data))
                 with self.assertRaises(media.Refused) as cm: media.check_photo(data)
-                self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", limits.AUDIO))
+                self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", AUDIO))
 
     def test_store_original_refuses_each_new_audio_header_and_creates_nothing(self):
         repo = PhotoRepo()
         self.addCleanup(repo.cleanup)
         for name, data in NEW_AUDIO.items():
             with self.subTest(name), self.assertRaises(media.Refused) as cm: repo.store(data)
-            self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", limits.AUDIO))
+            self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", AUDIO))
         self.assertFalse((repo.media / "originals").exists())
         self.assertFalse((repo.media / "web").exists())
 
@@ -63,7 +65,7 @@ class NewAudioFormatTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertFalse(media.is_audio(data))
                 with self.assertRaises(media.Refused) as cm: media.check_photo(data)
-                self.assertEqual((cm.exception.code, cm.exception.reply), ("unsupported-type", limits.UNSUPPORTED))
+                self.assertEqual((cm.exception.code, cm.exception.reply), ("unsupported-type", UNSUPPORTED))
 
     def test_empty_bytes_are_not_audio_and_stay_empty(self):
         self.assertFalse(media.is_audio(b""))  # no IndexError
@@ -104,7 +106,7 @@ class WavVoiceNoteConversationTests(unittest.TestCase):
         self.photos.data = NEW_AUDIO["wav"]
         self.assertEqual(self.say(ANSWER, pid="wav"), "photo-refused:audio")
         self.assertEqual(self.disposition("wav"), "photo-refused:audio")
-        self.assertEqual(self.replies(), [limits.AUDIO])
+        self.assertEqual(self.replies(), [AUDIO])
         self.assertNothingKept()  # no originals/web files, no draft, interpreter never called
 
     def test_ogg_and_3gpp_with_an_approval_caption_draft_nothing_and_a_redelivery_is_not_answered_twice(self):
@@ -112,7 +114,7 @@ class WavVoiceNoteConversationTests(unittest.TestCase):
             with self.subTest(pid):
                 self.photos.data = data
                 self.assertEqual(self.say("approve all", pid=pid), "photo-refused:audio")
-                self.assertEqual(self.replies(), [limits.AUDIO])
+                self.assertEqual(self.replies(), [AUDIO])
         self.assertEqual(self.say(pid="ogg"), "duplicate")
         self.assertEqual(self.replies(), [])
         self.assertNothingKept()

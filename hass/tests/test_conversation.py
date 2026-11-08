@@ -91,18 +91,19 @@ class FlowTests(ConversationTestCase):
         draft, reply = self.propose("hours")
         self.assertEqual(draft["state"], "proposed")
         self.assertEqual(draft["code"], draft["draft_hash"][7:11])
-        self.assertTrue(reply.startswith(f"Draft {draft['code']}:"), reply)
-        self.assertIn("store store: hours", reply)
-        self.assertIn("Expires 2026-11-02 09:10 PST.", reply)
-        self.assertTrue(reply.endswith("Reply yes to apply, no to cancel, or send a correction."))
+        self.assertEqual(draft["expires_at"], (T0 + timedelta(seconds=600)).isoformat())
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
+        self.assertIn("Avocado Shack, the opening hours", reply)
+        self.assertIn("Monday–Saturday 9am–6pm", reply)
+        self.assertTrue(reply.endswith("Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix."))
         self.assertEqual(self.say("Yes!"), "approved")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Applied {draft['code']}: store store: hours"), reply)
+        self.assertTrue(reply.startswith("Saved: the opening hours for Avocado Shack"), reply)
         self.assertEqual(self.commits(), 1)
         self.assertEqual((self.drafts()[0]["state"], self.drafts()[0]["commit"]), ("applied", self.repo.head()))
         second, _reply = self.propose("desc")
         self.assertEqual(self.say("no"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {second['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.drafts()[1]["state"], self.drafts()[1]["reason"]), ("rejected", "owner"))
         self.assertEqual(self.say("when?"), "question")
         self.assertEqual(self.replies(), ["Which day should change?"])
@@ -135,19 +136,19 @@ class FlowTests(ConversationTestCase):
         self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual((self.drafts()[0]["state"], self.commits()), ("expired", 0))
         self.assertEqual(self.say(f"yes {draft['code']}"), "no-target")
-        self.assertIn("expired", self.replies()[0])
+        self.assertIn("timed out", self.replies()[0])
         self.assertEqual(self.commits(), 0)
 
-    def assert_late_approvals_refused(self, old, closed_text):
+    def assert_late_approvals_refused(self, old, closed_text, closed_reason="cancelled"):
         """After `old` closed, the same request repeats it: neither `yes <old code>` nor a bare `yes` applies it."""
         new, reply = self.propose("hours")
         self.assertEqual(new["draft_hash"], old["draft_hash"])  # same ops on the same base: the A2 draft repeats
         self.assertNotEqual(new["code"], old["code"])
-        self.assertIn(f"Reply yes {new['code']} to apply", reply)
+        self.assertIn(f"Reply yes {new['code']} to save it", reply)
         self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
         self.assertEqual(self.replies(), [closed_text])
         self.assertEqual(self.say("yes"), "no-target")
-        self.assertEqual(self.replies(), [f"{new['code']} repeats a draft that was closed; reply yes {new['code']} to apply it."])
+        self.assertEqual(self.replies(), [f"That is the same change that was {closed_reason} earlier, so I want to be sure. Reply yes {new['code']} if you still want it."])
         self.assertEqual((self.drafts()[-1]["state"], self.commits(), self.editor.applies), ("proposed", 0, 0))
         self.assertEqual(self.say(f"yes {new['code']}"), "approved")
         self.assertEqual((self.drafts()[-1]["state"], self.commits(), self.editor.applies), ("applied", 1, 1))
@@ -156,12 +157,12 @@ class FlowTests(ConversationTestCase):
         old, _reply = self.propose("hours")
         self.assertEqual(self.say("no"), "rejected")
         self.replies()
-        self.assert_late_approvals_refused(old, f"{old['code']} was cancelled (owner); nothing changed.")
+        self.assert_late_approvals_refused(old, "That one was cancelled, so nothing changed.")
 
     def test_expired_code_is_never_reused_by_a_repeat(self):
         old, _reply = self.propose("hours")
         self.now = T0 + timedelta(seconds=601)
-        self.assert_late_approvals_refused(old, f"{old['code']} expired at 2026-11-02 09:10 PST; nothing changed.")
+        self.assert_late_approvals_refused(old, "That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it.", closed_reason="timed out")
 
     def test_ambiguous_yes_and_revision(self):
         one, _r = self.propose("hours")
@@ -172,7 +173,7 @@ class FlowTests(ConversationTestCase):
         self.assertIn(f"{two['code']}: ", reply)
         self.assertEqual(self.commits(), 0)
         self.assertEqual(self.say(f"yes {two['code']}"), "approved")
-        self.assertTrue(self.replies()[0].startswith(f"Applied {two['code']}"))
+        self.assertTrue(self.replies()[0].startswith("Saved:"))
         self.assertEqual(self.commits(), 1)
         self.assertEqual(self.drafts()[0]["state"], "proposed")
         self.interp.mapping["fix"] = {"ops": _req((HOURS, {"hours": ["Daily 8am–7pm"]}))["ops"], "revises": one["code"]}
@@ -180,7 +181,7 @@ class FlowTests(ConversationTestCase):
         first = self.drafts()[0]
         self.assertEqual((first["state"], first["reason"], first["replaced_by"]), ("rejected", "revised", three["code"]))
         self.assertEqual(self.say(f"yes {one['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{one['code']} was replaced by {three['code']}."])
+        self.assertEqual(self.replies(), ["That one was replaced by a newer one."])
         self.assertEqual(self.commits(), 1)
 
     def test_incomplete_correction_supersedes_proposal(self):
@@ -202,7 +203,7 @@ class FlowTests(ConversationTestCase):
         self.replies()
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "proposed"])
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), [f"Applied {pending['code']}: store store: hours\n{conversation.answers.NOT_LIVE}"])
+        self.assertEqual(self.replies(), [f"Saved: the opening hours for Avocado Shack\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.commits(), self.drafts()[1]["state"]), (1, "applied"))
 
     def test_stale_approval_redrafts_and_never_writes_old_draft(self):
@@ -217,7 +218,7 @@ class FlowTests(ConversationTestCase):
         self.assertEqual((stale["state"], stale["reason"], self.commits()), ("rejected", "stale", 0))
         self.assertEqual(new["state"], "proposed")
         self.assertNotEqual(new["draft_hash"], old["draft_hash"])
-        self.assertTrue(reply.startswith(f"The site changed since {old['code']}; please approve {new['code']}."))
+        self.assertTrue(reply.startswith("The website changed while that was waiting, so I've written it up again. Please look it over:\n"))
         self.assertEqual(self.say("yes"), "approved")
         self.assertEqual((self.drafts()[1]["state"], self.commits()), ("applied", 1))
 
@@ -231,7 +232,7 @@ class DurabilityTests(ConversationTestCase):
             self.conv.flush(self.out)
         self.assertEqual((self.drafts()[0]["state"], len(self.conv.outbox.unsent()), self.commits()), ("applied", 1, 1))
         self.conv = self.open()
-        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {draft['summary']}\n{conversation.answers.NOT_LIVE}"])
+        self.assertEqual(self.replies(), [f"Saved: {draft['summary']}\n{conversation.answers.NOT_LIVE}"])
         self.assertEqual((self.replies(), self.commits(), self.editor.applies), ([], 1, 1))
 
     def test_recover_fails_interrupted_approval_without_reapplying(self):

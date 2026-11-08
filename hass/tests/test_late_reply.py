@@ -16,7 +16,7 @@ from hass.tests.test_conversation import CHAT, OWNER, SETTINGS, ConversationTest
 from hass.tests.test_label_reader import LION, SHA, FakePhotos, PhotoInterpreter, PhotoRepo, _settings, recorded, reader
 
 T0 = datetime(2026, 11, 7, 17, 0, tzinfo=timezone.utc)  # Saturday 09:00 PST
-HEAD = "Late reply to your message from Saturday 09:00:\n"
+HEAD = "Sorry for the wait. This answers your message from today at 9 am:\n"
 
 
 class LateReplyOutboxTest(unittest.TestCase):
@@ -42,8 +42,8 @@ class LateReplyOutboxTest(unittest.TestCase):
         self.assertEqual(conversation.LATE_AFTER, timedelta(minutes=15))
 
     def test_ten_minutes_unprefixed_sixteen_prefixed(self):
-        self.assertEqual(self.answer("Cancelled a1b2.", timedelta(minutes=10)), ["Cancelled a1b2."])
-        self.assertEqual(self.answer("Applied c3d4.", timedelta(minutes=16)), [HEAD + "Applied c3d4."])
+        self.assertEqual(self.answer("Okay, I have cancelled that.", timedelta(minutes=10)), ["Okay, I have cancelled that."])
+        self.assertEqual(self.answer("Saved the opening hours.", timedelta(minutes=16)), [HEAD + "Saved the opening hours."])
 
     def test_exactly_fifteen_minutes_unprefixed_a_second_more_prefixed(self):
         self.assertEqual(self.answer("hello", timedelta(minutes=15)), ["hello"])
@@ -55,7 +55,7 @@ class LateReplyOutboxTest(unittest.TestCase):
         self.out.fail_sends = 1
         with self.assertRaises(ConnectionError): self.box.flush(self.out)
         self.now = T0 + timedelta(hours=1)  # 10:00
-        self.assertEqual(self.flush(), [HEAD + "one", "Late reply to your message from Saturday 09:01:\ntwo"])
+        self.assertEqual(self.flush(), [HEAD + "one", "Sorry for the wait. This answers your message from today at 9:01 am:\ntwo"])
         self.assertEqual([r["text"] for r in self.db.execute("SELECT text FROM outbox ORDER BY id")], ["one", "two"])
         self.now += timedelta(hours=1)
         self.assertEqual(self.flush(), [])  # sent once
@@ -63,13 +63,13 @@ class LateReplyOutboxTest(unittest.TestCase):
     def test_message_older_than_six_days_names_its_date(self):
         old = datetime(2026, 10, 23, 16, 0, tzinfo=timezone.utc)  # Friday 09:00 PDT
         self.now = datetime(2026, 10, 31, 17, 0, tzinfo=timezone.utc)
-        self.box.add(CHAT, "Applied a1b2.", reply_to=old.isoformat())
-        self.assertEqual(self.flush(), ["Late reply to your message from 2026-10-23 09:00:\nApplied a1b2."])
-        for days, form in ((6, "Friday 09:00:\n"), (6.1, "2026-10-23 09:00:\n")):  # the sixth day is still a weekday
+        self.box.add(CHAT, "Saved the opening hours.", reply_to=old.isoformat())
+        self.assertEqual(self.flush(), ["Sorry for the wait. This answers your message from Friday, Oct 23 at 9 am:\nSaved the opening hours."])
+        for days, form in ((6, "Friday, Oct 23 at 9 am:\n"), (6.1, "Friday, Oct 23 at 9 am:\n")):
             with self.subTest(days=days):
                 self.now = old + timedelta(days=days)
                 self.box.add(CHAT, "x", reply_to=old.isoformat())
-                self.assertEqual(self.flush(), [f"Late reply to your message from {form}x"])
+                self.assertEqual(self.flush(), [f"Sorry for the wait. This answers your message from {form}x"])
 
     def test_unusable_reply_to_is_unprefixed_without_error(self):
         self.now = T0 + timedelta(hours=3)
@@ -88,7 +88,7 @@ class LateReplyOutboxTest(unittest.TestCase):
         self.now = T0
         self.box.add(CHAT, "no message")  # no reply_to: AVB-07 heading alone, as before
         self.now = T0 + timedelta(hours=2)
-        self.assertEqual(self.flush(), ["(Delayed reply, written 2026-11-07 09:00 PST) no message"])
+        self.assertEqual(self.flush(), ["Sorry for the wait. no message"])
 
     def test_an_old_database_without_reply_to_gains_the_column_and_flushes_unprefixed(self):
         repo = PhotoRepo()
@@ -116,14 +116,14 @@ class LateReplyConversationTest(ConversationTestCase):
         self.assertIsNone(self.conv._answering)
         self.now = T0 + timedelta(minutes=16)
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(HEAD + "Draft "), reply)
+        self.assertTrue(reply.startswith(HEAD + "Here's the change I'd make:"), reply)
 
     def test_a_reply_sent_in_time_is_unprefixed(self):
         self.now = T0
         self.say("hours")
         self.now = T0 + timedelta(minutes=5)
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Draft "), reply)
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
 
     def test_a_failed_handling_still_clears_the_answering_time(self):
         self.interp.interpret = lambda text, pending, **kw: 1 / 0
@@ -158,9 +158,9 @@ class LateReplyLabelTest(unittest.TestCase):
         self.now = T0 + timedelta(hours=1)
         conv.flush(out)
         [sent] = [m["text"] for m in out.sent]
-        asked = f"{PHOTO_QUESTION} Reply with the product and description (draft {SHA[:4]})."
-        self.assertEqual(sent, HEAD + asked + f" The label looks like: Far West Fungi Lion's Mane ({category}). "
-                         "Is that right? Say which product it is either way.")
+        asked = PHOTO_QUESTION
+        self.assertEqual(sent, HEAD + asked + f" The label looks like Far West Fungi Lion's Mane ({category}). "
+                         "Is that right? Either way, tell me which product it is.")
 
 
 if __name__ == "__main__":

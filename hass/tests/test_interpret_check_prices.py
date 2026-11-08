@@ -54,9 +54,9 @@ class CheckPriceTests(unittest.TestCase):
         self.assertIs(interpret_check.check(question, load_registry(), ()), question)
 
     def test_earlier_errors_keep_precedence(self):
-        self.assertIn("unknown field", ask([call("product.edit", id=EDIT, colour="$1", description="$3")])["question"])
-        self.assertIn("should be a list of text", ask([call("hike.update", id="h1", clear="$1")])["question"])
-        self.assertIn("did not find a change", ask([])["question"])
+        self.assertIn("I can't do that kind of change yet", ask([call("product.edit", id=EDIT, colour="$1", description="$3")])["question"])
+        self.assertIn("I need a detail as a list of words", ask([call("hike.update", id="h1", clear="$1")])["question"])
+        self.assertIn("couldn't find a change", ask([])["question"])
 
     def test_forbidden_text_policy_unchanged(self):
         self.assertEqual(FORBIDDEN_TEXT, ("<", ">", "$", "{{", "}}"))

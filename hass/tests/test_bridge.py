@@ -230,5 +230,5 @@ class ConversationBridgeTests(ConversationTestCase):
         self.assertEqual(self.conv.outbox.unsent(), [])
         first, second = fake.calls
         self.assertEqual(first["body"]["message"], second["body"]["message"])
-        self.assertTrue(second["body"]["message"].startswith("Draft "))
+        self.assertTrue(second["body"]["message"].startswith("Here's the change I'd make:"))
         self.assertEqual(second["body"]["chatGuid"], OWNER_CHAT)

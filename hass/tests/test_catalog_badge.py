@@ -84,7 +84,7 @@ class OrganicBadgeRemovalTests(CatalogTestCase):
         pid = self.named["id"]
         draft = self.r.prepare(_req(("product.edit", {"id": pid, "name": "Beet juice"})))
         text = conversation.proposal_text("K7Q", draft["draft"], "2026-10-31T19:00:00+00:00")
-        self.assertIn(f"\nWarning: removes Organic badge from {pid}\n", text)
+        self.assertIn("\nHeads up: This takes off the Organic badge.\n", text)
 
     def test_maker_rename_gives_no_warning(self):
         self.assertEqual(self.warnings(("maker.edit", {"key": "Straus", "name": "Straus Family Creamery"})), [])

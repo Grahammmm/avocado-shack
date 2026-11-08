@@ -29,7 +29,7 @@ class NumberTests(unittest.TestCase):
     def test_unsaid_distance_asks_with_the_matched_text(self):
         draft = edit(None, "A 3.2 miles loop", field="distance", collection="events", key="h1")
         self.assertEqual(claims.unstated(draft, POST, MAKERS), [("events h1 distance", "3.2 miles")])
-        self.assertIn('"3.2 miles" in events h1 distance is not in your message', claims.question(claims.unstated(draft, POST, MAKERS)))
+        self.assertIn('You didn\'t say \ue000"3.2 miles"\ue001 in your message. Is that true?', claims.question(claims.unstated(draft, POST, MAKERS)))
 
     def test_owner_units_and_spellings_back_the_number(self):
         self.assertEqual(hits(None, "3.2 miles", "3.2 mi loop"), [])
@@ -109,7 +109,7 @@ class NumberConversationTests(ConversationTestCase):
     def test_unsaid_distance_asks_and_writes_no_row(self):
         rows, result = self.ask(POST, distance="3.2 miles")
         self.assertEqual(result, "claim-question")
-        self.assertIn('"3.2 miles" in events hike-2026-12-05-test-hike distance', self.replies()[0])
+        self.assertIn('You didn\'t say "3.2 miles" in your message. Is that true?', self.replies()[0])
         self.assertEqual(self.drafts(), rows)
 
     def test_owner_words_propose(self):
@@ -136,7 +136,7 @@ class NumberConversationTests(ConversationTestCase):
         with mock.patch.object(conversation.Conversation, "_routes", return_value=None):
             rows, result = self.ask(POST, distance="3 miles", trailId="idea-cass-hill")
         self.assertEqual(result, "claim-question")
-        self.assertIn('"3 miles" in events hike-2026-12-05-test-hike distance', self.replies()[0])
+        self.assertIn('You didn\'t say "3 miles" in your message. Is that true?', self.replies()[0])
         self.assertEqual(self.drafts(), rows)
 
 

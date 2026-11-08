@@ -7,12 +7,12 @@ import json
 import unittest
 from datetime import timedelta
 
-from hass import conversation
+from hass import conversation, voice
 from hass.tests.test_conversation import T0, ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
 DRIED, FRESH = "photo-product-046", "photo-product-150"
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
 
 
 class FindParseTests(unittest.TestCase):
@@ -63,9 +63,15 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.rename("Zzqx", products=7, makers=6)
         lines = self.find("find zzqx")
         self.assertEqual(len(lines), 11)
-        self.assertEqual([ln.split()[0] for ln in lines[:10]], ["product"] * 7 + ["maker"] * 3)  # products first
-        self.assertEqual(lines[10], "… 3 more; add a word.")
-        ids = [ln.split(":")[0].split(" ", 1)[1] for ln in lines[:7]]
+        content = json.loads((self.repo.wt / "hass/content/products.json").read_text("utf-8"))
+        makers = json.loads((self.repo.wt / "hass/content/makers.json").read_text("utf-8"))
+        expected = [p["name"] + " (on the website)" for p in sorted(content["products"], key=lambda p: p["id"])[:7]]
+        expected += [m["name"] + " (on the website)" for _, m in sorted(makers["makers"].items())[:3]]
+        self.assertEqual(lines[:10], expected)  # products first, ordered by their stored ids
+        self.assertEqual(lines[10], "There are more. Add a word to narrow it down.")
+        self.assertEqual(sum(p["name"].startswith("Zzqx ") for p in content["products"])
+                         + sum(m["name"].startswith("Zzqx ") for m in makers["makers"].values()), 13)
+        ids = [p["id"] for p in sorted(content["products"], key=lambda p: p["id"])[:7]]
         self.assertEqual(ids, sorted(ids))
 
     def test_lookup_cap_is_never_shown_as_an_exact_count(self):
@@ -80,7 +86,7 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.find("find Zzqx Nothing"), ["I couldn't find anything called Zzqx Nothing."])
         for text in ("find", "Find.", "find    ", "find " + "x" * 61):
             with self.subTest(text=text[:12]):
-                self.assertEqual(self.find(text), [conversation.FIND_USAGE])
+                self.assertEqual(self.find(text), [voice.plain(conversation.FIND_USAGE)])
         self.assertEqual(self.find("find " + "x" * 60), [f"I couldn't find anything called {"x" * 60}."])
 
     def test_hidden_and_held_records_show_their_status(self):
@@ -120,7 +126,7 @@ class FindTests(StoreMixin, ConversationTestCase):
 
     def test_reply_has_only_id_name_status_and_no_memory_table(self):
         lines = self.find("find etto")
-        self.assertIn("maker Etto: Etto (visible)", lines)
+        self.assertIn("Etto (on the website)", lines)
         text = "\n".join(lines)
         for leak in ("https", "Paso Robles", "Pasta is", "assets/"):
             self.assertNotIn(leak, text)

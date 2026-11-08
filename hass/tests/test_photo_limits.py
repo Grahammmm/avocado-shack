@@ -19,17 +19,15 @@ from hass.tests.test_photo_draft import ANSWER, JPG, PNG, FakePhotos, PhotoInter
 from hass.tests.test_set_photo import PhotoRepo, _settings
 
 # The exact owner texts (pinned here in full so a reply edit is a visible test change).
-TOO_LARGE = "That photo is too large for me (20 MB limit). Please send a smaller copy or a screenshot of it."
-UNSUPPORTED = ("I can't use that file (JPEG or PNG only), so nothing was saved. On iPhone: Settings > Camera > Formats > "
-               "Most Compatible, or send a screenshot of the photo.")
-UNREADABLE = ("I could not read that photo safely, so nothing was changed. Please send it again as a screenshot "
-              "(JPEG or PNG, up to 20 MB).")
-SIDEWAYS = ("This photo is stored sideways, and it has to be stored the right way up, so nothing was changed. "
-            "Please send it again as a screenshot.")
-EMPTY, INCOMPLETE = "That photo arrived empty. Please send it again.", "That photo arrived incomplete. Please send it again."
-MANY = "Please send one photo at a time (one per message); nothing was saved."
-AUDIO = ("That looks like a voice note or audio file. I can't understand voice notes yet, so nothing was saved. "
-         "Please type the change as a text message.")
+TOO_LARGE = "That photo is too big for me. Could you send a smaller copy, or a screenshot of it?"
+UNSUPPORTED = ("I can't use that kind of photo, so nothing was saved. Could you send a screenshot of it instead? "
+               "On an iPhone you can also set Camera, then Formats, to Most Compatible.")
+UNREADABLE = "I couldn't read that photo safely, so nothing changed. Could you send it again as a screenshot?"
+SIDEWAYS = "That photo is sideways and I can't turn it, so nothing changed. Could you send it again as a screenshot?"
+EMPTY, INCOMPLETE = "That photo came through empty. Could you send it again?", "That photo only came through partly. Could you send it again?"
+MANY = "Please send one photo at a time. I haven't saved any of these."
+AUDIO = ("That looks like a voice note. I can't understand voice notes yet, so nothing was saved. "
+         "Could you type the change instead?")
 
 BAD_IDAT = PNG_DATA[0][:-1] + bytes([PNG_DATA[0][-1] ^ 1])  # one CRC bit flipped
 CASES = {  # name: (bytes, code, full reply)
@@ -163,8 +161,10 @@ class CheckPhotoTests(unittest.TestCase):
         for name, (data, _, reply) in CASES.items():
             with self.subTest(name):
                 self.assertNotIn(hashlib.sha256(data).hexdigest()[:8], reply)
-        for reply, limit in ((TOO_LARGE, "20 MB"), (UNREADABLE, "JPEG or PNG, up to 20 MB"),
-                             (UNSUPPORTED, "JPEG or PNG only"), (SIDEWAYS, "right way up"), (MANY, "one per message")):
+        self.assertEqual(media.MAX_BYTES, 20 * 1024 * 1024)
+        self.assertEqual(set(media.KINDS), {"jpeg", "png"})
+        for reply, limit in ((TOO_LARGE, "too big"), (UNREADABLE, "couldn't read"),
+                             (UNSUPPORTED, "can't use that kind of photo"), (SIDEWAYS, "sideways"), (MANY, "one photo at a time")):
             self.assertIn(limit, reply)
 
 

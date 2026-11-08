@@ -33,7 +33,7 @@ class PhoneAnswerTests(H06TestCase):
         self.assertEqual((self.drafts(), self.approvals(), self.commits(), self.interp.texts), (drafts, 0, 0, []))
 
     def one(self, code):
-        return f"Nothing was changed. To apply {code}, reply yes {code}; to cancel it, no {code}."
+        return f"I haven't changed anything yet. To go ahead, reply yes {code}, or no {code} to cancel."
 
     def test_decorated_yes_applies_exactly_the_named_draft(self):
         a, b = self.proposal("hours"), self.proposal("desc")
@@ -80,7 +80,7 @@ class PhoneAnswerTests(H06TestCase):
                      f"{a['code']}", f"?yes {a['code']}", f"approve? {a['code']}", f"{a['code']} cancel thanks?"):
             with self.subTest(text=text):
                 self.hint(text, a_hint)
-        many = f"Nothing was changed. Reply yes <code> or no <code> with one of: {a['code']}, {b['code']}."
+        many = f"I haven't changed anything yet. Which one do you mean?\nyes {a['code']}: {a['summary']}\nyes {b['code']}: {b['summary']}"
         for text in ("yes?", "no?", "approve?", "yes 0000?"):
             with self.subTest(text=text):
                 self.hint(text, many)

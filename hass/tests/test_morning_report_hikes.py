@@ -16,7 +16,7 @@ import unittest
 from hass import morning_report
 from hass.tests import test_morning_report as base  # module import: the AVB-23 tests are not collected twice
 
-LAST, product, UNAV = base.LAST, base.product, "guest count unavailable"
+LAST, product, UNAV = "These come from your last shelf check, so they are not stock counts.", base.product, "I can't see how many guests have signed up"
 SENTINEL = "Zebulon Quillfeather"  # placeholder guest name that must never reach the output
 
 
@@ -51,8 +51,8 @@ class MorningReportHikesTests(unittest.TestCase):
         self.hikes(hike("ridge", "2026-11-03T09:00:00-08:00", capacity=12), hike("creek", "2026-11-03T10:30:00-08:00"),
                    hike("sunset", "2026-11-02T18:00:00-08:00", capacity=12))
         db = self.rsvp_db([("ridge", 3), ("ridge", 4), ("creek", 7), ("other", 9)])
-        self.assertEqual(self.hikes_line("--guests", db), "Hikes: Monday 6:00 pm Sunset (0 of 12 confirmed); "
-                         "Tuesday 9:00 am Ridge (7 of 12 confirmed); Tuesday 10:30 am Creek (7 confirmed)")
+        self.assertEqual(self.hikes_line("--guests", db), "Hikes: Monday at 6 pm, Sunset (0 guests have signed up, room for 12); "
+                         "Tuesday at 9 am, Ridge (7 guests have signed up, room for 12); Tuesday at 10:30 am, Creek (7 guests have signed up)")
         out = self.report("--guests", db, "--json")
         self.assertNotIn(SENTINEL, out)
         self.assertNotIn("example.invalid", out)
@@ -63,7 +63,7 @@ class MorningReportHikesTests(unittest.TestCase):
 
     def test_unset_or_unreadable_guests_say_unavailable_never_zero(self):  # 2
         self.hikes(hike("ridge", "2026-11-03T09:00:00-08:00", capacity=12))
-        want = f"Hikes: Tuesday 9:00 am Ridge ({UNAV})"
+        want = f"Hikes: Tuesday at 9 am, Ridge ({UNAV})"
         self.assertEqual(self.hikes_line(), want)
         self.assertIsNone(json.loads(self.report("--json"))["hikes"][0]["confirmed"])
         (not_sqlite := self.dir / "notes.txt").write_text("not a database " * 40)
@@ -98,14 +98,14 @@ class MorningReportHikesTests(unittest.TestCase):
         self.hikes(hike("late", "2026-11-03T07:30:00Z"), hike("tomorrow", "2026-11-03T17:00:00Z"),
                    hike("noon", "2026-11-03T12:00:00-08:00"), hike("night", "2026-11-04T07:30:00Z"),
                    hike("third", "2026-11-04T08:00:00Z"), hike("early", "2026-11-03T00:05:00-08:00"))
-        self.assertEqual(self.hikes_line(), f"Hikes: Monday 11:30 pm Late ({UNAV}); Tuesday 12:05 am Early ({UNAV}); "
-                         f"Tuesday 9:00 am Tomorrow ({UNAV}); Tuesday 12:00 pm Noon ({UNAV}); "
-                         f"Tuesday 11:30 pm Night ({UNAV})")
+        self.assertEqual(self.hikes_line(), f"Hikes: Monday at 11:30 pm, Late ({UNAV}); Tuesday at 12:05 am, Early ({UNAV}); "
+                         f"Tuesday at 9 am, Tomorrow ({UNAV}); Tuesday at 12 pm, Noon ({UNAV}); "
+                         f"Tuesday at 11:30 pm, Night ({UNAV})")
         self.hikes(hike("eve", "2026-11-01T06:30:00Z"), hike("pdt", "2026-11-01T08:30:00Z"),
                    hike("pst", "2026-11-01T09:30:00Z"), hike("morning", "2026-11-01T17:00:00Z"))
         line = self.run_report("--today", "2026-11-01").split("\n")[-2]
-        self.assertEqual(line, f"Hikes: Sunday 1:30 am Pdt ({UNAV}); Sunday 1:30 am Pst ({UNAV}); "
-                         f"Sunday 9:00 am Morning ({UNAV})")  # Oct 31 23:30 PDT is yesterday
+        self.assertEqual(line, f"Hikes: Sunday at 1:30 am, Pdt ({UNAV}); Sunday at 1:30 am, Pst ({UNAV}); "
+                         f"Sunday at 9 am, Morning ({UNAV})")  # Oct 31 23:30 PDT is yesterday
 
     def test_ten_long_titled_hikes_stay_within_limit(self):  # 5
         titles = [f"Hike {i:02d} " + "y" * 72 for i in range(10)]
@@ -116,7 +116,7 @@ class MorningReportHikesTests(unittest.TestCase):
         text = self.report("--guests", self.rsvp_db([("h1", 2)]))
         self.assertLessEqual(len(text), 1200)
         self.assertEqual(text.split("\n")[-1], LAST)
-        self.assertTrue(text.split("\n")[-2].startswith("Hikes: Tuesday 8:00 am Hike 00"), text)
+        self.assertTrue(text.split("\n")[-2].startswith("Hikes: Tuesday at 8 am, Hike 00"), text)
         self.assertIn("…", text.split("\n")[-2])
         self.hikes(*[hike(f"h{i}", f"2026-11-03T{8 + i:02d}:00:00-08:00", title=t) for i, t in enumerate(titles)])
         self.assertEqual(self.hikes_line().count("…"), 10)  # titles are cut before any hike is dropped
@@ -127,7 +127,7 @@ class MorningReportHikesTests(unittest.TestCase):
         bad = [hike("x", "x"), hike("none", None), hike("num", 20261103), {"id": "nostart", "status": "scheduled"},
                "not an event", None]
         self.hikes(*bad, good)
-        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday 9:00 am Ridge ({UNAV})")
+        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday at 9 am, Ridge ({UNAV})")
         self.assertEqual([h["id"] for h in json.loads(self.report("--json"))["hikes"]], ["ridge"])
         self.hikes(raw="not a list")
         self.assertNotIn("Hikes", self.report())
@@ -139,12 +139,12 @@ class MorningReportHikesTests(unittest.TestCase):
         self.hikes(hike("naive", "2026-11-03T01:00:00"), hike("dateonly", "2026-11-03"),
                    hike("naivez", "2026-11-02T18:00:00.5"), hike("ridge", "2026-11-03T09:00:00-08:00"))
         before = self.tree_bytes()
-        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday 9:00 am Ridge ({UNAV})")
+        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday at 9 am, Ridge ({UNAV})")
         self.assertEqual([(h["id"], h["confirmed"]) for h in json.loads(self.report("--json"))["hikes"]], [("ridge", None)])
         self.assertEqual(self.tree_bytes(), before)
         self.hikes(hike("naive", "2026-11-03T01:00:00"), hike("dateonly", "2026-11-03"))
         self.assertEqual(self.report("--guests", self.rsvp_db([("naive", 3)])).split("\n")[-2:],
-                         ["Available 1 · Limited 0 · Sold out 0 · Not confirmed 0", LAST])
+                         ["On the shelves: 1 available, 0 running low, 0 sold out, 0 not confirmed.", LAST])
 
     def test_report_is_host_timezone_independent(self):  # 8
         self.hikes(hike("naive", "2026-11-03T01:00:00"), hike("dateonly", "2026-11-03"),
@@ -173,7 +173,7 @@ class MorningReportHikesTests(unittest.TestCase):
             with self.subTest(start=start):
                 self.hikes(hike("ridge", start, title="Ridge"))
                 self.assertEqual(json.loads(self.report("--json"))["hikes"][0]["day"], "2026-11-03")
-                self.assertEqual(self.hikes_line(), f"Hikes: Tuesday 9:00 am Ridge ({UNAV})")
+                self.assertEqual(self.hikes_line(), f"Hikes: Tuesday at 9 am, Ridge ({UNAV})")
         # a zone named elsewhere in the event never makes a naive start aware
         self.hikes(dict(hike("naive", "2026-11-03T09:00:00"), timezone="America/Los_Angeles", utcOffset="-08:00"))
         self.assertNotIn("Hikes", self.report())
@@ -191,7 +191,7 @@ class MorningReportHikesTests(unittest.TestCase):
     def test_out_of_range_start_is_skipped_without_traceback(self):  # 11
         self.hikes(hike("ancient", "0001-01-01T00:00:00+00:00"), hike("far", "9999-12-31T23:59:59-08:00"),
                    hike("ridge", "2026-11-03T09:00:00-08:00"))
-        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday 9:00 am Ridge ({UNAV})")
+        self.assertEqual(self.hikes_line(), f"Hikes: Tuesday at 9 am, Ridge ({UNAV})")
         self.assertEqual([h["id"] for h in json.loads(self.report("--json"))["hikes"]], ["ridge"])
 
 

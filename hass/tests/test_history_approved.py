@@ -63,7 +63,7 @@ class AppliedHistoryTests(HistoryTestCase):
         self.propose("hours")
         self.ask(2)
         self.now += timedelta(seconds=600)  # the proposal and both questions lapse
-        self.assertEqual(self.history_bare(), ["Recent changes:", f"{a['code']} applied: {a['summary']}"])
+        self.assertEqual(self.history_bare(), ["Here's what we changed lately:", f"- {a['summary']}: saved, but I'm not sure it's on the website"])
         self.assertEqual(sorted({d["state"] for d in self.drafts()}), ["applied", "expired", "rejected"])
 
 
@@ -74,7 +74,7 @@ class HistoryStateTests(HistoryTestCase):
         lines = self.history_bare()
         self.assertEqual(lines[0], "Here's what we changed lately:")
         self.assertEqual([line.split(":")[0] for line in lines[1:]],
-                         ["S8 reverted", "S7 failed", "S5 verified", "S3 applied", "S1 approved"])
+                         ["- summary S8", "- summary S7", "- summary S5", "- summary S3", "- summary S1"])
         self.assertEqual(conversation.HISTORY_STATES, ("approved", "applied", "verified", "failed", "reverted"))
 
     def test_seven_verified_changes_show_the_newest_five(self):
@@ -83,7 +83,7 @@ class HistoryStateTests(HistoryTestCase):
         self.insert("Q1", "needs-details")
         lines = self.history_bare()
         self.assertEqual(len(lines), 1 + conversation.HISTORY_MAX)
-        self.assertEqual(lines[1:], [f"V{i} verified: summary V{i}" for i in range(7, 2, -1)])
+        self.assertEqual(lines[1:], [f"- summary V{i}: saved, but I'm not sure it's on the website" for i in range(7, 2, -1)])
 
     def test_only_questions_cancelled_and_expired_drafts(self):
         self.ask(1)
@@ -105,7 +105,7 @@ class HistoryStateTests(HistoryTestCase):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         self.assertEqual(self.history_bare(), before)
-        self.assertEqual(before[1:], [f"{r['code']} verified: {r['summary']}"
+        self.assertEqual(before[1:], [f"- {r['summary']}: saved, but I'm not sure it's on the website"
                                                    for r in (b, a)])
 
     def test_undone_change_shows_reverted_and_the_undo_shows_checked(self):
@@ -120,7 +120,7 @@ class HistoryStateTests(HistoryTestCase):
         self.assertEqual(self.history_bare()[1:],
                          [f"- {rev['summary']}: saved, but I'm not sure it's on the website",
                           f"- {a['summary']}: undone"])
-        self.assertTrue(self.history().endswith(f"{a['code']} reverted: {a['summary']} - undone"))
+        self.assertTrue(self.history().endswith(f"- {a['summary']}: undone"))
 
 
 if __name__ == "__main__":

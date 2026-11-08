@@ -11,7 +11,8 @@ import unittest
 from hass import morning_report
 from hass.tests import test_morning_report as base  # module import: the AVB-23 tests are not collected twice
 
-LAST, TODAY, product, CANNOT = base.LAST, base.TODAY, base.product, "morning_report: cannot read content"
+LAST, TODAY, product, CANNOT = ("These come from your last shelf check, so they are not stock counts.",
+                               base.TODAY, base.product, "morning_report: cannot read content")
 
 
 class MorningReportShapeTests(unittest.TestCase):
@@ -76,18 +77,18 @@ class MorningReportShapeTests(unittest.TestCase):
     def test_valid_content_prints_the_same_report_as_before(self):  # golden strings from test_morning_report
         self.content([product("Zucchini", "limited"), product("apples", "limited"), product("Pears", "no"),
                       product("Figs", "yes"), product("Kale"), product("Plums", "maybe")], checked_days_ago=3)
-        self.assertEqual(self.report(), "\n".join(["Shelf check: Friday, October 30",
-                                                   "Available 1 · Limited 2 · Sold out 1 · Not confirmed 2",
-                                                   "Limited: apples, Zucchini", "Sold out: Pears", LAST]))
+        self.assertEqual(self.report(), "\n".join(["Your last shelf check was Friday, October 30.",
+                                                   "On the shelves: 1 available, 2 running low, 1 sold out, 2 not confirmed.",
+                                                   "Running low: apples, Zucchini", "Sold out: Pears", LAST]))
         self.content([product("Pears", "no"), product("Figs", "limited"), product("Kale")], checked_days_ago=3)
         self.assertEqual(self.report("--json"), json.dumps(
             {"checked_on": "2026-10-30", "stale": False, "future": False, "available": 0, "limited": 1, "sold_out": 1,
              "not_confirmed": 1, "limited_names": ["Figs"], "sold_out_names": ["Pears"]}))
         self.content([product("Figs", "yes")], checked_days_ago=8)
-        self.assertEqual(self.report().split("\n")[0], "Shelf check: Sunday, October 25 - more than a week ago")
+        self.assertEqual(self.report().split("\n")[0], "Your last shelf check was Sunday, October 25. That was more than a week ago, so the website says to call to confirm.")
         self.content([product("Figs", "yes"), product("Pears", "no")], checked_days_ago=-1)
-        self.assertEqual(self.report().split("\n"), ["Shelf check: Tuesday, November 3 - dated after today, check the clock",
-                                                    "Available 1 · Limited 0 · Sold out 1 · Not confirmed 0",
+        self.assertEqual(self.report().split("\n"), ["Your last shelf check is dated Tuesday, November 3, which is still to come. Please check the date on the computer.",
+                                                    "On the shelves: 1 available, 0 running low, 1 sold out, 0 not confirmed.",
                                                     "Sold out: Pears", LAST])
 
     def test_unreadable_file_line_is_unchanged(self):

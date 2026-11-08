@@ -264,7 +264,7 @@ class FixtureConversationTests(test_undo.H06TestCase):
         for text in ("new honey in Templeton", "this honey isn't from Bee Happy Farm in Templeton"):
             with self.subTest(text):
                 self.assertEqual(self.say(text), "claim-question")
-                self.assertIn("I did not draft that", self.replies()[0])
+                self.assertIn('You didn\'t say "link" and ', self.replies()[0])
                 self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_no_cancels_both(self):

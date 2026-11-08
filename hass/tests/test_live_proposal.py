@@ -2,7 +2,7 @@
 from datetime import timedelta
 from unittest import mock
 
-from hass import conversation as conv, owner_answers as answers
+from hass import conversation as conv, owner_answers as answers, voice
 from hass.tests.test_conversation import ConversationTestCase, SETTINGS, T0, _ops
 from hass.tests.test_editor import DESC
 from hass.tests.test_live_policy import edit
@@ -23,16 +23,16 @@ class LiveProposalTests(ConversationTestCase):
         draft = edit(before, "A shorter headline", "headline", "store")
         text = conv.proposal_text("a1b2", draft, "2026-11-02T17:10:00+00:00", live_site=SITE)
         self.assertIn(before, text)
-        self.assertIn(f"Reply yes a1b2 and this goes live on {SITE} within a few minutes.", text)
+        self.assertIn("Reply yes a1b2 to put it on the website (it should show within a few minutes), or no a1b2 to cancel.", text)
         self.assertNotIn("Reply yes to apply", text)
         row, reply = self.propose("hours")
-        self.assertIn(f"Reply yes {row['code']} and this goes live on {SITE}", reply)
+        self.assertIn(f"Reply yes {row['code']} to put it on the website", reply)
 
     def test_protected_proposal_says_cannot_go_live(self):
         draft = edit("Organic fruit", "Not organic fruit")
         text = conv.proposal_text("a1b2", draft, "2026-11-02T17:10:00+00:00", live_site=SITE)
-        self.assertIn("This change can't go live from chat (protected sentences: origin/organic)", text)
-        self.assertIn("Nothing will be published; G can do it by hand.", text)
+        self.assertIn("I can't put this on the website from chat: it touches where the food comes from or whether it is organic.", text)
+        self.assertIn("Nothing will be published. Graham can do it by hand.", text)
         self.assertNotIn("Reply yes", text)
         # Even an explicitly named yes cannot bypass the content boundary.
 
@@ -40,9 +40,9 @@ class LiveProposalTests(ConversationTestCase):
             "id": "photo-product-001", "description": "Organic fruit"}))})
         self.conv.interpreter = self.interp
         row, reply = self.propose("Organic fruit")
-        self.assertIn("can't go live", reply)
+        self.assertIn("can't put this on the website from chat", reply)
         self.assertEqual(self.say(f"yes {row['code']}"), "no-target")
-        self.assertIn("can't go live", self.replies()[0])
+        self.assertIn("can't put this on the website from chat", self.replies()[0])
         self.assertEqual((self.editor.applies, self.commits()), (0, 0))
         self.assertEqual(self.conv.db.execute("SELECT count(*) FROM approvals").fetchone()[0], 0)
 
@@ -52,7 +52,7 @@ class LiveProposalTests(ConversationTestCase):
         self.assertEqual(self.replies(), ["To put a change on the website, reply yes and its code, like yes a1b2."])
         self.assertEqual(self.editor.applies, 0)
         self.assertEqual(self.say(f"yes {row['code']}"), "approved")
-        self.assertEqual(self.replies(), [answers.applied_text(row["code"], row["summary"], live_site=SITE)])
+        self.assertEqual(self.replies(), [voice.plain(answers.applied_text(row["code"], row["summary"], live_site=SITE))])
         self.assertEqual(self.commits(), 1)
         self.assertEqual(self.say(f"yes {row['code']}"), "no-target")
         self.assertEqual(self.editor.applies, 1)
@@ -66,7 +66,7 @@ class LiveProposalTests(ConversationTestCase):
         row, _ = self.propose("hours")
         self.now = T0 + timedelta(seconds=601)
         self.assertEqual(self.say(f"yes {row['code']}"), "no-target")
-        self.assertIn("expired", self.replies()[0])
+        self.assertIn("timed out", self.replies()[0])
         row, _ = self.propose("hours")
         self.assertEqual(self.say("yes", pid="same"), "no-target")
         self.replies()
@@ -77,10 +77,10 @@ class LiveProposalTests(ConversationTestCase):
         self.repo.apply(changed)
         self.assertEqual(self.say(f"yes {row['code']}"), "approved")
         reply = self.replies()[0]
-        self.assertIn("site changed since", reply)
+        self.assertIn("website changed while that was waiting", reply)
         new = self.drafts()[-1]
         self.assertNotEqual(new["code"], row["code"])
-        self.assertIn(f"Reply yes {new['code']} and this goes live on {SITE}", reply)
+        self.assertIn(f"Reply yes {new['code']} to put it on the website", reply)
         self.assertEqual(self.drafts()[-2]["reason"], "stale")
         self.assertEqual(self.say("yes"), "no-target")
 
@@ -108,7 +108,7 @@ class LiveProposalTests(ConversationTestCase):
         self.assertEqual(self.replies(), [])
         self.assertIsNone(self.conv.screenshot("missing"))
         for checked, error in ((True, None), (False, "private diagnostic")):
-            self.assertEqual(answers.applied_text(row["code"], row["summary"], checked, error, SITE), replies[0])
+            self.assertEqual(voice.plain(answers.applied_text(row["code"], row["summary"], checked, error, SITE)), replies[0])
 
     def test_recover_applied_and_verify_failure_never_claim_website_outcome(self):
         row, _ = self.propose("hours")
@@ -121,7 +121,7 @@ class LiveProposalTests(ConversationTestCase):
         with mock.patch.object(self.conv, "verify", return_value=(None, "private failure")):
             self.assertEqual(self.conv.recover(), ["applied"])
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Saved "))
+        self.assertTrue(reply.startswith("Saved: "))
         for text in ("website is unchanged", "Now showing", answers.NOT_LIVE, "private failure"):
             self.assertNotIn(text, reply)
         self.assertIsNotNone(self.drafts()[0]["checked_at"])
@@ -133,6 +133,6 @@ class LiveProposalTests(ConversationTestCase):
         draft = edit("old", "new", "headline", "store")
         self.assertEqual(conv.proposal_text("a1b2", draft, "2026-11-02T17:10:00+00:00"),
             "Here's the change I'd make:\nthe shop details, the headline: from \ue000old\ue001 to \ue000new\ue001\nI'll hold this for you until Monday, Nov 2 at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.")
-        self.assertEqual(answers.applied_text("a1b2", "headline"), "Applied a1b2: headline\n" + answers.NOT_LIVE)
+        self.assertEqual(answers.applied_text("a1b2", "headline"), "Saved: \ue000headline\ue001\n" + answers.NOT_LIVE)
         self.assertEqual(answers.recovered_text("a1b2"),
-            "a1b2 was interrupted and not saved. The website is as it was before; send the change again to make a new draft.")
+            "That change was interrupted and not saved. The website is as it was before. Please send it again.")

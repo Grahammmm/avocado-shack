@@ -51,10 +51,10 @@ class StatusPhotoTests(Harness):
                                      T0.isoformat(), expires.isoformat()))
 
     def photo_line(self, lines):
-        return [line for line in lines if line.startswith("Photos waiting")]
+        return [line for line in lines if "waiting for details from you" in line]
 
     def download_line(self, lines):
-        return [line for line in lines if line.startswith("Photos still downloading")]
+        return [line for line in lines if "still coming in" in line]
 
     def test_counts_only_waiting_photo_drafts(self):
         self.assertEqual(self.say(attachments=1), "photo-draft")
@@ -67,19 +67,21 @@ class StatusPhotoTests(Harness):
         self.insert("NUL1", "[]")  # no ops: not counted
         self.insert("OLD1", json.dumps([SET_PHOTO]), expires=T0 - timedelta(minutes=1))  # lapsed: not listed
         lines = self.status()
-        self.assertEqual(self.photo_line(lines), ["Photos waiting for details: 2"])
+        self.assertEqual(self.photo_line(lines), ["Some photos are waiting for details from you."])
         self.assertEqual(self.download_line(lines), [])  # no inbox file
         photo_codes = [d["code"] for d in self.drafts() if d["summary"] != "Which product?"]
-        for code in photo_codes:  # the per-draft line stays
-            self.assertTrue(any(line.startswith(f"{code} needs details: ") for line in lines))
-        at = lines.index("Photos waiting for details: 2")
+        self.assertEqual(len(photo_codes), 2)
+        for draft in (d for d in self.drafts() if d['code'] in photo_codes):
+            self.assertIn(f"I'm waiting for details: {draft['summary']}", lines)
+        at = lines.index("Some photos are waiting for details from you.")
         self.assertTrue(all(not line.startswith("Last change:") for line in lines[:at]))
-        self.assertTrue(lines[at - 1].startswith(("TXT1", "MIX1", "BAD1", "NUL1")))  # right after the draft lines
+        self.assertTrue(lines[at - 2].startswith("I'm waiting for details: Which product?"))
+        self.assertEqual(lines[at - 1], "I still need your shelf check.")
 
     def test_filled_photo_draft_is_no_longer_counted(self):
         self.say(attachments=1)
         self.replies()
-        self.assertEqual(self.photo_line(self.status()), ["Photos waiting for details: 1"])
+        self.assertEqual(self.photo_line(self.status()), ["A photo is waiting for details from you."])
         self.assertEqual(self.say(ANSWER), "proposed")
         self.replies()
         self.assertEqual(self.photo_line(self.status()), [])
@@ -88,7 +90,7 @@ class StatusPhotoTests(Harness):
         path = self.inbox([("pending", 1), ("pending", 0), ("done", 3)])  # a done row with tries is not counted
         before = path.read_bytes()
         lines = self.status()
-        self.assertEqual(self.download_line(lines), ["Photos still downloading: 1"])
+        self.assertEqual(self.download_line(lines), ["A photo is still coming in."])
         self.assertEqual(self.photo_line(lines), [])
         self.assertEqual(path.read_bytes(), before)
 
@@ -106,16 +108,16 @@ class StatusPhotoTests(Harness):
         path = self.repo.state / "inbox.sqlite3"
         path.write_bytes(b"not a database, just garbage bytes" * 64)
         lines = self.status()
-        self.assertEqual(self.download_line(lines), ["Photos still downloading: unavailable"])
-        self.assertEqual(lines[0], "Changes: on")
+        self.assertEqual(self.download_line(lines), ["I can't tell whether any photos are still coming in."])
+        self.assertEqual(lines[0], "Everything is ready.")
         self.assertEqual(path.read_bytes(), b"not a database, just garbage bytes" * 64)
         path.unlink()
         self.inbox([("pending", 1)])
         with contextlib.closing(sqlite3.connect(path, isolation_level=None)) as lock:
             lock.execute("BEGIN EXCLUSIVE")
-            self.assertEqual(self.download_line(self.status()), ["Photos still downloading: unavailable"])
+            self.assertEqual(self.download_line(self.status()), ["I can't tell whether any photos are still coming in."])
             lock.execute("ROLLBACK")
-        self.assertEqual(self.download_line(self.status()), ["Photos still downloading: 1"])
+        self.assertEqual(self.download_line(self.status()), ["A photo is still coming in."])
 
     def test_status_is_read_only(self):
         self.say(attachments=1)

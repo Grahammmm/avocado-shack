@@ -136,7 +136,7 @@ class MakerHideConversationTests(H06TestCase):
         self.assertGreater(len(self.big), 5)
         draft, reply = self.propose("stop big")
         self.assertIn(BIG, reply)
-        self.assertTrue(all(pid in reply for pid in self.big), reply)  # every id, past the short summary
+        self.assertTrue(all(p['name'] in reply for p in self.content('products')['products'] if p['id'] in self.big), reply)  # every product, past the short summary
         self.assertEqual(self.commits(), 0)
         self.assertEqual(self.say("no"), "rejected")
         self.replies()
@@ -146,7 +146,7 @@ class MakerHideConversationTests(H06TestCase):
         self.replies()
         self.assertEqual(self.commits(), 0)
         draft, reply = self.propose("stop etto")
-        self.assertTrue(all(pid in reply for pid in self.ids) and KEY in reply, reply)
+        self.assertTrue(all(p['name'] in reply for p in self.content('products')['products'] if p['id'] in self.ids) and KEY in reply, reply)
         self.assertEqual(self.say("yes"), "approved")
         self.replies()
         self.assertEqual(self.commits(), 1)
@@ -177,7 +177,7 @@ class MakerHideConversationTests(H06TestCase):
         self.apply("edit etto")  # touches a product the change touched
         self.assertEqual(self.say(f"undo {first['code']}"), "not-drafted")
         [reply] = self.replies()
-        self.assertIn("conflict", reply)
+        self.assertIn("That has changed since, so I can't undo it cleanly. Please ask Graham.", reply)
         self.assertTrue(all(self.statuses()[pid] == "hidden" for pid in self.ids))
         self.assertEqual(self.product(self.ids[0])["description"], "Later edit.")
 

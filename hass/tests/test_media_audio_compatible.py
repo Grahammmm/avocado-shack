@@ -12,6 +12,7 @@ from hass.tests.test_media import JPEG, PNG
 from hass.tests.test_photo_draft import ANSWER
 from hass.tests.test_set_photo import PhotoRepo
 
+AUDIO = "That looks like a voice note. I can't understand voice notes yet, so nothing was saved. Could you type the change instead?"
 PAD = b"\0" * 64
 
 
@@ -34,7 +35,7 @@ class CompatibleBrandTests(unittest.TestCase):
             with self.subTest(name):
                 self.assertTrue(media.is_audio(data))
                 with self.assertRaises(media.Refused) as cm: media.check_photo(data)
-                self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", limits.AUDIO))
+                self.assertEqual((cm.exception.code, cm.exception.reply), ("audio", AUDIO))
 
     def test_box_bounds_and_alignment(self):
         good = ftyp(brands=(b"M4A ",))
@@ -86,7 +87,7 @@ class CompatibleAudioConversationTests(unittest.TestCase):
         self.photos.data = ftyp(brands=(b"isom", b"M4A "))
         self.assertEqual(self.say("approve all", pid="cmp"), "photo-refused:audio")
         self.assertEqual(self.disposition("cmp"), "photo-refused:audio")
-        self.assertEqual(self.replies(), [limits.AUDIO])
+        self.assertEqual(self.replies(), [AUDIO])
         self.assertEqual(self.say("approve all", pid="cmp"), "duplicate")
         self.assertEqual(self.replies(), [])
         self.assertNothingKept()

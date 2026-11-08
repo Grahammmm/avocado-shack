@@ -55,7 +55,7 @@ class EnumCheckTests(unittest.TestCase):
         narrowed = dict(REGISTRY)
         narrowed["product.edit"] = Op("product.edit", {"category": Arg("enum", choices=("fruit", "eggs"))}, lambda *a: None)
         q = ask([call("product.edit", category="meat")], narrowed)["question"]
-        self.assertEqual(q, f"product.edit.category should be one of: fruit, eggs. {AGAIN}")
+        self.assertEqual(q, f"For the shelf, I can use: fruit, eggs. {AGAIN}")
         self.assertNotIn("Flowers", q)
 
     def test_enum_types_and_no_normalization(self):
@@ -82,8 +82,8 @@ class EnumCheckTests(unittest.TestCase):
         self.assertEqual(ask([bad, call("product.set_availability", id="p1", available="maybe")]),
                          {"question": SHELVES.format("snacks")})
         self.assertIn("are the same", ask([bad, bad])["question"])
-        self.assertIn("unknown field", ask([call("product.edit", id="p1", colour="x"), bad])["question"])
-        self.assertIn("draft beef waiting", ask([call("product.edit", id="p1", name="Hass")], revises="beef")["question"])
+        self.assertIn("I can't do that kind of change yet. You can ask Graham.", ask([call("product.edit", id="p1", colour="x"), bad])["question"])
+        self.assertIn("I can't find that change any more. Could you tell me the change again?", ask([call("product.edit", id="p1", name="Hass")], revises="beef")["question"])
         self.assertEqual(ask([bad], revises="beef"), {"question": SHELVES.format("snacks")})  # fields before revises
         self.assertEqual(ask([bad, call("history.revert", change="chg-000000000000")])["question"],
                          interpret_check.UNDO_GUIDANCE)

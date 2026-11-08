@@ -84,7 +84,7 @@ class HealthAwardTermTests(unittest.TestCase):
         many = claims.unstated(edit("", "Cures, heals, prevents, immune"), "", MAKERS)
         self.assertEqual([t for _w, t in many], ["cures", "heals", "prevents", "immune"])
         q = claims.question(many)
-        self.assertIn('"cures" in products p1 description and "heals" in products p1 description and 2 more are not', q)
+        self.assertIn('You didn\'t say \ue000"cures"\ue001 and \ue000"heals"\ue001 (and a few more) in your message. Are they true?', q)
 
     def test_revert_and_repeat_scope(self):
         revert = [{"op": "history.revert", "args": {"changeId": "c1"}}]
@@ -128,8 +128,8 @@ class HealthAwardConversationTests(ConversationTestCase):
     def test_unsaid_claim_asks_without_proposal_or_commit(self):
         self.assertEqual(self.draft("edit p1 description: smooth", "smooth, antioxidant honey"), "claim-question")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("I did not draft that: "), reply)
-        self.assertIn(f'"antioxidant" in products {P1} description', reply)
+        self.assertTrue(reply.startswith("You didn't say "), reply)
+        self.assertIn('"antioxidant" in your message. Is that true?', reply)
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_owner_claim_proposes_not_applies(self):

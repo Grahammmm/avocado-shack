@@ -101,8 +101,8 @@ class ListConversationTests(ConversationTestCase):
         text = "add a Saturday honey line to the hours"
         self.assertEqual(self.set_hours(text, ["Mon–Sat 9–6", "Organic honey Saturdays"]), "claim-question")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("I did not draft that: "), reply)
-        self.assertIn('"organic" in store store hours is not in your message', reply)
+        self.assertTrue(reply.startswith("You didn't say "), reply)
+        self.assertIn('You didn\'t say "organic" in your message. Is that true?', reply)
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_owner_words_propose(self):

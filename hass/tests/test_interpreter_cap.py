@@ -73,12 +73,13 @@ class CapTests(CapTestCase):
         self.assertEqual(self.commits(), 1)
         self.replies()
         self.assertEqual(self.say("undo"), "proposed")
-        self.assertTrue(self.replies()[0].startswith(f"Undo {hours['code']}:"))
+        self.assertTrue(self.replies()[0].startswith("To undo that, I'd change it back:"))
         self.assertEqual(self.say("remember parking: back lot"), "memory-saved")
         self.assertEqual(self.say("history"), "history")
         self.assertEqual(self.say("no"), "no-target")  # two drafts wait (desc and the undo): Hass asks which
         self.replies()
-        self.assertEqual(self.status()[1], "Interpreter today: 2 of 2")
+        self.assertEqual(self.status()[1], "I'm close to the number of new requests I can read today.")
+        self.assertEqual(tuple(self.conv.db.execute("SELECT day, calls FROM usage").fetchone()), ("2026-11-02", 2))
         self.assertEqual(self.interp.calls, 2)
         self.limited("desc2")
 
@@ -91,7 +92,7 @@ class CapTests(CapTestCase):
         self.assertEqual(self.status()[1], "Nothing is waiting for your yes.")
         self.assertEqual(self.say("when?"), "question")
         self.replies()
-        self.assertEqual((self.interp.calls, self.status()[1]), (3, "Interpreter today: 1 of 2"))
+        self.assertEqual((self.interp.calls, self.status()[1]), (3, "Nothing is waiting for your yes."))
         rows = [tuple(r) for r in self.conv.db.execute("SELECT day, calls FROM usage ORDER BY day")]
         self.assertEqual(rows, [("2026-11-02", 2), ("2026-11-03", 1)])  # old day kept
 

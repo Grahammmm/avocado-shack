@@ -19,12 +19,12 @@ from hass.tests.test_editor import SITE_FILES
 
 NOW = datetime(2026, 11, 2, 17, 30, tzinfo=timezone.utc)  # Mon 09:30 PST
 INTERNAL = re.compile(r"chg-|sha256|[0-9a-f]{7,}|/|worktree|commit|revision|index\.html|PermissionError", re.I)
-STOPPED = "Changes are stopped. Nothing new will be applied until you say 'resume'."
+STOPPED = "Changes are stopped. I won't save anything new until you say 'resume changes'."
 STAYS = "Changes already on the website stay there."
-NOT_COPIED = ("Saved, but not confirmed on the website. Copying it to the website has not been done, or did not finish. "
-              "If copying it was started and stopped part way, some pages may already show it; ask for help to copy it "
+NOT_COPIED = ("It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. "
+              "If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it "
               "to the website again, which puts every page in place.")
-NOT_LIVE = "Saved, but not on the website yet: copying it there is a separate step. Ask for help to put it on the website."
+NOT_LIVE = "It's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website."
 
 
 def row(state, **kw):
@@ -37,14 +37,14 @@ class DidItWorkTests(unittest.TestCase):
         installed = {"state": "installed", "installed_at": "2026-11-02T17:05:00+00:00", "commit": "d" * 40, "files": 3}
         failed = {"state": "failed", "reason": "write failed: PermissionError", "commit": "d" * 40}
         cases = [
-            (row("verified"), installed, "Done. store store: hours is on the website now (checked today 09:05)."),
+            (row("verified"), installed, "Done. \ue000store store: hours\ue001 is on the website now (I checked today at 9:05 am)."),
             (row("applied"), None, NOT_COPIED),
-            (row("verified"), failed, "This did not reach the website, and the website is unchanged. "
-                                      "The website files could not be written."),
+            (row("verified"), failed, "That didn't reach the website, and the website is unchanged. "
+                                      "I couldn't update the website pages."),
             (row("reverted"), installed, "That change was undone."),
-            (row("proposed"), None, "Waiting for your OK - nothing has changed yet."),
+            (row("proposed"), None, "It's waiting for your yes. Nothing has changed yet."),
             (row("failed", reason="generated file out of date: storefront-mockup/index.html"), None,
-             "This was not saved, and the website is unchanged; send the change again to retry.")]
+             "I couldn't save that, and the website is unchanged. Please send the change again.")]
         for change, inst, want in cases:
             with self.subTest(state=change["state"], install=inst):
                 got = answers.did_it_work(change, inst, NOW)
@@ -52,12 +52,12 @@ class DidItWorkTests(unittest.TestCase):
                 self.assertIsNone(INTERNAL.search(got), got)
 
     def test_install_reasons_drop_the_file_name(self):
-        for reason, plain in (("readback mismatch: index.html", "The website files did not read back as written"),
-                              ("site path is not a regular file: index.html", "Something unexpected is in the website folder"),
-                              ("a new reason: index.html", "The copy did not finish"), (None, "The copy did not finish")):
+        for reason, plain in (("readback mismatch: index.html", "The website pages didn't come out the way I wrote them"),
+                              ("site path is not a regular file: index.html", "Something unexpected is in the way on the website"),
+                              ("a new reason: index.html", "It didn't finish"), (None, "It didn't finish")):
             with self.subTest(reason=reason):
                 got = answers.did_it_work(row("applied"), {"state": "failed", "reason": reason}, NOW)
-                self.assertEqual(got, f"This did not reach the website, and the website is unchanged. {plain}.")
+                self.assertEqual(got, f"That didn't reach the website, and the website is unchanged. {plain}.")
                 self.assertIsNone(INTERNAL.search(got), got)
 
     def test_failed_rollback_never_says_the_website_is_unchanged(self):
@@ -77,37 +77,37 @@ class DidItWorkTests(unittest.TestCase):
             self.assertEqual(answers.did_it_work(row(state), installed, NOW), "That change was cancelled, so nothing changed.")
 
     def test_checked_time_today_another_day_and_unreadable(self):
-        for at, want in (("2026-11-02T17:05:00+00:00", "today 09:05"), ("2026-11-01T17:05:00+00:00", "Sun Nov 1 09:05"),
-                         ("not a time", "at an unknown time"), (None, "at an unknown time")):
+        for at, want in (("2026-11-02T17:05:00+00:00", "today at 9:05 am"), ("2026-11-01T17:05:00+00:00", "yesterday at 9:05 am"),
+                         ("not a time", "at a time I can't read"), (None, "at a time I can't read")):
             with self.subTest(at=at):
                 got = answers.did_it_work(row("applied"), {"state": "installed", "installed_at": at}, NOW)
-                self.assertEqual(got, f"Done. store store: hours is on the website now (checked {want}).")
+                self.assertEqual(got, f"Done. \ue000store store: hours\ue001 is on the website now (I checked {want}).")
 
     def test_preview_failure_is_the_reason_it_is_not_on_the_website(self):
         got = answers.did_it_work(row("applied", reason="not verified: products avocado-1: check failed: productShown"),
                                   None, NOW)
-        self.assertEqual(got, "Saved, but not confirmed on the website. The preview check failed: the preview did not "
-                              "show the change as expected: the product card (products avocado-1). " + NOT_COPIED.split(". ", 2)[2])
+        self.assertEqual(got, "It's saved, but I'm not sure it's on the website. The preview check didn't pass: the preview didn't "
+                              "show the change the way it should: the product card. " + NOT_COPIED.split(". ", 2)[2])
         self.assertNotIn("Nothing is broken", got)
 
     def test_preview_diagnostics_are_plain_and_redacted(self):  # RETURN 1: no path or exception text
-        for error, plain in (  # AV1737-08's failed record stays named; everything after it is translated
+        for error, plain in (  # The diagnostic stays in the record; the reply drops ids and technical details.
                 ("generated file out of date: storefront-mockup/index.html; generated file out of date: "
                  "storefront-mockup/catalog.json", "the website pages were not rebuilt for it"),
-                ("products avocado-1: preview server did not start", "the preview could not be started (products avocado-1)"),
+                ("products avocado-1: preview server did not start", "I couldn't make a preview"),
                 ("products avocado-1: desktop: check failed: productShown",
-                 "the preview did not show the change as expected: the product card (products avocado-1)"),
-                ("no change record", "the saved change could not be found"),
+                 "the preview didn't show the change the way it should: the product card"),
+                ("no change record", "I couldn't find the saved change"),
                 ("products avocado-1: FileNotFoundError: [Errno 2] /home/x/state/screenshots/chg-1.png",
-                 "the preview could not be checked (products avocado-1)"),
-                ("hass/content/products.json: products[0].name must be text", "the preview could not be checked"),
-                ("site/x y: TimeoutError", "the preview could not be checked"),  # a path is never taken as a record
-                ("", "the preview could not be checked")):
+                 "I couldn't check the preview"),
+                ("hass/content/products.json: products[0].name must be text", "I couldn't check the preview"),
+                ("site/x y: TimeoutError", "I couldn't check the preview"),  # a path is never taken as a record
+                ("", "I couldn't check the preview")):
             with self.subTest(error=error):
                 status = answers.did_it_work(row("applied", reason=f"not verified: {error}"), None, NOW)
                 reply = answers.applied_text("ab12", "store store: hours", error=error)
-                self.assertIn(f"The preview check failed: {plain}. ", status)
-                self.assertEqual(reply, f"Applied ab12, but the preview check failed: {plain}.\n{NOT_LIVE}")
+                self.assertIn(f"The preview check didn't pass: {plain}. ", status)
+                self.assertEqual(reply, f"I saved it, but the preview check didn't pass: {plain}.\n{NOT_LIVE}")
                 for text in (status, reply):
                     self.assertIsNone(INTERNAL.search(text), text)
                     for raw in ("Error", "Errno", ".json", "storefront", "productShown", "desktop", "home"):
@@ -122,16 +122,16 @@ class DidItWorkTests(unittest.TestCase):
         for change in (row("applied"), row("verified"), row("applied", reason="not verified: check failed: x")):
             with self.subTest(reason=change["reason"]):
                 got = answers.did_it_work(change, None, NOW)
-                self.assertTrue(got.startswith("Saved, but not confirmed on the website. "), got)
-                self.assertIn("some pages may already show it; ask for help to copy it to the website again", got)
+                self.assertTrue(got.startswith("It's saved, but I'm not sure it's on the website. "), got)
+                self.assertIn("some pages may already show it. Please ask Graham to copy it to the website again", got)
                 for word in ("Nothing is broken", "unchanged", "as it was"):
                     self.assertNotIn(word, got)
 
     def test_history_words(self):
         for state, inst, want in (("verified", {"state": "installed"}, "on the website"),
-                                  ("applied", {"state": "failed"}, "not on the website yet"),
-                                  ("applied", None, "not confirmed on the website"), ("reverted", None, "undone"),
-                                  ("failed", None, "not saved; website unchanged"), ("expired", None, "nothing changed")):
+                                  ("applied", {"state": "failed"}, "saved, but it didn't reach the website"),
+                                  ("applied", None, "saved, but I'm not sure it's on the website"), ("reverted", None, "undone"),
+                                  ("failed", None, "I couldn't save it, so nothing changed"), ("expired", None, "timed out, nothing changed")):
             with self.subTest(state=state, install=inst):
                 self.assertEqual(answers.history_words(row(state), inst), want)
 
@@ -195,14 +195,14 @@ class ConversationAnswerTests(ConversationTestCase):
     def test_did_it_work_follows_the_install(self):
         draft = self.applied()
         self.assertEqual(self.last_line(), "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.")
-        self.assertEqual(self.history(), [f"{draft['code']} applied: store store: hours - not confirmed on the website"])
+        self.assertEqual(self.history(), ["- the opening hours for Avocado Shack: saved, but I'm not sure it's on the website"])
         self.now = T0 + timedelta(minutes=5)
         out = install.install(draft["change_id"], state=str(self.repo.state), now=self.now)
         self.assertEqual(out["result"], "installed")
         line = self.last_line("Did my change work?")
-        self.assertEqual(line, f"Last change: {draft['code']} store store: hours - Done. store store: hours is on the "
-                               "website now (checked today 09:05).")
-        self.assertEqual(self.history(), [f"{draft['code']} applied: store store: hours - on the website"])
+        self.assertEqual(line, "Last change: the opening hours for Avocado Shack. Done. the opening hours for Avocado Shack is on the "
+                               "website now (I checked today at 9:05 am).")
+        self.assertEqual(self.history(), ["- the opening hours for Avocado Shack: on the website"])
 
     def test_failed_install_says_the_website_is_unchanged(self):
         draft, before = self.applied(), self.snapshot()
@@ -243,7 +243,7 @@ class ConversationAnswerTests(ConversationTestCase):
         self.assertEqual(self.snapshot(), before)  # nothing half-installed: the website really is as it was
         self.assertEqual(self.replies(), ["That change was interrupted and not saved. The website is as it was before. Please send it again."])
         self.assertEqual(self.say("stop"), "pause")  # still stopped after the restart; nothing is under way now
-        self.assertEqual(self.replies(), [f"{STOPPED} No requests are waiting. {STAYS}"])
+        self.assertEqual(self.replies(), [f"Changes are stopped. I won't save anything new until you say 'resume changes'. No requests are waiting. {STAYS}"])
 
     def test_stop_counts_waiting_drafts_and_unread_messages_but_not_itself(self):
         path = self.repo.state / "inbox.sqlite3"
@@ -264,7 +264,7 @@ class ConversationAnswerTests(ConversationTestCase):
         self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM control").fetchone()[0], 1)
         path.write_bytes(b"not a database")  # an unreadable inbox counts nothing and never fails the stop
         self.assertEqual(self.say("stop"), "pause")
-        self.assertEqual(self.replies(), [f"{STOPPED} No requests are waiting. {STAYS}"])
+        self.assertEqual(self.replies(), [f"Changes are stopped. I won't save anything new until you say 'resume changes'. No requests are waiting. {STAYS}"])
 
     def test_expired_draft_is_not_waiting(self):
         self.propose("hours")

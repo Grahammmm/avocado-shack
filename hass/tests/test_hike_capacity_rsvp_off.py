@@ -109,7 +109,7 @@ class ProposalCapacityWarningTests(H06TestCase):
         self.interp.mapping.update({"plan a quiet walk": _ops(("hike.create", OFF))})
         self.conv = self.open()
         draft, reply = self.propose("plan a quiet walk")
-        self.assertIn(f"\nWarning: {off_warning(5)}\n", reply)
+        self.assertIn("\nHeads up: Sign-ups are off, so the guest limit does nothing until they are turned on.\n", reply)
         self.assertEqual(self.say(f"yes {draft['code']}"), "approved")
         self.assertEqual(self.drafts()[-1]["state"], "verified")
 

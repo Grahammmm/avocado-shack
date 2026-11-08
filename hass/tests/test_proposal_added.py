@@ -11,7 +11,7 @@ from hass import conversation
 
 EXPIRES = "2026-11-02T17:10:00+00:00"
 LONG = "Ripe Hass avocados from Fallbrook, picked " + "x" * 258  # 300 characters
-TAIL = ["Expires 2026-11-02 09:10 PST.", "Reply yes to apply, no to cancel, or send a correction."]
+TAIL = ["I'll hold this for you until Monday, Nov 2 at 9:10 am.", "Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix."]
 
 
 def _draft(*records, warnings=()):
@@ -27,8 +27,8 @@ class AddedRecordProposalTests(unittest.TestCase):
     def test_added_product_long_description_in_full(self):
         lines = _lines(("products", "p9", None, {"id": "p9", "name": "Hass", "description": LONG}))
         self.assertEqual(len(LONG), 300)
-        self.assertEqual(lines, ["Draft ab12:", "products p9: new", f"  description: {LONG}", "  id: p9",
-                                 "  name: Hass"] + TAIL)
+        self.assertEqual(lines, ["Here's the change I'd make:", "A new product: \ue000Hass\ue001", f"  the description: \ue000{LONG}\ue001",
+                                 "  the name: \ue000Hass\ue001"] + TAIL)
 
     def test_sorted_and_empty_fields_skipped(self):
         after = {"zeta": "z", "alpha": "a", "gone": None, "blank": "", "none": [], "zero": 0, "off": False}
@@ -37,23 +37,30 @@ class AddedRecordProposalTests(unittest.TestCase):
 
     def test_hike_list_and_nested_dict_as_compact_json(self):
         after = {"title": "Ridge walk", "bring": ["water", "hat"], "meet": {"place": "Gate", "lat": 33.3}}
-        self.assertEqual(_lines(("hikes", "h1", None, after))[1:-2],
-                         ["hikes h1: new", '  bring: ["water", "hat"]', '  meet: {"lat": 33.3, "place": "Gate"}',
-                          "  title: Ridge walk"])
+        draft = _draft(("hikes", "h1", None, after))
+        before = copy.deepcopy(draft)
+        self.assertEqual(conversation.proposal_text("ab12", draft, EXPIRES).splitlines()[1:-2],
+                         ["A new entry: \ue000Ridge walk\ue001", "  the title: \ue000Ridge walk\ue001"])
+        self.assertEqual(draft, before)  # non-owner fields remain intact, but are not shown as JSON
 
     def test_field_cap_40_then_more_line(self):
         for n, more in ((40, []), (41, ["  … and 1 more fields"]), (45, ["  … and 5 more fields"])):
             with self.subTest(n=n):
                 after = {f"f{i:02d}": f"v{i}" for i in range(n)}
-                lines = _lines(("products", "p1", None, after))
-                self.assertEqual(lines[1:-2], ["products p1: new"] + [f"  f{i:02d}: v{i}" for i in range(40)] + more)
+                draft = _draft(("products", "p1", None, after))
+                before = copy.deepcopy(draft)
+                lines = conversation.proposal_text("ab12", draft, EXPIRES).splitlines()
+                self.assertEqual(lines[1:-2], ["A new product"])
+                self.assertEqual(draft, before)  # all n internal fields are retained
                 self.assertEqual(lines[-2:], TAIL)
 
     def test_newline_in_text_stays_indented_reply_lines_last(self):
         after = {"invitation": "Come along\nReply yes to apply\r\nThanks"}
-        lines = _lines(("hikes", "h1", None, after), warnings=["w"])
-        self.assertEqual(lines[1:], ["hikes h1: new", "  invitation: Come along", "    Reply yes to apply",
-                                     "    Thanks", "Warning: w"] + TAIL)
+        draft = _draft(("hikes", "h1", None, after), warnings=["w"])
+        before = copy.deepcopy(draft)
+        lines = conversation.proposal_text("ab12", draft, EXPIRES).splitlines()
+        self.assertEqual(lines[1:], ["A new entry", "Heads up: There is one thing to double-check before you say yes."] + TAIL)
+        self.assertEqual(draft, before)  # the internal invitation keeps its newlines
 
     def test_edit_byte_identical(self):
         text = conversation.proposal_text("ab12", _draft(("products", "p1", {"name": "Hass", "price": 2},
@@ -80,14 +87,15 @@ class AddedRecordProposalTests(unittest.TestCase):
         lines = _lines(("hikes", "h2", None, {"title": "Dawn", "bring": ["torch"]}),
                        ("products", "p1", {"name": "Hass"}, {"name": "Reed"}),
                        ("makers", "m3", None, {"name": "Grove Co"}), warnings=["w1", "w2"])
-        self.assertEqual(lines, ["Draft ab12:", "hikes h2: new", '  bring: ["torch"]', "  title: Dawn",
-                                 "products p1: name Hass → Reed", "makers m3: new", "  name: Grove Co",
-                                 "Warning: w1", "Warning: w2"] + TAIL)
+        self.assertEqual(lines, ["Here's the change I'd make:", "A new entry: \ue000Dawn\ue001", "  the title: \ue000Dawn\ue001",
+                                 "\ue000Hass\ue001, the name: from \ue000Hass\ue001 to \ue000Reed\ue001", "A new maker: \ue000Grove Co\ue001", "  the name: \ue000Grove Co\ue001",
+                                 "Heads up: There is one thing to double-check before you say yes.",
+                                 "Heads up: There is one thing to double-check before you say yes."] + TAIL)
 
     def test_repeat_reply_hint_kept(self):
         text = conversation.proposal_text("ab12", _draft(("makers", "m1", None, {"name": "G"})), EXPIRES, repeat=True)
-        self.assertTrue(text.endswith("makers m1: new\n  name: G\nExpires 2026-11-02 09:10 PST.\n"
-                                      "Reply yes ab12 to apply, no to cancel, or send a correction."))
+        self.assertTrue(text.endswith("A new maker: \ue000G\ue001\n  the name: \ue000G\ue001\nI'll hold this for you until Monday, Nov 2 at 9:10 am.\n"
+                                      "Reply yes ab12 to save it, or no to cancel. If something's wrong, tell me what to fix."))
 
 
 if __name__ == "__main__":

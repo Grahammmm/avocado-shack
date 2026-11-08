@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from hass import conversation, nl_eval, nl_prep
+from hass import conversation, nl_eval, nl_prep, voice
 from hass.interpreter_local import LocalInterpreter
 from hass.tests.test_conversation import ConversationTestCase
 
@@ -340,7 +340,7 @@ class RecentQuestionTests(ConversationTestCase):
         self.assertIsNone(self.asked[-1][1])
 
     def test_a_question_is_kept_only_up_to_500_characters(self):
-        self.interp.mapping["long?"] = {"question": "Which one? " + "x" * 600}
+        self.interp.mapping["long?"] = {"question": voice.quote("Which one? " + "x" * 550)}  # Above RECENT_MAX, below the message-length limit.
         self.say("long?")
         self.say("hours")
         self.assertIsNone(self.asked[-1][1])

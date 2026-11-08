@@ -15,7 +15,7 @@ from hass.tests.test_commands_doc import verb
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
 
 
 class PostParseTests(unittest.TestCase):
@@ -67,13 +67,13 @@ class PostTests(StoreMixin, ConversationTestCase):
         self.assertEqual((self.drafts(), self.commits(), self.approvals()), ([], 0, 0))
 
     def test_refusals_are_plain_words_and_attach_nothing(self):
-        for send, words in ((f"post {self.ids[0]}x", f"No product {self.ids[0]}x; send find <words> for ids."),
-                            (f"post {self.ids[2]}", f"{self.ids[2]} is not on the site."),
-                            (f"post {self.ids[3]}", f"{self.ids[3]} is not on the site."),
-                            (f"post {self.ids[1]}", f"{self.ids[1]} has no photo on the site."),
-                            (f"post {self.ids[4]}", f"{self.ids[4]} has no photo on the site."),  # link to a file outside
-                            (f"post {self.ids[5]}", f"{self.ids[5]} has no photo on the site."),  # a link is not a regular file
-                            (f"post {self.ids[6]}", f"Cannot draft a post for {self.ids[6]}: free text has a hashtag or account name.")):
+        for send, words in ((f"post {self.ids[0]}x", f"I don't know a product called {self.ids[0]}x. Try find and a word from its name."),
+                            (f"post {self.ids[2]}", f"{self.ids[2]} isn't on the website right now."),
+                            (f"post {self.ids[3]}", f"{self.ids[3]} isn't on the website right now."),
+                            (f"post {self.ids[1]}", f"{self.ids[1]} has no photo on the website yet, so I can't make a post for it."),
+                            (f"post {self.ids[4]}", f"{self.ids[4]} has no photo on the website yet, so I can't make a post for it."),  # link to a file outside
+                            (f"post {self.ids[5]}", f"{self.ids[5]} has no photo on the website yet, so I can't make a post for it."),  # a link is not a regular file
+                            (f"post {self.ids[6]}", f"I can't make a post for {self.ids[6]} right now. Nothing was posted.")):
             with self.subTest(send=send):
                 self.assertEqual(self.post(send), (words, []))
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
@@ -88,14 +88,14 @@ class PostTests(StoreMixin, ConversationTestCase):
         upper = self.ids[0].upper()
         self.assertNotEqual(upper, self.ids[0])
         self.assertEqual(self.post(f"post {upper}")[0], f"I don't know a product called {upper}. Try find and a word from its name.")
-        self.assertTrue(self.post(f"post {self.ids[0]}")[0].startswith("Draft post (not posted):"))
+        self.assertTrue(self.post(f"post {self.ids[0]}")[0].startswith("Here's a post you can copy. I haven't posted anything."))
 
     def test_works_while_paused_and_changes_nothing(self):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         tables, control = self.tables(), [dict(r) for r in self.conv.db.execute("SELECT * FROM control")]
         text, files = self.post(f"post {self.ids[0]}")
-        self.assertTrue(text.startswith("Draft post (not posted):") and "paused" not in text.lower(), text)
+        self.assertTrue(text.startswith("Here's a post you can copy. I haven't posted anything.") and "paused" not in text.lower(), text)
         self.assertEqual(files, [str(self.site / "post-test" / "real.jpg")])
         self.assertEqual((self.drafts(), self.tables(), self.commits(), self.approvals()), ([], tables, 0, 0))
         self.assertEqual([dict(r) for r in self.conv.db.execute("SELECT * FROM control")], control)

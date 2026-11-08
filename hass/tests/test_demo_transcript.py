@@ -17,8 +17,8 @@ from hass.tests.test_editor import WriterRepo
 
 FIXTURES = REPO_ROOT / "hass" / "tests" / "fixtures"
 DEMO, MAPPING = FIXTURES / "conversation-demo.jsonl", FIXTURES / "conversation-demo-interpreter.json"
-KINDS = ("Draft ", "Applied ", "Recent changes:", "Undo ", conversation.NOTHING)
-EXPECTED = ["Draft ", "Applied ", "Recent changes:", "Undo ", "Applied ", conversation.NOTHING]
+KINDS = ("Here's the change I'd make:", "Saved:", "Here's what we changed lately:", "To undo that, I'd change it back:", conversation.NOTHING)
+EXPECTED = [KINDS[0], KINDS[1], KINDS[2], KINDS[3], KINDS[1], conversation.NOTHING]
 PID = "photo-product-001"
 
 
@@ -64,11 +64,11 @@ class DemoTranscriptTests(unittest.TestCase):
         self.assertEqual(self.kinds(texts), EXPECTED)
         db = self.db(repo)
         edit, undo = db.execute("SELECT * FROM drafts ORDER BY row_id").fetchall()  # duplicate: no second draft
-        self.assertIn(f"products {PID}: description", texts[0])
-        self.assertTrue(texts[1].startswith(f"Applied {edit['code']}:"))
-        self.assertIn(f"{edit['code']} applied: products {PID}: description", texts[2])
-        self.assertTrue(texts[3].startswith(f"Undo {edit['code']}:\nDraft {undo['code']}:"))
-        self.assertTrue(texts[4].startswith(f"Applied {undo['code']}:"))
+        self.assertIn("Hass avocado, the description:", texts[0])
+        self.assertTrue(texts[1].startswith("Saved: the description for Hass avocado"))
+        self.assertIn("the description for Hass avocado: saved, but I'm not sure it's on the website", texts[2])
+        self.assertTrue(texts[3].startswith("To undo that, I'd change it back:\nHere's the change I'd make:"))
+        self.assertTrue(texts[4].startswith("Saved: the description for Hass avocado"))
         self.assertEqual(texts[5], conversation.NOTHING)  # final bare yes: exactly one reply
         self.assertEqual(json.loads(undo["ops_json"])[0]["op"], "history.revert")
         self.assertIn(undo["state"], ("applied", "verified"))

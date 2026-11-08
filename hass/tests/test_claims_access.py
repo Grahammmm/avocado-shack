@@ -25,7 +25,7 @@ class AccessTermTests(unittest.TestCase):
         hits = claims.unstated(edit(None, NOTE, collection="events", key="h1", field="accessNote"), POST, MAKERS)
         self.assertEqual(hits, [("events h1 accessNote", "dogs welcome"), ("events h1 accessNote", "no permit needed")])
         q = claims.question(hits)
-        self.assertIn('"dogs welcome" in events h1 accessNote and "no permit needed" in events h1 accessNote are not', q)
+        self.assertIn('You didn\'t say \ue000"dogs welcome"\ue001 and \ue000"no permit needed"\ue001 in your message. Are they true?', q)
 
     def test_longest_term_only_and_owner_words_clear_each(self):
         self.assertEqual(self.hits(None, NOTE, "dogs welcome on this one"), ["no permit needed"])
@@ -91,7 +91,7 @@ class AccessConversationTests(ConversationTestCase):
         self.interp.mapping[text] = _ops(("hike.update", {"id": HIKE_ID, "accessNote": NOTE}))
         self.assertEqual(self.say(text), "claim-question")
         [reply] = self.replies()
-        self.assertIn(f'"dogs welcome" in events {HIKE_ID} accessNote and "no permit needed" in events {HIKE_ID}', reply)
+        self.assertIn('You didn\'t say "dogs welcome" and "no permit needed" in your message. Are they true?', reply)
         self.assertEqual((self.drafts(), self.commits()), (rows, commits))
 
     def test_route_edit_adding_unsaid_terrain_claim_asks(self):
@@ -99,7 +99,7 @@ class AccessConversationTests(ConversationTestCase):
         self.interp.mapping[text] = _ops(("route.edit", {"id": "idea-cass-hill", "terrain": "Dirt, wheelchair accessible"}))
         rows = self.drafts()
         self.assertEqual(self.say(text), "claim-question")
-        self.assertIn('"wheelchair accessible" in routeIdeas idea-cass-hill terrain', self.replies()[0])
+        self.assertIn('You didn\'t say "wheelchair accessible" in your message. Is that true?', self.replies()[0])
         self.assertEqual(self.drafts(), rows)
 
     def test_owner_words_still_propose(self):

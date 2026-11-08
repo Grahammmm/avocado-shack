@@ -10,24 +10,24 @@ import sqlite3
 import unittest
 from datetime import timedelta
 
-from hass import conversation, editor
+from hass import conversation, editor, voice
 from hass.tests.test_conversation import GROUP, SETTINGS, STRANGER, T0, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS, NEW_HOURS
 from hass.tests.test_hike_ops import HIKE, HIKE_ID, NOW, SCHEMA as RSVP_SCHEMA, _req
 from hass.tests.test_undo import H06TestCase
 
-PAUSED = ("Changes are stopped. Nothing new will be applied until you say 'resume'. No requests are waiting. "
+PAUSED = ("Changes are stopped. I won't save anything new until you say 'resume changes'. No requests are waiting. "
           "Changes already on the website stay there.")  # SHOP-4 wording
 PAUSED_ONE = PAUSED.replace("No requests are waiting.", "1 request is waiting.")
-NOT_ON_SITE = ("Saved, but not confirmed on the website. {why}. If copying it was started and stopped part way, some "
-               "pages may already show it; ask for help to copy it to the website again, which puts every page in place.")
-NOT_COPIED = "Copying it to the website has not been done, or did not finish"
-PAST = ('Hike Past hike Sun 2026-11-01 09:00 PST has passed but is still scheduled; '  # AV1537-07: started before T0
-        'send "complete Past hike" or "cancel Past hike" in your own words.')
+NOT_ON_SITE = ("It's saved, but I'm not sure it's on the website. {why}. If copying it started and stopped partway, "
+               "some pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.")
+NOT_COPIED = "Copying it to the website hasn't been done, or didn't finish"
+PAST = ('Past hike was yesterday at 9 am and is still listed as coming up. '
+        'Tell me if it happened or was cancelled.')
 
 
 def gated(code):
-    return f"Changes are paused; {code} was not applied. Send resume changes, then yes {code}."
+    return f"Changes are paused, so I haven't saved that. Say resume changes, then reply yes {code}."
 
 
 class StoreMixin:
@@ -59,13 +59,12 @@ class PauseTests(StoreMixin, ConversationTestCase):
         self.assertEqual((row["state"], row["expires_at"]), ("proposed", draft["expires_at"]))
         self.assertEqual((self.commits(), self.editor.applies, self.approvals()), (0, 0, 0))
         self.assertEqual(self.disposition("p1"), "pause")
-        self.assertEqual(self.status()[0], "Changes: paused since 2026-11-02 09:00 PST")
+        self.assertEqual(self.status()[0], "Changes are paused since today at 9 am. Say resume changes when you're ready.")
         self.conv = self.open()  # restart: still paused
         self.assertEqual(self.say("yes", pid="y2"), "paused")
         self.assertEqual((self.disposition("y2"), self.replies(), self.commits()), ("paused", [gated(draft["code"])], 0))
         self.assertEqual(self.say("resume changes"), "resume")
-        self.assertEqual(self.replies(), [f"Changes resumed.\nWaiting for approval: {draft['code']}; "
-                                          "reply yes <code> to apply."])
+        self.assertEqual(self.replies(), [f"Changes are back on.\nOne change is waiting. Reply yes {draft['code']} to save it."])
         self.assertEqual((self.commits(), self.editor.applies, self.drafts()[0]["state"]), (0, 0, "proposed"))
         self.assertEqual(self.say("yes"), "approved")
         self.assertEqual((self.commits(), self.drafts()[0]["state"], self.approvals()), (1, "applied", 1))
@@ -79,24 +78,24 @@ class PauseTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.say("pause"), "pause")
         self.assertEqual(self.replies(), [PAUSED])  # already stopped: the same answer, nothing changes
         draft, reply = self.propose("hours")  # proposals still work and say they are paused
-        self.assertTrue(reply.endswith("Reply yes to apply, no to cancel, or send a correction.\n"
-                                       "Changes are paused; send resume changes before yes."), reply)
+        self.assertTrue(reply.endswith("Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.\n"
+                                       "Changes are paused, so nothing will be saved yet. Say resume changes first, then yes."), reply)
         self.assertEqual(self.say("no"), "rejected")  # cancel still works while paused
-        self.assertEqual(self.replies(), [f"Cancelled {draft['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.drafts()[0]["state"], self.commits()), ("rejected", 0))
         late, _reply = self.propose("desc")
         self.assertEqual(self.say("yes"), "paused")
         self.replies()
         self.now = T0 + timedelta(hours=1)  # the approval window ends during the pause
         self.assertEqual(self.say("RESUME CHANGES."), "resume")
-        self.assertEqual(self.replies(), ["Changes resumed."])
+        self.assertEqual(self.replies(), ["Changes are back on."])
         self.assertEqual(self.say("yes"), "no-target")  # the sweep at resume already closed it
         self.assertEqual(self.replies(), [conversation.NOTHING])
         self.assertEqual(self.say(f"yes {late['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{late['code']} expired at 2026-11-02 09:15 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:15 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual((self.drafts()[1]["state"], self.commits(), self.editor.applies), ("expired", 0, 0))
         self.assertEqual(self.say("resume"), "resume")
-        self.assertEqual(self.replies(), ["Changes are not paused."])
+        self.assertEqual(self.replies(), ["Changes are already on."])
 
     def test_parsing(self):
         for text, parsed in (("STATUS.", ("status", None)), ("Pause changes!", ("pause", None)), (" pause ", ("pause", None)),
@@ -130,13 +129,13 @@ class ReadOnlyTests(StoreMixin, ConversationTestCase):
         control = lambda: self.conv.db.execute("SELECT * FROM control").fetchall()
         before = (self.drafts(), self.approvals(), control(), self.commits())
         self.assertEqual(before[0][0]["state"], "proposed")
-        self.assertEqual(self.status()[:3], ["Changes: paused since 2026-11-02 09:00 PST", "Shelf check: not done yet",
-                                             conversation.NOTHING])
+        self.assertEqual(self.status()[:3], ["Changes are paused since today at 9 am. Say resume changes when you're ready.", conversation.NOTHING,
+                                             "I still need your shelf check."])
         self.assertEqual((self.drafts(), self.approvals(), control(), self.commits()), before)
         self.assertEqual(self.say("resume changes"), "resume")  # any later message still expires it
-        self.assertEqual(self.replies(), ["Changes resumed."])
+        self.assertEqual(self.replies(), ["Changes are back on."])
         self.assertEqual(self.say(f"yes {draft['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{draft['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual((self.drafts()[0]["state"], self.approvals(), self.commits()), ("expired", 0, 0))
 
     def test_ignored_and_duplicate_messages_do_not_pause(self):
@@ -185,30 +184,30 @@ class StatusTests(StoreMixin, H06TestCase):
         self.sent()
         filled = self.drafts()[0]
         self.assertEqual((filled["code"], [d["state"] for d in self.drafts()]), (needs["code"], ["verified"] * 2))
-        last = f"Last change: {filled['code']} {filled['summary']} - " + NOT_ON_SITE.format(why=NOT_COPIED)
+        last = f"Last change: {filled['summary']}. " + NOT_ON_SITE.format(why=NOT_COPIED)
         self.assertNotIn(filled["commit"][:7], last)
-        self.assertEqual(self.status()[1:], ["Shelf check: not done yet", conversation.NOTHING, last])
+        self.assertEqual(self.status()[1:], [conversation.NOTHING, "I still need your shelf check.", last])
         self.assertEqual(self.say("need"), "needs-details")
         self.sent()
         two = self.propose("desc2")[0]
         needs2 = self.drafts()[-2]
         self.assertEqual(self.status(), [
-            "Changes: on", "Shelf check: not done yet", f"{needs2['code']} needs details: {needs2['summary']}",
-            f"{two['code']} waiting (expires 2026-11-02 09:10 PST): {two['summary']}", last])
+            "Everything is ready.", f"I'm waiting for details: {needs2['summary']}",
+            f"Waiting for your yes: {two['summary']} (reply yes {two['code']})", "I still need your shelf check.", last])
 
     def test_failed_and_unverified_results(self):
         self.editor = FailingEditor(self.repo.state, self.editor.registry)
         self.conv = self.open()
         failed = self.apply("hours")
         self.assertEqual((failed["state"], failed["reason"]), ("failed", "simulated apply failure"))  # kept in the store
-        self.assertEqual(self.status()[-1], f"Last change: {failed['code']} {failed['summary']} - This was not saved, "
-                                            "and the website is unchanged; send the change again to retry.")
+        self.assertEqual(self.status()[-1], f"Last change: {failed['summary']}. I couldn't save that, "
+                                            "and the website is unchanged. Please send the change again.")
         self.previewer, self.editor = FailingPreviewer(), conversation.Editor(self.repo.state, self.editor.registry)
         self.conv = self.open()
         applied = self.apply("desc")
         self.assertEqual(applied["state"], "applied")
-        self.assertEqual(self.status()[-1], f"Last change: {applied['code']} {applied['summary']} - " + NOT_ON_SITE.format(
-            why="The preview check failed: the preview could not be checked (products photo-product-001)"))  # SHOP-4
+        self.assertEqual(self.status()[-1], f"Last change: {applied['summary']}. " + NOT_ON_SITE.format(
+            why="The preview check didn't pass: I couldn't check the preview"))  # SHOP-4
         self.assertEqual(self.drafts()[-1]["reason"], "not verified: products photo-product-001: simulated check failure")
         self.assertEqual(self.commits(), 1)
 
@@ -218,7 +217,7 @@ class StatusTests(StoreMixin, H06TestCase):
         self.sent()
         self.assertEqual(self.say(f"undo {done['code']}"), "proposed")
         [reply] = self.sent()
-        self.assertTrue(reply["text"].endswith("\n" + conversation.PAUSED_LINE), reply["text"])
+        self.assertTrue(reply["text"].endswith("\n" + voice.plain(conversation.PAUSED_LINE)), reply["text"])
         undo = self.drafts()[-1]
         self.assertEqual(self.say("yes"), "paused")
         self.assertEqual([r["text"] for r in self.sent()], [gated(undo["code"])])
@@ -264,8 +263,8 @@ class GuestTotalTests(StoreMixin, H06TestCase):
         self.use(self.rsvp_db("rsvps.sqlite3", [(HIKE_ID, 2), (HIKE_ID, 3), ("hike-2026-12-01-cancelled-hike", 4),
                                                 ("hike-2026-11-01-past-hike", 6)]))
         lines = self.status()
-        self.assertEqual(lines[-3:], ["Hike Open hike Fri 2026-11-20 09:00 PST: 0 confirmed of no limit",
-                                      "Hike Test hike Sat 2026-12-05 09:00 PST: 5 confirmed of 12", PAST])
+        self.assertEqual(lines[-3:], ["Open hike, Friday, Nov 20 at 9 am: 0 guests have signed up",
+                                      "Test hike, Saturday, Dec 5 at 9 am: 5 guests have signed up, with room for 12", PAST])
         self.assertEqual([line for line in lines if "Past hike" in line], [PAST])  # its 6 RSVPs are never shown
         text = "\n".join(lines)
         for absent in ("Cancelled hike", "example.invalid", "guest1", "Placeholder"):
@@ -276,8 +275,8 @@ class GuestTotalTests(StoreMixin, H06TestCase):
         for path in (None, "", str(self.repo.state.parent / "missing.sqlite3"), wrong):
             with self.subTest(path=path):
                 self.use(path)
-                self.assertEqual(self.status()[-3:], ["Hike Open hike Fri 2026-11-20 09:00 PST: guest count unavailable",
-                                                      "Hike Test hike Sat 2026-12-05 09:00 PST: guest count unavailable",
+                self.assertEqual(self.status()[-3:], ["Open hike, Friday, Nov 20 at 9 am: I can't see how many guests have signed up",
+                                                      "Test hike, Saturday, Dec 5 at 9 am: I can't see how many guests have signed up",
                                                       PAST])
         self.assertFalse((self.repo.state.parent / "missing.sqlite3").exists())
 

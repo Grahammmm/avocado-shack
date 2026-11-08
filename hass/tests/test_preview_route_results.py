@@ -58,7 +58,7 @@ class ReplyTests(unittest.TestCase):
 
     def test_shown_route_is_checked(self):
         text = self.reply([False])
-        self.assertTrue(text.startswith("Applied and checked C1"))
+        self.assertTrue(text.startswith("Saved and checked: \ue000renamed the route\ue001"))
         self.assertNotIn("nothing to check", text)
 
 

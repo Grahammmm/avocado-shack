@@ -156,7 +156,7 @@ class NaturalLanguageRulesTest(unittest.TestCase):
             self.assertIn(phrase, self.rules)
 
     def test_non_change_messages_point_to_the_command_and_never_approve(self):
-        for phrase in ("send status", "send undo", "send no <code>", "send yes <code>", "you never approve or cancel a draft yourself"):
+        for phrase in ("say status", "say undo", "reply no to cancel it", "reply yes to go ahead", "you never approve or cancel a draft yourself"):
             self.assertIn(phrase, self.rules)
 
     def test_rules_stay_small_enough_for_a_cpu_model_to_read(self):

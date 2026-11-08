@@ -13,7 +13,7 @@ from hass.tests.test_interpreter_cap import CapTestCase
 
 LIMIT = conversation.MAX_OWNER_TEXT
 AT_CAP, OVER = "a" * LIMIT, "a" * (LIMIT + 1)
-TEXT_BAD = "Not saved: text must be 1–500 plain characters."
+TEXT_BAD = "I couldn't save that. The note needs to be short, plain text."
 
 
 class OwnerTextCapTests(CapTestCase):
@@ -32,7 +32,7 @@ class OwnerTextCapTests(CapTestCase):
         self.assertEqual(self.drafts(), drafts)
 
     def test_reply_names_the_limit(self):
-        self.assertIn(f"over {LIMIT} characters", conversation.TOO_LONG)
+        self.assertIn("too long for me to read", conversation.TOO_LONG)
 
     def test_text_at_the_cap_is_interpreted(self):
         self.assertEqual(self.say(AT_CAP), "proposed")

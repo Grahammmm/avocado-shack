@@ -53,7 +53,7 @@ class PhotoOnProductTests(unittest.TestCase):
         git(self.repo.wt, "commit", "-q", "-s", "-am", "point images")
 
     def reply_for(self, pid):
-        return f"That photo is already on {pid} ({self.repo.product(pid)['name']}). To change that product, say what to change."
+        return f"That photo is already on {self.repo.product(pid)['name']}. To change that product, tell me what to change."
 
     def test_photo_on_an_active_product_is_named_and_opens_no_draft(self):
         self.point(OTHER, PID)  # two products use it: the first id is named
@@ -69,7 +69,7 @@ class PhotoOnProductTests(unittest.TestCase):
         self.assertEqual((self.replies(), self.drafts()), ([self.reply_for(PID)], []))
         self.point(PID, status="held")
         self.assertEqual(self.say(attachments=1), "photo-draft")
-        self.assertEqual(self.replies(), [f"{PHOTO_QUESTION} Reply with the product and description (draft {SHA[:4]})."])
+        self.assertEqual(self.replies(), [PHOTO_QUESTION])
         self.assertEqual([d["state"] for d in self.drafts()], ["needs-details"])
 
     def test_caption_is_still_handled_as_the_next_text(self):

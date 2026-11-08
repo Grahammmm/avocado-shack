@@ -8,16 +8,16 @@ import json
 import unittest
 from datetime import timedelta
 
-from hass import conversation, margins, sitegen
+from hass import conversation, margins, sitegen, voice
 from hass.interpreter_local import LocalInterpreter
 from hass.tests.test_conversation import CHAT, GROUP, STRANGER, T0, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS, NEW_HOURS
 from hass.tests.test_status_pause import PAUSED_ONE, StoreMixin
 
 AVO = "photo-product-001"  # "Hass avocado"
-SAVED = f"Saved cost for {AVO} (Hass avocado): 24.00 for 12 (private; never on the website). Send forget cost.{AVO} to remove it."
-NONE = f"No cost saved for {AVO}; send cost {AVO}: <pack cost> for <units> first."
-HINT = "Not saved: send cost <id>: <pack cost> for <units> to save a cost."
+SAVED = f"Saved. Hass avocado costs you 24.00 for 12. That stays private and is never on the website. Say forget cost.{AVO} to remove it."
+NONE = f"I don't have a cost saved for {AVO}. Tell me first, like cost {AVO}: 24 for 12."
+HINT = "I couldn't save that. Tell me the product, what you pay for a pack and how many are in it, like cost Hass avocado: 24 for 12."
 
 
 class CostTestCase(StoreMixin, ConversationTestCase):
@@ -45,32 +45,32 @@ class SaveAndMarginTests(CostTestCase):
         [row] = self.rows()
         self.assertEqual((row["value"], row["kind"], row["source"]), ("24.00 for 12", "fact", "owner-stated:c1"))
         self.now = T0 + timedelta(hours=8)  # 01:00 UTC Nov 3 is still Nov 2 in Los Angeles
-        want = "Using cost from 2026-11-02: 24.00 for 12.\n" + margins.render(margins.compute("24.00", "12", "0", "35"))
+        want = "Using the cost you gave me today at 9 am.\n" + margins.say(margins.compute("24.00", "12", "0", "35"))
         self.assertEqual(self.chat(f"Margin {AVO} at 35%", "margin"), want)
-        self.assertIn("suggested_price = round up to the cent", want)
+        self.assertIn("Charge $3.08.", want)
         self.assertEqual(self.chat(f"margin {AVO} at 35% shrink 5%", "margin"),
-                         "Using cost from 2026-11-02: 24.00 for 12.\n" + margins.render(margins.compute("24", "12", "5", "35")))
+                         "Using the cost you gave me today at 9 am.\n" + margins.say(margins.compute("24", "12", "5", "35")))
         self.assertEqual((self.drafts(), self.commits(), self.calls, self.editor.applies), ([], 0, [], 0))
         self.assertEqual(len(self.rows()), 1)  # margin stored nothing
-        self.assertIn(f"cost.{AVO}: 24.00 for 12 (fact, since 2026-11-02)", self.chat("memory", "memory-list"))
+        self.assertIn(f"cost.{AVO}: 24.00 for 12 (since today at 9 am)", self.chat("memory", "memory-list"))
 
     def test_no_cost_saved_and_margin_does_not_create_the_memory_table(self):
         self.assertEqual(self.chat(f"margin {AVO} at 35%", "margin"), NONE)
         self.assertEqual(self.chat("margin no-such-product at 35%", "margin"),
-                         "No cost saved for no-such-product; send cost no-such-product: <pack cost> for <units> first.")
+                         "I don't have a cost saved for no-such-product. Tell me first, like cost no-such-product: 24 for 12.")
         self.assertNotIn("memory", self.tables())
         self.chat(f"cost {AVO}: 24 for 12", "memory-saved")
-        self.assertEqual(self.chat("margin photo-product-002 at 35%", "margin").split(";")[0], "No cost saved for photo-product-002")
+        self.assertEqual(self.chat("margin photo-product-002 at 35%", "margin"), "I don't have a cost saved for photo-product-002. Tell me first, like cost photo-product-002: 24 for 12.")
 
     def test_dollar_sign_case_and_number_forms_save_one_normal_value(self):
         self.chat(f"COST {AVO.upper()}: $24 For 12", "memory-saved", SAVED)
-        self.chat(f"cost {AVO}: 24.00 for 12.0", "memory-unchanged", f"Already saved cost for {AVO}: 24.00 for 12; nothing changed.")
+        self.chat(f"cost {AVO}: 24.00 for 12.0", "memory-unchanged", f"I already have that cost for Hass avocado, so nothing changed.")
         self.assertEqual([r["value"] for r in self.rows()], ["24.00 for 12"])
 
     def test_margin_out_of_range_is_named(self):
         self.chat(f"cost {AVO}: 24 for 12", "memory-saved")
         self.assertEqual(self.chat(f"margin {AVO} at 95%", "margin"), "I couldn't work that out. Please check the margin: it needs to be a plain number in a sensible range.")
-        self.assertTrue(self.chat(f"margin {AVO} at 35% shrink 95%", "margin").startswith("Not calculated: shrink"))
+        self.assertTrue(self.chat(f"margin {AVO} at 35% shrink 95%", "margin").startswith("I couldn't work that out. Please check the shrink"))
 
     def test_full_length_product_ids_support_cost_update_margin_and_forget(self):
         path = self.repo.wt / "hass" / "content" / "products.json"
@@ -87,13 +87,13 @@ class SaveAndMarginTests(CostTestCase):
                 assert self.conv.memory is not None
                 self.assertEqual(self.conv.memory.get(key), "30.00 for 12")
                 self.assertEqual(self.chat(f"margin {ident} at 35%", "margin"),
-                                 "Using cost from 2026-11-02: 30.00 for 12.\n" +
-                                 margins.render(margins.compute("30", "12", "0", "35")))
+                                 "Using the cost you gave me today at 9 am.\n" +
+                                 margins.say(margins.compute("30", "12", "0", "35")))
                 self.assertNotIn(key, [n["key"] for n in self.conv._notes()])
                 self.chat(f"remember {key}: 5 for 1", "memory-invalid", HINT)
-                self.chat(f"forget {key}", "memory-forgot", f"Forgot {key}.")
+                self.chat(f"forget {key}", "memory-forgot", f"Okay, I've forgotten {key}.")
                 self.assertEqual({r["value"] for r in self.rows(key)}, {""})
-                self.assertTrue(self.chat(f"margin {ident} at 35%", "margin").startswith("No cost saved"))
+                self.assertTrue(self.chat(f"margin {ident} at 35%", "margin").startswith("I don't have a cost saved"))
         assert self.conv.memory is not None
         for key in ("p" * 65, "cost." + "p" * 65, "cost." + "p" * 59 + "."):
             with self.subTest(invalid_key=key), self.assertRaisesRegex(ValueError, "invalid key"):
@@ -101,24 +101,24 @@ class SaveAndMarginTests(CostTestCase):
 
     def test_hidden_product_can_have_a_cost(self):
         self.chat("cost photo-product-040: 8 for 4", "memory-saved",
-                  "Saved cost for photo-product-040 (Raw milk white cheddar): 8.00 for 4 (private; never on the website). "
-                  "Send forget cost.photo-product-040 to remove it.")
+                  "Saved. Raw milk white cheddar costs you 8.00 for 4. That stays private and is never on the website. "
+                  "Say forget cost.photo-product-040 to remove it.")
 
 
 class RefusalTests(CostTestCase):
     def test_bad_product_or_numbers_are_refused_naming_the_field_and_nothing_is_stored(self):
-        for text, reply in ((f"cost photo-product-999: 24 for 12", "Not saved: no product photo-product-999."),
-                            (f"cost {AVO}: 24 for 0", "Not saved: units must be 1 to 10000."),
-                            (f"cost {AVO}: 24 for 12.5", "Not saved: units must be a finite whole number."),
-                            (f"cost {AVO}: 0 for 12", "Not saved: pack cost must be 0.01 to 100000.00."),
-                            (f"cost {AVO}: abc for 12", "Not saved: pack cost must be a number."),
-                            (f"cost {AVO}: 24 for abc", "Not saved: units must be a number."),
-                            (f"cost {AVO}: 24.005 for 12", "Not saved: pack cost must be a finite number with at most 2 decimals."),
-                            (f"cost {AVO}: 24", "Not saved: " + conversation.COST_USAGE + "."),
-                            (f"cost {AVO} 24 for 12", "Not saved: " + conversation.COST_USAGE + "."),
-                            ("cost", "Not saved: " + conversation.COST_USAGE + "."),
-                            ("cost : 24 for 12", "Not saved: " + conversation.COST_USAGE + "."),
-                            ("cost " + "x" * 80 + ": 24 for 12", "Not saved: no product " + "x" * 80 + ".")):
+        for text, reply in ((f"cost photo-product-999: 24 for 12", "I don't know a product called photo-product-999. Try find and a word from its name."),
+                            (f"cost {AVO}: 24 for 0", "I couldn't read those numbers. Please check how many are in a pack: it needs to be a plain number in a sensible range."),
+                            (f"cost {AVO}: 24 for 12.5", "I couldn't read those numbers. Please check how many are in a pack: it needs to be a plain number in a sensible range."),
+                            (f"cost {AVO}: 0 for 12", "I couldn't read those numbers. Please check the pack price: it needs to be a plain number in a sensible range."),
+                            (f"cost {AVO}: abc for 12", "I couldn't read those numbers. Please check the pack price: it needs to be a plain number in a sensible range."),
+                            (f"cost {AVO}: 24 for abc", "I couldn't read those numbers. Please check how many are in a pack: it needs to be a plain number in a sensible range."),
+                            (f"cost {AVO}: 24.005 for 12", "I couldn't read those numbers. Please check the pack price: it needs to be a plain number in a sensible range."),
+                            (f"cost {AVO}: 24", voice.plain(conversation.COST_USAGE)),
+                            (f"cost {AVO} 24 for 12", voice.plain(conversation.COST_USAGE)),
+                            ("cost", voice.plain(conversation.COST_USAGE)),
+                            ("cost : 24 for 12", voice.plain(conversation.COST_USAGE)),
+                            ("cost " + "x" * 80 + ": 24 for 12", "I don't know a product called " + "x" * 80 + ". Try find and a word from its name.")):
             with self.subTest(text=text):
                 self.chat(text, "memory-invalid", reply)
         self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 0)
@@ -126,7 +126,7 @@ class RefusalTests(CostTestCase):
 
     def test_a_refused_new_cost_keeps_the_old_one(self):
         self.chat(f"cost {AVO}: 24 for 12", "memory-saved")
-        self.chat(f"cost {AVO}: 30 for 0", "memory-invalid", "Not saved: units must be 1 to 10000.")
+        self.chat(f"cost {AVO}: 30 for 0", "memory-invalid", "I couldn't read those numbers. Please check how many are in a pack: it needs to be a plain number in a sensible range.")
         self.assertEqual([r["value"] for r in self.rows()], ["24.00 for 12"])
 
     def test_generic_remember_of_a_cost_key_is_refused_with_the_hint(self):
@@ -153,26 +153,26 @@ class ChangeAndForgetTests(CostTestCase):
     def test_same_again_is_unchanged_a_new_cost_updates_and_forget_clears(self):
         self.chat(f"cost {AVO}: 24 for 12", "memory-saved", SAVED, pid="a1")
         self.now = T0 + timedelta(days=1)
-        self.chat(f"cost {AVO}: 24.00 for 12", "memory-unchanged", f"Already saved cost for {AVO}: 24.00 for 12; nothing changed.", pid="a2")
+        self.chat(f"cost {AVO}: 24.00 for 12", "memory-unchanged", f"I already have that cost for Hass avocado, so nothing changed.", pid="a2")
         self.assertEqual(len(self.rows()), 1)
         self.chat(f"cost {AVO}: 30 for 12", "memory-updated",
-                  f"Updated cost for {AVO} (Hass avocado): 30.00 for 12 (was: 24.00 for 12) (private; never on the website). "
-                  f"Send forget cost.{AVO} to remove it.", pid="a3")
+                  f"Updated. Hass avocado now costs you 30.00 for 12. That stays private and is never on the website. "
+                  f"Say forget cost.{AVO} to remove it.", pid="a3")
         self.assertEqual([(r["value"], r["superseded_at"] is None, r["source"]) for r in self.rows()],
                          [("24.00 for 12", False, "owner-stated:a1"), ("30.00 for 12", True, "owner-stated:a3")])
-        self.assertTrue(self.chat(f"margin {AVO} at 35%", "margin").startswith("Using cost from 2026-11-03: 30.00 for 12.\n"))
-        self.chat(f"forget cost.{AVO}", "memory-forgot", f"Forgot cost.{AVO}.")
+        self.assertTrue(self.chat(f"margin {AVO} at 35%", "margin").startswith("Using the cost you gave me today at 9 am.\n"))
+        self.chat(f"forget cost.{AVO}", "memory-forgot", f"Okay, I've forgotten cost.{AVO}.")
         self.assertEqual(self.chat(f"margin {AVO} at 35%", "margin"), NONE)
         self.assertEqual({r["value"] for r in self.rows()}, {""})  # the text is blanked, the dates stay
-        self.chat(f"forget cost.{AVO}", "memory-none", f"Nothing saved as cost.{AVO}.")
+        self.chat(f"forget cost.{AVO}", "memory-none", f"I don't have a note called cost.{AVO}.")
         self.chat(f"cost {AVO}: 5 for 1", "memory-saved")  # a cleared cost can be saved again
-        self.assertTrue(self.chat(f"margin {AVO} at 35%", "margin").startswith("Using cost from 2026-11-03: 5.00 for 1.\n"))
+        self.assertTrue(self.chat(f"margin {AVO} at 35%", "margin").startswith("Using the cost you gave me today at 9 am.\n"))
 
     def test_paused_cost_and_margin_still_answer_and_nothing_is_applied(self):
         draft, _reply = self.propose("hours")
         self.chat("pause changes", "pause", PAUSED_ONE)
         self.chat(f"cost {AVO}: 24 for 12", "memory-saved", SAVED)
-        self.assertTrue(self.chat(f"margin {AVO} at 35%", "margin").startswith("Using cost from 2026-11-02: 24.00 for 12.\n"))
+        self.assertTrue(self.chat(f"margin {AVO} at 35%", "margin").startswith("Using the cost you gave me today at 9 am.\n"))
         self.assertEqual((self.drafts(), self.commits(), self.editor.applies), ([draft], 0, 0))
 
 
@@ -221,11 +221,11 @@ class LeakTests(CostTestCase):
 
 class HelpTests(unittest.TestCase):
     def test_help_lists_cost_and_the_product_form_of_margin_and_both_examples_parse(self):
-        lines = conversation.HELP_TEXT.splitlines()
+        lines = voice.plain(conversation.HELP_TEXT).splitlines()
         [cost] = [ln for ln in lines if ln.startswith("cost ")]
         [margin] = [ln for ln in lines if ln.startswith("margin ")]
-        self.assertTrue(cost.endswith(f'"cost {AVO}: 24 for 12"'))
-        self.assertTrue(margin.endswith(f'"margin {AVO} at 35%"'))
+        self.assertEqual(cost, "cost Hass avocado: 24 for 12 - the price you pay, kept private")
+        self.assertEqual(margin, "margin Hass avocado at 35% - a price idea from the cost you saved")
         self.assertEqual(conversation.parse_memory(f"cost {AVO}: 24 for 12"), ("cost", AVO, "24 for 12"))
         self.assertEqual(conversation.parse_command(f"margin {AVO} at 35%"), ("margin", f"{AVO} at 35%"))
 

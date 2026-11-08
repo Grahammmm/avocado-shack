@@ -42,7 +42,7 @@ class _BeforeB(ConversationTestCase):  # shared setup and helpers; no tests of i
         return [dict(r) for r in self.conv.db.execute("SELECT * FROM approvals")]
 
     def refusal(self):
-        return f"That yes was sent before {self.b['code']} was proposed; reply yes {self.b['code']} to apply it."
+        return f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply yes {self.b['code']}."
 
     def assert_refused(self, text, received_at=BEFORE_B):
         self.assertEqual(self.late(text, received_at), "no-target")
@@ -210,7 +210,7 @@ class RowsFromBeforeTheColumnTests(_BeforeB):
         opened = asked + timedelta(minutes=4)
         self.upgrade(opened)
         self.assertEqual(self.drafts()[-1]["proposed_at"], conversation._iso(opened))
-        refusal = f"That yes was sent before {code} was proposed; reply yes {code} to apply it."
+        refusal = f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply yes {code}."
         for sent in (asked + timedelta(minutes=1), asked + timedelta(minutes=3)):  # before / at the fill: unknown
             self.assertEqual(self.late("yes", sent.isoformat(), now=opened), "no-target")
             self.assertEqual(self.replies(), [refusal])
