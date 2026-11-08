@@ -49,7 +49,7 @@ CODES = ("write-before-yes", "wrong-diff", "edit-undeclared", "undo-not-identica
          "stale-row", "bad-row", "bad-plan", "no-skill")
 FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "skip-later-preview")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a revision whose preview is never requested
 PLAN_KEYS = {"id", "plan", "kind", "slots", "ctx", "expect_ops", "expect_error", "version", "note", "must_fail"}
-CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "setup", "undo",
+CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "seed", "setup", "undo",
              "photos", "house_render"}
 ASSET_DIR = "storefront-mockup/assets/products/"  # a picture file the editor commits; undo leaves it, unused (a declared residue)
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
@@ -198,16 +198,25 @@ class SkillInterpreter:
 
     def __init__(self, mapping, skills, ctx_for):
         self.mapping, self.skills, self.ctx_for, self.used, self.errors = mapping, skills, ctx_for, [], []
+        self.said = []  # the owner's texts so far: a skill's rules read them (the dispatcher's ctx.texts)
+        self.chosen = []  # what the skills chose for the owner in this message (their SET_PHRASES): the `I set:` line
         self.notes = []  # the proposal-note lines of the message being answered (reset by Scratch.say)
-        self.texts = []
 
     def _plan(self, call):
         skill = self.skills.get(call.get("skill"))
         if skill is None: raise KeyError(f"no skill named {call.get('skill')!r}")
         self.used.append(skill.name)
-        ops = skill.plan(copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        slots, ctx = call.get("slots") or {}, self.ctx_for()
+        ops = skill.plan(copy.deepcopy(slots), ctx)
         self._notes(skill, call)
+        module = sys.modules.get(getattr(skill.plan, "__module__", ""))  # the skill module's own wording of its defaults (D8), when it has one
+        phrases = (getattr(module, "SET_PHRASES", None) or {}).get(skill.name)
+        if phrases: self.chosen += list(phrases(copy.deepcopy(slots), ctx))
         return ops
+
+    def set_line(self):
+        unique = list(dict.fromkeys(p for p in self.chosen if p))
+        return "I set: " + "; ".join(unique) + ".\n" if unique else ""
 
     def _notes(self, skill, call):
         """The assumed proposal-notes contract: a skill module may define ``notes(name, slots, ctx)`` returning
@@ -221,8 +230,9 @@ class SkillInterpreter:
                 if line not in self.notes: self.notes.append(line)
 
     def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
-        self.texts.append(text)  # the owner's texts of the row so far: what a plan's ``ctx.texts`` holds
         reply = copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
+        self.said.append(text)
+        self.chosen = []
         try:
             if "skill" in reply: return {"ops": self._plan(reply), "revises": reply.get("revises")}
             if "calls" in reply:
@@ -233,10 +243,14 @@ class SkillInterpreter:
         return reply
 
 
+class SetupError(ValueError):
+    """A row's `setup` ops were refused or did not apply."""
+
+
 class Scratch:
     """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry."""
 
-    def __init__(self, mapping, skills, fault=None, setup=None, photos=(), house_render=False):
+    def __init__(self, mapping, skills, fault=None, seed=None, setup=None, photos=(), house_render=False):
         from hass import conversation, editor, media
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo  # the H02 throwaway repo the demo transcript uses
@@ -253,6 +267,7 @@ class Scratch:
         cfg = json.loads((self.repo.state / "config.json").read_text("utf-8"))
         editor._write_json(self.repo.state / "config.json", {**cfg, "settings": settings})
         self.wt, self.now, self.n, self.out = self.repo.wt, START, 0, FixtureAdapter()
+        if seed: self._seed_or_clean(seed)
         self.interp = SkillInterpreter(mapping, skills, self._ctx)
         self.previewer = RecordingPreviewer(skip_after=1 if fault == "skip-later-preview" else None)
         self.turn_previews = []  # the preview requests each message caused, in message order
@@ -263,6 +278,8 @@ class Scratch:
                 self.repo.cleanup()
                 raise
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now, self.previewer)
+        self._proposal_reply = self.conv._proposal_reply
+        self.conv._proposal_reply = self._with_set_line  # the stand-in dispatcher's job: the `I set:` line goes in front of the proposal (FW-3: prefix=...)
         self.Inbound = conversation.Inbound
 
     def _real_assets(self):
@@ -281,23 +298,50 @@ class Scratch:
         _git(self.repo.wt, "add", "-A")
         _git(self.repo.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "real assets/products folder")
 
+    def _with_set_line(self, row, draft, prefix=""):
+        line, self.interp.chosen = self.interp.set_line(), []  # once, and only for the message whose plan chose something
+        return self._proposal_reply(row, draft, line + prefix)
+
+    def _seed_or_clean(self, seed):
+        try: self._seed(seed)
+        except BaseException:  # a seed that does not validate must not leave the scratch repo behind
+            self.repo.cleanup()
+            raise
+
+    def _seed(self, seed):
+        """A row's `seed` ({content file: {top-level key: value}}, for example a hike that is already on the page) is
+        written into the scratch content, validated, regenerated and committed BEFORE the row starts: the row's
+        start state, so its undo check and its diff are measured from there."""
+        from hass import sitegen
+        from hass.content_model import load_and_validate
+        for stem, keys in seed.items():
+            path = self.wt / "hass" / "content" / f"{stem}.json"
+            data = json.loads(path.read_text("utf-8"))
+            data.update(copy.deepcopy(keys))
+            path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
+        content = load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup")  # a bad seed stops the row here
+        sitegen.write_files(sitegen.render(content, self.wt / "hass" / "templates"), self.wt)
+        _git(self.wt, "add", "-A")
+        _git(self.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "seed")
+
     def _setup(self, ops):
         """A row's starting state (for example a hidden product): the ops go through the real editor, prepare then
         apply, before the row starts, so the row's base is the tree after them. They are never part of the row's diff."""
         out = self.editor.prepare(ops)
-        if out.get("result") != "ok": raise ValueError(f"setup ops were not accepted: {json.dumps(out, sort_keys=True)[:200]}")
+        if out.get("result") != "ok": raise SetupError(f"setup ops were not accepted: {json.dumps(out, sort_keys=True)[:200]}")
         done = self.editor.apply(out["draft"]["change_id"], out["draft"]["draft_hash"])
-        if done.get("result") != "applied": raise ValueError(f"setup ops were not applied: {json.dumps(done, sort_keys=True)[:200]}")
+        if done.get("result") != "applied": raise SetupError(f"setup ops were not applied: {json.dumps(done, sort_keys=True)[:200]}")
 
     def _ctx(self):
         from hass.content_model import load_and_validate
-        return types.SimpleNamespace(today="2026-11-08", now=self.now, texts=list(self.interp.texts), media_root=self.media_root,
+        return types.SimpleNamespace(today="2026-11-08", now=self.now, texts=list(self.interp.said), media_root=self.media_root,
                                      house_render=self.house_render,
                                      content=load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup"))
 
     def say(self, text):
         from datetime import timedelta
         self.n += 1
+        self.interp.chosen = []
         self.now += timedelta(minutes=1)
         msg = self.Inbound(f"tk-{self.n}", CHAT, OWNER, text, False, "new", self.now.isoformat())
         asked = len(self.previewer.requests)
@@ -428,8 +472,13 @@ def run_case_row(row, skills, skill=None, selftest=False):
     names = {c.get("skill") for r in row["replies"] for c in ([r] + list(r.get("calls", []))) if isinstance(c, dict) and "skill" in c}
     if skill is not None and "version" in row and getattr(skill, "version", None) not in (None, row["version"]):
         res.fail("stale-row", f"row written for version {row['version']}, skill is version {skill.version}"); return res
-    try: scratch = Scratch(mapping, skills, row.get("fault"), setup, row.get("photos") or (), row.get("house_render") is True)
-    except ValueError as exc: res.fail("bad-row", exc); return res
+    seed = row.get("seed")
+    if seed is not None and not (isinstance(seed, dict) and all(k in ("products", "makers", "community", "store") and isinstance(v, dict) for k, v in seed.items())):
+        res.fail("bad-row", "seed must be {products|makers|community|store: {top-level key: value}}"); return res
+    try: scratch = Scratch(mapping, skills, row.get("fault"), seed, setup, row.get("photos") or (), row.get("house_render") is True)
+    except (SetupError, ValueError) as exc: res.fail("bad-row", exc); return res
+    except Exception as exc:  # noqa: BLE001 - a seed the content rules refuse is a bad row, not a crash
+        res.fail("bad-row", f"the seed could not be applied: {type(exc).__name__}: {str(exc)[:200]}"); return res
     try: _drive(row, expect, scratch, skills, skill, names, res)
     finally: scratch.close()
     if row.get("undo") is True and "undo" not in res.facts and res.ok: res.fail("wrong-turn", "the row says undo, but it did not end in an approved draft that was undone")
