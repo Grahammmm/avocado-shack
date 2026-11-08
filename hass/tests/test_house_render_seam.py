@@ -43,6 +43,16 @@ def blurred(data, radius):
     return out.getvalue()
 
 
+def cutout_with_rgb(data, change):
+    """A PNG of the transparent-cut-out fixture with its colour channels changed by ``change`` and its alpha kept as it was."""
+    original = Image.open(io.BytesIO(data)).convert("RGBA")
+    out = io.BytesIO()
+    changed = change(original.convert("RGB")).convert("RGBA")
+    changed.putalpha(original.getchannel("A"))
+    changed.save(out, "PNG")
+    return out.getvalue()
+
+
 def darkened(data, factor):
     out = io.BytesIO()
     Image.open(io.BytesIO(data)).convert("RGB").point(lambda v: round(v * factor)).save(out, "JPEG", quality=84)
@@ -193,6 +203,22 @@ class RetakeTests(unittest.TestCase):
 
     def test_a_dark_photo_is_flagged(self):
         self.assertRetake(darkened(photo("jar-white-sheet"), .3), "dark")
+
+    def test_a_blurry_cutout_is_flagged_and_a_sharp_one_is_not(self):
+        sharp = photo("jar-cutout-alpha")
+        bare, sha, out = self.verdict(sharp)
+        self.assertEqual(out, f"assets/products/photo-{sha[:16]}.jpg")  # the sharp control still installs
+        for radius in (6, 12, 24):
+            with self.subTest(radius=radius):
+                self.assertRetake(cutout_with_rgb(sharp, lambda rgb: rgb.filter(ImageFilter.GaussianBlur(radius))), "blurry")
+
+    def test_a_black_cutout_is_a_plain_dark_retake_not_a_crash(self):
+        out = self.assertRetake(cutout_with_rgb(photo("jar-cutout-alpha"), lambda rgb: Image.new("RGB", rgb.size, (0, 0, 0))), "dark")
+        self.assertEqual(out.reason, photos.RETAKE["dark"])
+
+    def test_the_renderer_lifts_a_pure_black_subject_without_dividing_by_zero(self):
+        made = newitem_render.render(cutout_with_rgb(photo("jar-cutout-alpha"), lambda rgb: Image.new("RGB", rgb.size, (0, 0, 0))))
+        self.assertEqual((made["report"]["subject_luma"], made["report"]["exposure_gain"]), (0.0, 1.25))
 
     def test_a_moderately_dim_photo_is_lifted_not_refused(self):
         bare, sha, out = self.verdict(darkened(photo("jar-white-sheet"), .5))

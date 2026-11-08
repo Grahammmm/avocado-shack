@@ -296,7 +296,7 @@ def render(data: bytes, spec=None) -> dict:
         luma = statistics.fmean(solid) if solid else 128
         lo, hi = stats["subject_luma"]["p05"], stats["subject_luma"]["p95"]
         if luma < lo or luma > hi:  # exposure only, within a gentle range: never recolour a label
-            gain = max(.8, min(1.25, (lo if luma < lo else hi) / luma))
+            gain = max(.8, min(1.25, (lo if luma < lo else hi) / max(luma, 1.0)))  # a pure-black subject: the full lift, no zero divide
             subject = ImageEnhance.Brightness(subject).enhance(gain)
             report["exposure_gain"] = round(gain, 2)
         report["subject_luma"] = round(luma, 1)

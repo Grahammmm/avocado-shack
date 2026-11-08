@@ -78,21 +78,35 @@ class Retake(Refused):
     problems: tuple = ()
 
 
-def _sharpness(img):
+def _sharpness(img, alpha=None):
     """Edge sharpness of an upright RGB image: the strongest 0.5 % of one-pixel steps, as a share of the picture's own light
-    range, on a 640 px copy. A sharp edge changes within a pixel or two; a soft one spreads out, so the share falls."""
-    _Image, _ops, ImageChops, *_ = newitem_render._modules()
+    range, on a 640 px copy. A sharp edge changes within a pixel or two; a soft one spreads out, so the share falls.
+
+    With ``alpha`` (a supplied cut-out) only the inside of the product counts: its cut edge is sharp whatever the focus, so
+    the steps and the light range are taken where the 5 px neighbourhood is fully opaque. A cut-out with too little inside
+    to judge gives 0.0 (not sharp), never a pass by default."""
+    _Image, _ops, ImageChops, _draw, _enh, ImageFilter = newitem_render._modules()
+    box = newitem_render._resample(_Image, "BOX")
     gray = img.convert("L")
-    gray.thumbnail((640, 640), newitem_render._resample(_Image, "BOX"))
+    gray.thumbnail((640, 640), box)
     w, h = gray.size
     if w < 8 or h < 8:
         return None
     flat = gray.crop((0, 0, w - 1, h - 1))
     step = ImageChops.lighter(ImageChops.difference(flat, gray.crop((1, 0, w, h - 1))),
                               ImageChops.difference(flat, gray.crop((0, 1, w - 1, h))))
-    steps, light = sorted(step.getdata()), sorted(gray.getdata())
+    if alpha is None:
+        steps, light = sorted(step.getdata()), sorted(gray.getdata())
+    else:
+        inner = alpha.resize(gray.size, box).point(lambda v: 255 if v > 250 else 0).filter(ImageFilter.MinFilter(5))
+        keep = inner.crop((0, 0, w - 1, h - 1))
+        steps = sorted(v for v, m in zip(step.getdata(), keep.getdata()) if m)
+        light = sorted(v for v, m in zip(gray.getdata(), inner.getdata()) if m)
+        if len(steps) < 400:
+            return 0.0
     n = len(steps)
-    return steps[int(n * .995)] / max(1, light[int(n * .99)] - light[int(n * .01)])
+    m = len(light)
+    return steps[int(n * .995)] / max(1, light[int(m * .99)] - light[int(m * .01)])
 
 
 def _problems(data, made, spec):
@@ -106,7 +120,7 @@ def _problems(data, made, spec):
     if luma is not None and luma * report.get("exposure_gain", 1) < spec["pictures"]["catalog"]["metrics"]["subject_luma"]["min"]:
         found.add("dark")  # even after the render's gentle exposure lift the product is darker than any catalog picture
     img, alpha, _turned = newitem_render._upright(data)
-    sharp = None if alpha is not None else _sharpness(img)  # a supplied cut-out has no photo edges to judge
+    sharp = _sharpness(img, alpha)  # a cut-out is judged on the inside of the product, not on its cut edge
     if sharp is not None and sharp < SHARP_MIN:
         found.add("blurry")
     if not found and not made["check"]["pass"]:
