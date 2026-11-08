@@ -17,6 +17,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from hass import voice  # noqa: E402
 from hass.content_model import CONTENT_DIR, DATE_RE, INVISIBLE_RE, TEXT_LIMITS, ContentError, checked_on, load_content, shop_today  # noqa: E402
 from hass.ops import hikes  # noqa: E402
 from hass.sitegen import STALE_AFTER_DAYS, _day_text  # noqa: E402
@@ -77,8 +78,10 @@ def _hikes(content, today: date, guests) -> list[dict]:
 def _hike_text(h: dict, cut: int) -> str:
     title = h["title"] if len(h["title"]) <= cut else h["title"][:cut - 1].rstrip() + "…"
     n, cap, (hh, mm) = h["confirmed"], h["capacity"], map(int, h["time"].split(":"))
-    seats = ("guest count unavailable" if n is None else f"{n} of {cap} confirmed" if cap is not None else f"{n} confirmed")
-    return f"{date.fromisoformat(h['day']):%A} {(hh - 1) % 12 + 1}:{mm:02d} {'am' if hh < 12 else 'pm'} {title} ({seats})"
+    seats = ("I can't see how many guests have signed up" if n is None else f"{n} {'guest has' if n == 1 else 'guests have'} signed up"
+             + (f", room for {cap}" if cap is not None else ""))
+    when = f"{(hh - 1) % 12 + 1}{':%02d' % mm if mm else ''} {'am' if hh < 12 else 'pm'}"
+    return f"{date.fromisoformat(h['day']):%A} at {when}, {voice.quote(title)} ({seats})"
 
 
 def facts(content, today: date, guests=None) -> dict:
@@ -99,28 +102,32 @@ def facts(content, today: date, guests=None) -> dict:
             "sold_out_names": sorted(names["no"], key=str.casefold)} | ({"hikes": found} if found else {})
 
 
-def check_line(f: dict, stale_tail: str = " - more than a week ago") -> str:
-    """The 'Shelf check: ...' line from facts(); `status` passes its own stale tail (AV1102-05)."""
+def check_line(f: dict, stale_tail=None) -> str:
+    """The shelf-check sentence from facts(); `stale_tail` is kept for old callers and ignored."""
     day = f["checked_on"]
-    head = "Shelf check: not done yet" if day is None else f"Shelf check: {_day_text(date.fromisoformat(day))}"
-    return head + (" - dated after today, check the clock" if f["future"] else stale_tail if f["stale"] else "")
+    if day is None: return "I still need your shelf check."
+    when = _day_text(date.fromisoformat(day))
+    if f["future"]: return f"Your last shelf check is dated {when}, which is still to come. Please check the date on the computer."
+    if f["stale"]: return f"Your last shelf check was {when}. That was more than a week ago, so the website says to call to confirm."
+    return f"Your last shelf check was {when}."
 
 
 def render(f: dict) -> str:
-    counts = f"Available {f['available']} · Limited {f['limited']} · Sold out {f['sold_out']} · Not confirmed {f['not_confirmed']}"
+    counts = (f"On the shelves: {f['available']} available, {f['limited']} running low, {f['sold_out']} sold out, "
+              f"{f['not_confirmed']} not confirmed.")
     lists = [(label, [g[0] if len(g) == 1 else f"{g[0]} ({len(g)})"  # one entry per shared name, in sorted order
                       for g in (list(v) for _, v in groupby(f[key], key=str.casefold))])
-             for label, key in (("Limited", "limited_names"), ("Sold out", "sold_out_names"))]
+             for label, key in (("Running low", "limited_names"), ("Sold out", "sold_out_names"))]
     hike_list, cuts = f.get("hikes", []), (TEXT_LIMITS["event"]["title"], 40, 20, 8)
     steps = [(MAX_NAMES, c) for c in cuts] + [(cap, cuts[-1]) for cap in range(MAX_NAMES - 1, -1, -1)]
     for cap, cut in steps:  # hike titles cut with … first, then fewer names and hikes, never a longer reply
         lines = [check_line(f), counts]
         for label, found, sep in [(label, found, ", ") for label, found in lists] + [
                 ("Hikes", [_hike_text(h, cut) for h in hike_list], "; ")]:
-            shown = found[:cap] + ([f"+{len(found) - cap} more"] if len(found) > cap else [])
+            shown = [voice.quote(x) if label != "Hikes" else x for x in found[:cap]] + ([f"and {len(found) - cap} more"] if len(found) > cap else [])
             lines += [f"{label}: {sep.join(shown)}"] if found else []
-        lines.append("These are your last shelf checks, not stock counts.")
-        if len("\n".join(lines)) <= MAX_CHARS:
+        lines.append("These come from your last shelf check, so they are not stock counts.")
+        if len(voice.plain("\n".join(lines))) <= MAX_CHARS:
             break
     return "\n".join(lines)
 
@@ -130,6 +137,7 @@ def main(argv=None, content_dir: Path = CONTENT_DIR, out=None) -> int:
     parser.add_argument("--today", type=_date)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--guests", help="RSVP database (read-only) for confirmed guest counts")
+    parser.add_argument("--for-g", metavar="STATE", help="HASS-VOICE-1: also print the weekly correspondence line from this state folder (G only; never sent to the owner)")
     args = parser.parse_args(argv)  # a usage error exits 2
     guests = None
     if args.guests is not None:  # unreadable is not exit 1: the shelf part is still good, the hikes say so
@@ -145,7 +153,10 @@ def main(argv=None, content_dir: Path = CONTENT_DIR, out=None) -> int:
     except ValueError as exc:  # a product record the report cannot read, named (ContentError is caught above)
         print(f"morning_report: cannot read content ({exc})", file=sys.stderr)
         return 1
-    print(json.dumps(f, ensure_ascii=False) if args.json else render(f), file=out or sys.stdout)
+    print(json.dumps(f, ensure_ascii=False) if args.json else voice.plain(render(f)), file=out or sys.stdout)
+    if args.for_g and not args.json:
+        from hass import corrlog  # noqa: E402 - lazily: only G's run reads the log
+        print("\n" + corrlog.weekly_line(corrlog.CorrLog(args.for_g, lambda: datetime.now().astimezone())), file=out or sys.stdout)
     return 0
 
 
