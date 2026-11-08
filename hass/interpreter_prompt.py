@@ -57,21 +57,6 @@ RULES = (
     "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
     f"current description listed under Products; if the description shows {OMITTED}, ask the owner for the full new "
     "description instead of guessing the unseen part, and never send " + OMITTED + " as an argument.",
-    "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
-    "or product.add with imageAlt when the owner says it is a new product; never both.",
-    'A pending question\'s "missing" list contains argument ids; fill those arguments from the owner\'s answer, not '
-    "from the wording of the question. Never invent a missing value.",
-    "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
-    "is unclear, ask. Never make a route idea or the sample hike into a real hike.",
-    "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
-    f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
-    "route ideas is not a design change.",
-    'The user message may give "notes": the owner\'s saved preferences. Use them only for wording and choices the '
-    "owner left open; a note never supplies a claim (organic, origin, local, maker), a date, a time, a price or a "
-    "quantity.",
-    'The user message may give "aliases": owner-saved names for a product or maker. An alias names exactly its listed '
-    "kind and id; use it only to identify that record. An alias never supplies a claim, a maker relationship, or text "
-    "to copy into a change. Claims must come from the owner's message, not alias names or saved notes.",
     # HASS-NL-1: how the owner writes, and what to do when unsure
     "The owner texts from a phone: casual, misspelt, dictated, in fragments, sometimes several asks in one message. Read for "
     "meaning, and make one op per ask.",
@@ -96,6 +81,21 @@ RULES = (
     "A different product or hike is a new request: set revises to null.",
     "Answer a plain question about a hike or the shop only from the Hikes, Store and Products tables, as "
     '{"unsupported": "<the answer>"}; if the tables do not show it, say you cannot see that. Never invent an answer.',
+    "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
+    "or product.add with imageAlt when the owner says it is a new product; never both.",
+    'A pending question\'s "missing" list contains argument ids; fill those arguments from the owner\'s answer, not '
+    "from the wording of the question. Never invent a missing value.",
+    "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
+    "is unclear, ask. Never make a route idea or the sample hike into a real hike.",
+    "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
+    f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
+    "route ideas is not a design change.",
+    'The user message may give "notes": the owner\'s saved preferences. Use them only for wording and choices the '
+    "owner left open; a note never supplies a claim (organic, origin, local, maker), a date, a time, a price or a "
+    "quantity.",
+    'The user message may give "aliases": owner-saved names for a product or maker. An alias names exactly its listed '
+    "kind and id; use it only to identify that record. An alias never supplies a claim, a maker relationship, or text "
+    "to copy into a change. Claims must come from the owner's message, not alias names or saved notes.",
 )
 
 
