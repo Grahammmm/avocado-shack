@@ -12,7 +12,10 @@ traceable to the message (``ground``): a value Michael did not write is dropped 
 The description never states a claim, origin, ingredient or story that is not in the message or on a maker record; a
 description written by a model (``writer=``) is accepted only if it passes ``house_style.check_description`` and the
 same grounding test, else the template below is used. If the message lacks something the page shows, ONE short question
-is returned instead of a draft.
+is returned instead of a draft. A maker or place is kept only when his words tie it to the item ("from <maker> in <place>",
+or a catalog maker he named); otherwise ONE question confirms it. Claim terms (organic, local ...) never reach a public field
+(name, alt, description, maker note); they are listed in left_off. The photo passes media.check_photo and the renderer's pixel
+budget first; any photo that cannot be checked, decoded or drawn gives status "refused", one fixed reply and no ops.
 """
 from __future__ import annotations
 
@@ -21,7 +24,7 @@ import json
 import re
 from collections import Counter, defaultdict
 
-from hass import claims, house_style as hs
+from hass import claims, house_style as hs, media, newitem_render  # newitem_render imports Pillow only when a picture is drawn
 from hass.content_model import CATEGORIES, SHELF_LABELS
 from hass.ops.photos import _alt_problem
 
@@ -174,6 +177,30 @@ def _unaffirmed_terms(text: str, low: str) -> list:
     return [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if hs._has_term(text, t) and not claims._affirmed(claims._pattern(t), low)]
 
 
+def claim_terms(text) -> list:
+    """Every claim term in `text`, affirmed or not. Under the claim-omission policy (left_off: a claim goes on a card only when he
+    asks for it by name and it is documented) none of these may reach a public field of a new-item draft."""
+    return [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if text and hs._has_term(text, t)]
+
+
+def without_claims(name, kind):
+    """The public name with every claim term taken out ('Organic honey' -> 'Honey'); the kind word is kept or put back."""
+    if not name or not claim_terms(name): return name
+    for t in claim_terms(name):
+        name = re.sub(r"(?<!\w)" + r"[-\s]+".join(re.escape(w) for w in re.split(r"[-\s]+", t)) + r"(?!\w)", " ", name, flags=re.I)
+    name = " ".join(name.split()).strip(" ,-")
+    if kind and not any(_fold(w) == _fold(kind) for w in name.split()): name = " ".join(x for x in (name, kind) if x)
+    return _cap(name) if name else None
+
+
+def defer_claims(facts: dict) -> dict:
+    """The facts as the public fields may use them: no claim term in the name, the story or the serving use (left_off lists them)."""
+    out = {**facts, "name": without_claims(facts.get("name"), facts.get("kind"))}
+    for key in ("story", "use"):
+        if claim_terms(out.get(key)): out[key] = None
+    return out
+
+
 def _asserted(value: str, low: str) -> bool:
     """The value is in the message and at least one occurrence is not negated (the claims gate's own negator rule)."""
     return claims._affirmed(claims._pattern(value), low)
@@ -217,6 +244,30 @@ def _shelf_evidence(low: str):
     return None
 
 
+def _same(a, b) -> bool:
+    return bool(a) and bool(b) and _fold(str(a)).strip(" .,") == _fold(str(b)).strip(" .,")
+
+
+def maker_relations(message: str) -> list:
+    """[(maker, place or None)]: the maker relationships his own words state, 'from/by/made by/out of <Maker>[ in|, <Town, State>]'."""
+    return [(m.group("name").strip(" .,"), (m.group("place") or "").strip(" .,") or None) for m in NEW_MAKER_RE.finditer(" ".join(message.split()))]
+
+
+def _maker_supported(maker: str, message: str, content) -> bool:
+    """A catalog maker he named (the one the plain reader finds), or the <Maker> of one of his 'from/by <Maker>' phrases."""
+    key = find_maker(maker, content.makers)
+    if key and key == find_maker(message, content.makers) and (_same(maker, key) or _same(maker, content.makers[key]["name"])): return True
+    return any(_same(maker, name) for name, _place in maker_relations(message))
+
+
+def _place_supported(place: str, maker, message: str, content) -> bool:
+    """The place his words give for THAT maker ('from <maker> in <place>'), or that catalog maker's recorded place."""
+    if not maker: return False
+    key = find_maker(maker, content.makers)
+    if key and _same(place, content.makers[key].get("place")): return True
+    return any(_same(maker, name) and _same(place, where) for name, where in maker_relations(message))
+
+
 def ground(facts: dict, message: str, content) -> tuple:
     """(facts kept, [what was dropped]): a value must be traceable to the message (or be a maker/kind the catalog knows),
     not negated there, and a claim word only counts when he affirmed it. Shelf and availability are never taken on trust
@@ -230,9 +281,13 @@ def ground(facts: dict, message: str, content) -> tuple:
             ok = all(_fold(w) in low for w in re.findall(r"[\w’'-]+", value)) and not _unaffirmed_terms(value, low)
         elif key == "story":
             ok = _story_ok(value, kept.get("maker"), message)
+        elif key == "maker":  # the maker must be WHO he says makes it, not just a capitalised word somewhere in the message
+            ok = _asserted(value, low) and not _unaffirmed_terms(value, low) and _maker_supported(value, message, content)
+        elif key == "place":  # the place must be where he says THAT maker is, not any place he mentioned
+            ok = _asserted(value, low) and not _unaffirmed_terms(value, low) and _place_supported(value, kept.get("maker"), message, content)
         else:
             ok = _fold(value) in low
-            if ok and key in ("maker", "place", "use"): ok = _asserted(value, low) and not _unaffirmed_terms(value, low)
+            if ok and key == "use": ok = _asserted(value, low) and not _unaffirmed_terms(value, low)
         if not ok:
             kept[key] = None
             dropped.append(key)
@@ -256,7 +311,7 @@ def _town(place: str):
 
 def _serving_ok(sentence: str, owner_text: str) -> bool:
     inner = re.findall(r"(?<=[a-z,;:] )[A-Z][\w’'-]*", sentence)  # a capitalised word mid-sentence names something
-    terms = _unaffirmed_terms(sentence, _fold(owner_text))
+    terms = claim_terms(sentence)  # a catalog sentence carrying any claim is never borrowed (claim-omission policy)
     return len(sentence.split()) >= 4 and not inner and not terms and not any(c.isdigit() for c in sentence) and sentence.endswith(".")
 
 
@@ -396,6 +451,7 @@ def compose(facts: dict, content, spec: dict, message: str, writer=None) -> dict
         problems = writer_problems(text, facts, maker, message, content)
         check = hs.check_description(text, spec, name=facts.get("name"), owner_text=message)
         pieces = writer_unproven(text, first, [s for _i, s in pool], facts.get("use"))
+        if claim_terms(text): problems = [*problems, "a claim word (claims go on a card only on request): " + ", ".join(claim_terms(text))]
         if not bad and not problems and not pieces and check["pass"]:
             return {"text": text, "source": "writer", "serving_from": None, "writer_rejected": None}
         rejected = (("not in Michael's words: " + ", ".join(bad)) if bad else "; ".join(problems) if problems else
@@ -424,13 +480,15 @@ def next_product_id(content) -> str:
     return "photo-product-%03d" % (max(numbers, default=0) + 1)
 
 
-def question(facts: dict, content, label=None):
+def question(facts: dict, content, label=None, maker_unsupported=False):
     """ONE short question for the most important thing the page shows and the message lacks, else None."""
     if not facts.get("name") and not facts.get("kind"):
         if label and (label.get("name") or label.get("brand")):  # the existing label-reader path, as a question to confirm
             said = " ".join(v for v in (label.get("brand"), label.get("name")) if v)
             return f"The label looks like: {said}. Is that right? Say which product it is either way."
         return "What is this item called?"
+    if maker_unsupported:  # a maker his words do not tie to the item (a town, a word elsewhere): confirm, never guess
+        return f"Who makes the {facts.get('kind') or 'item'}, and what town and state are they in?"
     new_maker = facts.get("maker") and not find_maker(facts["maker"], content.makers)
     if new_maker and not (facts.get("place") and "," in facts["place"]):
         return f"Where is {facts['maker']} based (town and state)?"
@@ -447,8 +505,15 @@ def draft(message: str, photo: bytes, *, content, spec=None, facts=None, label=N
     spec = spec or hs.load_spec()
     raw = facts if facts is not None else extract_facts(message, content)
     facts, dropped = ground({**dict.fromkeys(FACT_KEYS), **raw}, message, content)
-    ask = question(facts, content, label)
+    facts = defer_claims(facts)
     base = {"facts": facts, "dropped": dropped, "left_off": [], "private": {}, "style": {}}
+    try:  # the store's own byte gate first: empty, over 20 MB, not JPEG/PNG, broken structure -> one fixed reply, no ops
+        media.check_photo(photo)
+    except media.Refused as exc:
+        return _refused(base, exc.code, exc.reply)
+    except TypeError:
+        return _refused(base, "unreadable", media.REPLIES["unreadable"])
+    ask = question(facts, content, label, maker_unsupported=bool(raw.get("maker")) and "maker" in dropped)
     if ask:
         return {**base, "status": "question", "question": ask, "reply": ask, "ops": []}
     key = find_maker(facts.get("maker") or "", content.makers)
@@ -467,13 +532,16 @@ def draft(message: str, photo: bytes, *, content, spec=None, facts=None, label=N
     sha = hashlib.sha256(photo).hexdigest()
     image: dict = {"path": f"assets/products/photo-{sha[:16]}.jpg", "sha256": sha}
     if renderer is None:
-        from hass import newitem_render  # noqa: PLC0415 - Pillow is optional
         renderer = newitem_render.render
     try:
         out = renderer(photo)
         image.update(bytes=out["jpeg"], report=out["report"], check=out["check"])
     except (hs.PillowMissing, ImportError) as exc:
         image.update(bytes=None, report={"review": [str(exc)]}, check=None)
+    except (media.Refused, newitem_render.Refused) as exc:
+        return _refused(base, exc.code, exc.reply)
+    except Exception:  # noqa: BLE001 - a photo that cannot be decoded or drawn is one fixed refusal with no ops, never a crash
+        return _refused(base, "unreadable", media.REPLIES["unreadable"])
     ops = ([{"op": "maker.add", "args": {k: v for k, v in new_maker.items()}}] if new_maker else []) + [
         {"op": "product.add", "args": {"name": name, "brand": brand, "category": shelf, "description": desc["text"], "photo": sha, "imageAlt": alt,
                                        **({"producerKey": key or new_maker["key"]} if (key or new_maker) else {})}}]
@@ -502,6 +570,11 @@ def draft(message: str, photo: bytes, *, content, spec=None, facts=None, label=N
     return {**base, "status": status, "question": None, "ops": ops, "image": image, "alt": alt, "description": desc, "maker": new_maker,
             "shelf": SHELF_LABELS[shelf], "product": product, "left_off": left_off, "style": style, "review": review + problems,
             "private": {k: facts[k] for k in ("price", "size") if facts.get(k)}, "reply": reply}
+
+
+def _refused(base: dict, code: str, reply: str) -> dict:
+    """The photo cannot be used: a fixed owner reply, no ops, no picture, nothing to approve."""
+    return {**base, "status": "refused", "refused": code, "question": None, "reply": reply, "ops": []}
 
 
 def _reply(name, shelf, description, new_maker, image, left_off, review, availability) -> str:

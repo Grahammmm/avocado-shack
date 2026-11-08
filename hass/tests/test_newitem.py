@@ -5,20 +5,37 @@ see reports/hass/NEWITEM-1.md hand-off card 5). The end-to-end test runs the dra
 apply, undo) on a throwaway repo, with the one planned seam (photos._web_bytes -> house render) patched in.
 """
 import hashlib
+import io
 import json
+import struct
 import unittest
+import zlib
 from unittest import mock
 
-from hass import claims, house_style as hs, newitem
+from hass import claims, house_style as hs, media, newitem, newitem_render
 from hass.content_model import load_content
 from hass.ops import photos
 
 try:
     import PIL  # noqa: F401
-    from hass import newitem_render, newitem_synthetic as syn
+    from PIL import Image as PILImage
+    from hass import newitem_synthetic as syn
     HAVE_PIL = True
 except ImportError:  # pragma: no cover
     HAVE_PIL = False
+
+
+def png(width=4, height=4, pixel=(200, 180, 120), idat=None) -> bytes:
+    """A real PNG built with the standard library only (RGB, or RGBA when `pixel` has four values); `idat` overrides the pixel data."""
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    colour = 6 if len(pixel) == 4 else 2
+    rows = b"".join(b"\0" + bytes(pixel) * width for _ in range(height))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, colour, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows) if idat is None else idat) + chunk(b"IEND", b""))
+
+
+PHOTO = png()  # passes media.check_photo; the draft tests below swap in FAKE for the picture itself
 
 CONTENT = load_content()
 SPEC = hs.load_spec()
@@ -118,7 +135,7 @@ class RenderTests(unittest.TestCase):
 
 class DraftTests(unittest.TestCase):
     def draft(self, message=HONEY, **kw):
-        return newitem.draft(message, b"synthetic-photo-bytes", content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
+        return newitem.draft(message, PHOTO, content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
 
     def test_the_honey_example(self):
         r = self.draft(selection_checked=True)
@@ -126,7 +143,7 @@ class DraftTests(unittest.TestCase):
         product = next(o for o in r["ops"] if o["op"] == "product.add")["args"]
         self.assertEqual((product["name"], product["brand"], product["category"], product["producerKey"]), ("Cal Poly honey", "Cal Poly", "pantry", "Cal Poly"))
         self.assertTrue(r["description"]["text"].startswith("Honey from Cal Poly in San Luis Obispo."))
-        self.assertEqual(product["photo"], hashlib.sha256(b"synthetic-photo-bytes").hexdigest())
+        self.assertEqual(product["photo"], hashlib.sha256(PHOTO).hexdigest())
         self.assertEqual(product["imageAlt"], "Cal Poly honey in a jar")
         self.assertEqual([o["op"] for o in r["ops"]], ["product.add", "product.set_availability"])
         self.assertEqual(r["ops"][1]["args"], {"id": newitem.next_product_id(CONTENT), "available": "yes"})
@@ -242,7 +259,7 @@ class DraftTests(unittest.TestCase):
 class GroundingTests(unittest.TestCase):
     """Review round 1 (PR 504): fact-only text, polarity, and shelf/availability that are never taken on trust."""
     def draft(self, message=HONEY, **kw):
-        return newitem.draft(message, b"synthetic-photo-bytes", content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
+        return newitem.draft(message, PHOTO, content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
 
     def test_a_writer_cannot_add_an_ingredient_or_a_history(self):
         for text in ("Honey blended with cinnamon and vanilla. Spoon a little onto buttered toast.",
@@ -304,7 +321,7 @@ class SourcePreservingTests(unittest.TestCase):
     MODEL = {"name": "Bee Happy Farm honey", "maker": "Bee Happy Farm", "place": "Templeton, California", "kind": "honey"}
 
     def draft(self, message=HONEY, **kw):
-        return newitem.draft(message, b"synthetic-photo-bytes", content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
+        return newitem.draft(message, PHOTO, content=CONTENT, spec=SPEC, renderer=FAKE, **kw)
 
     def story(self, tail, story):
         return self.draft(self.BEES + tail, facts={**self.MODEL, "story": story})
@@ -395,6 +412,115 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(committed, result["image"]["bytes"])  # what the draft showed is what was committed
         self.assertTrue(hs.check_image(committed, SPEC)["pass"])
         self.assertTrue(hs.check_product(added, repo.makers(), SPEC)["pass"])
+
+
+class FinalRoundTests(unittest.TestCase):
+    """Review round 3 (PR 504, frozen list A1 A2 B1 B2). Standard library only: these run in CI."""
+    BEES = "got in honey from Bee Happy Farm in Templeton, California"
+
+    def draft(self, message=HONEY, photo=PHOTO, **kw):
+        return newitem.draft(message, photo, content=CONTENT, spec=SPEC, **{"renderer": FAKE, **kw})
+
+    def assertRefused(self, r, code):
+        self.assertEqual((r["status"], r["refused"], r["ops"]), ("refused", code, []))
+        self.assertNotIn("image", r)
+
+    def test_a1_a_town_is_never_taken_as_the_maker(self):
+        town = {"name": "Bee Happy Farm honey", "maker": "Templeton", "place": "Templeton, California", "kind": "honey"}
+        r = self.draft(self.BEES, facts=town, selection_checked=True)
+        self.assertEqual((r["status"], r["ops"]), ("question", []))
+        self.assertIn("maker", r["dropped"])
+        self.assertEqual(r["question"], "Who makes the honey, and what town and state are they in?")
+        self.assertEqual(r["question"].count("?"), 1)
+        self.assertNotIn("maker.add", str(r["ops"]))
+        good = self.draft(self.BEES, facts={**town, "maker": "Bee Happy Farm"})  # the maker his 'from' names: still a full draft
+        self.assertEqual((good["status"], good["ops"][0]["args"]["name"], good["ops"][0]["args"]["place"]),
+                         ("draft", "Bee Happy Farm", "Templeton, California"))
+        self.assertTrue(good["description"]["text"].startswith("Honey from Bee Happy Farm in Templeton."))
+
+    def test_a1_a_place_must_be_where_he_says_that_maker_is(self):
+        message = "got in honey from Bee Happy Farm in Templeton, California. Picked it up on the way back from Paso Robles, California."
+        wrong = {"name": "Bee Happy Farm honey", "maker": "Bee Happy Farm", "place": "Paso Robles, California", "kind": "honey"}
+        r = self.draft(message, facts=wrong)
+        self.assertIn("place", r["dropped"])
+        self.assertEqual((r["status"], r["question"]), ("question", "Where is Bee Happy Farm based (town and state)?"))
+        known = self.draft(HONEY, facts={"name": "Cal Poly honey", "maker": "Cal Poly", "kind": "honey"})  # a catalog maker he named
+        self.assertEqual((known["status"], known["dropped"]), ("draft", []))
+
+    def test_a2_a_stated_claim_stays_out_of_every_public_field(self):
+        for facts in (None, {"name": "Organic honey", "kind": "honey"}):  # the plain reader and a model reader
+            with self.subTest(facts=facts):
+                r = self.draft("got in organic honey", facts=facts)
+                product = next(o for o in r["ops"] if o["op"] == "product.add")["args"]
+                self.assertEqual((product["name"], product["imageAlt"], r["product"]["name"]), ("Honey", "Honey", "Honey"))
+                self.assertNotIn("organic", json.dumps(r["ops"]).lower())
+                self.assertNotIn("organic", (r["alt"] + r["description"]["text"]).lower())
+                self.assertEqual([x["value"] for x in r["left_off"] if x["what"] == "claim"], ["organic"])
+        maker = self.draft("got in organic honey from Bee Happy Farm in Templeton, California. They keep organic bees.")
+        self.assertNotIn("organic", json.dumps(maker["ops"]).lower())
+        self.assertEqual(maker["maker"]["story"], "Bee Happy Farm is based in Templeton, California.")
+        self.assertEqual(newitem.without_claims("Cal Poly raw honey", "honey"), "Cal Poly honey")
+
+    def test_b1_unreadable_or_truncated_bytes_are_one_fixed_refusal(self):
+        self.assertRefused(self.draft(photo=b"synthetic-photo-bytes"), "unsupported-type")
+        self.assertRefused(self.draft(photo=PHOTO[:-20]), "truncated")
+        self.assertRefused(self.draft(photo=b""), "empty")
+        r = self.draft(photo=PHOTO, renderer=mock.Mock(side_effect=OSError("broken data stream when reading image file")))
+        self.assertRefused(r, "unreadable")
+        self.assertEqual(r["reply"], media.REPLIES["unreadable"])
+        blank = self.draft(photo=PHOTO, renderer=mock.Mock(side_effect=newitem_render.Refused("blank")))
+        self.assertRefused(blank, "blank")
+        self.assertEqual(blank["reply"], newitem_render.REPLIES["blank"])
+
+    def test_b2_the_store_byte_gate_runs_before_any_picture_work(self):
+        renderer = mock.Mock(side_effect=AssertionError("must not be reached"))
+        with mock.patch.object(media, "MAX_BYTES", 10):
+            self.assertRefused(self.draft(photo=PHOTO, renderer=renderer), "too-large")
+        self.assertRefused(self.draft(photo=b"GIF89a" + bytes(40), renderer=renderer), "unsupported-type")
+        renderer.assert_not_called()
+
+
+@unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
+class FinalRoundPictureTests(unittest.TestCase):
+    """Review round 3 (PR 504): the real renderer on bytes Pillow cannot or must not decode."""
+    def draft(self, photo):
+        return newitem.draft(HONEY, photo, content=CONTENT, spec=SPEC)
+
+    def test_b1_undecodable_pixels_and_an_all_transparent_png_are_refused(self):
+        broken = png(idat=b"this is not zlib data")  # valid chunks and CRCs, so it passes the byte gate; Pillow cannot decode it
+        media.check_photo(broken)
+        with self.assertRaises(newitem_render.Refused) as caught:
+            newitem_render.render(broken, SPEC)
+        self.assertEqual(caught.exception.code, "unreadable")
+        self.assertEqual((self.draft(broken)["status"], self.draft(broken)["ops"]), ("refused", []))
+        clear = png(64, 64, (0, 0, 0, 0))
+        with self.assertRaises(newitem_render.Refused) as caught:
+            newitem_render.render(clear, SPEC)
+        self.assertEqual(caught.exception.code, "blank")
+        r = self.draft(clear)
+        self.assertEqual((r["status"], r["refused"], r["ops"]), ("refused", "blank", []))
+
+    def test_b2_pixel_budget_is_checked_before_decoding(self):
+        huge = png(10_000, 6_000, idat=zlib.compress(b"\0" * 64))  # 60 MP in the header, almost no data
+        media.check_photo(huge)
+        with mock.patch.object(PILImage.Image, "load", side_effect=AssertionError("decoded before the budget check")):
+            with self.assertRaises(newitem_render.Refused) as caught:
+                newitem_render.render(huge, SPEC)
+        self.assertEqual(caught.exception.code, "too-many-pixels")
+        self.assertEqual(self.draft(huge)["refused"], "too-many-pixels")
+
+    def test_b2_decompression_bomb_warning_and_error_are_refusals(self):
+        for limit in (10, 5):  # 16 px: over the limit is Pillow's warning, over twice the limit its error
+            with self.subTest(limit=limit), mock.patch.object(PILImage, "MAX_IMAGE_PIXELS", limit):
+                with self.assertRaises(newitem_render.Refused) as caught:
+                    newitem_render.render(png(), SPEC)
+                self.assertEqual(caught.exception.code, "too-many-pixels")
+
+    def test_b2_only_the_kind_the_bytes_gate_found_is_opened(self):
+        buf = io.BytesIO()
+        PILImage.new("RGB", (8, 8), (200, 180, 120)).save(buf, "GIF")
+        with self.assertRaises(media.Refused):
+            newitem_render.render(buf.getvalue(), SPEC)
 
 
 if __name__ == "__main__":

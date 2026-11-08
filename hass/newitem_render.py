@@ -21,11 +21,28 @@ from __future__ import annotations
 import io
 import math
 import statistics
+import warnings
 from collections import deque
 
-from hass import house_style as hs
+from hass import house_style as hs, media
 
 SIZE = 800
+MAX_PIXELS = 50_000_000  # header width x height; a 48 MP phone photo fits. Larger is refused before a pixel is decoded
+FORMATS = {"jpeg": "JPEG", "png": "PNG"}  # Pillow may only open the kind media.check_photo found in the bytes
+REPLIES = {
+    "unreadable": media.REPLIES["unreadable"],
+    "too-many-pixels": "That photo is too big for me to open (more than 50 megapixels), so nothing was drafted. "
+                       "Please send a smaller copy or a screenshot of it.",
+    "blank": "I could not find the item in that photo (the picture is empty or see-through), so nothing was drafted. "
+             "Please send another photo of it.",
+}
+
+
+class Refused(ValueError):
+    """A photo the renderer will not draw from; .code is one of REPLIES and .reply is the fixed owner text for it."""
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code, self.reply = code, REPLIES[code]
 ANALYSIS = 320  # long side of the working copy the coarse mask is found on
 JPEG_QUALITIES = (90, 85, 80, 74)
 SHADOW = {"colour": (70, 55, 40), "alpha": 0.055, "blur": 11, "width": 0.8, "height": 0.055, "lift": 0.012}  # tuned to the measured shadow_depth
@@ -188,11 +205,33 @@ def _shadow_layer(canvas_size, box):
     return layer.filter(ImageFilter.GaussianBlur(SHADOW["blur"]))
 
 
+def _decode(data):
+    """The photo opened and decoded, after the store's own byte gate (media.check_photo: empty, 20 MB, JPEG/PNG only, structure)
+    and a pixel budget read from the header BEFORE any pixel is decoded. Pillow's decompression-bomb warning is an error here.
+    Anything that still fails to decode is Refused("unreadable"); nothing is returned half-read."""
+    Image, *_ = _modules()
+    kind = media.check_photo(data)  # raises media.Refused with the store's fixed reply
+    bomb = (Image.DecompressionBombWarning, Image.DecompressionBombError)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            im = Image.open(io.BytesIO(data), formats=(FORMATS[kind],))
+            w, h = im.size
+            if not w or not h or w * h > MAX_PIXELS: raise Refused("too-many-pixels")
+            im.load()
+    except Refused:
+        raise
+    except bomb:
+        raise Refused("too-many-pixels") from None
+    except Exception:  # noqa: BLE001 - any decode failure of untrusted bytes is one fixed refusal, never a crash
+        raise Refused("unreadable") from None
+    return im
+
+
 def _upright(data):
     """(RGB image with the EXIF rotation applied to the pixels, alpha channel or None, whether a rotation tag was present)."""
-    Image, ImageOps, *_ = _modules()
-    im = Image.open(io.BytesIO(data))
-    im.load()
+    _, ImageOps, *_ = _modules()
+    im = _decode(data)
     turned = im.getexif().get(0x0112, 1) not in (None, 1)
     im = ImageOps.exif_transpose(im)
     alpha = None
@@ -230,6 +269,7 @@ def render(data: bytes, spec=None) -> dict:
             mask = mask.rotate(lean, resample=_resample(Image, "BICUBIC"), expand=True, fillcolor=0)
             report["straightened_degrees"] = round(lean, 1)
         box = mask.point(lambda v: 255 if v > 100 else 0).getbbox()
+        if box is None: raise Refused("blank")  # e.g. an entirely transparent PNG: no subject to place
         pad = round(.012 * max(box[2] - box[0], box[3] - box[1]))
         box = (max(0, box[0] - pad), max(0, box[1] - pad), min(img.width, box[2] + pad), min(img.height, box[3] + pad))
         subject, cut = img.crop(box), mask.crop(box)
