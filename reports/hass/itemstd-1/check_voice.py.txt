@@ -1,0 +1,21 @@
+"""ITEMSTD-1: run every Mike-facing sample line in docs/hass/ITEM-STANDARD.md (lines starting with '> ') through hass/voice.py.
+
+Run: python3 check_voice.py REPO
+Prints each line with the rules it breaks; exit 1 if any line breaks a rule. Read only.
+"""
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+sys.path.insert(0, str(repo))
+from hass import voice  # noqa: E402
+
+lines = [ln[2:].strip() for ln in (repo / "docs/hass/ITEM-STANDARD.md").read_text().splitlines() if ln.startswith("> ")]
+bad = 0
+for ln in lines:
+    problems = voice.check(ln)
+    if problems:
+        bad += 1
+    print(("FAIL " if problems else "ok   ") + ln[:110] + ("   <- " + str(problems) if problems else ""))
+print(f"{len(lines)} lines, {bad} break a rule")
+sys.exit(1 if bad else 0)

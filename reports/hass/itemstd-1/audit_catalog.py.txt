@@ -1,0 +1,295 @@
+"""ITEMSTD-1: audit the saved catalog (hass/content/*.json) against the item standard. Read only.
+
+Run: python3 audit_catalog.py REPO PICTURES_SUMMARY_JSON OUT_JSON
+Writes one JSON with per-product and per-maker findings plus counts; build_gaps.py turns it into catalog-gaps.json.
+"""
+import difflib
+import json
+import re
+import statistics
+import sys
+import unicodedata
+from collections import Counter, defaultdict
+from pathlib import Path
+
+FRESH_SHELVES = ("fruit", "vegetables", "flowers")   # shop.js PRODUCE_SHELVES
+PACKAGED_IDS = ("photo-product-018",)                 # shop.js PACKAGED_IDS (hard-coded exception)
+CATEGORIES = ("fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers")
+SHELF_ORDER = list(CATEGORIES)
+TOWN_RE = re.compile(r"^[A-Z][\w’'. -]+, [A-Z][\w’'. -]+$")
+VAGUE_PLACE_WORDS = ("central coast", "northern california", "near ", "county", "valley", "region", "area")
+OK_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,;:'’!?-()&/%+")
+# words that suggest a different shelf than the one a product is on (review hints, never a verdict)
+SHELF_HINTS = {
+    "dairy": ("cheese", "cheddar", "jack", "gouda", "brie", "feta", "yogurt", "butter", "milk", "cream", "mozzarella", "parmesan", "gruyere", "manchego", "creamery"),
+    "drinks": ("coffee", "tea", "juice", "kombucha", "soda", "cider", "beer", "wine", "water", "decaf", "blend", "roast"),
+    "bread": ("bread", "sourdough", "loaf", "baguette", "ciabatta", "focaccia", "roll", "bun"),
+    "eggs": ("egg",),
+    "meat": ("beef", "pork", "chicken", "sausage", "bacon", "jerky", "lamb", "salami"),
+    "pantry": ("jam", "preserves", "marmalade", "honey", "sauce", "oil", "syrup", "pasta", "rice", "chips", "chocolate", "pistachio", "almond", "walnut", "cashew", "salsa", "vinegar", "mustard", "granola", "cracker", "guacamole", "pesto", "dried", "beans", "seasoning", "salt", "olive"),
+    "fruit": ("melon", "cantaloupe", "watermelon", "apple", "pear", "peach", "plum", "grape", "mango", "orange", "lemon", "strawberry", "blueberry", "raspberry"),
+}
+PACKAGED_WORDS = ("dried", "chips", "pickle", "canned", "jar", "sauce", "preserves", "juice", "roasted", "powder", "frozen", "salsa", "guacamole", "pesto", "olive", "bag", "tub")
+
+
+def fold(s):
+    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9 ]+", " ", s.replace("’", "'").replace("'", "")).strip()
+
+
+def norm_name(s, maker_words=()):
+    toks = [t for t in fold(s).split() if t not in maker_words]
+    toks = [t[:-1] if len(t) > 3 and t.endswith("s") and not t.endswith("ss") else t for t in toks]
+    return " ".join(sorted(toks))
+
+
+def sentence_count(t):
+    return len([x for x in re.split(r"(?<=[.!?])\s+", t.strip()) if x])
+
+
+def main():
+    repo, pics_path, out_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+    products = json.loads((repo / "hass/content/products.json").read_text())["products"]
+    makers = json.loads((repo / "hass/content/makers.json").read_text())["makers"]
+    store = json.loads((repo / "hass/content/store.json").read_text())
+    pics = json.loads(pics_path.read_text())["pictures"]
+    active = [p for p in products if p["status"] == "active"]
+    res = {"counts": {"products_total": len(products), "products_active": len(active),
+                      "products_by_status": dict(Counter(p["status"] for p in products)), "makers": len(makers),
+                      "makers_hidden": sum(1 for m in makers.values() if m.get("hidden"))}}
+    # ---- producer classes
+    def pclass(p):
+        if p.get("producerKey"):
+            return "maker"
+        return "market" if p["brand"] == "Producer not identified" else "own-brand"
+    res["producer_class"] = dict(Counter(pclass(p) for p in active))
+    res["producer_class_by_shelf"] = {c: dict(Counter(pclass(p) for p in active if p["category"] == c)) for c in CATEGORIES}
+    res["own_brand_products"] = [(p["id"], p["name"], p["brand"], p["displayBrand"]) for p in active if pclass(p) == "own-brand"]
+    res["shelves"] = dict(Counter(p["category"] for p in active))
+    res["fresh_vs_packaged"] = dict(Counter(("packaged" if (p["id"] in PACKAGED_IDS or p["category"] not in FRESH_SHELVES) else "fresh") for p in active))
+    # ---- brand consistency
+    odd_brand = []
+    for p in active:
+        k = p.get("producerKey")
+        if k:
+            m = makers.get(k)
+            if m is None:
+                odd_brand.append((p["id"], "producerKey not a maker", k))
+            else:
+                if p["brand"] != m["name"] and p["brand"] != k:
+                    odd_brand.append((p["id"], "brand differs from maker name", p["brand"], m["name"]))
+                if p["displayBrand"] != p["brand"]:
+                    odd_brand.append((p["id"], "displayBrand differs from brand", p["displayBrand"], p["brand"]))
+        elif p["brand"] == "Producer not identified" and p["displayBrand"] != "From the market":
+            odd_brand.append((p["id"], "market item shows odd displayBrand", p["displayBrand"]))
+    res["brand_inconsistencies"] = odd_brand
+    res["distinct_brand_values"] = len({p["brand"] for p in active})
+    res["brand_values_by_maker"] = {k: sorted({p["brand"] for p in active if p.get("producerKey") == k}) for k in makers}
+    # ---- per product findings
+    rows = {}
+    chars = Counter()
+    desc_lens, name_lens = [], []
+    for p in products:
+        f = {"missing": [], "display": [], "review": []}
+        rows[p["id"]] = f
+        if p["status"] != "active":
+            continue
+        k = p.get("producerKey")
+        m = makers.get(k) if k else None
+        cls = pclass(p)
+        if cls == "own-brand" and p["brand"] != "Avocado Shack":
+            f["missing"].append("producer_town")        # the brand is known (e.g. SLO Cider) but has no maker record with a town
+            f["review"].append("brand_without_maker_record:%s" % p["brand"])
+        elif cls in ("market", "own-brand"):
+            f["missing"].append("producer")
+            f["missing"].append("producer_town")
+        elif m:
+            place = m.get("place", "")
+            if not TOWN_RE.match(place) or any(w in place.lower() for w in VAGUE_PLACE_WORDS):
+                f["missing"].append("producer_town")
+        # picture
+        if not re.fullmatch(r"assets/products/photo-[0-9a-f]{16}\.(jpg|png)", p["image"]):
+            f["missing"].append("own_photo")  # the code's own word: "stock picture" (conversation._photos_to_take)
+        if not p.get("imageAlt"):
+            f["display"].append("alt_is_default")
+        pic = pics.get(p["id"])
+        if pic is None:
+            f["display"].append("picture_not_measured")
+        else:
+            f["picture_deviation"] = pic["deviation"]
+        # name checks
+        n = p["name"]
+        name_lens.append(len(n))
+        for ch in n:
+            if ch not in OK_CHARS:
+                chars[("name", ch, unicodedata.name(ch, "?"))] += 1
+                f["display"].append("name_odd_char:" + unicodedata.name(ch, "?"))
+        if "  " in n or n != n.strip():
+            f["display"].append("name_spacing")
+        if len(n) > 40:
+            f["display"].append("name_long:%d" % len(n))
+        if re.search(r"\d", n):
+            f["display"].append("name_has_digit")
+        # description checks
+        d = p.get("description") or ""
+        desc_lens.append(len(d))
+        if not d.strip():
+            f["missing"].append("description")
+        else:
+            if len(d) < 59:
+                f["display"].append("description_short:%d" % len(d))
+            if len(d) > 167:
+                f["display"].append("description_long:%d" % len(d))
+            if not d.rstrip().endswith("."):
+                f["display"].append("description_no_full_stop")
+            if re.search(r"\d", d):
+                f["display"].append("description_has_digit")
+            if "  " in d or d != d.strip():
+                f["display"].append("description_spacing")
+            if "'" in d:
+                f["display"].append("description_straight_apostrophe")
+            for ch in d:
+                if ch not in OK_CHARS:
+                    chars[("description", ch, unicodedata.name(ch, "?"))] += 1
+            if not (2 <= sentence_count(d) <= 3):
+                f["display"].append("description_sentences:%d" % sentence_count(d))
+        # shelf hint
+        words = set(fold(n).split())
+        for shelf, hints in SHELF_HINTS.items():
+            if shelf == p["category"]:
+                continue
+            hit = [h for h in hints if h in words or (h + "s") in words]
+            if hit:
+                # only report when the item's own shelf has no hint matching the name
+                own = SHELF_HINTS.get(p["category"], ())
+                if not any(h in words or (h + "s") in words for h in own):
+                    f["review"].append("shelf_hint:%s(%s)" % (shelf, hit[0]))
+                    break
+        if p["category"] in FRESH_SHELVES and any(w in words for w in PACKAGED_WORDS):
+            f["review"].append("packaged_word_on_fresh_shelf")
+        if p["id"] in PACKAGED_IDS:
+            f["review"].append("hard_coded_packaged_exception_in_shop_js")
+        # name repeats the producer line shown above it on the card
+        bl = fold(p["displayBrand"])
+        if bl and bl != "from the market" and fold(n).startswith(bl):
+            f["display"].append("name_repeats_producer_line")
+        # capitalised words after the first that are not part of a producer or place name (too noisy: product titles are proper nouns)
+        # town in the description must match the maker's town (narrow: "in <Town>" / "from <Town>", not a possessive or a maker name)
+        if m:
+            town = (m.get("place") or "").split(",")[0].strip()
+            for mt in re.finditer(r"\b(?:in|from) ([A-Z][a-z]+(?: [A-Z][a-z]+)*)(?![’'\w])", d):
+                t = mt.group(1)
+                if town and fold(t) != fold(town) and fold(t) not in fold(m.get("place", "")) and t.split()[0] not in makers \
+                        and fold(t.split()[0]) not in {w for kk in makers for w in fold(kk).split()}:
+                    f["review"].append("description_place_differs:%s vs %s" % (t, m.get("place")))
+        # availability word presence
+        if "available" not in p:
+            f["display"].append("no_availability_word")
+    # generic name that is a strict subset of a more specific name on the same shelf (review hint, not an error)
+    toks = {p["id"]: set(norm_name(p["name"]).split()) for p in active}
+    overlap = []
+    for a in active:
+        for b in active:
+            if a["id"] != b["id"] and a["category"] == b["category"] and toks[a["id"]] < toks[b["id"]] and len(toks[a["id"]]) >= 1 \
+                    and a.get("producerKey") == b.get("producerKey"):
+                overlap.append({"generic": a["id"], "generic_name": a["name"], "specific": b["id"], "specific_name": b["name"]})
+    res["generic_vs_specific_same_shelf"] = overlap
+    res["odd_characters"] = [{"where": k[0], "char": k[1], "name": k[2], "count": c} for k, c in chars.most_common()]
+    res["name_length"] = {"median": statistics.median(name_lens), "max": max(name_lens)}
+    res["description_length"] = {"median": statistics.median(desc_lens), "max": max(desc_lens), "min": min(desc_lens)}
+    # ---- duplicates and near duplicates (active + hidden/held, flagged by status)
+    by_norm = defaultdict(list)
+    for p in products:
+        mk = (p.get("producerKey") or "")
+        mw = tuple(fold(mk).split()) + tuple(fold(p["brand"]).split())
+        by_norm[norm_name(p["name"], mw)].append(p)
+    res["exact_duplicates"] = [[(x["id"], x["name"], x["status"]) for x in v] for v in by_norm.values() if len(v) > 1]
+    near = []
+    plist = list(products)
+    for i, a in enumerate(plist):
+        for b in plist[i + 1:]:
+            na, nb = fold(a["name"]), fold(b["name"])
+            r = difflib.SequenceMatcher(None, na, nb).ratio()
+            if r >= 0.86 and na != nb:
+                near.append({"a": a["id"], "a_name": a["name"], "b": b["id"], "b_name": b["name"], "ratio": round(r, 3),
+                             "same_maker": a.get("producerKey") == b.get("producerKey")})
+    res["near_duplicate_names"] = sorted(near, key=lambda x: -x["ratio"])
+    seen = defaultdict(list)
+    for p in products:
+        seen[fold(p["name"])].append((p["id"], p["status"]))
+    res["same_folded_name"] = [v for v in seen.values() if len(v) > 1]
+    desc_seen = defaultdict(list)
+    for p in active:
+        desc_seen[p["description"].strip()].append(p["id"])
+    res["repeated_description"] = [v for v in desc_seen.values() if len(v) > 1]
+    # ---- makers
+    mrows = {}
+    use = Counter(p.get("producerKey") for p in active if p.get("producerKey"))
+    for k, m in makers.items():
+        f = {"missing": [], "display": [], "review": [], "active_products": use.get(k, 0)}
+        mrows[k] = f
+        place = m.get("place", "")
+        if not place:
+            f["missing"].append("place")
+        elif not TOWN_RE.match(place) or any(w in place.lower() for w in VAGUE_PLACE_WORDS):
+            f["missing"].append("producer_town")
+            f["review"].append("place_is_a_region:%s" % place)
+        story = m.get("story", "")
+        if not story.strip():
+            f["missing"].append("story")
+        else:
+            if len(story) < 200:
+                f["display"].append("story_short:%d" % len(story))
+            if len(story) > 400:
+                f["display"].append("story_long:%d" % len(story))
+            if not story.rstrip().endswith("."):
+                f["display"].append("story_no_full_stop")
+            if "'" in story:
+                f["display"].append("story_straight_apostrophe")
+        if not m.get("url"):
+            f["missing"].append("website")
+        if use.get(k, 0) == 0:
+            f["review"].append("no_active_products_so_shown_nowhere")
+        if use.get(k, 0) == 1:
+            f["display"].append("single_product_no_see_all_link")
+        if k != m["name"]:
+            f["review"].append("key_differs_from_name")
+        for ch in m["name"]:
+            if ch not in OK_CHARS:
+                f["display"].append("name_odd_char:" + unicodedata.name(ch, "?"))
+        if "/" in m["name"]:
+            f["review"].append("name_contains_slash")
+        if m.get("hidden"):
+            f["review"].append("hidden")
+    res["maker_places"] = dict(Counter(m.get("place") for m in makers.values()))
+    res["makers_products"] = {k: use.get(k, 0) for k in makers}
+    res["selection_checked_on"] = store.get("selection_checked_on")
+    res["availability_words_set"] = sum(1 for p in active if "available" in p)
+    res["added_on_set"] = sum(1 for p in active if p.get("addedOn"))
+    res["image_alt_set"] = sum(1 for p in active if p.get("imageAlt"))
+    res["rows_products"] = rows
+    res["rows_makers"] = mrows
+    # counts per missing code
+    cnt = Counter()
+    for pid, f in rows.items():
+        if next(p for p in products if p["id"] == pid)["status"] == "active":
+            for c in set(f["missing"]):
+                cnt[c] += 1
+    res["missing_counts_products"] = dict(cnt)
+    res["display_counts_products"] = dict(Counter(re.sub(r":.*", "", c) for pid, f in rows.items() for c in f["display"]))
+    res["review_counts_products"] = dict(Counter(re.sub(r"[:(].*", "", c) for pid, f in rows.items() for c in f["review"]))
+    res["products_with_any_gap"] = sum(1 for p in active if rows[p["id"]]["missing"])
+    gaps_wo_photo = sum(1 for p in active if [c for c in rows[p["id"]]["missing"] if c != "own_photo"])
+    res["products_with_gap_excluding_photo"] = gaps_wo_photo
+    mc = Counter()
+    for k, f in mrows.items():
+        for c in set(f["missing"]):
+            mc[c] += 1
+    res["missing_counts_makers"] = dict(mc)
+    res["makers_with_any_gap"] = sum(1 for f in mrows.values() if f["missing"])
+    out_path.write_text(json.dumps(res, indent=1, ensure_ascii=False))
+    print("ok", res["counts"], "gaps incl photo", res["products_with_any_gap"], "excl photo", gaps_wo_photo)
+
+
+if __name__ == "__main__":
+    main()
