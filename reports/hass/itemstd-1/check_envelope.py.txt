@@ -1,0 +1,53 @@
+"""ITEMSTD-1: apply the proposed picture checks (hard and soft) to the 170 active product pictures. Read only.
+
+Run: python3 check_envelope.py REPO PICTURES_RAW_JSON OUT_JSON
+Hard checks reject a NEW render. Soft checks are advice (a retake tip) and never reject.
+Existing catalog result: 3 hard failures (015, 093, 110, all on the clean-frame check); they are the named, grandfathered compatibility exceptions.
+"""
+import json
+import sys
+from pathlib import Path
+
+repo, raw_path, out_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+MED = (254, 248, 236)
+
+
+def dist(a, b):
+    return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
+
+
+RULES = {  # name: (class, test returning True when the picture FAILS)
+    "size_800x800": ("hard", lambda r: not (r["width"] == 800 and r["height"] == 800)),
+    "no_metadata": ("hard", lambda r: r["has_exif"] or r["has_icc"] or r["has_alpha"]),
+    "bytes_at_most_160KB": ("hard", lambda r: r["bytes"] > 160 * 1024),
+    "background_within_28_of_fef8ec": ("hard", lambda r: dist(r["bg_rgb"], MED) > 28),
+    "clean_frame_at_least_90pct": ("hard", lambda r: r["frame_clean"] < 0.90),
+    "bytes_31_to_99KB": ("soft", lambda r: not (31000 <= r["bytes"] <= 99000)),
+    "background_within_17_of_fef8ec": ("soft", lambda r: dist(r["bg_rgb"], MED) > 17),
+    "background_variation_at_most_6": ("soft", lambda r: r["bg_spread"] > 6),
+    "subject_longest_side_79_to_97pct": ("soft", lambda r: not (0.79 <= r["subject"]["fill_max"] <= 0.97)),
+    "centre_down_within_4pct": ("soft", lambda r: abs(r["subject"]["center_y"]) > 0.04),
+    "centre_across_within_10pct": ("soft", lambda r: abs(r["subject"]["center_x"]) > 0.10),
+    "margin_below_at_least_2_5pct": ("soft", lambda r: r["subject"]["margin_bottom"] < 0.025),
+    "subject_area_20_to_60pct": ("soft", lambda r: not (0.20 <= r["subject"]["area_share"] <= 0.60)),
+    "shadow_at_most_7_5_levels": ("soft", lambda r: r["shadow_depth"] > 7.5),
+    "phone_thumbnail_fill_at_least_80pct": ("soft", lambda r: r["subject"]["fill_max"] < 0.80),
+}
+products = json.loads((repo / "hass/content/products.json").read_text())["products"]
+status = {p["id"]: p["status"] for p in products}
+pics = {r["used_by"][0]: r for r in json.loads(raw_path.read_text()) if r["used_by"] and status[r["used_by"][0]] == "active"}
+res = {name: sorted(pid for pid, r in pics.items() if test(r)) for name, (_, test) in RULES.items()}
+hard_any = sorted({pid for n, ids in res.items() if RULES[n][0] == "hard" for pid in ids})
+soft_any = sorted({pid for n, ids in res.items() if RULES[n][0] == "soft" for pid in ids})
+out = {
+    "about": "Proposed picture checks applied to the 170 active product pictures (ITEMSTD-1). hard = rejects a new render; soft = advice only.",
+    "pictures_checked": len(pics),
+    "checks": {n: {"class": RULES[n][0], "fails": len(ids), "ids": ids} for n, ids in res.items()},
+    "hard_failures": {pid: [n for n, ids in res.items() if RULES[n][0] == "hard" and pid in ids] for pid in hard_any},
+    "hard_failure_detail": {pid: {"clean_frame": pics[pid]["frame_clean"], "bg": pics[pid]["bg_hex"], "subject_longest_side": pics[pid]["subject"]["fill_max"]} for pid in hard_any},
+    "pictures_passing_every_hard_check": len(pics) - len(hard_any),
+    "pictures_missing_at_least_one_soft_check": len(soft_any),
+}
+out_path.write_text(json.dumps(out, indent=1) + "\n")
+print(json.dumps({"checked": out["pictures_checked"], "hard": out["hard_failures"], "soft_any": len(soft_any),
+                  "per_check": {n: v["fails"] for n, v in out["checks"].items()}}, indent=1))
