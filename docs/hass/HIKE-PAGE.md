@@ -13,7 +13,7 @@ One line each; the recommendation is the first option. Nothing in the build wait
 
 | # | Question | Recommendation | Why |
 |---|---|---|---|
-| **1** | **There is no online RSVP on the live site today.** The live site is a static page; the RSVP form and `/api/community` exist only in a local test server on AgentOrange. So: **A)** for now people join by asking at the Shack, phoning or telling Mike, Mike tells Hass, and the page shows "N spots left" within minutes. **B)** also build a real online sign-up now (a small Cloudflare function and database, your Cloudflare login, a token that must be kept away from the agents). | **A now, B later** as its own card after Monday | A needs no new service, no Cloudflare change and no stored secret. B is a bigger, attended job (section 3.6). |
+| **1** | **There is no online RSVP on the live site today.** The live site is a static page; the RSVP form and `/api/community` exist only in a local test server on AgentOrange. So: **A)** for now people join by asking at the Shack, phoning or telling Mike, Mike tells Hass, and the page shows "N spots left" within minutes. **B)** also build a real online sign-up now (a small Cloudflare function and database, your Cloudflare login, a token that must be kept away from the agents, **and guest names and any email typed in the form would be stored at Cloudflare, off the box**: sections 3.6.1 and 3.6.3). | **A now, B later** as its own card after Monday | A needs no new service, no Cloudflare change, no stored secret and no guest name leaves the box. B is a bigger, attended job and a data-exposure decision for you (section 3.6). |
 | **2** | Is **6 a default or a hard ceiling**? **A)** default 6 per hike, Mike can raise or lower it per hike. **B)** never more than 6. | **A** | You said "max six"; some walks (a group at a market day) may want 8. B is one line to add later if you want it. |
 | **3** | New hikes get **sign-up ON with 6 spots** (this replaces the earlier D8 default "sign-up off")? yes / no | **yes** | "Spots left" means nothing on a hike with sign-up off. Hass still never invents anything else about the hike. |
 | **4** | May Hass **publish the spots-left number by itself** after Mike adds or removes someone (numbers only, its own limit of 30 a day and 2 minutes apart, separate from the 10-a-day content limit)? yes / no | **yes** | The only way to keep a live count on a static site without spending the 10-a-day changes Mike needs for stock and text (section 3.3). This is a new kind of live publish, so it is your call. |
@@ -157,9 +157,9 @@ Honest state of the routes (READ, `reports/hiking-club/route-map-sources-2026-11
  Visitor's browser:  community.js  ──►  /hike-spots.json  ──►  "4 spots left"   (no names, ever)
 ```
 
-* **The roster** is a new private store under Hass's state folder (`rsvp.sqlite3`, mode 0600, the same user and the same box as `conversation.sqlite3`; not the content store, not git, not the website). One row per party: `hike id, name, seats, status (confirmed / waitlist / removed), source (chat / site), created, updated`. Chat adds store **name and seats only** (no phone number or email: Mike already has those). Later site-form rows (section 3.6) also carry the email the form collected.
+* **The roster** is a new private store under Hass's state folder (`rsvp.sqlite3`, mode 0600, the same user and the same box as `conversation.sqlite3`; not the content store, not git, not the website). One row per party: `hike id, name, seats, status (confirmed / waitlist / removed), source (chat / site), created, updated`. Chat adds store **name and seats only** (no phone number or email: Mike already has those). This local roster is the single roster only while there is no online form. If option B is built (section 3.6), the Cloudflare D1 database becomes the single roster for upcoming hikes and this file stops holding them (one attended, one-time import, then the local copy of upcoming hikes is deleted), so there are never two rosters. Online-form rows carry the email the form collected; that email stays in D1 and never reaches Hass (3.6.3).
 * **Taken** = the sum of `seats` where status is confirmed. **Left** = capacity − taken. These are computed in code, never by the model.
-* **Hass needs no credential to know the count**, because it is the one writing the roster. For the old local test database it keeps using the existing read-only `guestCountsDb`.
+* **Hass needs no credential to know the count** on the default path, because it is the one writing the roster. For the old local test database it keeps using the existing read-only `guestCountsDb`. With option B it still holds no credential: it asks the bridge (3.6.1), which holds the only one.
 * **Only integers go public** (`hike id → capacity, taken`, plus an "as of" time). No names, no emails, no party details.
 
 ### 3.3 How the public page gets the count without a republish per RSVP
@@ -185,11 +185,13 @@ If the "counts" release is stuck (STOP, cap, network), nothing is lost: the rost
 
 ### 3.5 Privacy
 
+**This table is for the default path (decision 1 = A: no online form, chat adds only).** The claim "guest names do not leave the box" holds **only on that path**. If G chooses option B (section 3.6), guest names, seats and any email a visitor types **are stored at Cloudflare, off the box**, and the extra table and the logging boundary in **section 3.6.3** replace the "No" answers in the first and third rows. Section 3.6.3 is part of decision 1: choosing B means accepting that off-box storage.
+
 | Data | Where it may be | Who sees it | Leaves the box? |
 |---|---|---|---|
-| Guest names, seats, waitlist | the roster only | Hass code; Mike in his own chat (`who is coming`) | **No**, except in Mike's chat reply (see below) |
+| Guest names, seats, waitlist | the roster only | Hass code; Mike in his own chat (`who is coming`) | **No**, except in Mike's chat reply (see below). **With option B: yes, see 3.6.3** |
 | Count (taken, capacity) | roster, `spots.json`, public `hike-spots.json` | everyone | yes, on purpose; integers only |
-| Phone numbers / emails | **not stored** for chat adds; the site form's emails stay in the form store | nobody else | no |
+| Phone numbers / emails | **not stored** for chat adds. With option B the online form's email goes to Cloudflare, not to Hass (3.6.3) | nobody else on the default path | no on the default path. **With option B: yes, to Cloudflare** |
 | Correspondence log | reason code and skill name **only**; no excerpt of Mike's text for RSVP skills, no names, no numbers | G (weekly summary) | no (and nothing in it can name a guest) |
 | Interpreter (local model) | loopback only (READ, `interpreter_local.py`); it sees Mike's own sentence to pick the skill; roster names are never put in its prompt, only counts | none | no |
 | Interpreter audit, stage log | no text at all (READ) | operator | no |
@@ -204,7 +206,53 @@ Two existing places need a small change so they cannot leak a guest: the corresp
 
 ### 3.6 Option B (later): a real online RSVP form, and where the credential lives
 
-Only if G chooses B in decision 1. Pieces: a Cloudflare Pages Function for `POST /api/community/rsvps` and a public `GET /api/community`; a Cloudflare D1 database as the single roster (capacity per hike copied in by Hass); the existing form and counts in `community.js` start working unchanged. Reading or writing D1 from AgentOrange needs a Cloudflare token. **Hass (an agent) must never hold it.** Design: a small host service, run as its own unit under a separate account, owns a root-readable token file (mode 0400, never in config the agents read, never in the environment, never in git). Hass talks to it over a local Unix socket with a **closed set of commands** (`counts`, `names for one hike`, `add`, `remove`, `set capacity`), never a raw query and never the token. G installs it and creates the token (the narrowest one the Cloudflare dashboard allows for that one database; UNVERIFIED label names until it is done). This is the same pattern as the site deploy key and needs the same attended steps. Cloudflare's free tier is probably enough at this size (UNVERIFIED: check current limits before committing). Decision 1 option B is therefore a **Cloudflare change, a credential and a new live service**: it waits for G and is not on the Monday path.
+Only if G chooses B in decision 1. Pieces: a Cloudflare Pages Function for `POST /api/community/rsvps` and a public `GET /api/community`; a Cloudflare D1 database as the single roster (capacity per hike copied in by Hass); the existing form and counts in `community.js` start working unchanged. Reading or writing D1 from AgentOrange needs a Cloudflare token. **Hass (an agent) must never hold it.** The design below says exactly which account owns the token, how the bridge process gets it, and who may talk to the bridge. Decision 1 option B is a **Cloudflare change, a credential, a new live service and off-box storage of guest names and emails (3.6.3)**: it waits for G and is not on the Monday path. Cloudflare's free tier is probably enough at this size (UNVERIFIED: check current limits before committing).
+
+#### 3.6.1 The credential holder: accounts, ownership, permissions
+
+Three separate identities. Nothing here gives any agent a way to read the token.
+
+| Identity | What it is | What it may touch |
+|---|---|---|
+| `root` (G, attended, via sudo) | installs the files and units once, rotates the token | owns the token file; no agent has root, sudo or membership of any group that can read it (checked at install, below) |
+| `hass-rsvp` | new system account: no login shell, no home, no password, no sudo, no other files. Runs **only** the bridge unit | reads the token (via the systemd credential below), the bridge's own program, and its socket |
+| the Hass account (the user that runs Hass and the other agents) | unchanged | may connect to the bridge socket and nothing else; **cannot read the token, the token's folder or the bridge's process memory** |
+
+* **Token file:** `/etc/hass-rsvp/cf-token`, owner `root:root`, mode `0400`, in a folder `/etc/hass-rsvp/` owned `root:root`, mode `0700`. G creates it by pasting the token into `sudo install -m 0400 -o root -g root /dev/stdin /etc/hass-rsvp/cf-token` in an attended terminal, so it is never typed into a chat, an agent's file or a shell history an agent can read. It is never in the environment of any agent, never in `settings`/config the agents read, never in git, never in a log.
+* **How the bridge, which is not root, gets a root-only file:** the unit is `hass-rsvp-bridge.service` with `User=hass-rsvp` and `LoadCredential=cf-token:/etc/hass-rsvp/cf-token`. systemd (which runs as root) reads the file and hands it to that one service as a private file under `$CREDENTIALS_DIRECTORY` (a per-service, in-memory folder readable only by `hass-rsvp`). The bridge reads the token from there at start and keeps it in memory. A mode-0400 root-owned file is therefore workable without making the file readable by the bridge account or by anyone else. (UNVERIFIED: this needs systemd 247 or newer on AgentOrange; the build card checks `systemctl --version` first.)
+* **Fallback if systemd is older:** the file is owned `hass-rsvp:hass-rsvp`, mode `0400`, in `/etc/hass-rsvp/` owned `hass-rsvp:hass-rsvp` mode `0700`. The property that matters is the same: the owner is the bridge account, not the Hass account. The install check below must pass either way.
+* **Unit hardening:** `NoNewPrivileges=yes`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `PrivateDevices=yes`, `CapabilityBoundingSet=` (empty), `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`, `UMask=0077`, and outbound network allowed to the Cloudflare API host only if the box's firewall supports it (UNVERIFIED; otherwise the closed command list is the limit). The bridge has no debug route, no environment dump and no "show config".
+* **The socket:** `/run/hass-rsvp/bridge.sock`, owner `hass-rsvp`, group `hass-rsvp-clients`, mode `0660`; the Hass account is the only member of `hass-rsvp-clients`. The bridge also checks the connecting process's user id with `SO_PEERCRED` and refuses any user id that is not the Hass account's, so a file-permission mistake alone does not open it.
+* **The closed command list** (each is one fixed D1 statement with bound parameters; there is no raw query, no "run this SQL" and nothing that returns the token): `counts` (capacity and seats taken per hike, integers), `names` (names and seats for **one** hike, **no email**), `add` (name, seats, hike; one conditional insert that refuses over capacity), `remove` (one row), `set_capacity`, and `purge` (deletes all rows of hikes older than the retention date, decision 7). Anything else is refused and counted.
+* **What an agent could still do:** ask the bridge to run those six commands. That is the intended power, it is bounded by the closed list, and every call is logged by name of command only (3.6.3). It cannot read the token, change the Cloudflare project, other databases or DNS: the token is the narrowest one the Cloudflare dashboard allows for this one D1 database (UNVERIFIED: label names and whether per-database scope exists, until G does it; if only a wider token exists, G is told before anything is installed and this is a new decision).
+* **Install check (attended, the build card's acceptance):** as the Hass account, `cat /etc/hass-rsvp/cf-token` and `ls /etc/hass-rsvp/` fail with permission denied; `sudo -n true` fails; `id` shows no group that owns the token; `ps`/`/proc/<bridge pid>/environ` and `/proc/<pid>/mem` are not readable; the socket accepts the Hass account and refuses another account; a command outside the list returns "refused"; `journalctl -u hass-rsvp-bridge` and the bridge's own log contain no token, name or email after a test run with synthetic names. If the Hass or any agent account turns out to have root or sudo on the box, this design does not hold and G is told before anything is installed.
+* **Rotation and removal:** G replaces the file and restarts the unit (token rotation, no code change); deleting the file and stopping the unit turns the whole online path off with no other effect on Hass.
+
+This is the same shape as the site deploy key (a credential an agent can use through a narrow door but cannot read) and needs the same attended steps. The credential rule in one line: root owns the file, `hass-rsvp` is the only process that receives it, Hass only gets the socket.
+
+#### 3.6.2 One store, one check
+
+D1 is the single roster for the hikes that take online sign-ups (3.2, 3.4). The form function and the bridge both write it with the same conditional insert; Hass never keeps its own copy of those hikes' names. UNVERIFIED until built and tested with a simultaneous form and chat add.
+
+#### 3.6.3 Option B privacy and logging boundary (replaces the "No" answers in 3.5)
+
+What leaves AgentOrange or the visitor's browser and lands at Cloudflare, a third party, when option B is on:
+
+| Data | Where | Who can read it | Notes |
+|---|---|---|---|
+| Name, seats, status, created time | Cloudflare D1 (single roster) | G (Cloudflare dashboard); the Function; the bridge; Mike through Hass (`names`, owner number only) | **Off-box.** Region and Cloudflare's own retention are UNVERIFIED and are checked before G chooses B |
+| Email, if the visitor types one | Cloudflare D1, same row | G (dashboard) only. **The bridge's `names` and `counts` never return it, so it never reaches Hass, Mike's chat, the interpreter or any log.** Hass cannot learn an email | Recommendation: the online form's email is optional and the page says what it is for (the shop contacting you about the hike; nothing is sent automatically). Today's local form requires one, so this is a form change in ONLINE-RSVP-1 |
+| Visitor IP address and request metadata | Cloudflare's own edge logs | Cloudflare | Cannot be switched off. The Function does not read, store or forward the IP, and no analytics script is added to the page |
+| Counts | D1, the bridge, `spots.json`, public `hike-spots.json` | everyone (integers) | unchanged from 3.5 |
+
+Rules the build must keep (each one is a test or a checklist line in ONLINE-RSVP-1):
+
+* **The Function** returns only the same fields as today's public API (`confirmedGuests`, `remaining`). It never echoes a name or email back to any other visitor, and error messages are fixed text. It does not `console.log` a request body, name or email; no Cloudflare log, tail or analytics sink is turned on for it that would keep one (UNVERIFIED: the Pages dashboard options are checked at install).
+* **The bridge** logs the command name, hike id, row count and outcome code only. Never a name, email, token, SQL text or Cloudflare response body. Its error paths log the code, not the payload. `names` is answered only to the Hass account and Hass shows it only to an owner number (3.5).
+* **Hass** treats `names` output like the local roster: never in a log, journal, report, the correspondence log (RSVP skills are private-text), the interpreter prompt or git. The scan test of section 4.4 also covers the bridge's log file and its journal.
+* **Retention:** the same decision-7 rule applies in D1: the bridge's `purge` runs daily by Hass's scheduler and deletes names **and emails** 30 days after the hike, counts stay. Deleting from D1 is not the same as every copy being gone: D1's own point-in-time backups may hold a row for a while (UNVERIFIED: the period is checked and written here before G chooses B).
+* **Exposure approval:** storing guest personal data at Cloudflare is a data-exposure decision that belongs to G. Decision 1 option B is not approved by the build cards; ONLINE-RSVP-1 starts only after G has accepted this section in writing on the card.
+* **Backups and exports:** no D1 export is made to the box, to git or to a report; any export G takes by hand from the dashboard is his to handle and is outside Hass.
 
 ---
 
@@ -274,6 +322,6 @@ Full table with owned files and dependencies: `reports/hass/HIKEPAGE-1.md` secti
 7. **HIKE-ADD-2**: `hike.add` v2 and `route.add` chaining.
 8. **TOPO-1**: a data-driven explorer and route builder; **TOPO-2 / TOPO-3**: Cass Hill and Fiscalini route data (blocked on collecting the route data).
 9. **RECAP-2** and the retention purge (needs decision 7).
-10. **ONLINE-RSVP-1** (only if decision 1 is B): attended, last.
+10. **ONLINE-RSVP-1** (only if decision 1 is B): attended, last. Starts only after G accepts the off-box guest-data section 3.6.3 in writing; builds the bridge as in 3.6.1.
 
 **Monday (store test, 2026-11-09), honestly:** the minimum is "add a hike with spots shown". Mike can already say "add a hike Saturday at 9, Cass Hill gate, sign-up on, 6 spots" on the **older plain-words path** (the skills are not in the runtime, `STORE-TEST-1.md`): the hike is saved with `capacity: 6`, but **today's page does not show the number**; on the live static site it says only "To join, ask at the Shack." So the Monday minimum needs **card 1** published, which needs the operator to move the runtime to a main that contains it before the Sunday 21:00 go/no-go (an attended restart). If that is not done, the fallback uses no code: Mike says "…say in the description: limited to six people", his own words, which the page should print (not tried). **Live count updates, the waitlist, who is coming and the full per-hike page are all after Monday.**

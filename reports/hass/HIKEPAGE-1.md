@@ -48,7 +48,7 @@ Screenshots (`reports/hass/hikepage-1/`): `01-live-static-hike-page.jpg` (full p
 
 ## 4. Where the design asks for a decision or crosses a protected boundary
 
-The seven decisions are on the first lines of `HIKE-PAGE.md`. The ones that touch protected code or live release: **4** (a new `counts` release class touches `publish_live.py` and `live_policy.py`) and **6** (relaxing the D4 trail-facts boundary). Neither is needed for Monday. Decision 1 (online RSVP) means a Cloudflare change and a credential: only G; the credential-holder design (a host service with a root-only token and a closed socket interface) is in section 3.6 of the design. No card here edits approval, ownership or reply logic. Two touch protected code and need the independent reviewer: ROSTER-1 (a small hook in `editor.py`, the writer path) and COUNTS-1 (`publish_live.py`, `live_policy.py`), which is also held for decision 4 and an attended review.
+The seven decisions are on the first lines of `HIKE-PAGE.md`. The ones that touch protected code or live release: **4** (a new `counts` release class touches `publish_live.py` and `live_policy.py`) and **6** (relaxing the D4 trail-facts boundary). Neither is needed for Monday. Decision 1 (online RSVP) means a Cloudflare change, a credential and **off-box storage of guest names and any form email at Cloudflare (a data-exposure decision, only G)**. The credential holder is a separate no-login account `hass-rsvp` running `hass-rsvp-bridge.service`; the token is a root-owned mode-0400 file that systemd hands only to that unit (`LoadCredential`), and the Hass account gets only a closed-command socket (design 3.6.1; the privacy and logging boundary is 3.6.3). The default path (decision 1 = A) keeps all names on the box. No card here edits approval, ownership or reply logic. Two touch protected code and need the independent reviewer: ROSTER-1 (a small hook in `editor.py`, the writer path) and COUNTS-1 (`publish_live.py`, `live_policy.py`), which is also held for decision 4 and an attended review.
 
 ## 5. The cards, in build order
 
@@ -66,7 +66,7 @@ Model column follows `WORKER-GUIDE.md` (routine well-specified: Sol Medium; subs
 | 8 | **TOPO-1**: a data-driven explorer (route id instead of hard-coded Point Buchon), topo as the default view, a generic route builder, `sitegen` takes route assets by pattern | `storefront-mockup/trail-explorer.js`, `trail-explorer.css`, `reports/hiking-club/build-trail-data.py`, `hass/sitegen.py` (chain, after 5), `storefront-mockup/map-qa` scripts | none | Sol High | no |
 | 8a | **TOPO-2 / TOPO-3**: Cass Hill and Fiscalini route data and photo | `storefront-mockup/assets/trails/<id>*`, `reports/hiking-club/` sources | 8; **blocked** on the route line, turnaround, frame and a confirmed photo (custodian: whoever can check the trails against the official guides) | Sol Medium + a human check | no |
 | 9 | **RECAP-2**: recap offers "N were signed up", purge schedule hook | `hass/skills/hikes.py` (chain), `hass/retention.py` | 3, 7 | Sol Medium | no |
-| 10 | **ONLINE-RSVP-1** (only if decision 1 = B): Pages function + D1 + the host bridge with a root-only token and a closed socket interface | new files outside `hass/` plus G's attended install steps | G; Cloudflare change | Sol High / attended | no |
+| 10 | **ONLINE-RSVP-1** (only if decision 1 = B): the Pages function + D1 + the host bridge (token owned by root, delivered only to the `hass-rsvp` unit, closed socket interface; design 3.6.1) + the privacy/logging rules of 3.6.3 + G's written acceptance of off-box guest data | new files outside `hass/` plus G's attended install steps | G; Cloudflare change | Sol High / attended | no |
 
 Shared-file chains (one card at a time): `community.js` = 1 → 6; `hikes.py` = 530 → 2 → 7 → 9; `sitegen.py` = 5 → 8; `editor.py` = 3 only; `model.py` = 4 only (small); `live_policy.py` and `publish_live.py` = 5 only.
 
@@ -81,7 +81,7 @@ Shared-file chains (one card at a time): `community.js` = 1 → 6; `hikes.py` = 
 
 * No live address was called, so F1 (no `/api` live) is inferred from the repos and the runbook.
 * Whether `guestCountsDb` is set on the live Hass host was not checked (private config).
-* Cloudflare Pages Function and D1 limits, the narrowest token scope and the dashboard labels are UNVERIFIED (design 3.6).
+* Cloudflare Pages Function and D1 limits, the narrowest token scope, the dashboard labels, D1's region and backup retention, whether the box's systemd supports `LoadCredential` (247+) and whether any agent account has sudo are UNVERIFIED (design 3.6.1, 3.6.3).
 * The skill names, slot lists, reply wording and the roster schema are a design, not measured behaviour. Nothing was built or run except the two scratch servers.
 * The OSM tile policy and USGS credit page were read on 2026-11-08; the licences of the Cass Hill / Fiscalini candidate photos are as recorded in the earlier route-map report, not rechecked.
 * One concern for the reviewer: decision 3 changes the D8 default ("sign-up off") that PR 530 documents; the design treats that as a follow-up edit to 530, not a reopening of it.
