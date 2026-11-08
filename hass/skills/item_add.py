@@ -21,7 +21,8 @@ Interface (built against the SKILLS-FW-3 dispatcher, PR 526, and the FW-2 router
 
 * ``plan(slots, ctx)``: ``ctx.content`` (the loaded, read-only content), ``ctx.today`` (an ISO day or a date) and
   ``ctx.texts`` (the owner's joined texts, or ``ctx.owner_text``). Every attribute is optional: with none the plan still
-  turns the slots into ops and leaves the checks that need the content to the editor, which repeats every one of them.
+  turns complete slots into ops when it is told the new product's id (``ctx.next_product_id``; the content gives it
+  otherwise), and leaves the checks that need the content to the editor, which repeats every one of them.
   ``plan`` is pure. It fills a missing drafted slot with the same ``derive:`` function the dispatcher calls, so it works
   on the model's raw slots as well as on slots the dispatcher already completed.
 * A plan that must stop raises ``Refusal`` (``.reply`` is the owner's sentence; ``.kind`` is "question" when one answer
@@ -256,7 +257,7 @@ def form_guess(slots, ctx):
         return "packaged"
     if FRESH_WORDS.search(said):
         return "fresh"
-    shelf = same_kind_majority(slots, ctx)
+    shelf = _clean(slots.get("shelf")).casefold() or same_kind_majority(slots, ctx)  # a shelf he named says it too
     return "fresh" if shelf in FRESH_SHELVES else "packaged" if shelf in PACKAGED_SHELVES else None
 
 
@@ -342,7 +343,8 @@ def question(slot_name, slots, ctx) -> str:
         verb = "grew" if slots.get("form") == "fresh" else "makes"
         what = "these " + name.lower() if name.endswith("s") else "this " + name.lower() if name else "it"
         last = last_maker(content)
-        offer = f" (Say \u201csame\u201d for {_q(content.makers[last]['name'])}, the farm from last time.)" if last else ""
+        noun = "farm" if slots.get("form") == "fresh" else "maker"
+        offer = f" (Say \u201csame\u201d for {_q(content.makers[last]['name'])}, the {noun} from last time.)" if last else ""
         return f"Who {verb} {what}?{offer}" if name else ASK["maker"]
     if slot_name == "place":
         choice = _soft_maker(slots.get("maker"), ctx) if _clean(slots.get("maker")) else None
@@ -460,6 +462,13 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
         left += list(made.left_off)
         say.append(f"{_q(brand)} is new on the site, so I'm adding them too.")
 
+    # twin: the same name and maker is never a second product (asked before anything else is asked)
+    if content is not None and (twin := _twin(content, name, brand)) is not None:
+        tail = {"active": "is already on the site. Do you want to change it instead?",
+                "hidden": "is on the site but hidden. Do you want me to bring it back instead?"}.get(
+            twin.get("status"), "is on hold until someone has looked at it.")
+        raise Refusal(f"{_q(twin['name'])} {tail}", "question" if twin.get("status") != "held" else "refuse")
+
     # 4. the shelf
     shelf = _clean(slots.get("shelf")).casefold()
     if shelf not in CATEGORIES:
@@ -493,13 +502,6 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     sha = slots.get("photo")
     if not (isinstance(sha, str) and media.SHA_RE.fullmatch(sha)):
         raise Refusal(question("photo", slots, ctx), "question")
-
-    # twin: the same name and maker is never a second product
-    if content is not None and (twin := _twin(content, name, brand)) is not None:
-        tail = {"active": "is already on the site. Do you want to change it instead?",
-                "hidden": "is on the site but hidden. Do you want me to bring it back instead?"}.get(
-            twin.get("status"), "is on hold until someone has looked at it.")
-        raise Refusal(f"{_q(twin['name'])} {tail}", "question" if twin.get("status") != "held" else "refuse")
 
     args = {"name": name, "brand": brand, "category": shelf, "description": description, "photo": sha, "imageAlt": alt}
     if key is not None:
