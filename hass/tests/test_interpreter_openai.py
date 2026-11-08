@@ -127,6 +127,15 @@ class OpenAIBackendTests(unittest.TestCase):
         interp.interpret(OWNER_TEXT, [])
         self.assertEqual(interp.last_error, "shape")
 
+    def test_an_answer_between_reasoning_blocks_is_a_failed_call_and_falls_back_once(self):
+        between = '<think>initial</think>{"question":"first?"}<think>later</think>{"question":"second?"}'
+        with self.assertRaises(interpreter_local._Failed): strip_reasoning(between)
+        with self.assertRaises(interpreter_local._Failed): strip_reasoning('<think>a</think>x<think>b</think>{"question":"s?"}')
+        self.assertEqual(strip_reasoning('<think>a</think>\n<think>b</think> {"question":"s?"}'), '{"question":"s?"}')
+        both, first, second = pair(oa(between), ol(js(GOOD)))
+        self.assertEqual(both.interpret(OWNER_TEXT, []), GOOD)
+        self.assertEqual((len(first.calls), len(second.calls), both.last_primary_error), (1, 1, "shape"))
+
     def test_the_separate_reasoning_field_is_ignored_even_when_it_looks_like_json(self):
         interp, _ = gpu(oa(js({"question": "Which day?"}), reasoning_content=js(GOOD)))
         self.assertEqual(interp.interpret("x", []), {"question": "Which day?"})

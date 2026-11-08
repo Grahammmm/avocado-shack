@@ -81,8 +81,11 @@ def strip_reasoning(text) -> str:
     opening tag) is reasoning and is dropped; a tag left anywhere else (an unclosed block, a block after the answer) is a
     failed call, never trimmed further."""
     if "</think>" in text:
-        head, text = text.rsplit("</think>", 1)
-        if "<think>" in head and head.split("<think>", 1)[0].strip(): raise _Failed("shape")  # an answer before the block
+        *blocks, text = text.split("</think>")
+        for i, block in enumerate(blocks):  # each block is only reasoning: no answer text before or between blocks
+            block = block.strip()
+            if block.count("<think>") > 1 or ("<think>" in block and not block.startswith("<think>")): raise _Failed("shape")
+            if i and "<think>" not in block: raise _Failed("shape")  # text between two closed blocks is an answer
     if "<think>" in text or "</think>" in text: raise _Failed("shape")
     return text.strip()
 
