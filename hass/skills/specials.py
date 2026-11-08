@@ -106,7 +106,17 @@ NOT_AVAILABLE = "I can't see the specials right now. Could you ask again in a mi
 NO_SPECIALS_NOW = "There are no specials on right now."
 
 _WHY_WORDS = (("web address", "a web address"), ("email address", "an email address"), ("phone number", "a phone number"))
-_MONEY = re.compile(r"\$|\d\s*(?:dollars?|bucks|cents|usd)\b|\d\s*¢", re.I)
+_NUMBER_WORDS = ("a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|"
+                 "seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|half|"
+                 "couple|few|several|dozen|zero")
+_CURRENCY_WORDS = "dollars?|bucks?|cents?|pennies|penny|nickels?|dimes?|euros?|quid|usd|eur|gbp|cad"
+# A price in a title: a currency sign, a figure or a spelled-out amount before a money word ('5 dollars', 'five bucks',
+# 'twenty five cents', 'a buck'). 'pound' is left out on purpose: 'a five pound jar' is a weight, not a price.
+_MONEY = re.compile(
+    r"[$£€¥¢]"
+    r"|\d\s*(?:" + _CURRENCY_WORDS + r"|¢)(?![a-z])"
+    r"|(?<![a-z])(?:" + _NUMBER_WORDS + r")(?:[\s-]+(?:and|" + _NUMBER_WORDS + r"))*[\s-]+(?:" + _CURRENCY_WORDS + r")(?![a-z])",
+    re.I)
 
 
 # -- the rules (each id is one named, tested function) --------------------------------------------------------------
@@ -148,12 +158,25 @@ def rule_price_in_deal_only(slots, texts, ctx):
     return None
 
 
+# Words that finish a deal, so a deal cut short just before one of them was cut in the wrong place ('buy one get one' of
+# 'buy one get one free', '2 for $5' of '2 for $5 each', '5' of '5 dollars').
+_DEAL_GOES_ON = (r"(?!\s+(?:free|off|each|apiece|per|ea|more|extra|less|percent|dollars?|bucks?|cents?|usd|lbs?|oz|pounds?)\b)"
+                 r"(?!\s+[$£€]?\d)")  # ... or just before a figure ('12 for' of '12 for $5')
+
+
+def _deal_span(deal: str) -> re.Pattern:
+    """The deal exactly as typed, on its own: not the tail of a longer word or figure ('2 for $5' inside '12 for $5'), not
+    the head of one ('$5' inside '$55' or '$5.50'). Case and spelling must match; only runs of spaces are folded."""
+    body = r"\s+".join(re.escape(part) for part in deal.split())
+    return re.compile(r"(?<![\w$£€])(?<!\d[.,])" + body + r"(?![\w%])(?![.,]\d)" + _DEAL_GOES_ON)
+
+
 def rule_deal_as_typed(slots, texts, ctx):
     deal = slots.get("deal")
-    if not texts or not isinstance(deal, str):
+    if not texts or not isinstance(deal, str) or not deal.strip():
         return None
-    said = [" ".join(str(t).split()) for t in texts]
-    if not any(" ".join(deal.split()) in t for t in said):
+    span = _deal_span(deal.strip())
+    if not any(span.search(str(t)) for t in texts):
         return NOT_AS_TYPED, "other"
     return None
 
@@ -343,7 +366,7 @@ def _clean(value):
 
 def _product_title(slots, ctx):
     name = (_products(ctx).get(slots.get("product")) or {}).get("name")
-    if isinstance(name, str) and len(name) <= MAX_SPECIAL_TITLE and not special_text_problem(name):
+    if isinstance(name, str) and len(name) <= MAX_SPECIAL_TITLE and not special_text_problem(name) and not _MONEY.search(name):
         return name
     return None
 
