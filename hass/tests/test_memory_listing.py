@@ -43,7 +43,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
 
     def snapshot(self):
         names = [r[0] for r in self.conv.db.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")]
-        return {n: [tuple(r) for r in self.conv.db.execute(f'SELECT * FROM "{n}"')] for n in names if n not in ("messages", "outbox")}
+        return {n: [tuple(r) for r in self.conv.db.execute(f'SELECT * FROM "{n}"')] for n in names if n not in ("messages", "message_chats", "outbox")}
 
     def test_notes_and_aliases_have_independent_caps(self):
         for i in range(23): self.save(f"k{i:02d}", f"v{i}")
