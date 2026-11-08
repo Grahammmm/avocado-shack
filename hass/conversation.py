@@ -127,6 +127,11 @@ HOSTILE_RE = re.compile(r"\b(?:ignore|disregard|forget|override|bypass)\b[^.!?]{
 HOSTILE_REPLY = "I can only publish changes you approve one at a time. Nothing was changed."  # HASS-VOICE-1: no model call, no draft
 CORRECTION_RE = re.compile(r"(?:no[,.!]|nope|that'?s (?:wrong|not right|not what)|not what i (?:meant|said|asked)|wrong\b|i didn'?t (?:mean|ask|say)|you got (?:it|that) wrong)", re.I)
 RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question stays open for a short answer; longest kept
+# HASS-HIKE-FLOW-1: the open request. While a question of ours is open, the owner's texts of that request are kept (this
+# private store only) so the short answer is read with the request it answers. Gone after RECENT_MINUTES, when a draft or
+# a new question outcome closes it, or on `no`; never more than the last ASK_TURNS texts and ASK_CHARS characters.
+ASKS = "CREATE TABLE IF NOT EXISTS open_asks(provider_id TEXT PRIMARY KEY, asked_at TEXT NOT NULL, texts_json TEXT NOT NULL)"
+ASK_TURNS, ASK_CHARS, ASK_TEXT_CUT = 4, 2000, 1000
 LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
@@ -805,6 +810,7 @@ class Conversation:
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text)
+        self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
@@ -855,6 +861,7 @@ class Conversation:
             return "no-target", None
         # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
         states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
+        if verb == "reject": self._close_asks()  # HASS-HIKE-FLOW-1: no/cancel also drops the open request (the reply is unchanged)
         targets = [r for r in self._drafts(f"state IN {states}") if code is None or r["code"] == code]
         asks = [] if verb != "approve" or targets else [self._by_code(code, ("needs-details",))] if code else \
             [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > cutoff]  # AV1737-05: bare yes
@@ -1016,17 +1023,42 @@ class Conversation:
 
     def _recent_question(self, now):
         """HASS-NL-1: {"question": text} when the newest owner message was answered with a question of ours at most
-        RECENT_MINUTES ago (so the next short text is its answer); else None. The owner's own text is not stored."""
+        RECENT_MINUTES ago (so the next short text is its answer); else None. HASS-HIKE-FLOW-1: plus "earlier", the owner's
+        texts of the open request, oldest first, when they are still kept (see _open_ask)."""
         try:
-            last = self.db.execute("SELECT disposition, received_at FROM messages WHERE received_at IS NOT NULL"
+            last = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE received_at IS NOT NULL"
                                    " ORDER BY rowid DESC LIMIT 1").fetchone()
             if last is None or last["disposition"] != "question": return None
             row = self.db.execute("SELECT text, created_at FROM outbox WHERE reply_to = ? ORDER BY id DESC LIMIT 1",
                                   (last["received_at"],)).fetchone()
             if row is None or not row["text"] or len(row["text"]) > RECENT_MAX: return None
             if now - datetime.fromisoformat(row["created_at"]) > timedelta(minutes=RECENT_MINUTES): return None
-            return {"question": row["text"]}
+            return {"question": row["text"], **({"earlier": earlier} if (earlier := self._ask_texts(last["provider_id"], now)) else {})}
         except (sqlite3.Error, ValueError, TypeError, KeyError): return None
+
+    def _ask_texts(self, provider_id, now) -> list:
+        """The owner texts kept for the open question that answered message ``provider_id``; any problem or a stale row: []."""
+        try:
+            if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_asks'").fetchone(): return []
+            row = self.db.execute("SELECT asked_at, texts_json FROM open_asks WHERE provider_id = ?", (provider_id,)).fetchone()
+            if row is None or now - datetime.fromisoformat(row["asked_at"]) > timedelta(minutes=RECENT_MINUTES): return []
+            texts = json.loads(row["texts_json"])
+            return texts if isinstance(texts, list) and all(isinstance(t, str) and t for t in texts) else []
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return []
+
+    def _open_ask(self, msg, now, earlier):
+        """HASS-HIKE-FLOW-1: keep this owner text with the earlier ones of the same open request, newest last, bounded."""
+        texts = [t[:ASK_TEXT_CUT] for t in [*earlier, msg.text]][-ASK_TURNS:]
+        while len(texts) > 1 and sum(map(len, texts)) > ASK_CHARS: texts.pop(0)
+        self.db.execute(ASKS)
+        self.db.execute("DELETE FROM open_asks")  # one open request at a time
+        self.db.execute("INSERT INTO open_asks VALUES (?, ?, ?)", (msg.provider_id, _iso(now), json.dumps(texts, ensure_ascii=False)))
+
+    def _close_asks(self, now=None):
+        """HASS-HIKE-FLOW-1: forget the open request (all of it, or with ``now`` only what is older than RECENT_MINUTES)."""
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_asks'").fetchone(): return
+        if now is None: self.db.execute("DELETE FROM open_asks")
+        else: self.db.execute("DELETE FROM open_asks WHERE asked_at < ?", (_iso(now - timedelta(minutes=RECENT_MINUTES)),))
 
     def _audit_backend(self, msg, now, failed):
         """HASS-INTERP-OPENAI-1: one audit row per interpreted message when the interpreter names the backend that answered
@@ -1064,8 +1096,9 @@ class Conversation:
                     **({"missing": _missing_ids(r["missing_json"])} if r["state"] == "needs-details" else {})}  # AV0007-03
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
+        recent = self._recent_question(now)  # HASS-NL-1; HASS-HIKE-FLOW-1: with the owner's earlier texts of the same request
         context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases()),
-                                     ("recent", self._recent_question(now))) if v}  # AV0007-06; HASS-NL-1
+                                     ("recent", recent)) if v}  # AV0007-06; HASS-NL-1
         sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
         failed = None  # AV1052-10: None until interpret actually returned; then the adapter's last_error (or "")
         try:
@@ -1090,6 +1123,9 @@ class Conversation:
         if named is not None and named["state"] == "expired" or cancelled_question:  # H16 vs NB-AV-01 (2026-10-31):
             result = {**result, "revises": None}  # a closed draft has nothing left to revise; an unknown code still asks
         result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
+        earlier = (recent or {}).get("earlier") or []  # HASS-HIKE-FLOW-1: the open request this text may be answering
+        if "question" in result: self._open_ask(msg, now, earlier)  # keep the request with our question, for the answer
+        elif "ops" in result: self._close_asks()  # a draft (or its own question) takes over; nothing stays open
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])
@@ -1130,7 +1166,7 @@ class Conversation:
             self._reply(self._plain(_reason(out)))
             return "not-drafted"
         draft = out["draft"]
-        if hits := claims.unstated(draft, msg.text, self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts
+        if hits := claims.unstated(draft, " ".join([*earlier, msg.text]), self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts; HASS-HIKE-FLOW-1: the owner's earlier texts of this request count as stated
             self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
             return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]

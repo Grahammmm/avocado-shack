@@ -16,8 +16,10 @@ question** that says what it understood and lists the choices, and it changes no
 - Hass: `Which honey should I mark Sold out: Stepladder avocado blossom honey or Big Sur Honey Company honey?`
 - You: `the big sur one`  (a short answer is fine: Hass remembers its own question)
 
-Hass remembers its question for 30 minutes <!-- conversation.RECENT_MINUTES -->. After that, or if you have sent something else
-in between, it does not connect your answer to the old question, so say the whole thing again.
+Hass remembers its question, and what you asked, for 30 minutes <!-- conversation.RECENT_MINUTES -->, so a short answer is read
+together with your first message (`8am` is the time for the hike you just described). After that, or if you have sent
+something else in between (a command such as `status`, or `no`), it does not connect your answer to the old question, so say
+the whole thing again. What it kept is deleted when the draft arrives or the 30 minutes pass.
 
 If you ask for something that is already true, Hass tells you instead of making a change that changes nothing.
 
@@ -40,6 +42,9 @@ If you ask for something that is already true, Hass tells you instead of making 
 **Hikes.** Say what and when; Hass works out the date from today in California time. A year you write (December 5 2027, 12/5/27, 2027-12-05) is used as written; a date with no year means the next one coming, and a date or year Hass cannot check (February 30 2027, December 5 202) gets no date hint, so the model asks you.
 
 - `post a hike at Cass Hill on Saturday at 9, meet at the trailhead gate`
+- `add a hike Saturday at 8am, Mill Creek trailhead, easy, bring water` (a place that is not on the route ideas list is just
+  text; Hass drafts the hike and asks only if the day, the time or the place is missing. Sign-ups stay off unless you mention them.)
+- `create a new hike on Fiscalini Ranch this Saturday at 8am` (a new hike, linked to that route idea)
 - `cancel the Point Buchon walk, it's raining`
 - `move Saturday's hike to 8:30`, `do the Cass Hill hike again on the 29th at 9`
 - After a hike: `recap: 12 people, great morning`

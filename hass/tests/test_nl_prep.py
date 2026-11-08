@@ -321,7 +321,7 @@ class RecentQuestionTests(ConversationTestCase):
         self.assertEqual(self.asked[-1], ("when?", None))
         self.now += timedelta(minutes=5)
         self.say("hours")
-        self.assertEqual(self.asked[-1], ("hours", {"question": "Which day should change?"}))
+        self.assertEqual(self.asked[-1], ("hours", {"question": "Which day should change?", "earlier": ["when?"]}))  # HASS-HIKE-FLOW-1: with the owner's text
 
     def test_it_is_dropped_after_30_minutes_or_once_something_else_was_said(self):
         self.say("when?")
