@@ -271,6 +271,7 @@ FIELDS = {  # the shop's own words for what can change; an unknown field is "a d
     "available_on": "when it was last checked", "place": "the place", "story": "the story", "url": "the website link",
     "hidden": "whether it is hidden", "title": "the title", "startsAt": "the start time", "capacity": "the guest limit",
     "rsvpEnabled": "whether guests can sign up", "meetingPoint": "the meeting place", "distance": "the distance",
+    "bring": "what to bring", "endsAt": "ends",
     "duration": "how long it takes", "difficulty": "how hard it is", "accessNote": "the access note",
     "recap": "the recap", "cancelNote": "the cancellation note", "hours": "the opening hours", "intro": "the intro",
     "headline": "the headline", "notice": "the notice", "phone": "the phone number", "streetAddress": "the street address",

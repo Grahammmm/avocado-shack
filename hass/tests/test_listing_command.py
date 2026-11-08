@@ -88,6 +88,10 @@ class ListingTests(StoreMixin, ConversationTestCase):
     def maker_name(self, key):
         return json.loads((self.cdir / "makers.json").read_text("utf-8"))["makers"][key]["name"]
 
+    def test_product_name_with_several_words(self):
+        self.assertEqual(self.fields("Hass avocado")[0], "Hass avocado")
+        self.assertEqual(self.listing(text="listing Hass avocado?")[0], HEAD)
+
     def test_availability_matches_shared_helper(self):
         pid = self.pid()
         self.edit("store.json", lambda doc: doc.pop("selection_checked_on", None))
@@ -128,7 +132,8 @@ class ListingTests(StoreMixin, ConversationTestCase):
         head, f = self.fields("MixedCase")
         self.assertEqual(head, "Mixed Case Co")
         self.assertEqual(f, {"Name": "Mixed Case Co", "Place": "Cayucos", "Products showing": "2", "Status": "on the website"})
-        self.assertEqual(self.listing("mixedcase"), [NONE])  # exact case only
+        self.assertEqual(self.listing("mixedcase"), [NONE])  # keys keep their exact case
+        self.assertEqual(self.fields("mixed case co")[0], "Mixed Case Co")  # names do not
         head, f = self.fields("NoProducts")
         self.assertEqual((f["Place"], f["Products showing"], f["Status"]), ("Morro Bay", "0", "hidden"))
 
@@ -221,7 +226,7 @@ class ListingTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.replies(), [])
 
     def test_help_and_card(self):
-        line = "listing Etto - what the website shows for one thing; hidden lists what is hidden"
+        line = "listing Etto - what's shown for one thing; hidden lists what's hidden"
         self.assertIn(line, voice.plain(conversation.HELP_TEXT).splitlines())
         self.assertLessEqual(len(line), 70)
         self.assertEqual(verb("listing Etto"), "listing")

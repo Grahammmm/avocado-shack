@@ -1,5 +1,5 @@
 """AV0222-04 (H10/H17): `photos to take` lists active products whose picture is not an installed photo-<16 hex> file,
-by shelf in site order (10 names), read-only, works while paused. Run: python3 -B -m unittest hass.tests.test_photos_to_take
+by shelf in site order (5 names), read-only, works while paused. Run: python3 -B -m unittest hass.tests.test_photos_to_take
 """
 
 import json
@@ -92,22 +92,31 @@ class PhotosTests(StoreMixin, ConversationTestCase):
                      + [(n, "eggs", "active", f"assets/products/{f}") for n, f in names.items()])
         lines = self.photos()
         self.assertEqual(lines[0], head(len(names)))
-        self.assertEqual(sorted(lines[1:-1]), sorted(f"- {n} (Eggs)" for n in names))
+        expected = [f"- {n} (Eggs)" for n in sorted(names)[:5]]
+        self.assertEqual(lines[1:-2], expected)
+        self.assertEqual(lines[-2:], ["When you've sent those, ask again and I'll show the next few.", GUIDE])
+        # Exercise every near-match as a visible candidate, not just the first five.
+        for name, filename in names.items():
+            with self.subTest(filename=filename):
+                self.fixture([(name, "eggs", "active", f"assets/products/{filename}")])
+                self.assertEqual(self.photos(), [head(1), f"- {name} (Eggs)", GUIDE])
 
-    def test_shelf_order_name_ties_and_global_ten_cap(self):
+    def test_shelf_order_name_ties_and_global_cap(self):
         order = ["fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers"]
         self.assertEqual(list(CATEGORIES), order)
         labels = ["Fruit", "Vegetables", "Dairy & cheese", "Eggs", "Meat", "Pantry", "Drinks & coffee", "Bread", "Flowers"]
         rows = [("zed", "flowers", "active", None), ("Bee", "bread", "active", None), ("apple", "bread", "active", None),
                 ("Twin", "fruit", "active", None), ("Twin", "fruit", "active", None), ("cat", "fruit", "active", None)]
         self.fixture(rows)
-        self.assertEqual(self.photos(), [head(6), "- cat (Fruit)", "- Twin (Fruit)", "- Twin (Fruit)", "- apple (Bread)", "- Bee (Bread)", "- zed (Flowers)", GUIDE])
-        for total, extra in ((10, None), (11, "When you've sent those, ask again and I'll show the next few."), (23, "When you've sent those, ask again and I'll show the next few.")):
+        self.assertEqual(self.photos(), [head(6), "- cat (Fruit)", "- Twin (Fruit)", "- Twin (Fruit)", "- apple (Bread)", "- Bee (Bread)",
+                                         "When you've sent those, ask again and I'll show the next few.", GUIDE])
+        self.assertEqual(conversation.PHOTOS_TO_TAKE_MAX, 5)
+        for total, extra in ((5, None), (6, "When you've sent those, ask again and I'll show the next few."), (23, "When you've sent those, ask again and I'll show the next few.")):
             self.fixture([(f"n{i:02d}", order[i % 9], "active", None) for i in range(total)])
             lines = self.photos()
             self.assertEqual(lines[0], head(total))
             names = [ln for ln in lines if ln.startswith("- ")]
-            self.assertEqual(len(names), 10)
+            self.assertEqual(len(names), 5)
             heads = [ln.rsplit(" (", 1)[1][:-1] for ln in names]
             self.assertEqual(heads, sorted(heads, key=labels.index))  # site order
             self.assertEqual(lines[-2:], [extra, GUIDE] if extra else [names[-1], GUIDE])

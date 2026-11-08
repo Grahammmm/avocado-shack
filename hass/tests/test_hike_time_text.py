@@ -69,7 +69,7 @@ class ProposalHikeTimeTests(unittest.TestCase):
         iso = "2026-11-07T09:00:00-08:00"
         self.assertEqual(_edit("recap", "old", iso)[1], f"this, the recap: from old to {iso}")
         self.assertEqual(_edit("startsat", iso, "x")[1], f"this, a detail: from {iso} to x")  # exact field name only
-        self.assertIn(f"  a detail: {iso}", _lines(("events", "h1", None, {"endsAt": iso, "recap": iso})))
+        self.assertIn("  ends: Saturday, Nov 7 at 9 am", _lines(("events", "h1", None, {"endsAt": iso, "recap": iso})))
         self.assertIn(f"  the recap: {iso}", _lines(("events", "h1", None, {"endsAt": iso, "recap": iso})))
 
 

@@ -80,12 +80,22 @@ class MarginChatTests(StoreMixin, ConversationTestCase):
 
     def test_text_not_in_the_form_gets_the_usage_without_interpreter_or_usage_row(self):
         before = self.stored()
-        for text in ("margin 24 for twelve at 35%", "margin", "margin 24 for 12 at 35", "margin 24 for 12", "margin a1b2",
+        for text in ("margin 24 for twelve at 35%", "margin $24 for twelve at 35%", "margin +24 for twelve at 35%", "margin", "margin 24 for 12 at 35", "margin 24 for 12", "margin a1b2",
                      "margin 24 for 12 at 35% shrink", "margin 24 for 12 at 35% shrink 5% extra"):
             with self.subTest(text=text):
                 self.assertEqual(self.margin(text), USAGE)
         self.assertEqual(CountingInterpreter.calls, 0)
         self.assertEqual(self.stored(), before)
+
+    def test_saved_cost_still_accepts_a_product_name(self):
+        self.assertEqual(self.say("cost Hass avocado: 24 for 12"), "memory-saved")
+        self.replies()
+        before = self.stored()
+        reply = self.margin("margin Hass avocado at 35%")
+        self.assertTrue(reply.startswith("Using the cost you gave me "), reply)
+        self.assertTrue(reply.endswith(margins.say(margins.compute("24", "12", "0", "35"))), reply)
+        self.assertEqual(self.stored(), before)
+        self.assertEqual(CountingInterpreter.calls, 0)
 
     def test_works_while_paused_and_writes_nothing(self):
         self.assertEqual(self.say("pause changes"), "pause")

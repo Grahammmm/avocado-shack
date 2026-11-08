@@ -107,6 +107,32 @@ class DrillTests(BackupTestCase):
         self.assertEqual(self.replies(), [text])
 
 class CreateRefusalTests(BackupTestCase):
+    def test_correspondence_directory_is_skipped_not_copied(self):
+        from hass import corrlog
+        self.assertTrue(self.conv.log.record("error", "save-failed"))
+        folder = self.repo.state / corrlog.FOLDER
+        # Its contents are outside the backup layout, and must not be traversed.
+        (folder / "outside").symlink_to(self.tmp / "missing")
+        before = tree(folder)
+        backup = self.backup()
+        self.assertEqual(statebackup.verify(str(backup))["result"], "ok")
+        self.assertFalse((backup / corrlog.FOLDER).exists())
+        self.assertFalse(any(rel.startswith(corrlog.FOLDER + "/") for rel in self.files(backup)))
+        self.assertEqual(tree(folder), before)
+
+    def test_correspondence_file_or_symlink_is_still_refused(self):
+        from hass import corrlog
+        path = self.repo.state / corrlog.FOLDER
+        for kind in ("file", "symlink"):
+            with self.subTest(kind=kind):
+                path.write_text("not a folder") if kind == "file" else path.symlink_to(self.tmp)
+                made = statebackup.create(str(self.repo.state), str(self.bk))
+                self.assertEqual(made["result"], "refused", made)
+                expected = "unknown entry" if kind == "file" else "symlink"
+                self.assertIn(f"{expected}: {corrlog.FOLDER}", made["problems"])
+                self.assertEqual(os.listdir(self.bk), [])
+                path.unlink()
+
     def test_refusals_leave_out_without_a_new_entry(self):
         self.apply("kumquat desc")
         state = self.repo.state

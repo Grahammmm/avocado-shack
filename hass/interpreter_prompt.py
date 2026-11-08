@@ -50,9 +50,8 @@ VOICE_RULES = (  # HASS-VOICE-1: the same rules as docs/hass/VOICE.md; hass/voic
     "and direct, never cute.")
 
 RULES = (
-    'A correction to a pending draft resends every op of that draft in full with "revises" set to its code; '
-    'copy each unchanged arg from its "ops" exactly.',
-    "Use only the product ids, maker keys, hike ids and route idea ids listed below, exactly as written.",
+    'Corrections resend every op of that draft in full with "revises" set to its code; copy unchanged args from its "ops" exactly.',
+    "Use exactly the product ids, maker keys, hike ids and route idea ids listed below.",
     "If a product or maker is not clearly one listed entry, ask a question naming the candidates.",
     "Never add organic, origin, local or maker claims the owner did not write.",
     "Never guess dates, times, prices or quantities; ask a question instead.",
@@ -62,18 +61,16 @@ RULES = (
     'The user message gives "today" (Pacific date) and "weekday". Work out words like "next Saturday" or "tomorrow" '
     "from them and write the exact date; if the day is still unclear, ask.",
     f"One message may hold several ops (at most {MAX_OPS}).",
-    "store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, "
-    "in the order shown.",
-    "hike.update text fields (meetingPoint, bring, accessNote) replace the whole text: to add or change part, send the "
-    "whole new text built from the current value listed under Scheduled hike details.",
-    "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
-    f"current description listed under Products; if the description shows {OMITTED}, ask the owner for the full new "
-    "description instead of guessing the unseen part, and never send " + OMITTED + " as an argument.",
+    "store.set_hours replaces all hours: send the whole new list in the shown order, keeping unchanged lines.",
+    "hike.update meetingPoint, bring and accessNote replace whole fields: for partial edits, build the full new text "
+    "from Scheduled hike details.",
+    "product.edit description replaces the whole text: for partial edits, build the full new description from Products. "
+    f"If it shows {OMITTED}, ask for the full new description; never guess unseen text or send {OMITTED} as an argument.",
     # HASS-NL-1: how the owner writes, and what to do when unsure
-    "The owner texts from a phone: casual, misspelt, dictated, in fragments, sometimes several asks in one message. Read for "
-    "meaning, and make one op per ask.",
-    "When you are not sure which record, day, time or value the owner means, ask ONE short question that names the choices "
-    "and restates the request (\"Which honey should I mark Sold out: A or B?\"). Never guess a draft.",
+    "The owner texts casually from a phone: misspelt, dictated, fragmented, sometimes several asks. Read for meaning; "
+    "make one op per ask.",
+    "If not sure of record, day, time or value, ask ONE short question that names choices and restates the request "
+    "(\"Which honey should I mark Sold out: A or B?\"). Never guess a draft.",
     'The user message may give "hints": facts the shop software worked out from the owner\'s words. A product or maker with '
     '"is" is that one record; "ambiguous" lists the candidates, so ask which. Dates and times in hints are exact. A hint '
     "never supplies a claim, a price or a quantity, and the owner's own words win over a hint.",

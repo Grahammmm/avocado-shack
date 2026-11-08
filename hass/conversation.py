@@ -32,7 +32,7 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(post)(?:\s+((?:hike\s+)?\S+(?:\s+\S+){0,5}))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
                         r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
                         r"|(hidden)"  # AV1222-13 (H03): group 17
-                        r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; one token, the id is re-read from the original text
+                        r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; multiword names need a catalog check
                         r"|(photos to take)")  # AV0222-04 (H10/H17): group 20
 q = voice.quote  # HASS-VOICE-1: words Mike typed himself, or commands he types, are shown as they are and never judged
 HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: " + q('"Stop showing the eggs as sold out"') + ".",  # AV1537-03, test_help
@@ -51,7 +51,7 @@ HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: 
     q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",
     q("margin Hass avocado at 35%") + " - a price idea from the cost you saved",
     q("post Hass avocado") + " or " + q("post hike Point Buchon") + " - a caption to copy; I post nothing",
-    q("listing Etto") + " - what the website shows for one thing; " + q("hidden") + " lists what is hidden",
+    q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
     q("show") + " and a word from the change - repeat a waiting change",
     q("help") + " - this list"))
 # H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
@@ -83,7 +83,7 @@ POST_REFUSALS = {"no such product": "I don't know a product called {id}. Try " +
 POST_CANT = "I can't make a post for {id} right now. Nothing was posted."
 _NUM = r"[-+]?[0-9.][0-9.,_]*(?:e[-+]?[0-9]+)?"  # AV1102-12: looks like a number; margins.compute is the only validator
 MARGIN_RE = re.compile(rf"\$?({_NUM})\s+for\s+({_NUM})\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")
-MARGIN_ID_RE = re.compile(rf"(\S.*?)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")  # AV1222-10: saved cost
+MARGIN_ID_RE = re.compile(rf"(?!\$?{_NUM}\s+for\s)(\S.*?)\s+at\s+({_NUM})\s*%(?:\s+shrink\s+({_NUM})\s*%)?")  # AV1222-10: saved cost
 COST_RE = re.compile(r"\$?(\S+)\s+for\s+(\S+)", re.IGNORECASE)  # AV1222-10: margins.compute is the only number validator
 COST_USAGE = "Tell me the product, what you pay for a pack and how many are in it, like " + q("cost Hass avocado: 24 for 12") + "."
 PRIVATE_PREFIXES = ("alias.", "cost.")  # AV1222-10: memory keys the interpreter never sees
@@ -416,7 +416,7 @@ def parse_near(text: str):
     return None if not match else match[2] or ""
 
 
-def parse_command(text: str):
+def parse_command(text: str, *, listing_names=False):
     """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
@@ -425,7 +425,10 @@ def parse_command(text: str):
     if match[1]:  # AV2152-02: bare history stays (history, None); history <words> keeps the words in their own case
         stripped = re.sub(r"[.!]+$", "", text.strip())
         if stripped.lower() != "history": return "history", stripped[7:].strip()
-    if match[18]: return "listing", re.sub(r"[.!]+$", "", text.strip())[7:].strip() if match[19] else ""  # AV1622-09: the id in its own case
+    if match[18]:
+        ident = re.sub(r"[.!]+$", "", text.strip())[7:].strip() if match[19] else ""
+        # Several words need a catalog check in the message flow, not just a syntax match.
+        return ("listing", ident) if listing_names or len(ident.split()) <= 1 else None
     if match[17]: return "hidden", None  # AV1222-13
     if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
     if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
@@ -479,12 +482,12 @@ def _asked(text: str):
     return cut if cut != text.strip() and "?" in text.strip()[len(cut):] else None
 
 
-def read_command(text: str):
+def read_command(text: str, *, listing_names=False):
     """AV1352-05 (H17): parse_command, but a closing ? is dropped for a read-only command only (never yes/no, undo, stop,
     resume); anything else keeps today's reading of the original text."""
     cut = _asked(text)
-    found = parse_command(cut) if cut else None
-    return found if found and found[0] in READ_ONLY else parse_command(text)
+    found = parse_command(cut, listing_names=listing_names) if cut else None
+    return found if found and found[0] in READ_ONLY else parse_command(text, listing_names=listing_names)
 
 
 def read_memory(text: str):
@@ -567,8 +570,8 @@ def _summary(draft: dict) -> str:
 
 
 def _when(field, value):
-    """A start time is written as a day and time; any other value is None here."""
-    return voice.natural_iso(value) if field == "startsAt" and isinstance(value, str) else None
+    """A start or end time is written as a day and time; any other value is None here."""
+    return voice.natural_iso(value) if field in ("startsAt", "endsAt") and isinstance(value, str) else None
 
 
 def _shown(field, v, cut=True) -> str:
@@ -809,7 +812,9 @@ class Conversation:
             self._reply(ATTACHMENT_REPLY)
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
-        now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text)
+        now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text, listing_names=True)
+        if command and command[0] == "listing" and command[1] and len(command[1].split()) >= 2 and not self._listing_names_something(command[1]):
+            command = None  # A sentence is not a listing request unless it names something in the catalog.
         if command and command[0] == "post" and len(command[1].split()) >= 2 and not self._post_names_something(command[1]):
             command = None  # HASS-VOICE-1: "post a sale on social media" is a sentence for the interpreter, not a product or hike name
         self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten
@@ -868,7 +873,8 @@ class Conversation:
         asks = [] if verb != "approve" or targets else [self._by_code(code, ("needs-details",))] if code else \
             [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > cutoff]  # AV1737-05: bare yes
         if asks := [a for a in asks if a is not None]:  # a waiting question is never approved; it is repeated
-            self._reply("I still need an answer from you first. " + asks[0]["summary"])
+            self._reply("\n".join("I still need an answer from you first. " + q(a["summary"]) for a in asks),
+                        long_ok=True)
             self._record(msg, "no-target")
             return "no-target", None
         if len(targets) != 1:
@@ -1204,6 +1210,7 @@ class Conversation:
                        .products if isinstance(p, dict)), key=lambda p: str(p.get("id")))
                        if p.get("status") in ("active", "hidden") and isinstance(p.get("image"), str)
                        and image.fullmatch(p["image"])), None)
+            if on is not None and "id" not in on: raise KeyError("id")  # a matching record must still be readable
             said = on and f"That photo is already on {q(on['name'])}. To change that product, tell me what to change."
         except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): said = None  # no id/name: as unreadable
         if said:
@@ -1419,6 +1426,15 @@ class Conversation:
         since = datetime.fromisoformat(row["created_at"]).astimezone(LOCAL_TZ)
         return f"Using the cost you gave me {voice.natural(since, self._now())}.\n" + margins.say(margins.compute(pack, units, shrink or "0", margin))
 
+    def _listing_names_something(self, text) -> bool:
+        """Like post, a multiword listing needs a known name; unreadable content gets the usual read error."""
+        try:
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            return True
+        return any(self._pick(kind, text, content) != text for kind in ("product", "maker")) \
+            or self._pick_hike(content, text) != text
+
     def _post_names_something(self, text) -> bool:
         """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
         or hike; anything else keeps going to the interpreter as before. Unreadable content counts as a name so the usual
@@ -1485,7 +1501,12 @@ class Conversation:
             if text in ids: return text
             has_memory = self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory'").fetchone()
             found = catalog.lookup(content, kind, text, aliases=self.aliases() if has_memory else None)
-            return found["match"] if "match" in found else text
+            matched = found.get("match")
+            # Maker keys keep their exact case; only names and nicknames are folded.
+            if kind == "maker" and isinstance(matched, str) and not found.get("via") \
+                    and catalog._fold(text) not in catalog._fold(content.makers[matched]["name"]):
+                return text
+            return matched if isinstance(matched, str) else text
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             return text
 
