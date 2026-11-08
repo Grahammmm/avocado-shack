@@ -588,6 +588,109 @@ class EndToEnd(host_tests.HostCase):
         self.go()
         self.assertEqual(self.sent.count(EYES), 1)
 
+    # -- HASS-FAST-1-FIX item 2: the worker moves a pause from the inbox queue into the control flag while the host reads --
+    def _requeue_pause(self, guid):
+        """A fresh, unread 'stop changes' at the host and no flag: the state before the worker moves it."""
+        self.conv.db.execute("DELETE FROM control WHERE name = 'paused'") if self.conv.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'control'").fetchone() else None
+        self.inbox.db.execute("DELETE FROM inbound")
+        self.now += timedelta(seconds=1)
+        self.owner_text(guid, "stop changes")
+        self.f.deliver()
+        self.assertEqual(len(self.inbound_rows()), 1)
+
+    def _worker_moves_the_pause(self, blocked):
+        """The real worker reads the queued pause, commits the flag, marks the message done. With a reader holding a lock the
+        worker may be unable to commit at that instant (SQLite busy): that is a legitimate outcome, not a failure."""
+        try: self.work.cycle()
+        except sqlite3.OperationalError:  # the worker gives up this round (a rolled-back commit) and would retry
+            blocked.append(1)
+            for db in (self.conv.db, self.inbox.db):
+                if db.in_transaction: db.execute("ROLLBACK")
+
+    def _after_step(self, k, action):
+        """Patch the sqlite3 that hass.host uses so `action` runs once, right after the k-th statement paused_flag executes."""
+        steps, fired = [0], []
+
+        class Hooked:
+            def __init__(self, db): self.db = db
+            def execute(self, *args):
+                try: return self.db.execute(*args)
+                finally:
+                    steps[0] += 1
+                    if steps[0] == k: fired.append(k); action()
+            def close(self): self.db.close()
+        proxy = mock.Mock(wraps=sqlite3)
+        proxy.connect = lambda *a, **kw: Hooked(sqlite3.connect(*a, **kw))
+        proxy.Error, proxy.Row = sqlite3.Error, sqlite3.Row
+        return mock.patch.object(host, "sqlite3", proxy), fired
+
+    def test_a_pause_moved_from_the_queue_to_the_flag_between_the_reads_is_never_reported_unpaused(self):
+        """The reviewer's round 2 interleaving, at every statement boundary of the host's read: queue a pause, let the real
+        worker move it (flag committed, then inbox row marked done) right after step k, and ask. Never False."""
+        reached, blocked = [], []
+        for k in range(1, 20):
+            with self.subTest(step=k):
+                self._requeue_pause(f"p{k}")
+                self.conv.db.execute("PRAGMA busy_timeout = 0")
+                self.inbox.db.execute("PRAGMA busy_timeout = 0")
+                ctx, fired = self._after_step(k, lambda: self._worker_moves_the_pause(blocked))
+                with ctx: answer = host.paused_flag(self.repo.state)
+                self.assertTrue(answer)
+                if not fired: break
+                reached.append(k)
+                self.assertTrue(host.paused_flag(self.repo.state))  # and afterwards: the worker finishes, the flag says paused
+                self.work.cycle()
+        self.assertGreaterEqual(len(reached), 4, reached)
+
+    def _composed(self, k):
+        """Composed: real forwarder -> sealed state question -> real host Server -> host.paused_flag -> real store, with the
+        real worker moving the queued pause into the flag right after statement k of the host's read. The next owner message
+        gets no 👀 and is recorded as paused."""
+        self._requeue_pause("cp")
+        self.conv.db.execute("PRAGMA busy_timeout = 0")
+        self.inbox.db.execute("PRAGMA busy_timeout = 0")
+        self.owner_text("next", "status")
+        ctx, fired = self._after_step(k, lambda: self._worker_moves_the_pause([]))
+        with ctx: self.f.ack()
+        self.assertEqual(fired, [k])
+        self.assertEqual((self.sent, self.spool.db.execute("SELECT state FROM ack WHERE provider_id='next'").fetchone()[0]), ([], "paused"))
+        self.work.cycle()
+        self.assertTrue(host.paused_flag(self.repo.state))
+
+    def test_the_move_before_the_hosts_first_read_sends_no_eyes(self): self._composed(1)
+    def test_the_move_after_the_read_transaction_opens_sends_no_eyes(self): self._composed(2)
+    def test_the_move_after_the_queue_is_read_sends_no_eyes(self): self._composed(3)
+    def test_the_move_after_the_read_transaction_closes_sends_no_eyes(self): self._composed(4)
+
+    def test_a_flag_that_appears_between_the_two_flag_reads_is_paused(self):
+        """No queued pause at all: the flag is set by a pause that was handled elsewhere. Whenever it lands during the read
+        the answer is paused, and once it is there it stays paused."""
+        reached = []
+
+        landed = []
+
+        def set_flag():  # a writer that finds the store locked by the reader simply lands after it
+            try:
+                self.conv.db.execute("INSERT OR REPLACE INTO control(name,value,set_at,provider_id) VALUES ('paused','1','2026-11-02T17:00:00+00:00','x')")
+                landed.append(1)
+            except sqlite3.OperationalError: pass
+        for k in range(1, 20):
+            with self.subTest(step=k):
+                self.conv.db.execute(conv_control())
+                self.conv.db.execute("DELETE FROM control WHERE name = 'paused'")
+                self.conv.db.execute("PRAGMA busy_timeout = 0")
+                landed.clear()
+                ctx, fired = self._after_step(k, set_flag)
+                with ctx: answer = host.paused_flag(self.repo.state)
+                if not fired: break
+                reached.append((k, answer, bool(landed)))
+                if landed: self.assertTrue(host.paused_flag(self.repo.state))
+        # a flag landing after the very last statement is the only place an unpaused answer is still correct (it was unpaused
+        # at both reads); every earlier boundary reports paused
+        self.assertTrue(all(answer for _, answer, landed_ in reached[:-1] if landed_), reached)
+        self.assertGreaterEqual(len(reached), 4, reached)
+
 
 class HostPauseSignal(host_tests.HostCase):
     """host.paused_flag is what the Mac's `state` question reads: the flag, an unread pause command, or 'cannot tell'."""
@@ -619,6 +722,16 @@ class HostPauseSignal(host_tests.HostCase):
         self.assertTrue(host.paused_flag(self.repo.state))
         self.inbox.db.execute("DELETE FROM inbound")
         self.queue("", "y", payload=json.dumps({"other": 1}))
+        self.assertTrue(host.paused_flag(self.repo.state))
+
+    def test_an_unreadable_inbox_or_a_missing_inbox_table_means_paused(self):
+        self.assertFalse(host.paused_flag(self.repo.state))
+        self.inbox.db.execute("ALTER TABLE inbound RENAME TO inbound_old")
+        self.assertTrue(host.paused_flag(self.repo.state))  # the queue cannot be read: unknown is paused
+        self.inbox.db.execute("ALTER TABLE inbound_old RENAME TO inbound")
+        self.assertFalse(host.paused_flag(self.repo.state))
+        self.inbox.db.close()
+        (Path(self.repo.state) / "inbox.sqlite3").write_bytes(b"not a database")
         self.assertTrue(host.paused_flag(self.repo.state))
 
     def test_it_stays_read_only(self):

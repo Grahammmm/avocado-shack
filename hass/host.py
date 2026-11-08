@@ -132,9 +132,10 @@ def _worktree(cfg) -> str:
     except editor_mod.UnsafeState: raise HostConfigError(["state"]) from None
 
 
-def _pause_waiting(db) -> bool:
-    """True when a pause command sits unread in the inbox (or a queued payload cannot be read): the pause is on its way."""
-    for (payload,) in db.execute("SELECT payload FROM inbound WHERE state = 'pending'"):
+def _pause_waiting(db, schema="main") -> bool:
+    """True when a pause command sits unread or is being handled in the inbox (`pending`; or a queued payload cannot be
+    read): the pause is on its way. `schema` names the attached inbox."""
+    for (payload,) in db.execute(f"SELECT payload FROM {schema}.inbound WHERE state = 'pending'"):
         try:
             text = json.loads(payload)["text"]
             found = conversation.read_command(text) or conversation.parse_command(text)
@@ -144,21 +145,36 @@ def _pause_waiting(db) -> bool:
     return False
 
 
+def _flag_set(db) -> bool:
+    return bool(db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone()
+                and db.execute("SELECT 1 FROM control WHERE name = 'paused'").fetchone() is not None)
+
+
 def paused_flag(state) -> bool:
-    """HASS-FAST-1: True when changes are paused, when a pause command is queued but not yet read (the worker may be busy
-    with an earlier message), or when this cannot be read. Read-only (`mode=ro`), nothing written, asked fresh on every 👀;
-    the Mac sends its 👀 only when this is False, so an unreadable store means no 👀 (the safe answer)."""
+    """HASS-FAST-1: True when changes are paused, when a pause command is queued or being handled (the worker may be busy
+    with an earlier message, or moving the pause from the inbox into the control flag right now), or when this cannot be
+    read. Read-only (`mode=ro`), nothing written, asked fresh on every 👀; the Mac sends its 👀 only when this is False.
+
+    One read-only connection and one transaction hold both stores (the inbox is attached read-only). A pause is in the
+    inbox as `pending` the whole time it is being handled (Inbox.drain marks it done only after Conversation has committed
+    the flag), so the reads go in the order that cannot miss that move: the inbox first, then the flag. The flag is read
+    a second time in a new transaction after the snapshot; if the two flag reads disagree (a pause or resume landed while
+    this was reading) the answer is paused. Any error, an unreadable store or an unreadable queued payload is paused."""
     try:
         base = Path(state).resolve()
-        path = base / "conversation.sqlite3"
+        path, inbox = base / "conversation.sqlite3", base / "inbox.sqlite3"
         if not path.is_file(): return True
-        with contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=1)) as db:
-            if db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone() \
-                    and db.execute("SELECT 1 FROM control WHERE name = 'paused'").fetchone() is not None: return True
-        inbox = base / "inbox.sqlite3"
-        if not inbox.is_file(): return False
-        with contextlib.closing(sqlite3.connect(f"{inbox.as_uri()}?mode=ro", uri=True, timeout=1)) as db:
-            return _pause_waiting(db)
+        with contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=1, isolation_level=None)) as db:
+            attached = inbox.is_file()
+            if attached: db.execute("ATTACH DATABASE ? AS inb", (f"{inbox.as_uri()}?mode=ro",))
+            db.execute("BEGIN")
+            try:
+                if attached and _pause_waiting(db, "inb"): return True  # pending or in progress: the pause is on its way
+                first = _flag_set(db)
+            finally:
+                db.execute("ROLLBACK")
+            if first: return True
+            return _flag_set(db) != first  # the second look, in a new transaction: any disagreement is paused (first is False here)
     except (OSError, ValueError, sqlite3.Error):
         return True
 
