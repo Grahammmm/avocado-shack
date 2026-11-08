@@ -49,7 +49,7 @@ class LiveProposalTests(ConversationTestCase):
     def test_bare_yes_refused_named_yes_approves(self):
         row, _ = self.propose("hours")
         self.assertEqual(self.say("yes"), "no-target")
-        self.assertEqual(self.replies(), ["To put a change live, reply yes <code>, for example yes a1b2."])
+        self.assertEqual(self.replies(), ["To put a change on the website, reply yes and its code, like yes a1b2."])
         self.assertEqual(self.editor.applies, 0)
         self.assertEqual(self.say(f"yes {row['code']}"), "approved")
         self.assertEqual(self.replies(), [answers.applied_text(row["code"], row["summary"], live_site=SITE)])
@@ -101,7 +101,7 @@ class LiveProposalTests(ConversationTestCase):
         with mock.patch.object(self.conv, "verify", return_value=("fixture-result.png", None)):
             self.assertEqual(self.say(f"yes {row['code']}"), "approved")
         replies = self.replies()
-        self.assertEqual(replies, [f"Saved {row['code']}: {row['summary']}. I'll send a separate message about the website."])
+        self.assertEqual(replies, [f"Saved: {row['summary']}. I'll send a separate message about the website."])
         self.assertEqual(self.conv.screenshot(row["change_id"]), "fixture-result.png")
         self.assertIsNotNone(self.drafts()[0]["checked_at"])
         self.conv._verify_pending()
@@ -132,8 +132,7 @@ class LiveProposalTests(ConversationTestCase):
     def test_live_off_is_byte_identical(self):
         draft = edit("old", "new", "headline", "store")
         self.assertEqual(conv.proposal_text("a1b2", draft, "2026-11-02T17:10:00+00:00"),
-            "Draft a1b2:\nstore fixture: headline old → new\nExpires 2026-11-02 09:10 PST.\n"
-            "Reply yes to apply, no to cancel, or send a correction.")
+            "Here's the change I'd make:\nthe shop details, the headline: from \ue000old\ue001 to \ue000new\ue001\nI'll hold this for you until Monday, Nov 2 at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.")
         self.assertEqual(answers.applied_text("a1b2", "headline"), "Applied a1b2: headline\n" + answers.NOT_LIVE)
         self.assertEqual(answers.recovered_text("a1b2"),
             "a1b2 was interrupted and not saved. The website is as it was before; send the change again to make a new draft.")

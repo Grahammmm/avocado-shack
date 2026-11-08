@@ -54,7 +54,7 @@ class CountTests(unittest.TestCase):
 
     def test_under_the_limit_other_questions_unchanged(self):
         self.assertEqual(ask(hides(20), revises="dead"),
-                         {"question": "I could not find draft dead waiting; reply with the change again."})
+                         {"question": "I can't find that change any more. Could you tell me the change again?"})
         self.assertIn("did not find a change", ask([])["question"])
 
     def test_prompt_limit_matches_editor_limit(self):

@@ -12,7 +12,7 @@ from hass import conversation
 from hass.tests.test_interpreter_cap import CapTestCase
 from hass.tests.test_undo import H06TestCase
 
-FAILED = {"unsupported": "I could not work that out right now, so nothing was drafted. Please try again in a few minutes."}
+FAILED = {"unsupported": "I couldn't work that out just now, so nothing was changed. Please try again in a few minutes."}
 LINE = "Last request not read: Monday 09:00 - the reader was not working; send it again"
 SUPPORT = Path(__file__).resolve().parents[2] / "docs" / "hass" / "SUPPORT.md"
 

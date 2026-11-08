@@ -48,7 +48,7 @@ class EnumCheckTests(unittest.TestCase):
         r = {"ops": [call("x.pick", colour="red")], "revises": None}
         self.assertIs(interpret_check.check(r, custom(("red", "blue")), ()), r)
         self.assertEqual(ask([call("x.pick", colour="green")], custom(("red", "blue"))),
-                         {"question": f"x.pick.colour should be one of: red, blue. {AGAIN}"})
+                         {"question": f"For a detail, I can use: red, blue. {AGAIN}"})
         for none in ((), None):
             self.assertEqual(ask([call("x.pick", colour="red")], custom(none)),
                              {"question": f"x.pick.colour has no available choices. {AGAIN}"})
@@ -61,7 +61,7 @@ class EnumCheckTests(unittest.TestCase):
     def test_enum_types_and_no_normalization(self):
         for bad in (None, True, 3, ["fruit"]):
             self.assertEqual(ask([call("product.edit", id="p1", category=bad)]),
-                             {"question": f"product.edit.category should be text. {AGAIN}"})
+                             {"question": f"I need the shelf as words. {AGAIN}"})
         for bad in ("Fruit", " fruit", "fruit ", ""):
             q = ask([call("product.edit", id="p1", category=bad)])["question"]
             self.assertTrue(q.startswith("There is no "), q)

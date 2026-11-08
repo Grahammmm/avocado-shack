@@ -104,7 +104,7 @@ class LimitsDocTest(unittest.TestCase):
             with self.subTest(name=name), mock.patch.object(mod, name, value):
                 source = f"{mod.__name__.removeprefix('hass.')}.{name}"
                 self.assertEqual(problems(self.doc), [f"line {lines[name]}: doc says {said}, {source} is {value}"])
-        self.assertEqual(conversation.FIND_USAGE, "Send find and 1–60 characters, e.g. find lion's mane.")
+        self.assertEqual(conversation.FIND_USAGE, "Tell me a word or two to look for, like \ue000find lion's mane\ue001.")
         self.assertEqual(named_image_types(self.doc), {"jpeg", "png"})
         self.assertIn("upright or sideways", self.doc)
 

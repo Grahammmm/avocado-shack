@@ -67,7 +67,7 @@ class YesBeforeProposalTests(_BeforeB):
 
     def test_the_cancelled_draft_code_is_not_a_way_round_it(self):
         self.assertEqual(self.late(f"yes {self.a['code']}", BEFORE_B), "no-target")
-        self.assertEqual(self.replies(), [f"{self.a['code']} was cancelled (owner); nothing changed."])
+        self.assertEqual(self.replies(), ["That one was cancelled, so nothing changed."])
         self.assertEqual((self.approvals(), self.commits(), self.editor.applies), ([], 0, 0))
 
     def test_yes_sent_exactly_at_the_proposal_instant_approves(self):
@@ -93,7 +93,7 @@ class YesBeforeProposalTests(_BeforeB):
 
     def test_no_sent_before_the_draft_was_proposed_still_cancels_it(self):
         self.assertEqual(self.late("no", BEFORE_B), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {self.b['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.drafts()[-1]["state"], self.commits()), ("rejected", 0))
 
     def test_yes_sent_between_a_question_and_its_fill_is_refused(self):
@@ -115,8 +115,7 @@ class YesBeforeProposalTests(_BeforeB):
         self.assertEqual((row["code"], row["state"]), (question["code"], "proposed"))
         sent = (asked + timedelta(minutes=1)).isoformat()  # after the question, before the fill
         self.assertEqual(self.late("yes", sent, now=filled + timedelta(minutes=1)), "no-target")
-        self.assertEqual(self.replies(), [f"That yes was sent before {row['code']} was proposed; "
-                                          f"reply yes {row['code']} to apply it."])
+        self.assertEqual(self.replies(), [f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply yes {row['code']}."])
         self.assertEqual((self.drafts()[-1]["state"], self.approvals(), self.editor.applies), ("proposed", [], 0))
         self.assertEqual(self.late("yes", filled.isoformat(), now=filled + timedelta(minutes=1)), "approved")
 
@@ -160,7 +159,7 @@ class ProposalTimeSurvivesTtlChangeTests(_BeforeB):
         self.restart(3600)
         sent = (asked + timedelta(minutes=1)).isoformat()  # after the question, before the fill
         self.assertEqual(self.late("yes", sent, now=filled + timedelta(minutes=1)), "no-target")
-        self.assertEqual(self.replies(), [f"That yes was sent before {code} was proposed; reply yes {code} to apply it."])
+        self.assertEqual(self.replies(), [f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply yes {code}."])
         self.assertEqual(self.late("yes", filled.isoformat(), now=filled + timedelta(minutes=1)), "approved")
 
 

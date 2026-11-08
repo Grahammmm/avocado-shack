@@ -108,7 +108,7 @@ class UndoTests(H06TestCase):
         self.apply("desc2")
         self.assertEqual(self.say(f"undo {a['code']}"), "not-drafted")
         [reply] = self.replies()
-        self.assertEqual(reply, f"Not undone: conflict: products photo-product-001 changed after {a['change_id']}")
+        self.assertEqual(reply, "That has changed since, so I can't undo it cleanly. Please ask Graham.")
         self.assertEqual((len(self.drafts()), self.commits()), (2, 2))
 
     def test_result_is_persisted_before_the_reply(self):
@@ -123,7 +123,7 @@ class UndoTests(H06TestCase):
         self.conv = self.open()  # restart
         [sent] = self.sent()
         self.assertEqual((sent["text"].split(":")[0], sent["attachments"]),
-                         (f"Applied and checked {row['code']}", [row["screenshot"]]))
+                         ("Saved and checked", [row["screenshot"]]))
         self.assertEqual((self.sent(), self.commits()), ([], 1))
 
     def test_undo_of_an_addition_hides_it(self):

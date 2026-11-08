@@ -128,8 +128,7 @@ class LabelReaderTests(unittest.TestCase):
             with self.subTest(brand):
                 found = self.read({**LION, "brand": brand})
                 self.assertEqual(found, {"name": "Lion's Mane", "category": "mushrooms"})
-                self.assertEqual(question(found), "The label looks like: Lion's Mane (mushrooms). Is that right? "
-                                                  "Say which product it is either way.")
+                self.assertEqual(question(found), "The label looks like \ue000Lion's Mane (mushrooms)\ue001. Is that right? Either way, tell me which product it is.")
         self.assertEqual(self.read({**LION, "brand": "Lion's Mane Co"})["brand"], "Lion's Mane Co")  # not an echo
         self.assertEqual(self.read({**LION, "name": "N/A", "brand": "Lion's Mane"}), {"brand": "Lion's Mane",
                                                                                        "category": "mushrooms"})

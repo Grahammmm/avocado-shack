@@ -48,7 +48,7 @@ class DeepConversationTests(StoreMixin, H06TestCase):
 
     def test_events_string_is_unavailable(self):  # 5: valid JSON, wrong shape (existing path)
         self.content("community.json").write_text(json.dumps({"events": "scheduled"}), "utf-8")
-        self.assertEqual(self.status_unchanged()[-1], "Hikes: unavailable")
+        self.assertEqual(self.status_unchanged()[-1], "I can't read the hike list right now.")
 
     def deepen_makers_after_prepare(self):  # a hand edit or damaged checkout landing before the claim check
         real = self.editor.prepare

@@ -19,7 +19,7 @@ EDIT = "photo-product-001"
 
 class CheckPriceTests(unittest.TestCase):
     def test_exact_replies(self):
-        self.assertEqual(PRICE, "The website does not show prices, so nothing was drafted. Send the change without the price.")
+        self.assertEqual(PRICE, "The website doesn't show prices, so I haven't made any change. Could you send it without the price?")
         self.assertEqual(PLAIN, "The website only accepts plain text, so nothing was drafted. "
                                 "Send the change without HTML or template marks.")
 

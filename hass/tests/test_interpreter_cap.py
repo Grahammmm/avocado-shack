@@ -60,7 +60,7 @@ class CapTests(CapTestCase):
         self.limited("desc2")
         self.limited("status please")  # command-like wording is still a change request: no bypass
         self.assertEqual(self.interp.calls, 2)
-        self.assertEqual(self.status()[:2], ["Changes: on", "Interpreter today: 2 of 2"])
+        self.assertEqual(self.status()[:2], ["Everything is ready.", "I'm close to the number of new requests I can read today."])
         self.conv = self.open()  # restart keeps the count
         self.limited("hours")
         self.assertEqual(self.interp.calls, 2)
@@ -88,7 +88,7 @@ class CapTests(CapTestCase):
         self.now = datetime(2026, 11, 3, 7, 59, tzinfo=timezone.utc)  # UTC date is the 3rd; local is 2 Nov 23:59 PST
         self.limited("desc2")
         self.now = datetime(2026, 11, 3, 8, 1, tzinfo=timezone.utc)  # 00:01 PST on 3 Nov: a new local day
-        self.assertEqual(self.status()[1], "Interpreter today: 0 of 2")
+        self.assertEqual(self.status()[1], "Nothing is waiting for your yes.")
         self.assertEqual(self.say("when?"), "question")
         self.replies()
         self.assertEqual((self.interp.calls, self.status()[1]), (3, "Interpreter today: 1 of 2"))
@@ -107,7 +107,7 @@ class CapTests(CapTestCase):
         self.assertEqual(self.say("when?", pid="d1"), "question")
         self.assertEqual(self.say("when?", pid="d1"), "duplicate")
         self.assertEqual(self.say("hours", pid="d1"), "duplicate")
-        self.assertEqual((self.interp.calls, self.status()[1]), (1, "Interpreter today: 1 of 2"))
+        self.assertEqual((self.interp.calls, self.status()[1]), (1, "Nothing is waiting for your yes."))
         self.propose("hours")
         self.limited(pid="d2")
         self.assertEqual(self.say("desc", pid="d2"), "duplicate")  # a redelivered limited message stays limited

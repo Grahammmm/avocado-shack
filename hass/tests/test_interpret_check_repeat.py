@@ -78,7 +78,7 @@ class RepeatTests(unittest.TestCase):
     def test_malformed_call_before_repeat_wins(self):
         edit = call("product.edit", id="p1", name="Hass")
         self.assertEqual(ask([edit, {"op": "product.edit"}, dict(edit)]),
-                         {"question": f"I could not read change 2 of that message. {AGAIN}"})
+                         {"question": f"I couldn't read part of that message. {AGAIN}"})
         self.assertEqual(ask([edit, dict(edit), {"op": 3, "args": {}}]),
                          {"question": f"I could not read change 3 of that message. {AGAIN}"})
 
@@ -90,7 +90,7 @@ class RepeatTests(unittest.TestCase):
     def test_args_that_cannot_be_compared_never_raise_or_repeat(self):
         odd = object()
         out = ask([call("product.edit", id="p1", name=odd), call("product.edit", id="p1", name=odd)])
-        self.assertEqual(out, {"question": f"product.edit.name should be text. {AGAIN}"})
+        self.assertEqual(out, {"question": f"I need the name as words. {AGAIN}"})
         loop = {}
         loop["self"] = loop
         out = ask([call("product.edit", id="p1", name=loop)] * 2)

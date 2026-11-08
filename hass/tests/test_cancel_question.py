@@ -26,7 +26,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
     def test_bare_no_cancels_the_only_question_and_a_later_fill_starts_fresh(self):
         q = self.ask()
         self.assertEqual(self.say("No!"), "rejected")  # wording: capitals and a trailing "!" are the same keyword
-        self.assertEqual(self.replies(), [f"Cancelled {q['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual(self.closed(q), ("rejected", "owner"))
         self.assertEqual(self.say("no"), "no-target")  # duplicate cancel: nothing is waiting any more
         self.assertEqual(self.replies(), [conversation.NOTHING])
@@ -48,7 +48,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         draft, _reply = self.propose("hours")
         q = self.ask()
         self.assertEqual(self.say(f"CANCEL {q['code']}."), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {q['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.closed(q), self.state(draft)["state"]), (("rejected", "owner"), "proposed"))
         q2 = self.ask_at(self.now)["row"]
         self.assertEqual(self.say(f"reject {draft['code']}"), "rejected")
@@ -101,7 +101,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.replies()
         q = self.ask()
         self.assertEqual(self.say("no"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {q['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual(self.closed(q), ("rejected", "owner"))
         self.assert_nothing_applied()
 
@@ -110,7 +110,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.assertEqual(self.say("no"), "rejected")
         self.replies()
         self.assertEqual(self.answer("done", draft["code"]), "question")  # scope: only questions start fresh
-        self.assertEqual(self.replies(), [f"I could not find draft {draft['code']} waiting; reply with the change again."])
+        self.assertEqual(self.replies(), ["I can't find that change any more. Could you tell me the change again?"])
         self.assertEqual(len(self.drafts()), 1)
 
 

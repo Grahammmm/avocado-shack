@@ -52,7 +52,7 @@ class AppliedHistoryTests(HistoryTestCase):
         self.assertEqual(a["state"], "applied")
         self.ask(6)
         self.assertEqual(sum(d["state"] == "needs-details" for d in self.drafts()), 6)
-        self.assertEqual(self.history_bare(), ["Recent changes:", f"{a['code']} applied: {a['summary']}"])
+        self.assertEqual(self.history_bare(), ["Here's what we changed lately:", f"- {a['summary']}: saved, but I'm not sure it's on the website"])
 
     def test_cancelled_and_expired_drafts_do_not_push_out_an_applied_change(self):
         a = self.apply("desc")
@@ -72,7 +72,7 @@ class HistoryStateTests(HistoryTestCase):
         for i, state in enumerate(ALL_STATES):
             self.insert(f"S{i}", state)
         lines = self.history_bare()
-        self.assertEqual(lines[0], "Recent changes:")
+        self.assertEqual(lines[0], "Here's what we changed lately:")
         self.assertEqual([line.split(":")[0] for line in lines[1:]],
                          ["S8 reverted", "S7 failed", "S5 verified", "S3 applied", "S1 approved"])
         self.assertEqual(conversation.HISTORY_STATES, ("approved", "applied", "verified", "failed", "reverted"))
@@ -93,11 +93,11 @@ class HistoryStateTests(HistoryTestCase):
         self.now += timedelta(seconds=600)  # this question lapses when history runs
         self.insert("E1", "expired")
         self.insert("P1", "proposed")
-        self.assertEqual(self.history(), "No approved changes yet.")
+        self.assertEqual(self.history(), "We haven't made any changes yet.")
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "expired", "expired", "proposed"])
 
     def test_empty_history(self):
-        self.assertEqual(self.history(), "No approved changes yet.")
+        self.assertEqual(self.history(), "We haven't made any changes yet.")
 
     def test_history_while_paused_is_the_same_list(self):
         a, b = self.apply("desc"), self.apply("hours")
@@ -118,8 +118,8 @@ class HistoryStateTests(HistoryTestCase):
         self.sent()
         rev = [d for d in self.drafts() if d["row_id"] == rev["row_id"]][0]
         self.assertEqual(self.history_bare()[1:],
-                         [f"{rev['code']} verified: {rev['summary']}",
-                          f"{a['code']} reverted: {a['summary']}"])
+                         [f"- {rev['summary']}: saved, but I'm not sure it's on the website",
+                          f"- {a['summary']}: undone"])
         self.assertTrue(self.history().endswith(f"{a['code']} reverted: {a['summary']} - undone"))
 
 

@@ -40,9 +40,9 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
                         event("hike-2026-10-17", "Cerro Cabrillo sunrise", "2026-10-17T07:05:00-07:00")],
                        [("idea-cerro-cabrillo", "Cerro Cabrillo summit")])
         self.assertEqual(self.find("find CERRO cabrillo"), [
-            "hike hike-2026-10-17: Cerro Cabrillo sunrise (Saturday Oct 17, 7:05 am, scheduled)",
-            "hike hike-2026-12-05: Cerro Cabrillo winter loop (Saturday Dec 5, 1:30 pm, scheduled)",
-            "route idea-cerro-cabrillo: Cerro Cabrillo summit (idea)"])
+            "Cerro Cabrillo sunrise (hike, Saturday, Oct 17 at 7:05 am, coming up)",
+            "Cerro Cabrillo winter loop (hike, Saturday, Dec 5 at 1:30 pm, coming up)",
+            "Cerro Cabrillo summit (route idea, just an idea)"])
         self.assertEqual(self.find("find cerro summit"), ["route idea-cerro-cabrillo: Cerro Cabrillo summit (idea)"])
         self.community([event("hike-2026-12-05", "Peña Zzridge bluffs", "2026-12-05T12:00:00-08:00")])
         self.assertEqual(self.find("find PENA zzridge"), [  # accents folded; noon is pm
@@ -62,8 +62,8 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
         self.community([event("hike-2026-10-03", "Zzst coast", "2026-10-03T08:00:00-07:00", "completed"),
                         event("hike-2026-10-10", "Zzst coast", "2026-10-10T08:00:00-07:00", "cancelled")])
         self.assertEqual(self.find("find zzst"), [
-            "hike hike-2026-10-03: Zzst coast (Saturday Oct 3, 8:00 am, completed)",
-            "hike hike-2026-10-10: Zzst coast (Saturday Oct 10, 8:00 am, cancelled)"])
+            "Zzst coast (hike, Saturday, Oct 3 at 8 am, done)",
+            "Zzst coast (hike, Saturday, Oct 10 at 8 am, cancelled)"])
 
     def test_unreadable_start_untitled_event_and_hidden_idea(self):
         """Content that validation refuses, written to community.json and read through the real loader/validator: a bad
@@ -82,10 +82,10 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
         self.assertIn("events[0].startsAt: must be an ISO date-time with a UTC offset", refused.exception.problems)
         self.assertIn("events[2]: missing field 'title'", refused.exception.problems)
         self.assertEqual(self.find("find zzbd"), [  # the two untitled events are skipped
-            "hike hike-utc: Zzbd utc (Saturday Dec 5, 9:00 am, scheduled)",
-            "hike hike-bad: Zzbd ridge (date unreadable, scheduled)",
-            "hike hike-naive: Zzbd naive (date unreadable, scheduled)",
-            "route idea-zzbd: Zzbd hidden (hidden)"])
+            "Zzbd utc (hike, Saturday, Dec 5 at 9 am, coming up)",
+            "Zzbd ridge (hike, no date I can read, coming up)",
+            "Zzbd naive (hike, no date I can read, coming up)",
+            "Zzbd hidden (route idea, hidden)"])
         products = self.repo.wt / "hass" / "content" / "products.json"
         good = products.read_text("utf-8")
         self.edit("products.json", lambda doc: doc["products"][0].update(status="bogus"))  # unrelated content still checked

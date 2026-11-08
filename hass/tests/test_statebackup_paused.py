@@ -42,7 +42,7 @@ class PausedRestoreTests(BackupTestCase):
         self.assertEqual(self.query(new), [("paused", "1", ISO(FIXED), "statebackup-restore")])
         self.restored(new)
         self.assertEqual(self.say("status"), "status")
-        self.assertEqual(self.replies()[0].splitlines()[0], "Changes: paused since 2026-11-02 09:03 PST")
+        self.assertEqual(self.replies()[0].splitlines()[0], "Changes are paused since today at 9:03 am. Say resume changes when you're ready.")
         for text in (f"yes {self.draft['code']}", "yes"):
             self.assertEqual((self.say(text), self.replies()), ("paused", [gated(self.draft["code"])]), text)
             self.assertEqual((self.drill_commits(), self.drafts()[0]["state"]), (base, "proposed"))

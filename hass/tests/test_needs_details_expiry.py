@@ -142,7 +142,7 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
         q = self.ask()
         self.now = T0 + TTL + timedelta(seconds=1)
         self.assertEqual(self.say("yes"), "no-target")  # the lapse is named by the message that expires it
-        self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual(self.say(f"yes {q['code']}"), "no-target")
         self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
         self.assertEqual(self.say(f"no {q['code']}"), "no-target")

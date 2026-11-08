@@ -99,7 +99,7 @@ class HiddenTests(StoreMixin, ConversationTestCase):
         self.assertEqual(lines[-2:], ["… and 2 more.", RESTORE])
 
     def test_nothing_hidden(self):
-        self.assertEqual(self.hidden(), ["Nothing is hidden."])
+        self.assertEqual(self.hidden(), ["Nothing is hidden right now."])
         self.set_state(held=(self.ids()[0],))  # held alone is not hidden
         self.assertEqual(self.hidden("Hidden."), ["Nothing is hidden."])
 

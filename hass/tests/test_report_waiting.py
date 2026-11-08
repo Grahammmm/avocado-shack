@@ -57,8 +57,8 @@ class ReportWaitingTests(StoreMixin, ConversationTestCase):
         path = self.repo.state / "inbox.sqlite3"
         path.write_bytes(GARBAGE)
         reply = self.report()
-        self.assertEqual(self.block(reply), ["Waiting for you:", "PHO1 needs details: Which product?",
-                                             "Photos waiting for details: 1"])
+        self.assertEqual(self.block(reply), ["Waiting for you:", "I'm waiting for details: Which product?",
+                                             "A photo is waiting for details from you."])
         self.assertNotIn("downloading", reply)
         self.assertNotIn("unavailable", reply)
         self.assertIn("Photos still downloading: unavailable", "\n".join(self.status()))  # status keeps its row
@@ -101,8 +101,7 @@ class ReportWaitingTests(StoreMixin, ConversationTestCase):
         moved = self.repo.wt.with_name(self.repo.wt.name + "-moved")
         self.repo.wt.rename(moved)
         self.addCleanup(moved.rename, self.repo.wt)
-        self.assertEqual(self.report(), "Shelf report unavailable right now; nothing changed.\n\n"
-                                        "Waiting for you:\nTXT1 needs details: Which maker?")
+        self.assertEqual(self.report(), "I can't read the shelf report right now, so I can't tell you what's on the shelves. Nothing has changed.\n\nWaiting for you:\nI'm waiting for details: Which maker?")
 
 
 if __name__ == "__main__":

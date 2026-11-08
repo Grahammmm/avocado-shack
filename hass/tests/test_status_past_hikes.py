@@ -101,7 +101,7 @@ class PastHikeStatusTests(sp.StoreMixin, H06TestCase):
         content = self.repo.wt / "hass/content/community.json"
         before = (self.drafts(), self.approvals(), self.tables(), self.commits(), content.read_bytes())
         lines = self.status()
-        self.assertEqual(lines[0], "Changes: paused since 2026-11-02 09:00 PST")
+        self.assertEqual(lines[0], "Changes are paused since today at 9 am. Say resume changes when you're ready.")
         self.assertEqual(lines[-1], passed("Past hike", "Sun 2026-11-01 09:00 PST"))
         self.assertEqual((self.drafts(), self.approvals(), self.tables(), self.commits(), content.read_bytes()),
                          before)

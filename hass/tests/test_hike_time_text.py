@@ -35,11 +35,11 @@ class ProposalHikeTimeTests(unittest.TestCase):
         self.assertEqual(conversation._hike_time("2026-11-01T01:30:00-07:00"), "Sun 2026-11-01 01:30 PDT")
         self.assertEqual(conversation._hike_time("2026-11-01T01:30:00-08:00"), "Sun 2026-11-01 01:30 PST")
         line = _edit("startsAt", "2026-11-01T01:30:00-07:00", "2026-11-01T01:30:00-08:00")[1]
-        self.assertEqual(line, "events h1: startsAt Sun 2026-11-01 01:30 PDT → Sun 2026-11-01 01:30 PST")
+        self.assertEqual(line, "this, the start time: from \ue000Sunday, Nov 1 at 1:30 am\ue001 to \ue000Sunday, Nov 1 at 1:30 am\ue001")
 
     def test_utc_value_reads_pacific(self):
         self.assertEqual(_edit("startsAt", "2026-07-04T16:00:00+00:00", "2026-07-04T17:00:00Z")[1],
-                         "events h1: startsAt Sat 2026-07-04 09:00 PDT → Sat 2026-07-04 10:00 PDT")
+                         "this, the start time: from \ue000Saturday, Jul 4 at 9 am\ue001 to \ue000Saturday, Jul 4 at 10 am\ue001")
 
     def test_naive_or_garbage_shown_raw_and_proposal_complete(self):
         for bad in ("soon", "2026-11-07T09:00", "", "2026-13-40T09:00:00-08:00"):
@@ -50,11 +50,11 @@ class ProposalHikeTimeTests(unittest.TestCase):
                                  + TAIL)
         for odd in (None, 5, ["2026-11-07T09:00:00-08:00"]):  # not a string: returned unchanged, no exception
             self.assertIs(conversation._hike_time(odd), odd)
-        self.assertEqual(_edit("startsAt", 900, "soon")[1], "events h1: startsAt 900 → soon")
+        self.assertEqual(_edit("startsAt", 900, "soon")[1], "this, the start time: from \ue000900\ue001 to \ue000at a time I can't read\ue001")
 
     def test_added_from_none(self):
         self.assertEqual(_edit("startsAt", None, "2026-11-07T09:00:00-08:00")[1],
-                         "events h1: startsAt (none) → Sat 2026-11-07 09:00 PST")
+                         "this, the start time: from \ue000nothing\ue001 to \ue000Saturday, Nov 7 at 9 am\ue001")
         self.assertEqual(_edit("startsAt", "2026-11-07T09:00:00-08:00", None)[1],
                          "events h1: startsAt Sat 2026-11-07 09:00 PST → (none)")
 
@@ -67,7 +67,7 @@ class ProposalHikeTimeTests(unittest.TestCase):
 
     def test_other_date_like_fields_untouched(self):
         iso = "2026-11-07T09:00:00-08:00"
-        self.assertEqual(_edit("recap", "old", iso)[1], f"events h1: recap old → {iso}")
+        self.assertEqual(_edit("recap", "old", iso)[1], f"this, the recap: from \ue000old\ue001 to \ue000{iso}\ue001")
         self.assertEqual(_edit("startsat", iso, "x")[1], f"events h1: startsat {iso} → x")  # exact field name only
         self.assertIn(f"  endsAt: {iso}", _lines(("events", "h1", None, {"endsAt": iso, "recap": iso})))
         self.assertIn(f"  recap: {iso}", _lines(("events", "h1", None, {"endsAt": iso, "recap": iso})))

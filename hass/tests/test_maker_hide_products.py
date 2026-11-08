@@ -208,7 +208,7 @@ class MakerHideConversationTests(H06TestCase):
         git(self.repo.wt, "commit", "-q", "-m", "fixture: image file removed")
         self.assertEqual(self.say(f"undo {first['code']}"), "not-drafted")
         [reply] = self.replies()
-        self.assertEqual(reply, f"Not undone: {self.ids[0]} cannot be restored: image file {image} is missing")
+        self.assertEqual(reply, "I can't find that photo. Could you send it again?")
         self.assertTrue(all(self.statuses()[pid] == "hidden" for pid in self.ids))
         self.assertEqual(self.product(self.ids[0])["status"], "hidden")
 

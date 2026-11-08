@@ -55,7 +55,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
                          ("Aliases (23):", f"jam 00 -> Hass avocado ({AVO})", f"jam 19 -> Hass avocado ({AVO})", "... and 3 more"))
 
     def test_alias_boundary_counts_and_single_sections(self):
-        self.assertEqual(self.listing(), "Nothing saved.\nAliases (0):")
+        self.assertEqual(self.listing(), "I'm not keeping any notes.\nI don't have any nicknames.")
         self.save("alias.a", f"product:{AVO}")
         self.assertEqual(self.listing(), f"Nothing saved.\nAliases (1):\na -> Hass avocado ({AVO})")
         for i in range(19): self.save(f"alias.b{i:02d}", f"product:{AVO}")
@@ -114,7 +114,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
     def test_catalog_failure_not_false_deletion(self):
         self.listing()  # no aliases: the catalog is never read
         with mock.patch.object(conversation, "load_content", side_effect=AssertionError("catalog read")):
-            self.assertEqual(self.listing(), "Nothing saved.\nAliases (0):")
+            self.assertEqual(self.listing(), "I'm not keeping any notes.\nI don't have any nicknames.")
         self.save("note", "kept")
         self.save("alias.jam", f"product:{AVO}")
         self.save("alias.bad", "nonsense")
@@ -142,7 +142,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
         self.calls.clear()
         before, states = self.snapshot(), [d["state"] for d in self.drafts()]
         self.assertEqual(states, ["needs-details"])
-        self.assertEqual(self.listing(), "Nothing saved.\nAliases (0):")
+        self.assertEqual(self.listing(), "I'm not keeping any notes.\nI don't have any nicknames.")
         self.assertEqual([d["state"] for d in self.drafts()], states)
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.calls, [])
@@ -152,7 +152,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
 
     def test_missing_memory_table_is_not_created_by_listing(self):
         self.assertFalse(self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'memory'").fetchone())
-        self.assertEqual(self.listing(), "Nothing saved.\nAliases (0):")
+        self.assertEqual(self.listing(), "I'm not keeping any notes.\nI don't have any nicknames.")
         self.assertFalse(self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'memory'").fetchone())
 
     def test_owner_duplicate_caption_and_punctuation(self):

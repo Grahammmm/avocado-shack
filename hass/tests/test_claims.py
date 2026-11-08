@@ -84,8 +84,7 @@ class UnstatedTests(unittest.TestCase):
 
     def test_question_names_two_hits_then_counts(self):
         one = claims.question([("products p1 description", "organic")])
-        self.assertEqual(one, 'I did not draft that: "organic" in products p1 description is not in your message. '
-                              "Is it true? Send the change again with it in your words, or without it.")
+        self.assertEqual(one, 'You didn\'t say \ue000"organic"\ue001 in your message. Is that true? Send the change again with it in your own words, or without it.')
         many = claims.question([("a", "organic"), ("b", "local"), ("c", "estate"), ("d", "maker")])
         self.assertIn('"organic" in a and "local" in b and 2 more are not in your message', many)
         self.assertNotIn("estate", many)

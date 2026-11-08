@@ -103,7 +103,7 @@ class CheckTests(unittest.TestCase):
                 question = self.check(result(call(name, changeId="c")))["question"]
                 self.assertIn("unknown change type", question)
         self.assertEqual(self.check(result(edit(1), edit(1)))["question"].split(".")[0],
-                         "Changes 1 and 2 in that message are the same")
+                         "Two of those changes are the same")
         self.assertIn("could not find draft", self.check(result(edit(1), revises="zzzz"))["question"])
 
 

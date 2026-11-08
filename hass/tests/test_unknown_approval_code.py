@@ -90,7 +90,7 @@ class UnknownCodeTestCase(ConversationTestCase):
         expired, _r = self.propose("hours")
         self.now = T0 + timedelta(seconds=600)  # exactly at expires_at: expired
         waiting, _r = self.propose("desc")
-        self.assertEqual(self.unknown(f"yes {expired['code']}"), [f"{expired['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.unknown(f"yes {expired['code']}"), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual(self.say("no"), "rejected")  # cancels the only waiting proposal
         self.replies()
         self.assertEqual(self.unknown(f"yes {waiting['code']}"), [f"{waiting['code']} was cancelled (owner); nothing changed."])
@@ -108,7 +108,7 @@ class UnknownCodeTestCase(ConversationTestCase):
         self.interp.mapping["fix"] = {"ops": _req((HOURS, {"hours": ["Daily 8am–7pm"]}))["ops"], "revises": old["code"]}
         new, _r = self.propose("fix")
         other, _r = self.propose("desc")
-        self.assertEqual(self.unknown(f"yes {old['code']}"), [f"{old['code']} was replaced by {new['code']}."])
+        self.assertEqual(self.unknown(f"yes {old['code']}"), ["That one was replaced by a newer one."])
         self.assertEqual(self.commits(), 0)
         self.assertEqual(self.drafts()[-1]["state"], "proposed")
         self.assertNotEqual(other["code"], new["code"])

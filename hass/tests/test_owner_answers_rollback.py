@@ -31,7 +31,7 @@ class RollbackFailedHistoryTests(unittest.TestCase):
         for reason in ("write failed: x", "readback mismatch: y", "", None, "rollback ok"):
             with self.subTest(reason=reason):
                 install = {"state": "failed", "reason": reason}
-                self.assertEqual(answers.history_words({"state": "applied"}, install), "not on the website yet")
+                self.assertEqual(answers.history_words({"state": "applied"}, install), "saved, but it didn't reach the website")
                 self.assertNotIn(PUT_BACK, answers.did_it_work({"state": "applied"}, install, NOW))
 
     def test_other_install_states_with_the_phrase_unchanged(self):

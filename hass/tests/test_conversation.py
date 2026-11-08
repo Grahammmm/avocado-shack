@@ -132,7 +132,7 @@ class FlowTests(ConversationTestCase):
         draft, _reply = self.propose("hours")
         self.now = T0 + timedelta(seconds=600)
         self.assertEqual(self.say("yes"), "no-target")
-        self.assertEqual(self.replies(), [f"{draft['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual((self.drafts()[0]["state"], self.commits()), ("expired", 0))
         self.assertEqual(self.say(f"yes {draft['code']}"), "no-target")
         self.assertIn("expired", self.replies()[0])
@@ -192,7 +192,7 @@ class FlowTests(ConversationTestCase):
         self.assertEqual((first["state"], first["reason"], first["replaced_by"]), ("rejected", "revised", pending["code"]))
         self.assertEqual(pending["state"], "needs-details")
         self.assertEqual(self.say("yes"), "no-target")
-        self.assertEqual(self.replies(), [f"{pending['code']} still needs details: {pending['summary']}"])  # AV1737-05
+        self.assertEqual(self.replies(), [f"I still need an answer from you first. {pending['summary']}"])  # AV1737-05
         self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
         self.assertEqual(self.replies(), [f"{old['code']} was replaced by {pending['code']}."])
         self.assertEqual((self.commits(), self.editor.applies), (0, 0))
@@ -245,8 +245,7 @@ class DurabilityTests(ConversationTestCase):
         row = self.drafts()[0]
         self.assertEqual((row["state"], row["reason"]), ("failed", conversation.INTERRUPTED))
         self.assertEqual((fresh.applies, self.commits()), (0, 0))
-        self.assertEqual(self.replies(), [f"{row['code']} was interrupted and not saved. The website is as it was "
-                                          "before; send the change again to make a new draft."])  # SHOP-4 wording
+        self.assertEqual(self.replies(), ["That change was interrupted and not saved. The website is as it was before. Please send it again."])  # SHOP-4 wording
 
     def test_state_file_is_private(self):
         self.assertEqual((self.repo.state / "conversation.sqlite3").stat().st_mode & 0o777, 0o600)
@@ -276,7 +275,7 @@ class ConfigAndCliTests(ConversationTestCase):
         rows = [json.loads(line) for line in run.stdout.splitlines()]
         self.assertEqual([(r["chat"], r["attachments"]) for r in rows], [(CHAT, [])] * 4)
         self.assertEqual([r["text"] for r in rows], ["Which hours should Saturday have?", conversation.NOT_READ_REPLY,
-                                                     conversation.NOTHING, "Sorry, I can't do that yet."])
+                                                     conversation.NOTHING, "I don't know a product called a sale on social media. Try find and a word from its name."])
         self.assertEqual(self.commits(), 0)
 
 

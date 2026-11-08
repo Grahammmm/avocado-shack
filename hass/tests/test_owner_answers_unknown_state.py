@@ -41,7 +41,7 @@ class UnknownStateTest(unittest.TestCase):
     def test_known_saved_state_with_install_still_done(self):
         change = {"state": "applied", "summary": "New hours"}
         self.assertEqual(answers.did_it_work(change, INSTALLED, NOW),
-                         "Done. New hours is on the website now (checked today 09:05).")
+                         "Done. \ue000New hours\ue001 is on the website now (I checked today at 9:05 am).")
         self.assertEqual(answers.history_words(change, INSTALLED), "on the website")
 
     def test_unknown_states_ask_for_help(self):
@@ -52,7 +52,7 @@ class UnknownStateTest(unittest.TestCase):
                     did = answers.did_it_work(change, install, NOW)
                     words = answers.history_words(change, install)
                     self.assertEqual(did, answers.UNKNOWN_STATE)
-                    self.assertEqual(words, "state unknown - ask for help")
+                    self.assertEqual(words, "I'm not sure where this one stands - please ask Graham")
                     for claim in ("unchanged", "Done", "waiting", "Waiting", "on the website now"):
                         self.assertNotIn(claim, did)
                         self.assertNotIn(claim, words)
@@ -61,7 +61,7 @@ class UnknownStateTest(unittest.TestCase):
         for change in ({}, {"state": None}, {"summary": "New hours"}):
             with self.subTest(change=change):
                 self.assertEqual(answers.did_it_work(change, INSTALLED, NOW),
-                                 "Waiting for your OK - nothing has changed yet.")
+                                 "It's waiting for your yes. Nothing has changed yet.")
                 self.assertEqual(answers.history_words(change, INSTALLED), "waiting for your OK")
 
     def test_known_matches_conversation_transitions(self):

@@ -34,15 +34,14 @@ def listed(pid, name):
 class QuestionTests(unittest.TestCase):
     def test_defaults_keep_todays_text_exactly(self):
         found = {"name": "Lion's Mane", "brand": "Far West Fungi", "category": "mushrooms"}
-        self.assertEqual(question(found), f"The label looks like: Far West Fungi Lion's Mane (mushrooms){TAIL}")
+        self.assertEqual(question(found), "The label looks like \ue000Far West Fungi Lion's Mane (mushrooms)\ue001. Is that right? Either way, tell me which product it is.")
         self.assertEqual(question(found, None, None), question(found))
         self.assertEqual(question(found, {}, []), question(found))
 
     def test_maker_matches_by_the_catalog_fold(self):
         found = {"brand": "STRAUS  family creamery", "category": "dairy"}
         self.assertEqual(question(found, MAKERS, PRODUCTS),
-                         f"The label looks like: STRAUS  family creamery (dairy){TAIL} Maker on file: Straus Family "
-                         "Creamery.")
+                         "The label looks like \ue000STRAUS  family creamery (dairy)\ue001. Is that right? Either way, tell me which product it is. I know the maker as \ue000Straus Family Creamery\ue001.")
         for brand in ("Straus", "Straus Family Creamery Co", "Straus-Family Creamery"):  # equality only, no prefix
             with self.subTest(brand):
                 self.assertEqual(question({"brand": brand}, MAKERS), f"The label looks like: {brand}{TAIL}")
@@ -71,7 +70,7 @@ class QuestionTests(unittest.TestCase):
         self.assertEqual(question(other, None, PRODUCTS), f"The label looks like: Other Farm Lion's Mane{TAIL}")
 
     def test_both_name_and_brand_are_needed_for_a_product_line(self):
-        self.assertEqual(question({"name": "Lion's Mane"}, None, PRODUCTS), f"The label looks like: Lion's Mane{TAIL}")
+        self.assertEqual(question({"name": "Lion's Mane"}, None, PRODUCTS), "The label looks like \ue000Lion's Mane\ue001. Is that right? Either way, tell me which product it is.")
         self.assertEqual(question({"name": "Lion's Mane", "category": "mushrooms"}, MAKERS, PRODUCTS),
                          f"The label looks like: Lion's Mane (mushrooms){TAIL}")
         self.assertEqual(question({"category": "dairy"}, MAKERS, PRODUCTS), f"The label looks like: dairy{TAIL}")
@@ -110,7 +109,7 @@ class LabelMatchConversationTests(unittest.TestCase):
         line = (f"The label looks like: straus BUTTER (dairy){TAIL} Maker on file: Straus."
                 + listed("photo-product-028", "Straus butter"))
         self.assertEqual(result, "photo-draft")
-        self.assertEqual(replies, [f"{PHOTO_QUESTION} Reply with the product and description (draft {SHA[:4]}). {line}"])
+        self.assertEqual(replies, [f"{PHOTO_QUESTION} The label looks like \ue000straus BUTTER (dairy)\ue001. Is that right? Either way, tell me which product it is. I know the maker as \ue000Straus\ue001. \ue000Straus butter\ue001 is already on the website. Reply with that name if you want to update it instead."])
         self.assertEqual((row["state"], row["summary"]), ("needs-details", f"{PHOTO_QUESTION} {line}"))
         self.assertEqual(json.loads(row["ops_json"]), [{"op": "product.set_photo", "args": {"photo": SHA}}])
         self.assertEqual(len(self.transport.calls), 1)

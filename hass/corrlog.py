@@ -38,11 +38,11 @@ KINDS = {
     "corrected": "he corrected me or said no",
 }
 SUGGESTIONS = {  # kind -> the one fix to suggest in the weekly line (plain words, for G)
-    "did-not-understand": "add the unclear phrases to the language tests and teach the reader",
+    "did-not-understand": "collect the phrases that were unclear and teach Hass to understand them",
     "could-not-do": "decide whether to build the thing he keeps asking for",
     "asked-again": "make the question list what is already known before asking",
     "error": "look at the most common cause and fix it at the source",
-    "slow": "check the reader and the phone link for slow spots",
+    "slow": "look for what makes replies slow and fix that first",
     "voice-fallback": "rewrite the wording that was held back",
     "corrected": "read the corrected messages and improve the draft wording",
 }

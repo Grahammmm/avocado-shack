@@ -62,7 +62,7 @@ class PostTests(StoreMixin, ConversationTestCase):
         self.assertTrue(want["draft"], want)
         with mock.patch("socket.socket", side_effect=AssertionError("network")):
             text, files = self.post(f"post {self.ids[0]}")
-        self.assertEqual(text, f"Draft post (not posted):\n{want['caption']}\nPhoto description: {want['alt']}")
+        self.assertEqual(text, f"Here's a post you can copy. I haven't posted anything.\n{want['caption']}\nWhat the photo shows: {want['alt']}")
         self.assertEqual(files, [str(self.site / "post-test" / "real.jpg")])
         self.assertEqual((self.drafts(), self.commits(), self.approvals()), ([], 0, 0))
 
@@ -79,7 +79,7 @@ class PostTests(StoreMixin, ConversationTestCase):
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_no_id_gets_usage_and_two_words_fall_through(self):
-        self.assertEqual(self.post("post"), ("Send post and a product id, e.g. post photo-product-001.", []))
+        self.assertEqual(self.post("post"), ("Which product is the post for? Say it like post Hass avocado.", []))
         self.interp.mapping["post a b"] = {"question": "Which?"}
         self.assertNotEqual(self.say("post a b"), "post")
         self.assertNotIn("Draft post", "\n".join(self.replies()))
@@ -87,7 +87,7 @@ class PostTests(StoreMixin, ConversationTestCase):
     def test_id_is_matched_as_typed(self):
         upper = self.ids[0].upper()
         self.assertNotEqual(upper, self.ids[0])
-        self.assertEqual(self.post(f"post {upper}")[0], f"No product {upper}; send find <words> for ids.")
+        self.assertEqual(self.post(f"post {upper}")[0], f"I don't know a product called {upper}. Try find and a word from its name.")
         self.assertTrue(self.post(f"post {self.ids[0]}")[0].startswith("Draft post (not posted):"))
 
     def test_works_while_paused_and_changes_nothing(self):

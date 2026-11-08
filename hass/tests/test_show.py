@@ -66,7 +66,7 @@ class ShowPreviewTests(ShowTestMixin, H06TestCase):
                     mock.patch.object(self.editor, "prepare", side_effect=AssertionError("prepared")), \
                     mock.patch.object(self.editor, "render_draft", side_effect=AssertionError("rendered")):
                 self.assertEqual(self.show(f"show {draft['code']}"),
-                                 (f"{draft['code']}: the draft details are not available any more.", []))
+                                 ("I can't find the details of that change any more.", []))
         self.assertEqual((self.state(), len(self.previewer.targets)), (before, targets))
 
 
@@ -108,7 +108,7 @@ class ShowTests(ShowTestMixin, ConversationTestCase):
         self.assertEqual(self.say("no"), "rejected")
         self.sent()
         self.assertEqual(self.show(f"show {draft['code']}"),
-                         (f"{draft['code']} was cancelled (owner); nothing changed.", []))
+                         ("That one was cancelled, so nothing changed.", []))
         self.conv.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at)"
                              " VALUES ('beef', 'needs-details', '[]', 'Which day?', ?, ?, ?, ?)",
                              (OWNER, CHAT, T0.isoformat(), (T0 + timedelta(hours=1)).isoformat()))
@@ -118,7 +118,7 @@ class ShowTests(ShowTestMixin, ConversationTestCase):
         for text in ("show", "Show!", "show zz", "show 123", "show me the avocado page", "show a1b2c3d4e5f6a"):
             with self.subTest(text=text):
                 self.assertEqual(self.show(text), (USAGE, []))
-        self.assertEqual(self.show("show abcd"), ("No draft abcd.", []))
+        self.assertEqual(self.show("show abcd"), ("I don't have a change with that code.", []))
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_while_paused_same_reply_and_no_approval_row(self):

@@ -113,8 +113,7 @@ class PhotoOnProductTests(unittest.TestCase):
                     if product["id"] == PID: del product[field]
                 path.write_text(json.dumps(doc, indent=2) + "\n", "utf-8")
                 self.assertEqual(self.say(attachments=1), "photo-draft")
-                self.assertEqual(self.replies(), [f"{PHOTO_QUESTION} Reply with the product and description"
-                                                  f" (draft {self.drafts()[-1]['code']})."])
+                self.assertEqual(self.replies(), [f"{PHOTO_QUESTION}"])
                 self.assertEqual(self.say("no"), "rejected")
                 self.replies()
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected"] * 2)
@@ -124,7 +123,7 @@ class PhotoOnProductTests(unittest.TestCase):
         self.replies()
         self.point(PID)
         self.assertEqual(self.say(attachments=1), "photo-duplicate")
-        self.assertEqual(self.replies(), [f"That photo is already in draft {SHA[:4]}. {PHOTO_QUESTION}"])
+        self.assertEqual(self.replies(), [f"I already have that photo, and I'm waiting on you. {PHOTO_QUESTION}"])
         self.assertEqual(len(self.drafts()), 1)
 
 

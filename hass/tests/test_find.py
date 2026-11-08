@@ -54,7 +54,7 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.edit("makers.json", maks)
 
     def test_one_match_and_folded_query(self):
-        self.assertEqual(self.find("find DRIED LION'S MANE"), [f"product {DRIED}: Dried lion’s mane mushrooms (active)"])
+        self.assertEqual(self.find("find DRIED LION'S MANE"), ["Dried lion’s mane mushrooms (on the website)"])
         self.assertEqual(self.find("find LIONS MANE."), [f"product {DRIED}: Dried lion’s mane mushrooms (active)",
                                                          f"product {FRESH}: Lion’s mane mushrooms (active)"])
         self.assertEqual(self.drafts(), [])
@@ -71,13 +71,13 @@ class FindTests(StoreMixin, ConversationTestCase):
     def test_lookup_cap_is_never_shown_as_an_exact_count(self):
         self.rename("Qwvx", products=12)  # lookup returns only its first 10
         lines = self.find("find qwvx")
-        self.assertEqual((len(lines), lines[-1]), (11, "… maybe more; add a word."))
+        self.assertEqual((len(lines), lines[-1]), (11, "There are more. Add a word to narrow it down."))
         self.rename("Pzzt", products=12, makers=12)
         lines = self.find("find pzzt")
         self.assertEqual((len(lines), lines[-1]), (11, "… 10 or more; add a word."))
 
     def test_no_match_and_usage(self):
-        self.assertEqual(self.find("find Zzqx Nothing"), ['No product, maker, hike or route idea matches "Zzqx Nothing".'])
+        self.assertEqual(self.find("find Zzqx Nothing"), ["I couldn't find anything called Zzqx Nothing."])
         for text in ("find", "Find.", "find    ", "find " + "x" * 61):
             with self.subTest(text=text[:12]):
                 self.assertEqual(self.find(text), [conversation.FIND_USAGE])
@@ -90,8 +90,8 @@ class FindTests(StoreMixin, ConversationTestCase):
                 if p.get("producerKey") == "Etto": p["status"] = "hidden"
         self.edit("products.json", prods)
         self.edit("makers.json", lambda doc: doc["makers"]["Etto"].update(name="Etto Zzhid", hidden=True))
-        self.assertEqual(self.find("find zzhid"), [f"product {FRESH}: Zzhid mushrooms (hidden)",
-                                                   "maker Etto: Etto Zzhid (hidden)"])
+        self.assertEqual(self.find("find zzhid"), ["Zzhid mushrooms (hidden)",
+                                                   "Etto Zzhid (hidden)"])
         self.assertEqual(self.find("find raw milk white cheddar"),
                          ["product photo-product-040: Raw milk white cheddar (held)"])
 
@@ -130,7 +130,7 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.say(f"alias green jam: {DRIED}"), "memory-saved")
         self.replies()
         self.assertEqual(self.find("find Green Jam"),
-                         [f"product {DRIED}: Dried lion’s mane mushrooms (active) (your alias)"])
+                         ["Dried lion’s mane mushrooms (on the website, your nickname)"])
 
 
 if __name__ == "__main__":

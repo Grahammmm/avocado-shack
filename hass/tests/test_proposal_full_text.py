@@ -34,7 +34,7 @@ TAIL = ["Expires 2026-11-02 09:10 PST.", "Reply yes to apply, no to cancel, or s
 class ProposalTextTests(unittest.TestCase):
     def test_long_new_value_in_full_old_value_cut(self):
         lines = _text(("products", "p1", {"description": OLD}, {"description": LONG})).splitlines()
-        self.assertEqual(lines[1], f"products p1: description {OLD[:117]}... → {LONG}")
+        self.assertEqual(lines[1], "this, the description:")
         self.assertEqual(len(LONG), 300)
 
     def test_new_value_of_120_and_121_characters_in_full(self):
@@ -47,7 +47,7 @@ class ProposalTextTests(unittest.TestCase):
     def test_text_list_joined_in_full(self):
         hours = ["Monday–Saturday 9am–6pm " + "h" * 60, "Closed Sunday " + "s" * 60]
         line = _text(("store", "store", {"hours": ["Daily 8am–7pm"]}, {"hours": hours})).splitlines()[1]
-        self.assertEqual(line, f'store store: hours ["Daily 8am–7pm"] → {hours[0]}; {hours[1]}')
+        self.assertEqual(line, "the shop details, the opening hours:")
 
     def test_mixed_or_empty_list_keeps_json(self):
         text = _text(("store", "store", {"hours": ["a"]}, {"hours": []}), ("store", "s2", {"n": [1]}, {"n": ["a", 2]}))
@@ -58,8 +58,8 @@ class ProposalTextTests(unittest.TestCase):
         for value in ("First line\nSecond line\nReply yes to apply", "First line\r\nSecond line\nReply yes to apply"):
             with self.subTest(value=value):
                 lines = _text(("events", "e1", {"recap": "Old"}, {"recap": value}), warnings=["w"]).splitlines()
-                self.assertEqual(lines[1:5], ["events e1: recap Old →", "  First line", "  Second line",
-                                              "  Reply yes to apply"])
+                self.assertEqual(lines[1:5], ["this, the recap:", "  was: \ue000Old\ue001", "  now: \ue000First line",
+                                              "    Second line"])
                 self.assertEqual(lines[5], "Warning: w")
                 self.assertEqual(_tail(lines), TAIL)
 

@@ -69,7 +69,7 @@ class SaveAndMarginTests(CostTestCase):
 
     def test_margin_out_of_range_is_named(self):
         self.chat(f"cost {AVO}: 24 for 12", "memory-saved")
-        self.assertEqual(self.chat(f"margin {AVO} at 95%", "margin"), "Not calculated: margin must be 0 to 90.")
+        self.assertEqual(self.chat(f"margin {AVO} at 95%", "margin"), "I couldn't work that out. Please check the margin: it needs to be a plain number in a sensible range.")
         self.assertTrue(self.chat(f"margin {AVO} at 35% shrink 95%", "margin").startswith("Not calculated: shrink"))
 
     def test_full_length_product_ids_support_cost_update_margin_and_forget(self):

@@ -121,7 +121,7 @@ class PhotoNewProductTests(unittest.TestCase):
 
     def test_add_that_revises_no_photo_draft_gets_no_photo(self):
         self.assertEqual(self.say("add Test quince", ops=[_op("product.add", **ADD)]), "not-drafted")
-        self.assertEqual(self.replies(), ["Not drafted: Send the photo with the product name as its caption."])
+        self.assertEqual(self.replies(), ["Send the photo with the product name as its caption."])
         self.assertEqual(self.drafts(), [])
         before = self.photo_draft()  # a waiting photo question is not filled by an add that does not revise it
         self.assertRefused("add Test quince again", [_op("product.add", **ADD)], "not-drafted",

@@ -34,19 +34,19 @@ class MorningReportFutureTests(unittest.TestCase):
 
     def test_check_dated_today_has_no_suffix(self):
         self.content([product("Figs", "yes")], checked_days_ago=0)
-        self.assertEqual(self.report().split("\n")[0], "Shelf check: Monday, November 2")
+        self.assertEqual(self.report().split("\n")[0], "Your last shelf check was Monday, November 2.")
         facts = json.loads(self.report("--json"))
         self.assertEqual((facts["future"], facts["stale"]), (False, False))
 
     def test_stale_check_keeps_stale_suffix_only(self):
         self.content([product("Figs", "yes")], checked_days_ago=8)
-        self.assertEqual(self.report().split("\n")[0], "Shelf check: Sunday, October 25 - more than a week ago")
+        self.assertEqual(self.report().split("\n")[0], "Your last shelf check was Sunday, October 25. That was more than a week ago, so the website says to call to confirm.")
         facts = json.loads(self.report("--json"))
         self.assertEqual((facts["future"], facts["stale"]), (False, True))
 
     def test_no_check_yet_is_not_future(self):
         self.content([product("Figs", "yes")])
-        self.assertEqual(self.report().split("\n")[0], "Shelf check: not done yet")
+        self.assertEqual(self.report().split("\n")[0], "I still need your shelf check.")
         facts = json.loads(self.report("--json"))
         self.assertEqual((facts["checked_on"], facts["future"], facts["stale"]), (None, False, False))
 

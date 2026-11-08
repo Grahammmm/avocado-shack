@@ -57,7 +57,7 @@ class PostHikeTests(StoreMixin, ConversationTestCase):
         self.assertTrue(self.want["draft"], self.want)
         with mock.patch("socket.socket", side_effect=AssertionError("network")):
             text, files = self.post("post hike h-ok")
-        self.assertEqual((text, files), (f"Draft post (not posted; copy it yourself):\n{self.want['caption']}", []))
+        self.assertEqual((text, files), (f"Here's a post you can copy. I haven't posted anything.\n{self.want['caption']}", []))
         self.assertEqual((self.drafts(), self.commits(), self.approvals()), ([], 0, 0))
 
     def test_refusals_are_plain_words(self):
@@ -86,7 +86,7 @@ class PostHikeTests(StoreMixin, ConversationTestCase):
 
     def test_product_post_still_works(self):
         pid = json.loads((self.repo.wt / "hass" / "content" / "products.json").read_text("utf-8"))["products"][0]["id"]
-        self.assertEqual(self.post(f"post {pid}x")[0], f"No product {pid}x; send find <words> for ids.")
+        self.assertEqual(self.post(f"post {pid}x")[0], f"I don't know a product called {pid}x. Try find and a word from its name.")
 
     def test_unreadable_catalog_gives_the_fixed_line(self):
         self.path.write_text("{not json", "utf-8")

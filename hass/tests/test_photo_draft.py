@@ -137,7 +137,7 @@ class PhotoDraftTests(unittest.TestCase):
         self.say(attachments=1)
         self.replies()
         self.assertEqual(self.say(attachments=1), "photo-duplicate")
-        self.assertEqual(self.replies(), [f"That photo is already in draft {SHA[:4]}. {PHOTO_QUESTION}"])
+        self.assertEqual(self.replies(), [f"I already have that photo, and I'm waiting on you. {PHOTO_QUESTION}"])
         self.say(ANSWER)
         self.replies()
         self.assertEqual(self.say(ANSWER, attachments=1), "photo-duplicate")  # still waiting as a proposal
@@ -165,7 +165,7 @@ class PhotoDraftTests(unittest.TestCase):
         self.replies()
         self.interp.mapping["other"] = {"id": PID, "imageAlt": ALT, "photo": PNG_SHA}
         self.assertEqual(self.say("other"), "photo-mismatch")
-        self.assertEqual(self.replies(), ["That draft is for another photo."])
+        self.assertEqual(self.replies(), ["That answer goes with a different photo, so nothing changed. Which product is this photo for?"])
         [row] = self.drafts()
         self.assertEqual((row["state"], _photo_ids(row)), ("needs-details", {SHA}))
         self.interp.mapping["same"] = {"id": PID, "imageAlt": ALT, "photo": SHA}  # naming its own photo is fine

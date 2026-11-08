@@ -41,7 +41,7 @@ class PhotoWordsTests(unittest.TestCase):
 
     def test_added_photo_keeps_sorted_place_and_alt(self):
         text = conversation.proposal_text("ab12", draft(None, {"id": "p", "image": PHOTO, "imageAlt": "Crate"}), EXPIRES)
-        self.assertEqual(text.splitlines()[2:5], ["  id: p", "  photo: the photo from your message", "  imageAlt: Crate"])
+        self.assertEqual(text.splitlines()[2:5], ["  the photo: the photo from your message", "  the photo description: \ue000Crate\ue001", "I'll hold this for you until Monday, Nov 2 at 9:10 am."])
         self.assertNotIn("  image:", text)
         self.assertNotIn("assets/products/", text)
 

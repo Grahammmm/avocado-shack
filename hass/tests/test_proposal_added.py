@@ -58,11 +58,10 @@ class AddedRecordProposalTests(unittest.TestCase):
     def test_edit_byte_identical(self):
         text = conversation.proposal_text("ab12", _draft(("products", "p1", {"name": "Hass", "price": 2},
                                                           {"name": "Reed", "price": 3})), EXPIRES)
-        self.assertEqual(text, "Draft ab12:\nproducts p1: name Hass → Reed\nproducts p1: price 2 → 3\n"
-                               "Expires 2026-11-02 09:10 PST.\nReply yes to apply, no to cancel, or send a correction.")
+        self.assertEqual(text, "Here's the change I'd make:\n\ue000Hass\ue001, the name: from \ue000Hass\ue001 to \ue000Reed\ue001\n\ue000Hass\ue001, a detail: from \ue0002\ue001 to \ue0003\ue001\nI'll hold this for you until Monday, Nov 2 at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.")
 
     def test_edit_from_empty_dict_is_not_new(self):
-        self.assertEqual(_lines(("products", "p1", {}, {"name": "Reed"}))[1:-2], ["products p1: name (none) → Reed"])
+        self.assertEqual(_lines(("products", "p1", {}, {"name": "Reed"}))[1:-2], ["\ue000Reed\ue001, the name: from \ue000nothing\ue001 to \ue000Reed\ue001"])
 
     def test_removal_unchanged(self):
         record = {"id": "p2", "description": LONG}
@@ -75,7 +74,7 @@ class AddedRecordProposalTests(unittest.TestCase):
         before = copy.deepcopy(draft)
         conversation.proposal_text("ab12", draft, EXPIRES)
         self.assertEqual(draft, before)
-        self.assertEqual(conversation._summary(draft), "products p9: record")
+        self.assertEqual(conversation._summary(draft), "a new product")
 
     def test_multi_record_blocks_in_order_then_warnings_and_expires(self):
         lines = _lines(("hikes", "h2", None, {"title": "Dawn", "bring": ["torch"]}),

@@ -64,18 +64,17 @@ class DidItWorkTests(unittest.TestCase):
         got = answers.did_it_work(row("applied"), {"state": "failed", "reason": "write failed: OSError; rollback "
                                                    "failed: index.html"}, NOW)
         self.assertNotIn("unchanged", got)
-        self.assertEqual(got, "This did not reach the website, and some website files could not be put back. The "
-                              "website files could not be written. Please ask for help before more changes.")
+        self.assertEqual(got, "That didn't reach the website, and some website files could not be put back. I couldn't update the website pages. Please ask Graham before making more changes.")
 
     def test_not_yet_approved_is_never_described_as_applied(self):
         installed = {"state": "installed", "installed_at": "2026-11-02T17:05:00+00:00"}
         for state in ("proposed", "needs-details", None):
             with self.subTest(state=state):
                 self.assertEqual(answers.did_it_work(row(state), installed, NOW),
-                                 "Waiting for your OK - nothing has changed yet.")
+                                 "It's waiting for your yes. Nothing has changed yet.")
                 self.assertEqual(answers.history_words(row(state), installed), "waiting for your OK")
         for state in ("rejected", "expired"):
-            self.assertEqual(answers.did_it_work(row(state), installed, NOW), "That draft was closed, so nothing changed.")
+            self.assertEqual(answers.did_it_work(row(state), installed, NOW), "That change was cancelled, so nothing changed.")
 
     def test_checked_time_today_another_day_and_unreadable(self):
         for at, want in (("2026-11-02T17:05:00+00:00", "today 09:05"), ("2026-11-01T17:05:00+00:00", "Sun Nov 1 09:05"),
@@ -115,7 +114,7 @@ class DidItWorkTests(unittest.TestCase):
                         self.assertNotIn(raw, text)
 
     def test_apply_reply_says_it_is_not_on_the_website(self):  # RETURN 2: the approve/apply reply point
-        self.assertEqual(answers.applied_text("ab12", "store store: hours"), f"Applied ab12: store store: hours\n{NOT_LIVE}")
+        self.assertEqual(answers.applied_text("ab12", "store store: hours"), "Saved: \ue000store store: hours\ue001\nIt's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.")
         self.assertEqual(answers.applied_text("ab12", "store store: hours", checked=True),
                          f"Applied and checked ab12: store store: hours\n{NOT_LIVE}")
 
@@ -147,8 +146,7 @@ class StoppedStateTests(unittest.TestCase):
     def test_not_paused_and_under_way(self):
         self.assertEqual(answers.stopped_state(None, {"waiting": 3}), "Changes are on.")
         self.assertEqual(answers.stopped_state("x", {"waiting": 0, "applying": ["ab12"]}),
-                         f"{STOPPED} No requests are waiting. ab12 had already started: the website is as it was "
-                         f"before, and nothing is copied to it by itself. {STAYS}")
+                         f"Changes are stopped. I won't save anything new until you say 'resume changes'. No requests are waiting. 1 change had already started. The website is as it was before, and nothing is copied to it by itself. {STAYS}")
 
 
 class Killed(BaseException):
@@ -173,7 +171,7 @@ class ConversationAnswerTests(ConversationTestCase):
     def applied(self):
         draft, _reply = self.propose("hours")
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), [f"Applied {draft['code']}: store store: hours\n{NOT_LIVE}"])  # RETURN 2
+        self.assertEqual(self.replies(), ["Saved: the opening hours for Avocado Shack\nIt's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website."])  # RETURN 2
         return draft
 
     def last_line(self, text="did it work?"):
@@ -239,9 +237,7 @@ class ConversationAnswerTests(ConversationTestCase):
         with self.assertRaises(RuntimeError):
             self.say("yes")  # the approval is stored; the apply never finished
         self.assertEqual(self.say("stop changes", pid="s1"), "pause")
-        self.assertEqual(self.replies(), [f"{STOPPED} No requests are waiting. {draft['code']} had already started: "
-                                          f"the website is as it was before, and nothing is copied to it by itself. "
-                                          f"{STAYS}"])
+        self.assertEqual(self.replies(), [f"Changes are stopped. I won't save anything new until you say 'resume changes'. No requests are waiting. 1 change had already started. The website is as it was before, and nothing is copied to it by itself. {STAYS}"])
         self.assertEqual((self.commits(), self.editor.applies), (0, 1))
         self.editor.crash = False
         self.conv = self.open()  # recovery never re-applies; it says what state the website is in
@@ -260,7 +256,7 @@ class ConversationAnswerTests(ConversationTestCase):
                                                                  ("u2", "pending"), ("d1", "done")])
         self.propose("hours")
         self.assertEqual(self.say("stop changes", pid="s1"), "pause")
-        self.assertEqual(self.replies(), [f"{STOPPED} 3 requests are waiting. {STAYS}"])
+        self.assertEqual(self.replies(), [f"Changes are stopped. I won't save anything new until you say 'resume changes'. 3 requests are waiting. {STAYS}"])
         self.assertEqual(self.say("no"), "rejected")
         self.replies()
         self.now = T0 + timedelta(hours=1)
@@ -277,7 +273,7 @@ class ConversationAnswerTests(ConversationTestCase):
         self.propose("hours")
         self.now = T0 + timedelta(hours=1)  # past the 600 s approval window
         self.assertEqual(self.say("stop changes"), "pause")
-        self.assertEqual(self.replies(), [f"{STOPPED} No requests are waiting. {STAYS}"])
+        self.assertEqual(self.replies(), [f"Changes are stopped. I won't save anything new until you say 'resume changes'. No requests are waiting. {STAYS}"])
 
 
 if __name__ == "__main__":

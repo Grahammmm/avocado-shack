@@ -71,7 +71,7 @@ class MorningReportTests(unittest.TestCase):
         self.assertNotIn("more than a week ago", self.report())
         self.content([product("Figs", "yes")], checked_days_ago=8)
         lines = self.report().split("\n")
-        self.assertEqual(lines[0], "Shelf check: Sunday, October 25 - more than a week ago")
+        self.assertEqual(lines[0], "Your last shelf check was Sunday, October 25. That was more than a week ago, so the website says to call to confirm.")
         self.assertEqual(lines[-1], LAST)
         self.assertEqual(json.loads(self.report("--json"))["stale"], True)
 

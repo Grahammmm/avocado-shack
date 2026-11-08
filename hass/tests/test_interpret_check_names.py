@@ -34,7 +34,7 @@ class NameTests(unittest.TestCase):
 
     def test_direction_override_in_op_is_removed(self):
         self.assertEqual(self.question(ask([call("store\u202e.set")])),
-                         f'I could not turn that into a change I know (unknown change type "store.set"). {AGAIN}')
+                         "I can't do that kind of change yet. You can ask Graham.")
 
     def test_zero_width_and_isolates_in_field_are_removed(self):
         field = "co\u200blo\u200dur\ufeff\u2066\u2067\u2068\u2069"
@@ -73,7 +73,7 @@ class NameTests(unittest.TestCase):
     def test_revises_code_with_zero_width_is_shown_clean(self):
         ops = [call("store.set_hours", hours=["9-5"])]
         self.assertEqual(ask(ops, "be\u200bef", {"beef"}),
-                         {"question": "I could not find draft beef waiting; reply with the change again."})
+                         {"question": "I can't find that change any more. Could you tell me the change again?"})
 
     def test_valid_result_is_returned_unchanged(self):
         result = {"ops": [call("hike.update", id="h1", capacity=10, rsvpEnabled=True)], "revises": "beef"}

@@ -38,26 +38,26 @@ class MorningReportNameTests(unittest.TestCase):
     def test_spaced_name_is_collapsed_in_text_and_json(self):
         products = [("Big   Sur  Salt", "limited"), ("Sea\u00a0 Salt", "no")]  # a tab is still refused (shapes tests)
         lines = self.report(products).split("\n")
-        self.assertEqual(lines[2:4], ["Limited: Big Sur Salt", "Sold out: Sea Salt"])
+        self.assertEqual(lines[2:4], ["Running low: Big Sur Salt", "Sold out: Sea Salt"])
         facts = json.loads(self.report(products, "--json"))
         self.assertEqual((facts["limited_names"], facts["sold_out_names"]), (["Big Sur Salt"], ["Sea Salt"]))
 
     def test_shared_name_listed_once_with_its_count(self):
         products = [("Salt", "limited"), ("salt", "limited"), ("Salt ", "limited"), ("Honey", "limited")]
         lines = self.report(products).split("\n")
-        self.assertEqual(lines[1:3], ["Available 0 · Limited 4 · Sold out 0 · Not confirmed 0", "Limited: Honey, Salt (3)"])
+        self.assertEqual(lines[1:3], ["On the shelves: 0 available, 4 running low, 0 sold out, 0 not confirmed.", "Running low: Honey, Salt (3)"])
         self.assertEqual(json.loads(self.report(products, "--json"))["limited_names"], ["Honey", "Salt", "salt", "Salt"])
 
     def test_more_counts_groups_not_products(self):
         names = [f"N{i:02d}" for i in range(12)]
         text = self.report([(n, "limited") for n in names] + [("N03", "limited"), ("n03", "limited")])
-        self.assertEqual(text.split("\n")[2], "Limited: N00, N01, N02, N03 (3), N04, N05, N06, N07, N08, N09, +2 more")
+        self.assertEqual(text.split("\n")[2], "Running low: N00, N01, N02, N03 (3), N04, N05, N06, N07, N08, N09, and 2 more")
         self.assertIn("Limited 14 ·", text)
 
     def test_grouped_per_list_never_across_lists(self):
         lines = self.report([("Salt", "limited"), ("SALT", "limited"), ("Salt", "no"), ("Figs", "yes")]).split("\n")
-        self.assertEqual(lines[1:4], ["Available 1 · Limited 2 · Sold out 1 · Not confirmed 0",
-                                      "Limited: Salt (2)", "Sold out: Salt"])
+        self.assertEqual(lines[1:4], ["On the shelves: 1 available, 2 running low, 1 sold out, 0 not confirmed.",
+                                      "Running low: Salt (2)", "Sold out: Salt"])
 
     def test_no_check_yet_shows_no_names(self):
         lines = self.report([("Salt", "limited"), ("salt", "limited"), ("Big  Sur", "no")], checked=False).split("\n")

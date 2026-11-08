@@ -86,8 +86,7 @@ class VerifyAllRecordsTests(H06TestCase):
         self.assertEqual([t["id"] for t, _n in self.previewer.results], ["p1", "p2"])  # p3 never captured
         self.assertEqual((row["state"], row["screenshot"]), ("applied", None))
         self.assertEqual(row["reason"], "not verified: products p2: simulated miss")
-        self.assertEqual(reply["text"], f"Applied {row['code']}, but the preview check failed: the preview could not be "
-                                        f"checked (products p2).\n{answers.NOT_LIVE}")  # SHOP-4: plain, still names p2
+        self.assertEqual(reply["text"], f"I saved it, but the preview check didn't pass: I couldn't check the preview.\n{answers.NOT_LIVE}")  # SHOP-4: plain, still names p2
         self.assertFalse((self.repo.state / "screenshots" / self.names(row, 3)[2]).exists())
 
     def test_first_failure_names_the_first_record(self):
@@ -134,8 +133,7 @@ class VerifyAllRecordsTests(H06TestCase):
         row, reply = self.run_change([])
         self.assertEqual(self.previewer.results, [])
         self.assertEqual((row["state"], row["reason"]), ("applied", "not verified: no change record"))
-        self.assertEqual(reply["text"], f"Applied {row['code']}, but the preview check failed: the saved change could "
-                                        f"not be found.\n{answers.NOT_LIVE}")
+        self.assertEqual(reply["text"], f"I saved it, but the preview check didn't pass: I couldn't find the saved change.\n{answers.NOT_LIVE}")
 
     def test_health_counts_the_failed_change_once(self):
         self.run_change([hidden("p1"), hidden("p2"), hidden("p3")], fail_at=2)

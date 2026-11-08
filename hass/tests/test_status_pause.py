@@ -72,7 +72,7 @@ class PauseTests(StoreMixin, ConversationTestCase):
 
     def test_pause_edge_paths(self):
         self.assertEqual(self.say("resume"), "resume")
-        self.assertEqual(self.replies(), ["Changes are not paused."])
+        self.assertEqual(self.replies(), ["Changes are already on."])
         self.assertEqual(self.say("Pause changes!"), "pause")
         self.assertEqual(self.replies(), [PAUSED])
         self.now = T0 + timedelta(minutes=5)
@@ -109,7 +109,7 @@ class PauseTests(StoreMixin, ConversationTestCase):
                 self.assertIsNone(conversation.parse_command(text))
         self.assertEqual(self.say("pause the hike"), "unsupported")  # goes to the interpreter
         self.assertEqual(self.replies(), ["Sorry, I can't do that yet."])
-        self.assertEqual(self.status()[0], "Changes: on")
+        self.assertEqual(self.status()[0], "Everything is ready.")
 
 
 class ReadOnlyTests(StoreMixin, ConversationTestCase):
@@ -176,8 +176,8 @@ class StatusTests(StoreMixin, H06TestCase):
         needs = self.drafts()[-1]
         waiting = self.propose("desc")[0]
         self.assertEqual(self.status(), [  # nothing applied yet: no last-change line; no events: no hike line
-            "Changes: on", "Shelf check: not done yet", f"{needs['code']} needs details: {needs['summary']}",
-            f"{waiting['code']} waiting (expires 2026-11-02 09:10 PST): {waiting['summary']}"])
+            "Everything is ready.", "I'm waiting for details: Please provide: hours", "Waiting for your yes: the description for Hass avocado (reply yes f48c)",
+            "I still need your shelf check."])
         self.assertEqual(self.say(f"yes {waiting['code']}"), "approved")
         self.interp.mapping["fill"] = {**_ops((HOURS, {"hours": NEW_HOURS})), "revises": needs["code"]}
         self.assertEqual(self.say("fill"), "proposed")
@@ -283,7 +283,7 @@ class GuestTotalTests(StoreMixin, H06TestCase):
 
     def test_unreadable_content_gives_one_line(self):
         (self.repo.wt / "hass/content/community.json").write_text("{", "utf-8")
-        self.assertEqual(self.status()[-1], "Hikes: unavailable")
+        self.assertEqual(self.status()[-1], "I can't read the hike list right now.")
         (self.repo.wt / "hass/content/community.json").write_text(json.dumps({"events": [{"status": "scheduled"}]}))
         self.assertEqual(self.status()[-1], "Hikes: unavailable")
 

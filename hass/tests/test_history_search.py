@@ -64,7 +64,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
 
     def test_only_summary_is_searched(self):
         self.row("zebra1", "applied", "Open at nine")
-        self.assertEqual(self.search("history zebra1"), ['No approved changes match "zebra1".'])
+        self.assertEqual(self.search("history zebra1"), ["I found no changes that match zebra1."])
         self.assertEqual(self.search("history applied"), ['No approved changes match "applied".'])
         self.assertEqual(self.search("history website"), ['No approved changes match "website".'])  # location text
 
@@ -73,7 +73,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
         for i in range(12): self.row(f"n{i:02}", "verified", f"needle {i}")
         for i in range(30): self.row(f"x{i:02}", "verified", f"other {i}")
         got = self.search("history needle")
-        self.assertEqual(got[0], "Matching changes:")
+        self.assertEqual(got[0], "These match:")
         self.assertEqual([ln.split()[0] for ln in got[1:]], [f"n{i:02}" for i in range(11, 1, -1)])
         self.assertEqual([ln.split()[0] for ln in self.search("history OLD")[1:]], ["old1"])  # older than five
         self.assertEqual(len(self.search("history other")), 1 + 10)
@@ -92,7 +92,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
 
     def test_query_bounds_usage_and_no_match(self):
         self.row("a1", "applied", "x" * 60)
-        self.assertEqual(self.search("history " + "x" * 60)[0], "Matching changes:")
+        self.assertEqual(self.search("history " + "x" * 60)[0], "These match:")
         self.assertEqual(self.search("history x")[0], "Matching changes:")
         self.assertEqual(self.search("history " + "x" * 61), [USAGE])
         self.assertEqual(self.search("history !!!"), [USAGE])
@@ -102,7 +102,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
         self.assertEqual(self.search("history Nothing Here."), ['No approved changes match "Nothing Here".'])
 
     def test_empty_history_says_no_match(self):
-        self.assertEqual(self.search("history hours"), ['No approved changes match "hours".'])
+        self.assertEqual(self.search("history hours"), ["I found no changes that match hours."])
 
     def test_search_is_read_only_paused_and_capped(self):
         self.row("a1", "applied", "hours change")
@@ -131,7 +131,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
 
     def test_bare_history_unchanged_and_code_can_draft_undo(self):
         a = self.apply("desc")
-        self.assertEqual(self.search("history " + a["summary"].split()[0])[0], "Matching changes:")
+        self.assertEqual(self.search("history " + a["summary"].split()[0])[0], "These match:")
         self.assertEqual(self.calls, [])
         self.assertEqual(self.say(f"undo {a['code']}"), "proposed")  # undo only proposes
         self.assertEqual([d["state"] for d in self.drafts()][-1], "proposed")

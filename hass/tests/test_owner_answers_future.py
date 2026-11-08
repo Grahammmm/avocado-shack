@@ -87,7 +87,7 @@ class FutureInstallTimeTests(unittest.TestCase):
         future = {"state": "installed", "installed_at": "2026-11-03T08:00:00-08:00"}
         self.assertEqual(answers.did_it_work({"state": "reverted"}, future, NOW), "That change was undone.")
         self.assertEqual(answers.did_it_work({"state": "proposed"}, future, NOW),
-                         "Waiting for your OK - nothing has changed yet.")
+                         "It's waiting for your yes. Nothing has changed yet.")
 
 
 if __name__ == "__main__":

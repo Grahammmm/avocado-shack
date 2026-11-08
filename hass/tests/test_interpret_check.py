@@ -37,7 +37,7 @@ class CheckTests(unittest.TestCase):
 
     def test_unknown_op_and_unknown_argument_are_named(self):
         self.assertEqual(ask([call("product.colour", id="p1")]), {"question": (
-            f'I could not turn that into a change I know (unknown change type "product.colour"). {AGAIN}')})
+            "I can't do that kind of change yet. You can ask Graham.")})
         self.assertAsks(ask([call("product.edit", id="p1", colour="green")]), '"product.edit.colour"', AGAIN)
         # a later call is checked too: the first problem wins, in call order
         self.assertAsks(ask([call("product.edit", id="p1"), call("hike.nope")]), '"hike.nope"')
@@ -59,13 +59,13 @@ class CheckTests(unittest.TestCase):
 
     def test_revises_must_name_a_waiting_draft(self):
         ops = [call("store.set_hours", hours=["9-5"])]
-        self.assertEqual(ask(ops, "beef"), {"question": "I could not find draft beef waiting; reply with the change again."})
+        self.assertEqual(ask(ops, "beef"), {"question": "I can't find that change any more. Could you tell me the change again?"})
         self.assertAsks(ask(ops, "beef", {"cafe", "beefcafe"}), "draft beef waiting")
         self.assertIn("ops", ask(ops, "beef", {"beef"}))
         self.assertIn("ops", ask(ops, None, ()))
 
     def test_empty_ops_and_bad_call_shapes(self):
-        self.assertEqual(ask([]), {"question": "I did not find a change in that message. What would you like to change?"})
+        self.assertEqual(ask([]), {"question": "I couldn't find a change in that message. What would you like to change?"})
         for bad in ({"op": "product.edit", "args": {"id": "p1"}, "why": "owner asked"}, {"op": "product.edit"},
                     {"op": 3, "args": {}}, {"op": "product.edit", "args": ["id"]}, "product.edit", None):
             with self.subTest(bad=bad):
@@ -128,7 +128,7 @@ class FixtureConversationTests(ConversationTestCase):
         [pending] = self.drafts()
         self.interp.mapping["stale"] = {**_ops((HOURS, {"hours": ["Daily 8am–7pm"]})), "revises": "beef"}
         self.assertEqual(self.say("stale"), "question")
-        self.assertEqual(self.replies(), ["I could not find draft beef waiting; reply with the change again."])
+        self.assertEqual(self.replies(), ["I can't find that change any more. Could you tell me the change again?"])
         self.interp.mapping["done"] = {**_ops((HOURS, {"hours": ["Daily 8am–7pm"]})), "revises": pending["code"]}
         self.assertEqual(self.say("done"), "proposed")
         self.replies()

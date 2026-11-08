@@ -20,7 +20,7 @@ class FailingReader(PhotoInterpreter):
         if self.down:
             self.texts.append(text)
             self.last_error = "http-503"
-            return {"unsupported": "I could not work that out right now, so nothing was drafted."}
+            return {"unsupported": "I couldn't work that out just now, so nothing was changed."}
         self.last_error = None
         return super().interpret(text, pending, **kw)
 
