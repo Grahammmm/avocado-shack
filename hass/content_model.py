@@ -453,7 +453,7 @@ def iso_day(value) -> date | None:
         return None
 
 
-SPECIAL_LINK_RE = re.compile(r"https?:|www\.|\b[a-z0-9-]+\.(?:com|net|org|io|co|us|info|biz|app|shop|store)\b|//|\bdot\s?com\b", re.I)
+SPECIAL_LINK_RE = re.compile(r"https?:|www\.|\b[a-z0-9-]+\.[a-z]{2,24}\b|//|\bdot\s?com\b", re.I)
 SPECIAL_EMAIL_RE = re.compile(r"@|\b\w+\s+(?:at|\(at\))\s+\w+\s+dot\s+\w+", re.I)
 SPECIAL_PHONE_RE = re.compile(r"\d[\d\s().+-]{8,}\d")  # ten or more digits with only separators between: a phone number
 SPECIAL_FORBIDDEN = tuple(c for c in FORBIDDEN_TEXT if c != "$") + ("&lt", "&gt", "&#", "&amp")

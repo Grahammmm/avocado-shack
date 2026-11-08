@@ -64,7 +64,7 @@ class ModelTests(unittest.TestCase):
 
     def test_text_rules_no_html_links_contact_or_title_price(self):
         for field, bad in [("title", "<b>Sale</b>"), ("deal", "2 for <i>5</i>"), ("deal", "see www.example.com"),
-                           ("deal", "visit shop.com now"), ("deal", "http://x.org"), ("deal", "mail me@shack.example"),
+                           ("deal", "visit shop.com now"), ("deal", "Visit example.dev for details"), ("title", "Visit example.edu for details"), ("deal", "http://x.org"), ("deal", "mail me@shack.example"),
                            ("deal", "call 805 555 0123"), ("deal", "call 8055550123"), ("title", "Eggs $3"),
                            ("title", "!!"), ("deal", "a" * 61), ("title", "a" * 61), ("title", "Two\nlines"),
                            ("deal", "&lt;b&gt;"), ("title", " padded"), ("deal", "x {{y}} z")]:
