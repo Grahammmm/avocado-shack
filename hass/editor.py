@@ -15,7 +15,7 @@ from types import MappingProxyType
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import migration_check, sitegen  # noqa: E402
+from hass import migration_check, sitegen, template_compat  # noqa: E402
 from hass.content_model import IMAGE_RE, REPO_ROOT, ContentError, load_and_validate, validate  # noqa: E402
 from hass.field_words import field_list  # noqa: E402
 from hass.ops import (  # noqa: E402
@@ -32,12 +32,14 @@ CHANGE_ID_RE = re.compile(r"chg-[0-9a-f]{12}")
 
 class UnsafeState(Exception): """The state dir is missing, shared, foreign-owned or inside a checkout (CLI exit 2)."""
 
-def content_revision(root) -> str:
-    digest = hashlib.sha256()
+def content_revision(root, *, previous=False) -> str:
+    """previous=True: the revision as it was before a recorded template edit (hass.template_compat), or "" if none applies."""
+    digest, used = hashlib.sha256(), False
     for rel in REVISION_PATHS:
         data = (Path(root) / rel).read_bytes()
+        if previous and (old := template_compat.previous_bytes(rel, data)) is not None: data, used = old, True
         digest.update(rel.encode() + b"\0" + str(len(data)).encode() + b"\0" + data)
-    return "sha256:" + digest.hexdigest()
+    return "sha256:" + digest.hexdigest() if used or not previous else ""
 
 def _now(now=None) -> str:
     return (now if now is not None else datetime.now(timezone.utc)).isoformat()
@@ -311,7 +313,7 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
     if rec.get("state") == "applied": return {"result": "already-applied", **rec}
     if rec: return {**rec, "result": "failed", "problems": rec["problems"] + ["prepare again and get a new approval"]}
     if problems := worktree_problems(wt): return {"result": "refused", "problems": problems}
-    if (rev := content_revision(wt)) != draft["base"]: return {"result": "stale", "base": draft["base"], "current": rev}
+    if (rev := content_revision(wt)) != draft["base"] and draft["base"] != content_revision(wt, previous=True): return {"result": "stale", "base": draft["base"], "current": rev}
     try:
         out = _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:

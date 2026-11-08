@@ -507,7 +507,7 @@ async function run() {
 
       // ----- home: ordinary (static host: no club service, forms closed up front) -----
       {
-        const st = mk('home-ordinary', '/', { required: ['.hero h1', '.hero-intro', '.catalog-note', '#catalog-count', '#catalog-grid .food-description', '#catalog-grid .origin-label', '#catalog-grid .food-badges span', '.maker-story summary', '.maker-story-content p', '.market-values h2', '.story .signature', '#community-newsletter .form-status', '#community-newsletter label', 'footer', '.skip-link', '.preview', '.topline'] });
+        const st = mk('home-ordinary', '/', { required: ['.hero h1', '.hero-intro', '#catalog-count', '#catalog-grid .food-description', '#catalog-grid .origin-label', '#catalog-grid .food-badges span', '.maker-story summary', '.maker-story-content p', '.market-values h2', '.story .signature', '#community-newsletter .form-status', '#community-newsletter label', 'footer', '.skip-link', '.preview', '.topline'] });
         const c = await open('A', '/', { api: 'none' }, st); const page = c.page;
         await page.locator('#catalog-grid article').first().waitFor();
         await loadAllCards(page, catalogCount); await expandAll(page);

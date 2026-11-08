@@ -21,8 +21,8 @@ import time
 import unittest
 from pathlib import Path
 
-from hass import editor, migration_check
-from hass.content_model import REPO_ROOT, SITE_DIR
+from hass import editor, migration_check, sitegen, template_compat
+from hass.content_model import REPO_ROOT, SITE_DIR, load_and_validate
 from hass.tests import fixture_ops
 
 HOURS, DESC = "test.set_store_hours", "test.set_product_description"
@@ -175,6 +175,42 @@ class ApplyTests(EditorTestCase):
         self.assertEqual(git(repo.wt, "rev-list", "--count", f"{start}..HEAD"), "1")
         self.assertEqual(migration_check.run_checks(repo.wt)[0], [])
         self.assertEqual(repo.status(), "")
+
+
+class TemplateCompatTests(EditorTestCase):
+    """AVO-SHOP-CLEAN-1: a content draft prepared before the shop-notice template edit still applies."""
+
+    def _install_template(self, repo, data):
+        """Commit the template `data` and the site files generated from it, as a template-edit commit would."""
+        (repo.wt / "hass/templates/index.html").write_bytes(data)
+        content = load_and_validate(repo.wt / "hass/content", repo.wt / "storefront-mockup")
+        sitegen.write_files(sitegen.render(content, repo.wt / "hass/templates"), repo.wt)
+        git(repo.wt, "add", "-A")
+        git(repo.wt, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "template")
+
+    def test_draft_prepared_before_template_edit_still_applies(self):
+        repo = self.repo()
+        current = (repo.wt / "hass/templates/index.html").read_bytes()
+        previous = template_compat.previous_bytes("hass/templates/index.html", current)
+        self.assertIsNotNone(previous, "the shipped template must match the recorded edit")
+        self._install_template(repo, previous)
+        draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
+        self._install_template(repo, current)
+        self.assertNotEqual(editor.content_revision(repo.wt), draft["base"])
+        self.assertEqual(editor.content_revision(repo.wt, previous=True), draft["base"])
+        self.assertEqual(repo.apply(draft)["result"], "applied")
+        self.assertEqual(repo.status(), "")
+
+    def test_draft_still_stale_when_template_differs_from_the_recorded_edit(self):
+        repo = self.repo()
+        current = (repo.wt / "hass/templates/index.html").read_bytes()
+        previous = template_compat.previous_bytes("hass/templates/index.html", current)
+        self._install_template(repo, previous)
+        draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
+        self._install_template(repo, current + b"<!-- another edit -->\n")
+        head = repo.head()
+        self.assertEqual(repo.apply(draft)["result"], "stale")
+        self.assertEqual((repo.head(), repo.status()), (head, ""))
 
 
 class FailClosedTests(EditorTestCase):
