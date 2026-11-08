@@ -213,6 +213,9 @@ def _product_restore(content, args, ctx):
     return _set_status(content, args, ctx, expect="hidden", new="active", state_error=lambda s: f"is {s}, not hidden")
 
 
+NOT_CHECKED_TODAY = "the selection was not checked today; check the selection first"  # HASS-SHELFCHECK-FLOW-1: Conversation asks the owner instead
+
+
 def _product_set_availability(content, args, ctx):
     """SHOP-1: mark one active product yes|limited|no. Shown on its card only while the selection check is recent."""
     product = _product(content, args["id"])
@@ -223,7 +226,7 @@ def _product_set_availability(content, args, ctx):
     if product.get("available") == args["available"]:
         return Refused(f"{product['id']} is already marked available={args['available']}; nothing to change")
     if (day := checked_on(content.store)) != shop_today(ctx.now):  # AV1102-01: only onto today's shelf check
-        return Refused("the selection was not checked today; check the selection first")
+        return Refused(NOT_CHECKED_TODAY)
     before = copy.deepcopy(product)
     product["available"] = args["available"]
     product["available_on"] = day.isoformat()
