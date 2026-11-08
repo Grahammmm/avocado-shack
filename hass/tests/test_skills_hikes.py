@@ -258,6 +258,19 @@ class Rules(unittest.TestCase):
         self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 10},
                                   texts=["sign up, Dec 12 10am, 12 spots"])[0], hikes.R_SPOTS_NOT_SAID)
 
+    def test_a_limit_must_be_a_guest_capacity_he_affirmed(self):
+        said = "Add a hike Saturday, sign up please, bring only 2 liters of water"
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 2}, texts=[said])[0], hikes.R_SPOTS_NOT_SAID)
+        said = "Add a hike Saturday, sign up please, not 12 spots, 20 spots"
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 12}, texts=[said])[0], hikes.R_SPOTS_NOT_SAID)
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 20}, texts=[said]))
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 12}, texts=["sign up, no more than 12"]))
+
+    def test_the_latest_sign_up_instruction_wins(self):
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True}, texts=["sign up please", "actually no sign ups"])[0],
+                         hikes.R_SIGNUP_NOT_SAID)
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": True}, texts=["no sign ups", "actually, sign up please"]))
+
     def test_a_plan_cannot_draft_what_a_rule_refuses(self):
         for plan, slots, event in ((hikes.plan_add, {"title": "Cass Hill", "day": "2026-11-21", "clock": "09:00", "meeting_point": "x"}, "already a hike called"),
                                    (hikes.plan_edit, {"hike": CALLED["id"], "bring": "hat"}, "cancelled"),

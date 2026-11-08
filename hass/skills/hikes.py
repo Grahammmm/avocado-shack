@@ -252,7 +252,7 @@ def rule_recap_state(slots, texts, ctx):
 def rule_no_invention(slots, texts, ctx):
     """The E2E-HIKE-1 finding: the model added sign-up and a guest limit nobody asked for. Sign-up needs the owner's
     sign-up words; a guest limit needs the number in his words. Skipped when the owner's words are not known."""
-    said = " ".join(t for t in (texts or ()) if isinstance(t, str))
+    said = "\n".join(t for t in (texts or ()) if isinstance(t, str))
     if not said.strip():
         return None
     if slots.get("signup") is True and not _said_signup(said):
@@ -278,7 +278,10 @@ _NUM_WORD = re.compile(r"\b(?:(" + "|".join(_TENS) + r")[\s-]+(" + "|".join(_UNI
 _COUNTED = r"(?:spots?|spaces?|seats?|places?|people|persons?|guests?|hikers?|folks|attendees|participants|rsvps?|sign-?ups?)"
 _LIMIT_AFTER = re.compile(r"\b(\d+)\s+(?:(?:more|open|available|total|extra)\s+)?" + _COUNTED + r"\b", re.I)
 _LIMIT_BEFORE = re.compile(r"\b(?:max(?:imum)?|limit(?:ed)?(?:\s+to|\s+of)?|capacity(?:\s+of)?|cap(?:ped)?(?:\s+at|\s+of)?|"
-                           r"up\s+to|at\s+most|no\s+more\s+than|only)\s*(?:of\s+|to\s+)?(\d+)\b", re.I)
+                           r"up\s+to|at\s+most|no\s+more\s+than)\s*(?:of\s+|to\s+)?(\d+)\b", re.I)
+_UNIT_AFTER = re.compile(r"^\s*(?:liters?|litres?|l|ml|miles?|mi|km|kms|kilometers?|meters?|m|feet|ft|hours?|hrs?|"
+                         r"minutes?|mins?|lbs?|kg|oz|degrees?|dollars?|bucks|layers?|bottles?|snacks?|sandwich\w*)\b", re.I)
+_REPLACED = re.compile(r"\b(?:not|instead\s+of|rather\s+than|other\s+than|no\s+longer)\s+(?:the\s+)?\d+\b", re.I)
 
 
 def _clauses(said):
@@ -286,13 +289,15 @@ def _clauses(said):
 
 
 def _said_signup(said):
-    """True only when a clause of the owner's words has a sign-up word and does not negate it ("no sign up",
-    "don't let people sign up" and "without rsvps" do not turn sign-up on); "no limit on sign ups" still counts."""
+    """The owner's latest sign-up instruction wins: on only when the last clause that mentions sign-up does not negate
+    it ("no sign up", "don't let people sign up", "without rsvps" are off; a later "actually no sign ups" reverses an
+    earlier "sign up please"); "no limit on sign ups" still counts as on."""
+    state = False
     for clause in _clauses(said):
         clause = _NO_LIMIT.sub(" ", clause)
-        if _SIGNUP_WORDS.search(clause) and not _NEGATED.search(clause):
-            return True
-    return False
+        if _SIGNUP_WORDS.search(clause):
+            state = not _NEGATED.search(clause)
+    return state
 
 
 def _words_to_digits(text):
@@ -305,12 +310,18 @@ def _words_to_digits(text):
 
 def _said_limits(said):
     """The guest limits the owner's words state: a number right next to a counted noun ("12 spots", "twelve people") or
-    a limit word ("max 12", "up to 20"). A date, a clock time or a year in the same words never counts."""
+    a limit word ("max 12", "up to 20"), in an affirmative clause. A date, a clock time, a year, a quantity of something
+    else ("only 2 liters of water") or a rejected number ("not 12 spots, 20 spots") never counts."""
     found = set()
     for clause in _clauses(said):
         text = _words_to_digits(_DATE_TIME.sub(" ", clause.lower()))
+        text = _REPLACED.sub(" ", text)
+        if _NEGATED.search(re.sub(r"\bno\s+more\s+than\b", "at most", _NO_LIMIT.sub(" ", text))):
+            continue
         for pat in (_LIMIT_AFTER, _LIMIT_BEFORE):
-            found.update(int(m.group(1)) for m in pat.finditer(text))
+            for m in pat.finditer(text):
+                if not _UNIT_AFTER.match(text[m.end():]):
+                    found.add(int(m.group(1)))
     return found
 
 
