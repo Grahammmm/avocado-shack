@@ -67,6 +67,7 @@ class CorrLog:
 
     def __init__(self, state, clock):
         self.dir, self.clock = Path(state) / FOLDER, clock
+        self._pruned_on = None  # the day this instance last pruned: old files go without anyone running prune
 
     def record(self, kind, reason, *, msg=None, reply=None, excerpt=None, seconds=None) -> bool:
         """Add one row. True when it was written. Never raises."""
@@ -80,6 +81,9 @@ class CorrLog:
                    "excerpt": _clean(excerpt)}
             if isinstance(seconds, (int, float)) and not isinstance(seconds, bool): row["seconds"] = round(float(seconds), 1)
             self.dir.mkdir(mode=0o700, exist_ok=True)
+            if self._pruned_on != now.date():  # at most one directory scan a day; prune never raises
+                self._pruned_on = now.date()
+                self.prune()
             path = self.dir / f"{now:%Y-%m-%d}.jsonl"
             fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
             try: os.write(fd, (json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))

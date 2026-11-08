@@ -75,7 +75,7 @@ Rows 1 to 9 are the operator's live findings of 2026-11-08, in order. The rest a
 
 ## The correspondence log
 
-`<state>/correspondence/<UTC day>.jsonl`, in the Hass state folder only, append-only (one `O_APPEND` write per row), kept 90 days (whole day files older than that are deleted, never rewritten). One row per problem moment: time, kind (did-not-understand, could-not-do, asked-again, error, slow over 20 s, voice-fallback, corrected), a short neutral reason code, the message ids (12 hex characters, one way), and at most 80 characters of what Mike wrote with numbers, addresses and links blanked. Writing never raises: a full disk means no row, never a lost reply. `hass/tests/test_corrlog.py` (48 tests) covers all of this, plus "slow" rows from `Outbox.flush`, the "said no / that's wrong" rows, and that the state backup does not take the folder (`statebackup.py` skips it and still refuses unknown entries).
+`<state>/correspondence/<UTC day>.jsonl`, in the Hass state folder only, append-only (one `O_APPEND` write per row), kept 90 days (whole day files older than that are deleted, never rewritten; the first row written each day, in the running service, deletes them, so nobody has to run `prune`). One row per problem moment: time, kind (did-not-understand, could-not-do, asked-again, error, slow over 20 s, voice-fallback, corrected), a short neutral reason code, the message ids (12 hex characters, one way), and at most 80 characters of what Mike wrote with numbers, addresses and links blanked. Writing never raises: a full disk means no row, never a lost reply. `hass/tests/test_corrlog.py` (48 tests) covers all of this, plus "slow" rows from `Outbox.flush`, the "said no / that's wrong" rows, and that the state backup does not take the folder (`statebackup.py` skips it and still refuses unknown entries).
 
 For G only: `problems` lists the last ten rows; `weekly` gives the three most common problems with one suggested fix each; `python3 hass/morning_report.py --for-g STATE` adds the weekly line under the morning report. Mike's morning report never has it.
 
@@ -109,3 +109,9 @@ For G only: `problems` lists the last ten rows; `weekly` gives the three most co
 ## Verification
 
 See the PR for the exact head and the CI run. Local: every hass test module run separately, plus the repo's own `python3 hass/tests/ci_shards.py plan --event pull_request --base origin/main --shards 4` (this PR touches shared hass modules, so CI runs the full suite).
+
+## Review round 1 fixes (codex-reviewer, head e3f982b)
+
+1. Retention is automatic: `CorrLog.record` prunes once per UTC day (`test_writing_a_row_deletes_old_day_files_without_anyone_running_prune`).
+2. Approval commands of 8, 10 and 12 characters: every place that tells Mike what to type (`status` waiting lines, the choices list, near-approval and paused/early/cancelled-earlier replies, the which-one-do-you-mean list) now marks `yes <code>` / `no <code>` as typed commands with `q()`; `voice.py` is unchanged (`LiveShowAndLongCodes.test_eight_ten_and_twelve_character_codes_survive_status_okay_and_choices`).
+3. `show` on a live site: the re-shown proposal gets the live-site setting and the stored ops, so it keeps the coded `yes <code>` / `no <code>` wording, the live-policy refusal and the full before values (`test_show_repeats_the_coded_live_instructions`).

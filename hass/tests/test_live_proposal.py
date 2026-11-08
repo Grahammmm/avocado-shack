@@ -136,3 +136,37 @@ class LiveProposalTests(ConversationTestCase):
         self.assertEqual(answers.applied_text("a1b2", "headline"), "Saved: \ue000headline\ue001\n" + answers.NOT_LIVE)
         self.assertEqual(answers.recovered_text("a1b2"),
             "That change was interrupted and not saved. The website is as it was before. Please send it again.")
+
+
+class LiveShowAndLongCodes(ConversationTestCase):
+    def setUp(self):
+        super().setUp()
+        self.conv.db.close()
+        self.set_settings({**SETTINGS, "liveSite": SITE, "approvalNeedsCode": True})
+        self.conv = self.open()
+        self.addCleanup(lambda: self.conv.db.close())
+
+    def test_show_repeats_the_coded_live_instructions(self):
+        row, _ = self.propose("hours")
+        self.say("show")
+        [reply] = self.replies()
+        self.assertIn(f"Reply yes {row['code']} to put it on the website", voice.plain(reply))
+        self.assertIn(f"no {row['code']} to cancel", voice.plain(reply))
+        self.assertNotIn("Reply yes to save it", voice.plain(reply))
+
+    def test_eight_ten_and_twelve_character_codes_survive_status_okay_and_choices(self):
+        for code in ("abc12345", "abc1234567", "abc123456789"):
+            with self.subTest(code=code):
+                self.conv.db.execute("UPDATE drafts SET code = ? WHERE state = 'proposed'", (code,)) if self.drafts() else None
+                if not self.drafts():
+                    self.propose("hours")
+                    self.conv.db.execute("UPDATE drafts SET code = ? WHERE state = 'proposed'", (code,))
+                else:
+                    self.conv.db.execute("UPDATE drafts SET code = ?", (code,))
+                self.say("status")
+                [status] = self.replies()
+                self.assertIn(f"reply yes {code}", voice.plain(status))
+                self.say("okay")
+                [near] = self.replies()
+                self.assertIn(f"yes {code}", voice.plain(near))
+                self.assertNotEqual(voice.plain(near), voice.SAFE_LINE)

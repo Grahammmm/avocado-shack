@@ -852,7 +852,7 @@ class Conversation:
         if keyword is None and (near := "" if social == "near" else parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
             codes = [r["code"] for r in self._drafts("state = 'proposed'")
                      if self._expiry(r) > now and near in ("", r["code"])]
-            self._reply(f"I haven't changed anything yet. To go ahead, reply yes {codes[0]}." if len(codes) == 1 else
+            self._reply(f"I haven't changed anything yet. To go ahead, reply {q('yes ' + codes[0])}." if len(codes) == 1 else
                         "I haven't changed anything yet. Which one do you want?\n" + self._choices(codes) if codes else NOTHING, long_ok=True)
             self._record(msg, "near-approval")
             return "near-approval", None
@@ -860,7 +860,7 @@ class Conversation:
             live = [r["code"] for r in self._drafts("state = 'proposed'") if self._expiry(r) > now]
             if phone[0] is not None or phone[1] in live:
                 one = phone[1] if phone[1] in live else live[0] if len(live) == 1 else None
-                self._reply(f"I haven't changed anything yet. To go ahead, reply yes {one}, or no {one} to cancel." if one else
+                self._reply(f"I haven't changed anything yet. To go ahead, reply {q('yes ' + one)}, or {q('no ' + one)} to cancel." if one else
                             "I haven't changed anything yet. Which one do you mean?\n" + self._choices(live) if live else NOTHING, long_ok=True)
                 self._record(msg, "near-approval")
                 return "near-approval", None
@@ -900,15 +900,15 @@ class Conversation:
             self._record(msg, "rejected")
             return "rejected", None
         if self._paused():  # H17: no approval row, no state move; the draft keeps its expiry
-            self._reply(f"Changes are paused, so I haven't saved that. Say {q('resume changes')}, then reply yes {target['code']}.")
+            self._reply(f"Changes are paused, so I haven't saved that. Say {q('resume changes')}, then reply {q('yes ' + target['code'])}.")
             self._record(msg, "paused")
             return "paused", None
         if cutoff != now and cutoff < self._proposed_at(target):  # AVB-03 (H05): a yes sent before the draft existed
-            self._reply(f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply yes {target['code']}.")
+            self._reply(f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply {q('yes ' + target['code'])}.")
             self._record(msg, "no-target")
             return "no-target", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
-            self._reply(f"That is the same change that was cancelled earlier, so I want to be sure. Reply yes {target['code']} if you still want it.")
+            self._reply(f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it.")
             self._record(msg, "no-target")
             return "no-target", None
         if self.settings.get("liveSite") and (reasons := live_policy.check(self.editor.show(target["change_id"]).get("draft"))):
@@ -926,7 +926,7 @@ class Conversation:
     def _choices(self, codes) -> str:
         """One line per waiting change: the words to reply with, then what the change is."""
         rows = [self._by_code(c, ("proposed",)) for c in codes]
-        return "\n".join(f"yes {c}: " + (q(r["summary"]) if r else "") for c, r in zip(codes, rows))
+        return "\n".join(q(f"yes {c}") + ": " + (q(r["summary"]) if r else "") for c, r in zip(codes, rows))
 
     def _for_g(self, msg):
         """HASS-VOICE-1: `problems` (the last ten problem moments) and `weekly` (the week's three most common) from G's own number
@@ -942,12 +942,12 @@ class Conversation:
     def _no_target(self, code, targets, expired) -> str:
         if targets:
             return "\n".join(["Which one do you mean? Reply yes or no and its code."] + [
-                (f"yes {r['code']}: " + q(r["summary"])) if r["state"] == "proposed" else "I'm waiting for details: " + r["summary"]
+                (q(f"yes {r['code']}") + ": " + q(r["summary"])) if r["state"] == "proposed" else "I'm waiting for details: " + r["summary"]
                 for r in targets])
         if code and self._by_code(code) is None:  # AV2152-01 (H05/H17): a code that matches no draft; never guessed
             waiting = self._drafts("state = 'proposed'")
             return "\n".join(["I don't have a change with that code."] + (["These are waiting for you:"] + [
-                f"yes {r['code']}: " + q(r["summary"]) for r in waiting] if waiting else []))
+                q(f"yes {r['code']}") + ": " + q(r["summary"]) for r in waiting] if waiting else []))
         named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired]
         return "\n".join(self._state_text(r) for r in named if r is not None) or NOTHING
 
@@ -1774,9 +1774,9 @@ class Conversation:
         try:
             out = self.editor.show(row["change_id"])
             rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
-            draft = {"records": rec["records"], "warnings": rec.get("warnings")}
+            draft = {"records": rec["records"], "warnings": rec.get("warnings"), "ops": rec.get("ops") or json.loads(row["ops_json"])}  # ops: the live check reads them
             if state == "proposed":
-                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), now=now)
+                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=now)
                 shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
             else:
                 text, shot = "\n".join(["Here's what was saved:"] + _record_lines(draft, _is_undo(row))), row["screenshot"]
@@ -2008,7 +2008,7 @@ class Conversation:
             self.db.execute("DELETE FROM control WHERE name = 'paused'")
             codes = [r["code"] for r in self._drafts("state = 'proposed'")]
             self._reply("Changes are back on." + ("\nWaiting for your yes:\n" + self._choices(codes) if len(codes) > 1 else
-                                                    f"\nOne change is waiting. Reply yes {codes[0]} to save it." if codes else ""), long_ok=True)
+                                                    f"\nOne change is waiting. Reply {q('yes ' + codes[0])} to save it." if codes else ""), long_ok=True)
         return verb
 
     def _status(self, now, since) -> str:
@@ -2051,7 +2051,7 @@ class Conversation:
 
     def _waiting_lines(self, now) -> list:
         """AV1102-11: one line per unexpired draft waiting for yes or for details; `status` and `report` share it."""
-        return [f"Waiting for your yes: {q(r['summary'])} (reply yes {r['code']})" if r["state"] == "proposed"
+        return [f"Waiting for your yes: {q(r['summary'])} (reply {q('yes ' + r['code'])})" if r["state"] == "proposed"
                 else "I'm waiting for details: " + r["summary"]
                 for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
 
