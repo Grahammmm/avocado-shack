@@ -157,6 +157,22 @@ class HoursRules(unittest.TestCase):
         self.assertEqual((caught.exception.kind, caught.exception.reason), ("refused", "price"))
         self.assertIn(caught.exception.reason, REASONS)
 
+    def test_a_dated_one_off_closure_is_a_notice_not_weekly_hours(self):
+        weekly = ["Monday–Wednesday 9am–6pm", "Thursday closed", "Friday 9am–6pm", "Saturday 9am–5pm · Closed Sunday"]
+        for said in ("closed Thursday November 12 only", "closed thu nov 12th", "closed on 11/12", "closed the 12th of November"):
+            with self.assertRaises(shop.SkillStop, msg=said) as caught:
+                shop.plan_hours({"hours": weekly}, ctx_for(store={"hours": H0}, texts=[said]))
+            self.assertEqual((caught.exception.kind, caught.exception.reply), ("question", shop.HOLIDAY_REPLY), said)
+        ops = shop.plan_hours({"hours": weekly}, ctx_for(store={"hours": H0}, texts=["closed thursdays from now on"]))
+        self.assertEqual(ops, [{"op": "store.set_hours", "args": {"hours": weekly}}])
+
+    def test_contact_removal_with_an_unchanged_address_part_still_plans_the_removal(self):
+        store = {"phone": "8055550100", "streetAddress": "1023 Example Street", "town": "Los Osos"}
+        ops = shop.plan_contact({"clear": True, "town": "Los Osos"}, ctx_for(store=store, texts=["take off the phone"]))
+        self.assertEqual(ops, [{"op": "store.clear_phone", "args": {}}])
+        ops = shop.plan_contact({"clear": True, "town": "Morro Bay"}, ctx_for(store=store, texts=["x"]))
+        self.assertEqual([o["op"] for o in ops], ["store.clear_phone", "store.set_address"])
+
     def test_plans_never_change_what_they_are_given(self):
         slots = {"hours": ["Monday–Thursday 9am–6pm", "Friday 9am–7pm", H0[1]]}
         before = json.loads(json.dumps(slots))

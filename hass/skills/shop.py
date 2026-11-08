@@ -445,12 +445,10 @@ def check_contact_already(slots, texts, ctx):
     same = []
     if "phone" in slots and store.get("phone") == phone_digits(slots["phone"]):
         same.append(f"the phone is {say_phone(store['phone'])}")
-    if slots.get("clear"):
-        return None  # taking the phone off is a change in itself; an unchanged address beside it is only left out of the draft
     given = {ADDRESS_KEYS[f]: slots[f] for f in ADDRESS_KEYS if slots.get(f)}
     if given and all(_spaced(store.get(f, "")) == _spaced(v) for f, v in given.items()):
         same.append("the address is " + ", ".join(store[f] for f in ("streetAddress", "town") if f in given))
-    wanted = int("phone" in slots) + int(bool(given))
+    wanted = int("phone" in slots) + int(bool(given)) + int(bool(slots.get("clear")))  # a removal is never already true
     if same and len(same) == wanted:
         return SkillStop("It already says that: " + " and ".join(same) + ". Did you mean something else?", "question")
     return None
