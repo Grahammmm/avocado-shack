@@ -21,6 +21,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from hass import editor as editor_mod  # noqa: E402
+from hass import voice  # noqa: E402
 from hass import memory as memory_mod  # noqa: E402
 from hass.skills.model import Slot, Skill, Trigger, Undo  # noqa: E402
 
@@ -102,8 +103,17 @@ class Backlog:
         rows = self.rows()
         if not rows:
             return EMPTY_LIST
-        lines = [f"{r['id']}. {r['received_at'][:10]} - {r['summary']}" for r in rows]
-        return "Written down so far, newest first:\n" + "\n".join(lines) + "\nSay 'forget backlog.<number>' to remove one."
+        lines = [f"{r['id']}. {_day(r['received_at'])} - {r['summary']}" for r in rows]
+        return "Written down so far, newest first:\n" + "\n".join(lines) + "\nSay " + voice.quote("forget backlog.3") + " (with that number) to remove one."
+
+
+def _day(iso) -> str:
+    """'Nov 8' for a stored timestamp (the owner never sees a computer date)."""
+    try:
+        at = datetime.fromisoformat(iso)
+        return f"{at:%b} {at.day}"
+    except (TypeError, ValueError):
+        return "a day I can't read"
 
 
 def _plan(slots, ctx) -> list:

@@ -303,7 +303,7 @@ class OpenRequests:
             skill = registry.get(req["skill"]) if registry is not None and req["skill"] else None
             label = getattr(skill, "label", None) or "a request"
             if req["state"] == "drafted":
-                out.append(f"Open: {label}, waiting for your yes (draft {req['draft_code']})")
+                out.append(f"Open: {label}, waiting for your yes")
             elif req["asked_slot"]:
                 out.append(f"Open: {label}, waiting for the {req['asked_slot'].replace('_', ' ')}")
             else:

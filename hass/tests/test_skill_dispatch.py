@@ -109,7 +109,7 @@ class CompleteRequestTests(SkillCase):
     def test_a_complete_hike_skill_reply_is_a_draft_with_every_slot_and_needs_the_owners_yes(self):
         self.script(LIVE1, skill_reply("hike.add", **MILL))
         draft, reply = self.propose(LIVE1)
-        for line in ("title: Mill Creek hike", "meetingPoint: Mill Creek trailhead", "startsAt: Sat 2026-11-07 08:00 PST", "difficulty: easy"):
+        for line in ("A new hike: Mill Creek hike", "the meeting place: Mill Creek trailhead", "the start time: Saturday, Nov 7 at 8 am", "how hard it is: easy"):
             self.assertIn(line, reply)
         self.assertEqual(draft["state"], "proposed")
         self.assertEqual(self.live()["state"], "drafted")
@@ -150,7 +150,7 @@ class MultiTurnTests(SkillCase):
         self.now += timedelta(minutes=2)
         draft, reply = self.propose("8am")
         self.assertEqual(len(self.asked), 1)  # no second model call: a clock answer to a clock slot
-        self.assertIn("meetingPoint: Mill Creek trailhead", reply)
+        self.assertIn("the meeting place: Mill Creek trailhead", reply)
         self.assertEqual(json.loads(draft["ops_json"])[0]["args"]["time"], "08:00")
         self.nothing_written()
 
@@ -251,7 +251,7 @@ class SeveralItemsTests(SkillCase):
         self.assertEqual(self.say(text), "proposed")
         replies = self.replies()
         self.assertEqual(len(replies), 2)
-        self.assertIn("Reply yes to apply", replies[0])
+        self.assertIn("Reply yes to save it", replies[0])
         self.assertTrue(replies[1].startswith("Which one do you mean:"), replies[1])
         self.assertEqual(len([d for d in self.drafts() if d["state"] == "proposed"]), 1)
         req = self.live()
@@ -271,7 +271,7 @@ class NoneAndUnknownTests(SkillCase):
         [reply] = self.replies()
         self.assertTrue(reply.startswith("I can't do that yet. I wrote it down as request #1."), reply)
         self.assertEqual(self.say("backlog"), "backlog")
-        self.assertIn("1. 2026-11-02 - order eggs from the farm", self.replies()[0])
+        self.assertIn("1. Nov 2 - order eggs from the farm", self.replies()[0])
         self.nothing_written()
 
     def test_an_unknown_skill_name_is_written_down_too(self):

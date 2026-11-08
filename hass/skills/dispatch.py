@@ -282,7 +282,10 @@ def question_for(slot, problem=None, ask=None) -> str:
     """The one short question: the resolver's own reply when it has one (it names the choices), else the slot's ``ask``."""
     if problem:
         return problem
-    return slot.ask.replace("{candidates}", ", ".join((ask or {}).get("names", [])))
+    text = (slot.ask or "").replace("{candidates}", ", ".join((ask or {}).get("names", []))).strip()
+    if text:
+        return text
+    return "Send me the photo." if (slot.from_attachment or slot.kind == "attachment") else "I need one more detail to go on. What is the " + slot.name.replace("_", " ") + "?"
 
 
 def candidates_of(router_result) -> list:
