@@ -21,7 +21,8 @@ from zoneinfo import ZoneInfo
 
 from hass.claims import REPEAT_FIELDS
 from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS, LINE_SEPARATORS, TEXT_LIMITS
-from hass.field_words import field_list
+from hass import voice
+from hass.field_words import field_list, field_words
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -97,10 +98,20 @@ def _move_warning(ctx, event, starts_at):
                             f"{'are' if seats != 1 else 'is'} not told automatically")
 
 
-def _fmt(offset) -> str:
-    minutes = int(offset.total_seconds() // 60)
-    sign, minutes = ("-" if minutes < 0 else "+"), abs(minutes)
-    return "%s%02d:%02d" % (sign, minutes // 60, minutes % 60)
+def _name(event) -> str:
+    """The hike in the owner's words: its title as he wrote it, never its id."""
+    title = event.get("title") if isinstance(event, dict) else None
+    return "the hike " + voice.quote(title) if isinstance(title, str) and title.strip() else "that hike"
+
+
+def _day_words(day: str) -> str:
+    d = date.fromisoformat(day)
+    return f"{d:%A, %B} {d.day}"
+
+
+def _clock_words(clock: str) -> str:
+    t = time.fromisoformat(clock)
+    return f"{t.hour % 12 or 12}:{t.minute:02d} {'am' if t.hour < 12 else 'pm'}"
 
 
 def _start(day: str, clock: str, now):
@@ -109,9 +120,10 @@ def _start(day: str, clock: str, now):
     first, second = naive.replace(tzinfo=TZ, fold=0), naive.replace(tzinfo=TZ, fold=1)
     if first.utcoffset() != second.utcoffset():
         gap = first.astimezone(timezone.utc).astimezone(TZ).replace(tzinfo=None) != naive
-        question = (f"{day} {clock} does not exist in Pacific time (clocks jump forward); what time should it start?"
-                    if gap else f"{day} {clock} happens twice in Pacific time ({_fmt(first.utcoffset())} and "
-                    f"{_fmt(second.utcoffset())}); which one do you mean?")
+        when = f"{_day_words(day)} at {_clock_words(clock)}"
+        question = (f"{when} does not exist in Pacific time, because the clocks jump forward. What time should it start?"
+                    if gap else f"{when} happens twice in Pacific time, because the clocks go back. "
+                    "Do you mean the first one or the second one?")
         return NeedsDetails(["time"], question)
     if first <= now:
         return Refused("start is in the past")
@@ -168,8 +180,7 @@ def _touch(before, event):
     return [Touched("events", event["id"], before, copy.deepcopy(event))]
 
 
-CAPACITY_QUESTION = ("RSVPs are on: give either a capacity (a number of guests) or noCapacityLimit true for no limit, "
-                     "but not both.")
+CAPACITY_QUESTION = "Guests can RSVP, so how many can come? Or should there be no limit? Please tell me one or the other."
 
 
 def _off_capacity(event_id, capacity):  # a capacity stored on an event that takes no RSVPs (warning, never refused)
@@ -204,7 +215,7 @@ def _hike_create(content, args, ctx):
         return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)
     # RF0200-10: with RSVPs off a capacity plus noCapacityLimit true still contradict each other; ask, never pick one.
     if not args["rsvpEnabled"] and "capacity" in args and args.get("noCapacityLimit") is True:
-        return NeedsDetails(["capacity", "noCapacityLimit"], "Give either a capacity or noCapacityLimit true, not both.")
+        return NeedsDetails(["capacity", "noCapacityLimit"], "Please give either a guest limit or no limit, not both.")
     starts = _start(args["date"], args["time"], ctx.now)
     if not isinstance(starts, str):
         return starts
@@ -235,8 +246,8 @@ def _hike_repeat(content, args, ctx):
         return NotFound(args["id"])
     missing = [f for f in ("meetingPoint", "rsvpEnabled") if f not in source]
     if missing:  # a legacy hike: nothing is invented for it
-        return NeedsDetails(missing, f"{args['id']} has no {' or '.join(missing)} on record; update that hike first, "
-                                     "then repeat it.")
+        return NeedsDetails(missing, f"{_name(source).capitalize()} is missing {' and '.join(map(field_words, missing))}. "
+                                     "Update that hike first, then repeat it.")
     copied = {f: copy.deepcopy(source[f]) for f in (*REPEAT_FIELDS, "rsvpEnabled", "capacity") if f in source}
     if copied["rsvpEnabled"] and "capacity" not in copied:
         copied["noCapacityLimit"] = True  # the source had no limit
@@ -282,14 +293,14 @@ def _hike_update(content, args, ctx):
             return Refused(why.format(bad))
     given = {f: args[f] for f in UPDATE_FIELDS if f in args and not (f == "noCapacityLimit" and not args[f])}
     if not given and not clear:
-        return NeedsDetails(list(UPDATE_FIELDS), f"What should change on {args['id']}? Give at least one of: "
+        return NeedsDetails(list(UPDATE_FIELDS), f"What would you like to change about {_name(event)}? You can change: "
                             + field_list(UPDATE_FIELDS))
     given = {f: v for f, v in given.items() if not (f in ("title", "meetingPoint") + TEXT_FIELDS
                                                     and isinstance(event.get(f), str) and _spaced(event[f]) == _spaced(v))}
     if not given and not clear:  # only spacing differs from the stored text: the page would render it identically
         return Refused(f"hike {args['id']} already says that")
     if "capacity" in given and "noCapacityLimit" in given:
-        return NeedsDetails(["capacity", "noCapacityLimit"], "Give either a new capacity or noCapacityLimit true, not both.")
+        return NeedsDetails(["capacity", "noCapacityLimit"], "Please give either a new guest limit or no limit, not both.")
     turning_on = given.get("rsvpEnabled") is True and not event.get("rsvpEnabled")
     if turning_on and "capacity" not in given and "noCapacityLimit" not in given and event.get("capacity") is None:
         return NeedsDetails(["capacity", "noCapacityLimit"], CAPACITY_QUESTION)

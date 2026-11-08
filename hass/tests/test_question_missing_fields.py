@@ -33,14 +33,15 @@ class QuestionWordsTests(HikeTestCase):
         cases = [
             (("route.add", {"title": "T", "place": "P", "sourceUrl": "https://trails.example.org/x", "sourceName": "N"}),
              "Please provide: "),
-            (("maker.edit", {"key": "Etto"}), "What should change on maker Etto? Give at least one of: "),
-            (("hike.update", {"id": HIKE_ID}), f"What should change on {HIKE_ID}? Give at least one of: "),
+            (("maker.edit", {"key": "Etto"}), "What would you like to change about Etto? You can change: "),
+            (("hike.update", {"id": HIKE_ID}), f"What would you like to change about the hike {HIKE['title']}? You can change: "),
         ]
         for (op, args), prefix in cases:
             with self.subTest(op=op):
                 missing, question = self.missing_of(repo, op, args)
-                self.assertTrue(question.startswith(prefix), question)
-                self.assertEqual(question[len(prefix):], field_list(missing))  # prose mapped, ids untouched
+                self.assertTrue(voice.plain(question).startswith(prefix), question)
+                self.assertEqual(voice.plain(question)[len(prefix):], field_list(missing))  # prose mapped, ids untouched
+                self.assertEqual(voice.check(question), [], question)  # and nothing a person would not say
                 self.assertTrue(missing and all(isinstance(m, str) for m in missing))
         missing, question = self.missing_of(repo, "product.edit", {"id": "photo-product-001"})
         self.assertEqual(missing, list(PRODUCT_EDITABLE) + ["producerKey", "clearProducer", "clearImageAlt"])

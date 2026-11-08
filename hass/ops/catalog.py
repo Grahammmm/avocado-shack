@@ -279,8 +279,8 @@ def _maker_edit(content, args, ctx):
     clear_url = bool(args.get("clearUrl"))
     if not changes and not clear_url:
         fields = list(MAKER_EDITABLE) + ["clearUrl"]
-        return NeedsDetails(fields, f"What should change on maker {args['key']}? Give at least one of: "
-                            + field_list(fields))
+        return NeedsDetails(fields, f"What would you like to change about {voice.quote(maker.get('name') or 'this maker')}? "
+                            "You can change: " + field_list(fields))
     clear_url = clear_url and "url" in maker  # clearing an absent url is no change
     changes = _drop_unchanged(changes, maker, f"maker {args['key']}", more=clear_url) if changes else changes
     if not changes and not clear_url:

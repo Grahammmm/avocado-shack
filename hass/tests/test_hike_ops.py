@@ -11,7 +11,7 @@ import sqlite3
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from hass import editor
+from hass import editor, voice
 from hass.tests.test_editor import WriterRepo
 
 NOW = datetime(2026, 10, 30, 12, 0, tzinfo=timezone(timedelta(hours=-7)))
@@ -122,8 +122,9 @@ class CreateTests(HikeTestCase):
         repo = self.repo()
         repeated = self.assertRejected(repo, "needs-details", ("hike.create", {**HIKE, "date": "2026-11-01", "time": "01:30"}))
         self.assertEqual(repeated["missing"], ["time"])
-        self.assertIn("-07:00", repeated["question"])
-        self.assertIn("-08:00", repeated["question"])
+        self.assertIn("happens twice in Pacific time", repeated["question"])
+        self.assertIn("the first one or the second one", repeated["question"])
+        self.assertEqual(voice.check(repeated["question"]), [])
         gap = self.assertRejected(repo, "needs-details", ("hike.create", {**HIKE, "date": "2027-03-14", "time": "02:30"}))
         self.assertEqual(gap["missing"], ["time"])
         refused = self.assertRejected(repo, "refused", ("hike.create", {**HIKE, "date": "2026-10-29"}))

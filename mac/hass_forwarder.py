@@ -34,7 +34,7 @@ ACK_WORKERS = CATCH_UP_PAGE  # one ack worker per pending message, up to the lar
 ACK_CLAIM_STALE = 8  # a row left `checking` this long (a worker died before deciding) goes back to `pending`; nothing was sent
 PULL_SLOW, PULL_FAST, FAST_WINDOW = 5, 1, 180  # reply pull every 5 s, every 1 s for 3 minutes after an owner message
 CATCH_UP_EVERY = 15  # was 60: the safety net that finds a message the BlueBubbles webhook did not announce
-KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack", "ack_reaction"}
+KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack", "ack_reaction", "gChat"}
 NOTICE = "Hass can't reach its computer right now, so nothing has changed yet. Your messages are saved and will be handled when it's back."
 
 
@@ -61,11 +61,13 @@ def key_read(path):
 
 def load_config(path):
     cfg = json.loads(private_read(path, 16384))
-    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort", "ack", "ack_reaction"} - set(cfg): raise ValueError("config")
+    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort", "ack", "ack_reaction", "gChat"} - set(cfg): raise ValueError("config")
     cfg.setdefault("webhookPort", 8796)
     if type(cfg.get("ack", True)) is not bool: raise ValueError("config")  # absent means on; false switches the tapback off
     if "ack_reaction" in cfg and (type(cfg["ack_reaction"]) is not str or cfg["ack_reaction"] not in TAPBACKS): raise ValueError("config")  # HASS-TAPBACK-1: allowlist
     if not isinstance(cfg["ownerChat"], str) or not re.fullmatch(r"iMessage;-;[^;\s]+", cfg["ownerChat"]): raise ValueError("config")
+    if "gChat" in cfg and (not isinstance(cfg["gChat"], str) or cfg["gChat"] == cfg["ownerChat"]  # HASS-VOICE-1: G's own one-to-one chat, optional, text only
+                           or not re.fullmatch(r"iMessage;-;[^;\s]+", cfg["gChat"])): raise ValueError("config")
     if any(type(cfg[k]) is not int or not 1 <= cfg[k] <= 65535 for k in ("bbPort", "webhookPort")): raise ValueError("config")
     for k in ("bbPasswordFile", "secretFile", "spoolDir", "webhookTokenFile"):
         if not isinstance(cfg[k], str) or not Path(cfg[k]).is_absolute(): raise ValueError("config")
@@ -164,10 +166,10 @@ class Spool:
             added = self.db.execute("INSERT OR IGNORE INTO fetch(guid,event,created_at) VALUES (?,?,?)", (guid, event["type"], now)).rowcount
             if added and event["type"] == "new-message": self.stage("webhook-in", guid)
 
-    def accept(self, event, owner, now, via="webhook"):
+    def accept(self, event, owner, now, via="webhook", also=None):
         msg = bridge.normalize(event)
         if isinstance(msg, bridge.Drop): return self.drop(msg.reason)
-        if msg.chat != owner: return self.drop("other-chat")
+        if msg.chat != owner and (also is None or msg.chat != also): return self.drop("other-chat")  # `also`: G's one chat, when set
         ms = int(datetime.fromisoformat(msg.received_at).timestamp() * 1000)
         if ms < self.get("start_ms"): return self.drop("history")
         new = self.db.execute("INSERT OR IGNORE INTO inbound VALUES (?,?,'pending',0,0,?,NULL)",
@@ -234,7 +236,7 @@ class Forwarder:
             msg = self.bb("/api/v1/message/" + urllib.parse.quote(guid, safe="") + "?with=chats,handle,attachment")
             if type(msg) is not dict or msg.get("guid") != guid: raise ValueError("refetch-shape")
             with self.spool.db:
-                self.spool.accept({"type": kind, "data": msg}, self.cfg["ownerChat"], created)
+                self.spool.accept({"type": kind, "data": msg}, self.cfg["ownerChat"], created, also=self.cfg.get("gChat"))
                 self.spool.db.execute("DELETE FROM fetch WHERE guid=? AND event=?", (guid, kind))
         except (bridge.BridgeError, ValueError, KeyError, TypeError):
             self.spool.db.execute("UPDATE fetch SET tries=tries+1,next_try_at=? WHERE guid=? AND event=?",
@@ -328,7 +330,7 @@ class Forwarder:
         ids = []
         try:
             for item in self.control({"op": "pull", "max": 5}, "replies")["items"]:
-                if item["chat"] != self.cfg["ownerChat"]: continue
+                if item["chat"] != self.cfg["ownerChat"] and not (item["chat"] == self.cfg.get("gChat") and item["pictures"] == 0): continue  # G's chat: text only
                 if not self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=?", (item["id"],)).fetchone():
                     self.stage("reply-pulled", item["id"])
                     self.stage("bb-send-start", item["id"])

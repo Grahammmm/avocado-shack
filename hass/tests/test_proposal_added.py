@@ -65,8 +65,10 @@ class AddedRecordProposalTests(unittest.TestCase):
     def test_removal_unchanged(self):
         record = {"id": "p2", "description": LONG}
         lines = _lines(("products", "p2", record, None))
-        self.assertEqual(lines[1:], ["this, this: from more than I can show here to nothing"] + TAIL)
-        self.assertTrue(lines[1].endswith(" to nothing"))
+        self.assertEqual(lines[1:], ["Remove this product."] + TAIL)
+        named = _lines(("routeIdeas", "r1", {"id": "r1", "title": "Bluff Walk", "description": LONG}, None))
+        self.assertEqual(named[1:], ["Remove the route idea Bluff Walk."] + TAIL)
+        self.assertNotIn("nothing", " ".join(named))
 
     def test_summary_and_draft_unchanged(self):
         draft = _draft(("products", "p9", None, {"id": "p9", "description": LONG}))
