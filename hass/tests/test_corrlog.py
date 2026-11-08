@@ -154,6 +154,15 @@ class Retention(LogCase):
         self.assertIn("notes.txt", self.files())
         self.assertEqual(corrlog.RETENTION_DAYS, 90)
 
+    def test_writing_a_row_deletes_old_day_files_without_anyone_running_prune(self):
+        self.now = NOW - timedelta(days=100)
+        self.log.record("error", "old")
+        self.assertEqual(len(self.files()), 1)
+        self.now = NOW
+        self.log.record("error", "new")  # the first row of a new day removes the 100-day-old file
+        self.assertEqual(self.files(), [f"{NOW.astimezone(timezone.utc):%Y-%m-%d}.jsonl"])
+        self.assertEqual([r["reason"] for r in self.log.rows()], ["new"])
+
     def test_rows_older_than_90_days_are_not_read_even_before_pruning(self):
         self.now = NOW - timedelta(days=120)
         self.log.record("error", "old")
