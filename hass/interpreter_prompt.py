@@ -84,13 +84,9 @@ RULES = (
     "A different product or hike is a new request: set revises to null.",
     "Answer a plain question about a hike or the shop only from the Hikes, Store and Products tables, as "
     '{"unsupported": "<the answer>"}; if the tables do not show it, say you cannot see that. Never invent an answer.',
-    "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
-    "or product.add with imageAlt when the owner says it is a new product; never both.",
-    'A pending question\'s "missing" list contains argument ids; fill those arguments from the owner\'s answer, not '
-    "from the wording of the question. Never invent a missing value.",
     # HASS-HIKE-FLOW-1: a hike request ends in a draft
     'Adding a hike ("add", "create", "schedule", "put on", "make" a hike or walk, with "new" or not) is ALWAYS hike.create, '
-    "never a change to a listed hike and never hike.repeat. Draft it as soon as the day, the time and one place are known; "
+    "never a change to a listed hike and never a repeat of one. Draft it as soon as the day, the time and one place are known; "
     "ask nothing about the other fields. Fill the arguments from the message: title = the name the owner gave, else the "
     'place plus "hike" (for example "Mill Creek hike" for "Mill Creek trailhead"); meetingPoint = the place to meet, and if the owner names only one '
     "place that place is the meeting point (\"somewhere at the beach\" names no place); difficulty (easy, moderate or hard) and bring (\"bring water\" -> \"Water\") "
@@ -103,6 +99,10 @@ RULES = (
     "For a new hike ask ONE short question, and only when the day or the time is missing, or no place was named at all; "
     'restate the request in it ("What time on Saturday for the Mill Creek hike?"). Never ask for a name, a route, a '
     "difficulty, a capacity or things to bring.",
+    "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
+    "or product.add with imageAlt when the owner says it is a new product; never both.",
+    'A pending question\'s "missing" list contains argument ids; fill those arguments from the owner\'s answer, not '
+    "from the wording of the question. Never invent a missing value.",
     "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
     "is unclear, ask. Never make the sample hike into a real hike.",
     "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
