@@ -50,13 +50,30 @@ def release_config(raw):
     return cfg
 
 
+# RFC 2606 / 6761 reserved names: an address here can never reach a person (a form placeholder such as you@example.com).
+RESERVED_DOMAINS = ('example.com', 'example.org', 'example.net')
+RESERVED_TLDS = ('example', 'test', 'invalid', 'localhost')
+
+
+def reserved_address(value):
+    """True only for an email whose domain is a reserved example domain, or a subdomain of one, in any letter case."""
+    domain = value.rpartition('@')[2].lower().rstrip('.')
+    return domain in RESERVED_DOMAINS or domain.endswith(tuple('.' + d for d in RESERVED_DOMAINS)) \
+        or domain.rpartition('.')[2] in RESERVED_TLDS
+
+
+def pattern_hits(name, rx, text):
+    hits = {m.group() for m in rx.finditer(text)}
+    return {h for h in hits if not reserved_address(h)} if name == 'email' else hits
+
+
 def privacy(files, baseline, message, forbidden=()):
-    """Compare values per path, never counts. Binary files are scanned too."""
+    """Compare values per path, never counts. Binary files are scanned too. Reserved example addresses are not personal."""
     found = set()
     for path, data in {**{p: b for p, b in files.items() if baseline.get(p) != b}, '<commit>': message.encode()}.items():
         text, old = data.decode('latin1'), baseline.get(path, b'').decode('latin1') if path != '<commit>' else ''
         for name, rx in PATTERNS.items():
-            if {m.group() for m in rx.finditer(text)} - {m.group() for m in rx.finditer(old)}: found.add(name)
+            if pattern_hits(name, rx, text) - pattern_hits(name, rx, old): found.add(name)
     # Owner identity is prohibited even in an unchanged, grandfathered file.
     for value in forbidden:
         if value and any(value.encode() in data for data in [*files.values(), message.encode()]): found.add('owner')

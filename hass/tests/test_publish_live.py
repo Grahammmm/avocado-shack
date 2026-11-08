@@ -368,6 +368,23 @@ class ReleaseCase(unittest.TestCase):
         self.assertEqual(self.entry()['step'], 'stopped')
         self.assertEqual(self.push_calls, 0)
 
+    def test_baseline_confirms_with_only_the_example_placeholder_but_not_a_real_address(self):
+        build = self.live.build
+        page = b'<input placeholder="you@example.com">'
+        def with_pages(extra):
+            return lambda *a, **kw: {**build(*a, **kw), 'style.css': b'new safe css', 'index.html': page, 'community.js': b"x='You@Mail.Example.COM'", **extra}
+        self.live.build = with_pages({'hike/index.html': page + b' person@gmail.com'})
+        preview = self.live.operate('baseline')
+        self.assertEqual((preview['result'], preview['privacy']), ('preview', ['email']))
+        self.assertEqual(self.live.operate('baseline', confirm=preview['manifest'])['result'], 'preview')
+        self.assertEqual(self.push_calls, 0)
+        self.live.build = with_pages({'hike/index.html': page})
+        preview = self.live.operate('baseline')
+        self.assertEqual((preview['result'], preview['privacy']), ('preview', []))
+        self.assertEqual(self.live.operate('baseline', confirm='wrong')['result'], 'preview')
+        self.assertEqual(self.push_calls, 0)
+        self.assertEqual(self.live.operate('baseline', confirm=preview['manifest'])['result'], 'ok')
+
     def test_undo_uses_same_path_cap_exempt_and_both_ids(self):
         self.apply(); self.settle()
         orig = self.entry()['change_id']
@@ -456,17 +473,37 @@ class ReleaseCase(unittest.TestCase):
 
 class PureTests(unittest.TestCase):
     def test_privacy_exact_values_per_path_and_owner_even_unchanged(self):
-        before = {'index.html': b'first@example.invalid 555-111-2222'}
-        rows = [({'index.html': b'first@example.invalid 555-111-2222'}, '', (), []),
-                ({'index.html': b'other@example.invalid 555-111-2222'}, '', (), ['email']),
-                ({'index.html': b'first@example.invalid 555-333-4444'}, '', (), ['phone']),
+        before = {'index.html': b'first@gmail.com 555-111-2222'}
+        rows = [({'index.html': b'first@gmail.com 555-111-2222'}, '', (), []),
+                ({'index.html': b'other@gmail.com 555-111-2222'}, '', (), ['email']),
+                ({'index.html': b'first@gmail.com 555-333-4444'}, '', (), ['phone']),
                 ({**before, 'new.html': before['index.html']}, '', (), ['email', 'phone']),
                 (before, 'ghp_' + 'a' * 25, (), ['github']),
-                (before, '', ('first@example.invalid',), ['owner'])]
+                (before, '', ('first@gmail.com',), ['owner'])]
         for files, message, forbidden, expected in rows:
             with self.subTest(expected=expected): self.assertEqual(p.privacy(files, before, message, forbidden), expected)
         for value in ('-----BEGIN', 'AKIA' + 'A'*16, 'sk-' + 'a'*20, 'xoxb-abc', '/home/fixture/data', '127.0.0.1', 'x.sqlite3', 'iMessage;fixture'):
             self.assertTrue(p.privacy({'new': value.encode()}, {}, ''))
+
+    def test_privacy_ignores_only_reserved_example_addresses(self):
+        # HASS-BASELINE-FIX-1: the live form placeholder you@example.com cannot be personal; nothing else is relaxed.
+        ignored = ['you@example.com', 'You@Mail.Example.COM', 'a@EXAMPLE.ORG', 'a@x.y.example.net', 'a@example.net',
+                   'a@site.example', 'a@host.test', 'a@host.INVALID', 'a@host.localhost', '<input placeholder="you@example.com">']
+        for value in ignored:
+            for path in ('index.html', 'community.js', 'hike/index.html'):
+                with self.subTest(value=value, path=path): self.assertEqual(p.privacy({path: value.encode()}, {}, ''), [])
+        blocked = ['person@gmail.com', 'you@notexample.com', 'you@example.com.evil.org', 'you@example.comx', 'you@xexample.org',
+                   'you@example.co', 'you@mytest.org', 'you@test.example.com.au', 'you@example-com.com', 'you@invalid.com']
+        for value in blocked:
+            with self.subTest(value=value): self.assertEqual(p.privacy({'index.html': value.encode()}, {}, ''), ['email'])
+        mixed = b'you@example.com and person@gmail.com'
+        self.assertEqual(p.privacy({'index.html': mixed}, {}, ''), ['email'])
+        # Other kinds are untouched next to a placeholder.
+        self.assertEqual(p.privacy({'index.html': b'you@example.com 555-111-2222'}, {}, ''), ['phone'])
+        self.assertEqual(p.privacy({'a.js': b'you@example.com ghp_' + b'a' * 25}, {}, ''), ['github'])
+        self.assertEqual(p.privacy({'a.js': b'you@example.com'}, {}, '', ('you@example.com',)), ['owner'])
+        self.assertEqual(p.privacy({'a.js': b'ok'}, {}, 'msg you@example.com person@gmail.com'), ['email'])
+        self.assertEqual(p.privacy({'a.js': b'ok'}, {}, 'msg you@example.com'), [])
 
     def test_fetch_rejects_redirect_http_and_foreign_host(self):
         for url in ('http://theavocadoman.com/x', 'https://elsewhere.invalid/x', 'https://theavocadoman.com:444/x'):
