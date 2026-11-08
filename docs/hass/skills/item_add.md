@@ -73,7 +73,8 @@ one as it is; an item Mike edited after adding it is a conflict ("changed after"
 
 ## How the plan sees the world (dispatcher interface)
 
-Built against the SKILLS-FW-3 dispatcher (PR 526) and the FW-2 router (PR 525), neither merged when this was written.
+Built on the SKILLS-FW-3 dispatcher (PR 526, merged) plus its three optional hooks (SKILLS-FW-3d, PR 544; this branch carries
+that commit until it merges) and against the FW-2 router (PR 525, not merged; the real-dispatcher tests stub the router).
 
 * `plan(slots, ctx)` is pure. `ctx.content`, `ctx.today`, `ctx.texts` (his joined texts) and `ctx.media_root` /
   `ctx.photo_bytes(sha)` are optional; `ctx.next_product_id` and `ctx.selection_checked_today` override what the content says.
@@ -81,10 +82,12 @@ Built against the SKILLS-FW-3 dispatcher (PR 526) and the FW-2 router (PR 525), 
 * `question(slot, slots, ctx)` gives the dynamic question; `notes(name, slots, ctx)` gives the `say` / `set` / `warn` lines shown
   beside the draft.
 
-**Known gaps until FW-3 grows three small hooks** (the test kit plays them; the live chat does not yet): the dispatcher must show
-`Refusal.reply` instead of a generic "Sorry", call `notes()` so the shelf-check, "Left off" and picture lines are shown, and call
-`question()` so the "same as last time" offer is made. "Same as last time" also meets the claims gate, which wants the maker
-named in his own words: today he is asked once to name the farm, then the draft follows (case `same-farm-tomatoes`).
+With the FW-3d hooks the real dispatcher shows `Refusal.reply` (a `question` keeps the open request, so his short answer
+continues it), calls `notes()` (shelf-check, "Left off" and picture lines, before his yes) and `question()` (the saved-farm
+offer: "Last time it was Etto. Say the name again to use them."). "Same as last time" meets the claims gate, which wants the
+maker named in his own words, so the offer asks him to say the name again. `hass/tests/test_item_add_dispatch.py` runs this
+through the real Conversation and Dispatcher (a missing farm and a short answer, a new maker's town, the shelf-check line, a
+bad photo warned before the yes, a bad description asked again); it is skipped on a tree without the hooks.
 
 ## Cases (`item.add.jsonl`)
 
