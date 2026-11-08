@@ -196,12 +196,12 @@ class OneOwnerStillWorks(ConversationTestCase):
     def test_old_store_without_chat_columns_is_upgraded(self):
         self.say("when?")
         self.replies()
-        self.conv.db.execute("ALTER TABLE messages DROP COLUMN chat")
+        self.conv.db.execute("DROP TABLE message_chats")
         self.conv.db.execute("ALTER TABLE open_asks DROP COLUMN chat")
         self.conv.db.close()
         self.conv = self.open()
         self.assertEqual(self.say("hours"), "proposed")
-        self.assertEqual([r["name"] for r in self.conv.db.execute("PRAGMA table_info(messages)") if r["name"] == "chat"], ["chat"])
+        self.assertIsNotNone(self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'message_chats'").fetchone())
         self.assertEqual(self.say("yes"), "approved")
 
 

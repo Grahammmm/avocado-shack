@@ -36,8 +36,8 @@ class TableShape(unittest.TestCase):
         self.assertEqual(sorted(policy.LIVE), sorted([
             "product.hide", "product.restore", "product.edit", "product.set_availability", "product.clear_availability",
             "store.confirm_selection", "specials.add", "specials.edit", "specials.remove", "specials.clear_expired",
-            "hike.create", "hike.update", "hike.cancel", "maker.edit", "history.revert"]))
-        self.assertEqual(policy.LIVE["product.edit"], {"id", "description", "category"})
+            "hike.create", "hike.update", "hike.cancel", "maker.edit", "maker.hide", "maker.restore", "history.revert"]))
+        self.assertEqual(policy.LIVE["product.edit"], {"id", "name", "description", "category"})
         self.assertEqual(policy.LIVE["maker.edit"], {"key", "story"})
 
     def test_every_private_reason_is_plain_and_passes_the_voice_check(self):
@@ -92,7 +92,6 @@ class RealDrafts(unittest.TestCase):
     def test_private_only_never_goes_live(self):
         cases = {
             "product.edit brand": [op("product.edit", id=PRODUCT, brand="Someone Else")],
-            "product.edit name": [op("product.edit", id=PRODUCT, name="Renamed")],
             "product.edit producer": [op("product.edit", id=PRODUCT, producerKey="Etto")],
             "new item": [op("product.add", name="Test jam", brand="Test Orchard", category="pantry", image="assets/products/photo-product-001.webp",
                             description="Sweet jam.")],

@@ -144,7 +144,8 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
 VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT, chat TEXT);
+CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT);
+CREATE TABLE IF NOT EXISTS message_chats(provider_id TEXT PRIMARY KEY, chat TEXT NOT NULL);  -- HASS-LIVE-PLAN-1: which owner chat a message came from
 CREATE TABLE IF NOT EXISTS drafts(row_id INTEGER PRIMARY KEY, change_id TEXT, code TEXT NOT NULL, state TEXT NOT NULL,
   reason TEXT, replaced_by TEXT, draft_hash TEXT, base TEXT, ops_json TEXT NOT NULL, summary TEXT NOT NULL,
   sender TEXT NOT NULL, chat TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT, "commit" TEXT,
@@ -287,6 +288,12 @@ class Outbox:
         try: age = (self._now() - datetime.fromisoformat(created_at)).total_seconds()
         except (TypeError, ValueError): return ""
         return "Sorry for the wait. " if age > DELAYED_AFTER_S else ""
+
+
+def _row_chat(row):
+    """The owner chat a draft row belongs to; None (the owner chat) for a row that does not say."""
+    try: return row["chat"]
+    except (KeyError, IndexError, TypeError): return None
 
 
 def _iso(dt: datetime) -> str:
@@ -678,8 +685,6 @@ class Conversation:
             if column not in columns: self.db.execute(f"ALTER TABLE drafts ADD COLUMN {column} TEXT")
         if "reply_to" not in {r["name"] for r in self.db.execute("PRAGMA table_info(outbox)")}:  # AV0022-10 (H16)
             self.db.execute("ALTER TABLE outbox ADD COLUMN reply_to TEXT")
-        if "chat" not in {r["name"] for r in self.db.execute("PRAGMA table_info(messages)")}:  # HASS-LIVE-PLAN-1: which owner chat
-            self.db.execute("ALTER TABLE messages ADD COLUMN chat TEXT")
         # AVB-03 (H05): an open draft from before proposed_at has no recoverable proposal instant (a filled question
         # keeps its question's created_at), so it counts as proposed when this store is opened: a yes sent earlier is
         # refused and the owner re-sends it; it is never judged from created_at or from the current ttl.
@@ -816,8 +821,9 @@ class Conversation:
         self._reply(text, shots, long_ok=True)
 
     def _record(self, msg, disposition, owner=True):
-        self.db.execute("INSERT INTO messages(provider_id, disposition, received_at, chat) VALUES (?, ?, ?, ?)",
-                        (msg.provider_id, disposition, msg.received_at if owner else None, msg.chat if owner else None))
+        self.db.execute("INSERT INTO messages(provider_id, disposition, received_at) VALUES (?, ?, ?)",
+                        (msg.provider_id, disposition, msg.received_at if owner else None))
+        if owner: self.db.execute("INSERT OR IGNORE INTO message_chats(provider_id, chat) VALUES (?, ?)", (msg.provider_id, msg.chat))
 
     def _propose(self, draft, sender, now, row=None):
         """Insert a proposed draft (or fill a needs-details row) bound to the A2 hash, base and expiry."""
@@ -1120,7 +1126,8 @@ class Conversation:
         texts of the open request, oldest first, when they are still kept (see _open_ask)."""
         try:
             last = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE received_at IS NOT NULL"
-                                   " AND COALESCE(chat, ?) = ? ORDER BY rowid DESC LIMIT 1", (self.settings["ownerChat"], self._chat())).fetchone()
+                                   " AND COALESCE((SELECT chat FROM message_chats c WHERE c.provider_id = messages.provider_id), ?) = ?"
+                                   " ORDER BY rowid DESC LIMIT 1", (self.settings["ownerChat"], self._chat())).fetchone()
             if last is None or last["disposition"] != "question": return None
             row = self.db.execute("SELECT text, created_at FROM outbox WHERE reply_to = ? AND chat = ? ORDER BY id DESC LIMIT 1",
                                   (last["received_at"], self._chat())).fetchone()
@@ -1164,7 +1171,8 @@ class Conversation:
             mine = "COALESCE(chat, ?) = ?" if "chat" in {c["name"] for c in self.db.execute("PRAGMA table_info(open_asks)")} else "? = ?"
             args = (self.settings["ownerChat"], self._chat()) if "COALESCE" in mine else (self._chat(), self.settings["ownerChat"])
             row = self.db.execute(f"SELECT * FROM open_asks WHERE pending_json IS NOT NULL AND {mine}", args).fetchone()
-            last = self.db.execute("SELECT provider_id FROM messages WHERE received_at IS NOT NULL AND COALESCE(chat, ?) = ?"
+            last = self.db.execute("SELECT provider_id FROM messages WHERE received_at IS NOT NULL"
+                                   " AND COALESCE((SELECT chat FROM message_chats c WHERE c.provider_id = messages.provider_id), ?) = ?"
                                    " ORDER BY rowid DESC LIMIT 1", (self.settings["ownerChat"], self._chat())).fetchone()
             if row is None or last is None or last["provider_id"] != row["provider_id"]: return None
             if now - datetime.fromisoformat(row["asked_at"]) > timedelta(minutes=RECENT_MINUTES): return None
@@ -1398,7 +1406,7 @@ class Conversation:
 
     def _outcome(self, row, out, now):
         """Store the apply result and its reply in one transaction (before anything is sent)."""
-        with self._answer_to(row["chat"]): return self._outcome_to(row, out, now)
+        with self._answer_to(_row_chat(row)): return self._outcome_to(row, out, now)
 
     def _outcome_to(self, row, out, now):
         result = out.get("result")
@@ -1442,7 +1450,7 @@ class Conversation:
                         self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
                     else:
                         self._move(row, "failed", reason=INTERRUPTED)
-                        with self._answer_to(row["chat"]): self._reply(answers.recovered_text(row["code"], live_site=self.settings.get("liveSite")))
+                        with self._answer_to(_row_chat(row)): self._reply(answers.recovered_text(row["code"], live_site=self.settings.get("liveSite")))
         self._verify_pending()
         return [self._row(r["row_id"])["state"] for r in rows]
 
@@ -1481,7 +1489,7 @@ class Conversation:
         for row in self._drafts("state = 'applied' AND checked_at IS NULL"):
             png, error, *flags = self.verify(row)  # outside the transaction; the result and reply are stored together
             unshown = flags[0] if flags else []
-            with self._tx(), self._answer_to(row["chat"]):
+            with self._tx(), self._answer_to(_row_chat(row)):
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
                     text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)), live_site=self.settings.get("liveSite"))

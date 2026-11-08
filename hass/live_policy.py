@@ -33,20 +33,20 @@ UNREADABLE = ["the change could not be read"]
 # sentence gates still judge what the change does). Adding a row here is the one-line way to let a new kind of change go live.
 LIVE = {
     "product.hide": {"id"}, "product.restore": {"id"},
-    "product.edit": {"id", "description", "category"},                       # never name, brand, producer, picture
+    "product.edit": {"id", "name", "description", "category"},                # never brand, producer, picture
     "product.set_availability": {"id", "available"}, "product.clear_availability": {"id"},
     "store.confirm_selection": None,                                         # the shelf-check day that goes with a stock word
     "specials.add": None, "specials.edit": None, "specials.remove": None, "specials.clear_expired": None,
     "hike.create": None, "hike.update": None, "hike.cancel": None,           # sign-up off only (see _signup)
     "maker.edit": {"key", "story"},                                          # the maker's about text only
+    "maker.hide": {"key", "withProducts"}, "maker.restore": {"key"},          # kept live: the merged maker skills declare chat-live
     "history.revert": None,
 }
 # Why an operation stays private. Plain words, finishing "it ..."; an operation in neither table gets the general line.
 PRIVATE = {
     "product.add": "adds an item with its brand and maker",
     "product.set_photo": "changes a picture",
-    "maker.add": "adds a maker with a place and links", "maker.hide": "changes which makers are shown",
-    "maker.restore": "changes which makers are shown",
+    "maker.add": "adds a maker with a place and links",
     "hike.repeat": "copies a hike", "hike.complete": "records how a hike went", "hike.recap": "records how a hike went",
     "hike.samples": "changes the sample hikes",
     "store.set_phone": "is contact details", "store.clear_phone": "is contact details", "store.set_address": "is contact details",

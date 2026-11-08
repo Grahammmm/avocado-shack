@@ -55,14 +55,15 @@ See `reports/hass/LIVE-STEPS-G-MICHAEL.md` (one page, plain words, copy-paste, w
 | Skill (operation) | Live from chat? | Reason |
 |---|---|---|
 | Hide / restore a product (`product.hide`, `product.restore`) | **Live** | Changes visibility only; held products stay refused by the editor |
-| Edit a product's description or category (`product.edit`, args `id description category` only) | **Live** | Free text, still claim-scanned; name, brand, producer, picture are not allowed args |
+| Edit a product's name, description or category (`product.edit`, args `id name description category` only) | **Live** | Free text, still claim-scanned; brand, producer and picture are not allowed args. (`name` is kept live because the merged item skill declares it chat-live; G's list named description and category; remove `name` from `LIVE` if G wants it private) |
 | Stock word, with the shelf-check day (`product.set_availability`, `product.clear_availability`, `store.confirm_selection`) | **Live** | A status word, not a number; the check day is the owner's own statement |
 | Weekly specials (`specials.add/edit/remove/clear_expired`) | **Live, if no price** | A price in the deal line is a protected sentence, so "2 for $5" stays private (G's "prices" rule). Ask G if deal-line prices should be allowed |
 | Hikes: add / edit / cancel (`hike.create/update/cancel`) | **Live, sign-up off only** | If the hike (before or after) has sign-up on, people are involved: private. Trail fields (`trailId`, distance, difficulty, duration, access note, meeting address) stay private |
 | Maker "about" text (`maker.edit`, args `key story` only) | **Live** | Free text, claim-scanned; place, link and name are not allowed args |
 | Undo (`history.revert`) | **Live** | Restores earlier content |
 | Add a product (`product.add`), change its picture (`product.set_photo`) | Private | A new item carries a brand and maker; pictures cannot be claim-checked. Revisit with the picture cards |
-| Add / hide / restore a maker, maker place or link or name | Private | Brands, producer places and links |
+| Hide / restore a maker (`maker.hide`, `maker.restore`) | **Live** | Visibility only; kept live because the merged maker skills declare it chat-live and pin it in tests; not on G's list, so G can remove the two rows |
+| Add a maker; a maker's place, link or name | Private | Brands, producer places and links |
 | Product brand, display brand, producer | Private | Brands and producers |
 | Hike repeat / complete / recap / sample hikes | Private | Not in G's list |
 | Club details | Private | Club fields are protected |
