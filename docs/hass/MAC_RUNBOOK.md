@@ -74,7 +74,7 @@ UI labels below are provisional; step 18 records actual versions/names. Taildrop
 
 12. **G / Mac:** Create the spool with `umask 077; mkdir -p ~/Library/Application\ Support/HassForwarder/spool`. Privately write `~/Library/Application Support/HassForwarder/config.json`; use the same owner one-to-one chat recorded in step 2:
     ```json
-    {"ownerChat":"iMessage;-;<owner address>","receiverUrl":"http://<agentorange tailnet name>:8795","bbPort":<BlueBubbles port>,"bbPasswordFile":"<absolute support path>/bb-password","secretFile":"<absolute support path>/envelope.key","spoolDir":"<absolute support path>/spool","webhookPort":8796,"webhookTokenFile":"<absolute support path>/webhook.token"}
+    {"ownerChat":"iMessage;-;<owner address>","receiverUrl":"http://<agentorange tailnet name>:8795","bbPort":<BlueBubbles port>,"bbPasswordFile":"<absolute support path>/bb-password","secretFile":"<absolute support path>/envelope.key","spoolDir":"<absolute support path>/spool","webhookPort":8796,"ack":true,"webhookTokenFile":"<absolute support path>/webhook.token"}
     ```
     Run `chmod 600 ~/Library/Application\ Support/HassForwarder/config.json`. Expected: private config, spool 0700, actual integer bbPort and absolute file paths.
     <!-- step 12 needs: mac-secrets,mac-code makes: fwd-config -->
