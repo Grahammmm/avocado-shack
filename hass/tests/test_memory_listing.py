@@ -57,7 +57,7 @@ class MemoryListingTests(StoreMixin, ConversationTestCase):
     def test_alias_boundary_counts_and_single_sections(self):
         self.assertEqual(self.listing(), "I'm not keeping any notes.\nI don't have any nicknames.")
         self.save("alias.a", f"product:{AVO}")
-        self.assertEqual(self.listing(), f"Nothing saved.\nAliases (1):\na -> Hass avocado ({AVO})")
+        self.assertEqual(self.listing(), "I'm not keeping any notes.\nNicknames:\n- a means Hass avocado")
         for i in range(19): self.save(f"alias.b{i:02d}", f"product:{AVO}")
         self.assertEqual(len(self.listing().splitlines()), 22)  # exactly 20: no "more" line
         self.assertNotIn("more", self.listing())

@@ -112,7 +112,7 @@ class ShowTests(ShowTestMixin, ConversationTestCase):
         self.conv.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at)"
                              " VALUES ('beef', 'needs-details', '[]', 'Which day?', ?, ?, ?, ?)",
                              (OWNER, CHAT, T0.isoformat(), (T0 + timedelta(hours=1)).isoformat()))
-        self.assertEqual(self.show("show beef"), ("beef still needs details: Which day?", []))
+        self.assertEqual(self.show("show beef"), ("I'm waiting for details: Which day?", []))
 
     def test_usage_and_unknown_code(self):
         for text in ("show", "Show!", "show zz", "show 123", "show me the avocado page", "show a1b2c3d4e5f6a"):

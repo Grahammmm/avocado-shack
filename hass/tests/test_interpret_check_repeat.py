@@ -80,7 +80,7 @@ class RepeatTests(unittest.TestCase):
         self.assertEqual(ask([edit, {"op": "product.edit"}, dict(edit)]),
                          {"question": f"I couldn't read part of that message. {AGAIN}"})
         self.assertEqual(ask([edit, dict(edit), {"op": 3, "args": {}}]),
-                         {"question": f"I could not read change 3 of that message. {AGAIN}"})
+                         {"question": f"I couldn't read part of that message. {AGAIN}"})
 
     def test_repeat_is_reported_before_unknown_op_field_and_code(self):
         self.assertEqual(ask([call("product.colour", id="p1")] * 2), same(1, 2))

@@ -20,8 +20,7 @@ EDIT = "photo-product-001"
 class CheckPriceTests(unittest.TestCase):
     def test_exact_replies(self):
         self.assertEqual(PRICE, "The website doesn't show prices, so I haven't made any change. Could you send it without the price?")
-        self.assertEqual(PLAIN, "The website only accepts plain text, so nothing was drafted. "
-                                "Send the change without HTML or template marks.")
+        self.assertEqual(PLAIN, "The website only takes plain words, so I haven't made any change. Could you send it again without special marks?")
 
     def test_dollar_in_text_args_is_the_price_reply(self):
         for op in (call("product.edit", id=EDIT, description="Avocados 2 for $3"),

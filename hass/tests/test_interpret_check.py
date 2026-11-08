@@ -70,7 +70,7 @@ class CheckTests(unittest.TestCase):
                     {"op": 3, "args": {}}, {"op": "product.edit", "args": ["id"]}, "product.edit", None):
             with self.subTest(bad=bad):
                 self.assertEqual(ask([call("product.edit", id="p1"), bad]),
-                                 {"question": f"I could not read change 2 of that message. {AGAIN}"})
+                                 {"question": f"I couldn't read part of that message. {AGAIN}"})
 
     def test_long_name_with_control_characters_is_cut_and_cleaned(self):
         name = "x" * 250 + "\n\r\t\x1b\x7f\x85" + "y" * 244

@@ -285,7 +285,7 @@ class GuestTotalTests(StoreMixin, H06TestCase):
         (self.repo.wt / "hass/content/community.json").write_text("{", "utf-8")
         self.assertEqual(self.status()[-1], "I can't read the hike list right now.")
         (self.repo.wt / "hass/content/community.json").write_text(json.dumps({"events": [{"status": "scheduled"}]}))
-        self.assertEqual(self.status()[-1], "Hikes: unavailable")
+        self.assertEqual(self.status()[-1], "I can't read the hike list right now.")
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ class ProposalHikeTimeTests(unittest.TestCase):
         self.assertEqual(_edit("startsAt", None, "2026-11-07T09:00:00-08:00")[1],
                          "this, the start time: from \ue000nothing\ue001 to \ue000Saturday, Nov 7 at 9 am\ue001")
         self.assertEqual(_edit("startsAt", "2026-11-07T09:00:00-08:00", None)[1],
-                         "events h1: startsAt Sat 2026-11-07 09:00 PST → (none)")
+                         "this, the start time: from \ue000Saturday, Nov 7 at 9 am\ue001 to \ue000nothing\ue001")
 
     def test_added_hike_field_line(self):
         after = {"id": "h1", "startsAt": "2026-11-07T09:00:00-08:00", "title": "Ridge walk"}
@@ -68,7 +68,7 @@ class ProposalHikeTimeTests(unittest.TestCase):
     def test_other_date_like_fields_untouched(self):
         iso = "2026-11-07T09:00:00-08:00"
         self.assertEqual(_edit("recap", "old", iso)[1], f"this, the recap: from \ue000old\ue001 to \ue000{iso}\ue001")
-        self.assertEqual(_edit("startsat", iso, "x")[1], f"events h1: startsat {iso} → x")  # exact field name only
+        self.assertEqual(_edit("startsat", iso, "x")[1], f"this, a detail: from \ue000{iso}\ue001 to \ue000x\ue001")  # exact field name only
         self.assertIn(f"  endsAt: {iso}", _lines(("events", "h1", None, {"endsAt": iso, "recap": iso})))
         self.assertIn(f"  recap: {iso}", _lines(("events", "h1", None, {"endsAt": iso, "recap": iso})))
 

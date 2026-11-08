@@ -72,7 +72,7 @@ class QuestionTests(unittest.TestCase):
     def test_both_name_and_brand_are_needed_for_a_product_line(self):
         self.assertEqual(question({"name": "Lion's Mane"}, None, PRODUCTS), "The label looks like \ue000Lion's Mane\ue001. Is that right? Either way, tell me which product it is.")
         self.assertEqual(question({"name": "Lion's Mane", "category": "mushrooms"}, MAKERS, PRODUCTS),
-                         f"The label looks like: Lion's Mane (mushrooms){TAIL}")
+                         "The label looks like \ue000Lion's Mane (mushrooms)\ue001. Is that right? Either way, tell me which product it is.")
         self.assertEqual(question({"category": "dairy"}, MAKERS, PRODUCTS), f"The label looks like: dairy{TAIL}")
 
     def test_unreadable_makers_give_the_product_line_only(self):

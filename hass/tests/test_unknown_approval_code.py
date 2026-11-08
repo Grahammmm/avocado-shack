@@ -93,7 +93,7 @@ class UnknownCodeTestCase(ConversationTestCase):
         self.assertEqual(self.unknown(f"yes {expired['code']}"), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual(self.say("no"), "rejected")  # cancels the only waiting proposal
         self.replies()
-        self.assertEqual(self.unknown(f"yes {waiting['code']}"), [f"{waiting['code']} was cancelled (owner); nothing changed."])
+        self.assertEqual(self.unknown(f"yes {waiting['code']}"), ["That one was cancelled, so nothing changed."])
         applied, _r = self.propose("hours")
         self.assertEqual(self.say(f"yes {applied['code']}"), "approved")
         self.replies()

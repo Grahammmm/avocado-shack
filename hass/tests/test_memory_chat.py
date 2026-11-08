@@ -178,7 +178,7 @@ class MemoryChatTests(StoreMixin, ConversationTestCase):
         self.assertEqual((lines[0], lines[1], lines[20], lines[21], len(lines)),
                          ("Notes I'm keeping:", "- k00: v0 (since today at 9 am)", "- k19: v19 (since today at 9 am)",
                           "And a few more.", 23))
-        self.assertEqual(lines[-1], "Aliases (0):")
+        self.assertEqual(lines[-1], "I don't have any nicknames.")
         self.assertEqual(reply, "Saved k22: v22. Send forget k22 to remove it.")
 
 

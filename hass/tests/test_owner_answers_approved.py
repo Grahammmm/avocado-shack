@@ -40,7 +40,7 @@ class ApprovedAnswerTests(unittest.TestCase):
         self.assertEqual(answers.did_it_work(row("reverted"), INSTALLED, NOW), "That change was undone.")
         self.assertEqual(answers.did_it_work(row("rejected"), None, NOW), "That change was cancelled, so nothing changed.")
         self.assertEqual(answers.did_it_work(row("verified"), INSTALLED, NOW),
-                         "Done. store store: hours is on the website now (checked today 09:05).")
+                         "Done. \ue000store store: hours\ue001 is on the website now (I checked today at 9:05 am).")
         for state, inst, want in (("verified", INSTALLED, "on the website"), ("failed", None,
                                   "not saved; website unchanged"), ("reverted", None, "undone")):
             self.assertEqual(answers.history_words(row(state), inst), want)

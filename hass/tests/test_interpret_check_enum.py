@@ -51,7 +51,7 @@ class EnumCheckTests(unittest.TestCase):
                          {"question": f"For a detail, I can use: red, blue. {AGAIN}"})
         for none in ((), None):
             self.assertEqual(ask([call("x.pick", colour="red")], custom(none)),
-                             {"question": f"x.pick.colour has no available choices. {AGAIN}"})
+                             {"question": f"I can't pick a detail from a list. {AGAIN}"})
         narrowed = dict(REGISTRY)
         narrowed["product.edit"] = Op("product.edit", {"category": Arg("enum", choices=("fruit", "eggs"))}, lambda *a: None)
         q = ask([call("product.edit", category="meat")], narrowed)["question"]

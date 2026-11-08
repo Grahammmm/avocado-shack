@@ -101,7 +101,7 @@ class HiddenTests(StoreMixin, ConversationTestCase):
     def test_nothing_hidden(self):
         self.assertEqual(self.hidden(), ["Nothing is hidden right now."])
         self.set_state(held=(self.ids()[0],))  # held alone is not hidden
-        self.assertEqual(self.hidden("Hidden."), ["Nothing is hidden."])
+        self.assertEqual(self.hidden("Hidden."), ["Nothing is hidden right now."])
 
     def test_paused_and_lapsed_draft_keep_state(self):
         draft, _reply = self.propose("hours")

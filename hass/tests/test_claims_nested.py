@@ -90,9 +90,7 @@ class NestedScanTests(unittest.TestCase):
                                 ("store store notice.text", "organic"), ("store store notice.text", "vegan"),
                                 ("store store notice.text", "kosher")])
         self.assertEqual(claims.question(hits[:1]), 'You didn\'t say \ue000"organic"\ue001 in your message. Is that true? Send the change again with it in your own words, or without it.')
-        self.assertEqual(claims.question(hits), 'I did not draft that: "organic" in store store homeImage.imageAlt and "local" in '
-                         "store store homeImage.imageAlt and 3 more are not in your message. Are they true? Send the change "
-                         "again with them in your words, or without them.")
+        self.assertEqual(claims.question(hits), 'You didn\'t say \ue000"organic"\ue001 and \ue000"local"\ue001 (and a few more) in your message. Are they true? Send the change again with them in your own words, or without them.')
         self.assertEqual(claims.question(self.hits({}, add, "x")), 'I did not draft that: "organic" in store store notice.text '
                          "is not in your message. Is it true? Send the change again with it in your words, or without it.")
 

@@ -194,7 +194,7 @@ class FlowTests(ConversationTestCase):
         self.assertEqual(self.say("yes"), "no-target")
         self.assertEqual(self.replies(), [f"I still need an answer from you first. {pending['summary']}"])  # AV1737-05
         self.assertEqual(self.say(f"yes {old['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{old['code']} was replaced by {pending['code']}."])
+        self.assertEqual(self.replies(), ["That one was replaced by a newer one."])
         self.assertEqual((self.commits(), self.editor.applies), (0, 0))
         # A different value from the superseded draft (an identical one is a repeat that needs `yes <code>`).
         self.interp.mapping["done"] = {**_ops((HOURS, {"hours": ["Daily 8am–7pm"]})), "revises": pending["code"]}

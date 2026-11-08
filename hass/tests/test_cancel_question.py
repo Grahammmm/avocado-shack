@@ -31,7 +31,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.assertEqual(self.say("no"), "no-target")  # duplicate cancel: nothing is waiting any more
         self.assertEqual(self.replies(), [conversation.NOTHING])
         self.assertEqual(self.say(f"cancel {q['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{q['code']} was cancelled (owner); nothing changed."])
+        self.assertEqual(self.replies(), ["That one was cancelled, so nothing changed."])
         self.assertNotIn(q["code"], self.status())
         self.assertEqual(self.answer("done", q["code"]), "proposed")  # the late fill is a new request
         self.replies()
@@ -52,7 +52,7 @@ class CancelQuestionTests(h16.NeedsDetailsExpiryTests):
         self.assertEqual((self.closed(q), self.state(draft)["state"]), (("rejected", "owner"), "proposed"))
         q2 = self.ask_at(self.now)["row"]
         self.assertEqual(self.say(f"reject {draft['code']}"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {draft['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual((self.closed(draft), self.state(q2)["state"]), (("rejected", "owner"), "needs-details"))
         self.assertEqual(self.say("cancel beef"), "no-target")  # an unknown code closes nothing
         self.assertEqual(self.replies(), ["No draft beef."])

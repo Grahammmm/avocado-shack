@@ -25,7 +25,7 @@ class HistoryWordsShapeTests(unittest.TestCase):
     def test_object_install_unchanged(self):
         self.assertEqual(answers.history_words({"state": "applied"}, {"state": "installed"}), "on the website")
         self.assertEqual(answers.history_words({"state": "applied"}, {"state": "failed"}), "saved, but it didn't reach the website")
-        self.assertEqual(answers.history_words({"state": "applied"}, {}), "not confirmed on the website")
+        self.assertEqual(answers.history_words({"state": "applied"}, {}), "saved, but I'm not sure it's on the website")
         self.assertEqual(answers.history_words({"state": "applied"}, None), "not confirmed on the website")
 
     def test_unsaved_states_ignore_a_damaged_install(self):

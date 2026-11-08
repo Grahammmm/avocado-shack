@@ -43,7 +43,7 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
             "Cerro Cabrillo sunrise (hike, Saturday, Oct 17 at 7:05 am, coming up)",
             "Cerro Cabrillo winter loop (hike, Saturday, Dec 5 at 1:30 pm, coming up)",
             "Cerro Cabrillo summit (route idea, just an idea)"])
-        self.assertEqual(self.find("find cerro summit"), ["route idea-cerro-cabrillo: Cerro Cabrillo summit (idea)"])
+        self.assertEqual(self.find("find cerro summit"), ["Cerro Cabrillo summit (route idea, just an idea)"])
         self.community([event("hike-2026-12-05", "Peña Zzridge bluffs", "2026-12-05T12:00:00-08:00")])
         self.assertEqual(self.find("find PENA zzridge"), [  # accents folded; noon is pm
             "hike hike-2026-12-05: Peña Zzridge bluffs (Saturday Dec 5, 12:00 pm, scheduled)"])

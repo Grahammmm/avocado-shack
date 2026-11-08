@@ -62,7 +62,7 @@ class UnknownStateTest(unittest.TestCase):
             with self.subTest(change=change):
                 self.assertEqual(answers.did_it_work(change, INSTALLED, NOW),
                                  "It's waiting for your yes. Nothing has changed yet.")
-                self.assertEqual(answers.history_words(change, INSTALLED), "waiting for your OK")
+                self.assertEqual(answers.history_words(change, INSTALLED), "waiting for your yes")
 
     def test_known_matches_conversation_transitions(self):
         closed = set(TRANSITIONS) | {t for v in TRANSITIONS.values() for t in v}

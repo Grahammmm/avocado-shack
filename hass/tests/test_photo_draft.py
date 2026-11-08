@@ -141,7 +141,7 @@ class PhotoDraftTests(unittest.TestCase):
         self.say(ANSWER)
         self.replies()
         self.assertEqual(self.say(ANSWER, attachments=1), "photo-duplicate")  # still waiting as a proposal
-        self.assertEqual(self.replies(), [f"That photo is already in draft {SHA[:4]}."])
+        self.assertEqual(self.replies(), ["I already have that photo, and I'm waiting on you. It's in a change waiting for your yes."])
         self.assertEqual((len(self.drafts()), len(self.originals())), (1, 2))
         self.assertEqual(self.interp.texts, [ANSWER])
         self.assertEqual(self.say("yes"), "approved")
@@ -172,7 +172,7 @@ class PhotoDraftTests(unittest.TestCase):
         self.assertEqual(self.say("same"), "proposed")
         self.replies()
         self.assertEqual(self.say(f"no {SHA[:4]}"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {SHA[:4]}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual(self.say(attachments=1), "photo-draft")  # a cancelled draft no longer holds the photo
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "needs-details"])
         self.assertEqual(self.repo.product(PID)["image"], "assets/products/photo-product-001.webp")

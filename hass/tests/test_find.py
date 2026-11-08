@@ -55,8 +55,8 @@ class FindTests(StoreMixin, ConversationTestCase):
 
     def test_one_match_and_folded_query(self):
         self.assertEqual(self.find("find DRIED LION'S MANE"), ["Dried lion’s mane mushrooms (on the website)"])
-        self.assertEqual(self.find("find LIONS MANE."), [f"product {DRIED}: Dried lion’s mane mushrooms (active)",
-                                                         f"product {FRESH}: Lion’s mane mushrooms (active)"])
+        self.assertEqual(self.find("find LIONS MANE."), ["Dried lion’s mane mushrooms (on the website)",
+                                                         "Lion’s mane mushrooms (on the website)"])
         self.assertEqual(self.drafts(), [])
 
     def test_seven_products_six_makers_gives_ten_lines_and_count(self):
@@ -74,14 +74,14 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.assertEqual((len(lines), lines[-1]), (11, "There are more. Add a word to narrow it down."))
         self.rename("Pzzt", products=12, makers=12)
         lines = self.find("find pzzt")
-        self.assertEqual((len(lines), lines[-1]), (11, "… 10 or more; add a word."))
+        self.assertEqual((len(lines), lines[-1]), (11, "There are more. Add a word to narrow it down."))
 
     def test_no_match_and_usage(self):
         self.assertEqual(self.find("find Zzqx Nothing"), ["I couldn't find anything called Zzqx Nothing."])
         for text in ("find", "Find.", "find    ", "find " + "x" * 61):
             with self.subTest(text=text[:12]):
                 self.assertEqual(self.find(text), [conversation.FIND_USAGE])
-        self.assertEqual(self.find("find " + "x" * 60), [f'No product, maker, hike or route idea matches "{"x" * 60}".'])
+        self.assertEqual(self.find("find " + "x" * 60), [f"I couldn't find anything called {"x" * 60}."])
 
     def test_hidden_and_held_records_show_their_status(self):
         def prods(doc):
@@ -93,7 +93,7 @@ class FindTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.find("find zzhid"), ["Zzhid mushrooms (hidden)",
                                                    "Etto Zzhid (hidden)"])
         self.assertEqual(self.find("find raw milk white cheddar"),
-                         ["product photo-product-040: Raw milk white cheddar (held)"])
+                         ["Raw milk white cheddar (on hold)"])
 
     def test_broken_or_invalid_content_is_unavailable(self):
         path = self.repo.wt / "hass" / "content" / "products.json"

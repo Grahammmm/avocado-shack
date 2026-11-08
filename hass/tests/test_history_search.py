@@ -65,7 +65,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
     def test_only_summary_is_searched(self):
         self.row("zebra1", "applied", "Open at nine")
         self.assertEqual(self.search("history zebra1"), ["I found no changes that match zebra1."])
-        self.assertEqual(self.search("history applied"), ['No approved changes match "applied".'])
+        self.assertEqual(self.search("history applied"), ["I found no changes that match applied."])
         self.assertEqual(self.search("history website"), ['No approved changes match "website".'])  # location text
 
     def test_search_all_history_before_limit(self):
@@ -93,7 +93,7 @@ class SearchTests(StoreMixin, HistoryTestCase):
     def test_query_bounds_usage_and_no_match(self):
         self.row("a1", "applied", "x" * 60)
         self.assertEqual(self.search("history " + "x" * 60)[0], "These match:")
-        self.assertEqual(self.search("history x")[0], "Matching changes:")
+        self.assertEqual(self.search("history x")[0], "These match:")
         self.assertEqual(self.search("history " + "x" * 61), [USAGE])
         self.assertEqual(self.search("history !!!"), [USAGE])
         self.assertEqual(self.search("history a\nb"), [USAGE])

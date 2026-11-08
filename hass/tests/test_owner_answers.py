@@ -72,7 +72,7 @@ class DidItWorkTests(unittest.TestCase):
             with self.subTest(state=state):
                 self.assertEqual(answers.did_it_work(row(state), installed, NOW),
                                  "It's waiting for your yes. Nothing has changed yet.")
-                self.assertEqual(answers.history_words(row(state), installed), "waiting for your OK")
+                self.assertEqual(answers.history_words(row(state), installed), "waiting for your yes")
         for state in ("rejected", "expired"):
             self.assertEqual(answers.did_it_work(row(state), installed, NOW), "That change was cancelled, so nothing changed.")
 
@@ -116,7 +116,7 @@ class DidItWorkTests(unittest.TestCase):
     def test_apply_reply_says_it_is_not_on_the_website(self):  # RETURN 2: the approve/apply reply point
         self.assertEqual(answers.applied_text("ab12", "store store: hours"), "Saved: \ue000store store: hours\ue001\nIt's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.")
         self.assertEqual(answers.applied_text("ab12", "store store: hours", checked=True),
-                         f"Applied and checked ab12: store store: hours\n{NOT_LIVE}")
+                         "Saved and checked: \ue000store store: hours\ue001\nIt's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.")
 
     def test_no_install_result_is_unconfirmed_never_intact(self):  # RETURN 3: install.py may have died part way
         for change in (row("applied"), row("verified"), row("applied", reason="not verified: check failed: x")):
@@ -194,7 +194,7 @@ class ConversationAnswerTests(ConversationTestCase):
 
     def test_did_it_work_follows_the_install(self):
         draft = self.applied()
-        self.assertEqual(self.last_line(), f"Last change: {draft['code']} store store: hours - {NOT_COPIED}")
+        self.assertEqual(self.last_line(), "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.")
         self.assertEqual(self.history(), [f"{draft['code']} applied: store store: hours - not confirmed on the website"])
         self.now = T0 + timedelta(minutes=5)
         out = install.install(draft["change_id"], state=str(self.repo.state), now=self.now)
@@ -209,9 +209,7 @@ class ConversationAnswerTests(ConversationTestCase):
         with mock.patch.object(install, "_swap", side_effect=PermissionError("denied")):
             self.assertEqual(install.install(draft["change_id"], state=str(self.repo.state))["result"], "failed")
         self.assertEqual(self.snapshot(), before)  # SHOP-2 rolled back: what the answer says is true on disk
-        self.assertEqual(self.last_line(), f"Last change: {draft['code']} store store: hours - This did not reach "
-                                           "the website, and the website is unchanged. The website files could not "
-                                           "be written.")
+        self.assertEqual(self.last_line(), "Last change: the opening hours for Avocado Shack. That didn't reach the website, and the website is unchanged. I couldn't update the website pages.")
 
     def test_interrupted_install_is_not_called_done_until_a_retry_finishes(self):
         draft, before = self.applied(), self.snapshot()
@@ -225,7 +223,7 @@ class ConversationAnswerTests(ConversationTestCase):
         self.assertNotEqual(self.snapshot(), before)  # RETURN 3: one file was replaced before the process died
         self.conv = self.open()  # restart: recovery has nothing to settle, the answer reads the change record
         line = self.last_line()
-        self.assertEqual(line, f"Last change: {draft['code']} store store: hours - {NOT_COPIED}")
+        self.assertEqual(line, "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.")
         self.assertNotIn("unchanged", line)  # never claims an intact site; says some pages may show it, ask for help
         self.assertEqual(install.install(draft["change_id"], state=str(self.repo.state))["result"], "installed")
         self.assertIn("is on the website now", self.last_line())
@@ -243,8 +241,7 @@ class ConversationAnswerTests(ConversationTestCase):
         self.conv = self.open()  # recovery never re-applies; it says what state the website is in
         self.assertEqual((self.drafts()[0]["state"], self.commits(), self.editor.applies), ("failed", 0, 1))
         self.assertEqual(self.snapshot(), before)  # nothing half-installed: the website really is as it was
-        self.assertEqual(self.replies(), [f"{draft['code']} was interrupted and not saved. The website is as it was "
-                                          "before; send the change again to make a new draft."])
+        self.assertEqual(self.replies(), ["That change was interrupted and not saved. The website is as it was before. Please send it again."])
         self.assertEqual(self.say("stop"), "pause")  # still stopped after the restart; nothing is under way now
         self.assertEqual(self.replies(), [f"{STOPPED} No requests are waiting. {STAYS}"])
 
@@ -263,7 +260,7 @@ class ConversationAnswerTests(ConversationTestCase):
         with sqlite3.connect(path) as db:  # the drain marked s1 done; u1 is the message being handled now
             db.execute("UPDATE inbound SET state = 'done' WHERE provider_id = 's1'")
         self.assertEqual(self.say("pause changes", pid="u1"), "pause")  # again: same answer, one pause row
-        self.assertEqual(self.replies(), [f"{STOPPED} 1 request is waiting. {STAYS}"])
+        self.assertEqual(self.replies(), [f"Changes are stopped. I won't save anything new until you say 'resume changes'. 1 request is waiting. {STAYS}"])
         self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM control").fetchone()[0], 1)
         path.write_bytes(b"not a database")  # an unreadable inbox counts nothing and never fails the stop
         self.assertEqual(self.say("stop"), "pause")
