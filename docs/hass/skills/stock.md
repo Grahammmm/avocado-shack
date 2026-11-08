@@ -36,7 +36,8 @@ he did the check.
   right now. It is on hold until someone has looked at it."
 * **Not already true.** A word already set today says so: "<name> already says Sold out. Nothing to change." A word set
   on an earlier day is a re-check, not a repeat, and goes through.
-* **One word per product.** The same product with two different words is one question ("Which one is right?").
+* **One word per product.** The same product with two different words is one question ("Which one is right?"). In
+  `stock.checked` a product named twice, in two lists or twice in one, is refused the same way, never counted once.
 * **`stock.checked` days.** Today, or an earlier day at most a week back, and not before the last recorded check. A future
   day, an old day, or a repeat of a day that already says the same are refused in plain words.
 * **`stock.clear`.** The product must have a word ("<name> has no label to clear."). It never sets "Sold out". It always
