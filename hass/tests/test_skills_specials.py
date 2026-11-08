@@ -160,6 +160,43 @@ class RuleTests(unittest.TestCase):
         self.assertIsNone(self.rule("specials-deal-as-typed", {"deal": "1.5 dollars"}, texts=["Eggs 1.5 dollars. Till Friday"]))
         self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=None))  # no owner texts to compare (plan golden)
 
+    def test_a_deal_cut_out_of_a_longer_figure_or_word_is_not_the_deal_he_typed(self):
+        rule = lambda deal, text: self.rule("specials-deal-as-typed", {"deal": deal}, texts=[text])
+        said = "put honey on special, 12 for $5, until Friday"
+        self.assertIsNone(rule("12 for $5", said))  # the exact deal is kept
+        for cut in ("2 for $5", "12 for $", "12 for", "2 for"):
+            self.assertIn("exactly as you type it", rule(cut, said)[0], cut)  # a figure's tail or head is not a deal
+        for deal, text in (("$5", "jam $5.50 till Friday"), ("$5", "jam $55 till Friday"), ("2 for $5", "jam 2 for $5.5 till Friday"),
+                           ("2 for $5", "jam 1.2 for $5"), ("2 for $5", "jam 1,2 for $5"), ("5", "jam 5 dollars"), ("20", "jam 20% off"),
+                           ("buy one get one", "jam buy one get one free"), ("2 for $5", "jam 2 for $5 each"), ("$5", "jam €$5")):
+            self.assertIn("exactly as you type it", rule(deal, text)[0], (deal, text))
+        for deal, text in (("2 for $5", "jam 2 for $5."), ("2 for $5", "jam, 2 for $5, till Friday"), ("2 for $5", "jam:2 for $5"),
+                           ("$5 off", "jam $5 off till Friday"), ("buy one get one free", "jam buy one get one free, through Sunday")):
+            self.assertIsNone(rule(deal, text), (deal, text))
+
+    def test_a_spelled_out_amount_in_a_title_is_a_price_too(self):
+        for title in ("Honey five dollars", "Honey twenty-five cents", "Honey twenty five bucks", "Eggs a buck", "Eggs one hundred dollars",
+                      "Eggs 5 euros", "Eggs €5", "Eggs £3", "Eggs three DOLLARS", "Eggs ten bucks each"):
+            reply, reason = self.rule("specials-price-in-deal-only", {"title": title})
+            self.assertIn("A price can only go in the deal line", reply, title)
+            self.assertEqual(reason, "price", title)
+        for plain in ("Honey", "Dollar Menu Day", "Five Star Honey", "Five pound jar of honey", "A quarter pound of honey", "Penny candy",
+                      "Three kinds of jam", "Two for the road", "Buck's honey", "Half dozen eggs", "Sample Saturday"):
+            self.assertIsNone(self.rule("specials-price-in-deal-only", {"title": plain}), plain)
+
+    def test_a_spelled_out_price_in_a_title_cannot_be_planned_for_an_add_or_an_edit_or_come_from_a_product(self):
+        said = ["honey five dollars on special, buy one get one, until Friday"]
+        add = {"title": "Honey five dollars", "deal": "buy one get one", "end": "2026-11-13"}
+        self.assertIn("price can only go in the deal line", refusal(sp.SPECIALS_ADD, add, ctx(texts=said)))
+        c = ctx(special("avocado-honey", "Avocado honey"), texts=said)
+        self.assertIn("price can only go in the deal line", refusal(sp.SPECIALS_EDIT, {"special": "honey", "title": "Honey five dollars"}, c))
+        product = {"id": "photo-product-041", "name": "Honey five dollars"}  # a product named like a price: ask, do not title it so
+        self.assertEqual(refusal(sp.SPECIALS_ADD, {"product": "photo-product-041", "deal": "buy one get one", "end": "2026-11-13"},
+                                 ctx(products=[product])), sp.ASK_ON)
+        plain = {"id": "photo-product-042", "name": "Avocado honey"}
+        op = sp.SPECIALS_ADD.plan({"product": "photo-product-042", "deal": "buy one get one", "end": "2026-11-13"}, ctx(products=[plain]))[0]
+        self.assertEqual(op["args"]["title"], "Avocado honey")
+
     def test_both_add_and_edit_run_the_as_typed_and_word_price_rules(self):
         for rules in (sp.ADD_RULES, sp.EDIT_RULES):
             self.assertIn("specials-deal-as-typed", rules)
@@ -618,6 +655,90 @@ class EndToEndTests(unittest.TestCase):
     def test_the_rows_do_not_depend_on_the_calendar(self):
         raw = E2E.read_text("utf-8")
         self.assertIsNone(re.search(r"20\d\d-\d\d-\d\d", raw), "dates in e2e.jsonl are {d+N} offsets from the shop's today")
+
+
+class GroundedEndToEndTests(unittest.TestCase):
+    """The same checks with the owner's texts handed to the rules, the way the dispatcher does (the kit's own context has none):
+    through the real Conversation and Editor on a scratch worktree, a wrong deal or a priced title never reaches a draft,
+    and the exact deal still saves after ``yes`` and reads back unchanged from the store."""
+
+    def go(self, text, skill, slots, seed=None):
+        """(disposition, owner replies, the saved specials after a yes when a draft was made)."""
+        registry = skills.load_skills().skills
+        sc = testkit.Scratch({text: {"skill": skill, "slots": slots}}, registry)
+        try:
+            if seed:
+                _seed(sc, seed)
+            ctx_for = sc.interp.ctx_for
+
+            def grounded():
+                c = ctx_for()
+                c.texts = [text]
+                return c
+
+            sc.interp.ctx_for = grounded
+            disposition, replies = sc.say(text)
+            saved = None
+            if disposition == "proposed":
+                _approved, _out = sc.say("yes " + sc.drafts()[-1]["code"])
+                saved = json.loads((sc.wt / "hass/content/store.json").read_text("utf-8")).get("specials")
+            return disposition, [voice.plain(r) for r in replies], saved, sc.drafts()
+        finally:
+            sc.close()
+
+    def add_slots(self, title, deal):
+        return {"title": title, "deal": deal, "start": shop_today().isoformat(), "end": (shop_today() + timedelta(days=3)).isoformat()}
+
+    def edit_seed(self):
+        today = shop_today()
+        return [{"id": "honey", "title": "Honey", "deal": "buy one get one", "start": today.isoformat(),
+                 "end": (today + timedelta(days=5)).isoformat(), "order": 0}]
+
+    def test_add_keeps_the_exact_deal_and_refuses_a_cut_one_before_any_draft(self):
+        text = "put honey on special, 12 for $5, until Friday"
+        disposition, _replies, saved, _drafts = self.go(text, ADD, self.add_slots("Honey", "12 for $5"))
+        self.assertEqual(disposition, "proposed")
+        self.assertEqual([(x["title"], x["deal"]) for x in saved], [("Honey", "12 for $5")])
+        for cut in ("2 for $5", "12 for", "12 for $", "2 for 5"):
+            disposition, replies, saved, drafts = self.go(text, ADD, self.add_slots("Honey", cut))
+            self.assertNotEqual(disposition, "proposed", cut)
+            self.assertIsNone(saved, cut)
+            self.assertEqual(drafts, [], cut)  # no draft was made at all
+            self.assertTrue(any("exactly as you type it" in r for r in replies), (cut, replies))
+
+    def test_edit_keeps_the_exact_deal_and_refuses_a_cut_one_before_any_draft(self):
+        text = "change the honey special to 12 for $5"
+        disposition, _replies, saved, _drafts = self.go(text, EDIT, {"special": "honey", "deal": "12 for $5"}, self.edit_seed())
+        self.assertEqual(disposition, "proposed")
+        self.assertEqual([x["deal"] for x in saved], ["12 for $5"])
+        for cut in ("2 for $5", "12 for"):
+            disposition, replies, saved, drafts = self.go(text, EDIT, {"special": "honey", "deal": cut}, self.edit_seed())
+            self.assertNotEqual(disposition, "proposed", cut)
+            self.assertIsNone(saved, cut)
+            self.assertEqual(drafts, [], cut)
+            self.assertTrue(any("exactly as you type it" in r for r in replies), (cut, replies))
+
+    def test_add_refuses_a_spelled_out_price_in_the_title_and_keeps_a_plain_one(self):
+        text = "put Honey five dollars on special, buy one get one, until Friday"
+        disposition, replies, saved, drafts = self.go(text, ADD, self.add_slots("Honey five dollars", "buy one get one"))
+        self.assertNotEqual(disposition, "proposed")
+        self.assertEqual((saved, drafts), (None, []))
+        self.assertTrue(any("price can only go in the deal line" in r for r in replies), replies)
+        disposition, _replies, saved, _drafts = self.go("put Five Star Honey on special, buy one get one, until Friday", ADD,
+                                                          self.add_slots("Five Star Honey", "buy one get one"))
+        self.assertEqual(disposition, "proposed")
+        self.assertEqual([x["title"] for x in saved], ["Five Star Honey"])
+
+    def test_edit_refuses_a_spelled_out_price_in_the_title_and_keeps_a_plain_one(self):
+        text = "rename the honey special to Honey five dollars"
+        disposition, replies, saved, drafts = self.go(text, EDIT, {"special": "honey", "title": "Honey five dollars"}, self.edit_seed())
+        self.assertNotEqual(disposition, "proposed")
+        self.assertEqual((saved, drafts), (None, []))
+        self.assertTrue(any("price can only go in the deal line" in r for r in replies), replies)
+        disposition, _replies, saved, _drafts = self.go("rename the honey special to Wildflower honey", EDIT,
+                                                          {"special": "honey", "title": "Wildflower honey"}, self.edit_seed())
+        self.assertEqual(disposition, "proposed")
+        self.assertEqual([x["title"] for x in saved], ["Wildflower honey"])
 
 
 if __name__ == "__main__":

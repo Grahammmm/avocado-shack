@@ -23,9 +23,9 @@ named product's picture is used unless he says no). Edit: `special` (his words: 
 
 ## Checks (rule ids are prefixed `specials-`)
 
-`deal-as-typed` (the deal must appear word for word in his texts; a reworded deal asks him to type it) · `text-limits` (60 characters each,
+`deal-as-typed` (the deal must appear word for word in his texts, standing on its own: not the tail or head of a longer figure or word, so `2 for $5` is refused when he typed `12 for $5`, `$5` when he typed `$5.50`, and a deal cut just before `free`, `off`, `each` or a figure is refused too; a reworded or cut deal asks him to type it) · `text-limits` (60 characters each,
 no markup or hidden characters) · `no-links-or-contact` (no web address, email or phone number) · `price-in-deal-only` (a price in the title
-is refused: D9 stays for every other price) · `end-date-required` · `dates` (last day not past, not before the first day, at most 31 days) ·
+is refused, whether a sign or figure (`$3`, `3 dollars`, `€5`) or spelled out (`five dollars`, `twenty-five cents`, `a buck`), for a typed title, an edit's new title and a product's name used as the title; `five pound jar` is a weight, not a price: D9 stays for every other price) · `end-date-required` · `dates` (last day not past, not before the first day, at most 31 days) ·
 `max-six-active` (never more than six on one day; the reply lists the running ones and asks which to take off) · `twin` (same title already
 running) · `room` (20 saved at most; offers to clear the finished) · `which` (one special, else one question naming the candidates) ·
 `something-to-change` · `not-already-true` · `finished-to-clear`. Each is one function in `specials.RULES`, run by the plan and (when it
