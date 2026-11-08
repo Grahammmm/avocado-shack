@@ -107,6 +107,8 @@ class HintTests(unittest.TestCase):
             "hike on 12/5/2027": ("12/5/2027", "2027-12-05"),
             "hike on 12/05/27": ("12/05/27", "2027-12-05"),
             "hike on 2027-12-05": ("2027-12-05", "2027-12-05"),
+            "hike on 5 Dec. 2027 at 9am": ("5 dec. 2027", "2027-12-05"),
+            "hike on 5th of Dec. 2027": ("5th of dec. 2027", "2027-12-05"),
             "hike on December 5 2025": ("december 5 2025", "2025-12-05"),  # a past year is as written, not rolled forward
             "hike on nov 2 2026": ("nov 2 2026", "2026-11-02"),
         }

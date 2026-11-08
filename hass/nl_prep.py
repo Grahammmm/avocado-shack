@@ -51,7 +51,7 @@ MONEY_RE = re.compile(r"\$\s?(\d+(?:\.\d{1,2})?)|\b(\d+(?:\.\d{1,2})?)\s*(?:buck
 TIME_RE = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b([01]?\d|2[0-3]):([0-5]\d)\b|\b(noon|midnight)\b")
 ORDINAL_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b")
 MONTH_DAY_RE = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b")
-DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b")
+DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b(?:\.(?=(?:,\s*|\s+)(?:'\d{2}|\d{4})(?![\d:])))?")
 SLASH_RE = re.compile(r"(?<!/)\b(1[0-2]|0?[1-9])/([0-3]?\d)\b(?:/(\d+))?")  # m/d or m/d/yy(yy); a year-first 2027/12/5 is not read
 ISO_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 YEAR_RE = re.compile(r"(?:,\s*|\s+)(?:'(\d{2})|(\d{4}))(?![\d:])")  # a year the owner wrote right after a month and day
