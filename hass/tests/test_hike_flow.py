@@ -67,9 +67,9 @@ class FlowCase(ConversationTestCase):
         self.editor = Clocked(self.repo.state, lambda: self.now)
         self.conv = self.open()
 
-    def open_asks(self):
-        if not self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_asks'").fetchone(): return []
-        return [json.loads(r["texts_json"]) for r in self.conv.db.execute("SELECT texts_json FROM open_asks")]
+    def open_asks(self):  # SKILLS-FW-3: the one open-request store (was the open_asks table)
+        if not self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_requests'").fetchone(): return []
+        return [json.loads(r["texts_json"]) for r in self.conv.db.execute("SELECT texts_json FROM open_requests")]
 
     def nothing_written(self):
         self.assertEqual(self.commits(), 0)
@@ -184,10 +184,13 @@ class AnswerAfterQuestionTests(FlowCase):
 
     def test_a_missing_or_broken_store_is_no_earlier_text_not_a_crash(self):
         self.say(OPEN1)
-        self.conv.db.execute("DROP TABLE open_asks")
+        self.conv.db.execute("DROP TABLE open_requests")  # SKILLS-FW-3: the store is open_requests now
         self.assertEqual(self.conv._recent_question(self.now), {"question": Q_TIME["question"]})
-        self.conv.db.execute("CREATE TABLE open_asks(provider_id TEXT PRIMARY KEY, asked_at TEXT NOT NULL, texts_json TEXT NOT NULL)")
-        self.conv.db.execute("INSERT INTO open_asks VALUES (?, 'x', 'not json')", (self.conv.db.execute("SELECT provider_id FROM messages").fetchone()[0],))
+        self.conv.db.execute("CREATE TABLE open_requests(request_id INTEGER PRIMARY KEY, provider_id TEXT NOT NULL, owner TEXT NOT NULL,"
+                             " state TEXT NOT NULL, texts_json TEXT NOT NULL, expires_at TEXT NOT NULL)")
+        far = (self.now + timedelta(hours=1)).isoformat()
+        self.conv.db.execute("INSERT INTO open_requests VALUES (1, ?, ?, 'open', 'not json', ?)",
+                             (self.conv.db.execute("SELECT provider_id FROM messages").fetchone()[0], self.conv.settings["ownerChat"], far))
         self.assertEqual(self.conv._recent_question(self.now), {"question": Q_TIME["question"]})
 
     def test_a_claim_the_owner_made_in_the_first_text_still_counts_for_the_answer(self):

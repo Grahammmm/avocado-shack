@@ -82,9 +82,9 @@ class ShelfCase(ConversationTestCase):
         products = json.loads((self.repo.wt / "hass" / "content" / "products.json").read_text("utf-8"))["products"]
         return next(p for p in products if p["id"] == pid)
 
-    def open_asks(self):
-        if not self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_asks'").fetchone(): return []
-        return [dict(r) for r in self.conv.db.execute("SELECT * FROM open_asks")]
+    def open_asks(self):  # SKILLS-FW-3: the one open-request store (was the open_asks table)
+        if not self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_requests'").fetchone(): return []
+        return [dict(r) for r in self.conv.db.execute("SELECT * FROM open_requests")]
 
     def nothing_written(self):
         self.assertEqual(self.commits(), 0)
@@ -397,8 +397,13 @@ class MorningReportTests(ShelfCase):
 
 
 class OldStoreTests(ShelfCase):
-    def test_a_store_made_before_this_change_gains_the_column_and_keeps_its_open_request(self):
+    def test_a_store_made_before_this_change_keeps_its_open_request_in_the_one_store(self):
+        # SKILLS-FW-3: the pre-FW-3 open_asks table (even without the pending column) is migrated into open_requests and dropped
         self.conv.db.execute("CREATE TABLE open_asks(provider_id TEXT PRIMARY KEY, asked_at TEXT NOT NULL, texts_json TEXT NOT NULL)")
+        self.conv.db.execute("INSERT INTO open_asks VALUES ('old1', ?, ?)", (self.now.isoformat(), json.dumps(["add a hike"])))
+        self.conv.requests.adopt_legacy(self.conv.settings["ownerChat"])
+        self.assertIsNone(self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_asks'").fetchone())
+        self.assertEqual([json.loads(r["texts_json"]) for r in self.open_asks()], [["add a hike"]])
         self.ask_and_get_question()
         self.assertEqual(self.say("yes"), "proposed")
 
