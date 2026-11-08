@@ -9,7 +9,7 @@
 Exit 0 ok, 2 config / secret / start point / runtime refused (one JSON line, field names only), 1 any other error.
 Nothing prints message text, a sender, a chat id, a URL, a secret or a path.
 """
-import argparse, base64, collections, ipaddress, json, logging, os, secrets, signal, socket, socketserver, stat, subprocess, sys, threading  # noqa: E401
+import argparse, base64, collections, contextlib, ipaddress, json, logging, os, secrets, signal, socket, socketserver, sqlite3, stat, subprocess, sys, threading  # noqa: E401
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -17,7 +17,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
-from hass import preview, receiver, relay  # noqa: E402
+from hass import preview, receiver, relay, stagelog  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
 
@@ -132,6 +132,19 @@ def _worktree(cfg) -> str:
     except editor_mod.UnsafeState: raise HostConfigError(["state"]) from None
 
 
+def paused_flag(state) -> bool:
+    """HASS-FAST-1: True when changes are paused or this cannot be read. Read-only (`mode=ro`), one SELECT, nothing written;
+    the Mac sends its 👀 only when this is False, so an unreadable store means no 👀 (the safe answer)."""
+    try:
+        path = Path(state).resolve() / "conversation.sqlite3"
+        if not path.is_file(): return True
+        with contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=1)) as db:
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone(): return False
+            return db.execute("SELECT 1 FROM control WHERE name = 'paused'").fetchone() is not None
+    except (OSError, ValueError, sqlite3.Error):
+        return True
+
+
 # -- serve ---------------------------------------------------------------------------------------------------------
 class Handler(BaseHTTPRequestHandler):
     timeout = 10  # a slow client cannot hold the single-threaded server
@@ -176,6 +189,7 @@ class Handler(BaseHTTPRequestHandler):
         secs = int(now.timestamp())
         if msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
         elif msg["op"] == "ack": srv.store.ack(msg["ids"], secs); out = {"op": "acked", "ids": msg["ids"]}
+        elif msg["op"] == "state" and "paused" not in msg: out = {"op": "state", "paused": srv.paused()}  # HASS-FAST-1, read-only
         elif msg["op"] == "picture":
             while srv.pic_times and secs - srv.pic_times[0] >= 60: srv.pic_times.popleft()
             shot = None if len(srv.pic_times) >= PICTURES_PER_MIN else srv.store.picture(msg["id"], msg["idx"])
@@ -187,9 +201,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 class Server(HTTPServer):
-    def __init__(self, cfg, secret, rx, store, clock=_now):
+    def __init__(self, cfg, secret, rx, store, clock=_now, paused=lambda: True):
         self.address_family = socket.AF_INET6 if ":" in cfg["addr"][0] else socket.AF_INET
         self.peers, self.secret, self.receiver, self.store, self.clock = cfg["peers"], secret, rx, store, clock
+        self.paused = paused  # HASS-FAST-1: () -> bool, True when changes are paused or unknown (no 👀)
         self.pic_times = collections.deque()
         super().__init__(cfg["addr"], Handler)
 
@@ -202,21 +217,51 @@ class Server(HTTPServer):
 
 
 # -- work ----------------------------------------------------------------------------------------------------------
+class _Timed:
+    """HASS-FAST-1: stage times around each interpreter call; every other attribute (last_error ...) passes through."""
+    def __init__(self, inner, worker): self._inner, self._worker = inner, worker
+
+    def interpret(self, *args, **kwargs):
+        w = self._worker
+        w.stage("interp-start", w.current)
+        try: return self._inner.interpret(*args, **kwargs)
+        finally: w.stage("interp-end", w.current)
+
+    def __getattr__(self, name): return getattr(self._inner, name)
+
+
 class Worker:
-    def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None):
+    def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None, stage=stagelog.off):
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
+        self.stage, self.current = stage, ""  # HASS-FAST-1: `current` is the message being handled (stage log only)
         self.sender = relay.RelaySender(store, conv.settings["ownerChat"], lambda: int(clock().timestamp()), shots_dir)
         self.rev = editor_mod.content_revision(self.worktree)
+        conv.interpreter = _Timed(conv.interpreter, self)
+        raw_send = self.sender.send
+
+        def send(chat, text, attachments=()):
+            rid = raw_send(chat, text, attachments)
+            self.stage("reply-queued", self.current, rid=stagelog.short(rid))
+            return rid
+        self.sender.send = send
         handle = rx.handle
 
         def refreshed(msg, *a, **kw):  # an earlier message in the same drain may have applied a change
             self._refresh()
-            return handle(msg, *a, **kw)
+            self.current = msg.provider_id
+            self.stage("worker-pickup", msg.provider_id)
+            try: return handle(msg, *a, **kw)
+            finally:
+                # HASS-FAST-1: this message's replies go out now, not after the rest of the drain (a slow earlier message
+                # used to hold a quick command's reply). A failure here changes nothing: cycle() flushes again and raises as before.
+                try: self.conv.flush(self.sender)
+                except Exception: pass  # noqa: BLE001,S110
+                self.stage("handled", msg.provider_id)
         rx.handle = refreshed
 
     def _refresh(self):
         if (rev := editor_mod.content_revision(self.worktree)) != self.rev:
-            self.conv.interpreter, self.rev = self.build(), rev
+            self.conv.interpreter, self.rev = _Timed(self.build(), self), rev
 
     def cycle(self):
         """Rebuild the interpreter prompt when the content changed (before every message), drain the inbox, queue the replies."""
@@ -245,7 +290,7 @@ def interpreter_builder(cfg, worktree):
     return build
 
 
-def make_worker(cfg, store, *, editor=None, build=None, clock=_now) -> Worker:
+def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagelog.off) -> Worker:
     worktree = _worktree(cfg)
     build = build or interpreter_builder(cfg, worktree)
     if cfg["approvals"] == "live" and editor is None:
@@ -258,7 +303,7 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now) -> Worker:
         conv.editor.reconcile()
     rx = receiver.Receiver(state=inbox_mod.Inbox(cfg["state"], clock=clock), settings=conv,
                            apply=cfg["approvals"] in ("private", "live"))
-    return Worker(conv, rx, store, worktree, build, clock, Path(cfg["state"]).resolve() / "screenshots" if cfg["pictures"] else None)
+    return Worker(conv, rx, store, worktree, build, clock, Path(cfg["state"]).resolve() / "screenshots" if cfg["pictures"] else None, stage)
 
 
 # -- commands ------------------------------------------------------------------------------------------------------
@@ -287,12 +332,14 @@ def _run(args, root, clock):
         return {"result": "ok", "start_at": args.at}
     cfg, key = _ready(args, root, need_start=args.cmd != "check")
     host_dir = Path(args.host).resolve().parent
+    stage = stagelog.StageLog(host_dir / "stages.jsonl")  # HASS-FAST-1: read-only stage times, ids hashed, no text
     if args.cmd == "work":
         stop = _stopper()
-        make_worker(cfg, relay.RelayStore(host_dir), clock=clock).run(stop)
+        make_worker(cfg, relay.RelayStore(host_dir), clock=clock, stage=stage).run(stop)
     elif args.cmd == "serve":
         stop, rx = _stopper(), receiver.Receiver(state=inbox_mod.Inbox(cfg["state"], clock=clock), settings=None)
-        srv = Server(cfg, key, rx, relay.RelayStore(host_dir), clock)
+        rx.stage = stage
+        srv = Server(cfg, key, rx, relay.RelayStore(host_dir), clock, paused=lambda: paused_flag(cfg["state"]))
         srv.timeout = 1
         while not stop.is_set(): srv.handle_request()
     return {"result": "ok"}

@@ -37,3 +37,16 @@ Screenshots (HASS-ATTACH-1, UNVERIFIED on a real Mac until runbook step 19): whe
 picture to the owner chat only via loopback BlueBubbles `POST /api/v1/message/attachment`, after checking sha256, size and the
 PNG signature. Progress is kept in the spool (`sent_pics`), so a restart never repeats the text. A picture that fails three
 times or does not verify gets one fallback text and the reply is acknowledged. Nothing is written to disk on the Mac.
+
+Eyes ack (HASS-FAST-1): when the forwarder stores a NEW message from the owner's own address in the owner's one-to-one chat,
+it sends one text `👀` to that chat through the same BlueBubbles send as replies, before the receiver or any model is involved.
+Never for a stranger, a group, Hass's own message (so never for its own 👀), an edit, a reaction, a message found more than 120 s
+after it was sent, or while changes are paused or the host has not answered (the host's `state` op, asked every 5 s, answer trusted
+30 s; the owner's own pause command also holds it for 60 s). One ack per message id (spool table `ack`, claimed before the send, so
+a crash or a replay never sends a second); a failed or slow (4 s cap) send is recorded and ignored. Optional config key `"ack": false`
+switches it off. The tapback route is not used: BlueBubbles' react call needs the Private API (kept off) and iMessage has no 👀
+tapback; `ackcheck --config FILE` (GET only, sends nothing) prints whether this server could send any tapback.
+Deploy the host first (it learns the `state` op), then the Mac; a new Mac with an old host just sends no 👀.
+Timing: the forwarder writes `stages.jsonl` in the spool dir (stage name, time, a one-way hash of the message id; no text or
+sender) and the host writes one in its host dir; `python3 hass/stagelog.py MAC_LOG HOST_LOG` prints the table. Reply pull is every
+1 s for 3 minutes after an owner message (5 s otherwise); the catch-up poll is every 15 s (was 60 s).

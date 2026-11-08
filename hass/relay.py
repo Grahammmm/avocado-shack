@@ -87,6 +87,8 @@ SHAPES = {  # body op -> [(keys, validator of the whole body)]; "picture" is a r
                  and b["idx"] in (0, 1) and type(b["sha256"]) is str and bool(bridge.MAC_RE.fullmatch(b["sha256"]))
                  and _b64(b["b64"]))],
     "gone": [({"op", "id", "idx"}, lambda b: type(b["id"]) is int and type(b["idx"]) is int and b["idx"] in (0, 1))],
+    # HASS-FAST-1: the Mac asks if the 👀 may be sent; the answer is true when changes are paused OR the host cannot tell
+    "state": [({"op"}, lambda b: True), ({"op", "paused"}, lambda b: type(b["paused"]) is bool)],
 }
 
 
@@ -210,6 +212,7 @@ class RelaySender:
         self.store, self.owner_chat, self.clock, self.shots_dir = store, owner_chat, clock, shots_dir
 
     def send(self, chat, text, attachments=()):
+        """Stores the reply for the Mac to pull; returns the relay id (HASS-FAST-1: the stage log joins reply to message by it)."""
         if chat != self.owner_chat or len(text) > MAX_TEXT or len(attachments) > 10 or bridge.SURROGATE_RE.search(text):
             raise RelayRefused("reply refused")
         shots = []
@@ -217,4 +220,4 @@ class RelaySender:
             for path in attachments[:MAX_SHOTS]:
                 data = read_shot(path, self.shots_dir)
                 if data is not None: shots.append(data)
-        self.store.add(chat, text, len(attachments) - len(shots), self.clock(), shots)
+        return self.store.add(chat, text, len(attachments) - len(shots), self.clock(), shots)
