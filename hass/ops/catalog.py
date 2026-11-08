@@ -223,9 +223,11 @@ def _product_set_availability(content, args, ctx):
         return product
     if product["status"] != "active":
         return Refused(f"{product['id']} is {product['status']}; restore it before marking it available")
-    if product.get("available") == args["available"]:
+    day = checked_on(content.store)
+    if (product.get("available") == args["available"]
+            and product.get("available_on") == shop_today(ctx.now).isoformat()):  # HASS-SHELFCHECK-FLOW-1: a stale same word is a re-check
         return Refused(f"{product['id']} is already marked available={args['available']}; nothing to change")
-    if (day := checked_on(content.store)) != shop_today(ctx.now):  # AV1102-01: only onto today's shelf check
+    if day != shop_today(ctx.now):  # AV1102-01: only onto today's shelf check
         return Refused(NOT_CHECKED_TODAY)
     before = copy.deepcopy(product)
     product["available"] = args["available"]

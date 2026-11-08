@@ -173,6 +173,24 @@ class StaleCheckTests(ShelfCase):
         self.nothing_written()
 
 
+class SameValueNextDayTests(ShelfCase):
+    def test_sold_out_yesterday_and_sold_out_again_today_goes_through_the_shelf_check(self):
+        self.checked(TODAY)
+        self.say(SOLD_OUT)
+        self.say("yes")
+        self.assertEqual(self.product()["available_on"], TODAY)
+        self.now += timedelta(days=1)  # next day: the word and its date are both yesterday's
+        self.replies()
+        self.assertEqual(self.say(SOLD_OUT), "question")
+        self.assertEqual(self.replies(), [Q_SHELF])
+        self.assertEqual(self.say("yes"), "proposed")
+        self.assertEqual([c["op"] for c in json.loads(self.drafts()[-1]["ops_json"])],
+                         ["store.confirm_selection", "product.set_availability"])
+        self.assertEqual(self.say("yes"), "approved")
+        self.assertEqual(self.product()["available_on"], "2026-11-03")
+        self.assertEqual(self.store()["selection_checked_on"], "2026-11-03")
+
+
 class TodaysCheckTests(ShelfCase):
     def test_with_todays_check_the_change_is_drafted_at_once_with_no_question(self):
         self.checked(TODAY)
