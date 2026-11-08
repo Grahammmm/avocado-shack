@@ -14,21 +14,27 @@ from hass.conversation import parse_command, read_command, sender_key  # noqa: E
 MAX_BODY = 256 * 1024
 MAX_REPLY, PIC_RETRY = 2621440, (10, 30)  # HASS-ATTACH-1: picture reply cap (2.5 MiB); waits after the 1st and 2nd failure
 GAVE_UP = "The picture for that message didn't come through. What the message says is still right."
-# HASS-FAST-1 (eyes ack). The ack is a single text "👀" to the owner chat through the existing send path (BlueBubbles' tapback
-# endpoint needs the Private API, which stays off, and iMessage has no 👀 tapback anyway: see reports/hass/FAST-1.md).
-ACK_TEXT = "\N{EYES}"
+# HASS-TAPBACK-1 (replaces the HASS-FAST-1 text 👀, which G rejected: "mark my message, don't send me a message"). The ack is ONE
+# real iMessage tapback on the owner's message, through BlueBubbles' react endpoint (Private API). It is never a text: there is
+# no text-ack code path left. BlueBubbles documents exactly six tapbacks (server source `possibleReactions`) and no emoji
+# reaction, so the 👀 emoji is not offered; see reports/hass/TAPBACK-1.md.
+TAPBACKS = ("love", "like", "dislike", "laugh", "emphasize", "question")  # the allowlist; never a "-name" (that REMOVES a tapback)
+ACK_REACTION = "like"  # default thumbs up; config key ack_reaction picks another of TAPBACKS
+REACT_PATH = "/api/v1/message/react"
+GUID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")  # a message guid (a UUID in practice); anything else means no react call
+PROBE_TTL, PROBE_FAIL_TTL = 30, 5  # seconds the Private API answer (or an unanswered probe) is reused before asking again
 ACK_MAX_AGE = 120   # a message older than this when accepted (catch-up after sleep or an outage) is never acked
-ACK_BUDGET = 2.0    # the 👀 should be CONFIRMED sent this many seconds after the message was stored; one sent after it is recorded `late`
-ACK_STALE = 10      # an ack still unsent this long after it was queued is recorded `stale` and not sent at all (a late 👀 is sent until then)
-ACK_TIMEOUT = 1.5   # seconds the 👀 send itself may take (a reply send gets 10); with ACK_STATE_TIMEOUT: <= 2 s per attempt
-ACK_STATE_TIMEOUT = 0.5  # seconds the fresh "paused?" question to the host may take; no answer means no 👀
+ACK_BUDGET = 2.0    # the tapback should be CONFIRMED sent this many seconds after the message was stored; one sent after it is recorded `late`
+ACK_STALE = 10      # an ack still unsent this long after it was queued is recorded `stale` and not sent at all (a late tapback is sent until then)
+ACK_TIMEOUT = 1.5   # seconds the react call itself may take (a reply send gets 10); with ACK_STATE_TIMEOUT: <= 2 s per attempt
+ACK_STATE_TIMEOUT = 0.5  # seconds the fresh "paused?" question to the host (and the Private API probe) may take; no answer means no tapback
 ACK_TICK = 0.25     # the ack thread also looks every this many seconds (a restart, a missed wake-up)
 CATCH_UP_PAGE = 50  # the most messages one catch-up query returns, so the most owner messages one cycle can accept at once
 ACK_WORKERS = CATCH_UP_PAGE  # one ack worker per pending message, up to the largest burst a cycle accepts: every attempt starts at once
 ACK_CLAIM_STALE = 8  # a row left `checking` this long (a worker died before deciding) goes back to `pending`; nothing was sent
 PULL_SLOW, PULL_FAST, FAST_WINDOW = 5, 1, 180  # reply pull every 5 s, every 1 s for 3 minutes after an owner message
 CATCH_UP_EVERY = 15  # was 60: the safety net that finds a message the BlueBubbles webhook did not announce
-KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack"}
+KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack", "ack_reaction"}
 NOTICE = "Hass can't reach its computer right now, so nothing has changed yet. Your messages are saved and will be handled when it's back."
 
 
@@ -55,9 +61,10 @@ def key_read(path):
 
 def load_config(path):
     cfg = json.loads(private_read(path, 16384))
-    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort", "ack"} - set(cfg): raise ValueError("config")
+    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort", "ack", "ack_reaction"} - set(cfg): raise ValueError("config")
     cfg.setdefault("webhookPort", 8796)
-    if type(cfg.get("ack", True)) is not bool: raise ValueError("config")  # HASS-FAST-1: absent means on; false switches the 👀 off
+    if type(cfg.get("ack", True)) is not bool: raise ValueError("config")  # absent means on; false switches the tapback off
+    if "ack_reaction" in cfg and (type(cfg["ack_reaction"]) is not str or cfg["ack_reaction"] not in TAPBACKS): raise ValueError("config")  # HASS-TAPBACK-1: allowlist
     if not isinstance(cfg["ownerChat"], str) or not re.fullmatch(r"iMessage;-;[^;\s]+", cfg["ownerChat"]): raise ValueError("config")
     if any(type(cfg[k]) is not int or not 1 <= cfg[k] <= 65535 for k in ("bbPort", "webhookPort")): raise ValueError("config")
     for k in ("bbPasswordFile", "secretFile", "spoolDir", "webhookTokenFile"):
@@ -88,6 +95,29 @@ def request_json(url, body=None, limit=1024 * 1024, timeout=10):
             if len(raw) > limit: raise ValueError("response-size")
             return json.loads(raw)
     except Exception: raise bridge.BridgeError("transport-error") from None
+
+
+def valid_guid(guid): return type(guid) is str and GUID_RE.fullmatch(guid) is not None
+
+
+class BlueBubblesReactor:
+    """HASS-TAPBACK-1: one tapback on one message, `POST /api/v1/message/react` on loopback BlueBubbles. Nothing else: it cannot
+    send a text. A reaction outside TAPBACKS or a guid that is not a plain message guid raises ValueError BEFORE any network
+    call. The password is read fresh from its private file and goes only in the `password` query parameter; errors carry no URL."""
+    def __init__(self, base_url, password_file, transport=None, timeout=ACK_TIMEOUT):
+        self.base, self.password_file, self.timeout = base_url.rstrip("/"), password_file, timeout
+        self.transport = transport or bridge._urllib_transport
+
+    def react(self, chat, guid, reaction):
+        if reaction not in TAPBACKS or not valid_guid(guid) or type(chat) is not str or not chat: raise ValueError("react-args")
+        try: password = private_read(self.password_file, 4096).decode().strip()
+        except (ValueError, UnicodeDecodeError): password = ""
+        if not password: raise bridge.BridgeError("password-unreadable")
+        body = json.dumps({"chatGuid": chat, "selectedMessageGuid": guid, "reaction": reaction, "partIndex": 0}).encode()
+        url = f"{self.base}{REACT_PATH}?{urllib.parse.urlencode({'password': password})}"
+        try: status = self.transport(url, body, {"Content-Type": "application/json"}, self.timeout)
+        except Exception: raise bridge.BridgeError("transport-error") from None  # noqa: BLE001 - its text may hold the URL
+        if not (type(status) is int and 200 <= status < 300): raise bridge.BridgeError("http-error", status if type(status) is int else None)
 
 
 class Spool:
@@ -170,16 +200,15 @@ class Spool:
 
 
 class Forwarder:
-    def __init__(self, cfg, spool, clock=time.time, transport=request_json, sender=None, attach=None, stage=None, acker=None):
+    def __init__(self, cfg, spool, clock=time.time, transport=request_json, sender=None, attach=None, stage=None, reactor=None):
         self.cfg, self.spool, self.clock, self.transport = cfg, spool, clock, transport
         spool.clock = clock
         self.stage = spool.stage = stage or stagelog.off  # HASS-FAST-1: read-only stage times (main() passes a StageLog)
         self.secret = key_read(cfg["secretFile"])
         self.sender = sender or bridge.BlueBubblesSender(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
-        # The 👀 goes through the same send path, but its own short timeout (ACK_TIMEOUT), and from its own thread.
-        self.acker = acker or (self.sender if sender else bridge.BlueBubblesSender(
-            f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"],
-            transport=lambda url, body, headers, timeout: bridge._urllib_transport(url, body, headers, min(timeout, ACK_TIMEOUT))))
+        # The tapback has its own object (it can only react, never send a text), its own short timeout and its own thread.
+        self.reactor = reactor or BlueBubblesReactor(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
+        self.probe_cache, self.probe_lock = None, threading.Lock()  # (valid until, blocker reason or None)
         self.attach = attach or bridge_attach.BlueBubblesAttachmentSender(
             f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], cfg["ownerChat"])
         self.big = functools.partial(request_json, limit=MAX_REPLY) if transport is request_json else transport
@@ -310,12 +339,30 @@ class Forwarder:
         finally:
             if ids: self.control({"op": "ack", "ids": ids}, "acked")
 
-    # -- HASS-FAST-1: the 👀 ack. It runs on its own thread with its own SQLite connection, so nothing slow in the main loop
-    # (a reply pull, a picture, a catch-up query, a post to the receiver) can delay it and a slow or failing ack send can
+    # -- HASS-FAST-1 / HASS-TAPBACK-1: the ack (a real tapback). It runs on its own thread with its own SQLite connection, so nothing slow in the main loop
+    # (a reply pull, a picture, a catch-up query, a post to the receiver) can delay it and a slow or failing react can
     # never delay the main loop. The only things the two share are the spool file (atomic row claims) and the nonce table.
+    def tapback_blocker(self):
+        """None when BlueBubbles says the Private API is on AND its helper is connected (the existing GET-only server/info
+        probe, 0.5 s limit); otherwise the reason code: private_api_off, helper_disconnected, or private_api_unknown (no usable answer:
+        fail closed). Reused for PROBE_TTL seconds (PROBE_FAIL_TTL for an unanswered probe) so a burst asks once."""
+        with self.probe_lock:
+            now = self.clock()
+            if self.probe_cache is not None and self.probe_cache[0] > now: return self.probe_cache[1]
+            try:
+                password = private_read(self.cfg["bbPasswordFile"], 4096).decode().strip()
+                info = self.quick(f'http://127.0.0.1:{self.cfg["bbPort"]}/api/v1/server/info?{urllib.parse.urlencode({"password": password})}')["data"]
+                private, helper = info.get("private_api"), info.get("helper_connected")
+                if type(private) is not bool or type(helper) is not bool: raise ValueError("info-shape")
+                reason, ttl = (None if private and helper else "private_api_off" if not private else "helper_disconnected"), PROBE_TTL
+            except Exception:  # noqa: BLE001 - unknown is not "on"
+                reason, ttl = "private_api_unknown", PROBE_FAIL_TTL
+            self.probe_cache = (now + ttl, reason)
+            return reason
+
     def host_paused(self, spool):
         """True when changes are paused or a pause command is on its way; None when the host cannot be asked right now.
-        Asked fresh before every 👀 (nothing cached): the host reads its own pause flag and its unread queue, read-only."""
+        Asked fresh before every tapback (nothing cached): the host reads its own pause flag and its unread queue, read-only."""
         try:
             paused = self.control({"op": "state"}, "state", spool=spool, quick=True)["paused"]
             return paused if type(paused) is bool else None
@@ -324,7 +371,7 @@ class Forwarder:
 
     def pause_ahead(self, spool, created):
         """True when a pause command (or a message that cannot be read) is stored here and not yet handed to the host, or an
-        earlier doorbell is still unresolved (what it says is unknown): the host cannot know about those, so no 👀 yet."""
+        earlier doorbell is still unresolved (what it says is unknown): the host cannot know about those, so no tapback yet."""
         db = spool.db
         if db.execute("SELECT 1 FROM fetch WHERE event='new-message' AND created_at<=? LIMIT 1", (created,)).fetchone(): return True
         for (payload,) in db.execute("SELECT payload FROM inbound WHERE state='pending'"):
@@ -354,28 +401,38 @@ class Forwarder:
         return spool.db.execute("UPDATE ack SET state='checking',done_at=? WHERE provider_id=? AND state='pending'", (self.clock(), pid)).rowcount == 1
 
     def _ack_row(self, spool, pid, created):
-        """Decide one claimed (`checking`) row, once and finally, and send its 👀 if it is due. At most once per message id:
-        checking -> sending (committed before the send) -> sent | late | failed, and a row found `sending` after a crash is
-        never sent again. No 👀 (and the state says why) when the ack is switched off, when it is older than ACK_STALE, when a
-        pause command is ahead of it (stored here or queued at the host), when the host says paused, or when the host cannot
-        be asked right now (fail closed). A failure or timeout is recorded and ignored. A 👀 that was sent but not confirmed
+        """Decide one claimed (`checking`) row, once and finally, and send its tapback if it is due. At most once per message id:
+        checking -> sending (committed before the call) -> sent | late | react_failed, and a row found `sending` after a crash is
+        never sent again. No tapback (and the state says why, and `ack_skipped reason=<state>` goes to the log) when the ack is
+        switched off, when it is older than ACK_STALE, when the message guid or the configured reaction is not valid, when a
+        pause command is ahead of it (stored here or queued at the host), when the host says paused, when it cannot be asked
+        right now (fail closed), or when BlueBubbles reports the Private API off, its helper not connected or not answering.
+        A failure or timeout is recorded and ignored; it is NEVER turned into a text. A tapback that was sent but not confirmed
         within ACK_BUDGET of the message being stored is recorded `late`, never `sent`: it is not counted as on time."""
         db = spool.db
         now = self.clock()
 
-        def close(state): db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='checking'", (state, now, pid))
+        def close(state):
+            db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='checking'", (state, now, pid))
+            print("ack_skipped", f"reason={state}", file=sys.stderr)  # a reason code only: no id, text, chat or sender
         if now - created > ACK_STALE: return close("stale")
         if not self.cfg.get("ack", True): return close("off")
+        reaction = self.cfg.get("ack_reaction", ACK_REACTION)
+        if reaction not in TAPBACKS: return close("bad_reaction")
+        if not valid_guid(pid): return close("bad_guid")
         if self.pause_ahead(spool, created): return close("paused")
         paused = self.host_paused(spool)
         if paused is not False: return close("paused" if paused else "unknown")
+        blocker = self.tapback_blocker()
+        if blocker is not None: return close(blocker)
         if db.execute("UPDATE ack SET state='sending',done_at=? WHERE provider_id=? AND state='checking'", (now, pid)).rowcount != 1: return
         self.stage("ack-start", pid)
         try:
-            self.acker.send(self.cfg["ownerChat"], ACK_TEXT)
+            self.reactor.react(self.cfg["ownerChat"], pid, reaction)
             state = "sent"
         except Exception:  # noqa: BLE001 - an ack never blocks, retries or leaks: the state records it, nothing else
-            state = "failed"
+            state = "react_failed"
+            print("ack_skipped", f"reason={state}", file=sys.stderr)
         done = self.clock()
         if state == "sent" and done - created > ACK_BUDGET: state = "late"
         db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=?", (state, done, pid))
@@ -463,7 +520,7 @@ class Forwarder:
         fast = self.clock() < self.spool.get("fast_until")  # an owner message arrived in the last FAST_WINDOW seconds
         if fast: self.next_pull = min(self.next_pull, self.clock() + PULL_FAST)  # do not finish a slow wait first
         # Acceptance comes first (a webhook fetch, the catch-up poll) and the ack is kicked right after it, ahead of the
-        # reply pull, the pictures and the post to the receiver, none of which can then delay the 👀.
+        # reply pull, the pictures and the post to the receiver, none of which can then delay the tapback.
         try: self.fetch()
         except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
         self.ack_kick()
@@ -522,11 +579,14 @@ def main(argv=None):
     try:
         cfg = load_config(args.config)
         if args.command == "ackcheck":
-            # HASS-FAST-1: GET only, no message, no react call. Says whether this BlueBubbles server could send a tapback at all.
+            # GET only, no message, no react call. Says whether this BlueBubbles server can send a tapback now (the runbook's check).
             password = private_read(cfg["bbPasswordFile"], 4096).decode().strip()
             info = request_json(f'http://127.0.0.1:{cfg["bbPort"]}/api/v1/server/info?{urllib.parse.urlencode({"password": password})}')["data"]
             private, helper = info.get("private_api") is True, info.get("helper_connected") is True
-            print(json.dumps({"ackMethod": "text", "helperConnected": helper, "privateApi": private, "tapbackPossible": private and helper}, sort_keys=True))
+            version = info.get("server_version")
+            if type(version) is not str or not re.fullmatch(r"[0-9A-Za-z.+-]{1,32}", version): version = None
+            print(json.dumps({"ackMethod": "tapback", "ackReaction": cfg.get("ack_reaction", ACK_REACTION), "helperConnected": helper, "privateApi": private,
+                              "serverVersion": version, "supportedReactions": list(TAPBACKS), "tapbackPossible": private and helper}, sort_keys=True))
             return 0
         if args.command == "check":
             # GET only; even a 404 proves the receiver answered. No messages or relay operations.

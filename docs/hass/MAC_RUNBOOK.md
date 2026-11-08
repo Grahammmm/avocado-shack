@@ -26,7 +26,7 @@ UI labels below are provisional; step 18 records actual versions/names. Taildrop
 6. **G / account website + AgentOrange:** In Tailscale Access controls (UNVERIFIED until step 18), allow only this Mac to reach `agentorange:8795`; enable Taildrop (UNVERIFIED until step 18) only between these machines. If receiving files requires it, G runs `sudo tailscale set --operator=$USER` on AgentOrange.
    Expected: only the Mac has this network access; file transfer works. If Taildrop is unavailable, G carries the step-11 bundle on USB and uses the step-15 typed-key fallback; do not broaden access.
    <!-- step 6 needs: mac-tailnet makes: acl,taildrop -->
-7. **G / Mac:** Install BlueBubbles Server from its official release. Grant only prompted permissions in Privacy & Security (UNVERIFIED until step 18); keep Private API (UNVERIFIED until step 18) off.
+7. **G / Mac:** Install BlueBubbles Server from its official release. Grant only prompted permissions in Privacy & Security (UNVERIFIED until step 18); keep Private API (UNVERIFIED until step 18) off for now (the tapback add-on at the end turns it on).
    Expected: server sees the business Messages account without the Private API.
    <!-- step 7 needs: imessage makes: bb -->
 8. **G / Mac:** Generate a server password with `openssl rand -hex 24` only at G's private console; set Server password (UNVERIFIED until step 18) in BlueBubbles. Disable every proxy and dynamic-DNS option (UNVERIFIED until step 18). Enable Firewall (UNVERIFIED until step 18) in macOS.
@@ -74,7 +74,7 @@ UI labels below are provisional; step 18 records actual versions/names. Taildrop
 
 12. **G / Mac:** Create the spool with `umask 077; mkdir -p ~/Library/Application\ Support/HassForwarder/spool`. Privately write `~/Library/Application Support/HassForwarder/config.json`; use the same owner one-to-one chat recorded in step 2:
     ```json
-    {"ownerChat":"iMessage;-;<owner address>","receiverUrl":"http://<agentorange tailnet name>:8795","bbPort":<BlueBubbles port>,"bbPasswordFile":"<absolute support path>/bb-password","secretFile":"<absolute support path>/envelope.key","spoolDir":"<absolute support path>/spool","webhookPort":8796,"ack":true,"webhookTokenFile":"<absolute support path>/webhook.token"}
+    {"ownerChat":"iMessage;-;<owner address>","receiverUrl":"http://<agentorange tailnet name>:8795","bbPort":<BlueBubbles port>,"bbPasswordFile":"<absolute support path>/bb-password","secretFile":"<absolute support path>/envelope.key","spoolDir":"<absolute support path>/spool","webhookPort":8796,"ack":true,"ack_reaction":"like","webhookTokenFile":"<absolute support path>/webhook.token"}
     ```
     Run `chmod 600 ~/Library/Application\ Support/HassForwarder/config.json`. Expected: private config, spool 0700, actual integer bbPort and absolute file paths.
     <!-- step 12 needs: mac-secrets,mac-code makes: fwd-config -->
@@ -148,3 +148,13 @@ UI labels below are provisional; step 18 records actual versions/names. Taildrop
     Expected: forwarding, processing and timers stopped; STOP prevents publication. Leave drafts unapproved. Optionally remove the Tailscale ACL and GitHub deploy key in their account settings (UNVERIFIED until step 18).
     Emergency rollback: G uses Cloudflare Pages → Rollback (UNVERIFIED until step 18), then from runtime `python3 hass/publish_live.py resolve <change id> --as reverted --host ~/.local/state/hass/host/host.json` only after checking the actual site. Preserve journals; unknown is not success.
     <!-- step 23 needs: runtime makes: stopped -->
+
+## Add-on — Real tapback ack (HASS-TAPBACK-1; G does these on the Mac mini, only after step 18 passes)
+
+Hass marks the owner's message with a real iMessage tapback (thumbs up) to show it saw it. It never texts an ack. A tapback needs the BlueBubbles Private API, and the Private API needs SIP off (G approved this on 2026-11-08). No agent touches SIP, BlueBubbles settings or the Mac. All UI labels here are UNVERIFIED until step 18's record exists.
+- **T1 G / Mac, Recovery:** Shut down. Hold the power button until startup options appear, choose Options, Continue, then Utilities, Terminal. Run `csrutil disable`, then restart. Expected: `csrutil status` in a normal Terminal says disabled.
+- **T2 G / Mac, BlueBubbles:** In BlueBubbles Settings, Private API (UNVERIFIED), enable the Private API and follow its helper install prompts; restart BlueBubbles if it asks.
+- **T3 G / Mac, probe (GET only, sends nothing):** `python3.12 ~/hass/avocado-shack/mac/hass_forwarder.py ackcheck --config ~/Library/Application\ Support/HassForwarder/config.json`. Expected: `"privateApi": true`, `"helperConnected": true`, `"tapbackPossible": true`, `"ackReaction": "like"`. Record `serverVersion` privately. If either is false the forwarder sends no tapback at all (and never a text); its log shows `ack_skipped reason=private_api_off` or `helper_disconnected`.
+- **T4 G / Mac, ship and restart:** the operator puts the new `mac/hass_forwarder.py` in the repo checkout from step 11, then `launchctl kickstart -k gui/$(id -u)/com.avocadoshack.hass-forwarder`. Expected: the owner texts `status`; a thumbs up appears on that message, then the normal reply; no separate "seen" text.
+- **Choose or switch off:** config key `ack_reaction` is one of `love`, `like`, `dislike`, `laugh`, `emphasize`, `question` (default `like`; anything else stops the forwarder starting). Roll back with `"ack": false` in the config, then the same kickstart; the tapback stops at once and nothing else changes.
+- **Undo SIP:** only if wanted: Recovery, Terminal, `csrutil enable`, restart, and turn the Private API off in BlueBubbles. Hass keeps working without it, just with no tapback.
