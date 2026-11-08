@@ -127,6 +127,10 @@ class PlanRules(unittest.TestCase):
         self.assertEqual(_refusal(stock.STOCK_CHECKED, {"out": [EGGS]}, ctx), stock.DONE_TODAY)  # it already says so
         self.assertEqual(stock.STOCK_CHECKED.plan({"in": [EGGS]}, ctx)[0]["args"], {"yes": [EGGS]})  # a different word is a change
 
+    def test_a_product_repeated_in_one_check_list_is_refused_not_deduplicated(self):
+        ctx = _ctx([_product()])
+        self.assertEqual(_refusal(stock.STOCK_CHECKED, {"in": [EGGS, EGGS]}, ctx), stock.TWICE.format(name="Cal Poly eggs"))
+
     def test_clear_needs_a_word_to_clear(self):
         ctx = _ctx([_product(), _product("photo-product-001", "Hass avocado", available="limited", available_on="2026-11-08")])
         self.assertEqual(_refusal(stock.STOCK_CLEAR, {"items": [EGGS]}, ctx), "Cal Poly eggs has no label to clear.")

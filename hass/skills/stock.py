@@ -134,6 +134,8 @@ def _checked_plan(slots, ctx) -> list:
     seen: dict = {}
     args: dict = {}
     for word, ids in lists.items():
+        if isinstance(ids, (list, tuple)) and len(set(ids)) != len(ids) and all(isinstance(x, str) and ID_RE.fullmatch(x) for x in ids):
+            raise Refusal(TWICE.format(name=_name(ctx, next(x for x in ids if list(ids).count(x) > 1))))  # each product once, same list too
         ids = _ids(ids, cap=None)  # a morning check may name any number of products: one change, not one per product
         for pid in ids:
             _usable(ctx, pid)
