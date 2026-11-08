@@ -17,7 +17,9 @@ Interface assumed from the dispatcher (SKILLS-FW-3b; the router, FW-2, and dispa
   owner's sentence (the convention the test kit already plays) and whose ``.backlog`` is a backlog reason when the
   caller should also write the request down, else None.
 * ``notes(name, slots, ctx)`` gives the extra proposal lines (``say`` / ``set`` / ``warn``) the dispatcher shows
-  beside the draft.
+  beside the draft: the hidden-not-deleted line and the owner's reason (hide), the maker-line default (edit) and the
+  description advice (edit). The test kit plays this contract (it appends those lines to the proposal it captures), so
+  the fixture rows assert them; it is not wired into the live conversation by this card.
 
 Owner wording follows docs/hass/VOICE.md. Authoring guide: docs/hass/SKILLS.md. Skill docs: docs/hass/skills/items.md.
 """
@@ -34,7 +36,14 @@ MAX_ITEMS = 6  # spec 3.2 / 3.3: more than six products at once asks with the co
 PRICE_SLOTS = frozenset({"price", "prices", "cost", "amount", "pricing"})
 CLEAR_CHOICES = ("clearProducer", "clearImageAlt")
 UNKNOWN_BRAND, UNKNOWN_SHOWN = "Producer not identified", "From the market"  # the house words for an unknown producer
-PRICE_TEXT = re.compile(r"\$|\bper (?:lb|pound|ounce|oz|dozen|each)\b|\bcents?\b|\bdollars?\b|\d\s?¢", re.IGNORECASE)
+_NUM = (r"(?:\d+(?:[.,]\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|"
+        r"forty|fifty|hundred)")
+PRICE_TEXT = re.compile(
+    r"\$|\bper (?:lb|pound|ounce|oz|dozen|each)\b|\bcents?\b|\bdollars?\b|\d\s?¢"
+    + rf"|\b{_NUM}\s+for\s+{_NUM}(?=\s*(?:[.,;:!?)]|$|\s(?:each|a piece|apiece|ea|bucks?|and|or)\b))"  # 'two for five.', '2 for 5.'
+    + rf"|\b(?:a|an|{_NUM})\s+bucks?\b"  # 'five bucks each', 'a buck'
+    + rf"|\b{_NUM}\s+(?:a|the)\s+(?:pound|lb|dozen|ounce|oz)\b",  # '5 a pound'
+    re.IGNORECASE)
 FOREVER = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?|erase|wipe)\b", re.IGNORECASE)
 FIELD_WORDS = {"name": "name", "description": "description", "displayBrand": "maker line", "imageAlt": "picture caption"}
 SLOT_OF = {"displayBrand": "display_brand", "imageAlt": "image_alt"}  # slot names are lower case; the op arguments keep their camel case
@@ -105,9 +114,21 @@ def _text(slots, key):
     return value.strip()
 
 
+def _concern(product) -> str:
+    """The recorded reason a product is on hold, as one plain sentence (no address, file or id); '' when none is kept."""
+    hold = product.get("hold")
+    reason = " ".join(str(hold.get("reason") or "").split()) if isinstance(hold, dict) else ""
+    reason = INVISIBLE_RE.sub("", reason).strip().rstrip(".;")
+    if not reason or any(bad in reason for bad in FORBIDDEN_TEXT) or re.search(r"https?:|www\.|\.(?:com|org|json|jpe?g|webp)\b", reason, re.IGNORECASE):
+        return ""
+    return reason[:1].upper() + reason[1:200]
+
+
 def _held(product, many):
     if product.get("status") == "held":
-        raise Refusal(f"I can't change {_quoted(product)} right now. It is on hold until someone has looked at it."
+        concern = _concern(product)
+        why = f" What was written down: {voice.quote(concern)}." if concern else ""
+        raise Refusal(f"I can't change {_quoted(product)} right now. It is on hold until someone has looked at it.{why}"
                       + (REST_OF if many else ""))
 
 
@@ -353,6 +374,8 @@ def notes(name, slots, ctx) -> dict:
     out = {"say": [], "set": [], "warn": []}
     if name == "item.hide":
         out["say"].append(HIDDEN_NOT_DELETED)
+        if (reason := _text(slots, "reason")):  # listed in the reply only; it is never written to the product
+            out["say"].append(f"You told me why: {voice.quote(' '.join(reason.split())[:120])}. I haven't saved that on the product.")
     elif name == "item.edit":
         content = _content(ctx)
         maker = slots.get("maker")
@@ -429,7 +452,7 @@ ITEM_EDIT = Skill(
         Trigger("rename the Hass avocado to Hass avocados"),
         Trigger("chnage the pesto desription to say its great on toast", "typo"),
         Trigger("move the garlic pesto to the dairy shelf"),
-        Trigger("rename the oranges to Navel oranges and add a line to the lemons description", "multi"),
+        Trigger("rename the oranges to Navel oranges and add a line to the lemons description: try a squeeze over roasted vegetables", "multi"),
         Trigger("the guacamole text is boring", "vague"),
         Trigger("the figs are by Fair Hills Farm now, not Producer not identified"),
         Trigger("make the eggs $6.50"),

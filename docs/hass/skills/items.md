@@ -14,13 +14,13 @@ with `undo` (which needs its own `yes`). Undo leaves nothing behind.
 
 ## `item.hide`: hide a product
 
-Slots: `items` (one or more products, a list of at most six) and `reason` (optional, kept nowhere; it only helps Hass
+Slots: `items` (one or more products, a list of at most six) and `reason` (optional; listed back in the reply and kept nowhere, never written to the product; it also helps Hass
 tell "delete it for good" from "hide it"). Plan: one `product.hide` per product. Edits: `products[id].status`
 (`hass/content/products.json`) and the generated product list. Preview: the first product. Live class: `chat-live`.
 
 Rules (each one has a case row):
 
-* `held-refused`: a product on hold is never changed ("I can't change ... right now. It is on hold until someone has looked at it.").
+* `held-refused`: a product on hold is never changed ("I can't change ... right now. It is on hold until someone has looked at it. What was written down: ..."). The sentence repeats the recorded concern (for the raw milk cheese: that the maker's site shows a raw-milk cheese recall and the hold waits for exact product and lot checking), never a web address, file or id.
 * `already-hidden`: "I already have ... hidden. Nothing changed." With a list, the sentence names the product and offers to do the rest.
 * `whole-shelf`: a shelf word such as "all the bread" is a list of its products. More than six asks with the count: "That is 13 products at once. Which ones should I hide?"
 * `no-permanent-delete`: "delete it for good" is answered "I don't delete anything for good. I can hide it instead: ..." and the caller writes the request down (`Refusal.backlog` is `policy`).
@@ -48,7 +48,7 @@ and the generated product list. Preview: the first product. Live class: `chat-li
 Rules:
 
 * `not-hidden`: "I already have ... on the website. Nothing changed."
-* `held-refused`: a product on hold is not brought back; it needs a look at the recorded concern first.
+* `held-refused`: a product on hold is not brought back; the refusal gives the recorded concern in plain words (for the raw milk cheese: the maker's raw-milk cheese recall and the exact product and lot check the hold waits for).
 * `maker-hidden`: "I can't bring ... back while its maker, ..., is hidden. Bring ... back first, ..."
 * `image-missing`: the picture file must still be there. The editor already refuses; the skill says it in plain words when it is told where the site folder is.
 
@@ -83,8 +83,8 @@ Rules:
 
 * `not-already-true`: a field that already has the asked value is dropped; nothing left says "It already says that on ... Nothing changed."
 * `twin`: a rename may not give two products the same name and maker.
-* `no-price`: `$`, "per lb", "cents", "dollars" or an amount in any text refuses with the price sentence. A `price` slot does not exist, and one that arrives anyway is refused the same way.
-* `held-refused`: a product on hold is not changed.
+* `no-price`: `$`, "per lb", "cents", "dollars", "bucks" or an amount such as "two for five", "2 for 5" or "five bucks each" in any text refuses with the price sentence (a number on its own, "two for five minutes" or "Bucks County" does not). A `price` slot does not exist, and one that arrives anyway is refused the same way.
+* `held-refused`: a product on hold is not changed, and the refusal gives the recorded concern in plain words.
 
 Also refused in plain words: a hidden product (bring it back first), a hidden or unknown maker, an unknown shelf, text that is too
 long or carries special marks (`< > {{ }}`).
@@ -94,7 +94,7 @@ long or carries special marks (`< > {{ }}`).
 | rename the Hass avocado to Hass avocados | Changes the name. |
 | chnage the pesto desription to say its great on toast | Changes the description (the whole new text). |
 | move the garlic pesto to the dairy shelf | Changes the shelf. |
-| rename the oranges to Navel oranges and add a line to the lemons description | One draft, two products. |
+| rename the oranges to Navel oranges and add a line to the lemons description: try a squeeze over roasted vegetables | One draft, two products. The line is the owner's own; the lemons text is the current one plus that line. Without the line Hass asks for it and writes nothing of its own. |
 | the guacamole text is boring | Asks "What should the guacamole description say instead?" |
 | the figs are by Fair Hills Farm now, not Producer not identified | Changes the maker, brand and maker line (private-only). |
 | make the eggs $6.50 | Refused: the website doesn't show prices. |
@@ -105,8 +105,11 @@ long or carries special marks (`< > {{ }}`).
 ## What the owner sees besides the draft: `notes()`
 
 `items.notes(name, slots, ctx)` returns the extra lines for the proposal: `say` (`item.hide`: "It is hidden, not deleted. You can bring
-it back any time."), `set` (`item.edit`: the "I set: ..." line for the maker line) and `warn` (`item.edit`: advice when a new description is
+it back any time.", and when Mike gave a reason, "You told me why: ... I haven't saved that on the product."), `set` (`item.edit`: the "I set: ..." line for the maker line) and `warn` (`item.edit`: advice when a new description is
 longer or shorter than the site's 59 to 167 characters, has no full stop, or uses `!` or `?`; advice only, never a refusal).
+The test kit plays this contract: after a skill's plan it calls `notes` and appends the lines to the reply of a message that ends in a
+draft, so the rows assert them (`hide-7-delete-means-hide`, `hide-15-with-reason`, `edit-4-two-products`, `edit-6-maker`, `edit-18-no-maker`).
+The live conversation does not show these lines yet; that is the dispatcher card's job.
 
 ## Interface assumed (the router and dispatch are not merged yet)
 

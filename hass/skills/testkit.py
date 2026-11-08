@@ -196,12 +196,26 @@ class SkillInterpreter:
 
     def __init__(self, mapping, skills, ctx_for):
         self.mapping, self.skills, self.ctx_for, self.used, self.errors = mapping, skills, ctx_for, [], []
+        self.notes = []  # the proposal-note lines of the message being answered (reset by Scratch.say)
 
     def _plan(self, call):
         skill = self.skills.get(call.get("skill"))
         if skill is None: raise KeyError(f"no skill named {call.get('skill')!r}")
         self.used.append(skill.name)
-        return skill.plan(copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        ops = skill.plan(copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        self._notes(skill, call)
+        return ops
+
+    def _notes(self, skill, call):
+        """The assumed proposal-notes contract: a skill module may define ``notes(name, slots, ctx)`` returning
+        ``{say, set, warn}`` lines the dispatcher shows beside the draft. They are collected here, in that order and
+        once each, so the row can assert what the owner would be shown (the live conversation does not show them yet)."""
+        fn = getattr(sys.modules.get(getattr(skill.plan, "__module__", None)), "notes", None)
+        if not callable(fn): return
+        got = fn(skill.name, copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        for key in ("say", "set", "warn"):
+            for line in got.get(key, []):
+                if line not in self.notes: self.notes.append(line)
 
     def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
         reply = copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
@@ -257,11 +271,14 @@ class Scratch:
         self.now += timedelta(minutes=1)
         msg = self.Inbound(f"tk-{self.n}", CHAT, OWNER, text, False, "new", self.now.isoformat())
         asked = len(self.previewer.requests)
+        self.interp.notes = []
         disposition = self.conv.handle(msg)
         before = len(self.out.sent)
         self.conv.flush(self.out)
         self.turn_previews.append(self.previewer.requests[asked:])
-        return disposition, [r["text"] for r in self.out.sent[before:]]
+        texts = [r["text"] for r in self.out.sent[before:]]
+        if disposition == "proposed" and self.interp.notes: texts.append(voice.plain("\n".join(self.interp.notes)))  # the proposal notes, as the dispatcher will show them
+        return disposition, texts
 
     def head(self): return _git(self.wt, "rev-parse", "HEAD").strip()
 

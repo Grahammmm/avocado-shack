@@ -218,6 +218,50 @@ class Plans(unittest.TestCase):
         for text in ("Sweet, $2", "9 cents each", "3 dollars", "two for 5\u00a2", "per lb", "per pound please"):
             self.assertEqual(self.refusal(EDIT, {"item": "photo-product-001", "name": text}).reply, PRICE_REPLY, text)
 
+    def test_unambiguous_amounts_without_a_dollar_sign_are_prices_too(self):
+        for text in ("Two for five.", "2 for 5.", "Five bucks each.", "two for five, best deal", "Three for 10", "a buck apiece",
+                     "Only 5 a pound", "TWO FOR FIVE!"):
+            for key in ("description", "name", "display_brand", "image_alt"):
+                with self.subTest(text=text, slot=key):
+                    self.assertEqual(self.refusal(EDIT, {"item": "photo-product-017", key: text}).reply, PRICE_REPLY)
+        for text in ("Two for the road: a squeeze of lemon over fish for five minutes.", "Good for two for five minutes of toasting.",
+                     "Buckwheat noodles from Bucks County.", "Pick one for dinner and two for lunch.", "Keep it 5 minutes, then another 2 for crisp edges and 3 to serve.",
+                     "Add 2 for a milder dish."):
+            with self.subTest(text=text):
+                [op] = it.plan_edit({"item": "photo-product-017", "description": text}, self.ctx)
+                self.assertEqual(op["args"]["description"], text)
+
+    def test_a_price_form_never_reaches_a_draft_in_the_real_kit(self):
+        for rid in ("edit-19-two-for-five", "edit-20-five-bucks"):
+            row = next(r for r in ROWS[EDIT] if r["id"] == rid)
+            self.assertTrue(run_case_row(row, SKILLS, SKILLS[EDIT]).ok, rid)
+        digits = copy.deepcopy(next(r for r in ROWS[EDIT] if r["id"] == "edit-19-two-for-five"))
+        digits["texts"] = ["the lemons description: 2 for 5."]
+        digits["replies"][0]["slots"]["description"] = "2 for 5."
+        self.assertTrue(run_case_row(digits, SKILLS, SKILLS[EDIT]).ok)
+
+    def test_a_held_product_is_refused_with_the_recorded_concern_in_plain_words(self):
+        content = load_and_validate(CONTENT, SITE)
+        ctx = ctx_for(content)
+        for fn, slots in ((it.plan_restore, {"items": ["photo-product-040"]}), (it.plan_hide, {"items": ["photo-product-040"]}),
+                          (it.plan_edit, {"item": "photo-product-040", "name": "White cheddar"})):
+            with self.assertRaises(it.Refusal) as caught:
+                fn(slots, ctx)
+            reply = voice.plain(caught.exception.reply)
+            self.assertIn("on hold", reply)
+            self.assertIn("raw-milk cheese recall", reply)
+            self.assertIn("exact product/lot verification", reply)
+            for leak in ("http", ".com", ".json", "photo-product", "storefront-mockup", "Supplied store photograph"):
+                self.assertNotIn(leak, reply)
+            self.assertEqual(voice.check(caught.exception.reply), [])
+        held = next(p for p in content.products if p["id"] == "photo-product-040")
+        held["hold"]["reason"] = "see https://example.test/x"  # a web address is never repeated: the generic sentence stands
+        with self.assertRaises(it.Refusal) as caught:
+            it.plan_restore({"items": ["photo-product-040"]}, ctx)
+        self.assertIn("on hold", caught.exception.reply)
+        self.assertNotIn("http", caught.exception.reply)
+        self.assertNotIn("What was written down", caught.exception.reply)
+
     def test_rule_functions_are_pure_and_named(self):
         for rule_id, fn in it.RULE_FUNCTIONS.items():
             self.assertTrue(callable(fn) and fn.__doc__ and fn.__doc__.startswith(rule_id), rule_id)
@@ -302,6 +346,11 @@ class OwnerWords(unittest.TestCase):
         ctx = ctx_for(self.content)
         self.assertEqual(it.notes(HIDE, {"items": ["photo-product-055"]}, ctx), {"say": [it.HIDDEN_NOT_DELETED], "set": [], "warn": []})
         self.assertEqual(it.notes(RESTORE, {"items": ["photo-product-055"]}, ctx), {"say": [], "set": [], "warn": []})
+        said = it.notes(HIDE, {"items": ["photo-product-055"], "reason": "out of season"}, ctx)["say"]
+        self.assertEqual([voice.plain(s) for s in said], [voice.plain(it.HIDDEN_NOT_DELETED),
+                                                          "You told me why: out of season. I haven't saved that on the product."])
+        for text in said:
+            self.assertEqual(voice.check(text), [])
         lines = it.notes(EDIT, {"item": "photo-product-097", "maker": "Etto"}, ctx)
         self.assertEqual(voice.plain(lines["set"][0]), "I set: the maker line on the card to Etto.")
         self.assertEqual(it.notes(EDIT, {"item": "photo-product-097", "maker": "Etto", "display_brand": "Etto Pasta"}, ctx)["set"], [])
@@ -393,6 +442,20 @@ class KitAdditions(unittest.TestCase):
         self.assertEqual(run_case_row(refusal, SKILLS, SKILLS[HIDE]).codes, ["wrong-turn"])
         del refusal["undo"]
         self.assertTrue(run_case_row(refusal, SKILLS, SKILLS[HIDE]).ok)
+
+    def test_the_proposal_notes_are_shown_in_the_captured_reply_and_asserted(self):
+        """The kit plays the notes contract: what notes() says is in the reply the row sees, so a row can pin it."""
+        row = next(r for r in ROWS[HIDE] if r["id"] == "hide-15-with-reason")
+        self.assertTrue(run_case_row(row, SKILLS, SKILLS[HIDE]).ok)
+        for wrong in ("it is gone for ever", "a reason nobody gave"):
+            bad = copy.deepcopy(row)
+            bad["expect"]["reply_contains"] = [wrong]
+            self.assertEqual(run_case_row(bad, SKILLS, SKILLS[HIDE]).codes, ["wrong-reply"], wrong)
+        plain = copy.deepcopy(row)  # no reason slot: no reason line
+        plain["replies"][0]["slots"].pop("reason")
+        plain["expect"]["reply_contains"] = ["hidden, not deleted"]
+        plain["expect"]["reply_not_contains"] = ["told me why"]
+        self.assertTrue(run_case_row(plain, SKILLS, SKILLS[HIDE]).ok)
 
 
 class FixtureFiles(unittest.TestCase):
