@@ -135,11 +135,13 @@ class RuleTests(unittest.TestCase):
             self.assertIsNone(self.rule("specials-no-links-or-contact", {"deal": fine}), fine)
 
     def test_a_price_goes_in_the_deal_line_only(self):
-        for title in ("Eggs $3", "Eggs 3 dollars", "Eggs 3 bucks", "Eggs 50 cents", "Eggs 50¢"):
+        for title in ("Eggs $3", "Eggs 3 dollars", "Eggs 3 bucks", "Eggs 50 cents", "Eggs 50¢", "Eggs five dollars", "Eggs twenty-five cents", "Eggs a buck", "Eggs Two Bucks"):
             reply, reason = self.rule("specials-price-in-deal-only", {"title": title})
             self.assertIn("A price can only go in the deal line", reply)
             self.assertEqual(reason, "price")
         self.assertIsNone(self.rule("specials-price-in-deal-only", {"title": "Eggs", "deal": "2 for $5 or 3 dollars"}))
+        self.assertIsNone(self.rule("specials-price-in-deal-only", {"title": "Dollar Menu Day"}))
+        self.assertIsNone(self.rule("specials-price-in-deal-only", {"title": "Eggs", "deal": "five dollars a dozen"}))  # words are fine in the deal
         self.assertIsNone(self.rule("specials-price-in-deal-only", {"title": "Dollar Menu Day"}))
 
     def test_the_deal_is_shown_exactly_as_typed(self):
@@ -149,6 +151,10 @@ class RuleTests(unittest.TestCase):
         self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=["special on honey", "2 for 5 dollars"]))  # said in a later text
         for reworded in ("2 for $5", "2 For 5 Dollars", "two for 5 dollars", "2 for 5 dollars!"):
             self.assertIn("exactly as you type it", self.rule("specials-deal-as-typed", {"deal": reworded}, texts=["honey 2 for 5 dollars"])[0], reworded)
+        for inside in ("Eggs 12 for 5 dollars till Friday", "x2 for 5 dollars", "2 for 5 dollarsX"):  # not a whole token run
+            self.assertIn("exactly as you type it", self.rule("specials-deal-as-typed", slots, texts=[inside])[0], inside)
+        self.assertIsNone(self.rule("specials-deal-as-typed", {"deal": "$5"}, texts=["eggs $5, till Friday"]))
+        self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=["honey (2 for 5 dollars)."]))
         self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=None))  # no owner texts to compare (plan golden)
 
     def test_a_deal_cut_out_of_a_longer_figure_or_word_is_not_the_deal_he_typed(self):
@@ -187,6 +193,11 @@ class RuleTests(unittest.TestCase):
         plain = {"id": "photo-product-042", "name": "Avocado honey"}
         op = sp.SPECIALS_ADD.plan({"product": "photo-product-042", "deal": "buy one get one", "end": "2026-11-13"}, ctx(products=[plain]))[0]
         self.assertEqual(op["args"]["title"], "Avocado honey")
+
+    def test_both_add_and_edit_run_the_as_typed_and_word_price_rules(self):
+        for rules in (sp.ADD_RULES, sp.EDIT_RULES):
+            self.assertIn("specials-deal-as-typed", rules)
+            self.assertIn("specials-price-in-deal-only", rules)
 
     def test_end_date_required(self):
         self.assertEqual(self.rule("specials-end-date-required", {}), ("Until what day should it run?", "other"))
