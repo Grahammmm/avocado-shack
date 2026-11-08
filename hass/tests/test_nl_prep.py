@@ -98,6 +98,48 @@ class HintTests(unittest.TestCase):
         self.assertEqual(self.ask("nov 2")["dates"][0]["date"], "2027-11-02")
         self.assertNotIn("dates", self.ask("feb 30"))
 
+    def test_an_explicit_year_is_kept_and_never_turned_into_the_next_annual_day(self):
+        cases = {  # text -> (said, date) the one hint has to be
+            "hike on December 5 2027 at 9am": ("december 5 2027", "2027-12-05"),
+            "hike on december 5th, 2027": ("december 5th, 2027", "2027-12-05"),
+            "hike on 5 december 2027": ("5 december 2027", "2027-12-05"),
+            "hike on 5th of dec '27": ("5th of dec '27", "2027-12-05"),
+            "hike on 12/5/2027": ("12/5/2027", "2027-12-05"),
+            "hike on 12/05/27": ("12/05/27", "2027-12-05"),
+            "hike on 2027-12-05": ("2027-12-05", "2027-12-05"),
+            "hike on 5 Dec. 2027 at 9am": ("5 dec. 2027", "2027-12-05"),
+            "hike on 5th of Dec. 2027": ("5th of dec. 2027", "2027-12-05"),
+            "hike on December 5 2025": ("december 5 2025", "2025-12-05"),  # a past year is as written, not rolled forward
+            "hike on nov 2 2026": ("nov 2 2026", "2026-11-02"),
+        }
+        for text, (said, want) in cases.items():
+            [row] = self.ask(text)["dates"]
+            self.assertEqual((row["said"], row["date"]), (said, want), text)
+        self.assertEqual(self.ask("hike on 12/5/2027")["dates"][0]["weekday"], "Sunday")
+
+    def test_a_year_that_cannot_be_checked_leaves_the_date_hint_out(self):
+        for text in ("hike on feb 30 2027", "hike on 2/30/2027", "hike on 2027-02-30", "hike on dec 5 1999", "hike on dec 5 3027",
+                     "hike on 12/5/202", "hike on 12/5/20277", "hike on 5 dec 0027", "hike on 2027/12/5", "hike on dec 5 1530",
+                     "hike on feb 29 2027"):
+            self.assertNotIn("dates", self.ask(text), text)
+        [row] = self.ask("hike on feb 29 2028")["dates"]  # a real leap day
+        self.assertEqual(row["date"], "2028-02-29")
+
+    def test_a_time_or_a_count_after_a_date_is_not_a_year(self):
+        [row] = self.ask("hike on dec 5 9am")["dates"]
+        self.assertEqual((row["said"], row["date"]), ("dec 5", "2026-12-05"))
+        [row] = self.ask("hike on dec 5 10:30")["dates"]
+        self.assertEqual((row["said"], row["date"]), ("dec 5", "2026-12-05"))
+        [row] = self.ask("hike on 12/5 at 9")["dates"]
+        self.assertEqual((row["said"], row["date"]), ("12/5", "2026-12-05"))
+
+    def test_yearless_dates_still_roll_forward(self):
+        self.assertEqual(self.ask("dec 5")["dates"][0]["date"], "2026-12-05")
+        self.assertEqual(self.ask("5 dec")["dates"][0]["date"], "2026-12-05")
+        self.assertEqual(self.ask("12/5")["dates"][0]["date"], "2026-12-05")
+        self.assertEqual(self.ask("nov 2")["dates"][0]["date"], "2027-11-02")
+        self.assertEqual(self.ask("11/2")["dates"][0]["date"], "2027-11-02")
+
     def test_times_and_numbers(self):
         times = {t["said"]: t["time"] for t in self.ask("8:30am, 5pm, noon and 17:45")["times"]}
         self.assertEqual(times, {"8:30am": "08:30", "5pm": "17:00", "noon": "12:00", "17:45": "17:45"})
@@ -231,6 +273,18 @@ class RequestTests(unittest.TestCase):
             self.assertEqual((interp.last_error, "hints" in self.user(seen)), (None, False))
         with self.assertRaises(ValueError):
             LocalInterpreter(URL, "m", "SYSTEM", hinter="not callable")
+
+    def test_an_explicit_year_reaches_the_model_as_written(self):
+        seen = []
+        interp = self.make(seen, hinter=nl_prep.make_hinter(tiny()))
+        for text, want in (("post a Cass Hill hike on December 5 2027 at 9am", "2027-12-05"), ("post a Cass Hill hike on 5 Dec 2027 at 9am", "2027-12-05"),
+                           ("post a Cass Hill hike on 12/5/2027 at 9am", "2027-12-05"), ("post a Cass Hill hike on December 5 at 9am", "2026-12-05")):
+            interp.interpret(text, [])
+            user = self.user(seen)
+            self.assertEqual(user["message"], text)
+            self.assertEqual([row["date"] for row in user["hints"]["dates"]], [want], text)
+        interp.interpret("post a Cass Hill hike on feb 30 2027 at 9am", [])
+        self.assertNotIn("dates", self.user(seen).get("hints", {}))
 
     def test_hints_are_sent_after_the_saved_context(self):
         seen = []
