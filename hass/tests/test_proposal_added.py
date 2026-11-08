@@ -79,7 +79,7 @@ class AddedRecordProposalTests(unittest.TestCase):
         lines = _lines(("hikes", "h2", None, {"title": "Dawn", "bring": ["torch"]}),
                        ("products", "p1", {"name": "Hass"}, {"name": "Reed"}),
                        ("makers", "m3", None, {"name": "Grove Co"}), warnings=["w1", "w2"])
-        self.assertEqual(lines, ["Here's the change I'd make:", "A new entry: Dawn", "  the title: Dawn", "Hass, the name: from Hass to Reed", "A new maker: Grove Co", "  the name: Grove Co", "Heads up: There is one thing to double-check before you say yes.", "Heads up: There is one thing to double-check before you say yes."] + TAIL)
+        self.assertEqual(lines, ["Here's the change I'd make:", "A new entry: Dawn", "  what to bring: torch", "  the title: Dawn", "Hass, the name: from Hass to Reed", "A new maker: Grove Co", "  the name: Grove Co", "Heads up: There is one thing to double-check before you say yes.", "Heads up: There is one thing to double-check before you say yes."] + TAIL)
 
     def test_repeat_reply_hint_kept(self):
         text = conversation.proposal_text("ab12", _draft(("makers", "m1", None, {"name": "G"})), EXPIRES, repeat=True)

@@ -317,7 +317,7 @@ class Honesty(ConversationTestCase):
         self.assertIn("could-not-do", [r["kind"] for r in self.conv.log.rows()])
 
     def test_missing_fact_says_i_dont_know(self):
-        self.say("post Nonesuch Product")
+        self.say("post Nonesuch")
         [reply] = self.replies()
         self.assertIn("I don't know a product called", reply)
         self.say("margin Nonesuch at 35%")
