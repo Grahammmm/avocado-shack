@@ -277,7 +277,7 @@ class PromptTests(unittest.TestCase):
         rule = next(line for line in prompt.splitlines() if "hike.repeat" in line and line.startswith("- "))
         self.assertIn("repeat a listed hike", rule)
         self.assertIn("if the hike, date or time is unclear, ask", rule)
-        self.assertIn("Never make a route idea or the sample hike into a real hike", rule)
+        self.assertIn("Never make the sample hike into a real hike", rule)
 
 
 if __name__ == "__main__":

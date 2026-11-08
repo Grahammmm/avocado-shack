@@ -8,12 +8,33 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from hass import bridge, bridge_attach, relay  # noqa: E402
+from hass import bridge, bridge_attach, relay, stagelog  # noqa: E402
+from hass.conversation import parse_command, read_command, sender_key  # noqa: E402
 
 MAX_BODY = 256 * 1024
 MAX_REPLY, PIC_RETRY = 2621440, (10, 30)  # HASS-ATTACH-1: picture reply cap (2.5 MiB); waits after the 1st and 2nd failure
 GAVE_UP = "The picture for that message didn't come through. What the message says is still right."
-KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile"}
+# HASS-TAPBACK-1 (replaces the HASS-FAST-1 text 👀, which G rejected: "mark my message, don't send me a message"). The ack is ONE
+# real iMessage tapback on the owner's message, through BlueBubbles' react endpoint (Private API). It is never a text: there is
+# no text-ack code path left. BlueBubbles documents exactly six tapbacks (server source `possibleReactions`) and no emoji
+# reaction, so the 👀 emoji is not offered; see reports/hass/TAPBACK-1.md.
+TAPBACKS = ("love", "like", "dislike", "laugh", "emphasize", "question")  # the allowlist; never a "-name" (that REMOVES a tapback)
+ACK_REACTION = "like"  # default thumbs up; config key ack_reaction picks another of TAPBACKS
+REACT_PATH = "/api/v1/message/react"
+GUID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")  # a message guid (a UUID in practice); anything else means no react call
+PROBE_TTL, PROBE_FAIL_TTL = 30, 5  # seconds the Private API answer (or an unanswered probe) is reused before asking again
+ACK_MAX_AGE = 120   # a message older than this when accepted (catch-up after sleep or an outage) is never acked
+ACK_BUDGET = 2.0    # the tapback should be CONFIRMED sent this many seconds after the message was stored; one sent after it is recorded `late`
+ACK_STALE = 10      # an ack still unsent this long after it was queued is recorded `stale` and not sent at all (a late tapback is sent until then)
+ACK_TIMEOUT = 1.5   # seconds the react call itself may take (a reply send gets 10); with ACK_STATE_TIMEOUT: <= 2 s per attempt
+ACK_STATE_TIMEOUT = 0.5  # seconds the fresh "paused?" question to the host (and the Private API probe) may take; no answer means no tapback
+ACK_TICK = 0.25     # the ack thread also looks every this many seconds (a restart, a missed wake-up)
+CATCH_UP_PAGE = 50  # the most messages one catch-up query returns, so the most owner messages one cycle can accept at once
+ACK_WORKERS = CATCH_UP_PAGE  # one ack worker per pending message, up to the largest burst a cycle accepts: every attempt starts at once
+ACK_CLAIM_STALE = 8  # a row left `checking` this long (a worker died before deciding) goes back to `pending`; nothing was sent
+PULL_SLOW, PULL_FAST, FAST_WINDOW = 5, 1, 180  # reply pull every 5 s, every 1 s for 3 minutes after an owner message
+CATCH_UP_EVERY = 15  # was 60: the safety net that finds a message the BlueBubbles webhook did not announce
+KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack", "ack_reaction"}
 NOTICE = "Hass can't reach its computer right now, so nothing has changed yet. Your messages are saved and will be handled when it's back."
 
 
@@ -40,8 +61,10 @@ def key_read(path):
 
 def load_config(path):
     cfg = json.loads(private_read(path, 16384))
-    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort"} - set(cfg): raise ValueError("config")
+    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort", "ack", "ack_reaction"} - set(cfg): raise ValueError("config")
     cfg.setdefault("webhookPort", 8796)
+    if type(cfg.get("ack", True)) is not bool: raise ValueError("config")  # absent means on; false switches the tapback off
+    if "ack_reaction" in cfg and (type(cfg["ack_reaction"]) is not str or cfg["ack_reaction"] not in TAPBACKS): raise ValueError("config")  # HASS-TAPBACK-1: allowlist
     if not isinstance(cfg["ownerChat"], str) or not re.fullmatch(r"iMessage;-;[^;\s]+", cfg["ownerChat"]): raise ValueError("config")
     if any(type(cfg[k]) is not int or not 1 <= cfg[k] <= 65535 for k in ("bbPort", "webhookPort")): raise ValueError("config")
     for k in ("bbPasswordFile", "secretFile", "spoolDir", "webhookTokenFile"):
@@ -63,19 +86,43 @@ def load_config(path):
     return cfg
 
 
-def request_json(url, body=None, limit=1024 * 1024):
+def request_json(url, body=None, limit=1024 * 1024, timeout=10):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
-        with bridge._OPENER.open(req, timeout=10) as r:
+        with bridge._OPENER.open(req, timeout=timeout) as r:
             raw = r.read(limit + 1)
             if len(raw) > limit: raise ValueError("response-size")
             return json.loads(raw)
     except Exception: raise bridge.BridgeError("transport-error") from None
 
 
+def valid_guid(guid): return type(guid) is str and GUID_RE.fullmatch(guid) is not None
+
+
+class BlueBubblesReactor:
+    """HASS-TAPBACK-1: one tapback on one message, `POST /api/v1/message/react` on loopback BlueBubbles. Nothing else: it cannot
+    send a text. A reaction outside TAPBACKS or a guid that is not a plain message guid raises ValueError BEFORE any network
+    call. The password is read fresh from its private file and goes only in the `password` query parameter; errors carry no URL."""
+    def __init__(self, base_url, password_file, transport=None, timeout=ACK_TIMEOUT):
+        self.base, self.password_file, self.timeout = base_url.rstrip("/"), password_file, timeout
+        self.transport = transport or bridge._urllib_transport
+
+    def react(self, chat, guid, reaction):
+        if reaction not in TAPBACKS or not valid_guid(guid) or type(chat) is not str or not chat: raise ValueError("react-args")
+        try: password = private_read(self.password_file, 4096).decode().strip()
+        except (ValueError, UnicodeDecodeError): password = ""
+        if not password: raise bridge.BridgeError("password-unreadable")
+        body = json.dumps({"chatGuid": chat, "selectedMessageGuid": guid, "reaction": reaction, "partIndex": 0}).encode()
+        url = f"{self.base}{REACT_PATH}?{urllib.parse.urlencode({'password': password})}"
+        try: status = self.transport(url, body, {"Content-Type": "application/json"}, self.timeout)
+        except Exception: raise bridge.BridgeError("transport-error") from None  # noqa: BLE001 - its text may hold the URL
+        if not (type(status) is int and 200 <= status < 300): raise bridge.BridgeError("http-error", status if type(status) is int else None)
+
+
 class Spool:
-    def __init__(self, directory, now):
+    def __init__(self, directory, now, ready=False):
+        """ready=True: the file and its tables already exist (an ack worker's own connection): no schema or meta writes."""
         self.clock = time.time
         self.directory = directory
         path = Path(directory) / "spool.sqlite3"
@@ -85,6 +132,8 @@ class Spool:
             if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o177: raise ValueError("spool-file")
         finally: os.close(fd)
         self.db = sqlite3.connect(path, isolation_level=None)
+        self.stage = stagelog.off  # HASS-FAST-1: the Forwarder swaps in a StageLog
+        if ready: return
         self.db.executescript(
             "CREATE TABLE IF NOT EXISTS inbound(provider_id TEXT PRIMARY KEY,payload TEXT,state TEXT,tries INTEGER,"
             "next_try_at REAL,created_at REAL,done_at REAL);"
@@ -94,8 +143,10 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS sent_pics(reply_id INTEGER,idx INTEGER,sent_at REAL,PRIMARY KEY(reply_id,idx));"
             "CREATE TABLE IF NOT EXISTS pic_tries(reply_id INTEGER,idx INTEGER,tries INTEGER,next_try_at REAL,PRIMARY KEY(reply_id,idx));"
             "CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY,seen_at REAL);"
-            "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);")
-        for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0)):
+            "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);"
+            "CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);")
+        for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0),
+                            ("fast_until", 0)):
             self.db.execute("INSERT OR IGNORE INTO meta VALUES (?,?)", (name, value))
 
     def get(self, name): return self.db.execute("SELECT value FROM meta WHERE name=?", (name,)).fetchone()[0]
@@ -110,16 +161,35 @@ class Spool:
         data = event.get("data")
         guid = data.get("guid") if type(data) is dict else None
         if isinstance(guid, str) and 0 < len(guid) <= 1024 and not bridge.SURROGATE_RE.search(guid):
-            self.db.execute("INSERT OR IGNORE INTO fetch(guid,event,created_at) VALUES (?,?,?)", (guid, event["type"], now))
+            added = self.db.execute("INSERT OR IGNORE INTO fetch(guid,event,created_at) VALUES (?,?,?)", (guid, event["type"], now)).rowcount
+            if added and event["type"] == "new-message": self.stage("webhook-in", guid)
 
-    def accept(self, event, owner, now):
+    def accept(self, event, owner, now, via="webhook"):
         msg = bridge.normalize(event)
         if isinstance(msg, bridge.Drop): return self.drop(msg.reason)
         if msg.chat != owner: return self.drop("other-chat")
         ms = int(datetime.fromisoformat(msg.received_at).timestamp() * 1000)
         if ms < self.get("start_ms"): return self.drop("history")
-        self.db.execute("INSERT OR IGNORE INTO inbound VALUES (?,?,'pending',0,0,?,NULL)",
-                        (msg.provider_id, json.dumps(asdict(msg)), now))
+        new = self.db.execute("INSERT OR IGNORE INTO inbound VALUES (?,?,'pending',0,0,?,NULL)",
+                              (msg.provider_id, json.dumps(asdict(msg)), now)).rowcount
+        if new:  # a repeat (webhook then catch-up, a replay, a restart) never reaches this line
+            self.stage("accepted", msg.provider_id, via=via)
+            self.owner_arrived(msg, owner, ms)
+
+    def owner_arrived(self, msg, owner, ms):
+        """HASS-FAST-1: a newly stored message from the owner's own address in the owner's one-to-one chat, sent just now,
+        queues exactly one ack (INSERT OR IGNORE on the message id) and opens the fast reply pull. Never a stranger's, Hass's
+        own (from_me), an edit or a reaction, or an old message found by catch-up. Whether changes are paused is NOT decided
+        here: the ack thread asks the host fresh just before it sends (see Forwarder._ack)."""
+        try:
+            address = owner.split(";", 2)[2]
+            mine = (msg.kind == "new" and not msg.from_me and msg.chat == owner
+                    and sender_key(msg.sender) is not None and sender_key(msg.sender) == sender_key(address))
+            if not mine or self.clock() * 1000 - ms > ACK_MAX_AGE * 1000: return
+            self.set("fast_until", self.clock() + FAST_WINDOW)
+            self.db.execute("INSERT OR IGNORE INTO ack VALUES (?,'pending',?,NULL)", (msg.provider_id, self.clock()))
+        except Exception:  # noqa: BLE001 - an ack is never worth losing the message that was just stored
+            pass
 
     def status(self):
         counts = {s: self.db.execute("SELECT COUNT(*) FROM inbound WHERE state=?", (s,)).fetchone()[0] for s in ("pending", "done", "dropped")}
@@ -130,23 +200,31 @@ class Spool:
 
 
 class Forwarder:
-    def __init__(self, cfg, spool, clock=time.time, transport=request_json, sender=None, attach=None):
+    def __init__(self, cfg, spool, clock=time.time, transport=request_json, sender=None, attach=None, stage=None, reactor=None):
         self.cfg, self.spool, self.clock, self.transport = cfg, spool, clock, transport
         spool.clock = clock
+        self.stage = spool.stage = stage or stagelog.off  # HASS-FAST-1: read-only stage times (main() passes a StageLog)
         self.secret = key_read(cfg["secretFile"])
         self.sender = sender or bridge.BlueBubblesSender(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
+        # The tapback has its own object (it can only react, never send a text), its own short timeout and its own thread.
+        self.reactor = reactor or BlueBubblesReactor(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
+        self.probe_cache, self.probe_lock = None, threading.Lock()  # (valid until, blocker reason or None)
         self.attach = attach or bridge_attach.BlueBubblesAttachmentSender(
             f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], cfg["ownerChat"])
         self.big = functools.partial(request_json, limit=MAX_REPLY) if transport is request_json else transport
+        self.quick = functools.partial(request_json, timeout=ACK_STATE_TIMEOUT) if transport is request_json else transport
         self.next_poll = self.next_pull = 0
         self.query_offset, self.query_high = 0, 0
+        self.ack_thread, self.ack_stop, self.ack_wake = None, threading.Event(), threading.Event()
+        self.ack_live, self.ack_lock = set(), threading.Lock()
 
     def bb(self, path, body=None):
         password = private_read(self.cfg["bbPasswordFile"], 4096).decode().strip()
         sep = "&" if "?" in path else "?"
         return self.transport(f'http://127.0.0.1:{self.cfg["bbPort"]}{path}{sep}{urllib.parse.urlencode({"password": password})}', body)["data"]
 
-    def post(self, path, env, big=False): return (self.big if big else self.transport)(self.cfg["receiverUrl"] + path, env)
+    def post(self, path, env, big=False, quick=False):
+        return (self.big if big else self.quick if quick else self.transport)(self.cfg["receiverUrl"] + path, env)
 
     def fetch(self):
         row = self.spool.db.execute("SELECT guid,event,created_at,tries,next_try_at FROM fetch ORDER BY created_at,rowid LIMIT 1").fetchone()
@@ -164,7 +242,7 @@ class Forwarder:
 
     def catch_up(self):
         cursor = int(self.spool.get("last_seen_ms"))
-        query = {"chatGuid": self.cfg["ownerChat"], "after": cursor, "sort": "ASC", "limit": 50,
+        query = {"chatGuid": self.cfg["ownerChat"], "after": cursor, "sort": "ASC", "limit": CATCH_UP_PAGE,
                  "with": ["chats", "handle", "attachment"]}
         # Keep the durable cursor fixed until a page is exhausted, including timestamp ties.
         if self.query_offset: query["offset"] = self.query_offset
@@ -173,16 +251,16 @@ class Forwarder:
         for msg in rows:
             if type(msg) is not dict or type(msg.get("dateCreated")) is not int: raise ValueError("query-shape")
         for msg in rows:
-            self.spool.accept({"type": "new-message", "data": msg}, self.cfg["ownerChat"], self.clock())
+            self.spool.accept({"type": "new-message", "data": msg}, self.cfg["ownerChat"], self.clock(), via="poll")
             if type(msg.get("dateEdited")) is int and msg["dateEdited"] > 0:
-                self.spool.accept({"type": "updated-message", "data": msg}, self.cfg["ownerChat"], self.clock())
+                self.spool.accept({"type": "updated-message", "data": msg}, self.cfg["ownerChat"], self.clock(), via="poll")
             cursor = max(cursor, msg["dateCreated"])
         self.query_high = max(self.query_high, cursor)
-        if len(rows) == 50: self.query_offset += 50
+        if len(rows) == CATCH_UP_PAGE: self.query_offset += CATCH_UP_PAGE
         else:
             self.spool.set("last_seen_ms", self.query_high)
             self.query_offset = 0
-        self.next_poll = self.clock() + (0 if len(rows) == 50 else 60)
+        self.next_poll = self.clock() + (0 if len(rows) == CATCH_UP_PAGE else CATCH_UP_EVERY)
 
     def deliver(self):
         db, now = self.spool.db, self.clock()
@@ -191,9 +269,12 @@ class Forwarder:
         # A failed earlier refetch must not let later messages pass it.
         if db.execute("SELECT 1 FROM fetch WHERE created_at<=? LIMIT 1", (row[4],)).fetchone(): return
         try:
-            env = bridge.seal(bridge.Inbound(**json.loads(row[1])), self.secret, nonce=secrets.token_hex(16), now=now)
+            inbound = bridge.Inbound(**json.loads(row[1]))
+            env = bridge.seal(inbound, self.secret, nonce=secrets.token_hex(16), now=now)
+            self.stage("post-start", inbound.provider_id)
             result = self.post("/v1/inbound", env)["result"]
             if result not in ("queued", "duplicate", "history", "rejected"): raise ValueError("post-shape")
+            self.stage("post-end", inbound.provider_id)
         except (bridge.BridgeError, ValueError, KeyError, TypeError):
             db.execute("UPDATE inbound SET tries=tries+1,next_try_at=? WHERE rowid=?", (now + min(300, 5 * 2 ** min(row[2], 6)), row[0]))
             if not self.spool.get("outage_since"): self.spool.set("outage_since", now)
@@ -208,9 +289,10 @@ class Forwarder:
         else:
             db.execute("UPDATE inbound SET state='done',payload=NULL,done_at=? WHERE rowid=?", (now, row[0]))
 
-    def control(self, body, expected, big=False):
+    def control(self, body, expected, big=False, spool=None, quick=False):
         env = relay.seal_control(body, self.secret, nonce=secrets.token_hex(16), now=self.clock())
-        answer = relay.unseal_control(self.post("/v1/relay", env, big), self.secret, now=self.clock(), seen=self.spool)
+        sent = self.post("/v1/relay", env, quick=True) if quick else self.post("/v1/relay", env, big)
+        answer = relay.unseal_control(sent, self.secret, now=self.clock(), seen=spool or self.spool)
         if answer["op"] not in (expected if type(expected) is tuple else (expected,)): raise ValueError("relay-op")
         return answer
 
@@ -248,21 +330,211 @@ class Forwarder:
             for item in self.control({"op": "pull", "max": 5}, "replies")["items"]:
                 if item["chat"] != self.cfg["ownerChat"]: continue
                 if not self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=?", (item["id"],)).fetchone():
+                    self.stage("reply-pulled", item["id"])
+                    self.stage("bb-send-start", item["id"])
                     self.sender.send(item["chat"], item["text"], (None,) * item["pictures"])
+                    self.stage("bb-send-end", item["id"])
                     self.spool.db.execute("INSERT INTO sent VALUES (?,?)", (item["id"], self.clock()))
                 if self.deliver_shots(item): ids.append(item["id"])
         finally:
             if ids: self.control({"op": "ack", "ids": ids}, "acked")
 
+    # -- HASS-FAST-1 / HASS-TAPBACK-1: the ack (a real tapback). It runs on its own thread with its own SQLite connection, so nothing slow in the main loop
+    # (a reply pull, a picture, a catch-up query, a post to the receiver) can delay it and a slow or failing react can
+    # never delay the main loop. The only things the two share are the spool file (atomic row claims) and the nonce table.
+    def tapback_blocker(self):
+        """None when BlueBubbles says the Private API is on AND its helper is connected (the existing GET-only server/info
+        probe, 0.5 s limit); otherwise the reason code: private_api_off, helper_disconnected, or private_api_unknown (no usable answer:
+        fail closed). Reused for PROBE_TTL seconds (PROBE_FAIL_TTL for an unanswered probe) so a burst asks once."""
+        with self.probe_lock:
+            now = self.clock()
+            if self.probe_cache is not None and self.probe_cache[0] > now: return self.probe_cache[1]
+            try:
+                password = private_read(self.cfg["bbPasswordFile"], 4096).decode().strip()
+                info = self.quick(f'http://127.0.0.1:{self.cfg["bbPort"]}/api/v1/server/info?{urllib.parse.urlencode({"password": password})}')["data"]
+                private, helper = info.get("private_api"), info.get("helper_connected")
+                if type(private) is not bool or type(helper) is not bool: raise ValueError("info-shape")
+                reason, ttl = (None if private and helper else "private_api_off" if not private else "helper_disconnected"), PROBE_TTL
+            except Exception:  # noqa: BLE001 - unknown is not "on"
+                reason, ttl = "private_api_unknown", PROBE_FAIL_TTL
+            self.probe_cache = (now + ttl, reason)
+            return reason
+
+    def host_paused(self, spool):
+        """True when changes are paused or a pause command is on its way; None when the host cannot be asked right now.
+        Asked fresh before every tapback (nothing cached): the host reads its own pause flag and its unread queue, read-only."""
+        try:
+            paused = self.control({"op": "state"}, "state", spool=spool, quick=True)["paused"]
+            return paused if type(paused) is bool else None
+        except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError):
+            return None
+
+    def pause_ahead(self, spool, created):
+        """True when a pause command (or a message that cannot be read) is stored here and not yet handed to the host, or an
+        earlier doorbell is still unresolved (what it says is unknown): the host cannot know about those, so no tapback yet."""
+        db = spool.db
+        if db.execute("SELECT 1 FROM fetch WHERE event='new-message' AND created_at<=? LIMIT 1", (created,)).fetchone(): return True
+        for (payload,) in db.execute("SELECT payload FROM inbound WHERE state='pending'"):
+            try:
+                text = json.loads(payload)["text"]
+                found = read_command(text) or parse_command(text)
+            except (TypeError, ValueError, KeyError, AttributeError): return True
+            if found and found[0] == "pause": return True
+        return False
+
+    def ack(self, spool=None):
+        try: self._ack(spool or self.spool)
+        except Exception: print("retry", file=sys.stderr)  # noqa: BLE001 - an ack can never stop the loop (a broken table, a full disk)
+
+    def _ack(self, spool):
+        """Inline path (no ack thread: unit tests and `ack()`): decide up to three pending rows one after another with
+        _ack_row. Returns True when three were done (more may be waiting)."""
+        db = spool.db
+        for _ in range(3):
+            row = db.execute("SELECT provider_id,created_at FROM ack WHERE state='pending' ORDER BY created_at,rowid LIMIT 1").fetchone()
+            if row is None: return False
+            if self._claim(spool, row[0]): self._ack_row(spool, *row)
+        return True
+
+    def _claim(self, spool, pid):
+        """pending -> checking, atomic: exactly one caller (thread or process) gets True for a given message id."""
+        return spool.db.execute("UPDATE ack SET state='checking',done_at=? WHERE provider_id=? AND state='pending'", (self.clock(), pid)).rowcount == 1
+
+    def _ack_row(self, spool, pid, created):
+        """Decide one claimed (`checking`) row, once and finally, and send its tapback if it is due. At most once per message id:
+        checking -> sending (committed before the call) -> sent | late | react_failed, and a row found `sending` after a crash is
+        never sent again. No tapback (and the state says why, and `ack_skipped reason=<state>` goes to the log) when the ack is
+        switched off, when it is older than ACK_STALE, when the message guid or the configured reaction is not valid, when a
+        pause command is ahead of it (stored here or queued at the host), when the host says paused, when it cannot be asked
+        right now (fail closed), or when BlueBubbles reports the Private API off, its helper not connected or not answering.
+        A failure or timeout is recorded and ignored; it is NEVER turned into a text. A tapback that was sent but not confirmed
+        within ACK_BUDGET of the message being stored is recorded `late`, never `sent`: it is not counted as on time."""
+        db = spool.db
+        now = self.clock()
+
+        def close(state):
+            db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='checking'", (state, now, pid))
+            print("ack_skipped", f"reason={state}", file=sys.stderr)  # a reason code only: no id, text, chat or sender
+        if now - created > ACK_STALE: return close("stale")
+        if not self.cfg.get("ack", True): return close("off")
+        reaction = self.cfg.get("ack_reaction", ACK_REACTION)
+        if reaction not in TAPBACKS: return close("bad_reaction")
+        if not valid_guid(pid): return close("bad_guid")
+        if self.pause_ahead(spool, created): return close("paused")
+        paused = self.host_paused(spool)
+        if paused is not False: return close("paused" if paused else "unknown")
+        blocker = self.tapback_blocker()
+        if blocker is not None: return close(blocker)
+        if db.execute("UPDATE ack SET state='sending',done_at=? WHERE provider_id=? AND state='checking'", (now, pid)).rowcount != 1: return
+        self.stage("ack-start", pid)
+        try:
+            self.reactor.react(self.cfg["ownerChat"], pid, reaction)
+            state = "sent"
+        except Exception:  # noqa: BLE001 - an ack never blocks, retries or leaks: the state records it, nothing else
+            state = "react_failed"
+            print("ack_skipped", f"reason={state}", file=sys.stderr)
+        done = self.clock()
+        if state == "sent" and done - created > ACK_BUDGET: state = "late"
+        db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=?", (state, done, pid))
+        self.stage("ack-end", pid, outcome=state)
+
+    def ack_kick(self):
+        """Tell the ack thread there is work; with no thread running (unit tests) do the work here instead."""
+        if self.ack_thread is not None: self.ack_wake.set()
+        else: self.ack()
+
+    def start_ack(self):
+        """Start the ack dispatcher thread (main() does; it owns its own spool connection, opened inside the thread)."""
+        if self.ack_thread is not None: return
+        self.ack_stop.clear()
+        self.ack_thread = threading.Thread(target=self._ack_loop, name="hass-ack", daemon=True)
+        self.ack_thread.start()
+
+    def stop_ack(self):
+        self.ack_stop.set()
+        self.ack_wake.set()
+        if self.ack_thread is not None: self.ack_thread.join(ACK_TIMEOUT + ACK_STATE_TIMEOUT + 2)
+        self.ack_thread = None
+        with self.ack_lock: live = list(self.ack_live)
+        for worker in live: worker.join(ACK_TIMEOUT + ACK_STATE_TIMEOUT + 2)
+
+    def _ack_loop(self):
+        """The dispatcher: it only claims pending rows and starts one worker thread per claimed row, so every attempt starts
+        at once instead of waiting behind the sends before it (a burst of four 0.8 s sends used to start at 0.1, 0.9, 1.7 and
+        2.5 s). It never sends anything itself."""
+        spool = None
+        try:
+            while not self.ack_stop.is_set():
+                self.ack_wake.wait(ACK_TICK)
+                self.ack_wake.clear()
+                if self.ack_stop.is_set(): break
+                try:
+                    if spool is None:
+                        spool = Spool(self.spool.directory, self.clock())
+                        spool.clock, spool.stage = self.clock, self.stage
+                    self._ack_dispatch(spool)
+                except Exception:  # noqa: BLE001 - the thread outlives any single failure (a locked file, a full disk)
+                    print("retry", file=sys.stderr)
+        finally:
+            if spool is not None:
+                try: spool.db.close()
+                except sqlite3.Error: pass
+
+    def _ack_dispatch(self, spool):
+        db = spool.db
+        db.execute("UPDATE ack SET state='pending' WHERE state='checking' AND done_at<?", (self.clock() - ACK_CLAIM_STALE,))
+        with self.ack_lock: room = ACK_WORKERS - len(self.ack_live)  # fewer than the pending rows only past one catch-up page; the rest follow as workers finish
+        if room <= 0: return
+        db.execute("BEGIN IMMEDIATE")  # one transaction claims the whole burst (pending -> checking, atomic: a row is claimed by exactly one caller)
+        try:
+            rows = db.execute("SELECT provider_id,created_at FROM ack WHERE state='pending' ORDER BY created_at,rowid LIMIT ?", (room,)).fetchall()
+            db.executemany("UPDATE ack SET state='checking',done_at=? WHERE provider_id=? AND state='pending'", [(self.clock(), pid) for pid, _ in rows])
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        for pid, created in rows:
+            worker = threading.Thread(target=self._ack_worker, args=(pid, created), name="hass-ack-worker", daemon=True)
+            with self.ack_lock: self.ack_live.add(worker)
+            try: worker.start()
+            except RuntimeError:  # no thread could be started: nothing was sent, the row goes back and the next pass retries it
+                with self.ack_lock: self.ack_live.discard(worker)
+                db.execute("UPDATE ack SET state='pending' WHERE provider_id=? AND state='checking'", (pid,))
+
+    def _ack_worker(self, pid, created):
+        spool = None
+        try:
+            spool = Spool(self.spool.directory, self.clock(), ready=True)
+            spool.clock, spool.stage = self.clock, self.stage
+            self._ack_row(spool, pid, created)
+        except Exception:  # noqa: BLE001 - one message's failure never touches another's
+            print("retry", file=sys.stderr)
+        finally:
+            if spool is not None:
+                try: spool.db.close()
+                except sqlite3.Error: pass
+            with self.ack_lock: self.ack_live.discard(threading.current_thread())
+            self.ack_wake.set()  # a pending row may have been waiting for a free worker
+
     def cycle(self):
-        for attr, delay, action in (("next_poll", 60, self.catch_up), ("next_pull", 5, self.pull)):
-            if self.clock() >= getattr(self, attr):
-                setattr(self, attr, self.clock() + delay)
-                try: action()
-                except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
-        for action in (self.fetch, self.deliver):
-            try: action()
-            except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
+        fast = self.clock() < self.spool.get("fast_until")  # an owner message arrived in the last FAST_WINDOW seconds
+        if fast: self.next_pull = min(self.next_pull, self.clock() + PULL_FAST)  # do not finish a slow wait first
+        # Acceptance comes first (a webhook fetch, the catch-up poll) and the ack is kicked right after it, ahead of the
+        # reply pull, the pictures and the post to the receiver, none of which can then delay the tapback.
+        try: self.fetch()
+        except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
+        self.ack_kick()
+        if self.clock() >= self.next_poll:
+            self.next_poll = self.clock() + CATCH_UP_EVERY
+            try: self.catch_up()
+            except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
+            finally: self.ack_kick()
+        try: self.deliver()
+        except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
+        if self.clock() >= self.next_pull:
+            self.next_pull = self.clock() + (PULL_FAST if fast else PULL_SLOW)
+            try: self.pull()
+            except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
         self.spool.db.execute("DELETE FROM nonces WHERE seen_at<?", (self.clock() - 86400,))
 
 
@@ -284,6 +556,7 @@ class Handler(BaseHTTPRequestHandler):
             if len(raw) != int(size): return self.respond(400)
             # The HTTP thread owns its connection; network retries never block the doorbell.
             spool = Spool(self.server.spool.directory, self.server.clock())
+            spool.stage = self.server.spool.stage  # HASS-FAST-1: the doorbell's stage time goes to the same log
             try: spool.doorbell(json.loads(raw), self.server.clock())
             finally: spool.db.close()
         except (ValueError, RecursionError): return self.respond(400)
@@ -300,11 +573,21 @@ class Server(HTTPServer):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("command", choices=("serve", "status", "check"))
+    ap.add_argument("command", choices=("serve", "status", "check", "ackcheck"))
     ap.add_argument("--config", required=True)
     args = ap.parse_args(argv)
     try:
         cfg = load_config(args.config)
+        if args.command == "ackcheck":
+            # GET only, no message, no react call. Says whether this BlueBubbles server can send a tapback now (the runbook's check).
+            password = private_read(cfg["bbPasswordFile"], 4096).decode().strip()
+            info = request_json(f'http://127.0.0.1:{cfg["bbPort"]}/api/v1/server/info?{urllib.parse.urlencode({"password": password})}')["data"]
+            private, helper = info.get("private_api") is True, info.get("helper_connected") is True
+            version = info.get("server_version")
+            if type(version) is not str or not re.fullmatch(r"[0-9A-Za-z.+-]{1,32}", version): version = None
+            print(json.dumps({"ackMethod": "tapback", "ackReaction": cfg.get("ack_reaction", ACK_REACTION), "helperConnected": helper, "privateApi": private,
+                              "serverVersion": version, "supportedReactions": list(TAPBACKS), "tapbackPossible": private and helper}, sort_keys=True))
+            return 0
         if args.command == "check":
             # GET only; even a 404 proves the receiver answered. No messages or relay operations.
             password = private_read(cfg["bbPasswordFile"], 4096).decode().strip()
@@ -321,7 +604,8 @@ def main(argv=None):
             if args.command == "status": print(json.dumps(spool.status(), sort_keys=True))
             else:
                 os.umask(0o077)
-                fwd, stop = Forwarder(cfg, spool), threading.Event()
+                fwd, stop = Forwarder(cfg, spool, stage=stagelog.StageLog(Path(cfg["spoolDir"]) / "stages.jsonl")), threading.Event()
+                fwd.start_ack()
                 signal.signal(signal.SIGTERM, lambda *a: stop.set())
                 signal.signal(signal.SIGINT, lambda *a: stop.set())
                 with Server(cfg, spool) as srv:
@@ -332,6 +616,7 @@ def main(argv=None):
                             fwd.cycle()
                             stop.wait(0.2)
                     finally:
+                        fwd.stop_ack()
                         srv.shutdown()
                         thread.join()
         finally: spool.db.close()

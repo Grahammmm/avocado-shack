@@ -1,0 +1,15 @@
+{
+ "total_chars": 44036,
+ "approx_tokens_at_3p5_chars": 12582,
+ "static_prefix_chars": 6953,
+ "static_share": 0.158,
+ "sections": {
+  "role+contract": 483,
+  "rules": 3186,
+  "operations": 3284,
+  "catalog (products + makers)": 36547,
+  "community (hikes, routes)": 282,
+  "store": 256
+ },
+ "product_rows_chars": 35521
+}

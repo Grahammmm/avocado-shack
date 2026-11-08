@@ -2,8 +2,9 @@
 host dirs, a throwaway key, FixtureInterpreter. Run: python3 -B -m unittest hass.tests.test_host"""
 
 import contextlib, http.client, io, json, logging, os, shutil, tempfile, threading, unittest  # noqa: E401
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from hass import bridge, host, inbox as inbox_mod, receiver, relay
@@ -142,6 +143,16 @@ class ConfigTests(HostCase):
             made = host.interpreter_builder(cfg, "/nonexistent")()
             default = host.interpreter_builder({"interpreter": {"url": "http://127.0.0.1:11434", "model": "m"}}, "/nonexistent")()
         self.assertEqual((made.timeout, made.think, default.timeout, default.think), (90, False, 30, None))
+
+    def test_interpreter_builder_gives_the_interpreter_a_hinter_built_from_the_content(self):  # HASS-NL-1
+        cfg = {"interpreter": {"url": "http://127.0.0.1:11434", "model": "m"}}
+        content = SimpleNamespace(products=[{"id": "photo-product-001", "name": "Lemons", "status": "active", "category": "fruit"}],
+                                        makers={}, community={}, store={})
+        with mock.patch.object(host, "load_registry"), mock.patch.object(host, "load_content", return_value=content), \
+                mock.patch.object(host.interpreter_prompt, "build", return_value="p"):
+            made = host.interpreter_builder(cfg, "/nonexistent")()
+        hints = made.hinter("lemons are out", date(2026, 11, 9))
+        self.assertEqual(hints["products"][0]["is"]["id"], "photo-product-001")
 
     def test_live_mode_requires_release_settings(self):
         out = io.StringIO()

@@ -239,7 +239,7 @@ class InterfaceTests(ForwarderCase):
             srv = actual({**cfg, "webhookPort": 0}, spool, lambda: self.now)
             servers.append(srv)
             return srv
-        def cycle():
+        def cycle(ack=True):
             c = http.client.HTTPConnection(*servers[0].server_address, timeout=2)
             c.request("POST", "/bb/" + "ab" * 32, json.dumps({"type": "new-message", "data": {"guid": "queued-before-stop"}}))
             r = c.getresponse()

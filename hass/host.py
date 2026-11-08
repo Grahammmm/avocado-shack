@@ -9,7 +9,7 @@
 Exit 0 ok, 2 config / secret / start point / runtime refused (one JSON line, field names only), 1 any other error.
 Nothing prints message text, a sender, a chat id, a URL, a secret or a path.
 """
-import argparse, base64, collections, ipaddress, json, logging, os, secrets, signal, socket, socketserver, stat, subprocess, sys, threading  # noqa: E401
+import argparse, base64, collections, contextlib, ipaddress, json, logging, os, secrets, signal, socket, socketserver, sqlite3, stat, subprocess, sys, threading  # noqa: E401
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -17,7 +17,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
-from hass import preview, receiver, relay  # noqa: E402
+from hass import nl_prep, preview, receiver, relay, stagelog  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
 
@@ -65,6 +65,24 @@ def _ip(value):
     except (ValueError, TypeError): return None
 
 
+def _interpreter_ok(itp, nested=False) -> bool:
+    """host.json `interpreter`: url + model, optional timeout (1-120) and think (Ollama only), and (HASS-INTERP-OPENAI-1) `api`
+    ("ollama" default, "openai") and, with api openai only, `fallback`: the same keys for the Ollama model asked once when the
+    first answer fails. url is loopback http."""
+    allowed = {"url", "model", "timeout", "think"} | (set() if nested else {"api", "fallback"})
+    if not (isinstance(itp, dict) and {"url", "model"} <= set(itp) <= allowed): return False
+    api = itp.get("api", "ollama")
+    ok = (isinstance(itp["model"], str) and 0 < len(itp["model"]) <= 100
+          and type(itp.get("timeout", 30)) is int and 1 <= itp.get("timeout", 30) <= 120
+          and type(itp.get("think", False)) is bool and api in interpreter_local.APIS
+          and not ("think" in itp and api == "openai")  # the openai request is always non-thinking
+          and ("fallback" not in itp or api == "openai") and (nested or "fallback" not in itp or _interpreter_ok(itp["fallback"], True)))
+    if ok:
+        try: interpreter_local.check_url(itp["url"])
+        except ValueError: return False
+    return ok
+
+
 def _listen(value, allow_zero):
     host, _, port = value.rpartition(":") if isinstance(value, str) else ("", "", "")
     ip = _ip(host.strip("[]"))
@@ -85,15 +103,9 @@ def load_host(path, allow_port_zero=False) -> dict:
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
               and all(c in "0123456789abcdef" for c in raw["runtimeCommit"]),
-              "interpreter": isinstance(itp, dict) and {"url", "model"} <= set(itp) <= {"url", "model", "timeout", "think"}
-              and isinstance(itp["model"], str) and 0 < len(itp["model"]) <= 100
-              and (type(itp.get("timeout", 30)) is int and 1 <= itp.get("timeout", 30) <= 120)
-              and type(itp.get("think", False)) is bool,
+              "interpreter": _interpreter_ok(itp),
               "allowedPeers": isinstance(peers, list) and all(_ip(p) for p in peers),
               "listen": _listen(raw.get("listen"), allow_port_zero) is not None}
-    if checks["interpreter"]:
-        try: interpreter_local.check_url(itp["url"])
-        except ValueError: checks["interpreter"] = False
     bad += [name for name, ok in checks.items() if not ok and name not in bad]
     if not bad and not peers and not _listen(raw["listen"], allow_port_zero)[0].is_loopback: bad.append("allowedPeers")
     if raw.get("approvals") == "live":
@@ -130,6 +142,53 @@ def _worktree(cfg) -> str:
         sdir = editor_mod.open_state(cfg["state"])
         return editor_mod._read_config(sdir / "config.json")["worktree"]
     except editor_mod.UnsafeState: raise HostConfigError(["state"]) from None
+
+
+def _pause_waiting(db, schema="main") -> bool:
+    """True when a pause command sits unread or is being handled in the inbox (`pending`; or a queued payload cannot be
+    read): the pause is on its way. `schema` names the attached inbox."""
+    for (payload,) in db.execute(f"SELECT payload FROM {schema}.inbound WHERE state = 'pending'"):
+        try:
+            text = json.loads(payload)["text"]
+            found = conversation.read_command(text) or conversation.parse_command(text)
+        except (TypeError, ValueError, KeyError, AttributeError):
+            return True  # cannot tell what it says: treat it as a pause
+        if found and found[0] == "pause": return True
+    return False
+
+
+def _flag_set(db) -> bool:
+    return bool(db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone()
+                and db.execute("SELECT 1 FROM control WHERE name = 'paused'").fetchone() is not None)
+
+
+def paused_flag(state) -> bool:
+    """HASS-FAST-1: True when changes are paused, when a pause command is queued or being handled (the worker may be busy
+    with an earlier message, or moving the pause from the inbox into the control flag right now), or when this cannot be
+    read. Read-only (`mode=ro`), nothing written, asked fresh on every 👀; the Mac sends its 👀 only when this is False.
+
+    One read-only connection and one transaction hold both stores (the inbox is attached read-only). A pause is in the
+    inbox as `pending` the whole time it is being handled (Inbox.drain marks it done only after Conversation has committed
+    the flag), so the reads go in the order that cannot miss that move: the inbox first, then the flag. The flag is read
+    a second time in a new transaction after the snapshot; if the two flag reads disagree (a pause or resume landed while
+    this was reading) the answer is paused. Any error, an unreadable store or an unreadable queued payload is paused."""
+    try:
+        base = Path(state).resolve()
+        path, inbox = base / "conversation.sqlite3", base / "inbox.sqlite3"
+        if not path.is_file(): return True
+        with contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=1, isolation_level=None)) as db:
+            attached = inbox.is_file()
+            if attached: db.execute("ATTACH DATABASE ? AS inb", (f"{inbox.as_uri()}?mode=ro",))
+            db.execute("BEGIN")
+            try:
+                if attached and _pause_waiting(db, "inb"): return True  # pending or in progress: the pause is on its way
+                first = _flag_set(db)
+            finally:
+                db.execute("ROLLBACK")
+            if first: return True
+            return _flag_set(db) != first  # the second look, in a new transaction: any disagreement is paused (first is False here)
+    except (OSError, ValueError, sqlite3.Error):
+        return True
 
 
 # -- serve ---------------------------------------------------------------------------------------------------------
@@ -176,6 +235,7 @@ class Handler(BaseHTTPRequestHandler):
         secs = int(now.timestamp())
         if msg["op"] == "pull": out = {"op": "replies", "items": srv.store.pull(msg["max"], secs)}
         elif msg["op"] == "ack": srv.store.ack(msg["ids"], secs); out = {"op": "acked", "ids": msg["ids"]}
+        elif msg["op"] == "state" and "paused" not in msg: out = {"op": "state", "paused": srv.paused()}  # HASS-FAST-1, read-only
         elif msg["op"] == "picture":
             while srv.pic_times and secs - srv.pic_times[0] >= 60: srv.pic_times.popleft()
             shot = None if len(srv.pic_times) >= PICTURES_PER_MIN else srv.store.picture(msg["id"], msg["idx"])
@@ -187,9 +247,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 class Server(HTTPServer):
-    def __init__(self, cfg, secret, rx, store, clock=_now):
+    def __init__(self, cfg, secret, rx, store, clock=_now, paused=lambda: True):
         self.address_family = socket.AF_INET6 if ":" in cfg["addr"][0] else socket.AF_INET
         self.peers, self.secret, self.receiver, self.store, self.clock = cfg["peers"], secret, rx, store, clock
+        self.paused = paused  # HASS-FAST-1: () -> bool, True when changes are paused or unknown (no 👀)
         self.pic_times = collections.deque()
         super().__init__(cfg["addr"], Handler)
 
@@ -202,21 +263,51 @@ class Server(HTTPServer):
 
 
 # -- work ----------------------------------------------------------------------------------------------------------
+class _Timed:
+    """HASS-FAST-1: stage times around each interpreter call; every other attribute (last_error ...) passes through."""
+    def __init__(self, inner, worker): self._inner, self._worker = inner, worker
+
+    def interpret(self, *args, **kwargs):
+        w = self._worker
+        w.stage("interp-start", w.current)
+        try: return self._inner.interpret(*args, **kwargs)
+        finally: w.stage("interp-end", w.current)
+
+    def __getattr__(self, name): return getattr(self._inner, name)
+
+
 class Worker:
-    def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None):
+    def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None, stage=stagelog.off):
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
+        self.stage, self.current = stage, ""  # HASS-FAST-1: `current` is the message being handled (stage log only)
         self.sender = relay.RelaySender(store, conv.settings["ownerChat"], lambda: int(clock().timestamp()), shots_dir)
         self.rev = editor_mod.content_revision(self.worktree)
+        conv.interpreter = _Timed(conv.interpreter, self)
+        raw_send = self.sender.send
+
+        def send(chat, text, attachments=()):
+            rid = raw_send(chat, text, attachments)
+            self.stage("reply-queued", self.current, rid=stagelog.short(rid))
+            return rid
+        self.sender.send = send
         handle = rx.handle
 
         def refreshed(msg, *a, **kw):  # an earlier message in the same drain may have applied a change
             self._refresh()
-            return handle(msg, *a, **kw)
+            self.current = msg.provider_id
+            self.stage("worker-pickup", msg.provider_id)
+            try: return handle(msg, *a, **kw)
+            finally:
+                # HASS-FAST-1: this message's replies go out now, not after the rest of the drain (a slow earlier message
+                # used to hold a quick command's reply). A failure here changes nothing: cycle() flushes again and raises as before.
+                try: self.conv.flush(self.sender)
+                except Exception: pass  # noqa: BLE001,S110
+                self.stage("handled", msg.provider_id)
         rx.handle = refreshed
 
     def _refresh(self):
         if (rev := editor_mod.content_revision(self.worktree)) != self.rev:
-            self.conv.interpreter, self.rev = self.build(), rev
+            self.conv.interpreter, self.rev = _Timed(self.build(), self), rev
 
     def cycle(self):
         """Rebuild the interpreter prompt when the content changed (before every message), drain the inbox, queue the replies."""
@@ -239,13 +330,20 @@ class Worker:
 
 def interpreter_builder(cfg, worktree):
     def build():
-        prompt = interpreter_prompt.build(load_registry(), load_content(Path(worktree) / "hass" / "content"))
-        return interpreter_local.LocalInterpreter(cfg["interpreter"]["url"], cfg["interpreter"]["model"], prompt,
-                                               timeout=cfg["interpreter"].get("timeout", 30), think=cfg["interpreter"].get("think"))
+        content = load_content(Path(worktree) / "hass" / "content")
+        prompt = interpreter_prompt.build(load_registry(), content)
+        itp, hinter = cfg["interpreter"], nl_prep.make_hinter(content)  # HASS-NL-1
+
+        def one(c, api):
+            return interpreter_local.LocalInterpreter(c["url"], c["model"], prompt, timeout=c.get("timeout", 30),
+                                                      think=c.get("think"), hinter=hinter, api=api)
+        main = one(itp, itp.get("api", "ollama"))
+        if "fallback" not in itp: return main  # HASS-INTERP-OPENAI-1: no fallback block, no second call
+        return interpreter_local.FallbackInterpreter(main, one(itp["fallback"], "ollama"), lambda r: conversation._checked(r) is r)
     return build
 
 
-def make_worker(cfg, store, *, editor=None, build=None, clock=_now) -> Worker:
+def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagelog.off) -> Worker:
     worktree = _worktree(cfg)
     build = build or interpreter_builder(cfg, worktree)
     if cfg["approvals"] == "live" and editor is None:
@@ -258,7 +356,7 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now) -> Worker:
         conv.editor.reconcile()
     rx = receiver.Receiver(state=inbox_mod.Inbox(cfg["state"], clock=clock), settings=conv,
                            apply=cfg["approvals"] in ("private", "live"))
-    return Worker(conv, rx, store, worktree, build, clock, Path(cfg["state"]).resolve() / "screenshots" if cfg["pictures"] else None)
+    return Worker(conv, rx, store, worktree, build, clock, Path(cfg["state"]).resolve() / "screenshots" if cfg["pictures"] else None, stage)
 
 
 # -- commands ------------------------------------------------------------------------------------------------------
@@ -287,12 +385,14 @@ def _run(args, root, clock):
         return {"result": "ok", "start_at": args.at}
     cfg, key = _ready(args, root, need_start=args.cmd != "check")
     host_dir = Path(args.host).resolve().parent
+    stage = stagelog.StageLog(host_dir / "stages.jsonl")  # HASS-FAST-1: read-only stage times, ids hashed, no text
     if args.cmd == "work":
         stop = _stopper()
-        make_worker(cfg, relay.RelayStore(host_dir), clock=clock).run(stop)
+        make_worker(cfg, relay.RelayStore(host_dir), clock=clock, stage=stage).run(stop)
     elif args.cmd == "serve":
         stop, rx = _stopper(), receiver.Receiver(state=inbox_mod.Inbox(cfg["state"], clock=clock), settings=None)
-        srv = Server(cfg, key, rx, relay.RelayStore(host_dir), clock)
+        rx.stage = stage
+        srv = Server(cfg, key, rx, relay.RelayStore(host_dir), clock, paused=lambda: paused_flag(cfg["state"]))
         srv.timeout = 1
         while not stop.is_set(): srv.handle_request()
     return {"result": "ok"}

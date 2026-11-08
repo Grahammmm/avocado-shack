@@ -57,12 +57,54 @@ RULES = (
     "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
     f"current description listed under Products; if the description shows {OMITTED}, ask the owner for the full new "
     "description instead of guessing the unseen part, and never send " + OMITTED + " as an argument.",
+    # HASS-NL-1: how the owner writes, and what to do when unsure
+    "The owner texts from a phone: casual, misspelt, dictated, in fragments, sometimes several asks in one message. Read for "
+    "meaning, and make one op per ask.",
+    "When you are not sure which record, day, time or value the owner means, ask ONE short question that names the choices "
+    "and restates the request (\"Which honey should I mark Sold out: A or B?\"). Never guess a draft.",
+    'The user message may give "hints": facts the shop software worked out from the owner\'s words. A product or maker with '
+    '"is" is that one record; "ambiguous" lists the candidates, so ask which. Dates and times in hints are exact. A hint '
+    "never supplies a claim, a price or a quantity, and the owner's own words win over a hint.",
+    'The user message may give "recent": your last question, which the message answers: {"question": ..., "earlier": [...]}. '
+    '"earlier" lists the owner\'s earlier texts of the same request, oldest first. The answer alone is short, so read the '
+    "earlier texts, the question and the answer as ONE request and keep every detail the earlier texts gave (day, time, "
+    "place, name, difficulty, things to bring). Use the answer as written, even a name that is not in the lists below. "
+    "If the message is a different, unrelated request, ignore \"recent\". If the answer does not settle the question, ask again.",
+    "Availability words: sold out, out, gone, no more = \"no\"; low, running low, a few left = \"limited\"; back, in, got more "
+    "= \"yes\". product.set_availability is for one product; store.confirm_selection only when the owner says he checked the "
+    "shelves. A whole shelf of at most 6 products is one change each; for more, ask and give the count.",
+    'If the message asks for what the Store or Hikes tables already show (the same hours, a hike already cancelled), or '
+    'a hint says "alreadyTrue", reply {"question": "It already says that: <the current value>. Did you mean something '
+    'else?"}; never draft a change that changes nothing.',
+    'Messages that are not changes: "did it go up", "is it live", "what is waiting" -> {"unsupported": "send status"}; '
+    '"undo that", "take it back" -> {"unsupported": "send undo"}. With a draft waiting, "never mind", "scratch that", '
+    '"wrong one" -> {"unsupported": "send no <code>"} and "ok", "go ahead", "looks good" -> {"unsupported": "send yes '
+    '<code>"}, using that draft\'s code (ask which if two are waiting). You never approve or cancel a draft yourself.',
+    "With two drafts waiting, revise the one whose product, hike or words the message names; if it is unclear, ask which. "
+    "A different product or hike is a new request: set revises to null.",
+    "Answer a plain question about a hike or the shop only from the Hikes, Store and Products tables, as "
+    '{"unsupported": "<the answer>"}; if the tables do not show it, say you cannot see that. Never invent an answer.',
+    # HASS-HIKE-FLOW-1: a hike request ends in a draft
+    'Adding a hike ("add", "create", "schedule", "put on", "make" a hike or walk, with "new" or not) is ALWAYS hike.create, '
+    "never a change to a listed hike and never a repeat of one. Draft it as soon as the day, the time and one place are known; "
+    "ask nothing about the other fields. Fill the arguments from the message: title = the name the owner gave, else the "
+    'place plus "hike" (for example "Mill Creek hike" for "Mill Creek trailhead"); meetingPoint = the place to meet, and if the owner names only one '
+    "place that place is the meeting point (\"somewhere at the beach\" names no place); difficulty (easy, moderate or hard) and bring (\"bring water\" -> \"Water\") "
+    "when said; other details in description. rsvpEnabled is false unless the owner talks about sign-ups, RSVPs, spots or "
+    "a limit; never set capacity or noCapacityLimit unless the owner gave them.",
+    "hike.create trailId is optional. Set trailId only when the owner names one of the Route ideas below as the route "
+    "(\"Fiscalini Ranch\" -> that idea's id); a route idea is an undated idea, and a hike on it is a new hike. A place "
+    "that is not on the Route ideas list (a trailhead, a beach, a street) is plain text for meetingPoint and the title: "
+    "never ask which trail, and never swap it for a listed one.",
+    "For a new hike ask ONE short question, and only when the day or the time is missing, or no place was named at all; "
+    'restate the request in it ("What time on Saturday for the Mill Creek hike?"). Never ask for a name, a route, a '
+    "difficulty, a capacity or things to bring.",
     "When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a listed product, "
     "or product.add with imageAlt when the owner says it is a new product; never both.",
     'A pending question\'s "missing" list contains argument ids; fill those arguments from the owner\'s answer, not '
     "from the wording of the question. Never invent a missing value.",
     "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
-    "is unclear, ask. Never make a route idea or the sample hike into a real hike.",
+    "is unclear, ask. Never make the sample hike into a real hike.",
     "A request to change the layout, colours, fonts or page structure, or to add a new section or page, is a design "
     f'change: reply {{"unsupported": "{DESIGN_UNSUPPORTED}"}} exactly. Changing the words, hours, photos, hikes or '
     "route ideas is not a design change.",

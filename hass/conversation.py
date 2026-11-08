@@ -14,7 +14,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass import claims, interpret_check, label_reader, margins, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
-from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, load_and_validate, load_content, shop_today, validate  # noqa: E402
+from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, checked_on, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
 from hass import live_policy  # noqa: E402
@@ -100,6 +100,10 @@ FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was ch
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
+# HASS-INTERP-OPENAI-1: which backend answered each message. Lazy like CONTROL; written only for an interpreter that names its
+# backend. Short codes and seconds only: never the owner's text, the prompt, a URL or a model reply.
+AUDIT = """CREATE TABLE IF NOT EXISTS interpreter_audit(provider_id TEXT PRIMARY KEY, at TEXT NOT NULL, backend TEXT NOT NULL,
+  fallback INTEGER NOT NULL, primary_error TEXT, error TEXT, seconds REAL)"""
 DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
                "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
@@ -116,6 +120,19 @@ NOTHING = "Nothing is waiting for approval."
 SOCIAL_REPLY = "Nothing changed. Send a change in plain words, or help."  # AV0007-07
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question stays open for a short answer; longest kept
+# HASS-HIKE-FLOW-1: the open request. While a question of ours is open, the owner's texts of that request are kept (this
+# private store only) so the short answer is read with the request it answers. Gone after RECENT_MINUTES, when a draft or
+# a new question outcome closes it, or on `no`; never more than the last ASK_TURNS texts and ASK_CHARS characters.
+ASKS = "CREATE TABLE IF NOT EXISTS open_asks(provider_id TEXT PRIMARY KEY, asked_at TEXT NOT NULL, texts_json TEXT NOT NULL, pending_json TEXT)"
+# HASS-SHELFCHECK-FLOW-1: the same open request also carries the change Hass could not draft yet (pending_json), when the
+# only thing missing was today's shelf check. Plain words only: no "selection", no "not drafted", no ids.
+SHELF_ASK = "Is the shelf list right for today? Reply yes if it is, or tell me what is different."
+SHELF_QUESTION = "Before I change that, " + SHELF_ASK[0].lower() + SHELF_ASK[1:]
+SHELF_NO = "Okay, nothing was changed. Tell me what is different on the shelf list and I will draft that."
+SHELF_FAILED = "Sorry, I could not set that up, so nothing was changed. Please send the change again."
+SHELF_CLOCK = "The last shelf check is dated in the future, so the date on this phone or computer looks wrong. Nothing was changed."
+ASK_TURNS, ASK_CHARS, ASK_TEXT_CUT = 4, 2000, 1000
 LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
@@ -194,7 +211,7 @@ class FixtureInterpreter:
     def __init__(self, mapping):
         self.mapping = dict(mapping)
 
-    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None):
+    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
         return copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
 
 
@@ -708,6 +725,7 @@ class Conversation:
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text)
+        self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
@@ -752,12 +770,17 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         verb, code = keyword
+        if code is None and (ask := self._shelf_ask(now)) is not None:  # HASS-SHELFCHECK-FLOW-1: a bare yes/no answers our question
+            disposition = self._shelf_answer(msg, now, verb, ask)  # (never a waiting draft's approval or cancel)
+            self._record(msg, disposition)
+            return disposition, None
         if verb == "approve" and code is None and self.settings.get("approvalNeedsCode"):
             self._reply("To put a change live, reply yes <code>, for example yes a1b2.")
             self._record(msg, "no-target")
             return "no-target", None
         # AV1537-02: no/cancel also closes an open (unexpired) question; yes only ever targets a proposal.
         states = "('proposed', 'needs-details')" if verb == "reject" else "('proposed')"
+        if verb == "reject": self._close_asks()  # HASS-HIKE-FLOW-1: no/cancel also drops the open request (the reply is unchanged)
         targets = [r for r in self._drafts(f"state IN {states}") if code is None or r["code"] == code]
         asks = [] if verb != "approve" or targets else [self._by_code(code, ("needs-details",))] if code else \
             [r for r in self._drafts("state = 'needs-details'") if self._expiry(r) > cutoff]  # AV1737-05: bare yes
@@ -892,6 +915,121 @@ class Conversation:
         except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return []
 
+    def _recent_question(self, now):
+        """HASS-NL-1: {"question": text} when the newest owner message was answered with a question of ours at most
+        RECENT_MINUTES ago (so the next short text is its answer); else None. HASS-HIKE-FLOW-1: plus "earlier", the owner's
+        texts of the open request, oldest first, when they are still kept (see _open_ask)."""
+        try:
+            last = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE received_at IS NOT NULL"
+                                   " ORDER BY rowid DESC LIMIT 1").fetchone()
+            if last is None or last["disposition"] != "question": return None
+            row = self.db.execute("SELECT text, created_at FROM outbox WHERE reply_to = ? ORDER BY id DESC LIMIT 1",
+                                  (last["received_at"],)).fetchone()
+            if row is None or not row["text"] or len(row["text"]) > RECENT_MAX: return None
+            if now - datetime.fromisoformat(row["created_at"]) > timedelta(minutes=RECENT_MINUTES): return None
+            return {"question": row["text"], **({"earlier": earlier} if (earlier := self._ask_texts(last["provider_id"], now)) else {})}
+        except (sqlite3.Error, ValueError, TypeError, KeyError): return None
+
+    def _ask_texts(self, provider_id, now) -> list:
+        """The owner texts kept for the open question that answered message ``provider_id``; any problem or a stale row: []."""
+        try:
+            if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_asks'").fetchone(): return []
+            row = self.db.execute("SELECT asked_at, texts_json FROM open_asks WHERE provider_id = ?", (provider_id,)).fetchone()
+            if row is None or now - datetime.fromisoformat(row["asked_at"]) > timedelta(minutes=RECENT_MINUTES): return []
+            texts = json.loads(row["texts_json"])
+            return texts if isinstance(texts, list) and all(isinstance(t, str) and t for t in texts) else []
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return []
+
+    def _open_ask(self, msg, now, earlier, pending=None):
+        """HASS-HIKE-FLOW-1: keep this owner text with the earlier ones of the same open request, newest last, bounded.
+        HASS-SHELFCHECK-FLOW-1: ``pending`` = {"ops": [...], "revises": code|None}, the change that waits for today's shelf check."""
+        texts = [t[:ASK_TEXT_CUT] for t in [*earlier, msg.text]][-ASK_TURNS:]
+        while len(texts) > 1 and sum(map(len, texts)) > ASK_CHARS: texts.pop(0)
+        self.db.execute(ASKS)
+        if not any(c["name"] == "pending_json" for c in self.db.execute("PRAGMA table_info(open_asks)")):
+            self.db.execute("ALTER TABLE open_asks ADD COLUMN pending_json TEXT")  # a store made before the shelf check flow
+        self.db.execute("DELETE FROM open_asks")  # one open request at a time
+        self.db.execute("INSERT INTO open_asks(provider_id, asked_at, texts_json, pending_json) VALUES (?, ?, ?, ?)",
+                        (msg.provider_id, _iso(now), json.dumps(texts, ensure_ascii=False),
+                         json.dumps(pending, sort_keys=True) if pending else None))
+
+    def _shelf_ask(self, now):
+        """HASS-SHELFCHECK-FLOW-1: the open shelf-check question as {"ops", "revises", "texts"}, or None. It is open only while
+        it is the newest thing the owner and Hass said (any other owner message, a stranger's does not count, closes it) and
+        at most RECENT_MINUTES old; a stored change that cannot be read is no question."""
+        try:
+            if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_asks'").fetchone(): return None
+            if "pending_json" not in {c["name"] for c in self.db.execute("PRAGMA table_info(open_asks)")}: return None
+            row = self.db.execute("SELECT * FROM open_asks WHERE pending_json IS NOT NULL").fetchone()
+            last = self.db.execute("SELECT provider_id FROM messages WHERE received_at IS NOT NULL ORDER BY rowid DESC LIMIT 1").fetchone()
+            if row is None or last is None or last["provider_id"] != row["provider_id"]: return None
+            if now - datetime.fromisoformat(row["asked_at"]) > timedelta(minutes=RECENT_MINUTES): return None
+            pending, texts = json.loads(row["pending_json"]), json.loads(row["texts_json"])
+            ops = pending["ops"]
+            if not (isinstance(ops, list) and all(isinstance(c, dict) and isinstance(c.get("op"), str) for c in ops)): return None
+            return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else []}
+        except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
+
+    def _check_day(self):
+        """HASS-SHELFCHECK-FLOW-1: (the stored shelf-check date or None, True when readable) from the writer worktree."""
+        try:
+            wt = editor_mod._load(str(self.sdir))[2]
+            return checked_on(load_and_validate(wt / "hass" / "content", wt / "storefront-mockup").store), True
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError): return None, False
+
+    def _ask_shelf(self, msg, now, result, earlier) -> str:
+        """HASS-SHELFCHECK-FLOW-1: the change was refused only because today's shelf check is missing (none, or older than
+        today): keep it with our question. Nothing is drafted or written until the owner's own yes; a check dated after
+        today cannot be fixed by a yes, so that says so."""
+        day, readable = self._check_day()
+        if readable and day is not None and day > shop_today(now):
+            self._reply(SHELF_CLOCK)
+            return "not-drafted"
+        self._open_ask(msg, now, earlier, {"ops": result["ops"], "revises": result.get("revises")})
+        self._reply(SHELF_QUESTION)
+        return "question"
+
+    def _shelf_answer(self, msg, now, verb, ask) -> str:
+        """HASS-SHELFCHECK-FLOW-1: the owner's bare yes or no to the open shelf-check question (never a draft's yes/no).
+        yes: one draft that marks today's shelf check and then makes the waiting change (none, for the morning report's
+        question), with the normal approval; no: nothing is changed and the question is closed."""
+        self._close_asks()
+        if verb == "reject":
+            self._reply(SHELF_NO)
+            return "shelf-no"
+        ops = [{"op": "store.confirm_selection", "args": {}}, *ask["ops"]]
+        out = self.editor.prepare(ops)
+        draft = out.get("draft") if out["result"] == "ok" else None
+        revised = self._by_code(ask["revises"], ("proposed", "needs-details")) if isinstance(ask["revises"], str) else None
+        if draft is None or claims.unstated(draft, " ".join(ask["texts"]), self._makers(), self._routes(), self._sources()):
+            self._reply(SHELF_FAILED)
+            return "not-drafted"
+        same = self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])
+        row = same[0] if same else self._propose(draft, msg.sender, now)
+        if revised is not None and not same: self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
+        self._proposal_reply(row, draft, "Got it. This draft also records that the shelf list was checked today.\n" if ask["ops"] else "")
+        return "proposed"
+
+    def _close_asks(self, now=None):
+        """HASS-HIKE-FLOW-1: forget the open request (all of it, or with ``now`` only what is older than RECENT_MINUTES)."""
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_asks'").fetchone(): return
+        if now is None: self.db.execute("DELETE FROM open_asks")
+        else: self.db.execute("DELETE FROM open_asks WHERE asked_at < ?", (_iso(now - timedelta(minutes=RECENT_MINUTES)),))
+
+    def _audit_backend(self, msg, now, failed):
+        """HASS-INTERP-OPENAI-1: one audit row per interpreted message when the interpreter names the backend that answered
+        (and whether the fallback was asked). No such interpreter, or a call that raised: no row."""
+        itp = self.interpreter
+        backend = getattr(itp, "last_backend", None)
+        if failed is None or not isinstance(backend, str) or not backend: return
+        code = lambda v: v if isinstance(v, str) and len(v) <= 40 else None  # noqa: E731 - short reason codes only
+        seconds = getattr(itp, "last_seconds", None)
+        self.db.execute(AUDIT)
+        self.db.execute("INSERT OR REPLACE INTO interpreter_audit VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (msg.provider_id, _iso(now), backend[:20], 1 if getattr(itp, "last_fallback", False) is True else 0,
+                         code(getattr(itp, "last_primary_error", None)), code(getattr(itp, "last_error", None)),
+                         float(seconds) if isinstance(seconds, (int, float)) else None))
+
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
             self._reply(TOO_LONG)
@@ -909,7 +1047,9 @@ class Conversation:
                     **({"missing": _missing_ids(r["missing_json"])} if r["state"] == "needs-details" else {})}  # AV0007-03
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
-        context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases())) if v}  # AV0007-06
+        recent = self._recent_question(now)  # HASS-NL-1; HASS-HIKE-FLOW-1: with the owner's earlier texts of the same request
+        context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases()),
+                                     ("recent", recent)) if v}  # AV0007-06; HASS-NL-1
         sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
         failed = None  # AV1052-10: None until interpret actually returned; then the adapter's last_error (or "")
         try:
@@ -917,6 +1057,7 @@ class Conversation:
             failed = getattr(self.interpreter, "last_error", None) or ""
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
+        self._audit_backend(msg, now, failed)
         if failed:  # AV1052-10: the reader itself failed: remember it for status (latest only, no error detail kept)
             self.db.execute(CONTROL)
             self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('reader-failed', ?, ?, ?)"
@@ -933,6 +1074,9 @@ class Conversation:
         if named is not None and named["state"] == "expired" or cancelled_question:  # H16 vs NB-AV-01 (2026-10-31):
             result = {**result, "revises": None}  # a closed draft has nothing left to revise; an unknown code still asks
         result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
+        earlier = (recent or {}).get("earlier") or []  # HASS-HIKE-FLOW-1: the open request this text may be answering
+        if "question" in result: self._open_ask(msg, now, earlier)  # keep the request with our question, for the answer
+        elif "ops" in result: self._close_asks()  # a draft (or its own question) takes over; nothing stays open
         for key in ("question", "unsupported"):
             if key in result:
                 self._reply(result[key])
@@ -963,11 +1107,13 @@ class Conversation:
                 if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
             return "needs-details"
+        if out["result"] == "refused" and out.get("reason") == catalog.NOT_CHECKED_TODAY and not ({"store.confirm_selection"} & {c["op"] for c in result["ops"]}):
+            return self._ask_shelf(msg, now, result, earlier)  # HASS-SHELFCHECK-FLOW-1: ask, keep the change, write nothing
         if out["result"] != "ok":
             self._reply(f"Not drafted: {_reason(out)}")
             return "not-drafted"
         draft = out["draft"]
-        if hits := claims.unstated(draft, msg.text, self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts
+        if hits := claims.unstated(draft, " ".join([*earlier, msg.text]), self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts; HASS-HIKE-FLOW-1: the owner's earlier texts of this request count as stated
             self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
             return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"])]
@@ -1149,7 +1295,7 @@ class Conversation:
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
         if verb == "show": return self._reply(*self._show(code, now)) or "show"
-        if verb == "report": return self._report(now)
+        if verb == "report": return self._report(msg, now)
         if verb == "post": return self._post(code)
         if verb == "margin": return self._margin(code)
         if verb == "hidden": return self._hidden()
@@ -1177,17 +1323,34 @@ class Conversation:
         self._proposal_reply(row, out["draft"], f"Undo {done[-1]['code']}:\n")
         return "proposed"
 
-    def _report(self, now) -> str:
-        """AV1322-05 (F04): the morning shelf report from the writer worktree content, Pacific today; read-only."""
+    def _report(self, msg, now) -> str:
+        """AV1322-05 (F04): the morning shelf report from the writer worktree content, Pacific today; read-only for the site.
+        HASS-SHELFCHECK-FLOW-1: when today's shelf check is missing, the first report of the day also asks the owner
+        SHELF_ASK (a yes then drafts the check; nothing is written by asking)."""
+        ask = False
         try:
             wt = editor_mod._load(str(self.sdir))[2]
             content = load_and_validate(wt / "hass" / "content", wt / "storefront-mockup")
-            text = morning_report.render(morning_report.facts(content, shop_today(now)))
+            facts = morning_report.facts(content, shop_today(now))
+            text = morning_report.render(facts)
+            ask = facts["checked_on"] != shop_today(now).isoformat() and not facts["future"] and self._report_asked(msg, now)
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             text = "Shelf report unavailable right now; nothing changed."
         waiting = self._waiting_lines(now) + [l for l in self._photo_lines(now) if l.startswith("Photos waiting")]
-        self._reply(f"{text}\n\n" + "\n".join(["Waiting for you:"] + waiting if waiting else ["Waiting for you: nothing"]))
+        self._reply(f"{text}\n\n" + "\n".join(["Waiting for you:"] + waiting if waiting else ["Waiting for you: nothing"])
+                    + (f"\n\n{SHELF_ASK}" if ask else ""))
         return "report"
+
+    def _report_asked(self, msg, now) -> bool:
+        """HASS-SHELFCHECK-FLOW-1: True the first time today that the report asks SHELF_ASK (and keeps it open); once a day."""
+        day = shop_today(now).isoformat()
+        self.db.execute(CONTROL)
+        if (row := self.db.execute("SELECT value FROM control WHERE name = 'shelf-asked'").fetchone()) and row["value"] == day: return False
+        self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('shelf-asked', ?, ?, ?)"
+                        " ON CONFLICT(name) DO UPDATE SET value = excluded.value, set_at = excluded.set_at,"
+                        " provider_id = excluded.provider_id", (day, _iso(now), msg.provider_id))
+        self._open_ask(msg, now, [], {"ops": [], "revises": None})
+        return True
 
     def _margin(self, rest) -> str:
         """AV1102-12 (F03): margins.render for one purchase line, text in and text out. Read-only: nothing is stored or
