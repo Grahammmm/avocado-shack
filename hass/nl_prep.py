@@ -43,6 +43,8 @@ WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturd
 MONTHS = {"jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3, "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6,
           "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9, "oct": 10, "october": 10, "nov": 11,
           "november": 11, "dec": 12, "december": 12}
+HIKE_WORD_RE = re.compile(r"\b(?:hikes?|walks?|outings?|trails?|routes?|trek|meet(?:ing)?\s?(?:up|point))\b")
+RANGE_RE = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?\s*(?:to|-|\u2013|until|till|through)\s*(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?(?!\d)")
 TOKEN_RE = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
 PRICE_CUE_RE = re.compile(r"\$|\b(?:bucks?|dollars?|cents?|prices?|priced|pricing|charg\w*|costs?|mark(?:ed)?\s?down|markdown|discount\w*|sale|each|per\s(?:lb|pound))\b|%\s*off")
 MONEY_RE = re.compile(r"\$\s?(\d+(?:\.\d{1,2})?)|\b(\d+(?:\.\d{1,2})?)\s*(?:bucks?|dollars?)\b|\b(\d+\.\d{2})\b")
@@ -95,6 +97,9 @@ class _Index:
         community = community if isinstance(community, dict) else {}
         self.hikes = [e for e in community.get("events") or [] if isinstance(e, dict) and isinstance(e.get("id"), str)]
         self.ideas = [r for r in community.get("routeIdeas") or [] if isinstance(r, dict) and isinstance(r.get("id"), str)]
+        store = getattr(content, "store", None)
+        hours = store.get("hours") if isinstance(store, dict) else None
+        self.hours = [h for h in hours if isinstance(h, str)] if isinstance(hours, list) else []
         self.vocab = {t for p in self.products for t in p["tokens"]} | {t for m in self.makers for t in m["tokens"]} \
             | {t for e in (*self.hikes, *self.ideas) for t in tokens(e.get("title") or "")}
         self.vocab |= set(SHELVES)
@@ -177,20 +182,21 @@ def phrase_hints(text, index, aliases) -> dict:
     """products / makers / shelves for the phrases in ``text``."""
     tokens_ = [stem(t) for t in TOKEN_RE.findall(fold(text))]
     raw = TOKEN_RE.findall(fold(text))
+    alias_seqs = []
+    for a in aliases or []:
+        if isinstance(a, dict) and isinstance(a.get("name"), str):
+            seq = tuple(tokens(a["name"], stop=NAME_STOP | {"the"}))
+            if seq: alias_seqs.append((seq, a))
+    alias_words = {w for seq, _ in alias_seqs for w in seq}  # an alias word is read as written, in the catalog or not
     canon, guessed = [], []
     for original, token in zip(raw, tokens_):
         if original in MSG_STOP or token in MSG_STOP or original in NAME_STOP or token in NAME_STOP:
             canon.append("")
             guessed.append(False)
             continue
-        word, guess = index.canon(token)
+        word, guess = (token, False) if token in alias_words else index.canon(token)
         canon.append(word)
         guessed.append(guess)
-    alias_seqs = []
-    for a in aliases or []:
-        if isinstance(a, dict) and isinstance(a.get("name"), str):
-            seq = tuple(tokens(a["name"], stop=NAME_STOP | {"the"}))
-            if seq: alias_seqs.append((seq, a))
     products, makers, shelves, said = [], [], [], {}
     run = []
     for k in range(len(canon) + 1):
@@ -241,7 +247,7 @@ def hike_hints(text, index, today: date, weekday_hits) -> dict:
             out.append({"hike": e["id"], "title": e.get("title"), "startsAt": e.get("startsAt"), "status": e.get("status")})
     ideas = [{"routeIdea": r["id"], "title": r.get("title")} for r in index.ideas if (set(tokens(r.get("title") or "")) - {"walk", "hike"}) and set(tokens(r.get("title") or "")) <= words]
     rows = []
-    for name, wd in weekday_hits:
+    for name, wd in weekday_hits if HIKE_WORD_RE.search(fold(text)) or out or ideas else ():  # a weekday alone is not about hikes
         on = [e for e in index.hikes if e.get("status") == "scheduled" and _weekday_of(e.get("startsAt")) == wd]
         if on: rows.append({"said": name, "scheduled hikes": [{"hike": e["id"], "title": e.get("title"), "startsAt": e.get("startsAt")} for e in on][:MAX_LIST]})
     result = {}
@@ -342,6 +348,42 @@ def price_hints(text):
     return {"mentioned": True, "amounts": amounts[:MAX_LIST]}
 
 
+def _clock(hour, minute, mark):
+    return f"{hour % 12 or 12}{':' + minute if minute and minute != '00' else ''}{mark}"
+
+
+def asked_range(text):
+    """('9am', '5pm') for "9 to 5", "8:30-4pm" and the like (a bare end before the start is the afternoon); else None."""
+    m = RANGE_RE.search(fold(text))
+    if not m: return None
+    h1, m1, a1, h2, m2, a2 = int(m.group(1)), m.group(2), m.group(3), int(m.group(4)), m.group(5), m.group(6)
+    if not (1 <= h1 <= 12 and 1 <= h2 <= 12): return None
+    a1, a2 = (a1 or "")[:1], (a2 or "")[:1]
+    if not a2 and not a1: a1, a2 = ("a" if h1 >= 6 else "p"), ("p" if h2 <= 8 or h2 < h1 else "a")
+    elif not a2: a2 = "p" if a1 == "a" and h2 < h1 else a1
+    elif not a1: a1 = "a" if h1 <= h2 or a2 == "p" else "p"
+    return _clock(h1, m1, a1 + "m"), _clock(h2, m2, a2 + "m")
+
+
+def hours_hints(text, index):
+    """The Store already shows the days and hours the owner asks for: a fact for "it already says that", never a draft."""
+    asked, days = asked_range(text), [WEEKDAYS[name] for _, name in WEEKDAY_RE.findall(fold(text))]
+    if not (asked and days and index.hours): return None
+    names = WEEKDAY_NAMES
+    same = []
+    for wd in sorted({d for d in days}):
+        for line in index.hours:
+            for part in line.split("\u00b7"):
+                m = re.match(r"\s*([A-Za-z]+)(?:\s*[\u2013-]\s*([A-Za-z]+))?\s+(.+?)\s*$", part)
+                if not m: continue
+                first = next((i for i, n in enumerate(names) if n.lower().startswith(m.group(1).lower()[:3])), None)
+                last = first if m.group(2) is None else next((i for i, n in enumerate(names) if n.lower().startswith(m.group(2).lower()[:3])), None)
+                if first is None or last is None or not first <= wd <= last: continue
+                shown = re.sub(r"\s*[\u2013-]\s*", "\u2013", m.group(3).lower().replace(" ", ""))
+                if shown == f"{asked[0]}\u2013{asked[1]}": same.append(f"{names[wd]} already {m.group(3)}")
+    return same or None
+
+
 def make_hinter(content):
     """hinter(text, today: date, aliases=None) -> dict (empty when there is nothing to say; never raises)."""
     index = _Index(content)
@@ -351,7 +393,11 @@ def make_hinter(content):
             out = phrase_hints(text, index, aliases)
             dates, weekdays = date_hints(text, today)
             hikes = hike_hints(text, index, today, weekdays)
-            for key, value in (("hikes", hikes), ("dates", dates), ("times", time_hints(text)), ("numbers", number_hints(text)), ("price", price_hints(text))):
+            if hikes.get("named") and out.get("products"):  # "cass hill" in a hike message is the hike, not the product of that name
+                titles = [set(tokens(n.get("title") or "")) for n in hikes["named"]]
+                out["products"] = [p for p in out["products"] if not any(set(tokens(p["said"])) <= t for t in titles)]
+                if not out["products"]: del out["products"]
+            for key, value in (("alreadyTrue", hours_hints(text, index)), ("hikes", hikes), ("dates", dates), ("times", time_hints(text)), ("numbers", number_hints(text)), ("price", price_hints(text))):
                 if value: out[key] = value
             return out
         except Exception:  # noqa: BLE001 - a hint is a convenience; the request still goes out without it

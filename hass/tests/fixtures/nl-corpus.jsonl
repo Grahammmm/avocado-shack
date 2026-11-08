@@ -343,3 +343,6 @@
 {"id": "n343", "text": "um", "intent": "vague", "expect": {"question": true}, "ask": true, "refuse": false, "pending": [], "also": [{"unsupported": true}]}
 {"id": "n344", "text": "so about yesterday", "intent": "vague", "expect": {"question": true}, "ask": true, "refuse": false, "pending": []}
 {"id": "n345", "text": "you know the one", "intent": "vague", "expect": {"question": true}, "ask": true, "refuse": false, "pending": []}
+{"id": "n346", "text": "can you change the shop hours to 9 to 5 on saturdays", "intent": "store", "expect": {"question": true}, "ask": true, "refuse": false, "pending": [], "mustContain": ["already"], "tags": ["no-op"]}
+{"id": "n347", "text": "make saturday 9 to 5 pls", "intent": "store", "expect": {"question": true}, "ask": true, "refuse": false, "pending": [], "mustContain": ["already"], "tags": ["no-op"]}
+{"id": "n348", "text": "weekdays 9am to 6pm, update the hours", "intent": "store", "expect": {"question": true}, "ask": true, "refuse": false, "pending": [], "mustContain": ["already"], "tags": ["no-op"]}

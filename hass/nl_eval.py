@@ -21,7 +21,7 @@ Commands (offline unless --live):
   score --replies R [--corpus C]          one JSON summary: metrics, per-intent counts, failing ids with a short reason
   report --run LABEL=R [--run ...]        a markdown table, one column per run
   compare --before R1 --after R2          ids that regressed or were fixed
-  --live --url U --model M --out FILE     OPERATOR ONLY, never in CI: asks the local model once per case, appends
+  --live --url U --model M --out FILE     [--sample N | --every K | --limit L] OPERATOR ONLY, never in CI: asks the local model once per case, appends
                                           {"id","reply","failed","ms","firstMs","firstFailed"} lines to FILE.partial and
                                           links FILE when complete. --retry-timeout S asks a failed call once more with
                                           that longer limit (a shared CPU model can be swapped out between cases); the
@@ -287,9 +287,33 @@ def _improvements(content) -> dict:
     return {"hinter": nl_prep.make_hinter(content)}
 
 
-def subset(corpus, every=None, limit=None):
-    rows = corpus[::every] if every else corpus
+def subset(corpus, every=None, limit=None, sample=None, ids=None):
+    """Which cases a live run asks: an exact id set (--ids / --same-as, so a before and an after run answer the same cases),
+    else a stratified sample, every K-th case or the whole corpus; --limit cuts the front."""
+    rows = [c for c in corpus if c["id"] in ids] if ids else stratified(corpus, sample) if sample else corpus[::every] if every else corpus
     return rows[:limit] if limit else rows
+
+
+def stratified(corpus, n):
+    """About n cases, spread over every intent (at least one each, evenly spaced inside it), in corpus order: a live run on a
+    slow shared CPU model can only afford a sample, and a sample must not skip a whole kind of message."""
+    groups = {}
+    for case in corpus: groups.setdefault(case["intent"], []).append(case)
+    if n >= len(corpus): return list(corpus)
+    quota = {k: max(1, round(n * len(v) / len(corpus))) for k, v in groups.items()}
+    while sum(quota.values()) > max(n, len(groups)):  # trim the biggest groups first
+        big = max((k for k in quota if quota[k] > 1), key=lambda k: quota[k], default=None)
+        if big is None: break
+        quota[big] -= 1
+    while sum(quota.values()) < n:  # top up the groups with the most unsampled cases
+        k = max(groups, key=lambda g: len(groups[g]) - quota[g])
+        if quota[k] >= len(groups[k]): break
+        quota[k] += 1
+    keep = set()
+    for k, rows in groups.items():
+        step = len(rows) / quota[k]
+        keep.update(rows[int(i * step + step / 2)]["id"] for i in range(quota[k]))
+    return [c for c in corpus if c["id"] in keep]
 
 
 def main(argv=None, transport=None) -> int:
@@ -305,6 +329,9 @@ def main(argv=None, transport=None) -> int:
     parser.add_argument("--think", choices=("true", "false"))
     parser.add_argument("--every", type=int)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--ids", help="live: only these case ids, comma separated")
+    parser.add_argument("--same-as", help="live: only the cases already in this replies file (pairs a before and an after run)")
+    parser.add_argument("--sample", type=int, help="live: about N cases spread over every intent (deterministic)")
     parser.add_argument("--warmup-timeout", type=int, default=900)
     args = parser.parse_args(argv)
     try:
@@ -313,8 +340,11 @@ def main(argv=None, transport=None) -> int:
         if args.live:
             if not (args.url and args.model and args.out and not args.command): parser.error("use: --live --url U --model M --out FILE")
             think = None if args.think is None else args.think == "true"
+            ids = {i for i in (args.ids or "").split(",") if i} | (set(load_replies(args.same_as)) if args.same_as else set())
+            if (args.ids or args.same_as) and not ids: parser.error("--ids / --same-as named no cases")
+            if ids - {c["id"] for c in corpus}: raise EvalError("--ids / --same-as name a case that is not in the corpus")
             say = lambda i, ms, err, final: print(f"{i} {ms}ms {err or 'ok'}{'' if final == err else ' -> ' + (final or 'ok')}", file=sys.stderr, flush=True)  # noqa: E731 - no case text
-            summary = live(subset(corpus, args.every, args.limit), args.url, args.model, args.out, timeout=args.timeout, think=think,
+            summary = live(subset(corpus, args.every, args.limit, args.sample, ids), args.url, args.model, args.out, timeout=args.timeout, think=think,
                            baseline=args.baseline, warmup_timeout=args.warmup_timeout, transport=transport, registry=registry, progress=say,
                            retry_timeout=args.retry_timeout)
         elif args.command == "score" and args.replies:

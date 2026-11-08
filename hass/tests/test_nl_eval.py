@@ -337,6 +337,67 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(len(nl.subset(self.corpus, every=5)), -(-len(self.corpus) // 5))
         self.assertEqual(len(nl.subset(self.corpus, every=5, limit=3)), 3)
 
+    def test_sample_covers_every_intent_in_corpus_order_and_is_stable(self):
+        picked = nl.subset(self.corpus, sample=40)
+        self.assertEqual(len(picked), 40)
+        self.assertEqual({c["intent"] for c in picked}, nl.INTENTS)
+        self.assertEqual([c["id"] for c in picked], [c["id"] for c in nl.subset(self.corpus, sample=40)])
+        self.assertEqual([c["id"] for c in picked], sorted(c["id"] for c in picked))
+        self.assertEqual(len(nl.subset(self.corpus, sample=10_000)), len(self.corpus))
+        self.assertEqual(len(nl.subset(self.corpus, sample=40, limit=5)), 5)
+
+    def test_ids_and_same_as_pick_exactly_those_cases(self):
+        self.assertEqual([c["id"] for c in nl.subset(self.corpus, ids={"n003", "n001"})], ["n001", "n003"])
+        done = self.tmp / "before.jsonl"
+        nl.live(self.corpus[:4], URL, "m", done, baseline=True, transport=fake_model(), warmup_timeout=0)
+        out = self.tmp / "after.jsonl"
+        code, text, err = run("--live", "--url", URL, "--model", "m", "--out", out, "--same-as", done, "--warmup-timeout", "0", transport=fake_model())
+        self.assertEqual((code, json.loads(text)["recorded"]), (0, 4))
+        self.assertEqual(list(nl.load_replies(out)), list(nl.load_replies(done)))
+        code, _text, err = run("--live", "--url", URL, "--model", "m", "--out", self.tmp / "x.jsonl", "--ids", "n001,zzz", transport=fake_model())
+        self.assertEqual(code, 2)
+
+    def test_the_no_op_hours_cases_want_an_it_already_says_that_question(self):
+        cases = [c for c in self.corpus if "no-op" in c.get("tags", [])]
+        self.assertGreaterEqual(len(cases), 3)
+        for case in cases:
+            self.assertEqual((case["expect"], case["ask"], case["mustContain"]), ({"question": True}, True, ["already"]))
+            draft = {"ops": [{"op": "store.set_hours", "args": {"hours": ["Saturday 9am\u20135pm"]}}], "revises": None}
+            row = {"reply": draft, "failed": None, "ms": 1}
+            self.assertEqual(nl.judge(case, row, REGISTRY)["verdict"], "wrong-draft")  # drafting a change that changes nothing is the unsafe outcome
+            row["reply"] = {"question": "It already says that: Saturday 9am\u20135pm. Did you mean something else?"}
+            self.assertEqual(nl.judge(case, row, REGISTRY)["verdict"], "pass")
+
+    def test_retry_timeout_asks_once_more_and_keeps_the_first_attempt(self):
+        calls = []
+        good = fake_model()
+
+        def slow_then_fine(url, body, headers, timeout):
+            calls.append(timeout)
+            if len(calls) == 1: raise TimeoutError
+            return good(url, body, headers, timeout)
+        out = self.tmp / "retry.jsonl"
+        nl.live(self.corpus[:1], URL, "m", out, baseline=True, timeout=30, retry_timeout=500, transport=slow_then_fine, warmup_timeout=0)
+        [row] = nl.load_replies(out).values()
+        self.assertEqual(calls, [30, 500])
+        self.assertEqual((row["failed"], row["firstFailed"]), (None, "timeout"))  # answered, but the first try's timeout stays on record
+        s = nl.score(self.corpus[:1], {self.corpus[0]["id"]: row}, REGISTRY)
+        self.assertEqual(s["firstAttemptTimeouts"], 1)
+        calls.clear()
+        nl.live(self.corpus[1:2], URL, "m", self.tmp / "off.jsonl", baseline=True, timeout=30, transport=lambda *a: (_ for _ in ()).throw(TimeoutError), warmup_timeout=0)
+        self.assertEqual(len(calls), 0)  # without --retry-timeout nothing is asked twice
+
+    def test_live_after_run_sends_hints_and_recent_but_the_baseline_does_not(self):
+        seen = []
+        case = next(c for c in self.corpus if c.get("recent"))
+        for baseline in (True, False):
+            nl.live([case], URL, "m", self.tmp / f"run{baseline}.jsonl", baseline=baseline, transport=fake_model(seen), warmup_timeout=0)
+        self.assertNotIn("recent", seen[0]["fields"])
+        self.assertEqual(seen[1]["fields"]["recent"], case["recent"])
+        hinted = next(c for c in self.corpus if c["text"] == "eggs are out")
+        nl.live([hinted], URL, "m", self.tmp / "h.jsonl", baseline=False, transport=fake_model(seen), warmup_timeout=0)
+        self.assertEqual(seen[-1]["fields"]["hints"]["products"][0]["is"]["id"], "photo-product-024")
+
 
 if __name__ == "__main__":
     unittest.main()

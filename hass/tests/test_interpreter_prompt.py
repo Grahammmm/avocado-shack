@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from hass.content_model import CATEGORIES, load_and_validate
-from hass.interpreter_prompt import MAX_MAKERS, MAX_PRODUCTS, PROMPT_MAX_BYTES, build
+from hass.interpreter_prompt import MAX_MAKERS, MAX_PRODUCTS, PROMPT_MAX_BYTES, RULES, build
 from hass.ops import Arg, Op, load_registry
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "interpreter-prompt.txt"
@@ -133,6 +133,34 @@ class EscapeAndCapTest(unittest.TestCase):
         products = [{"id": f"p-{i:03d}", "name": "n" * 200, "status": "active"} for i in range(MAX_PRODUCTS)]
         with self.assertRaisesRegex(ValueError, r"^prompt too large$"):
             build(TEST_REGISTRY, tiny_content(products))
+
+
+class NaturalLanguageRulesTest(unittest.TestCase):
+    """HASS-NL-1: the rules that make Hass ask instead of guess. Wording may change; each of these ideas must stay."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rules = " ".join(RULES).lower()
+
+    def test_unsure_means_one_short_question_and_never_a_guessed_draft(self):
+        for phrase in ("not sure", "one short question", "restates the request", "never guess a draft"):
+            self.assertIn(phrase, self.rules)
+
+    def test_hints_are_facts_and_never_supply_claims_prices_or_quantities(self):
+        for phrase in ('"hints"', '"ambiguous"', "never supplies a claim, a price or a quantity", "owner's own words win"):
+            self.assertIn(phrase, self.rules)
+
+    def test_recent_question_availability_words_and_no_op_rule(self):
+        for phrase in ('"recent"', "sold out, out, gone", "running low", "at most 6 products", "alreadytrue", "it already says that",
+                       "never draft a change that changes nothing"):
+            self.assertIn(phrase, self.rules)
+
+    def test_non_change_messages_point_to_the_command_and_never_approve(self):
+        for phrase in ("send status", "send undo", "send no <code>", "send yes <code>", "you never approve or cancel a draft yourself"):
+            self.assertIn(phrase, self.rules)
+
+    def test_rules_stay_small_enough_for_a_cpu_model_to_read(self):
+        self.assertLess(len(" ".join(RULES).encode("utf-8")), 9000)
 
 
 if __name__ == "__main__":
