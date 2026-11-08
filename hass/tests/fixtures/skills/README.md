@@ -42,6 +42,10 @@ the file name is not the skill name.
   reply carrying the exception's `reply` text.
 * `version`: the skill version the row was written for; a different skill version fails the row as `stale-row`.
 * `approve: false` stops after the draft and the wrong-code check (no apply, no undo).
+* `setup` (optional): a list of `{op, args}` ops applied through the real editor before the row starts, so the row can begin
+  from a state the shop's content does not have (for example a hidden product to bring back). They are the row's base, never
+  part of its diff or its undo. Used by `items/item.restore.jsonl`.
+* `undo: true` (optional marker): the row ends in an approved draft that the kit then undoes; the kit fails the row if it did not.
 
 `expect` fields (all optional except `diff` when the row ends in a draft):
 

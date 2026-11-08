@@ -49,7 +49,7 @@ CODES = ("write-before-yes", "wrong-diff", "edit-undeclared", "undo-not-identica
          "stale-row", "bad-row", "bad-plan", "no-skill")
 FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "skip-later-preview")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a revision whose preview is never requested
 PLAN_KEYS = {"id", "plan", "kind", "slots", "ctx", "expect_ops", "expect_error", "version", "note", "must_fail"}
-CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan"}
+CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "setup", "undo"}
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
                "left_off", "set_line", "ops", "diff", "files", "preview", "residue", "allow_words"}
 KINDS = ("clean", "vague", "typo", "multi", "refuse", "photo", "turns")
@@ -218,7 +218,7 @@ class SkillInterpreter:
 class Scratch:
     """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry."""
 
-    def __init__(self, mapping, skills, fault=None):
+    def __init__(self, mapping, skills, fault=None, setup=None):
         from hass import conversation, editor
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo  # the H02 throwaway repo the demo transcript uses
@@ -230,8 +230,21 @@ class Scratch:
         self.previewer = RecordingPreviewer(skip_after=1 if fault == "skip-later-preview" else None)
         self.turn_previews = []  # the preview requests each message caused, in message order
         self.editor = _fault_editor(conversation.Editor, self, str(self.repo.state), fault)
+        if setup:
+            try: self._setup(setup)
+            except Exception:  # noqa: BLE001 - nothing else owns the throwaway repo yet
+                self.repo.cleanup()
+                raise
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now, self.previewer)
         self.Inbound = conversation.Inbound
+
+    def _setup(self, ops):
+        """A row's starting state (for example a hidden product): the ops go through the real editor, prepare then
+        apply, before the row starts, so the row's base is the tree after them. They are never part of the row's diff."""
+        out = self.editor.prepare(ops)
+        if out.get("result") != "ok": raise ValueError(f"setup ops were not accepted: {json.dumps(out, sort_keys=True)[:200]}")
+        done = self.editor.apply(out["draft"]["change_id"], out["draft"]["draft_hash"])
+        if done.get("result") != "applied": raise ValueError(f"setup ops were not applied: {json.dumps(done, sort_keys=True)[:200]}")
 
     def _ctx(self):
         from hass.content_model import load_and_validate
@@ -355,14 +368,20 @@ def run_case_row(row, skills, skill=None, selftest=False):
         bad = "texts must be distinct non-empty strings, one recorded reply each"
     if not bad and (("fault" in row or "must_fail" in row) and not selftest): bad = "fault / must_fail exist only for the kit self-test"
     if not bad and row.get("fault") not in (None, *FAULTS): bad = f"fault must be one of {', '.join(FAULTS)}"
+    setup = row.get("setup") if isinstance(row, dict) else None
+    if not bad and setup is not None and not (isinstance(setup, list) and setup and all(isinstance(o, dict) and set(o) == {"op", "args"} for o in setup)):
+        bad = "setup is a list of {op, args} ops applied before the row starts"
+    if not bad and "undo" in row and row["undo"] is not True: bad = "undo, when given, is true (the row ends in an approved draft that is undone)"
     if bad: res.fail("bad-row", bad); return res
     expect, mapping = row["expect"], dict(zip(row["texts"], row["replies"]))
     names = {c.get("skill") for r in row["replies"] for c in ([r] + list(r.get("calls", []))) if isinstance(c, dict) and "skill" in c}
     if skill is not None and "version" in row and getattr(skill, "version", None) not in (None, row["version"]):
         res.fail("stale-row", f"row written for version {row['version']}, skill is version {skill.version}"); return res
-    scratch = Scratch(mapping, skills, row.get("fault"))
+    try: scratch = Scratch(mapping, skills, row.get("fault"), setup)
+    except ValueError as exc: res.fail("bad-row", exc); return res
     try: _drive(row, expect, scratch, skills, skill, names, res)
     finally: scratch.close()
+    if row.get("undo") is True and "undo" not in res.facts and res.ok: res.fail("wrong-turn", "the row says undo, but it did not end in an approved draft that was undone")
     return res
 
 
