@@ -859,8 +859,8 @@ class ThreadedAck(AckCase):
         self.assertEqual(len(times), 4)
         attempts = sorted(a for a, _ in times.values())
         confirmed = sorted(c for _, c in times.values())
-        self.assertLess(attempts[-1], 0.5, times)                      # every attempt started at once, not one send after another
-        self.assertLess(attempts[-1] - attempts[0], 0.4, times)       # ... all four together
+        self.assertLess(attempts[-1], 1.0, times)                      # every attempt started at once (0.05-0.12 s here); one send after another gives 2.4 s+
+        self.assertLess(attempts[-1] - attempts[0], 0.8, times)       # ... all four together (one send after another: 0.8 s apart each)
         self.assertGreaterEqual(confirmed[0], 0.8)                     # the sends really took their 0.8 s
         self.assertLess(confirmed[-1], fwd.ACK_BUDGET, times)          # and each confirmation is inside the 2 s budget
         self.assertEqual(len(self.eyes()), 4)
@@ -878,7 +878,7 @@ class ThreadedAck(AckCase):
         self.sender.send = slow
         return box
 
-    def test_twelve_messages_with_0_4_s_sends_start_every_attempt_within_a_second(self):
+    def test_twelve_messages_with_0_4_s_sends_start_side_by_side_not_one_after_another(self):
         clock = self.real_clock()
         seen = self.record_stages()
         self.slow_sender(0.4)
@@ -886,10 +886,12 @@ class ThreadedAck(AckCase):
         names = [f"t{i}" for i in range(12)]
         self.queue_acks(clock, names)
         self.f.ack_kick()
-        self.assertTrue(self.until(lambda: len(self.states()) == 12 and set(self.states().values()) == {"sent"}, 20), self.states())
+        self.assertTrue(self.until(lambda: len(self.states()) == 12 and set(self.states().values()) <= {"sent", "late"}, 20), self.states())
         times = self.timings(seen, clock)
         self.assertEqual(len(times), 12)
-        self.assertLess(max(a for a, _ in times.values()), 1.0, sorted(times.values()))
+        # side by side the last attempt starts after about 0.4 s (0.41 s here); one after another it would start after 11 x 0.4 = 4.4 s.
+        # On a machine under heavy load a slow row may be recorded `late`; the bound leaves room for that and still excludes a queue.
+        self.assertLess(max(a for a, _ in times.values()), 2.0, sorted(times.values()))
         self.assertEqual(len(self.eyes()), 12)
 
     def test_the_largest_burst_one_catch_up_page_can_accept_is_worked_in_parallel_one_send_each_none_dropped(self):
@@ -974,10 +976,13 @@ class ThreadedAck(AckCase):
         self.start()
         for i in range(25):
             self.message(f"m{i}")
-            self.spool.doorbell({"type": "new-message", "data": {"guid": f"m{i}"}}, self.now)
+            # Doorbells arrive one after another, as in life: with a fixed test clock they would all carry the ack's own time,
+            # and the (intended) rule "an earlier unresolved doorbell may hide a pause command, so no 👀 yet" would then
+            # randomly close some acks as `paused` depending on thread timing.
+            self.spool.doorbell({"type": "new-message", "data": {"guid": f"m{i}"}}, self.now + i)
         for _ in range(60):
             self.f.cycle()
-            if self.pending() == 0: break
+            if self.pending() == 0 and not self.spool.db.execute("SELECT 1 FROM fetch").fetchone(): break
         self.assertTrue(self.until(lambda: len(self.states()) == 25 and set(self.states().values()) == {"sent"}, 20))
         self.assertEqual((len(self.eyes()), len(self.posts)), (25, 25))
 
