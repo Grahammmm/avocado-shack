@@ -12,10 +12,23 @@ reads, not into the system Python:
 
 1. `python3 -m venv ~/.local/share/hass/venv` (skip if it exists)
 2. `~/.local/share/hass/venv/bin/pip install --only-binary=:all: "Pillow==12.0.0"`
-3. Make the Hass services use that Python: in the user unit templates under `deploy/hass`, the
-   `ExecStart` Python is the one that must import PIL. If the units use `/usr/bin/python3`, change them
-   to `~/.local/share/hass/venv/bin/python3` (a unit edit and restart is the operator's call; do it in
-   the next planned service restart, not mid-conversation).
+3. Make the Hass services use that Python. systemd does not expand `~` in `ExecStart`; use `%h`
+   (the user's home) or an absolute path. The receiver and worker units currently start
+   `/usr/bin/python3 -B ...`. In the installed user units, change only the interpreter and keep every
+   other argument as it is:
+
+   `ExecStart=%h/.local/share/hass/venv/bin/python3 -B %h/.local/share/hass/runtime/hass/host.py serve ...`
+   (receiver) and the same interpreter in `hass-worker.service` (`... host.py work ...`).
+
+   The installed copies are in `~/.config/systemd/user/`; the templates in `deploy/hass` are what they
+   were installed from, so make the same one-word interpreter change in the template in a later
+   reviewed pull request or the next install will undo it. Apply it in the next planned service
+   restart, not mid-conversation:
+
+   1. edit `~/.config/systemd/user/hass-receiver.service` and `hass-worker.service` as above
+   2. `systemctl --user daemon-reload`
+   3. `systemctl --user restart hass-receiver.service hass-worker.service` (the planned restart)
+   4. `systemctl --user status hass-receiver.service hass-worker.service` shows both running
 
 ## Check
 
