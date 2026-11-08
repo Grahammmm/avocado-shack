@@ -197,16 +197,27 @@ class SkillInterpreter:
     def __init__(self, mapping, skills, ctx_for):
         self.mapping, self.skills, self.ctx_for, self.used, self.errors = mapping, skills, ctx_for, [], []
         self.said = []  # the owner's texts so far: a skill's rules read them (the dispatcher's ctx.texts)
+        self.chosen = []  # what the skills chose for the owner in this message (their SET_PHRASES): the `I set:` line
 
     def _plan(self, call):
         skill = self.skills.get(call.get("skill"))
         if skill is None: raise KeyError(f"no skill named {call.get('skill')!r}")
         self.used.append(skill.name)
-        return skill.plan(copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        slots, ctx = call.get("slots") or {}, self.ctx_for()
+        ops = skill.plan(copy.deepcopy(slots), ctx)
+        module = sys.modules.get(getattr(skill.plan, "__module__", ""))  # the skill module's own wording of its defaults (D8), when it has one
+        phrases = (getattr(module, "SET_PHRASES", None) or {}).get(skill.name)
+        if phrases: self.chosen += list(phrases(copy.deepcopy(slots), ctx))
+        return ops
+
+    def set_line(self):
+        unique = list(dict.fromkeys(p for p in self.chosen if p))
+        return "I set: " + "; ".join(unique) + ".\n" if unique else ""
 
     def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
         reply = copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
         self.said.append(text)
+        self.chosen = []
         try:
             if "skill" in reply: return {"ops": self._plan(reply), "revises": reply.get("revises")}
             if "calls" in reply:
@@ -234,7 +245,13 @@ class Scratch:
         self.turn_previews = []  # the preview requests each message caused, in message order
         self.editor = _fault_editor(conversation.Editor, self, str(self.repo.state), fault)
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now, self.previewer)
+        self._proposal_reply = self.conv._proposal_reply
+        self.conv._proposal_reply = self._with_set_line  # the stand-in dispatcher's job: the `I set:` line goes in front of the proposal (FW-3: prefix=...)
         self.Inbound = conversation.Inbound
+
+    def _with_set_line(self, row, draft, prefix=""):
+        line, self.interp.chosen = self.interp.set_line(), []  # once, and only for the message whose plan chose something
+        return self._proposal_reply(row, draft, line + prefix)
 
     def _seed_or_clean(self, seed):
         try: self._seed(seed)
@@ -266,6 +283,7 @@ class Scratch:
     def say(self, text):
         from datetime import timedelta
         self.n += 1
+        self.interp.chosen = []
         self.now += timedelta(minutes=1)
         msg = self.Inbound(f"tk-{self.n}", CHAT, OWNER, text, False, "new", self.now.isoformat())
         asked = len(self.previewer.requests)

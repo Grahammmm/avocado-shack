@@ -127,6 +127,51 @@ class Fixtures(unittest.TestCase):
         self.assertNotIn("capacity", clean["diff"][0]["after"])
         self.assertIs(clean["diff"][0]["after"]["rsvpEnabled"], False)
 
+    def test_every_recorded_row_changes_the_hike_its_words_name_on_the_day_they_name(self):
+        """Review round 2: a row must not advertise a successful change to another hike or day than the one the owner asked about."""
+        import difflib
+        import re
+        unnamed = {"hike.recap": {"complete-with-his-words"}}  # "recap: 12 people, great morning" names no hike (the spec sentence); the seed holds exactly one candidate
+        weekdays = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+        months = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
+        checked = 0
+        for name in NAMES:
+            for row in rows_of(name):
+                if row.get("plan"):
+                    continue
+                seeded = {e["id"]: e for e in ((row.get("seed") or {}).get("community") or {}).get("events", [])}
+                words = re.findall(r"[a-z]+", " ".join(row["texts"]).lower())
+                for reply in row["replies"]:
+                    for call in ([reply] + reply.get("calls", [])):
+                        slots = call.get("slots") or {}
+                        event = seeded.get(slots.get("hike"))
+                        with self.subTest(f"{name} {row['id']}"):
+                            if slots.get("hike"):
+                                self.assertIsNotNone(event, "the row changes a hike that is not in its seed")
+                                if row["id"] not in unnamed.get(name, ()):
+                                    title = [w for w in re.findall(r"[a-z]+", event["title"].lower()) if len(w) > 3]
+                                    near = any(difflib.SequenceMatcher(None, t, w).ratio() >= 0.8 for t in title for w in words)
+                                    dated = re.search(r"\b(%s)[a-z]*\s+(\d{1,2})\b" % "|".join(months), " ".join(row["texts"]).lower())
+                                    start = datetime.fromisoformat(event["startsAt"])
+                                    on_day = bool(dated) and (months[dated.group(1)], int(dated.group(2))) == (start.month, start.day)
+                                    self.assertTrue(near or on_day, f"the words {row['texts']} do not name the hike {event['title']!r} ({event['startsAt'][:10]})")
+                                    checked += 1
+                            if slots.get("day"):
+                                said = [weekdays[w] for w in words if w in weekdays]
+                                if said:
+                                    self.assertIn(date.fromisoformat(slots["day"]).weekday(), said, f"{slots['day']} is not the weekday he said")
+        self.assertGreater(checked, 30)
+
+    def test_the_rows_say_which_hike_each_text_is_about(self):
+        by = {r["id"]: r for r in rows_of("hike.cancel")}
+        row = by["no-note"]
+        self.assertIn("Morro Rock", row["texts"][0])
+        self.assertEqual(row["replies"][0]["slots"]["hike"], "hike-2026-12-05-morro-rock-beach-stroll")
+        self.assertEqual(row["expect"]["preview"]["title"], "Morro Rock Beach Stroll")
+        self.assertNotIn("weekend", " ".join(t for r in rows_of("hike.cancel") for t in r.get("texts", [])))  # the kit's clock is a Sunday: "this weekend" names nothing fixed
+        recap = {r["id"]: r for r in rows_of("hike.recap")}["refuse-not-started-yet"]
+        self.assertEqual(recap["replies"][0]["slots"]["hike"], "hike-2026-12-19-cass-hill")
+
     def test_every_skill_has_its_own_plan_rows_too(self):
         for name in NAMES:
             plan_rows = [r for r in rows_of(name) if r.get("plan")]
@@ -138,10 +183,36 @@ class Defaults(unittest.TestCase):
         out = hikes.plan_add({"title": "T", "day": "2026-11-14", "clock": "08:00", "meeting_point": "the gate"}, ctx())
         self.assertIs(out[0]["args"]["rsvpEnabled"], False)
         self.assertNotIn("capacity", out[0]["args"])
-        self.assertEqual(hikes.set_line({"day", "clock", "meeting_point", "title"}, {"title": "T", "signup": False}), "I set: sign-up off")
-        self.assertEqual(voice.check(hikes.set_line(set(), {"signup": False, "title": "Mill Creek hike"})), [])
-        self.assertIsNone(hikes.set_line({"signup", "title"}, {"signup": True, "title": "T"}))  # he said it: nothing was chosen for him
-        self.assertEqual(hikes.set_line({"title"}, {"title": "T", "signup": True}), "I set: sign-up on")
+        phrases = hikes.SET_PHRASES["hike.add"]({"title": "T", "day": "2026-11-14", "clock": "08:00", "meeting_point": "the gate"}, ctx())
+        self.assertEqual(hikes.set_line(phrases), "I set: sign-up off.")
+        named = hikes.SET_PHRASES["hike.add"]({"day": "2026-11-14", "clock": "08:00", "meeting_point": "Mill Creek trailhead"}, ctx())
+        self.assertEqual(named[0], "sign-up off")  # sign-up first: the line starts with the D8 words
+        self.assertEqual(voice.check(hikes.set_line(named)), [])
+        self.assertEqual(hikes.SET_PHRASES["hike.add"]({"title": "T", "signup": True}, ctx()), [])  # he said it: nothing was chosen for him
+        self.assertEqual(hikes.SET_PHRASES["hike.add"]({"title": "T", "signup": False}, ctx()), [])
+        self.assertIsNone(hikes.set_line([]))
+        self.assertEqual(hikes.set_line(["sign-up off", "sign-up off"]), "I set: sign-up off.")  # two hikes in one message: said once
+
+    def test_the_owner_reply_of_a_real_draft_carries_the_line_through_the_kit(self):
+        """End to end on the scratch world: the real Conversation proposal text, with the line put there by the kit's stand-in
+        dispatcher from hikes.SET_PHRASES (the same hand-off the real dispatcher is asked to make)."""
+        text = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate"
+        slots = {"title": "Cass Hill hike", "day": "2026-12-12", "clock": "08:00", "meeting_point": "Cass Hill gate"}
+        skills = {s.name: s for s in testkit.registry_skills()}
+        seen = {}
+        for label, said, given in (("ordinary", text, slots), ("sign-up said", text + ", sign-up on, 15 spots", {**slots, "signup": True, "capacity": 15}),
+                                   ("sign-up said off", text + ", sign-up off", {**slots, "signup": False})):
+            sc = testkit.Scratch({said: {"skill": "hike.add", "slots": given}}, skills)
+            try:
+                disposition, out = sc.say(said)
+            finally:
+                sc.close()
+            self.assertEqual(disposition, "proposed", label)
+            seen[label] = out[0]
+        self.assertTrue(seen["ordinary"].startswith("I set: sign-up off.\n"), seen["ordinary"])
+        self.assertIn("whether guests can sign up: no", seen["ordinary"])
+        self.assertNotIn("I set:", seen["sign-up said"])
+        self.assertNotIn("I set:", seen["sign-up said off"])
 
     def test_spots_are_written_only_with_sign_up_and_only_as_given(self):
         base = {"title": "T", "day": "2026-11-14", "clock": "08:00", "meeting_point": "the gate"}
@@ -227,11 +298,65 @@ class Rules(unittest.TestCase):
     def test_invented_sign_up_and_spots_are_refused_when_the_owners_words_are_known(self):
         said = [E2E1A_START + " Meet at the Spooners Cove parking lot. It's an easy difficulty."]
         self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 10}, texts=said)[0], hikes.R_SIGNUP_NOT_SAID)
-        self.assertEqual(self.hit("hike-no-invention", {"capacity": 10}, texts=["add a hike, he said sign up please"])[0], hikes.R_SPOTS_NOT_SAID)
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 10}, texts=["add a hike, he said sign up please"])[0], hikes.R_SPOTS_NOT_SAID)
         for fine in (["hike Dec 12 10am Cayucos Pier, sign up with 12 spots"], ["rsvps on, twelve spots"], ["let people sign-up, max 12"]):
             self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 12}, texts=fine), fine)
         self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 10}))  # his words unknown: no verdict
         self.assertIsNone(self.hit("hike-no-invention", {"signup": False}, texts=said))
+
+    def test_sign_up_needs_words_in_the_same_direction(self):
+        """Review round 2: the sign-up WORD is not evidence, its direction is."""
+        base = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate"
+        unclear = hikes.R_SIGNUP_UNCLEAR
+        for said in (base + ", sign-up off", base + ", no sign-up", base + ", sign up is off", base + ", without sign-up", base + ", don't let people sign up",
+                     base + ", no sign-up and no limit", base + ", sign-up on, sign-up off"):
+            with self.subTest(said):
+                self.assertEqual(self.hit("hike-no-invention", {"signup": True}, texts=[said])[0], unclear)
+                self.assertEqual(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=[said])[0], unclear)
+        for said in (base + ", sign-up on", base + ", sign up please", base + ", let people sign up", base + ", rsvps on", base + ", sign-up open",
+                     base + ", sign up with no limit", base + ", sign-up on, no limit", base + ", turn on sign-up"):
+            with self.subTest(said):
+                self.assertIsNone(self.hit("hike-no-invention", {"signup": True}, texts=[said]))
+                if "no limit" in said:
+                    self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=[said]))
+        # he said on and the slots say off (or say nothing): the default must not quietly win
+        self.assertEqual(self.hit("hike-no-invention", {"signup": False}, texts=[base + ", sign-up on"])[0], unclear)
+        self.assertEqual(self.hit("hike-no-invention", {}, texts=[base + ", sign-up on"])[0], unclear)
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": False}, texts=[base + ", sign-up off"]))
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": False}, texts=[base]))  # the default, nothing said
+        # a later message corrects an earlier one; one message that says both is asked about
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=[base + ", sign-up off", "actually turn sign-up on, no limit"]))
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": False}, texts=[base + ", sign-up on", "no wait, sign-up off"]))
+
+    def test_a_guest_limit_needs_a_number_he_tied_to_guests(self):
+        base = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate"
+        not_said = hikes.R_SPOTS_NOT_SAID
+        for said in (base + ", sign-up on, no limit", base + ", sign up please", base + ", sign-up on, 5 miles", base + ", sign-up on, bring 12 liters",
+                     base + " at 10:30, sign-up on", base + ", sign-up on, up to 5 miles"):
+            with self.subTest(said):
+                self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 12}, texts=[said])[0], not_said)
+        for said, cap in ((base + ", sign-up on, 15 spots", 15), (base + ", sign-up on, max 15", 15), (base + ", sign up, limit of fifteen", 15),
+                          (base + ", sign-up on, a dozen spots", 12), ("cap Cass Hill at 3", 3), ("turn on sign-up, 3 more spots", 3)):
+            with self.subTest(said):
+                self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": cap}, texts=[said]))
+        # a number and "no limit" together, or two different numbers, are asked about; "no limit" needs its own words
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 15, "no_limit": True}, texts=[base + ", sign-up on, 15 spots, no limit"])[0], not_said)
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 15}, texts=[base + ", sign-up on, 15 spots or 20 spots"])[0], not_said)
+        self.assertEqual(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=[base + ", sign-up on, 15 spots"])[0:1], (not_said,))
+        self.assertEqual(self.hit("hike-no-invention", {"hike": CASS["id"], "no_limit": True}, texts=["make Cass Hill moderate"])[0], not_said)
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=["Cass Hill sign-up, unlimited"]))
+
+    def test_the_same_rule_guards_an_edit(self):
+        edit = {"hike": CASS["id"]}
+        self.assertEqual(self.hit("hike-no-invention", {**edit, "signup": True}, texts=["turn off sign-up for Cass Hill"])[0], hikes.R_SIGNUP_UNCLEAR)
+        self.assertEqual(self.hit("hike-no-invention", {**edit, "signup": True, "capacity": 12}, texts=["turn on sign-up for Cass Hill on December 12"])[0], hikes.R_SPOTS_NOT_SAID)
+        self.assertEqual(self.hit("hike-no-invention", {**edit, "signup": False}, texts=["make Cass Hill moderate"])[0], hikes.R_SIGNUP_UNCLEAR)  # turned off without a word
+        self.assertIsNone(self.hit("hike-no-invention", {**edit, "signup": False}, texts=["turn off sign-up for Cass Hill"]))
+        self.assertIsNone(self.hit("hike-no-invention", {**edit, "signup": True, "capacity": 15}, texts=["turn on sign-up for Cass Hill, 15 spots"]))
+        self.assertIsNone(self.hit("hike-no-invention", {**edit, "capacity": 3}, texts=["cap Cass Hill at 3"]))
+        self.assertEqual(self.hit("hike-no-invention", {**edit, "capacity": 3}, texts=["cap Cass Hill at 3, sign-up off"])[0], hikes.R_SIGNUP_UNCLEAR)
+        for reply in (hikes.R_SIGNUP_UNCLEAR, hikes.R_SIGNUP_NOT_SAID, hikes.R_SPOTS_NOT_SAID):
+            self.assertEqual(voice.check(reply), [], reply)
 
     def test_a_plan_cannot_draft_what_a_rule_refuses(self):
         for plan, slots, event in ((hikes.plan_add, {"title": "Cass Hill", "day": "2026-11-21", "clock": "09:00", "meeting_point": "x"}, "already a hike called"),
@@ -272,6 +397,16 @@ class DispatcherHandOff(unittest.TestCase):
         self.assertIs(stub.RULES["hike-twin"], hikes.rule_twin)
         self.assertEqual(set(stub.RULES), {*hikes.RULES})
         self.assertIs(stub.DERIVERS["place_title"], hikes.place_title)
+
+    def test_the_i_set_wording_is_handed_over_only_when_the_dispatcher_has_a_place_for_it(self):
+        stub = types.SimpleNamespace(RULES={}, DERIVERS={}, SET_PHRASES={})
+        with mock.patch.dict(sys.modules, {"hass.skills.dispatch": stub}):
+            self.assertTrue(hikes._register())
+        self.assertIs(stub.SET_PHRASES["hike.add"], hikes.add_set_phrases)
+        bare = types.SimpleNamespace(RULES={}, DERIVERS={})  # FW-3 as open today: no such place, nothing is invented there
+        with mock.patch.dict(sys.modules, {"hass.skills.dispatch": bare}):
+            self.assertTrue(hikes._register())
+        self.assertFalse(hasattr(bare, "SET_PHRASES"))
 
     def test_without_the_dispatcher_nothing_happens(self):
         with mock.patch.dict(sys.modules, {"hass.skills.dispatch": None}):

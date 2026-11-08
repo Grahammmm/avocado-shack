@@ -46,6 +46,10 @@ the file name is not the skill name.
   top-level keys to replace). Put a record on the scratch page before the row starts: validated, regenerated and committed,
   so the row's diff and its undo are measured from that start state. A seed the content rules refuse is a `bad-row`. Use it
   when the repository content has none of what the skill acts on (it has no hikes).
+* `I set:` line: a skill module may define `SET_PHRASES = {skill name: fn(slots as the owner gave them, ctx) -> [plain phrases]}`.
+  The kit's stand-in dispatcher calls it for every plan and puts `I set: <phrases>.` in front of the proposal text (what
+  SKILLS-FW-3's dispatcher does with the defaults it shows), so `expect.set_line` and `reply_not_contains: ["I set:"]` read it
+  in an actual owner reply. A module without the hook gets no line from the kit.
 
 `expect` fields (all optional except `diff` when the row ends in a draft):
 

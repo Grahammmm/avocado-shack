@@ -20,8 +20,10 @@ Interface assumptions about SKILLS-FW-3 (``hass/skills/dispatch.py``, open as PR
 unless it is present): rules are ``RULES[id](slots, texts, ctx) -> None | (owner reply, backlog reason)``; a default
 ``derive:<name>`` is a module-level function of the plan's module or in ``DERIVERS``; ``ctx`` has ``content`` (read-only),
 ``today`` (a date or an ISO string), ``now`` and ``texts`` (the owner's words of this request). Every name below degrades
-without them: the plans work on slots alone and refuse nothing they cannot see. ``set_line`` is how the ``I set:`` line of
-D8 is worded; the generic ``name: value`` rendering of a default would read "signup: False".
+without them: the plans work on slots alone and refuse nothing they cannot see. ``SET_PHRASES[skill](slots, ctx)`` is how the
+``I set:`` line of D8 is worded (the generic ``name: value`` rendering of a default would read "signup: False"): the test kit
+consumes it today (its stand-in dispatcher puts ``set_line(...)`` in front of the proposal, so the owner reply is asserted
+end to end); the real dispatcher must call it the same way (docs/hass/skills/hikes.md, "The I set line").
 """
 from __future__ import annotations
 
@@ -55,8 +57,22 @@ R_SIGNUP_NOT_SAID = "You didn't say guests can sign up, so I haven't turned it o
 R_SPOTS_NOT_SAID = "You didn't say how many can come, so I haven't set a limit. How many can come, or is there no limit?"
 R_NO_RECAP_YET = "Say how it went first, then I can write the post."
 
-_SIGNUP_WORDS = re.compile(r"\b(sign ?-?ups?|signing up|rsvps?|register(?:ed|ing)?|reserv\w*|spots?|spaces?|seats?|capacity|"
-                           r"limit(?:ed)?|how many can|people can (?:join|come|sign))\b", re.I)
+R_SIGNUP_UNCLEAR = "I'm not sure if you want guests to be able to sign up. Should they?"
+
+# What the owner's words are checked against (folded text: lower case, one space). Polarity and number relations, not word presence.
+_SIGNUP_TERM = re.compile(r"\b(?:sign[\s-]*ups?|sign(?:ing|ed)?\s+up|rsvps?|regist(?:er|ered|ering|ration)|reserv\w*)\b")
+_NEGATION = re.compile(r"\b(?:no|not|nobody|none|never|without|off|closed|skip|stop|disable\w*|(?:do|does|did|can|could|will|is|are|was|were)n['’]?t|"
+                       r"cannot|do not|does not|can not|will not|turn(?:ed|ing)? off|nope)\b")
+_NO_LIMIT = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|without(?:\s+(?:a|any))?)\s+(?:guest\s+|spot\s+|people\s+)?(?:limits?|caps?|maximum|max|cut-?off)|"
+                       r"unlimited|any number(?:\s+of\s+\w+)?|as many (?:as|people|guests))\b")
+_NUM = r"(?P<n>\d{1,3}|" + "|".join(sorted(nl_prep.WORD_NUMBERS, key=len, reverse=True)) + r")(?!\s*(?:miles?|mi|km|k|hours?|hrs?|minutes?|mins?|a\.?m|p\.?m|feet|ft|%|:|\.\d))\b"
+_GUESTS = r"(?:more\s+)?(?:spots?|spaces?|seats?|places?|slots?|people|guests?|hikers?|walkers?|participants?|attendees|rsvps?|sign[\s-]*ups?)\b"
+_CAPACITY_PATTERNS = (
+    re.compile(r"\b" + _NUM + r"\s+" + _GUESTS),  # "12 spots", "twelve people"
+    re.compile(r"\b(?:limit(?:ed)?|cap(?:ped)?|max(?:imum)?|capacity|up\s+to|at\s+most|no\s+more\s+than|space\s+for|room\s+for)\b(?:\s+(?:of|at|to|is|for|it|them|guests?))*\s+" + _NUM),
+    re.compile(r"\b(?:cap(?:ped)?|limit(?:ed)?)\b(?:\s+\S+){1,4}?\s+(?:at|to)\s+" + _NUM),  # "cap Cass Hill at 3"
+    re.compile(r"\b" + _NUM + r"\s+(?:max|maximum|limit|cap)\b"),
+)
 _PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:person|head|lb|pound|oz|ounce|kg|dozen)\b", re.I)
 _PLACE_TAIL = re.compile(r"(?:^|\s+)(?:trail ?head|gate|entrance|parking(?:\s+lot)?|lot|staging area|picnic area)\s*$", re.I)
 _PLACE_HEAD = re.compile(r"^(?:the|at|by)\s+", re.I)
@@ -249,19 +265,74 @@ def rule_recap_state(slots, texts, ctx):
     return None
 
 
+def _clauses(text):
+    return [c for c in re.split(r"[,;.!?\n]+|\s-\s|\bbut\b|\bexcept\b", _fold(text)) if c.strip()]
+
+
+def _text_polarity(text):
+    """Sign-up polarity of ONE message: "on", "off", "mixed" (both) or None (not mentioned). Judged clause by clause on the
+    sign-up word itself: a negation in the clause (no, not, off, without, don't ...) turns it off; "no limit" and "unlimited"
+    are about the guest limit and are taken out first, so "sign up with no limit" stays on."""
+    found = set()
+    for clause in _clauses(text):
+        clause = _NO_LIMIT.sub(" ", _SIGNUP_TERM.sub(" signup ", clause))
+        if "signup" in clause.split():
+            found.add("off" if _NEGATION.search(clause) else "on")
+    return None if not found else found.pop() if len(found) == 1 else "mixed"
+
+
+def _signup_polarity(texts):
+    """What the owner said about sign-up: the polarity of the LAST message that mentions it (a later "actually, no sign-up"
+    corrects an earlier one); "mixed" when that one message says both."""
+    seen = [p for p in (_text_polarity(t) for t in texts) if p]
+    return seen[-1] if seen else None
+
+
+def _number(word):
+    return int(word) if word.isdigit() else nl_prep.WORD_NUMBERS.get(word)
+
+
+def _capacity_numbers(texts):
+    """The numbers the owner tied to how many guests can come ("12 spots", "max 12", "cap Cass Hill at 3", "limit of twelve"),
+    from the last message that has any. A number that is only a date, a time or a distance is never one of them."""
+    for text in reversed(texts):
+        found = set()
+        for clause in _clauses(text):
+            for pattern in _CAPACITY_PATTERNS:
+                for m in pattern.finditer(clause):
+                    n = _number(m.group("n"))
+                    if n is not None:
+                        found.add(n)
+        if found:
+            return found
+    return set()
+
+
 def rule_no_invention(slots, texts, ctx):
-    """The E2E-HIKE-1 finding: the model added sign-up and a guest limit nobody asked for. Sign-up needs the owner's
-    sign-up words; a guest limit needs the number in his words. Skipped when the owner's words are not known."""
-    said = " ".join(t for t in (texts or ()) if isinstance(t, str))
-    if not said.strip():
+    """The E2E-HIKE-1 finding: the model added sign-up and a guest limit nobody asked for. A word or a number somewhere in
+    the text is not evidence: sign-up needs the owner's sign-up words IN THE SAME DIRECTION ("sign-up off" never turns it on),
+    a guest limit needs a number he tied to guests ("12 spots", not the 12 in "December 12"), and a limit together with
+    "no limit" is unclear. Unclear evidence asks one plain question. Skipped when the owner's words are not known."""
+    said = [t for t in (texts or ()) if isinstance(t, str) and t.strip()]
+    if not said:
         return None
-    if slots.get("signup") is True and not _SIGNUP_WORDS.search(said):
-        return R_SIGNUP_NOT_SAID, "other"
+    signup, no_limit = slots.get("signup"), slots.get("no_limit") is True
     cap = slots.get("capacity")
-    if isinstance(cap, int) and not isinstance(cap, bool):
-        numbers = {int(n) for n in re.findall(r"\d+", said)} | {h["value"] for h in nl_prep.number_hints(said)
-                                                                if isinstance(h.get("value"), int)}
-        if cap not in numbers:
+    cap = cap if isinstance(cap, int) and not isinstance(cap, bool) else None
+    polarity, numbers = _signup_polarity(said), _capacity_numbers(said)
+    if signup is True:
+        if polarity in ("off", "mixed"):
+            return R_SIGNUP_UNCLEAR, "other"
+        if polarity is None and not numbers:
+            return R_SIGNUP_NOT_SAID, "other"
+    elif polarity == "on" or (signup is False and "hike" in slots and polarity is None and not numbers):
+        return R_SIGNUP_UNCLEAR, "other"  # he said on and the slots say off, or an edit turns sign-up off without a word about it
+    if cap is not None or no_limit:
+        if polarity in ("off", "mixed"):
+            return R_SIGNUP_UNCLEAR, "other"
+        if cap is not None and (no_limit or cap not in numbers or len(numbers) > 1):
+            return R_SPOTS_NOT_SAID, "other"
+        if no_limit and cap is None and not _NO_LIMIT.search(" ".join(_fold(t) for t in said)):
             return R_SPOTS_NOT_SAID, "other"
     return None
 
@@ -305,15 +376,27 @@ def place_title(slots, ctx):
 DERIVERS = {"place_title": place_title}
 
 
-def set_line(given, final):
-    """The one line that tells the owner what the skill chose for him (D8): "I set: sign-up off". ``given`` are the slot
-    names that came from the owner, ``final`` the slots after the defaults. None when nothing was chosen for him."""
-    said = []
-    if "title" not in given and final.get("title"):
-        said.append(f"the title {voice.quote(final['title'])}")
-    if "signup" not in given and final.get("signup") is not None:
-        said.append("sign-up on" if final["signup"] else "sign-up off")
-    return "I set: " + "; ".join(said) if said else None
+def add_set_phrases(slots, ctx) -> list:
+    """What hike.add chose for the owner, as the plain phrases of the one ``I set:`` line (D8): ``["sign-up off", "the title
+    “Mill Creek hike”"]``. ``slots`` are the slots as the owner gave them, BEFORE any default is applied; a slot he gave is
+    never listed. Empty when nothing was chosen for him. (The dispatcher's generic default text would read "signup: False".)"""
+    out = []
+    if slots.get("signup") is None:
+        out.append("sign-up off")  # plan_add writes rsvpEnabled False when sign-up was not said
+    if not _given(slots, "title"):
+        title = place_title(slots, ctx)
+        if title:
+            out.append(f"the title {voice.quote(title)}")
+    return out
+
+
+def set_line(phrases) -> str | None:
+    """``I set: sign-up off.`` from the phrases of one or several calls (each said once); None when there are none."""
+    unique = list(dict.fromkeys(p for p in phrases if p))
+    return "I set: " + "; ".join(unique) + "." if unique else None
+
+
+SET_PHRASES = {"hike.add": add_set_phrases}  # skill name -> fn(slots as the owner gave them, ctx) -> phrases; consumed by the kit and the dispatcher
 
 
 def _signup_args(slots):
@@ -615,6 +698,10 @@ def _register():
         dispatch.RULES.setdefault(rule_id, fn)
     for name, fn in DERIVERS.items():
         dispatch.DERIVERS.setdefault(name, fn)
+    phrases = getattr(dispatch, "SET_PHRASES", None)  # the D8 wording hook: only when the dispatcher has one (PR 526 has not yet)
+    if isinstance(phrases, dict):
+        for name, fn in SET_PHRASES.items():
+            phrases.setdefault(name, fn)
     return True
 
 

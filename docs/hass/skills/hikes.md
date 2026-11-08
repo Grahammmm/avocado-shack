@@ -24,10 +24,18 @@ the ops and the content.
 
 ### What is never invented
 
-* **Sign-up is off** unless the owner said otherwise (decision D8). The proposal carries the line `I set: sign-up off`
-  (`hikes.set_line`). A guest limit is written only with sign-up on and only if he gave the number. "Sign-up on" with no number
-  and no "no limit" is left to the editor, which asks "how many can come, or is there no limit?" (HASS-E2E-HIKE-1 found the
-  model adding `rsvpEnabled: true` and `capacity: 10`, and `capacity: 1`.)
+* **Sign-up is off** unless the owner said otherwise (decision D8). The proposal carries the line `I set: sign-up off.`
+  (see "The `I set:` line" below). A guest limit is written only with sign-up on and only if he gave the number. "Sign-up on" with
+  no number and no "no limit" is left to the editor, which asks "how many can come, or is there no limit?" (HASS-E2E-HIKE-1 found
+  the model adding `rsvpEnabled: true` and `capacity: 10`, and `capacity: 1`.)
+* **His words decide the direction, not their presence** (rule `hike-no-invention`, add and edit alike). Sign-up on needs a
+  sign-up word that is not negated in its clause: "sign-up off", "no sign-up", "without sign-up", "don't let people sign up" never
+  turn it on ("no limit" is about the guest limit and is taken out first, so "sign up with no limit" stays on). A guest limit
+  needs a number he tied to guests: "15 spots", "max 15", "limit of fifteen", "cap Cass Hill at 3", a dozen spots. The 12 in
+  "December 12", a time or "5 miles" is not one. A limit with "no limit", two different numbers, sign-up said both ways in one
+  message, sign-up said on while the slots say off, or sign-up turned off by an edit with no word about it, all get one plain
+  question ("I'm not sure if you want guests to be able to sign up. Should they?" or "how many can come, or is there no limit?")
+  and nothing is drafted. When he corrects himself in a later message, the later message wins.
 * Difficulty, distance, duration, bring, the access note and the description are written exactly as he gave them (case and
   spelling kept) and never filled in. A trail fact he did not say is asked about by the claims check, not written.
 * A place that is not a route idea is plain meeting-point text. `trailId` is set only when he names a route idea. A new hike is
@@ -40,7 +48,8 @@ the ops and the content.
 * A day or time that has passed, or more than 400 days away. A twin: a scheduled hike with the same title that day.
 * A hike that is cancelled or already done (change, move), already cancelled (cancel), not started yet or cancelled (recap).
 * A move to the day and time it already has. A price in any text (`The website doesn't show prices`).
-* Sign-up or a guest limit that his own words do not contain.
+* Sign-up or a guest limit that his own words do not contain, or contain the other way ("sign-up off" never turns it on). A
+  guest limit needs a number tied to guests, not a date.
 * A move with neither a day nor a time asks "What day or time should it move to?".
 
 The rules run twice: in the dispatcher (when it is present) and again inside each plan, so a plan can never draft what a rule
@@ -87,9 +96,20 @@ It was proved with the test kit and works with the dispatcher in PR 526 as writt
   module. `hikes.py` registers its rules and `place_title` with `hass.skills.dispatch` when that module exists, with `setdefault`
   so it never replaces another skill's rule. Rule ids start with `hike-` except `no-price`. The spec calls the twin rule `twin`;
   it is `hike-twin` here because `item.add` has a different twin rule and the dispatcher's table is shared.
-* **The `I set:` line.** The dispatcher shows defaults as `name: value`, which would read "I set: signup: False". D8 wants
-  "I set: sign-up off". `hikes.set_line(given, final)` words it; **a follow-up in the dispatcher should call it** (or accept a
-  per-skill wording hook). Until then the proposal still says "whether guests can sign up: no".
+* **The `I set:` line** (D8). The dispatcher in PR 526 renders a default as `name: value`, which would read "I set: signup:
+  False." A skill module may therefore carry its own wording: `hikes.SET_PHRASES["hike.add"](slots, ctx)` returns the plain phrases
+  of what the skill chose for him, from the slots **as he gave them, before defaults** (`["sign-up off", "the title “Mill Creek
+  hike”"]`, sign-up first; empty when he said it himself), and `hikes.set_line(phrases)` joins them: `I set: sign-up off.`
+  * **Consumed here:** the test kit's stand-in dispatcher (`testkit.py`, `SkillInterpreter._plan` and `Scratch._with_set_line`) calls
+    the hook for every plan and puts the line in front of the real Conversation's proposal text, as FW-3's
+    `Conversation._draft(..., prefix=...)` does. So the fixtures assert the line in an actual owner reply
+    (`expect.set_line`, on every add that leaves sign-up off), and `test_the_owner_reply_of_a_real_draft_carries_the_line_through_the_kit`
+    proves it with and without him saying sign-up.
+  * **Not consumed yet by the real dispatcher.** PR 526 has no hook, and this card does not edit `dispatch.py`. `hikes._register()` hands
+    `SET_PHRASES` to `dispatch.SET_PHRASES` only if that dict exists. The change FW-3 needs is small: in `apply_defaults`, when
+    `SET_PHRASES.get(skill.name)` exists, build `shown` from `fn(slots_before_defaults, ctx)` instead of `"name: value"` (and keep
+    the generic text for skills without one), and add `SET_PHRASES: dict = {}` next to `DERIVERS`. Until then, hikes plus PR 526
+    would show `I set: signup: False` (jargon, caught by `voice`); the follow-up is recorded on the card and on PR 526.
 * A partial change to a text ("add sunscreen to what to bring") sends the whole new text, which includes words already on the
   page. The dispatcher's owner-words check (`traceable`) counts only the owner's messages, so it would drop those old words and
   list the field under "Left off". The words on the page being edited should count as the owner's. This is not changed here.
@@ -101,20 +121,26 @@ It was proved with the test kit and works with the dispatcher in PR 526 as writt
     python3 -B -m unittest hass.tests.test_skills_hikes hass.tests.test_skills_plans hass.tests.test_skills_cases -v
     python3 hass/skills/testkit.py run hass/tests/fixtures/skills/hikes/hike.add.jsonl
 
-Case rows are in `hass/tests/fixtures/skills/hikes/<skill>.jsonl` (82 rows: plan rows for the exact ops, case rows through the
+Case rows are in `hass/tests/fixtures/skills/hikes/<skill>.jsonl` (107 rows: plan rows for the exact ops, case rows through the
 real Conversation, Editor, sitegen and claims, with the exact content diff and undo back to the start). They include:
 
 * the three live texts of 2026-11-08, word for word (`live-1-mill-creek`, `live-2-fiscalini-alone`, `live-3-fiscalini-new-hike`)
   and the whole sequence ending in a draft, not a question (`live-sequence-ends-in-a-draft`);
 * the HASS-E2E-HIKE-1 text with the invented sign-up and capacity, which is refused, and the same text drafted without them;
+* the sign-up and guest-limit evidence rule, one sentence said in each direction: "sign-up off" is never turned on, "December 12"
+  is never a guest limit, and the controls (nothing said = off with the `I set:` line, sign-up on with no limit, sign-up on with 15
+  spots, sign-up off said by him = off with no `I set:` line), on add and on edit;
 * a refusal or question for each rule above, and a row that undoes every draft that can be undone.
+
+Every recorded row names the hike it changes: `test_every_recorded_row_changes_the_hike_its_words_name_on_the_day_they_name` checks
+the seeded title (or its date) against the owner's words, and the weekday he says against the day in the slots.
 
 Rows record the interpreter's reply; a person still reads every model-written text in the acceptance report (SKILLS-ACC-2).
 Machine-valid is not accepted.
 
 ### Changes to the test kit that this card needed
 
-The kit (`hass/skills/testkit.py`, SKILLS-TK-1) had three gaps that a hike skill hits:
+The kit (`hass/skills/testkit.py`, SKILLS-TK-1) had four gaps that a hike skill hits:
 
 1. **`seed` on a row**: `{"community": {"events": [...]}}` puts a hike on the scratch page before the row starts, validated,
    regenerated and committed. The repository content has no events, so edit, move, cancel, repeat and recap could not be
@@ -124,6 +150,9 @@ The kit (`hass/skills/testkit.py`, SKILLS-TK-1) had three gaps that a hike skill
    `skill.undo.residue`, so every skill with a declared residue failed as `residue-undeclared`.
 3. **`ctx.texts`**: the kit's context now carries the owner's texts, as the dispatcher's does, so a rule that reads the owner's
    words (the invented sign-up check) is tested for real.
+4. **`SET_PHRASES`**: the stand-in dispatcher asks the skill's module for `SET_PHRASES[skill name]` (when it has one) and puts the
+   `I set:` line in front of the proposal text. Without that, the `expect.set_line` check of the kit could never see a skill's
+   own wording of a default. A module without the hook is unchanged.
 
 `model.lint_cases` counts undo rows as `kind: "undo"` or `undo: true`; the kit refuses both (it undoes every approved draft
 itself). So `skill_lint(..., repo_root=...)` reports "at least 1 undo row" for any skill. `test_skills_hikes` checks the
