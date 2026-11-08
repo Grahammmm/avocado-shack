@@ -100,6 +100,7 @@ class LabelReader(LocalInterpreter):
     def __init__(self, base_url, model, timeout=30, transport=None, api="ollama", fallback=None):
         super().__init__(base_url, model, PROMPT, timeout=timeout, transport=transport, api=api)
         if fallback is not None and not isinstance(fallback, LabelReader): raise ValueError("fallback must be a LabelReader")
+        if fallback is not None and fallback.fallback is not None: raise ValueError("fallback must not have a fallback of its own")
         self.fallback = fallback  # HASS-INTERP-OPENAI-1: asked once, and only, when this reader failed
 
     def _label_request(self, image_bytes) -> bytes:
@@ -117,7 +118,7 @@ class LabelReader(LocalInterpreter):
         found = self._read_once(image_bytes, categories)
         if not self.last_error or self.fallback is None: return found
         first = self.last_error  # the one retry on the fallback reader; its answer, good or failed, is final
-        found = self.fallback.read(image_bytes, categories)
+        found = self.fallback._read_once(image_bytes, categories)  # one attempt, never its own fallback
         self.last_error, self.last_backend, self.last_fallback, self.last_primary_error = (
             self.fallback.last_error, self.fallback.last_backend, True, first)
         return found

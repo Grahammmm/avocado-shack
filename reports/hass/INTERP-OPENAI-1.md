@@ -67,7 +67,7 @@ The router queues the call (no 429, no error). The wait is the rest of the fleet
 | n215 | email everyone on the hike list | refusal explaining the site sends no email | refusal text `send status` (odd) | wording; GPU answer is the better one |
 | n286 | cancel them both | `send no a1b2` | `send yes a1b2 c3d4` | **content**: the CPU text is wrong (yes); the GPU one answers only for one code (the scorer passes it, CPU is a content-miss) |
 | n170 | put the old photo back on the homepage | question "Which photo ...?" | refusal (no previous image kept) | **kind**: both counted over-cautious |
-| n091 | Linns is in Cambria, not Morro Bay | **draft: maker.edit Linn's place Cambria** | long question (Linn's or Stepladder?) | **kind: GPU wrong draft** per the corpus (a question was expected); the owner would see the draft and say yes or no |
+| n091 | Linns is in Cambria, not Morro Bay | **draft: maker.edit Linn's place Cambria** | long question (Linn's or Stepladder?) | **kind: GPU wrong draft**: the corpus expects `maker.edit` Linn's with place `Cambria, California` and ask=false; the GPU drafted the edit with place `Cambria` (not `Cambria, California`) and the CPU asked a question instead, so the GPU draft is counted wrong against the expected place text; the owner would see the draft and say yes or no |
 
 Run 1 (22 cases, same 20 plus n192 and n240) is in `interp-openai-1/run1_*`: same behavior, 0 failed.
 

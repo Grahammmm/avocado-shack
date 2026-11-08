@@ -80,7 +80,9 @@ def strip_reasoning(text) -> str:
     """HASS-INTERP-OPENAI-1: the answer without a reasoning block. Text up to the last `</think>` (with or without an
     opening tag) is reasoning and is dropped; a tag left anywhere else (an unclosed block, a block after the answer) is a
     failed call, never trimmed further."""
-    if "</think>" in text: text = text.rsplit("</think>", 1)[1]
+    if "</think>" in text:
+        head, text = text.rsplit("</think>", 1)
+        if "<think>" in head and head.split("<think>", 1)[0].strip(): raise _Failed("shape")  # an answer before the block
     if "<think>" in text or "</think>" in text: raise _Failed("shape")
     return text.strip()
 

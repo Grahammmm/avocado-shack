@@ -118,6 +118,15 @@ class OpenAIBackendTests(unittest.TestCase):
                 self.assertNotIn("SECRET-THOUGHT", json.dumps(out))
         self.assertEqual(strip_reasoning(f"<think>x</think> {answer}\n"), answer)
 
+    def test_a_reasoning_block_after_an_answer_is_a_failed_call_not_the_second_answer(self):
+        for content in ('{"question":"first?"}<think>reason</think>{"question":"second?"}',
+                        '{"question":"first?"}</think>{"question":"second?"}'[:0] + 'x<think>r</think>{"question":"s?"}'):
+            with self.subTest(content=content[:30]):
+                with self.assertRaises(interpreter_local._Failed): strip_reasoning(content)
+        interp, fake = gpu(oa('{"question":"first?"}<think>reason</think>{"question":"second?"}'))
+        interp.interpret(OWNER_TEXT, [])
+        self.assertEqual(interp.last_error, "shape")
+
     def test_the_separate_reasoning_field_is_ignored_even_when_it_looks_like_json(self):
         interp, _ = gpu(oa(js({"question": "Which day?"}), reasoning_content=js(GOOD)))
         self.assertEqual(interp.interpret("x", []), {"question": "Which day?"})
@@ -396,6 +405,19 @@ class LabelReaderOpenAITests(unittest.TestCase):
         self.assertEqual((labels.read(JPG, self.CATS), labels.last_error, len(fake.calls)), ({}, "timeout", 1))
         with self.assertRaises(ValueError):
             self.reader(oa(js(self.LION)), fallback="x")
+
+    def test_a_fallback_chain_is_refused_and_only_one_retry_is_ever_made(self):
+        inner_fake = Fake(ol(js(self.LION)))
+        inner = LabelReader(OLLAMA, "vision-cpu", transport=inner_fake)
+        with self.assertRaises(ValueError):
+            LabelReader(OLLAMA, "vision-cpu", fallback=LabelReader(OLLAMA, "vision-cpu", fallback=inner))
+        middle = LabelReader(OLLAMA, "vision-cpu", transport=Fake((500, b"")))
+        labels, fake = self.reader((500, b""), fallback=middle)
+        middle.fallback = inner  # a chain forced in by hand still costs one retry only
+        self.assertEqual((labels.read(JPG, self.CATS), labels.last_error, len(fake.calls), len(inner_fake.calls)),
+                         ({}, "http-500", 1, 0))
+        middle.fallback = middle  # a cycle ends after the one retry too
+        self.assertEqual((labels.read(JPG, self.CATS), labels.last_error), ({}, "http-500"))
 
     def test_without_a_fallback_a_failure_stays_a_plain_failed_read(self):
         labels, _ = self.reader((500, b""))
