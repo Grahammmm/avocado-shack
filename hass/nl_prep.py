@@ -349,7 +349,7 @@ def price_hints(text):
     return {"mentioned": True, "amounts": amounts[:MAX_LIST]}
 
 
-CLOSURE_RE = re.compile(r"\b(?:closed?|closes|closing|shut|off|no|not|never|from|after|before|except|until|till|later|earlier|by)\b")
+PLAIN_WORDS = frozenset("a also and at can could change changes hours hour i is it me my of on our please set shop shops store the to update we would you make".split())  # only these may surround the days and ranges: any other word may be a clause nothing here proves already true
 
 
 def _clock(hour, minute, mark):
@@ -390,8 +390,8 @@ def hours_hints(text, index):
     ranges = [(m.start(), m.end(), asked_range(m.group(0))) for m in RANGE_RE.finditer(t)]
     days = [(m.start(), m.end(), WEEKDAYS[m.group(2)]) for m in WEEKDAY_RE.finditer(t)]
     if not (ranges and days and index.hours) or any(r[2] is None for r in ranges): return None
-    rest = RANGE_RE.sub(" ", t)  # words around the ranges: a closure or open-ended clause is a change nothing here proves already true
-    if CLOSURE_RE.search(rest): return None
+    rest = WEEKDAY_RE.sub(" ", RANGE_RE.sub(" ", t))  # every other word must be plain filler: "closed", "opens at 10am", "from 10" are changes nothing here proves already true
+    if any(w not in PLAIN_WORDS for w in TOKEN_RE.findall(rest)): return None
     same, used = [], set()
     for start, end, wd in days:
         dist = sorted((max(r[0] - end, start - r[1], 0), k) for k, r in enumerate(ranges))
