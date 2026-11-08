@@ -22,6 +22,7 @@ WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", 
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
 CHAT_PATH, MAX_BODY, MAX_MODEL = "/api/chat", 256 * 1024, 100
+MAX_EARLIER = 4  # HASS-HIKE-FLOW-1: owner texts of the open request that go out with an answer (Conversation keeps the same)
 APIS, OPENAI_PATH, MAX_TOKENS = ("ollama", "openai"), "/v1/chat/completions", 2000  # HASS-INTERP-OPENAI-1
 HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
 FAILED = "I could not work that out right now, so nothing was drafted. Please try again in a few minutes."
@@ -145,10 +146,12 @@ class LocalInterpreter:
             fields = {"message": text, "pending": pending, "today": today, "weekday": weekday}
             if isinstance(notes, list) and notes: fields["notes"] = notes  # AV1102-09: owner preferences, never claims
             if isinstance(aliases, list) and aliases: fields["aliases"] = aliases  # AV0007-06: identifiers, never claims
-            hints = self._hints(text, today, aliases)
+            earlier = recent.get("earlier") if isinstance(recent, dict) else None
+            earlier = earlier if isinstance(earlier, list) and 0 < len(earlier) <= MAX_EARLIER and all(isinstance(t, str) and t for t in earlier) else None
+            hints = self._hints(" ".join([*(earlier or ()), text]), today, aliases)  # HASS-HIKE-FLOW-1: the whole open request, not only the answer
             if hints: fields["hints"] = hints  # HASS-NL-1: facts, never claims
             if isinstance(recent, dict) and isinstance(recent.get("question"), str) and recent["question"]:
-                fields["recent"] = {"question": recent["question"]}  # HASS-NL-1: Hass's last question, which this text answers
+                fields["recent"] = {"question": recent["question"], **({"earlier": earlier} if earlier else {})}  # HASS-NL-1: Hass's last question, which this text answers; HASS-HIKE-FLOW-1: + the owner's texts of that request, oldest first
             user = json.dumps(fields, ensure_ascii=False)
             messages = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": user}]
             if self.api == "openai": return self._openai_body(messages)
