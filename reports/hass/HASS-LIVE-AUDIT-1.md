@@ -230,6 +230,12 @@ Revision 3 run on the live box, 2026-11-07 15:27 PST, at commit `4ce2ee7` on `rb
 `timer:hass-health ... last run Sat 2026-11-07 15:25:00 PST` and `growth state 272 KB, free 258705 MB, hass journal
 209 lines/24h`.
 
+Revision 4 run on the live box, 2026-11-07 16:35 PST, at commit `3378c0b` (no `--model`; growth file in `/tmp`):
+`pass=8 warn=3 fail=0 skip=1`, exit 0. Both services `active, 0 restarts` (the worker's restart counter has reset since
+the 14:46 snapshot), `timer:hass-health ... last run Sat 2026-11-07 16:35:06 PST`, `timer:hass-backup` has not run yet,
+no backup under 26 h old, health `backup-age` only, `inbox pending 0, done 48`, `growth state 368 KB, free 256721 MB,
+hass journal 261 lines/24h`.
+
 Nightly candidate (not installed): `reports/hass/hass-selftest.service.candidate` and
 `reports/hass/hass-selftest.timer.candidate`, also copied to `~/agent-work/reports/hass/`. Systemd user oneshot,
 02:50 Pacific (after nightly CI at 02:23, before the 03:30 backup), `Nice=10`, `TimeoutStartSec=15min`, same
