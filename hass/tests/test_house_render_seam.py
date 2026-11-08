@@ -290,8 +290,11 @@ def strip(size, mode="RGB", colour=(240, 238, 230)):
 class ExtremeAspectTests(unittest.TestCase):
     """A strip (1000x1) has no border ring to measure: it is refused with one fixed reply, never an IndexError."""
 
-    STRIPS = {"wide-opaque": strip((1000, 1)), "tall-opaque": strip((1, 1000)), "wide-short": strip((2000, 10)),
-              "wide-with-alpha": strip((1000, 1), "RGBA", (200, 30, 30, 120)), "tall-with-alpha": strip((1, 1000), "RGBA", (200, 30, 30, 120))}
+    @classmethod
+    def setUpClass(cls):  # built here, not in the class body: the quick job runs without Pillow and must still import this file
+        cls.STRIPS = {"wide-opaque": strip((1000, 1)), "tall-opaque": strip((1, 1000)), "wide-short": strip((2000, 10)),
+                      "wide-with-alpha": strip((1000, 1), "RGBA", (200, 30, 30, 120)),
+                      "tall-with-alpha": strip((1, 1000), "RGBA", (200, 30, 30, 120))}
 
     def test_the_renderer_refuses_a_strip_with_its_own_code(self):
         for name, data in self.STRIPS.items():
