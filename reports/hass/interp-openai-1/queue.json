@@ -1,0 +1,62 @@
+[
+ {
+  "kind": "idle",
+  "hassSeconds": 2.7,
+  "error": null
+ },
+ {
+  "kind": "idle",
+  "hassSeconds": 2.72,
+  "error": null
+ },
+ {
+  "kind": "idle",
+  "hassSeconds": 2.72,
+  "error": null
+ },
+ {
+  "kind": "fleet-request-in-flight",
+  "fillerMaxTokens": 100,
+  "fillerTotalSeconds": 3.69,
+  "fillerTokens": 100,
+  "hassStartedAfterSeconds": 0.52,
+  "hassSeconds": 6.1,
+  "error": null,
+  "impliedWaitSeconds": 4.8
+ },
+ {
+  "kind": "after",
+  "hassSeconds": 2.71,
+  "error": null
+ },
+ {
+  "kind": "fleet-request-in-flight",
+  "fillerMaxTokens": 300,
+  "fillerTotalSeconds": 9.46,
+  "fillerTokens": 292,
+  "hassStartedAfterSeconds": 0.52,
+  "hassSeconds": 11.92,
+  "error": null,
+  "impliedWaitSeconds": 10.6
+ },
+ {
+  "kind": "after",
+  "hassSeconds": 2.72,
+  "error": null
+ },
+ {
+  "kind": "fleet-request-in-flight",
+  "fillerMaxTokens": 600,
+  "fillerTotalSeconds": 9.46,
+  "fillerTokens": 292,
+  "hassStartedAfterSeconds": 0.52,
+  "hassSeconds": 11.74,
+  "error": null,
+  "impliedWaitSeconds": 10.4
+ },
+ {
+  "kind": "after",
+  "hassSeconds": 2.71,
+  "error": null
+ }
+]

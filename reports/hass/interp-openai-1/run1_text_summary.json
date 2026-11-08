@@ -1,0 +1,682 @@
+{
+ "model": "qwen3.8:27b-thinkingcap-q6",
+ "url": "http://127.0.0.1:8010",
+ "n": 22,
+ "failedCalls": 0,
+ "seconds": {
+  "first": 9.334,
+  "p50": 1.31,
+  "p95": 3.58,
+  "max": 9.334,
+  "min": 0.661,
+  "mean": 1.77,
+  "warmP50": 1.29,
+  "warmP95": 2.9,
+  "warmMax": 3.618
+ },
+ "sameAnswer": 9,
+ "samePassVerdict": 21,
+ "gpuScore": {
+  "cases": 22,
+  "scored": 22,
+  "missing": [],
+  "intentAccuracy": 0.909,
+  "strictAccuracy": 0.864,
+  "wrongDraftRate": 0.045,
+  "wrongDrafts": 1,
+  "draftWhenShouldNotRate": 0.0,
+  "questionWhenUnsureRate": 1.0,
+  "askCases": 5,
+  "refusalRate": 1.0,
+  "refuseCases": 9,
+  "overCautiousRate": 0.25,
+  "draftCases": 8,
+  "jsonValidRate": 1.0,
+  "schemaValidRate": 1.0,
+  "callsFailed": 0,
+  "timeouts": 0,
+  "firstAttemptFailures": 0,
+  "firstAttemptTimeouts": 0,
+  "latencyMs": {
+   "p50": 1289,
+   "p95": 3618,
+   "max": 9334,
+   "calls": 22
+  },
+  "verdicts": {
+   "pass": 19,
+   "wrong-draft": 1,
+   "over-cautious": 2,
+   "kind-mismatch": 0,
+   "content-miss": 0,
+   "call-failed": 0
+  },
+  "byIntent": {
+   "alias": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "answer": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "availability": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "chitchat": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "correction": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "design": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "hide": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "hike": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "info": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "maker": {
+    "cases": 1,
+    "pass": 0,
+    "wrongDraft": 1
+   },
+   "multi": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "notes": {
+    "cases": 1,
+    "pass": 0,
+    "wrongDraft": 0
+   },
+   "outside": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "photo": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "price": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "product": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "restore": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "status": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "store": {
+    "cases": 1,
+    "pass": 0,
+    "wrongDraft": 0
+   },
+   "two-drafts": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "undo": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "vague": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   }
+  },
+  "failed": [
+   {
+    "id": "n091",
+    "verdict": "wrong-draft",
+    "why": "op 1 maker.edit: arg place differs"
+   },
+   {
+    "id": "n170",
+    "verdict": "over-cautious",
+    "why": "question where a draft was right"
+   },
+   {
+    "id": "n253",
+    "verdict": "over-cautious",
+    "why": "question where a draft was right"
+   }
+  ]
+ },
+ "cpuScore": {
+  "cases": 22,
+  "scored": 22,
+  "missing": [],
+  "intentAccuracy": 0.864,
+  "strictAccuracy": 0.818,
+  "wrongDraftRate": 0.0,
+  "wrongDrafts": 0,
+  "draftWhenShouldNotRate": 0.0,
+  "questionWhenUnsureRate": 1.0,
+  "askCases": 5,
+  "refusalRate": 1.0,
+  "refuseCases": 9,
+  "overCautiousRate": 0.375,
+  "draftCases": 8,
+  "jsonValidRate": 1.0,
+  "schemaValidRate": 1.0,
+  "callsFailed": 0,
+  "timeouts": 0,
+  "firstAttemptFailures": 2,
+  "firstAttemptTimeouts": 2,
+  "latencyMs": {
+   "p50": 23928,
+   "p95": 39596,
+   "max": 53166,
+   "calls": 20
+  },
+  "verdicts": {
+   "pass": 18,
+   "wrong-draft": 0,
+   "over-cautious": 3,
+   "kind-mismatch": 0,
+   "content-miss": 1,
+   "call-failed": 0
+  },
+  "byIntent": {
+   "alias": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "answer": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "availability": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "chitchat": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "correction": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "design": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "hide": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "hike": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "info": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "maker": {
+    "cases": 1,
+    "pass": 0,
+    "wrongDraft": 0
+   },
+   "multi": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "notes": {
+    "cases": 1,
+    "pass": 0,
+    "wrongDraft": 0
+   },
+   "outside": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "photo": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "price": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "product": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "restore": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "status": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "store": {
+    "cases": 1,
+    "pass": 0,
+    "wrongDraft": 0
+   },
+   "two-drafts": {
+    "cases": 1,
+    "pass": 0,
+    "wrongDraft": 0
+   },
+   "undo": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   },
+   "vague": {
+    "cases": 1,
+    "pass": 1,
+    "wrongDraft": 0
+   }
+  },
+  "failed": [
+   {
+    "id": "n091",
+    "verdict": "over-cautious",
+    "why": "question where a draft was right"
+   },
+   {
+    "id": "n170",
+    "verdict": "over-cautious",
+    "why": "unsupported where a draft was right"
+   },
+   {
+    "id": "n253",
+    "verdict": "over-cautious",
+    "why": "question where a draft was right"
+   },
+   {
+    "id": "n286",
+    "verdict": "content-miss",
+    "why": "required words missing"
+   }
+  ]
+ },
+ "cpuSecondsP50": 24.8,
+ "ids": [
+  "n044",
+  "n072",
+  "n083",
+  "n091",
+  "n110",
+  "n138",
+  "n170",
+  "n178",
+  "n187",
+  "n192",
+  "n198",
+  "n207",
+  "n215",
+  "n229",
+  "n240",
+  "n243",
+  "n248",
+  "n253",
+  "n257",
+  "n276",
+  "n286",
+  "n304"
+ ],
+ "detail": [
+  {
+   "id": "n044",
+   "intent": "availability",
+   "text": "flowers are out",
+   "gpuSeconds": 9.33,
+   "cpuSeconds": 120.1,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "ops product.set_availability({\"id\": \"photo-product-006\", \"available\": \"no\"})",
+   "cpu": "ops product.set_availability({\"id\": \"photo-product-006\", \"available\": \"no\"})",
+   "gpuFailed": null
+  },
+  {
+   "id": "n072",
+   "intent": "hide",
+   "text": "take the jam off",
+   "gpuSeconds": 1.09,
+   "cpuSeconds": 120.1,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "question: Which jam should I take off: strawberry, raspberry, or blackberry?",
+   "cpu": "question: Which jam should I take off the shelves: Cal Poly strawberry jam, Cal Poly raspberry jam, ",
+   "gpuFailed": null
+  },
+  {
+   "id": "n083",
+   "intent": "restore",
+   "text": "unhide the leeks",
+   "gpuSeconds": 1.46,
+   "cpuSeconds": 39.6,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "ops product.restore({\"id\": \"photo-product-064\"})",
+   "cpu": "ops product.restore({\"id\": \"photo-product-064\"})",
+   "gpuFailed": null
+  },
+  {
+   "id": "n091",
+   "intent": "maker",
+   "text": "Linns is in Cambria, not Morro Bay",
+   "gpuSeconds": 1.92,
+   "cpuSeconds": 53.2,
+   "sameAnswer": false,
+   "gpuVerdict": "wrong-draft",
+   "cpuVerdict": "over-cautious",
+   "gpu": "ops maker.edit({\"key\": \"Linn's\", \"place\": \"Cambria\"})",
+   "cpu": "question: Which maker's location should I correct: Linn's (currently listed with no place, or implie",
+   "gpuFailed": null
+  },
+  {
+   "id": "n110",
+   "intent": "product",
+   "text": "the lemons description should say they are great in cocktails",
+   "gpuSeconds": 2.9,
+   "cpuSeconds": 29.4,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "ops product.edit({\"id\": \"photo-product-017\", \"description\": \"Not an afterthought. A squeeze of lemon can wa)",
+   "cpu": "ops product.edit({\"id\": \"photo-product-017\", \"description\": \"Not an afterthought. A squeeze of lemon can wa)",
+   "gpuFailed": null
+  },
+  {
+   "id": "n138",
+   "intent": "hike",
+   "text": "move the hike to 9",
+   "gpuSeconds": 2.01,
+   "cpuSeconds": 25.0,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "question: Which hike should I move to 9:00: the Fiscalini Ranch walk (Nov 1), the Point Buchon walk ",
+   "cpu": "question: Which hike should I move to 9am: Fiscalini Ranch walk (Nov 1), Point Buchon walk (Nov 14),",
+   "gpuFailed": null
+  },
+  {
+   "id": "n170",
+   "intent": "store",
+   "text": "put the old photo back on the homepage",
+   "gpuSeconds": 0.95,
+   "cpuSeconds": 23.3,
+   "sameAnswer": false,
+   "gpuVerdict": "over-cautious",
+   "cpuVerdict": "over-cautious",
+   "gpu": "question: Which photo should I put back on the homepage?",
+   "cpu": "unsupported: The website does not store a previous homepage image to revert. To change the homepage ima",
+   "gpuFailed": null
+  },
+  {
+   "id": "n178",
+   "intent": "price",
+   "text": "nine bucks for the beet juice",
+   "gpuSeconds": 1.32,
+   "cpuSeconds": 23.9,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: The website does not show prices, so nothing was drafted. Send the change without the pric",
+   "cpu": "unsupported: The website does not show prices, so nothing was drafted. Send the change without the pric",
+   "gpuFailed": null
+  },
+  {
+   "id": "n187",
+   "intent": "design",
+   "text": "the font is too small on my phone",
+   "gpuSeconds": 1.01,
+   "cpuSeconds": 22.5,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: design changes cannot be made by message yet",
+   "cpu": "unsupported: design changes cannot be made by message yet",
+   "gpuFailed": null
+  },
+  {
+   "id": "n192",
+   "intent": "undo",
+   "text": "oops undo the last thing",
+   "gpuSeconds": 0.67,
+   "cpuSeconds": 20.5,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: send undo",
+   "cpu": "unsupported: send undo",
+   "gpuFailed": null
+  },
+  {
+   "id": "n198",
+   "intent": "status",
+   "text": "anything pending?",
+   "gpuSeconds": 0.69,
+   "cpuSeconds": 20.7,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: send status",
+   "cpu": "unsupported: send status",
+   "gpuFailed": null
+  },
+  {
+   "id": "n207",
+   "intent": "info",
+   "text": "what's our address again",
+   "gpuSeconds": 0.95,
+   "cpuSeconds": 22.1,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: 2190 Main Street, Morro Bay",
+   "cpu": "unsupported: Our address is 2190 Main Street, Morro Bay.",
+   "gpuFailed": null
+  },
+  {
+   "id": "n215",
+   "intent": "outside",
+   "text": "email everyone on the hike list",
+   "gpuSeconds": 1.5,
+   "cpuSeconds": 20.7,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: The website does not send email; it only shows the hike list. Did you mean to change the h",
+   "cpu": "unsupported: send status",
+   "gpuFailed": null
+  },
+  {
+   "id": "n229",
+   "intent": "chitchat",
+   "text": "never mind",
+   "gpuSeconds": 0.66,
+   "cpuSeconds": 20.9,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: send no",
+   "cpu": "unsupported: send no <code>",
+   "gpuFailed": null
+  },
+  {
+   "id": "n240",
+   "intent": "vague",
+   "text": "can you look at the cheese",
+   "gpuSeconds": 1.44,
+   "cpuSeconds": 27.2,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "question: Which cheese should I look at: Ragged Point, Rocky Butte, Bixby, or Big Sur?",
+   "cpu": "question: Which cheese should I look at: Ragged Point, Stepladder Rocky Butte, Stepladder Bixby, or ",
+   "gpuFailed": null
+  },
+  {
+   "id": "n243",
+   "intent": "photo",
+   "text": "use my photo for the homepage",
+   "gpuSeconds": 0.92,
+   "cpuSeconds": 22.2,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "question: Which photo should I use for the homepage?",
+   "cpu": "question: Which photo should I use for the homepage?",
+   "gpuFailed": null
+  },
+  {
+   "id": "n248",
+   "intent": "alias",
+   "text": "the good oil description should say cold pressed in Templeton",
+   "gpuSeconds": 3.62,
+   "cpuSeconds": 31.4,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "ops product.edit({\"id\": \"photo-product-045\", \"description\": \"Picual olive oil from Sunshine Olive in Temple)",
+   "cpu": "ops product.edit({\"id\": \"photo-product-045\", \"description\": \"Picual olive oil from Sunshine Olive in Temple)",
+   "gpuFailed": null
+  },
+  {
+   "id": "n253",
+   "intent": "notes",
+   "text": "add Bacon avocados fruit shelf",
+   "gpuSeconds": 1.68,
+   "cpuSeconds": 30.3,
+   "sameAnswer": false,
+   "gpuVerdict": "over-cautious",
+   "cpuVerdict": "over-cautious",
+   "gpu": "question: Which avocado should I mark as Bacon: the Hass avocado, or is Bacon a new product to add t",
+   "cpu": "question: Which avocado should I add to the fruit shelf: Hass avocado or Bacon avocados?",
+   "gpuFailed": null
+  },
+  {
+   "id": "n257",
+   "intent": "multi",
+   "text": "eggs out and the honey is limited",
+   "gpuSeconds": 1.29,
+   "cpuSeconds": 26.1,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "question: Which honey should I mark limited: Stepladder avocado blossom honey or Big Sur Honey Compa",
+   "cpu": "question: Which honey should I mark as limited: Stepladder avocado blossom honey or Big Sur Honey Co",
+   "gpuFailed": null
+  },
+  {
+   "id": "n276",
+   "intent": "correction",
+   "text": "oops wrong one",
+   "gpuSeconds": 0.81,
+   "cpuSeconds": 22.8,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "unsupported: send no c3d4",
+   "cpu": "unsupported: send no c3d4",
+   "gpuFailed": null
+  },
+  {
+   "id": "n286",
+   "intent": "two-drafts",
+   "text": "cancel them both",
+   "gpuSeconds": 0.86,
+   "cpuSeconds": 24.6,
+   "sameAnswer": false,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "content-miss",
+   "gpu": "unsupported: send no a1b2",
+   "cpu": "unsupported: send yes a1b2 c3d4",
+   "gpuFailed": null
+  },
+  {
+   "id": "n304",
+   "intent": "answer",
+   "text": "the stepladder one",
+   "gpuSeconds": 1.91,
+   "cpuSeconds": 29.4,
+   "sameAnswer": true,
+   "gpuVerdict": "pass",
+   "cpuVerdict": "pass",
+   "gpu": "ops product.set_availability({\"id\": \"photo-product-041\", \"available\": \"no\"})",
+   "cpu": "ops product.set_availability({\"id\": \"photo-product-041\", \"available\": \"no\"})",
+   "gpuFailed": null
+  }
+ ],
+ "differ": [
+  "n072",
+  "n091",
+  "n110",
+  "n138",
+  "n170",
+  "n207",
+  "n215",
+  "n229",
+  "n240",
+  "n248",
+  "n253",
+  "n257",
+  "n286"
+ ]
+}

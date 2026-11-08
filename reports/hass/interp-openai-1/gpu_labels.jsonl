@@ -1,0 +1,10 @@
+{"id": "l01", "reply": {"name": "Hass avocado", "brand": "AVOCADO SHACK"}, "seconds": 2.42, "failed": null}
+{"id": "l02", "reply": {"name": "Raspberries", "brand": "AG BERRIES"}, "seconds": 2.14, "failed": null}
+{"id": "l03", "reply": {"name": "Spring Greens", "brand": "JAYLEAF"}, "seconds": 2.12, "failed": null}
+{"id": "l04", "reply": {"name": "Cal Poly eggs", "brand": "CAL POLY", "category": "eggs"}, "seconds": 1.99, "failed": null}
+{"id": "l05", "reply": {"name": "Straus half-and-half", "brand": "STRAUS"}, "seconds": 2.05, "failed": null}
+{"id": "l06", "reply": {"name": "Rye bread", "brand": "BRIAN'S"}, "seconds": 2.02, "failed": null}
+{"id": "l07", "reply": {"name": "Linn's blueberry preserves", "brand": "LINN'S"}, "seconds": 2.33, "failed": null}
+{"id": "l08", "reply": {"name": "Alle-Pia guanciale", "brand": "ALLE-PIA"}, "seconds": 2.23, "failed": null}
+{"id": "l09", "reply": {"name": "Zero non-alcoholic cider", "brand": "SLO CIDER"}, "seconds": 2.07, "failed": null}
+{"id": "l10", "reply": {"name": "Watermelon"}, "seconds": 1.88, "failed": null}

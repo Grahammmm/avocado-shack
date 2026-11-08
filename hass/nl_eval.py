@@ -232,7 +232,7 @@ def _content():
 
 
 def live(corpus, url, model, out, timeout=120, think=None, baseline=False, warmup_timeout=900, transport=None, registry=None,
-         content=None, clock=time.monotonic, progress=None, retry_timeout=0) -> dict:
+         content=None, clock=time.monotonic, progress=None, retry_timeout=0, api="ollama") -> dict:
     """Ask the local model once per case. FILE.partial is appended (and resumed) one fsynced line per case and linked to FILE
     only when complete. baseline=True sends exactly what the service sends today (no hints, no recent question)."""
     target = Path(out).expanduser().resolve()
@@ -244,7 +244,7 @@ def live(corpus, url, model, out, timeout=120, think=None, baseline=False, warmu
         content = content or _content()
         prompt = interpreter_prompt.build(registry or load_registry(), content)
         kwargs = {} if baseline else _improvements(content)
-        asker = LocalInterpreter(url, model, prompt, timeout=timeout, transport=transport, think=think, **kwargs)
+        asker = LocalInterpreter(url, model, prompt, timeout=timeout, transport=transport, think=think, api=api, **kwargs)
     except (ContentError, ValueError, OSError) as exc:
         raise EvalError(str(exc)) from None
     done = set(load_replies(partial)) if partial.exists() else set()
@@ -327,6 +327,7 @@ def main(argv=None, transport=None) -> int:
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--retry-timeout", type=int, default=0, help="live: ask a timed-out call once more with this many seconds (0 = off)")
     parser.add_argument("--think", choices=("true", "false"))
+    parser.add_argument("--api", choices=("ollama", "openai"), default="ollama", help="live: Ollama /api/chat or OpenAI-style /v1/chat/completions")
     parser.add_argument("--every", type=int)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--ids", help="live: only these case ids, comma separated")
@@ -346,7 +347,7 @@ def main(argv=None, transport=None) -> int:
             say = lambda i, ms, err, final: print(f"{i} {ms}ms {err or 'ok'}{'' if final == err else ' -> ' + (final or 'ok')}", file=sys.stderr, flush=True)  # noqa: E731 - no case text
             summary = live(subset(corpus, args.every, args.limit, args.sample, ids), args.url, args.model, args.out, timeout=args.timeout, think=think,
                            baseline=args.baseline, warmup_timeout=args.warmup_timeout, transport=transport, registry=registry, progress=say,
-                           retry_timeout=args.retry_timeout)
+                           retry_timeout=args.retry_timeout, api=args.api)
         elif args.command == "score" and args.replies:
             summary = score(corpus, load_replies(args.replies), registry)
         elif args.command == "report" and args.run:

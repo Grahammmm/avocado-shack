@@ -90,13 +90,13 @@ def _read_photo(folder_fd, name) -> bytes:
         os.close(fd)
 
 
-def live(cases, url, model, photos, out, transport=None) -> dict:
+def live(cases, url, model, photos, out, transport=None, api="ollama") -> dict:
     """OPERATOR ONLY, never run in CI or tests (they inject a fake transport): record the raw reply per photo."""
     target = Path(out).expanduser().resolve()
     if target == REPO or REPO in target.parents: raise EvalError("--out must be outside the repository")
     if os.path.lexists(Path(out).expanduser()) or target.exists(): raise EvalError("--out already exists")
     try:
-        reader = LabelReader(url, model, transport=transport)
+        reader = LabelReader(url, model, transport=transport, api=api)
         folder_fd = os.open(photos, os.O_RDONLY | os.O_DIRECTORY)
     except (ValueError, OSError):
         raise EvalError("--url, --model or --photos is not usable") from None
@@ -131,13 +131,14 @@ def main(argv=None, transport=None) -> int:
     parser.add_argument("command", nargs="?", choices=("score",))
     parser.add_argument("--live", action="store_true", help="operator only: record replies from the loopback vision model")
     for flag in ("--cases", "--replies", "--url", "--model", "--photos", "--out"): parser.add_argument(flag)
+    parser.add_argument("--api", choices=("ollama", "openai"), default="ollama", help="live: Ollama /api/chat or OpenAI-style /v1/chat/completions")
     args = parser.parse_args(argv)
     if not (args.live and not args.command and args.url and args.model and args.photos and args.out
             or not args.live and args.command == "score" and args.replies):
         parser.error("use: score --cases C --replies R, or --live --url U --model M --photos DIR --out FILE --cases C")
     try:
         cases = load_cases(args.cases or CASES)
-        summary = (live(cases, args.url, args.model, args.photos, args.out, transport=transport) if args.live
+        summary = (live(cases, args.url, args.model, args.photos, args.out, transport=transport, api=args.api) if args.live
                    else score(cases, load_replies(args.replies, cases), catalog_categories()))
     except EvalError as exc:
         print(f"label_eval: {exc}", file=sys.stderr)
