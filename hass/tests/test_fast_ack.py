@@ -22,14 +22,22 @@ class AckCase(ft.ForwarderCase):
         super().setUp()
         self.order = []
         self.sender.send = self._send
+        self.answer = False  # what the host says to a `state` ask: False, True, or None (no answer)
+        if self.STUB: self.f.control = self._control
         self.host_ok()
+
+    STUB = True
+
+    def _control(self, body, expected, big=False):
+        if body.get("op") != "state" or self.answer is None: raise bridge.BridgeError("transport-error")
+        return {"op": "state", "paused": self.answer}
 
     def _send(self, chat, text, attachments=()):
         if self.sender.fail: raise bridge.BridgeError("transport-error")
         self.sender.calls.append((chat, text, attachments))
         self.order.append("ack" if text == EYES else "reply")
 
-    def host_ok(self, paused=False): self.f.paused, self.f.paused_at = paused, self.now
+    def host_ok(self, paused=False): self.answer, self.f.paused, self.f.paused_at = paused, paused, self.now
 
     def eyes(self): return [c for c in self.sender.calls if c[1] == EYES]
 
@@ -107,7 +115,7 @@ class OneAckPerMessage(AckCase):
         reopened = fwd.Spool(self.root, self.now)
         self.addCleanup(reopened.db.close)
         restarted = fwd.Forwarder(self.cfg, reopened, lambda: self.now, self.transport, self.sender)
-        restarted.paused, restarted.paused_at = False, self.now
+        restarted.control = self._control
         self.spool.accept({"type": "new-message", "data": self.messages["m1"]}, OWNER_CHAT, self.now)
         reopened.accept({"type": "new-message", "data": self.messages["m1"]}, OWNER_CHAT, self.now)
         restarted.ack()
@@ -124,7 +132,7 @@ class OneAckPerMessage(AckCase):
         reopened = fwd.Spool(self.root, self.now)
         self.addCleanup(reopened.db.close)
         restarted = fwd.Forwarder(self.cfg, reopened, lambda: self.now, self.transport, self.sender)
-        restarted.paused, restarted.paused_at = False, self.now
+        restarted.control = self._control
         restarted.ack()
         restarted.ack()
         self.assertEqual(len(self.eyes()), 1)
@@ -138,17 +146,18 @@ class OneAckPerMessage(AckCase):
 
 class NotWhenPausedOrUnknown(AckCase):
     def test_no_host_answer_yet_waits_then_drops(self):
-        self.f.paused = None
+        self.answer = None
         self.enqueue("m1")
         self.f.ack()
         self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "pending"}))
-        self.f.paused, self.f.paused_at = False, self.now  # the host answers in time: sent
+        self.answer = False  # the host answers in time: sent
         self.f.ack()
         self.assertEqual(len(self.eyes()), 1)
 
-    def test_a_host_answer_older_than_the_ttl_is_no_answer(self):
+    def test_a_host_answer_older_than_the_ttl_is_no_answer(self):  # the old answer is never reused: the host is asked again and is silent
         self.enqueue("m1")
         self.now += fwd.STATE_TTL + 1
+        self.answer = None
         self.spool.db.execute("UPDATE ack SET created_at=?", (self.now,))
         self.f.ack()
         self.assertEqual(self.sender.calls, [])
@@ -245,6 +254,7 @@ class AckNeverBlocks(AckCase):
 
 
 class HostAnswers(AckCase):
+    STUB = False
     """A fake host that answers the sealed `state` op (and nothing else the ack path needs)."""
 
     def setUp(self):
@@ -290,6 +300,21 @@ class FailClosedOnPause(HostAnswers):
         self.host_down = False                      # the host answers again (not paused): the waiting row is sent
         self.f.ack()
         self.assertEqual((len(self.eyes()), self.states()["m2"]), (2, "sent"))
+
+    def test_pause_or_outage_strictly_inside_the_ttl_still_blocks_the_next_ack(self):
+        for paused, down, want in ((True, False, "paused"), (False, True, "pending")):
+            with self.subTest(paused=paused, down=down):
+                self.host_paused, self.host_down = False, False
+                self.enqueue(f"a{paused}")
+                self.f.ack()
+                before = len(self.eyes())
+                self.host_paused, self.host_down = paused, down
+                self.now += 1                          # inside STATE_TTL
+                self.enqueue(f"b{paused}")
+                self.f.ack()
+                self.assertEqual(len(self.eyes()), before)
+                self.assertEqual(self.states()[f"b{paused}"], want)
+                self.spool.db.execute("UPDATE ack SET state='stale' WHERE state='pending'")
 
     def test_composed_pause_resume_and_outage_transitions(self):
         sent = []

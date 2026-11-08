@@ -333,8 +333,8 @@ class Forwarder:
             def close(state): db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='pending'", (state, now, pid))
             if now - created > ACK_STALE: close("stale"); continue
             if not self.cfg.get("ack", True): close("off"); continue
-            if now >= self.spool.get("hold_until") and (self.paused is None or now - self.paused_at > STATE_TTL):
-                self.state()  # ask the host right now (own thread: a slow reply send cannot delay this)
+            if now >= self.spool.get("hold_until"):
+                self.state()  # ask the host for EVERY ack, never trust an earlier not-paused answer (own thread: a slow send cannot delay this)
                 now = self.clock()
             allowed, final = self.ack_allowed(now)
             if not allowed:
