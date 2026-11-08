@@ -116,6 +116,7 @@ NOTHING = "Nothing is waiting for approval."
 SOCIAL_REPLY = "Nothing changed. Send a change in plain words, or help."  # AV0007-07
 UNREADABLE = {"unsupported": "Sorry, I could not understand that request."}
 VALUE_CUT = 120
+RECENT_MINUTES, RECENT_MAX = 30, 500  # HASS-NL-1: how long our last question stays open for a short answer; longest kept
 LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
@@ -194,7 +195,7 @@ class FixtureInterpreter:
     def __init__(self, mapping):
         self.mapping = dict(mapping)
 
-    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None):
+    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
         return copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
 
 
@@ -892,6 +893,20 @@ class Conversation:
         except (sqlite3.Error, OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return []
 
+    def _recent_question(self, now):
+        """HASS-NL-1: {"question": text} when the newest owner message was answered with a question of ours at most
+        RECENT_MINUTES ago (so the next short text is its answer); else None. The owner's own text is not stored."""
+        try:
+            last = self.db.execute("SELECT disposition, received_at FROM messages WHERE received_at IS NOT NULL"
+                                   " ORDER BY rowid DESC LIMIT 1").fetchone()
+            if last is None or last["disposition"] != "question": return None
+            row = self.db.execute("SELECT text, created_at FROM outbox WHERE reply_to = ? ORDER BY id DESC LIMIT 1",
+                                  (last["received_at"],)).fetchone()
+            if row is None or not row["text"] or len(row["text"]) > RECENT_MAX: return None
+            if now - datetime.fromisoformat(row["created_at"]) > timedelta(minutes=RECENT_MINUTES): return None
+            return {"question": row["text"]}
+        except (sqlite3.Error, ValueError, TypeError, KeyError): return None
+
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
             self._reply(TOO_LONG)
@@ -909,7 +924,8 @@ class Conversation:
                     **({"missing": _missing_ids(r["missing_json"])} if r["state"] == "needs-details" else {})}  # AV0007-03
                    for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
         notes = self._notes()  # AV1102-09: preferences only; no notes means no notes keyword
-        context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases())) if v}  # AV0007-06
+        context = {k: v for k, v in (("notes", notes), ("aliases", self._interpreter_aliases()),
+                                     ("recent", self._recent_question(now))) if v}  # AV0007-06; HASS-NL-1
         sent_at = _answered_at(msg, now)  # AV1352-06: 'today' is the day it was sent; bad, naive or future means now
         failed = None  # AV1052-10: None until interpret actually returned; then the adapter's last_error (or "")
         try:
