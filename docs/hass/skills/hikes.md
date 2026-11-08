@@ -28,14 +28,15 @@ the ops and the content.
   (see "The `I set:` line" below). A guest limit is written only with sign-up on and only if he gave the number. "Sign-up on" with
   no number and no "no limit" is left to the editor, which asks "how many can come, or is there no limit?" (HASS-E2E-HIKE-1 found
   the model adding `rsvpEnabled: true` and `capacity: 10`, and `capacity: 1`.)
-* **His words decide the direction, not their presence** (rule `hike-no-invention`, add and edit alike). Sign-up on needs a
-  sign-up word that is not negated in its clause: "sign-up off", "no sign-up", "without sign-up", "don't let people sign up" never
-  turn it on ("no limit" is about the guest limit and is taken out first, so "sign up with no limit" stays on). A guest limit
-  needs a number he tied to guests: "15 spots", "max 15", "limit of fifteen", "cap Cass Hill at 3", a dozen spots. The 12 in
-  "December 12", a time or "5 miles" is not one. A limit with "no limit", two different numbers, sign-up said both ways in one
-  message, sign-up said on while the slots say off, or sign-up turned off by an edit with no word about it, all get one plain
-  question ("I'm not sure if you want guests to be able to sign up. Should they?" or "how many can come, or is there no limit?")
-  and nothing is drafted. When he corrects himself in a later message, the later message wins.
+* **His words decide the direction, not their presence** (rule `hike-no-invention`, add and edit alike). Sign-up on needs his
+  latest sign-up instruction to be on: "sign-up off", "no sign-up", "without rsvps", "don't let people sign up" never turn it on
+  ("no limit" is about the guest limit and is taken out first, so "sign up with no limit" stays on; a later "actually no sign
+  ups" beats an earlier "sign up please"). A guest limit needs a number he tied to guests: "15 spots", "max 15", "limit of 15",
+  "cap Cass Hill at 3", "twelve people". The 12 in "December 12", a clock time, a year, "5 miles", "2 liters" or a number he took
+  back ("not 12 spots, 20 spots") is not one; his latest limit wins. Sign-up said off while the slots say on, sign-up said on
+  while the slots say off, an edit that turns sign-up off with no word about it, a limit together with "no limit", or "no
+  limit" without his words for it, all get one plain question ("I'm not sure if you want guests to be able to sign up. Should
+  they?" or "You didn't say how many can come ...") and nothing is drafted.
 * Difficulty, distance, duration, bring, the access note and the description are written exactly as he gave them (case and
   spelling kept) and never filled in. A trail fact he did not say is asked about by the claims check, not written.
 * A place that is not a route idea is plain meeting-point text. `trailId` is set only when he names a route idea. A new hike is

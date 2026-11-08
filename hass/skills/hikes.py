@@ -59,20 +59,9 @@ R_NO_RECAP_YET = "Say how it went first, then I can write the post."
 
 R_SIGNUP_UNCLEAR = "I'm not sure if you want guests to be able to sign up. Should they?"
 
-# What the owner's words are checked against (folded text: lower case, one space). Polarity and number relations, not word presence.
-_SIGNUP_TERM = re.compile(r"\b(?:sign[\s-]*ups?|sign(?:ing|ed)?\s+up|rsvps?|regist(?:er|ered|ering|ration)|reserv\w*)\b")
-_NEGATION = re.compile(r"\b(?:no|not|nobody|none|never|without|off|closed|skip|stop|disable\w*|(?:do|does|did|can|could|will|is|are|was|were)n['’]?t|"
-                       r"cannot|do not|does not|can not|will not|turn(?:ed|ing)? off|nope)\b")
-_NO_LIMIT = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|without(?:\s+(?:a|any))?)\s+(?:guest\s+|spot\s+|people\s+)?(?:limits?|caps?|maximum|max|cut-?off)|"
-                       r"unlimited|any number(?:\s+of\s+\w+)?|as many (?:as|people|guests))\b")
-_NUM = r"(?P<n>\d{1,3}|" + "|".join(sorted(nl_prep.WORD_NUMBERS, key=len, reverse=True)) + r")(?!\s*(?:miles?|mi|km|k|hours?|hrs?|minutes?|mins?|a\.?m|p\.?m|feet|ft|%|:|\.\d))\b"
-_GUESTS = r"(?:more\s+)?(?:spots?|spaces?|seats?|places?|slots?|people|guests?|hikers?|walkers?|participants?|attendees|rsvps?|sign[\s-]*ups?)\b"
-_CAPACITY_PATTERNS = (
-    re.compile(r"\b" + _NUM + r"\s+" + _GUESTS),  # "12 spots", "twelve people"
-    re.compile(r"\b(?:limit(?:ed)?|cap(?:ped)?|max(?:imum)?|capacity|up\s+to|at\s+most|no\s+more\s+than|space\s+for|room\s+for)\b(?:\s+(?:of|at|to|is|for|it|them|guests?))*\s+" + _NUM),
-    re.compile(r"\b(?:cap(?:ped)?|limit(?:ed)?)\b(?:\s+\S+){1,4}?\s+(?:at|to)\s+" + _NUM),  # "cap Cass Hill at 3"
-    re.compile(r"\b" + _NUM + r"\s+(?:max|maximum|limit|cap)\b"),
-)
+_SIGNUP_WORDS = re.compile(r"\b(sign ?-?ups?|signing up|rsvps?|register(?:ed|ing)?|reserv\w*|how many can|people can (?:join|come|sign))\b", re.I)
+# only words about SIGNING UP decide its direction: "limited parking", "no space for dogs" or "a seat cushion" say nothing about it;
+# a guest limit ("15 spots", "max 12") is read by _said_limits and counts as the owner asking for sign-up
 _PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:person|head|lb|pound|oz|ounce|kg|dozen)\b", re.I)
 _PLACE_TAIL = re.compile(r"(?:^|\s+)(?:trail ?head|gate|entrance|parking(?:\s+lot)?|lot|staging area|picnic area)\s*$", re.I)
 _PLACE_HEAD = re.compile(r"^(?:the|at|by)\s+", re.I)
@@ -265,74 +254,111 @@ def rule_recap_state(slots, texts, ctx):
     return None
 
 
-def _clauses(text):
-    return [c for c in re.split(r"[,;.!?\n]+|\s-\s|\bbut\b|\bexcept\b", _fold(text)) if c.strip()]
+_CLAUSE_SPLIT = re.compile(r"[.;!?\n,]+|\s+(?:but|however|though)\s+", re.I)
+_NEGATED = re.compile(r"\b(?:no|not|never|without|nobody|none|cannot|skip|off|disabled?|closed?)\b|n't\b", re.I)
+_NO_LIMIT = re.compile(r"\b(?:no|without\s+a|without\s+any|without)\s+(?:limit|cap|max(?:imum)?)\b|\bunlimited\b", re.I)
+_DATE_TIME = re.compile(r"\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b|\b\d{1,2}:\d{2}\s*(?:[ap]\.?m\.?)?|"
+                        r"\b\d{1,2}\s*[ap]\.?m\b\.?|\b\d{1,2}(?:st|nd|rd|th)\b|\b(?:19|20)\d\d\b|"
+                        r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b|"
+                        r"\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b|"
+                        r"\b(?:at|around|about|by|from|until|till)\s+\d{1,2}\b|\bo'?clock\b", re.I)
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60}
+_UNITS = {w: v for w, v in nl_prep.WORD_NUMBERS.items() if 0 < v < 10}
+_NUM_WORD = re.compile(r"\b(?:(" + "|".join(_TENS) + r")[\s-]+(" + "|".join(_UNITS) + r")|(" +
+                       "|".join(sorted(nl_prep.WORD_NUMBERS, key=len, reverse=True)) + r"))\b", re.I)
+_COUNTED = r"(?:spots?|spaces?|seats?|places?|people|persons?|guests?|hikers?|folks|attendees|participants|rsvps?|sign-?ups?)"
+_LIMIT_AFTER = re.compile(r"\b(\d+)\s+(?:(?:more|open|available|total|extra)\s+)?" + _COUNTED + r"\b", re.I)
+_LIMIT_BEFORE = re.compile(r"\b(?:max(?:imum)?|limit(?:ed)?(?:\s+to|\s+of)?|capacity(?:\s+of)?|cap(?:ped)?(?:\s+(?:[a-z']+\s+){0,4}?(?:at|to|of))?|"
+                           r"up\s+to|at\s+most|no\s+more\s+than)\s*(?:of\s+|to\s+)?(\d+)\b", re.I)  # "cap Cass Hill at 3" too
+_UNIT_AFTER = re.compile(r"^\s*(?:liters?|litres?|l|ml|miles?|mi|km|kms|kilometers?|meters?|m|feet|ft|hours?|hrs?|"
+                         r"minutes?|mins?|lbs?|kg|oz|degrees?|dollars?|bucks|layers?|bottles?|snacks?|sandwich\w*)\b", re.I)
+_REPLACED = re.compile(r"\b(?:not|instead\s+of|rather\s+than|other\s+than|no\s+longer)\s+(?:the\s+)?\d+\b", re.I)
 
 
-def _text_polarity(text):
-    """Sign-up polarity of ONE message: "on", "off", "mixed" (both) or None (not mentioned). Judged clause by clause on the
-    sign-up word itself: a negation in the clause (no, not, off, without, don't ...) turns it off; "no limit" and "unlimited"
-    are about the guest limit and are taken out first, so "sign up with no limit" stays on."""
-    found = set()
-    for clause in _clauses(text):
-        clause = _NO_LIMIT.sub(" ", _SIGNUP_TERM.sub(" signup ", clause))
-        if "signup" in clause.split():
-            found.add("off" if _NEGATION.search(clause) else "on")
-    return None if not found else found.pop() if len(found) == 1 else "mixed"
+def _clauses(said):
+    return [c for c in _CLAUSE_SPLIT.split(said.replace("\u2019", "'")) if c and c.strip()]
 
 
-def _signup_polarity(texts):
-    """What the owner said about sign-up: the polarity of the LAST message that mentions it (a later "actually, no sign-up"
-    corrects an earlier one); "mixed" when that one message says both."""
-    seen = [p for p in (_text_polarity(t) for t in texts) if p]
-    return seen[-1] if seen else None
+def _signup_state(said):
+    """What the owner's LATEST sign-up instruction says: True (on), False (off: "no sign up", "don't let people sign up",
+    "without rsvps", a later "actually no sign ups" after "sign up please") or None (not mentioned). "no limit on sign ups" is
+    about the guest limit, not sign-up, and stays on."""
+    state = None
+    for clause in _clauses(said):
+        clause = _NO_LIMIT.sub(" ", clause)
+        if _SIGNUP_WORDS.search(clause):
+            state = not _NEGATED.search(clause)
+    return state
 
 
-def _number(word):
-    return int(word) if word.isdigit() else nl_prep.WORD_NUMBERS.get(word)
+def _said_signup(said):
+    return _signup_state(said) is True
 
 
-def _capacity_numbers(texts):
-    """The numbers the owner tied to how many guests can come ("12 spots", "max 12", "cap Cass Hill at 3", "limit of twelve"),
-    from the last message that has any. A number that is only a date, a time or a distance is never one of them."""
-    for text in reversed(texts):
-        found = set()
-        for clause in _clauses(text):
-            for pattern in _CAPACITY_PATTERNS:
-                for m in pattern.finditer(clause):
-                    n = _number(m.group("n"))
-                    if n is not None:
-                        found.add(n)
-        if found:
-            return found
-    return set()
+def _words_to_digits(text):
+    def one(m):
+        if m.group(1):
+            return str(_TENS[m.group(1).lower()] + _UNITS[m.group(2).lower()])
+        return str(nl_prep.WORD_NUMBERS[m.group(3).lower()])
+    return _NUM_WORD.sub(one, text)
+
+
+_LIMIT_TAIL = re.compile(r"^\s*(?:(?:more|open|available|total|extra|in\s+total|please|thanks|tops|max)\s*)*(?:$|" + _COUNTED + r"\b)", re.I)
+
+
+def _said_limits(said):
+    """The effective guest limit the owner's words state: a number right next to a counted noun ("12 spots", "twelve
+    people") or after a limit word that is itself followed by a guest noun or nothing ("max 12", "up to 20 people"), in
+    an affirmative clause. A date, a clock time, a year, a quantity of something else ("only 2 liters of water", "at
+    most 2 apples") or a rejected number ("not 12 spots, 20 spots") never counts; the latest instruction wins, so
+    "12 spots" then "actually make it 20 spots" leaves only 20, and a later "no limit" leaves none."""
+    effective = set()
+    for clause in _clauses(said):
+        if _NO_LIMIT.search(clause):
+            effective = set()
+        text = re.sub(r"\b(cap(?:ped)?|limit(?:ed)?)\b(?:\s+[a-z']+){0,4}?\s+(?:at|to)\s+(\d+)\b", r"\1 \2", clause.lower())  # "cap Cass Hill at 3": not a time
+        text = _words_to_digits(_DATE_TIME.sub(" ", _NO_LIMIT.sub(" ", text)))
+        for m in _REPLACED.finditer(text):
+            effective.discard(int(re.search(r"\d+", m.group(0)).group(0)))  # a retracted number is no longer said
+        text = _REPLACED.sub(" ", text)
+        if _NEGATED.search(re.sub(r"\bno\s+more\s+than\b", "at most", text)):
+            continue
+        hits = []
+        for pat in (_LIMIT_AFTER, _LIMIT_BEFORE):
+            for m in pat.finditer(text):
+                if pat is _LIMIT_AFTER or _LIMIT_TAIL.match(text[m.end():]):
+                    hits.append((m.start(), int(m.group(1))))
+        if hits:
+            effective = {max(hits)[1]}
+    return effective
 
 
 def rule_no_invention(slots, texts, ctx):
     """The E2E-HIKE-1 finding: the model added sign-up and a guest limit nobody asked for. A word or a number somewhere in
-    the text is not evidence: sign-up needs the owner's sign-up words IN THE SAME DIRECTION ("sign-up off" never turns it on),
-    a guest limit needs a number he tied to guests ("12 spots", not the 12 in "December 12"), and a limit together with
-    "no limit" is unclear. Unclear evidence asks one plain question. Skipped when the owner's words are not known."""
-    said = [t for t in (texts or ()) if isinstance(t, str) and t.strip()]
-    if not said:
+    the text is not evidence: sign-up on needs his latest sign-up instruction to be on ("sign-up off" never turns it on), a
+    guest limit needs a number he tied to guests ("12 spots", not the 12 in "December 12"), "no limit" needs his own words, and
+    a limit together with "no limit" is unclear. Unclear evidence asks one plain question. Skipped when the owner's words are
+    not known. The same rule guards an add and an edit."""
+    said = "\n".join(t for t in (texts or ()) if isinstance(t, str))
+    if not said.strip():
         return None
     signup, no_limit = slots.get("signup"), slots.get("no_limit") is True
     cap = slots.get("capacity")
     cap = cap if isinstance(cap, int) and not isinstance(cap, bool) else None
-    polarity, numbers = _signup_polarity(said), _capacity_numbers(said)
+    state, limits = _signup_state(said), _said_limits(said)
     if signup is True:
-        if polarity in ("off", "mixed"):
-            return R_SIGNUP_UNCLEAR, "other"
-        if polarity is None and not numbers:
+        if state is False:
+            return R_SIGNUP_UNCLEAR, "other"  # he said sign-up off
+        if state is None and not limits:
             return R_SIGNUP_NOT_SAID, "other"
-    elif polarity == "on" or (signup is False and "hike" in slots and polarity is None and not numbers):
-        return R_SIGNUP_UNCLEAR, "other"  # he said on and the slots say off, or an edit turns sign-up off without a word about it
+    elif state is True or (signup is False and "hike" in slots and state is None and not limits):
+        return R_SIGNUP_UNCLEAR, "other"  # he said on and the slots say off (or nothing), or an edit turns sign-up off without a word
     if cap is not None or no_limit:
-        if polarity in ("off", "mixed"):
+        if state is False:
             return R_SIGNUP_UNCLEAR, "other"
-        if cap is not None and (no_limit or cap not in numbers or len(numbers) > 1):
+        if cap is not None and (no_limit or cap not in limits):
             return R_SPOTS_NOT_SAID, "other"
-        if no_limit and cap is None and not _NO_LIMIT.search(" ".join(_fold(t) for t in said)):
+        if no_limit and cap is None and not _NO_LIMIT.search(said):
             return R_SPOTS_NOT_SAID, "other"
     return None
 
