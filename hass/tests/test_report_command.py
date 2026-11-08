@@ -52,7 +52,7 @@ class ReportTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.say(text), "report")
         self.assertEqual(self.disposition(f"m{self.n}"), "report")
         [reply] = self.replies()
-        return reply
+        return reply.removesuffix("\n\n" + conversation.SHELF_ASK)  # HASS-SHELFCHECK-FLOW-1: that question is tested in test_shelf_check_flow
 
     def test_report_wordings_reply_the_rendered_report_and_change_nothing(self):
         want = self.expected(date(2026, 11, 2))
@@ -61,7 +61,7 @@ class ReportTests(StoreMixin, ConversationTestCase):
             with self.subTest(text=text):
                 self.assertEqual(self.report(text), want)
         self.assertEqual((self.calls, self.drafts(), self.commits(), self.approvals()), ([], [], 0, 0))
-        self.assertNotIn("control", self.tables())
+        self.assertEqual([r[0] for r in self.conv.db.execute("SELECT name FROM control")], ["shelf-asked"])  # the question is asked once a day; nothing else
 
     def test_lookalikes_go_to_the_normal_request_path(self):
         for text in ("report now", "reports"):
@@ -76,14 +76,14 @@ class ReportTests(StoreMixin, ConversationTestCase):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         self.calls.clear()
-        control = [dict(r) for r in self.conv.db.execute("SELECT * FROM control")]
+        control = [dict(r) for r in self.conv.db.execute("SELECT * FROM control WHERE name != 'shelf-asked'")]
         self.now = T0 + timedelta(seconds=601)  # lapsed; no other message has swept it yet
         before = self.drafts()
         reply = self.report()
         self.assertEqual(reply, self.expected(date(2026, 11, 2)))
         self.assertNotIn("paused", reply.lower())
         self.assertEqual((self.drafts(), self.calls, self.approvals(), self.commits()), (before, [], 0, 0))
-        self.assertEqual([dict(r) for r in self.conv.db.execute("SELECT * FROM control")], control)
+        self.assertEqual([dict(r) for r in self.conv.db.execute("SELECT * FROM control WHERE name != 'shelf-asked'")], control)
         self.assertEqual(self.say(f"yes {draft['code']}"), "no-target")  # a later message still expires it
 
     def test_missing_writer_worktree_gives_the_fixed_line(self):

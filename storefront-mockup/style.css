@@ -70,3 +70,4 @@ dialog .close{position:sticky;top:0;right:auto;float:right;width:44px;height:44p
 .catalog-controls .avail-filter input{display:inline-block;width:24px;height:24px;margin:0;flex:none}
 .catalog-controls #clear-filters{min-height:44px;justify-self:start}
 .catalog-controls #clear-filters[hidden]{display:block;visibility:hidden}
+.catalog-only .filters.views{border-bottom:0;margin:15px 0 0;padding-bottom:8px}.catalog-only .filters.views+.filters{margin-top:0}

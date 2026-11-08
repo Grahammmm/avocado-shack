@@ -106,7 +106,7 @@ There is no single style document today. It is spread over five places, which is
 | About text | there is **no About page**. "About" is the per-maker story (`makers.json` `story`, max 600 characters) and the single "COME ON IN" paragraph (`store.story`, max 400, `store.set_story`) | |
 | Description voice | measured in `house-style.json` (#504) | see 1.5 |
 | "New" badge | `shop.js isNew()` / `addedOn` (set by `product.add`): first 14 Pacific days | |
-| Photo vs illustration | `shop.js installedImage()`: only `photo-<16 hex>.(jpg\|png)` is an owner photo; any other path is shown as an illustration with the shop-wide note "Some product pictures are illustrations made from photos of our shelves" | 0 of 170 live pictures are owner photos |
+| Photo vs illustration | `shop.js installedImage()`: only `photo-<16 hex>.(jpg\|png)` is an owner photo; any other path is shown as an illustration (the shop-wide note about illustrations was removed by AVO-SHOP-CLEAN-1) | 0 of 170 live pictures are owner photos |
 
 **Consequence for design (decision D1):** a restyled owner photo is the owner's photograph re-framed, not an AI illustration. Keep it a `photo-<sha16>.jpg` so the page labels it honestly as a photo and the "photos to take" list stops listing it. Do not convert it to WEBP or rename it to `photo-product-NNN`.
 

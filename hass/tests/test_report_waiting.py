@@ -19,6 +19,11 @@ GARBAGE = b"not a database, just garbage bytes" * 64
 
 
 class ReportWaitingTests(StoreMixin, ConversationTestCase):
+    def setUp(self):
+        super().setUp()
+        path = self.repo.wt / "hass" / "content" / "store.json"  # today's shelf check, so the report asks nothing more
+        path.write_text(json.dumps({**json.loads(path.read_text("utf-8")), "selection_checked_on": "2026-11-02"}), "utf-8")
+
     def report(self):
         self.assertEqual(self.say("report"), "report")
         [reply] = self.replies()
