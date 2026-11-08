@@ -38,6 +38,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from hass.content_model import REPO_ROOT  # noqa: E402
+from hass import voice  # noqa: E402
 
 FIXTURES = REPO_ROOT / "hass" / "tests" / "fixtures" / "skills"
 OWNER, CHAT = "owner@example.invalid", "chat-testkit-owner"
@@ -376,6 +377,8 @@ def _drive(row, expect, sc, skills, skill, names, res):
 
     for text in row["texts"]:
         try: disposition, out = sc.say(text)
+        except voice.VoiceError as exc:  # HASS-VOICE-1: strict mode refuses a reply that breaks the voice rules
+            res.fail("jargon", f"owner reply breaks the voice rules: {str(exc)[:160]}"); return
         except Exception as exc:  # noqa: BLE001
             res.fail("wrong-turn", f"{type(exc).__name__}: {exc}"); return
         dispositions.append(disposition), replies.append(out)

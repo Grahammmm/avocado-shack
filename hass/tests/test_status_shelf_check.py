@@ -97,7 +97,7 @@ class ShelfCheckStatusTests(StoreMixin, ConversationTestCase):
         one, two = self.propose("hours")[0], self.propose("desc")[0]
         self.checked(date(2026, 11, 1))
         lines = self.status()
-        self.assertEqual(lines[:3], ["Everything is ready.", "Waiting for your yes: the opening hours for Avocado Shack (reply yes f11c)", "Waiting for your yes: the description for Hass avocado (reply yes f48c)"])
+        self.assertEqual(lines[:3], ["Everything is ready.", "Waiting for your yes: the opening hours for Avocado Shack (reply yes fb1e)", "Waiting for your yes: the description for Hass avocado (reply yes 5390)"])
         self.assertEqual(len(self.shelf(lines)), 1)
         self.assertEqual(lines[3:], ["Your last shelf check was Sunday, November 1."])
         self.assertIn(f"reply yes {one['code']}", lines[1])

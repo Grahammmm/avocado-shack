@@ -35,7 +35,7 @@ class PromptRuleTests(unittest.TestCase):
         self.assertIn("hike.repeat", rules[-5])
         self.assertIn('"notes"', rules[-3])
         self.assertIn('"aliases"', rules[-1])
-        self.assertIn('Everything you write in a question', rules[-2])
+        self.assertIn('reads every question or unsupported reply you write', rules[-2])
         self.assertEqual(prompt.count(DESIGN_UNSUPPORTED), 1)
         found = re.search(r"\{\"unsupported\": \"[^\"]*\"\}", design[0])
         self.assertEqual(json.loads(found.group(0)), DESIGN)

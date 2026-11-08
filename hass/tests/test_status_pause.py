@@ -174,7 +174,7 @@ class StatusTests(StoreMixin, H06TestCase):
         needs = self.drafts()[-1]
         waiting = self.propose("desc")[0]
         self.assertEqual(self.status(), [  # nothing applied yet: no last-change line; no events: no hike line
-            "Everything is ready.", "I'm waiting for details: Please provide: hours", "Waiting for your yes: the description for Hass avocado (reply yes f48c)",
+            "Everything is ready.", "I'm waiting for details: Please provide: hours", "Waiting for your yes: the description for Hass avocado (reply yes 5390)",
             "I still need your shelf check."])
         self.assertEqual(self.say(f"yes {waiting['code']}"), "approved")
         self.interp.mapping["fill"] = {**_ops((HOURS, {"hours": NEW_HOURS})), "revises": needs["code"]}
