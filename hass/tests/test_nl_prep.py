@@ -120,7 +120,8 @@ class HintTests(unittest.TestCase):
     def test_a_year_that_cannot_be_checked_leaves_the_date_hint_out(self):
         for text in ("hike on feb 30 2027", "hike on 2/30/2027", "hike on 2027-02-30", "hike on dec 5 1999", "hike on dec 5 3027",
                      "hike on 12/5/202", "hike on 12/5/20277", "hike on 5 dec 0027", "hike on 2027/12/5", "hike on dec 5 1530",
-                     "hike on feb 29 2027"):
+                     "hike on feb 29 2027", "hike on December 5 202", "hike on 5 December 20277", "hike on dec 5, 202", "hike on 5th of dec 20277",
+                     "hike on dec 5 0202"):
             self.assertNotIn("dates", self.ask(text), text)
         [row] = self.ask("hike on feb 29 2028")["dates"]  # a real leap day
         self.assertEqual(row["date"], "2028-02-29")
@@ -132,6 +133,10 @@ class HintTests(unittest.TestCase):
         self.assertEqual((row["said"], row["date"]), ("dec 5", "2026-12-05"))
         [row] = self.ask("hike on 12/5 at 9")["dates"]
         self.assertEqual((row["said"], row["date"]), ("12/5", "2026-12-05"))
+        for text, said in (("hike on dec 5 930pm", "dec 5"), ("hike on dec 5 930 pm", "dec 5"), ("hike on 5 dec 9am", "5 dec"), ("hike on dec 5 at 930", "dec 5"),
+                           ("hike on dec 5 with 2 helpers", "dec 5")):
+            [row] = self.ask(text)["dates"]
+            self.assertEqual((row["said"], row["date"]), (said, "2026-12-05"), text)
 
     def test_yearless_dates_still_roll_forward(self):
         self.assertEqual(self.ask("dec 5")["dates"][0]["date"], "2026-12-05")
@@ -283,8 +288,10 @@ class RequestTests(unittest.TestCase):
             user = self.user(seen)
             self.assertEqual(user["message"], text)
             self.assertEqual([row["date"] for row in user["hints"]["dates"]], [want], text)
-        interp.interpret("post a Cass Hill hike on feb 30 2027 at 9am", [])
-        self.assertNotIn("dates", self.user(seen).get("hints", {}))
+        for text in ("post a Cass Hill hike on feb 30 2027 at 9am", "post a Cass Hill hike on December 5 202 at 9am", "post a Cass Hill hike on 5 December 20277 at 9am"):
+            interp.interpret(text, [])
+            self.assertEqual(self.user(seen)["message"], text)
+            self.assertNotIn("dates", self.user(seen).get("hints", {}), text)
 
     def test_hints_are_sent_after_the_saved_context(self):
         seen = []

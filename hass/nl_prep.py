@@ -55,6 +55,7 @@ DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".joi
 SLASH_RE = re.compile(r"(?<!/)\b(1[0-2]|0?[1-9])/([0-3]?\d)\b(?:/(\d+))?")  # m/d or m/d/yy(yy); a year-first 2027/12/5 is not read
 ISO_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 YEAR_RE = re.compile(r"(?:,\s*|\s+)(?:'(\d{2})|(\d{4}))(?![\d:])")  # a year the owner wrote right after a month and day
+BAD_YEAR_RE = re.compile(r"(?:,\s*|\s+)\d{3,}(?!\d)(?!:)(?!\s*[ap]\.?m\b)")  # three or more digits after a month and day that YEAR_RE did not take, and that are not a clock time
 WEEKDAY_RE = re.compile(r"\b(?:(this|next|last|coming|on)\s+)?(" + "|".join(sorted(WEEKDAYS, key=len, reverse=True)) + r")s?\b")
 RELATIVE_RE = re.compile(r"\b(today|tonight|tomorrow|tmrw|tmr|yesterday|day after tomorrow)\b")
 IN_RE = re.compile(r"\bin\s+(\d{1,2}|" + "|".join(WORD_NUMBERS) + r")\s+(day|week)s?\b")
@@ -288,6 +289,7 @@ def _named_date(t, m, month, day, today, year=True):
         n = int(y.group(1)) + 2000 if y.group(1) else int(y.group(2))
         d = _safe_date(n, month, day) if 2000 <= n <= 2099 else None
         return (t[m.start():y.end()], d) if d is not None else None
+    if year and BAD_YEAR_RE.match(t, m.end()): return None  # digits that look like a year but are not one (dec 5 202, 5 dec 20277): no hint
     d = _safe_date(today.year, month, day)
     if d is not None and d < today: d = _safe_date(today.year + 1, month, day)
     return (m.group(0), d) if d is not None else None
