@@ -168,6 +168,10 @@ class ListingTests(StoreMixin, ConversationTestCase):
         self.edit("community.json", lambda doc: doc["routeIdeas"][0].update(title="Zebrawalk"))
         self.edit("community.json", lambda doc: doc["routeIdeas"][1].update(title="Zebrawalk"))
         self.assertEqual(self.listing("Zebrawalk"), [NONE])  # two routes share the title: no guess
+        for r in (0, 1): self.edit("community.json", lambda doc, r=r: doc["routeIdeas"][r].update(title="Zebra Coastal Walk"))
+        self.calls.clear()
+        self.assertEqual(self.listing("Zebra Coastal Walk"), [NONE])  # several words, two routes: still no guess, no interpreter
+        self.assertEqual(self.calls, [])
 
     # -- usage, unknown, collision, lookalikes ---------------------------------------------------------------------
     def test_usage_unknown_collision_and_lookalikes(self):

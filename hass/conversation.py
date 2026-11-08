@@ -1524,7 +1524,16 @@ class Conversation:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             return True
         return any(self._pick(kind, text, content) != text for kind in ("product", "maker")) \
-            or self._pick_hike(content, text) != text or self._pick_hike(content, text, "routeIdeas") != text
+            or self._pick_hike(content, text) != text or self._pick_hike(content, text, "routeIdeas") != text \
+            or self._title_matches(content, text)
+
+    @staticmethod
+    def _title_matches(content, text) -> bool:
+        """True when some hike or route idea title holds every word, even if several do (the listing then says it is not sure)."""
+        words = catalog._fold(text).split()
+        if not words or not isinstance(content.community, dict): return False
+        return any(isinstance(e, dict) and isinstance(e.get("title"), str) and all(w in catalog._fold(e["title"]) for w in words)
+                   for key in ("events", "routeIdeas") for e in (content.community.get(key) if isinstance(content.community.get(key), list) else []))
 
     def _post_names_something(self, text) -> bool:
         """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
