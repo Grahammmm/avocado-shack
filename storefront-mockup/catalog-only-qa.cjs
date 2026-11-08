@@ -4,12 +4,13 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 (async()=>{
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
  const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto(base+'/');
+ await page.goto(base+'/?view=all');
  assert.equal(await page.locator('.section-intro').textContent(),'An avocado from Morro Bay. A loaf from Atascadero. Cheese made in Cambria. Explore our selection and follow the flavors back to the farms, kitchens, and makers from our community.');
  assert.equal(await page.locator('[data-source],.sourcing-filters').count(),0);
  assert.equal(await page.locator('[data-add],#bag,#boxes,#merch,#owner,#order-preview,.price,[data-product],.food-detail,#hikes').count(),0);
  assert.doesNotMatch(await page.locator('body').innerText(),/\$\d|add to basket|pickup|local delivery|weekly boxes|online shop|merchandise|Discover this food|Food & maker story/i);
  const countText=async()=>(await page.locator('#catalog-count').textContent()).split(' \u00b7 ')[0],fullCount=await countText();assert.equal(fullCount,(await page.evaluate(()=>catalog.length))+' selections');
+ const defaultCount=(await page.evaluate(()=>catalog.filter(p=>!['fruit','vegetables','flowers'].includes(p.category)||p.id==='photo-product-018').length))+' selections';
  await page.locator('#product-search').fill('Cambria');const count=await page.locator('#catalog-grid article').count();assert.ok(count>0);
  assert.ok((await page.locator('#catalog-grid .origin-label').allTextContents()).every(t=>t.includes('Cambria')));
  assert.ok(await page.locator('#catalog-grid .maker-story a[href^="https://"]').count());
@@ -58,14 +59,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  for(const width of [390,1440]){await page.setViewportSize({width,height:1000});await page.goto(base+'/');await page.locator('#brand-filter').selectOption('');await page.locator('#catalog-grid').evaluate(e=>e.scrollIntoView({behavior:'instant',block:'start'}));await page.waitForTimeout(250);await page.screenshot({path:out+`/catalog-inline-${width}.png`});await page.locator('#brand-filter').selectOption('Etto');await page.locator('#catalog-grid').evaluate(e=>e.scrollIntoView({behavior:'instant',block:'start'}));await page.screenshot({path:out+`/catalog-maker-${width}.png`});}
  // AVB-25: shelf, search and producer live in the address (replaceState, hash and other params untouched).
  let dialogs=0;page.on('dialog',d=>{dialogs++;d.dismiss()});
- const open=async s=>{await page.goto(base+'/'+s);await page.waitForSelector('#catalog-grid article, #catalog-sentinel')};
- const addr=()=>page.evaluate(()=>({search:location.search,hash:location.hash,href:location.href,params:Object.fromEntries(new URLSearchParams(location.search))}));
+ // AVO-SHOP-CLEAN-1: the shop opens on packaged goods. These older checks assume the whole catalog, so open() adds view=all unless the address already names a shelf, view, maker or item (those infer their own view); addr().params leaves view out.
+ const open=async s=>{const [q,h]=s.split(/(?=#)/),sp=new URLSearchParams(q.replace(/^\?/,''));if(!['shelf','view','from','item'].some(k=>sp.has(k))){sp.set('view','all');}await page.goto(base+'/'+'?'+sp.toString()+(h||''));await page.waitForSelector('#catalog-grid article, #catalog-sentinel')};
+ const addr=()=>page.evaluate(()=>({search:location.search,hash:location.hash,href:location.href,params:(()=>{const o=Object.fromEntries(new URLSearchParams(location.search));delete o.view;return o})()}));
  await open('?shelf=pantry&q=jam');
  assert.equal(await page.locator('[data-filter="pantry"]').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#product-search').inputValue(),'jam');
  assert.ok(await page.locator('#catalog-grid article').count()>0);assert.equal(await page.locator('#catalog-grid article:not([data-category="pantry"])').count(),0);
- await open('?shelf=nonsense&maker=Nobody');
+ await open('?view=all&shelf=nonsense&maker=Nobody');
  assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('#brand-filter').inputValue(),'');assert.equal(await countText(),fullCount);
- await open('?shelf=constructor&q=%20%20'+'a'.repeat(100)+'&maker=Etto');
+ await open('?view=all&shelf=constructor&q=%20%20'+'a'.repeat(100)+'&maker=Etto');
  assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');assert.equal((await page.locator('#product-search').inputValue()).length,80,'q is cut to 80 characters');assert.equal(await page.locator('#brand-filter').inputValue(),'Etto');
  await open('?q=%20%20jam%20');assert.equal(await page.locator('#product-search').inputValue(),'jam','q is trimmed');
  const hostile='<img src=x onerror=alert(1)>';await open('?q='+encodeURIComponent(hostile));await page.waitForTimeout(200);
@@ -79,7 +81,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await open('?utm=x&q=jam&shelf=pantry&maker=Etto');
  await page.locator('#product-search').fill('');await page.locator('[data-filter="all"]').click();await page.locator('#brand-filter').selectOption('');
  a=await addr();assert.equal(a.search,'?utm=x','an unrelated param survives');
- await open('?q=jam');await page.locator('#product-search').fill('');a=await addr();assert.equal(a.search,'');assert.ok(!a.href.includes('?'),'no query string left');
+ await page.goto(base+'/?q=jam');await page.waitForSelector('#catalog-grid article, #catalog-sentinel');await page.locator('#product-search').fill('');a=await addr();assert.equal(a.search,'');assert.ok(!a.href.includes('?'),'no query string left');
  // Typed or pasted text past 80 characters is cut in the box as well, so the box, the results and the address agree, and a reload restores the same search.
  const view=()=>page.evaluate(()=>({box:document.querySelector('#product-search').value,q:new URLSearchParams(location.search).get('q'),ids:filteredProducts().map(p=>p.id)}));
  const roundTrip=async(enter,want,label)=>{await open('');await page.locator('#product-search').focus();await enter();const live=await view();
@@ -103,7 +105,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await page.setViewportSize({width:390,height:844});
  await open(`?item=${encodeURIComponent(fruit)}&shelf=bread&q=zzz&maker=Etto`);await inView(fruit);let s=await shown();
  assert.deepEqual([s.focused,s.pressed,s.q,s.maker],[fruit,'all','',''],'?item wins over the filters');assert.ok(s.ids.includes(fruit));
- await open('');const plain=await shown();
+ await page.goto(base+'/');await page.waitForSelector('#catalog-grid article');const plain=await shown();
  for(const v of ['nope','',encodeURIComponent(id40)+'x','a'.repeat(81)]){await open('?item='+v);await page.waitForTimeout(150);s=await shown();
   assert.deepEqual(s.ids,plain.ids,'unknown item '+v.length);assert.equal(s.focused,null);assert.equal(s.y,plain.y,'nothing scrolls');}
  await open('?item=nope&shelf=pantry&q=jam');s=await shown();assert.deepEqual([s.pressed,s.q,s.focused],['pantry','jam',null],'unknown item: URL filters apply as before');
@@ -113,7 +115,7 @@ await open('?item=gone-fixture&shelf=pantry&q=jam&utm=x&utm=y#market');let n=awa
 assert.deepEqual([n.count,n.text,n.hidden,n.role,n.aboveGrid],[1,GONE,false,'status',true],'unknown item: one status line above the cards');
 a=await addr();assert.equal(a.search,'?shelf=pantry&q=jam&utm=x&utm=y','dead item dropped, other params kept');assert.equal(a.href.endsWith('#market'),true,'hash kept');
 s=await shown();assert.deepEqual([s.pressed,s.q,s.focused],['pantry','jam',null],'filters apply as before');assert.ok(!(await page.content()).includes('gone-fixture</'),'id not echoed');
-await page.locator('[data-filter="fruit"]').click();n=await note();assert.deepEqual([n.count,n.hidden,n.text],[1,true,''],'next filter change hides the line');
+await page.locator('[data-filter="bread"]').click();n=await note();assert.deepEqual([n.count,n.hidden,n.text],[1,true,''],'next filter change hides the line');
 await open('?item=gone-fixture');await page.evaluate(()=>scrollTo(0,300));await page.evaluate(()=>loadMore());n=await note();assert.equal(n.hidden,false,'scroll and loadMore keep the line');
 await page.reload();n=await note();assert.equal(n.hidden,true,'reload has no line');
 for(const v of ['','z'.repeat(81),'a'.repeat(81)]){await open('?item='+v);n=await note();assert.equal(n.hidden,true,'no line for '+v.length);assert.equal((await addr()).search,'?item='+v,'address unchanged for '+v.length)}
@@ -178,7 +180,7 @@ await open('?item='+'a'.repeat(80));assert.equal((await note()).hidden,false,'80
  await open('');await page.evaluate(()=>{limit=catalog.length;renderCatalog()});
  assert.equal(await page.locator('[data-from]').evaluateAll((els,key)=>els.filter(e=>e.dataset.from===key).length,single.key),0,'one-product maker has no button');
  assert.equal(await page.evaluate(()=>[...document.querySelectorAll('#catalog-grid article')].filter(e=>!producers[catalog.find(p=>p.id===e.dataset.productId).producerKey]).every(e=>!e.querySelector('[data-from]'))),true,'no maker has no button');
- for(const key of ['nope',single.key,'constructor','<img src=x onerror=alert(1)>','']){await open(fromUrl(key)+'&utm=x#market');assert.equal(await countText(),fullCount);assert.equal(await page.locator('.catalog-from').isVisible(),false);assert.deepEqual((await addr()).params,{utm:'x'});assert.equal((await addr()).hash,'#market');}
+ for(const key of ['nope',single.key,'constructor','<img src=x onerror=alert(1)>','']){await open(fromUrl(key)+'&utm=x#market');assert.equal(await countText(),defaultCount,'an unusable from link opens the default view');assert.equal(await page.locator('.catalog-from').isVisible(),false);assert.deepEqual((await addr()).params,{utm:'x'});assert.equal((await addr()).hash,'#market');}
  const other=await page.evaluate(k=>catalog.find(p=>!catalog.some(x=>x.producerKey===k&&x.category===p.category)).category,multi.key);
  await open(fromUrl(multi.key)+'&shelf='+other);assert.equal((await fromState()).n,0);assert.equal(await page.locator('#catalog-grid article').count(),0);assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);
  await open(fromUrl(multi.key)+'&q=unfindablefoo&maker=Etto');assert.equal((await fromState()).n,0,'search and brand remain AND filters');await page.locator('[data-clear-from]').click();assert.equal(await countText(),fullCount,'clear resets the combined view');
@@ -208,13 +210,13 @@ await open('?item='+'a'.repeat(80));assert.equal((await note()).hidden,false,'80
  assert.match(await page.locator('#catalog-grid article .availability').first().textContent(),/^Last confirmed /);assert.equal(await page.locator('#catalog-grid .availability',{hasText:/Available today|Limited|Sold out/}).count(),0);
  // AV1222-14: Clear filters shows for any one filter, resets all five, keeps other parameters and the hash, then focuses the search box.
  const clr=page.locator('#clear-filters'),FILTERS=['shelf=pantry','q=jam','maker=Etto','from='+multi.key];
- for(const width of [390,1440]){await page.setViewportSize({width,height:900});await open('');assert.equal(await clr.isVisible(),false,'fresh: hidden');assert.equal(await countText(),fullCount);
-  for(const f of FILTERS){await open('?'+f+'&utm=x#catalog');assert.equal(await clr.isVisible(),true,f);await clr.click();assert.equal(await countText(),fullCount,f);assert.deepEqual((await addr()).params,{utm:'x'},f);assert.equal((await addr()).hash,'#catalog');assert.equal(await page.evaluate(()=>document.activeElement.id),'product-search');assert.equal(await clr.isVisible(),false);}
-  await open('?q=unfindablefoo');assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);assert.equal(await clr.isVisible(),true);await clr.click();assert.equal(await countText(),fullCount);
-  await open('?q=%20%20%20');assert.equal(await clr.isVisible(),false,'spaces are not a filter');
-  await open('?shelf=pantry&q=jam');await page.locator('#product-search').focus();await page.keyboard.press('Tab');await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'clear-filters','Tab reaches it');await page.keyboard.press('Enter');assert.equal(await countText(),fullCount);assert.equal(await page.locator('#brand-filter').inputValue(),'');assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');
+ for(const width of [390,1440]){await page.setViewportSize({width,height:900});await page.goto(base+'/');await page.waitForSelector('#catalog-grid article');assert.equal(await clr.isVisible(),false,'fresh: hidden');assert.equal(await countText(),defaultCount);
+  for(const f of FILTERS){await open('?'+f+'&utm=x#catalog');assert.equal(await clr.isVisible(),true,f);await clr.click();assert.equal(await countText(),defaultCount,f);assert.deepEqual((await addr()).params,{utm:'x'},f);assert.equal((await addr()).hash,'#catalog');assert.equal(await page.evaluate(()=>document.activeElement.id),'product-search');assert.equal(await clr.isVisible(),false);}
+  await open('?q=unfindablefoo');assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);assert.equal(await clr.isVisible(),true);await clr.click();assert.equal(await countText(),defaultCount);
+  await page.goto(base+'/?q=%20%20%20');await page.waitForSelector('#catalog-grid article');assert.equal(await clr.isVisible(),false,'spaces are not a filter');
+  await open('?shelf=pantry&q=jam');await page.locator('#product-search').focus();await page.keyboard.press('Tab');await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'clear-filters','Tab reaches it');await page.keyboard.press('Enter');assert.equal(await countText(),defaultCount);assert.equal(await page.locator('#brand-filter').inputValue(),'');assert.equal(await page.locator('[data-filter="all"]').getAttribute('aria-pressed'),'true');
   await open('?q=jam');const bx=await clr.boundingBox();assert.ok(bx.height>=44,'tap target '+width);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no overflow '+width);}
- await fixture(W);await open('?avail=1');assert.equal(await clr.isVisible(),true,'avail');await clr.click();assert.equal(await avail().isChecked(),false);assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
+ await fixture(W);await open('?avail=1');assert.equal(await clr.isVisible(),true,'avail');await clr.click();assert.equal(await avail().isChecked(),false);assert.equal(await countText(),defaultCount);assert.equal((await addr()).params.avail,undefined);
 // AV1052-02: a shelf with no product in the published catalog is hidden (really invisible, out of the Tab order); All shelves always shows.
  const shelfFix=async(drop,after='')=>{await page.unroute('**/catalog-products.js').catch(()=>{});await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;for(let i=catalog.length;i--;)if(${JSON.stringify(drop)}.includes(catalog[i].category))catalog.splice(i,1);${after}`})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
  const shelves=()=>page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[data-filter]')].map(b=>[b.dataset.filter,{shown:b.getBoundingClientRect().width>0,pressed:b.getAttribute('aria-pressed')}])));
@@ -223,7 +225,7 @@ await open('?item='+'a'.repeat(80));assert.equal((await note()).hidden,false,'80
  const perShelf=await page.evaluate(()=>{const o={};catalog.forEach(p=>o[p.category]=(o[p.category]||0)+1);return o}),total=Object.values(perShelf).reduce((a,b)=>a+b,0);
  for(const width of [390,1440]){await page.setViewportSize({width,height:900});
   for(const drop of [['flowers'],['eggs'],['eggs','flowers']]){await shelfFix(drop);
-   await open('?shelf=flowers&utm=synthetic#market');
+   await open('?view=all&shelf=flowers&utm=synthetic#market');
    sh=await shelves();assert.deepEqual(Object.keys(sh).filter(k=>sh[k].shown),ALL9.filter(k=>!drop.includes(k)),'only the empty shelves vanish: '+drop);
    assert.equal(await page.locator('[data-filter="flowers"]').count(),1,'node kept');assert.equal(await page.getByRole('button',{name:'Flowers',exact:true}).count(),drop.includes('flowers')?0:1,'role query agrees');
    if(drop.includes('flowers')){assert.equal(sh.all.pressed,'true');assert.equal(Object.values(sh).filter(v=>v.pressed==='true').length,1);assert.equal(await countText(),(total-drop.reduce((n,d)=>n+perShelf[d],0))+' selections','falls back to All shelves');assert.deepEqual((await addr()).params,{utm:'synthetic'},'only shelf dropped');assert.equal((await addr()).hash,'#market');}
@@ -247,20 +249,64 @@ await open('?item='+'a'.repeat(80));assert.equal((await note()).hidden,false,'80
  await shelfFix(ALL9.slice(1));await open('?shelf=fruit');sh=await shelves();assert.deepEqual(Object.keys(sh).filter(k=>sh[k].shown),['all']);assert.equal(sh.all.pressed,'true');assert.equal(await countText(),'0 selections');assert.match(await page.locator('#catalog-sentinel').textContent(),/Nothing here/);
  await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await open('?shelf=flowers');sh=await shelves();assert.equal(sh.flowers.shown,true);assert.equal(sh.flowers.pressed,'true','reload with the product restores the shelf');
  await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await page.setViewportSize({width:390,height:844});
- // AV1352-01: one illustration note and an alt suffix while any active card is not an owner photo.
- const NOTE='Some product pictures are illustrations made from photos of our shelves, so a label or package in the store may look different.';
- const noteState=()=>page.evaluate(()=>({notes:[...document.querySelectorAll('p.catalog-note')].map(e=>e.textContent),next:document.querySelector('.catalog-controls').previousElementSibling.textContent,alts:[...document.querySelectorAll('#catalog-grid img')].map(i=>i.alt),names:[...document.querySelectorAll('#catalog-grid article')].map(a=>catalog.find(p=>p.id===a.dataset.productId).name)}));
+// AV1352-01 / AVO-SHOP-CLEAN-1: the three catalog notices (Based in, seasons and deliveries, illustrations) are gone from the page; a generated picture still carries the alt suffix.
+ const NOTICES=['names the town a producer or maker calls home','Our selection changes with the seasons','illustrations made from photos of our shelves','claim that every ingredient'];
+ const noteState=()=>page.evaluate(()=>({body:document.body.innerText,html:document.documentElement.outerHTML,notes:[...document.querySelectorAll('p.catalog-note')].map(e=>e.textContent),alts:[...document.querySelectorAll('#catalog-grid img')].map(i=>i.alt),names:[...document.querySelectorAll('#catalog-grid article')].map(a=>catalog.find(p=>p.id===a.dataset.productId).name)}));
+ const noNotices=(ns,why)=>{for(const g of NOTICES){assert.ok(!ns.body.includes(g)&&!ns.html.includes(g),why+': notice gone: '+g)}};
  const imageFixture=async js=>{await page.unroute('**/catalog-products.js').catch(()=>{});await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+';'+js})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
- await open('');let ns=await noteState();assert.equal(ns.notes.length,3,'real catalog: two notes plus the illustration note');assert.equal(ns.notes[2],NOTE);assert.equal(ns.next,NOTE,'note sits last, right before the controls');
+ await open('');let ns=await noteState();noNotices(ns,'real catalog');
  assert.ok(ns.alts.length>0&&ns.alts.every(a=>a.endsWith(' (illustration)')&&!a.endsWith(' (illustration) (illustration)')),'every generated picture is flagged');
- await page.locator('#product-search').fill('Cambria');ns=await noteState();assert.equal(ns.notes.length,3,'a filter does not add or remove the note');await page.locator('#product-search').fill('');
+ await page.locator('#product-search').fill('Cambria');ns=await noteState();noNotices(ns,'filtered');await page.locator('#product-search').fill('');
  await imageFixture(`catalog.forEach((p,i)=>{p.image='assets/products/photo-0123456789abcdef.'+(i%2?'jpg':'png');if(i===0)p.imageAlt='Owner photo alt'});`);await open('');ns=await noteState();
- assert.equal(ns.notes.length,2,'all owner photos: no illustration note');assert.ok(!ns.notes.includes(NOTE));assert.equal(ns.alts[0],'Owner photo alt');assert.equal(ns.alts[1],ns.names[1],'owner photo keeps its plain alt');
+ noNotices(ns,'all owner photos');assert.equal(ns.alts[0],'Owner photo alt');assert.equal(ns.alts[1],ns.names[1],'owner photo keeps its plain alt');
  await imageFixture(`catalog.forEach((p,i)=>{p.image=i===1?'assets/products/photo-0123456789abcdef.jpg':i===2?'assets/products/photo-0123456789ABCDEF.jpg':i===3?'assets/products/photo-0123456789abcdef.jpg\\n':i===4?'assets/products/photo-0123456789abcdef.jpeg':'assets/products/photo-0123456789abcdef.png'});`);await open('');ns=await noteState();
- assert.deepEqual([ns.notes.length,ns.notes[2]],[3,NOTE],'mixed: note shown');assert.deepEqual(ns.alts.slice(0,6).map((a,i)=>a.endsWith(' (illustration)')),[false,false,true,true,true,false],'only the exact installed form is exempt');
+ noNotices(ns,'mixed');assert.deepEqual(ns.alts.slice(0,6).map((a,i)=>a.endsWith(' (illustration)')),[false,false,true,true,true,false],'only the exact installed form is exempt');
  await imageFixture(`catalog.forEach((p,i)=>{p.image=i===0?'assets/products/a.webp':'assets/products/photo-0123456789abcdef.jpg'});`);await open('');ns=await noteState();const ownerName=ns.names[5];
- await page.locator('#product-search').fill(ownerName);ns=await noteState();assert.ok(ns.alts.length>0&&ns.alts.every(a=>!a.endsWith(' (illustration)')),'filtered to owner photos only');assert.equal(ns.notes.length,3,'mixed: note persists when the view shows only owner photos');
- await imageFixture(`catalog.length=0;`);await open('');ns=await noteState();assert.equal(ns.notes.length,2,'empty catalog: no illustration note');
+ await page.locator('#product-search').fill(ownerName);ns=await noteState();assert.ok(ns.alts.length>0&&ns.alts.every(a=>!a.endsWith(' (illustration)')),'filtered to owner photos only');noNotices(ns,'owner photos only');
+ await imageFixture(`catalog.length=0;`);await open('');ns=await noteState();noNotices(ns,'empty catalog');
+ await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');
+ // AVO-SHOP-CLEAN-1: the shop opens on packaged goods. Produce = fruit, vegetables, flowers; photo-product-018 (tortilla chips, filed under vegetables) is sold in a bag, so it is packaged.
+await open('');
+ {const PRODUCE=['fruit','vegetables','flowers'],BAGGED='photo-product-018';
+  const isProduce=(cat,id)=>PRODUCE.includes(cat)&&id!==BAGGED;
+  const cards=()=>page.evaluate(()=>[...document.querySelectorAll('#catalog-grid article')].map(a=>({id:a.dataset.productId,cat:a.dataset.category})));
+  const allCat=await page.evaluate(()=>catalog.map(p=>({id:p.id,cat:p.category}))),wantPack=allCat.filter(p=>!isProduce(p.cat,p.id)).length,wantProd=allCat.length-wantPack;
+  assert.ok(wantPack>0&&wantProd>0&&allCat.some(p=>p.id===BAGGED&&p.cat==='vegetables'),'fixture: both views have products and the bagged item is filed under vegetables');
+  const pressed=()=>page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[data-view]')].map(b=>[b.dataset.view,b.getAttribute('aria-pressed')])));
+  const vis=f=>page.locator(`[data-filter="${f}"]`).isVisible();
+  // First paint: the page as served already says Packaged goods and offers no produce shelf; the grid is never filled with the wrong view.
+  await page.addInitScript(()=>{window.__wrong=0;document.addEventListener('DOMContentLoaded',()=>{},{once:true});new MutationObserver(()=>{const g=document.getElementById('catalog-grid');if(g&&g.querySelector('article[data-category="fruit"],article[data-category="vegetables"]:not([data-product-id="photo-product-018"]),article[data-category="flowers"]'))window.__wrong++}).observe(document,{childList:true,subtree:true})});
+  const raw=await (await page.request.get(base+'/')).text();
+  assert.match(raw,/<button data-view="packaged" aria-pressed="true" class="selected">Packaged goods<\/button>/,'served page: packaged goods selected');
+  for(const f of PRODUCE)assert.match(raw,new RegExp(`<button data-filter="${f}" aria-pressed="false" hidden>`),'served page: no produce shelf '+f);
+  await page.goto(base+'/');await page.waitForSelector('#catalog-grid article');
+  assert.equal(await page.evaluate(()=>window.__wrong),0,'the wrong view is never drawn');
+  assert.equal(await countText(),wantPack+' selections');assert.deepEqual(await pressed(),{packaged:'true',produce:'false',all:'false'});
+  assert.ok((await cards()).every(c=>!isProduce(c.cat,c.id)),'default view: packaged goods only');assert.equal(new URL(page.url()).search,'','the default needs no address');
+  for(const f of PRODUCE)assert.equal(await vis(f),false,'produce shelf hidden in packaged view: '+f);
+  for(const f of ['pantry','dairy','bread'])assert.equal(await vis(f),true,'packaged shelf offered: '+f);
+  // Choosing a view changes the address (shareable) and the count; the other views are one click away.
+  await page.locator('[data-view="produce"]').click();assert.equal(new URL(page.url()).search,'?view=produce');assert.equal(await countText(),wantProd+' selections');assert.ok((await cards()).every(c=>isProduce(c.cat,c.id)));
+  assert.equal(await vis('fruit'),true);assert.equal(await vis('pantry'),false);assert.equal(await page.locator('#clear-filters').isVisible(),true,'a non-default view can be cleared');
+  await page.locator('[data-view="all"]').click();assert.equal(new URL(page.url()).search,'?view=all');assert.equal(await countText(),allCat.length+' selections');assert.equal(await vis('pantry'),true);assert.equal(await vis('fruit'),true);
+  await page.locator('[data-view="packaged"]').click();assert.equal(new URL(page.url()).search,'');assert.equal(await countText(),wantPack+' selections');
+  // Shared links: ?view=, explicit ?view=packaged, an older ?shelf= link, ?item= on a produce card, a maker link.
+  await page.goto(base+'/?view=produce');await page.waitForSelector('#catalog-grid article');assert.equal(await countText(),wantProd+' selections');assert.equal((await pressed()).produce,'true');
+  await page.goto(base+'/?view=packaged');await page.waitForSelector('#catalog-grid article');assert.equal(await countText(),wantPack+' selections');
+  await page.goto(base+'/?view=all');await page.waitForSelector('#catalog-grid article');assert.equal(await countText(),allCat.length+' selections');
+  await page.goto(base+'/?view=nonsense');await page.waitForSelector('#catalog-grid article');assert.equal(await countText(),wantPack+' selections');assert.equal(new URL(page.url()).search,'','a bad view is dropped');
+  await page.goto(base+'/?shelf=fruit');await page.waitForSelector('#catalog-grid article');assert.equal((await pressed()).produce,'true','an older shelf link opens on its own view');assert.ok((await cards()).every(c=>c.cat==='fruit'));assert.equal(new URL(page.url()).search,'?shelf=fruit');
+  await page.goto(base+'/?view=packaged&shelf=fruit');await page.waitForSelector('#catalog-grid article');assert.equal(new URL(page.url()).search,'?view=packaged','a shelf outside the view is dropped');assert.equal(await countText(),wantPack+' selections');
+  const prodId=allCat.find(p=>isProduce(p.cat,p.id)).id;await page.goto(base+'/?item='+prodId);await page.waitForSelector('#catalog-grid article');assert.equal((await pressed()).all,'true','a linked produce item opens all items');assert.ok((await cards()).some(c=>c.id===prodId));
+  // Search and the maker filter work inside the view; an empty result points at All items.
+  await page.goto(base+'/');await page.waitForSelector('#catalog-grid article');
+  await page.locator('#product-search').fill('jam');let r=await cards();assert.ok(r.length>0&&r.every(c=>!isProduce(c.cat,c.id)),'search inside packaged');assert.equal(new URL(page.url()).search,'?q=jam');
+  await page.locator('#product-search').fill('jalapeno');assert.equal((await cards()).length,0,'a produce-only search finds nothing in packaged goods');assert.match(await page.locator('#catalog-sentinel').textContent(),/All items/);
+  await page.locator('[data-view="all"]').click();assert.ok((await cards()).length>0,'the same search finds it under all items');await page.locator('#clear-filters').click();
+  assert.equal(await countText(),wantPack+' selections','clear filters returns to packaged goods');assert.equal(new URL(page.url()).search,'');assert.equal((await pressed()).packaged,'true');
+  const mk=await page.evaluate(()=>{const m={};catalog.forEach(p=>{if(p.category==='pantry')m[p.brand]=(m[p.brand]||0)+1});return Object.keys(m).sort()[0]});
+  await page.locator('#brand-filter').selectOption(mk);r=await cards();assert.ok(r.length>0&&r.every(c=>!isProduce(c.cat,c.id)),'maker filter inside packaged');await page.locator('#clear-filters').click();
+ }
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
  const result={checkedAt:new Date().toISOString(),all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
