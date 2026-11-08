@@ -343,7 +343,8 @@ class Dispatcher:
         names = [n for n, _ in found]
         best = found[0]
         pick = dict(found).get(skill_name)
-        if skill_name not in names or (skill_name != best[0] and pick is not None and best[1] <= pick * 1.10):
+        tied = len(found) > 1 and found[0][1] <= found[1][1] * 1.10  # leading pair within 10%, whichever the model picked
+        if skill_name not in names or tied or (skill_name != best[0] and pick is not None and best[1] <= pick * 1.10):
             first = self.registry.get(skill_name)
             other = self.registry.get(best[0] if best[0] != skill_name else (names[1] if len(names) > 1 else ""))
             if first is None or other is None:

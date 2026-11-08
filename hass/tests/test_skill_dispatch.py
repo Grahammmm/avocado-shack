@@ -486,6 +486,24 @@ class AgreementTests(SkillCase):
         self.assertEqual(self.replies(), ["Do you want to add a hike, or change an item's description?"])
         self.nothing_written()
 
+    def test_a_near_tie_asks_even_when_the_model_picked_the_leader(self):
+        self.fake_router([("hike.add", 4.0), ("item.describe", 3.8)])
+        self.script(OPEN1, skill_reply("hike.add", **MILL))
+        self.assertEqual(self.say(OPEN1), "question")
+        self.assertEqual(self.replies(), ["Do you want to add a hike, or change an item's description?"])
+        self.nothing_written()
+
+    def test_the_ten_percent_boundary_for_the_leading_pair(self):
+        self.fake_router([("hike.add", 4.4), ("item.describe", 4.0)])  # exactly 10%: tied
+        self.script(OPEN1, skill_reply("hike.add", **MILL))
+        self.assertEqual(self.say(OPEN1), "question")
+
+    def test_a_lead_over_ten_percent_goes_on_to_the_draft(self):
+        self.fake_router([("hike.add", 4.6), ("item.describe", 4.0)])
+        self.script(LIVE1, skill_reply("hike.add", **MILL))
+        draft, _ = self.propose(LIVE1)
+        self.assertEqual(draft["state"], "proposed")
+
     def test_a_clear_agreement_goes_on_to_the_draft(self):
         self.fake_router([("hike.add", 5.0), ("item.describe", 1.0)])
         self.script(LIVE1, skill_reply("hike.add", **MILL))
