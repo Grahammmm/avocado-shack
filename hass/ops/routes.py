@@ -21,6 +21,7 @@ import copy
 import re
 import unicodedata
 
+from hass import voice
 from hass.content_model import TEXT_LIMITS, _https
 from hass.field_words import field_list
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
@@ -56,7 +57,9 @@ def _route_edit(content, args, ctx):
         return Refused(f"unknown route idea {route_id}")
     changes = {f: args[f] for f in ROUTE_EDITABLE if f in args}
     if not changes:
-        return NeedsDetails(list(ROUTE_EDITABLE), "What should change on this route idea?")
+        title = idea.get("title")
+        return NeedsDetails(list(ROUTE_EDITABLE), "What would you like to change about the route idea "
+                            + (voice.quote(title) if isinstance(title, str) and title.strip() else "you mean") + "?")
     if long := _too_long(args):
         return long
     changes = {f: v for f, v in changes.items() if _spaced(idea.get(f)) != _spaced(v)}

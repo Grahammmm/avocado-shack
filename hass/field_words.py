@@ -35,6 +35,16 @@ FIELD_WORDS = {
     "time": "the time",
     "capacity": "the guest limit",
     "available": "availability",
+    "meetingAddress": "the street address of the meeting place",
+    "distance": "the distance",
+    "difficulty": "how hard it is",
+    "duration": "how long it takes",
+    "meetTime": "when to meet",
+    "walkTime": "when the walk starts",
+    "returnTime": "when we get back",
+    "invitation": "the invitation text",
+    "bring": "what to bring",
+    "accessNote": "the note about getting there",
 }
 
 

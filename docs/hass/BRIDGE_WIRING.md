@@ -30,6 +30,7 @@ Closed key set (any other key is refused):
 | key | holds | notes |
 |---|---|---|
 | `ownerChat` | `iMessage;-;<owner address>` | one-to-one owner chat only |
+| `gChat` | `iMessage;-;<G address>` | optional; G's own one-to-one chat for `problems` and `weekly` (text only). Leave it out and nothing but the owner chat is read or sent. Must match `gChat` in the host config and never be the owner chat |
 | `receiverUrl` | `http://<agentorange tailnet name>:8795` | host must be loopback or in 100.64.0.0/10; port 8795; no path/credentials |
 | `bbPort` | integer | BlueBubbles port shown in its settings (default 1234) |
 | `bbPasswordFile` | absolute path | file name `bb-password`: the BlueBubbles **server password**, 0600. Password name only; value never leaves the Mac |

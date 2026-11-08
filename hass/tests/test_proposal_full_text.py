@@ -74,7 +74,7 @@ class ProposalTextTests(unittest.TestCase):
         lines = _text(("products", "p2", None, record)).splitlines()
         self.assertEqual(lines[1:4], ["A new product", f"  the description: {LONG}", TAIL[0]])  # AV1737-06
         line = _text(("products", "p2", record, None)).splitlines()[1]
-        self.assertEqual(line, "this, this: from more than I can show here to nothing")
+        self.assertEqual(line, "Remove this product.")
 
     def test_every_product_field_at_its_limit_is_uncut_and_reply_lines_last(self):
         after = {f: f[0] * n for f, n in TEXT_LIMITS["product"].items()}

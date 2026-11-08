@@ -57,7 +57,7 @@ class TurnRsvpOnTests(HikeTestCase):
     def test_both_given_keeps_the_existing_not_both_question(self):
         repo = self.off_repo()
         result = self.assertAsks(repo, {"rsvpEnabled": True, "capacity": 8, "noCapacityLimit": True})
-        self.assertEqual(result["question"], "Give either a new capacity or noCapacityLimit true, not both.")
+        self.assertEqual(result["question"], "Please give either a new guest limit or no limit, not both.")
 
     def test_turning_on_keeps_an_existing_capacity(self):
         repo = self.off_repo(capacity=10)

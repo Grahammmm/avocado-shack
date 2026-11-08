@@ -14,7 +14,7 @@ from hass.tests.test_hike_ops import HIKE, HIKE_ID, NOW, HikeTestCase, _req
 
 OFF = {**HIKE, "rsvpEnabled": False, "capacity": 12}
 OFF_BARE = {k: v for k, v in OFF.items() if k != "capacity"}
-CONFLICT = "Give either a capacity or noCapacityLimit true, not both."
+CONFLICT = "Please give either a guest limit or no limit, not both."
 OFF_WARNING = f"{HIKE_ID}: RSVPs are off, so capacity 12 has no effect until RSVPs are turned on"
 FIELDS = ["capacity", "noCapacityLimit"]
 
@@ -110,7 +110,7 @@ class OffCapacityConflictTests(HikeTestCase):
         result = self.assertRejected(repo, "needs-details",
                                      ("hike.update", {"id": HIKE_ID, "capacity": 7, "noCapacityLimit": True}))
         self.assertEqual((result["missing"], result["question"]),
-                         (FIELDS, "Give either a new capacity or noCapacityLimit true, not both."))
+                         (FIELDS, "Please give either a new guest limit or no limit, not both."))
         self.assertNotIn("warnings", result)
         self.assertEqual(_snapshot(repo), before)
         repo = self.repo()

@@ -21,6 +21,8 @@ from hass import conversation, corrlog, interpret_check, live_policy, margins, m
 from hass.content_model import REPO_ROOT
 from hass.tests.test_conversation import CHAT, OWNER, ConversationTestCase, _ops
 from hass.tests.test_editor import DESC, HOURS, NEW_HOURS
+from hass.tests.test_hike_ops import HIKE, HIKE_ID
+from hass.tests.test_undo import H06TestCase
 
 q = voice.quote
 HASS = REPO_ROOT / "hass"
@@ -376,6 +378,73 @@ class ProposalWording(ConversationTestCase):
         self.propose("hours")
         self.say("no")
         self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
+
+
+class OperationQuestions(H06TestCase):
+    """What the operations themselves ask Mike (a missing detail) and how a removal is worded, through the real editor:
+    plain words and names, no fallback line, nothing the outbox had to replace."""
+
+    def fallbacks(self):
+        return [r for r in self.conv.log.rows() if r.get("kind") == "voice-fallback"]
+
+    def test_a_hike_edit_with_only_its_id_asks_what_to_change_by_the_hikes_name(self):
+        self.editor.prepare([{"op": "hike.create", "args": HIKE}])
+        self.interp.mapping["new walk"] = _ops(("hike.create", HIKE))
+        self.apply("new walk")
+        self.interp.mapping["change walk"] = _ops(("hike.update", {"id": HIKE_ID}))
+        self.conv.outbox.strict = False  # as in service: a message that breaks a rule would be swapped for the safe line
+        self.assertEqual(self.say("change walk"), "needs-details")
+        [reply] = self.replies()
+        self.assertNotEqual(reply, voice.SAFE_LINE)
+        self.assertEqual(self.fallbacks(), [])
+        self.assertTrue(reply.startswith(f"What would you like to change about the hike {HIKE['title']}? You can change: "), reply)
+        self.assertNotIn(HIKE_ID, reply)
+        self.assertNotIn("noCapacityLimit", reply)
+        self.assertEqual(voice.check(reply), [])
+
+    def test_a_product_edit_with_only_its_id_still_asks_by_name(self):
+        self.interp.mapping["change soap"] = _ops(("product.edit", {"id": "photo-product-001"}))
+        self.conv.outbox.strict = False
+        self.assertEqual(self.say("change soap"), "needs-details")
+        [reply] = self.replies()
+        self.assertTrue(reply.startswith("What would you like to change about "), reply)
+        self.assertNotIn("photo-product-001", reply)
+        self.assertEqual(self.fallbacks(), [])
+
+    def test_no_question_in_the_operations_shows_an_id_or_key(self):
+        offenders = []
+        for path in sorted((HASS / "ops").glob("*.py")):
+            for call in (n for n in ast.walk(ast.parse(path.read_text("utf-8"))) if isinstance(n, ast.Call)):
+                if getattr(call.func, "id", None) != "NeedsDetails" or len(call.args) < 2: continue
+                question = call.args[1]
+                for node in ast.walk(question):
+                    key = node.slice.value if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) else None
+                    if key in ("id", "key") or isinstance(node, ast.Name) and node.id in ("event_id", "route_id"):
+                        offenders.append(f"{path.name}:{call.lineno}")
+                for _line, text in _strings(question):
+                    if voice.check(text, long_ok=True): offenders.append(f"{path.name}:{call.lineno} {text!r}")
+        self.assertEqual(offenders, [])
+
+    def test_undoing_a_new_route_idea_says_the_route_idea_will_be_removed(self):
+        from hass.tests.test_route_add import NEW
+        request = "Add route " + " ".join(NEW.values())
+        self.interp.mapping[request] = _ops(("route.add", NEW))
+        route = self.apply(request)
+        self.assertEqual(self.say("undo " + route["code"]), "proposed")
+        [proposal] = self.replies()
+        self.assertIn(f"Remove the route idea {NEW['title']}.", proposal)
+        self.assertNotIn("nothing", proposal)
+        self.assertNotIn("from more than I can show", proposal)
+        undo = self.drafts()[-1]
+        self.say("show " + undo["code"])
+        [shown] = self.replies()
+        self.assertIn(f"Remove the route idea {NEW['title']}.", shown)
+        self.say("yes")
+        self.replies()
+        self.say("show " + undo["code"])
+        [saved] = self.replies()
+        self.assertIn(f"The route idea {NEW['title']} was removed.", saved)
+        self.assertEqual(self.fallbacks(), [])
 
 
 if __name__ == "__main__":

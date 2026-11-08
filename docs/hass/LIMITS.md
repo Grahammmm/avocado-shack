@@ -88,7 +88,10 @@ Longer text is refused and nothing is changed; shorten it and send it again.
   numbers, addresses and links blanked. The state backup does not copy that folder.
 - Only the numbers listed as `gSenders` in the config can ask about it. Send `problems` for the last ten, or `weekly` for the
   three most common problems with one suggested fix each; the morning report made for G adds the weekly line under it. `gSenders` is empty by default, so nothing answers until it is set; a number may not be both in `gSenders` and
-  an owner number. G's chat must also be forwarded by the bridge. Mike never sees any of this.
+  an owner number. `gChat` (G's own one-to-one chat, never Mike's chat) must be set with it: Hass answers `problems` and
+  `weekly` only in that chat, as text, and ignores them anywhere else. The Mac forwarder carries that chat only when its own
+  config also has the same `gChat`; at most two such answers wait at once, so they can never hold up a reply to Mike. Mike
+  never sees any of this.
 - `history` lines no longer show change codes, so an older change cannot be undone by code from the chat; `undo` takes back the
   last change.
 
