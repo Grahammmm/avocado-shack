@@ -12,10 +12,10 @@ Nothing here approves, applies, releases or sends anything. Every draft goes thr
 proposal, owner ``yes <code>``), exactly as a raw-ops draft does. The owner's texts are private: never logged or printed.
 
 Interface assumptions about SKILLS-FW-2 (router / prompt / reply check), all optional, all fail-safe:
-  * ``hass.skills.router.candidates(text, hints, open_request, attachment)`` returns up to 3 candidates, best first, each a
+  * ``hass.skills.router.candidates(text, hints, open_request, attachment, skills)`` returns up to 3 candidates, best first, each a
     ``(name, score)`` pair, a dict with ``skill``/``name`` and ``score``, or an object with ``.skill``/``.name`` and ``.score``.
-    If the module is missing, or raises, the agreement rule (spec 2.5) is skipped and the model's skill is used: a wrong
-    choice can only produce a wrong DRAFT, which the owner still has to approve by code.
+    If the module is missing, or raises, agreement cannot be established (spec 2.5): nothing is drafted and the owner is asked
+    which task he means; the answer he then gives stands.
   * The interpreter receives the continue-mode snapshot through its existing ``recent`` argument (keys ``question``,
     ``earlier``, plus ``skill``, ``slots``, ``asked_slot``, ``draft``); the Skills section of its prompt is FW-2's.
   * ``hass.interpret_check.check_skill`` is NOT needed: this module validates the reply shape and every slot itself.
@@ -346,22 +346,31 @@ class Dispatcher:
         return [s for s in self.registry.active() if any(sl.kind == "attachment" and sl.from_attachment for sl in s.slots)]
 
     # routing agreement (spec 2.5 step 3) -------------------------------------------------------------------
-    def _router_names(self, texts, req, attachments):
+    def _hints(self, texts, now):
+        """The nl_prep hints the router scores with; never raises (a hint is a convenience)."""
+        try:
+            text = " ".join(texts)
+            ctx = self._ctx(now, texts)
+            return nl_prep.make_hinter(ctx.content)(text, ctx.today, self.conv.aliases())
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _router_names(self, texts, req, attachments, now):
         """The router's top three skill names, best first, as ``[(name, score)]``; None when the router is missing or fails."""
         try:
             router = importlib.import_module("hass.skills.router")
-            return candidates_of(router.candidates(" ".join(texts), {}, req, bool(attachments), self.registry))
+            return candidates_of(router.candidates(" ".join(texts), self._hints(texts, now), req, bool(attachments), self.registry))
         except Exception:  # noqa: BLE001 - agreement cannot be established; the caller asks instead of guessing
             return None
 
-    def _agreement(self, texts, req, picks, attachments, has_slots=True):
+    def _agreement(self, texts, req, picks, attachments, now, has_slots=True):
         """None to accept the model's skill(s) ``picks``, else ``(question, offered names)``: the one question that asks which task
         the owner means. Nothing is drafted on a pick the code cannot back: the router missing or failing, a pick outside its
         top three, a split between the leading two, or no second opinion and nothing filled in. When the owner already chose
         among the names we offered, the pick he then makes stands."""
         if req is not None and not req["skill"] and set(picks) <= set((req["ask"] or {}).get("agree") or ()):
             return None
-        found = self._router_names(texts, req, attachments)
+        found = self._router_names(texts, req, attachments, now)
         names = [n for n, _ in found or []]
         if found is None or (not found and not has_slots):
             offered = list(dict.fromkeys(picks))
@@ -370,11 +379,11 @@ class Dispatcher:
         else:
             best, near = found[0], len(found) > 1 and found[0][1] - found[1][1] <= NEAR_TIE * found[0][1]
             if any(p not in names for p in picks):
-                offered = list(dict.fromkeys([best[0], *picks]))[:3]
+                offered = list(dict.fromkeys([*picks, best[0]]))[:3]
             elif len(picks) == 1 and near:  # the leading pair is ambiguous, whichever one was picked
-                offered = [found[0][0], found[1][0]]
+                offered = list(dict.fromkeys([picks[0], found[0][0], found[1][0]]))[:2]
             elif len(picks) == 1 and picks[0] != best[0] and best[1] - dict(found)[picks[0]] <= NEAR_TIE * best[1]:
-                offered = [best[0], picks[0]]
+                offered = [picks[0], best[0]]
             else:
                 return None
         labels = list(dict.fromkeys(self.registry.get(n).label for n in offered if self.registry.get(n) is not None))
@@ -422,7 +431,8 @@ class Dispatcher:
             self.conv._reply(PHOTO_MISMATCH.format(labels=labels))
             return "question"
         if not same:
-            asked = self._agreement(_joined(req, msg), req, [name], attachments, has_slots=any(v not in (None, "", []) for v in result["slots"].values()))
+            asked = self._agreement(_joined(req, msg), req, [name], attachments, now,
+                                    has_slots=any(v not in (None, "", []) for v in result["slots"].values()))
             if asked:
                 return self._ask_which(msg, now, req, asked, attachments)
         revises = result.get("revises") or (req["draft_code"] if same and req["state"] == "drafted" else None)
@@ -559,7 +569,7 @@ class Dispatcher:
         texts = _joined(req, msg)
         attachments = req["attachments"] if req else []
         asked = None if any(self.registry.get(c.get("skill")) is None for c in result["calls"]) else self._agreement(
-            texts, req, [c.get("skill") for c in result["calls"]], attachments,
+            texts, req, [c.get("skill") for c in result["calls"]], attachments, now,
             has_slots=any(v not in (None, "", []) for c in result["calls"] for v in c["slots"].values()))
         if asked:
             return self._ask_which(msg, now, req, asked, attachments)
