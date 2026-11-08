@@ -46,7 +46,7 @@ START = datetime(2026, 11, 8, 17, 0, tzinfo=timezone.utc)  # Sunday 09:00 PST, a
 CODES = ("write-before-yes", "wrong-diff", "edit-undeclared", "undo-not-identical", "residue-undeclared",
          "wrong-disposition", "wrong-reply", "wrong-ops", "wrong-skill", "wrong-preview", "wrong-turn", "jargon",
          "stale-row", "bad-row", "bad-plan", "no-skill")
-FAULTS = ("write-on-prepare", "undo-leaves")  # self-test only: a skill path that writes unasked / an undo that leaves a trace
+FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "skip-later-preview")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a revision whose preview is never requested
 PLAN_KEYS = {"id", "plan", "kind", "slots", "ctx", "expect_ops", "expect_error", "version", "note", "must_fail"}
 CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan"}
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
@@ -178,10 +178,12 @@ class RecordingPreviewer:
     """Stands in for the browser screenshot: records the preview request (what would be shown) and returns a tiny
     private file, so the proposal and the result checks go the normal path."""
 
-    def __init__(self): self.requests = []
+    def __init__(self, skip_after=None):
+        self.requests, self.skip_after, self.calls = [], skip_after, 0  # skip_after: self-test fault, later previews are never requested
 
     def capture(self, files, target, out_png, assets=None):
-        self.requests.append(copy.deepcopy(dict(target)))
+        self.calls += 1
+        if self.skip_after is None or self.calls <= self.skip_after: self.requests.append(copy.deepcopy(dict(target)))
         p = Path(out_png)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -224,7 +226,8 @@ class Scratch:
         editor._write_json(self.repo.state / "config.json", {**cfg, "settings": SETTINGS})
         self.wt, self.now, self.n, self.out = self.repo.wt, START, 0, FixtureAdapter()
         self.interp = SkillInterpreter(mapping, skills, self._ctx)
-        self.previewer = RecordingPreviewer()
+        self.previewer = RecordingPreviewer(skip_after=1 if fault == "skip-later-preview" else None)
+        self.turn_previews = []  # the preview requests each message caused, in message order
         self.editor = _fault_editor(conversation.Editor, self, str(self.repo.state), fault)
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now, self.previewer)
         self.Inbound = conversation.Inbound
@@ -239,9 +242,11 @@ class Scratch:
         self.n += 1
         self.now += timedelta(minutes=1)
         msg = self.Inbound(f"tk-{self.n}", CHAT, OWNER, text, False, "new", self.now.isoformat())
+        asked = len(self.previewer.requests)
         disposition = self.conv.handle(msg)
         before = len(self.out.sent)
         self.conv.flush(self.out)
+        self.turn_previews.append(self.previewer.requests[asked:])
         return disposition, [r["text"] for r in self.out.sent[before:]]
 
     def head(self): return _git(self.wt, "rev-parse", "HEAD").strip()
@@ -269,12 +274,22 @@ def _fault_editor(base, scratch, state, fault):
         def apply(self, change_id, draft_hash):
             out = super().apply(change_id, draft_hash)
             self.applies += 1
-            if fault == "undo-leaves" and self.applies == 2:
+            if fault == "undo-leaves" and self.applies == 2:  # a real, fully regenerated leftover: the site matches its content
+                from hass import sitegen
+                from hass.content_model import load_and_validate
                 path = scratch.wt / "hass" / "content" / "store.json"
                 data = json.loads(path.read_text("utf-8"))
                 data["town"] = data["town"] + " Leftover"
                 path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
+                content = load_and_validate(scratch.wt / "hass" / "content", scratch.wt / "storefront-mockup")
+                sitegen.write_files(sitegen.render(content, scratch.wt / "hass" / "templates"), scratch.wt)
                 _git(scratch.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-a", "-m", "leftover")
+            if fault == "undo-stale-generated" and self.applies == 2:  # content restored, one generated file still shows the edit
+                path = scratch.wt / "storefront-mockup" / "catalog-products.js"
+                path.write_text(path.read_text("utf-8") + "// still the edited text\n", "utf-8")
+                _git(scratch.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-a", "-m", "stale")
+            if fault == "undo-dirty" and self.applies == 2:  # nothing committed, an untracked file stays in the worktree
+                (scratch.wt / "storefront-mockup" / "left-behind.txt").write_text("x", "utf-8")
             return out
     return FaultEditor(state)
 
@@ -383,8 +398,9 @@ def _drive(row, expect, sc, skills, skill, names, res):
     draft = drafts[-1]
     ops = json.loads(draft["ops_json"])
     if "ops" in expect and ops != expect["ops"]: res.fail("wrong-ops", f"draft ops {json.dumps(ops, sort_keys=True)[:300]} != expected")
-    _check_preview(expect, sc, chosen[0] if chosen else None, res)
-    if "diff" not in expect: res.fail("bad-row", "a row that ends in a draft must say expect.diff"); return
+    for key in ("diff", "files", "preview"):
+        if key not in expect: res.fail("bad-row", f"a row that ends in a draft must say expect.{key}"); return
+    _check_preview(expect, sc.turn_previews[len(row["texts"]) - 1], chosen[0] if chosen else None, res)
     # a wrong code never approves, and a draft that was never approved has written nothing
     try: sc.say("yes zzzz")
     except Exception as exc:  # noqa: BLE001
@@ -404,20 +420,41 @@ def _drive(row, expect, sc, skills, skill, names, res):
     disposition, out = sc.say(f"yes {sc.drafts()[-1]['code']}")
     flat += out
     ufiles, leftover = tree_diff(sc.wt, base_head)
-    from hass.editor import GENERATED_PATHS  # the editor sorts JSON keys on every write, so bytes differ after an undo:
-    ufiles = [f for f in ufiles if f not in GENERATED_PATHS and not (f.startswith("hass/content/") and f.endswith(".json"))] + sorted({e["file"] for e in leftover})  # content is judged parsed, generated files through it
     wanted = expect.get("residue", [])
-    if not leftover and not ufiles:
+    hard = _undo_problems(sc, ufiles, leftover)
+    if hard: res.fail("undo-not-identical", "; ".join(hard))
+    elif not leftover:
         if wanted: res.fail("undo-not-identical", f"the row declares residue {wanted} but undo left nothing")
     elif chosen and not any(_residue_declared(s) for s in chosen):
-        res.fail("residue-undeclared", "undo left " + _fmt(leftover or ufiles) + " but the skill declares no residue")
+        res.fail("residue-undeclared", "undo left " + _fmt(leftover) + " but the skill declares no residue")
     elif leftover != _norm(wanted, leftover):
-        res.fail("undo-not-identical", "undo left " + _fmt(leftover or ufiles) + f" but the row declares {_fmt(wanted)}")
-    res.facts["undo"] = "identical" if not (leftover or ufiles) else "residue"
+        res.fail("undo-not-identical", "undo left " + _fmt(leftover) + f" but the row declares {_fmt(wanted)}")
+    res.facts["undo"] = "identical" if not (hard or leftover) else "residue"
     words = sorted(set(expect.get("allow_words", [])))
     for text in flat:
         problems = plain_words_problems(text, words)
         if problems: res.fail("jargon", f"owner reply shows {sorted(set(problems))}: {text.splitlines()[0][:80]!r}")
+
+
+def _undo_problems(sc, ufiles, leftover):
+    """What the real worktree shows after undo, apart from a declared content residue: it is clean (nothing
+    uncommitted or untracked), every file that is not content JSON is as at the start, the site files equal a fresh
+    render of the restored content (the editor re-sorts keys, so they are judged against that render, not against
+    the start's bytes)."""
+    from hass.content_model import ContentError, load_and_validate
+    from hass.editor import GENERATED_PATHS
+    from hass import sitegen
+    out = []
+    if sc.dirty(): out.append("the worktree is not clean after undo: " + sc.dirty().replace("\n", ", ")[:160])
+    contentish = lambda f: f.startswith("hass/content/") and f.endswith(".json")  # noqa: E731 - the editor re-sorts keys; judged parsed
+    other = [f for f in ufiles if not contentish(f) and f not in GENERATED_PATHS]
+    if other: out.append("undo left these files different from the start: " + ", ".join(other))
+    try:
+        stale = sitegen.stale_paths(load_and_validate(sc.wt / "hass" / "content", sc.wt / "storefront-mockup"), sc.wt)
+    except ContentError as exc:
+        stale = [f"content invalid after undo: {exc}"]
+    if stale: out.append("site files do not match the restored content: " + ", ".join(stale))
+    return out
 
 
 def _norm(wanted, actual):  # a declared residue entry names {file, path}; before / after are matched when given
@@ -453,21 +490,22 @@ def _check_expect_text(row, expect, dispositions, final, last, flat, res):
 def _as_list(v): return [] if v is None else v if isinstance(v, list) else [v]
 
 
-def _check_preview(expect, sc, skill, res):
-    requests = sc.previewer.requests
-    if not requests: res.fail("wrong-preview", "no preview was requested for the proposal"); return
-    first = requests[0]
-    res.facts["preview"] = first.get("kind")
-    if "preview" in expect and not _subset(expect["preview"], first): res.fail("wrong-preview", f"preview request {json.dumps(first, sort_keys=True)[:200]} lacks {json.dumps(expect['preview'], sort_keys=True)}")
+def _check_preview(expect, requests, skill, res):
+    """`requests` are the preview requests the message that made the final draft caused: the preview of the draft
+    that is then approved, never an earlier one."""
+    if not requests: res.fail("wrong-preview", "no preview was requested for the final proposal"); return
+    last = requests[-1]
+    res.facts["preview"] = last.get("kind")
+    if not _subset(expect["preview"], last): res.fail("wrong-preview", f"preview request {json.dumps(last, sort_keys=True)[:200]} lacks {json.dumps(expect['preview'], sort_keys=True)}")
     kind = str(getattr(skill, "preview", "") or "").split(":")[0]
-    if skill is not None and kind in PREVIEW_KINDS and first.get("kind") not in PREVIEW_KINDS[kind]:
-        res.fail("wrong-preview", f"the skill previews {kind!r} but the request is for {first.get('kind')!r}")
+    if skill is not None and kind in PREVIEW_KINDS and last.get("kind") not in PREVIEW_KINDS[kind]:
+        res.fail("wrong-preview", f"the skill previews {kind!r} but the request is for {last.get('kind')!r}")
 
 
 def _check_diff(expect, files, diff, chosen, res):
     want = sorted(expect["diff"], key=lambda e: (e["file"], e["path"]))
     if diff != want: res.fail("wrong-diff", f"diff {_fmt(diff)} != expected {_fmt(want)}")
-    if "files" in expect and files != sorted(expect["files"]): res.fail("wrong-diff", f"files {files} != expected {sorted(expect['files'])}")
+    if files != sorted(expect["files"]): res.fail("wrong-diff", f"files {files} != expected {sorted(expect['files'])}")
     if chosen:
         from hass.editor import GENERATED_PATHS
         declared = [d for s in chosen for d in _declared_edits(s)]

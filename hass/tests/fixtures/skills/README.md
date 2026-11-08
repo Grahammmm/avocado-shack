@@ -53,8 +53,8 @@ the file name is not the skill name.
 | `left_off`, `set_line` | words in a `Left off:` / `I set:` line of the reply |
 | `ops` | the exact ops of the draft |
 | `diff` | the exact content change: `[{"file", "path", "before", "after"}]`. `path` is a key path such as `products[photo-product-001].description` or `hours`; `before` is absent for something added, `after` for something removed; JSON is compared parsed, key order ignored |
-| `files` | the exact set of files the commit touched (content and generated) |
-| `preview` | fields the preview request must contain, e.g. `{"kind": "product", "id": "photo-product-001"}` |
+| `files` | required on every row that ends in a draft: the exact set of files the commit touched (content and generated); a missing or extra file is `wrong-diff` |
+| `preview` | required on every row that ends in a draft: fields the preview request of the final proposal (the last message's) must contain, e.g. `{"kind": "product", "id": "photo-product-001"}` |
 | `residue` | what `undo` leaves behind: `[{"file", "path"}]`; empty or absent means the tree must come back identical |
 | `allow_words` | words a reply may show although they look technical (a product's own name) |
 
@@ -62,9 +62,9 @@ the file name is not the skill name.
 
 1. Starts a scratch writer worktree and private state (a copy of the repo content, a fixed Sunday 09:00 PST clock, a synthetic owner).
 2. Sends each text. After **every** message the worktree must be unchanged: no commit, no file (`write-before-yes`).
-3. If the last message ended in a draft: asks the preview (the request is recorded, no browser), sends `yes zzzz` with a wrong code (nothing may change), then `yes <code>`.
+3. If the last message ended in a draft: asks the preview of the final proposal (the request that last message caused is recorded and checked, no browser; an earlier proposal's preview never counts), sends `yes zzzz` with a wrong code (nothing may change), then `yes <code>`.
 4. Compares the commit with `expect.diff` and `expect.files` (`wrong-diff`) and with the skill's declared `edits` (`edit-undeclared`).
-5. Sends `undo`, then `yes <code>` for the undo draft. The content must equal the start, except the row's `residue`; the skill's `residue` sentence must say so (`undo-not-identical`, `residue-undeclared`). Generated files are judged through the content, because the editor re-sorts JSON keys on every write.
+5. Sends `undo`, then `yes <code>` for the undo draft. The real worktree is then checked: nothing uncommitted or untracked, content equal to the start except the row's `residue`, every other file as at the start, and every site file equal to a fresh render of the restored content (the editor re-sorts JSON keys on every write, so site files are judged against that render, not the start's bytes). The skill's `residue` sentence must say so (`undo-not-identical`, `residue-undeclared`).
 6. Checks every owner-facing reply for plain words: no internal id (`photo-product-001`), operation or skill name, `json`, `slot`, hash or braces (`jargon`). The draft's own record lines are the conversation's house format and are left alone.
 
 A model-written text is machine-valid here, never accepted: a person reads it in the acceptance report.
@@ -72,7 +72,7 @@ A model-written text is machine-valid here, never accepted: a person reads it in
 ## The kit proves itself
 
 `_selftest/toy.py` has four toy skills (not in any registry). `_selftest/toy.jsonl` has plan and case rows; a row with
-`"must_fail": "<code>"` (and optionally `"fault": "write-on-prepare" | "undo-leaves"`, a deliberately broken skill path)
+`"must_fail": "<code>"` (and optionally `"fault": "write-on-prepare" | "undo-leaves" | "undo-stale-generated" | "undo-dirty" | "skip-later-preview"`, a deliberately broken skill path)
 has to fail for exactly that code, and every other row has to pass. `must_fail` and `fault` are refused in any other file.
 
 Not covered yet (later cards): pictures (`photo` rows need the house render of SKILLS-PIC-1), the real dispatcher

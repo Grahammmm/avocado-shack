@@ -53,11 +53,36 @@ class KitProvesItself(unittest.TestCase):
         self.assertEqual({r.kind for r in good}, {"clean", "vague", "multi", "refuse", "turns"})
 
     def test_each_break_fails_for_its_own_reason_only(self):
-        broken = {r.row["must_fail"]: r for r in self.results if r.row.get("must_fail") and not r.plan}
-        self.assertEqual(set(broken), REQUIRED_BREAKS)
-        for code, result in broken.items():
-            with self.subTest(code):
-                self.assertEqual(sorted(set(result.codes)), [code])
+        broken = [r for r in self.results if r.row.get("must_fail") and not r.plan]
+        self.assertTrue(REQUIRED_BREAKS <= {r.row["must_fail"] for r in broken})
+        for result in broken:
+            with self.subTest(result.id):
+                self.assertEqual(sorted(set(result.codes)), [result.row["must_fail"]])
+
+    def test_undo_is_judged_on_the_real_worktree(self):
+        by_id = {r.id: r for r in self.results}
+        for row in ("bad-undo-stale-site-file", "bad-undo-untracked-file"):
+            self.assertEqual(by_id[row].codes, ["undo-not-identical"])
+        self.assertIn("do not match the restored content", by_id["bad-undo-stale-site-file"].problems[0][1])
+        self.assertIn("not clean", by_id["bad-undo-untracked-file"].problems[0][1])
+
+    def test_every_draft_row_states_the_exact_files_and_the_preview(self):
+        by_id = {r.id: r for r in self.results}
+        self.assertEqual(by_id["bad-files-missing-one"].codes, ["wrong-diff"])
+        self.assertEqual(by_id["bad-files-not-stated"].codes, ["bad-row"])
+        self.assertEqual(by_id["bad-preview-not-stated"].codes, ["bad-row"])
+
+    def test_the_preview_checked_is_the_final_proposals(self):
+        by_id = {r.id: r for r in self.results}
+        self.assertTrue(by_id["turns-revised-draft-previewed"].ok)
+        self.assertEqual(by_id["turns-revised-draft-previewed"].facts["preview"], "product")
+        self.assertEqual(by_id["bad-revision-without-final-preview"].codes, ["wrong-preview"])
+        res = testkit.Result("x")  # an earlier correct preview does not stand in for the final one
+        testkit._check_preview({"preview": {"kind": "product", "id": "b"}}, [{"kind": "product", "id": "a"}], None, res)
+        self.assertEqual(res.codes, ["wrong-preview"])
+        res = testkit.Result("x")
+        testkit._check_preview({"preview": {"kind": "product", "id": "b"}}, [{"kind": "product", "id": "a"}, {"kind": "product", "id": "b"}], None, res)
+        self.assertTrue(res.ok)
 
     def test_a_skill_that_writes_without_approval_fails(self):
         [result] = [r for r in self.results if r.id == "bad-write-before-yes"]
