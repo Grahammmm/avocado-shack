@@ -98,7 +98,8 @@ const allowed=req=>{
       else if(places>0)checks.routeShown=got.lines.every(l=>!!l&&l.before===(l.link?`Route: ${title} ·`:`Route: ${title}`))&&got.archive.every(a=>a===title)&&(got.sample===null||got.sample===title);
       else unshown=true;
     }else{
-      await page.goto(base+'/',{waitUntil:'networkidle'});
+      // AVO-SHOP-CLEAN-1: the shop opens on packaged goods; product and maker checks search the whole catalog (?view=all).
+      await page.goto(base+((target.kind==='product'||target.kind==='maker')?'/?view=all':'/'),{waitUntil:'networkidle'});
       if(target.kind==='product'||target.kind==='maker'){
         await page.locator('#product-search').fill(target.name||'');
         await page.waitForTimeout(200);
