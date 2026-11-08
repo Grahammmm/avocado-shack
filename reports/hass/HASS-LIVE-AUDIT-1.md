@@ -145,15 +145,29 @@ code) before the backup-age-only WARN applies, so a crash with a traceback is a 
 An empty successful journal query still counts as 0 lines.
 
 Revision 3 (commit `22c71a2` on `rb/hass-live-audit-1-r2`, pushed by another worker 15:26 PST with the same fix this
-card's author made in parallel; the author's duplicate script/test commit was dropped, not pushed): each acquisition's
-own exit status is checked before its output is parsed. `du` can print a partial total and exit 1 (an unreadable
+card's author made in parallel; the author's duplicate script/test commit was dropped, not pushed): the `du`, `df` and
+timer-query acquisitions' own exit status is checked before their output is parsed. `du` can print a partial total and exit 1 (an unreadable
 subtree), and `df` can print a usable-looking line and exit 1; either is now `unknown` and a FAIL and does not replace
 the baseline. A timer `LastTriggerUSec` or service `ExecMainStatus` query that exits non-zero is a FAIL (`last trigger
 query failed (systemctl exit N)`), not "has not run yet"; only a successful query answering empty, `n/a` or `0` is the
 never-run WARN. Tests cover, with fakes in a temp dir: health crash, git exit 128, journalctl exit 1, du partial total
 with exit 1, df output with exit 1, and a timer query exiting 1; and the valid controls: clean git, backup-age-only
-health, an empty successful journal query, and a successful never-triggered timer. Not covered: a failing `systemctl
-show -p NRestarts` with numeric output (a non-numeric or empty answer already FAILs).
+health, an empty successful journal query, and a successful never-triggered timer. (Revision 3 left gaps: `systemctl
+is-active` and `NRestarts` exit codes were not checked, and a failed `ExecMainStatus` on a never-run timer still read
+as "has not run yet"; revision 4 closes them.)
+
+Revision 4 (the class fix, admitted by the rule-29 checkpoint): every command substitution that reads a command or
+helper keeps its own exit status and checks it before the output is used. That covers git status and rev-parse,
+`systemctl is-active` (services and timers), `NRestarts`, `LastTriggerUSec`, `ExecMainStatus`, `health.py`,
+`inbox.py`, the report parser, `find` (backup listing), `date`, `du`, `df`, `journalctl`, and the synthetic and model
+helpers. `active` with a non-zero exit is FAIL `<unit> state unknown (systemctl exit N)`; a non-zero `NRestarts` is FAIL
+`restart counter unknown (systemctl exit N)` even when it printed a number; all three timer queries must succeed before
+"has not run yet" is believed. One table-driven test
+(`test_every_failed_read_fails_its_check_even_with_good_looking_output`) makes each of those 18 reads print a plausible
+good value and exit 1, and asserts the script exits 1 and that check is FAIL (growth also keeps its baseline). Its
+controls: all fakes good (with `--model`) exit 0 with no FAIL, and a timer that successfully answers it never ran is
+WARN with exit 0; a failed `ExecMainStatus` on that never-run timer is FAIL. Against the revision-3 script the table
+fails on 6 rows (is-active service and timer, NRestarts, find, date, ExecMainStatus on a never-run timer).
 
 | Check | What it proves | Requirement covered |
 | --- | --- | --- |

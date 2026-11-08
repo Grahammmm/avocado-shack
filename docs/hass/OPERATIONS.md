@@ -59,9 +59,12 @@ nothing, sends nothing and opens no key. It runs the Mac forwarder, host server 
 (status, a draft, reply retry without a duplicate, a stranger ignored, cancelled and expired codes doing nothing), then
 reads the services, timers, `health.py`, `inbox.py status`, disk and journal growth. `--model NAME` adds a draft round
 trip through the local model on three synthetic eval cases (a few minutes of CPU). One `PASS|WARN|FAIL` line per check
-and a `HASS-SELFTEST` summary line; exit 1 when a check failed. A check whose data cannot be read (git, systemctl, an
-invalid `health.py` or `inbox.py` report, `du`, `df`, `journalctl`) shows `unknown` and fails; it never reads as clean,
-healthy, zero or "not run yet"; each command's exit status is checked before its output is used. A nightly timer for it is proposed in
+and a `HASS-SELFTEST` summary line; exit 1 when a check failed. Every read of a command or helper (git status and
+rev-parse, each `systemctl` query, `health.py`, `inbox.py`, the report parser, `find`, `date`, `du`, `df`,
+`journalctl`, the synthetic and model helpers) keeps its own exit status, and that status is checked before the output
+is used: a read that exits non-zero shows `unknown` and fails even when it printed a good-looking value; it never reads
+as clean, healthy, active, zero or "not run yet". A test table (`hass/tests/test_live_selftest.py`) checks each of
+these reads that way. A nightly timer for it is proposed in
 `reports/hass/hass-selftest.{service,timer}.candidate` and is not installed.
 
 ## Retention proposal (H21, G decides; nothing enforces it yet)

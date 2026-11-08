@@ -14,14 +14,21 @@ ENV = {"HASS_PYTHON": sys.executable, "PATH": "/usr/bin:/bin", "HOME": "/nonexis
 if os.environ.get("TMPDIR"):
     ENV["TMPDIR"] = os.environ["TMPDIR"]  # child temp files stay in the configured scratch dir
 
-# Stand-ins, selected by the PROBE_* variables. The fake interpreter answers for the synthetic helper, health.py and
-# inbox.py and hands every other script (the real live_selftest_parse.py) to the real interpreter.
+# Stand-ins, selected by the PROBE_* variables. The fake interpreter answers for the synthetic and model helpers,
+# health.py and inbox.py and hands every other script (the real live_selftest_parse.py) to the real interpreter.
+# PROBE_BAD=<acquisition> makes exactly that one read print its normal, plausible good value and then exit 1.
 FAKE_PY = f"""#!{sys.executable}
 import os, sys
 script = sys.argv[2] if len(sys.argv) > 2 else ""
 health = os.environ.get("PROBE_HEALTH", "ok")
+bad = os.environ.get("PROBE_BAD", "")
+def good(text, name):
+    print(text)
+    sys.exit(1 if bad == name else 0)
 if script.endswith("live_selftest_synth.py"):
-    print('{{"failed": 0, "ran": 6, "synthetic": "pass"}}')
+    good('{{"failed": 0, "ran": 6, "synthetic": "pass"}}', "synthetic")
+elif script.endswith("live_selftest_model.py"):
+    good('{{"result": "pass", "cases": 3, "passed": 3}}', "model")
 elif script.endswith("health.py"):
     if health == "crash":
         print("Traceback (most recent call last): simulated crash", file=sys.stderr)
@@ -29,40 +36,86 @@ elif script.endswith("health.py"):
     if health == "backup-age":
         print('{{"ok": false, "problems": [{{"check": "backup-age", "detail": "x"}}], "info": {{}}, "fingerprint": "f"}}')
         sys.exit(1)
-    print('{{"ok": true, "problems": [], "info": {{}}, "fingerprint": "f"}}')
+    good('{{"ok": true, "problems": [], "info": {{}}, "fingerprint": "f"}}', "health")
 elif script.endswith("inbox.py"):
-    print('{{"pending": 0, "done": 3, "history": 3, "oldest_pending_minutes": null}}')
+    good('{{"pending": 0, "done": 3, "history": 3, "oldest_pending_minutes": null}}', "inbox")
+elif script.endswith("live_selftest_parse.py") and bad == "parse-" + sys.argv[3]:
+    sys.stdin.read()
+    good("" if sys.argv[3] == "health" else "0 null 3", bad)
 else:
     os.execv({sys.executable!r}, [{sys.executable!r}] + sys.argv[1:])
 """
 FAKE_GIT = """#!/bin/sh
 [ "${PROBE_GIT:-ok}" = fail ] && exit 128
-case "$*" in *rev-parse*) echo 0123456789ab ;; esac
+case "$*" in
+  *rev-parse*) echo 0123456789ab; [ "${PROBE_BAD:-}" = git-rev-parse ] && exit 1 ;;
+  *status*) [ "${PROBE_BAD:-}" = git-status ] && exit 1 ;;  # empty output would read as clean
+esac
 exit 0
 """
 FAKE_SYSTEMCTL = """#!/bin/sh
 case "$*" in
+  *is-active*hass-receiver.service*) echo active; [ "${PROBE_BAD:-}" = is-active-service ] && exit 1 ;;
+  *is-active*hass-health.timer*) echo active; [ "${PROBE_BAD:-}" = is-active-timer ] && exit 1 ;;
   *is-active*) echo active ;;
+  *NRestarts*hass-receiver*) echo 0; [ "${PROBE_BAD:-}" = nrestarts ] && exit 1 ;;
   *NRestarts*) echo 0 ;;
+  *LastTriggerUSec*hass-health*)
+    case "${PROBE_TIMER:-ok}" in fail) exit 1 ;; never) echo 'n/a' ;; *) echo 'Sat 2026-11-07 14:40:03 PST' ;; esac
+    [ "${PROBE_BAD:-}" = last-trigger ] && exit 1 ;;
   *LastTriggerUSec*)
     case "${PROBE_TIMER:-ok}" in fail) exit 1 ;; never) echo 'n/a' ;; *) echo 'Sat 2026-11-07 14:40:03 PST' ;; esac ;;
+  *ExecMainStatus*hass-health*) echo 0; [ "${PROBE_BAD:-}" = exec-main-status ] && exit 1 ;;
   *ExecMainStatus*) echo 0 ;;
 esac
+exit 0
 """
 FAKE_JOURNALCTL = """#!/bin/sh
 case "${PROBE_JOURNAL:-empty}" in fail) exit 1 ;; lines) printf 'a\\nb\\nc\\n' ;; esac
+[ "${PROBE_BAD:-}" = journalctl ] && exit 1  # no output with exit 0 would read as 0 lines
 exit 0
 """
 
 
 FAKE_DU = """#!/bin/sh
 case "${PROBE_DU:-ok}" in partial) echo "123	$2"; exit 1 ;; esac
+[ "${PROBE_BAD:-}" = du ] && { echo "123	$2"; exit 1; }
 exec /usr/bin/du "$@"
 """
 FAKE_DF = """#!/bin/sh
 case "${PROBE_DF:-ok}" in partial) printf 'Filesystem 1M-blocks Used Available Capacity Mounted\\nx 10 1 9999 1%% /\\n'; exit 1 ;; esac
+[ "${PROBE_BAD:-}" = df ] && { printf 'Filesystem 1M-blocks Used Available Capacity Mounted\\nx 10 1 9999 1%% /\\n'; exit 1; }
 exec /usr/bin/df "$@"
 """
+FAKE_FIND = """#!/bin/sh
+[ "${PROBE_BAD:-}" = find ] && { echo "$1/hass-state-synthetic.tar"; exit 1; }
+exec /usr/bin/find "$@"
+"""
+FAKE_DATE = """#!/bin/sh
+[ "${PROBE_BAD:-}" = date ] && [ "$1" = +%s ] && { echo 1794000000; exit 1; }
+exec /usr/bin/date "$@"
+"""
+
+# The class rule as a table: (PROBE_BAD acquisition, the check that must FAIL, extra script arguments).
+BAD_READS = (
+    ("git-status", "runtime", ()), ("git-rev-parse", "runtime", ()),
+    ("synthetic", "synthetic", ()),
+    ("is-active-service", "service:hass-receiver", ()), ("nrestarts", "service:hass-receiver", ()),
+    ("is-active-timer", "timer:hass-health", ()), ("last-trigger", "timer:hass-health", ()),
+    ("exec-main-status", "timer:hass-health", ()),
+    ("find", "backup", ()),
+    ("health", "health", ()), ("parse-health", "health", ()),
+    ("inbox", "inbox", ()), ("parse-inbox", "inbox", ()),
+    ("model", "model", ("--model", "m")),
+    ("date", "growth", ()), ("du", "growth", ()), ("df", "growth", ()), ("journalctl", "growth", ()),
+)
+SPECIFIC = {  # the wording the disposition names for the systemctl reads
+    "is-active-service": "hass-receiver.service state unknown (systemctl exit 1)",
+    "is-active-timer": "hass-health.timer state unknown (systemctl exit 1)",
+    "nrestarts": "restart counter unknown (systemctl exit 1)",
+    "last-trigger": "last trigger query failed (systemctl exit 1)",
+    "exec-main-status": "last run exit status unknown (systemctl exit 1)",
+}
 
 
 class LiveSelftestScript(unittest.TestCase):
@@ -88,7 +141,8 @@ class LiveModeAcquisitionFailures(unittest.TestCase):
         bins = self.tmp / "bin"
         bins.mkdir()
         for name, body in (("python", FAKE_PY), ("git", FAKE_GIT), ("systemctl", FAKE_SYSTEMCTL),
-                           ("journalctl", FAKE_JOURNALCTL), ("du", FAKE_DU), ("df", FAKE_DF)):
+                           ("journalctl", FAKE_JOURNALCTL), ("du", FAKE_DU), ("df", FAKE_DF), ("find", FAKE_FIND),
+                           ("date", FAKE_DATE)):
             (bins / name).write_text(body)
             (bins / name).chmod(0o700)
         self.state = self.tmp / "hass"
@@ -97,9 +151,9 @@ class LiveModeAcquisitionFailures(unittest.TestCase):
         self.growth = self.tmp / "growth.tsv"
         self.env = dict(ENV, PATH=f"{bins}:/usr/bin:/bin", HASS_PYTHON=str(bins / "python"))
 
-    def run_live(self, **probes):
+    def run_live(self, *args, **probes):
         r = subprocess.run(["bash", str(SCRIPTS / "live_selftest.sh"), "--state-root", str(self.state),
-                            "--growth-file", str(self.growth), "--min-free-mb", "1"],
+                            "--growth-file", str(self.growth), "--min-free-mb", "1", *args],
                            capture_output=True, text=True, timeout=120, env=dict(self.env, **probes), cwd=self.tmp)
         lines = {ln.split(" ", 2)[1]: ln for ln in r.stdout.splitlines() if ln[:5] in ("PASS ", "WARN ", "FAIL ", "SKIP ")}
         return r, lines
@@ -169,6 +223,30 @@ class LiveModeAcquisitionFailures(unittest.TestCase):
         r, lines = self.run_live(PROBE_TIMER="never")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(lines["timer:hass-health"], "WARN timer:hass-health active, has not run yet")
+
+    def test_every_failed_read_fails_its_check_even_with_good_looking_output(self):
+        """Class rule: each acquisition prints a plausible good value and exits 1; the script must FAIL that check."""
+        r, lines = self.run_live("--model", "m")  # control: every fake good, the model helper included
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("FAIL ", r.stdout)
+        self.assertTrue(lines["model"].startswith("PASS model "), lines["model"])
+        r, lines = self.run_live(PROBE_TIMER="never")  # control: a timer that successfully answers it never ran
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(lines["timer:hass-health"], "WARN timer:hass-health active, has not run yet")
+        rows = BAD_READS + (("exec-main-status", "timer:hass-health", ()),)  # second pass below: with never-ran
+        for i, (bad, check, args) in enumerate(rows):
+            extra = {"PROBE_TIMER": "never"} if i == len(BAD_READS) else {}
+            with self.subTest(bad=bad, **extra):
+                self.growth.write_text("1 2 3 4\n")
+                r, lines = self.run_live(*args, PROBE_BAD=bad, **extra)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertTrue(lines[check].startswith(f"FAIL {check} "), lines[check])
+                self.assertIn(check, r.stdout.splitlines()[-1].split("failed:", 1)[1].split(","))
+                if bad in SPECIFIC:
+                    self.assertIn(SPECIFIC[bad], lines[check])
+                if check == "growth":
+                    self.assertIn("not measured:", lines[check])
+                    self.assertEqual(self.growth.read_text(), "1 2 3 4\n")  # the baseline is kept
 
 
 if __name__ == "__main__":

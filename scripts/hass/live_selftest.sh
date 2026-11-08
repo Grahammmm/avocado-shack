@@ -21,8 +21,10 @@
 #   model       only with --model: scripts/hass/live_selftest_model.py, 3 synthetic interpreter-eval cases through
 #               the local model with the production timeout (a draft round trip; uses the CPU for a few minutes)
 #   growth      state size, free disk and Hass journal lines in 24 h, compared with the previous run (--growth-file)
-# A check whose data cannot be read (git, systemctl, health/inbox JSON via scripts/hass/live_selftest_parse.py, du,
-# df, journalctl) reports `unknown` and FAILs: a failed acquisition is never shown as clean, healthy or zero.
+# Every command substitution that reads a command or helper (git, systemctl, health.py, inbox.py, the parser, find,
+# date, du, df, journalctl, the synthetic and model helpers) keeps its own exit status, checked before the output is
+# used. A check whose read fails reports `unknown` and FAILs: a failed acquisition is never shown as PASS, clean,
+# healthy, "not run yet" or zero.
 # Output: one `PASS|WARN|FAIL|SKIP <check> <detail>` line per check, then `HASS-SELFTEST <UTC> pass=.. warn=.. fail=..
 # skip=..`; --log FILE appends that last line, --brief FILE replaces FILE with it (one line for the ops brief); a
 # FAIL adds `failed:<check,...>`. Exit 0 no FAIL, 1 a FAIL, 2 bad usage.
@@ -95,10 +97,13 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   else say FAIL runtime-after "checkout state $tree"; fi
 
   # -- services --------------------------------------------------------------------------------------------------
+  # Every systemctl read keeps its own exit status: PASS needs exit 0 and the expected output, never the output alone.
   for unit in hass-receiver hass-worker; do
-    st="$(systemctl --user is-active "$unit.service" 2>/dev/null)"
-    restarts="$(systemctl --user show -p NRestarts --value "$unit.service" 2>/dev/null)"
-    if [ "$st" != active ]; then say FAIL "service:$unit" "${st:-unknown}"
+    st="$(systemctl --user is-active "$unit.service" 2>/dev/null)"; arc=$?
+    restarts="$(systemctl --user show -p NRestarts --value "$unit.service" 2>/dev/null)"; nrc=$?
+    if [ $arc != 0 ] && [ "$st" = active ]; then say FAIL "service:$unit" "$unit.service state unknown (systemctl exit $arc)"
+    elif [ "$st" != active ]; then say FAIL "service:$unit" "${st:-unknown} (systemctl exit $arc)"
+    elif [ $nrc != 0 ]; then say FAIL "service:$unit" "active, restart counter unknown (systemctl exit $nrc)"
     elif ! is_count "$restarts"; then say FAIL "service:$unit" "active, restart counter unknown"
     elif [ "$restarts" -gt 0 ]; then say WARN "service:$unit" "active, systemd restart counter ${restarts} (crash restarts since the unit was loaded)"
     else say PASS "service:$unit" "active, 0 restarts"; fi
@@ -106,19 +111,25 @@ if [ "$SYNTH_ONLY" = 0 ]; then
 
   # -- timers ----------------------------------------------------------------------------------------------------
   for unit in hass-health hass-backup; do
-    st="$(systemctl --user is-active "$unit.timer" 2>/dev/null)"
+    st="$(systemctl --user is-active "$unit.timer" 2>/dev/null)"; arc=$?
     lastrun="$(systemctl --user show -p LastTriggerUSec --value "$unit.timer" 2>/dev/null)"; lrc=$?
     status="$(systemctl --user show -p ExecMainStatus --value "$unit.service" 2>/dev/null)"; src=$?
-    if [ "$st" != active ]; then say FAIL "timer:$unit" "${st:-unknown}"
+    # All three reads must succeed before "has not run yet" is believed: a failed query is not proof of no run.
+    if [ $arc != 0 ] && [ "$st" = active ]; then say FAIL "timer:$unit" "$unit.timer state unknown (systemctl exit $arc)"
+    elif [ "$st" != active ]; then say FAIL "timer:$unit" "${st:-unknown} (systemctl exit $arc)"
     elif [ $lrc != 0 ]; then say FAIL "timer:$unit" "last trigger query failed (systemctl exit $lrc)"
+    elif [ $src != 0 ]; then say FAIL "timer:$unit" "last run exit status unknown (systemctl exit $src)"
     elif [ -z "$lastrun" ] || [ "$lastrun" = n/a ] || [ "$lastrun" = 0 ]; then say WARN "timer:$unit" "active, has not run yet"
-    elif [ $src != 0 ] || ! is_count "$status"; then say FAIL "timer:$unit" "last run exit status unknown (systemctl exit $src)"
+    elif ! is_count "$status"; then say FAIL "timer:$unit" "last run exit status unknown (not a number)"
     elif [ "$unit" = hass-health ] && [ "$status" -gt 1 ]; then say FAIL "timer:$unit" "last run exit $status"
     elif [ "$unit" = hass-backup ] && [ "$status" -ne 0 ]; then say FAIL "timer:$unit" "last run exit $status"
     else say PASS "timer:$unit" "active, last run $lastrun"; fi
   done
-  newest="$(find "$BACKUPS" -maxdepth 1 -name 'hass-state-*' -mmin -1560 2>/dev/null | head -1)"
-  if [ -n "$newest" ]; then say PASS backup "a backup under 26 h old exists"
+  if [ -d "$BACKUPS" ]; then
+    found="$(find "$BACKUPS" -maxdepth 1 -name 'hass-state-*' -mmin -1560 2>/dev/null)"; brc=$?
+  else found="" brc=0; fi  # no backups directory yet is "no backup", not a failed read
+  if [ $brc != 0 ]; then say FAIL backup "cannot list the backups (find exit $brc)"
+  elif [ -n "$found" ]; then say PASS backup "a backup under 26 h old exists"
   else say WARN backup "no backup under 26 h old"; fi
 
   # -- health (read-only: no --seen, no --alert-log) ---------------------------------------------------------------
@@ -140,7 +151,9 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   parsed="$(printf '%s\n' "$iout" | "$PY" -B "$PARSE" inbox 2>/dev/null)"; prc=$?
   read -r pending oldest done_n <<< "$parsed"
   if [ $rc != 0 ]; then say FAIL inbox "inbox.py status exit $rc"
-  elif [ $prc != 0 ]; then say FAIL inbox "${parsed:-parser exit $prc}"
+  elif [ $prc != 0 ]; then say FAIL inbox "invalid report (parser exit $prc): ${parsed:-no output}"
+  elif ! is_count "$pending" || ! is_count "$done_n" || { [ "$oldest" != null ] && ! is_count "$oldest"; }; then
+    say FAIL inbox "parser output not counts"
   elif [ "$pending" = 0 ]; then say PASS inbox "pending 0, done $done_n"
   elif [ "$oldest" != null ] && [ "$oldest" -ge 15 ]; then say FAIL inbox "pending $pending, oldest ${oldest} min"
   else say WARN inbox "pending $pending, oldest ${oldest} min"; fi
@@ -156,7 +169,8 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   # -- disk and log growth -------------------------------------------------------------------------------------
   # A failed measurement is reported as unknown and FAILs; it is never counted as 0 KB or 0 journal lines, and it
   # does not overwrite the previous run's baseline.
-  now_s="$(date +%s)"
+  now_s="$(date +%s)"; crc=$?
+  [ $crc = 0 ] || now_s=""
   # Producer exit statuses are kept (a pipeline reports only its last stage): du can print a partial total and exit
   # 1 on an unreadable subtree, which is not a measurement.
   dout="$(du -sk "$STATE_ROOT" 2>/dev/null)"; drc=$?
@@ -168,6 +182,7 @@ if [ "$SYNTH_ONLY" = 0 ]; then
   jout="$(journalctl --user -q -u 'hass-*' --since -24h -o cat --no-pager 2>/dev/null)"; jrc=$?
   if [ $jrc != 0 ]; then lines=""; elif [ -z "$jout" ]; then lines=0; else lines="$(printf '%s\n' "$jout" | wc -l)"; fi
   unknown=""
+  is_count "$now_s" || { now_s=""; unknown="$unknown clock (date exit $crc);"; }
   is_count "$size_kb" || { size_kb=""; unknown="$unknown state size (du exit $drc);"; }
   is_count "$free_mb" || { free_mb=""; unknown="$unknown free disk (df exit $frc);"; }
   is_count "$lines" || { lines=""; unknown="$unknown hass journal (journalctl exit $jrc);"; }
