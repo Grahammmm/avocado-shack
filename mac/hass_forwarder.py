@@ -9,7 +9,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from hass import bridge, bridge_attach, relay, stagelog  # noqa: E402
-from hass.conversation import read_command, sender_key  # noqa: E402
+from hass.conversation import parse_command, read_command, sender_key  # noqa: E402
 
 MAX_BODY = 256 * 1024
 MAX_REPLY, PIC_RETRY = 2621440, (10, 30)  # HASS-ATTACH-1: picture reply cap (2.5 MiB); waits after the 1st and 2nd failure
@@ -18,10 +18,10 @@ GAVE_UP = "The picture for that message didn't come through. What the message sa
 # endpoint needs the Private API, which stays off, and iMessage has no 👀 tapback anyway: see reports/hass/FAST-1.md).
 ACK_TEXT = "\N{EYES}"
 ACK_MAX_AGE = 120   # a message older than this when accepted (catch-up after sleep or an outage) is never acked
-ACK_STALE = 30      # an ack still unsent this long after it was queued is dropped, not sent late
-ACK_TIMEOUT = 4     # seconds one ack send may block the loop (an ack never waits the 10 s of a reply)
-STATE_TTL = 30      # the host's "changes are paused" answer is trusted this long; older or missing means no ack
-PAUSE_HOLD = 60     # after the owner's own pause command, no ack for this long (the host has not read it yet)
+ACK_STALE = 10      # an ack still unsent this long after it was queued is dropped, not sent late
+ACK_TIMEOUT = 1.5   # seconds the 👀 send itself may take (a reply send gets 10); with ACK_STATE_TIMEOUT: <= 2 s per attempt
+ACK_STATE_TIMEOUT = 0.5  # seconds the fresh "paused?" question to the host may take; no answer means no 👀
+ACK_TICK = 0.25     # the ack thread also looks every this many seconds (a restart, a missed wake-up)
 PULL_SLOW, PULL_FAST, FAST_WINDOW = 5, 1, 180  # reply pull every 5 s, every 1 s for 3 minutes after an owner message
 CATCH_UP_EVERY = 15  # was 60: the safety net that finds a message the BlueBubbles webhook did not announce
 KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack"}
@@ -75,11 +75,11 @@ def load_config(path):
     return cfg
 
 
-def request_json(url, body=None, limit=1024 * 1024):
+def request_json(url, body=None, limit=1024 * 1024, timeout=10):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
     try:
-        with bridge._OPENER.open(req, timeout=10) as r:
+        with bridge._OPENER.open(req, timeout=timeout) as r:
             raw = r.read(limit + 1)
             if len(raw) > limit: raise ValueError("response-size")
             return json.loads(raw)
@@ -110,7 +110,7 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);")
         self.stage = stagelog.off  # HASS-FAST-1: the Forwarder swaps in a StageLog
         for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0),
-                            ("hold_until", 0), ("fast_until", 0)):
+                            ("fast_until", 0)):
             self.db.execute("INSERT OR IGNORE INTO meta VALUES (?,?)", (name, value))
 
     def get(self, name): return self.db.execute("SELECT value FROM meta WHERE name=?", (name,)).fetchone()[0]
@@ -143,15 +143,14 @@ class Spool:
     def owner_arrived(self, msg, owner, ms):
         """HASS-FAST-1: a newly stored message from the owner's own address in the owner's one-to-one chat, sent just now,
         queues exactly one ack (INSERT OR IGNORE on the message id) and opens the fast reply pull. Never a stranger's, Hass's
-        own (from_me), an edit or a reaction, or an old message found by catch-up. The pause command is noted here too."""
+        own (from_me), an edit or a reaction, or an old message found by catch-up. Whether changes are paused is NOT decided
+        here: the ack thread asks the host fresh just before it sends (see Forwarder._ack)."""
         try:
             address = owner.split(";", 2)[2]
             mine = (msg.kind == "new" and not msg.from_me and msg.chat == owner
                     and sender_key(msg.sender) is not None and sender_key(msg.sender) == sender_key(address))
             if not mine or self.clock() * 1000 - ms > ACK_MAX_AGE * 1000: return
             self.set("fast_until", self.clock() + FAST_WINDOW)
-            cmd = read_command(msg.text) if msg.attachments == 0 else None
-            if cmd and cmd[0] == "pause": self.set("hold_until", self.clock() + PAUSE_HOLD)
             self.db.execute("INSERT OR IGNORE INTO ack VALUES (?,'pending',?,NULL)", (msg.provider_id, self.clock()))
         except Exception:  # noqa: BLE001 - an ack is never worth losing the message that was just stored
             pass
@@ -171,23 +170,25 @@ class Forwarder:
         self.stage = spool.stage = stage or stagelog.off  # HASS-FAST-1: read-only stage times (main() passes a StageLog)
         self.secret = key_read(cfg["secretFile"])
         self.sender = sender or bridge.BlueBubblesSender(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
-        # The 👀 goes through the same send path, but one slow send may hold the loop only ACK_TIMEOUT seconds, not 10.
+        # The 👀 goes through the same send path, but its own short timeout (ACK_TIMEOUT), and from its own thread.
         self.acker = acker or (self.sender if sender else bridge.BlueBubblesSender(
             f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"],
             transport=lambda url, body, headers, timeout: bridge._urllib_transport(url, body, headers, min(timeout, ACK_TIMEOUT))))
         self.attach = attach or bridge_attach.BlueBubblesAttachmentSender(
             f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], cfg["ownerChat"])
         self.big = functools.partial(request_json, limit=MAX_REPLY) if transport is request_json else transport
-        self.next_poll = self.next_pull = self.next_state = 0
+        self.quick = functools.partial(request_json, timeout=ACK_STATE_TIMEOUT) if transport is request_json else transport
+        self.next_poll = self.next_pull = 0
         self.query_offset, self.query_high = 0, 0
-        self.paused, self.paused_at = None, 0  # the host's "changes are paused" answer and when it came (None: not known)
+        self.ack_thread, self.ack_stop, self.ack_wake = None, threading.Event(), threading.Event()
 
     def bb(self, path, body=None):
         password = private_read(self.cfg["bbPasswordFile"], 4096).decode().strip()
         sep = "&" if "?" in path else "?"
         return self.transport(f'http://127.0.0.1:{self.cfg["bbPort"]}{path}{sep}{urllib.parse.urlencode({"password": password})}', body)["data"]
 
-    def post(self, path, env, big=False): return (self.big if big else self.transport)(self.cfg["receiverUrl"] + path, env)
+    def post(self, path, env, big=False, quick=False):
+        return (self.big if big else self.quick if quick else self.transport)(self.cfg["receiverUrl"] + path, env)
 
     def fetch(self):
         row = self.spool.db.execute("SELECT guid,event,created_at,tries,next_try_at FROM fetch ORDER BY created_at,rowid LIMIT 1").fetchone()
@@ -252,9 +253,10 @@ class Forwarder:
         else:
             db.execute("UPDATE inbound SET state='done',payload=NULL,done_at=? WHERE rowid=?", (now, row[0]))
 
-    def control(self, body, expected, big=False):
+    def control(self, body, expected, big=False, spool=None, quick=False):
         env = relay.seal_control(body, self.secret, nonce=secrets.token_hex(16), now=self.clock())
-        answer = relay.unseal_control(self.post("/v1/relay", env, big), self.secret, now=self.clock(), seen=self.spool)
+        sent = self.post("/v1/relay", env, quick=True) if quick else self.post("/v1/relay", env, big)
+        answer = relay.unseal_control(sent, self.secret, now=self.clock(), seen=spool or self.spool)
         if answer["op"] not in (expected if type(expected) is tuple else (expected,)): raise ValueError("relay-op")
         return answer
 
@@ -301,30 +303,43 @@ class Forwarder:
         finally:
             if ids: self.control({"op": "ack", "ids": ids}, "acked")
 
-    def state(self):
-        """HASS-FAST-1: ask the host whether changes are paused (a sealed read-only `state`). Any failure, including an
-        older host that does not know the op, just leaves the answer unknown, which means no 👀 (never a guess)."""
+    # -- HASS-FAST-1: the 👀 ack. It runs on its own thread with its own SQLite connection, so nothing slow in the main loop
+    # (a reply pull, a picture, a catch-up query, a post to the receiver) can delay it and a slow or failing ack send can
+    # never delay the main loop. The only things the two share are the spool file (atomic row claims) and the nonce table.
+    def host_paused(self, spool):
+        """True when changes are paused or a pause command is on its way; None when the host cannot be asked right now.
+        Asked fresh before every 👀 (nothing cached): the host reads its own pause flag and its unread queue, read-only."""
         try:
-            paused = self.control({"op": "state"}, "state")["paused"]
-            if type(paused) is bool: self.paused, self.paused_at = paused, self.clock()
+            paused = self.control({"op": "state"}, "state", spool=spool, quick=True)["paused"]
+            return paused if type(paused) is bool else None
         except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError):
-            pass
+            return None
 
-    def ack_allowed(self, now):
-        """(may send, final). A pause command just seen or a paused host is a final no; no fresh host answer is a no for now."""
-        if now < self.spool.get("hold_until"): return False, True
-        if self.paused is None or now - self.paused_at > STATE_TTL: return False, False
-        return (not self.paused), True
+    def pause_ahead(self, spool, created):
+        """True when a pause command (or a message that cannot be read) is stored here and not yet handed to the host, or an
+        earlier doorbell is still unresolved (what it says is unknown): the host cannot know about those, so no 👀 yet."""
+        db = spool.db
+        if db.execute("SELECT 1 FROM fetch WHERE event='new-message' AND created_at<=? LIMIT 1", (created,)).fetchone(): return True
+        for (payload,) in db.execute("SELECT payload FROM inbound WHERE state='pending'"):
+            try:
+                text = json.loads(payload)["text"]
+                found = read_command(text) or parse_command(text)
+            except (TypeError, ValueError, KeyError, AttributeError): return True
+            if found and found[0] == "pause": return True
+        return False
 
-    def ack(self):
-        try: self._ack()
+    def ack(self, spool=None):
+        try: self._ack(spool or self.spool)
         except Exception: print("retry", file=sys.stderr)  # noqa: BLE001 - an ack can never stop the loop (a broken table, a full disk)
 
-    def _ack(self):
-        """HASS-FAST-1: send the 👀 for each owner message queued by Spool.owner_arrived, before delivery and before any
-        model. At most once per message id: the row goes pending -> sending (committed before the send) -> sent | failed,
-        and a row found `sending` after a crash is never sent again. A failure or timeout is recorded and ignored."""
-        db = self.spool.db
+    def _ack(self, spool):
+        """Send the 👀 for each owner message queued by Spool.owner_arrived, before delivery and before any model. At most
+        once per message id: the row goes pending -> sending (committed before the send) -> sent | failed, and a row found
+        `sending` after a crash is never sent again. Every row is decided once and finally: no 👀 when the ack is switched
+        off, when it is too old, when a pause command is ahead of it (stored here or queued at the host), when the host says
+        paused, or when the host cannot be asked right now (fail closed: an unknown state is not an unpaused state). A
+        failure or timeout is recorded and ignored."""
+        db = spool.db
         for _ in range(3):
             row = db.execute("SELECT provider_id,created_at FROM ack WHERE state='pending' ORDER BY created_at,rowid LIMIT 1").fetchone()
             if row is None: return
@@ -333,10 +348,9 @@ class Forwarder:
             def close(state): db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='pending'", (state, now, pid))
             if now - created > ACK_STALE: close("stale"); continue
             if not self.cfg.get("ack", True): close("off"); continue
-            allowed, final = self.ack_allowed(now)
-            if not allowed:
-                if final: close("paused"); continue
-                return  # the host has not answered yet: wait (the row goes stale after ACK_STALE)
+            if self.pause_ahead(spool, created): close("paused"); continue
+            paused = self.host_paused(spool)
+            if paused is not False: close("paused" if paused else "unknown"); continue
             if db.execute("UPDATE ack SET state='sending',done_at=? WHERE provider_id=? AND state='pending'", (now, pid)).rowcount != 1: continue
             self.stage("ack-start", pid)
             try:
@@ -345,20 +359,64 @@ class Forwarder:
             except Exception:  # noqa: BLE001 - an ack never blocks, retries or leaks: the state records it, nothing else
                 state = "failed"
             db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=?", (state, self.clock(), pid))
-            self.stage("ack-end", pid)
+            self.stage("ack-end", pid, outcome=state)
+
+    def ack_kick(self):
+        """Tell the ack thread there is work; with no thread running (unit tests) do the work here instead."""
+        if self.ack_thread is not None: self.ack_wake.set()
+        else: self.ack()
+
+    def start_ack(self):
+        """Start the ack thread (main() does; it owns its own spool connection, opened inside the thread)."""
+        if self.ack_thread is not None: return
+        self.ack_stop.clear()
+        self.ack_thread = threading.Thread(target=self._ack_loop, name="hass-ack", daemon=True)
+        self.ack_thread.start()
+
+    def stop_ack(self):
+        self.ack_stop.set()
+        self.ack_wake.set()
+        if self.ack_thread is not None: self.ack_thread.join(ACK_TIMEOUT + ACK_STATE_TIMEOUT + 2)
+        self.ack_thread = None
+
+    def _ack_loop(self):
+        spool = None
+        try:
+            while not self.ack_stop.is_set():
+                self.ack_wake.wait(ACK_TICK)
+                self.ack_wake.clear()
+                if self.ack_stop.is_set(): break
+                try:
+                    if spool is None:
+                        spool = Spool(self.spool.directory, self.clock())
+                        spool.clock, spool.stage = self.clock, self.stage
+                    self._ack(spool)
+                except Exception:  # noqa: BLE001 - the thread outlives any single failure (a locked file, a full disk)
+                    print("retry", file=sys.stderr)
+        finally:
+            if spool is not None:
+                try: spool.db.close()
+                except sqlite3.Error: pass
 
     def cycle(self):
         fast = self.clock() < self.spool.get("fast_until")  # an owner message arrived in the last FAST_WINDOW seconds
         if fast: self.next_pull = min(self.next_pull, self.clock() + PULL_FAST)  # do not finish a slow wait first
-        for attr, delay, action in (("next_poll", CATCH_UP_EVERY, self.catch_up), ("next_state", PULL_SLOW, self.state),
-                                    ("next_pull", PULL_FAST if fast else PULL_SLOW, self.pull)):
-            if self.clock() >= getattr(self, attr):
-                setattr(self, attr, self.clock() + delay)
-                try: action()
-                except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
-        for action in (self.fetch, self.ack, self.deliver):
-            try: action()
-            except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
+        # Acceptance comes first (a webhook fetch, the catch-up poll) and the ack is kicked right after it, ahead of the
+        # reply pull, the pictures and the post to the receiver, none of which can then delay the 👀.
+        try: self.fetch()
+        except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
+        self.ack_kick()
+        if self.clock() >= self.next_poll:
+            self.next_poll = self.clock() + CATCH_UP_EVERY
+            try: self.catch_up()
+            except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
+            finally: self.ack_kick()
+        try: self.deliver()
+        except (bridge.BridgeError, ValueError): print("retry", file=sys.stderr)
+        if self.clock() >= self.next_pull:
+            self.next_pull = self.clock() + (PULL_FAST if fast else PULL_SLOW)
+            try: self.pull()
+            except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError): print("retry", file=sys.stderr)
         self.spool.db.execute("DELETE FROM nonces WHERE seen_at<?", (self.clock() - 86400,))
 
 
@@ -426,6 +484,7 @@ def main(argv=None):
             else:
                 os.umask(0o077)
                 fwd, stop = Forwarder(cfg, spool, stage=stagelog.StageLog(Path(cfg["spoolDir"]) / "stages.jsonl")), threading.Event()
+                fwd.start_ack()
                 signal.signal(signal.SIGTERM, lambda *a: stop.set())
                 signal.signal(signal.SIGINT, lambda *a: stop.set())
                 with Server(cfg, spool) as srv:
@@ -436,6 +495,7 @@ def main(argv=None):
                             fwd.cycle()
                             stop.wait(0.2)
                     finally:
+                        fwd.stop_ack()
                         srv.shutdown()
                         thread.join()
         finally: spool.db.close()

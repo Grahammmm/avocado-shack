@@ -2,7 +2,7 @@
 old message, never while paused or unknown, never blocks), the host `state` op, and the read-only stage log.
 Synthetic only: fake BlueBubbles, fake sender, loopback sockets on port 0, temp dirs. No Mac, no real message.
 Run: python3 -B -m unittest hass.tests.test_fast_ack"""
-import contextlib, io, json, os, sqlite3, tempfile, threading, unittest  # noqa: E401
+import contextlib, io, json, os, sqlite3, tempfile, threading, time, unittest  # noqa: E401
 from datetime import timedelta
 from pathlib import Path
 from unittest import mock
@@ -20,7 +20,7 @@ NOW, EYES = ft.NOW, "\N{EYES}"
 class AckCase(ft.ForwarderCase):
     def setUp(self):
         super().setUp()
-        self.order = []
+        self.order, self.state_asked = [], 0
         self.sender.send = self._send
         self.host_ok()
 
@@ -29,7 +29,14 @@ class AckCase(ft.ForwarderCase):
         self.sender.calls.append((chat, text, attachments))
         self.order.append("ack" if text == EYES else "reply")
 
-    def host_ok(self, paused=False): self.f.paused, self.f.paused_at = paused, self.now
+    def host_ok(self, paused=False): self.answer = paused  # what the fake host says to the next `state` question; None: unreachable
+
+    def transport(self, url, body=None):
+        if url.endswith("/v1/relay") and relay.unseal_control(body, ft.KEY, now=self.now, seen=set())["op"] == "state":
+            self.state_asked += 1
+            if self.answer is None: raise bridge.BridgeError("transport-error")
+            return relay.seal_control({"op": "state", "paused": self.answer}, ft.KEY, nonce=os.urandom(16).hex(), now=self.now)
+        return super().transport(url, body)
 
     def eyes(self): return [c for c in self.sender.calls if c[1] == EYES]
 
@@ -88,7 +95,6 @@ class WhoGetsAnAck(AckCase):
     def test_an_ack_that_waited_too_long_is_dropped_not_sent_late(self):
         self.enqueue("m1")
         self.now += fwd.ACK_STALE + 1
-        self.host_ok()
         self.f.ack()
         self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "stale"}))
 
@@ -107,7 +113,6 @@ class OneAckPerMessage(AckCase):
         reopened = fwd.Spool(self.root, self.now)
         self.addCleanup(reopened.db.close)
         restarted = fwd.Forwarder(self.cfg, reopened, lambda: self.now, self.transport, self.sender)
-        restarted.paused, restarted.paused_at = False, self.now
         self.spool.accept({"type": "new-message", "data": self.messages["m1"]}, OWNER_CHAT, self.now)
         reopened.accept({"type": "new-message", "data": self.messages["m1"]}, OWNER_CHAT, self.now)
         restarted.ack()
@@ -124,7 +129,6 @@ class OneAckPerMessage(AckCase):
         reopened = fwd.Spool(self.root, self.now)
         self.addCleanup(reopened.db.close)
         restarted = fwd.Forwarder(self.cfg, reopened, lambda: self.now, self.transport, self.sender)
-        restarted.paused, restarted.paused_at = False, self.now
         restarted.ack()
         restarted.ack()
         self.assertEqual(len(self.eyes()), 1)
@@ -137,21 +141,25 @@ class OneAckPerMessage(AckCase):
 
 
 class NotWhenPausedOrUnknown(AckCase):
-    def test_no_host_answer_yet_waits_then_drops(self):
-        self.f.paused = None
+    def test_no_host_answer_means_no_ack_now_and_never_a_late_one(self):
+        self.host_ok(None)
         self.enqueue("m1")
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "pending"}))
-        self.f.paused, self.f.paused_at = False, self.now  # the host answers in time: sent
-        self.f.ack()
-        self.assertEqual(len(self.eyes()), 1)
-
-    def test_a_host_answer_older_than_the_ttl_is_no_answer(self):
-        self.enqueue("m1")
-        self.now += fwd.STATE_TTL + 1
-        self.spool.db.execute("UPDATE ack SET created_at=?", (self.now,))
+        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "unknown"}))
+        self.host_ok(False)  # the host is back a moment later: still not sent (fail closed, not late)
         self.f.ack()
         self.assertEqual(self.sender.calls, [])
+
+    def test_the_host_is_asked_fresh_for_every_ack_nothing_is_cached(self):
+        self.enqueue("a")
+        self.f.ack()
+        self.host_ok(True)                   # paused between two messages, with no poll in between
+        self.enqueue("b")
+        self.f.ack()
+        self.host_ok(False)
+        self.enqueue("c")
+        self.f.ack()
+        self.assertEqual((self.state_asked, len(self.eyes()), self.states()), (3, 2, {"a": "sent", "b": "paused", "c": "sent"}))
 
     def test_paused_host_means_no_ack_at_all(self):
         self.host_ok(paused=True)
@@ -162,19 +170,35 @@ class NotWhenPausedOrUnknown(AckCase):
         self.f.ack()
         self.assertEqual(self.sender.calls, [])  # the closed row is not reopened
 
-    def test_the_owners_own_pause_command_holds_the_ack_before_the_host_has_read_it(self):
-        for text in ("stop changes", "pause", "Pause changes.", "stop"):
+    def test_a_pause_command_stored_here_and_not_yet_handed_to_the_host_blocks_it_and_everything_after_it(self):
+        asked = self.state_asked
+        for text in ("stop changes", "pause", "Pause changes.", "stop", "STOP!"):
             with self.subTest(text=text):
                 self.sender.calls.clear()
-                self.now += fwd.PAUSE_HOLD + 1
-                self.host_ok()
-                self.enqueue("c" + text[:3] + str(self.now), text=text)
-                self.enqueue("after" + str(self.now))
+                self.enqueue("c" + text[:3], text=text)
+                self.enqueue("after" + text[:3])
                 self.f.ack()
                 self.assertEqual(self.sender.calls, [])
-        self.now += fwd.PAUSE_HOLD + 1
-        self.host_ok()
-        self.enqueue("later")
+                self.spool.db.execute("UPDATE inbound SET state='done',payload=NULL")  # handed to the host; the host's queue takes over
+        self.assertEqual(self.state_asked, asked)  # all ten are stopped here, before the host is even asked
+
+    def test_a_message_that_cannot_be_read_counts_as_a_pause_ahead(self):
+        self.enqueue("a")
+        self.spool.db.execute("UPDATE inbound SET payload='not json' WHERE provider_id='a'")
+        self.enqueue("b")
+        self.f.ack()
+        self.assertEqual(self.sender.calls, [])
+
+    def test_an_earlier_unresolved_doorbell_holds_the_ack_but_not_a_later_one(self):
+        def accept(guid):
+            self.spool.accept({"type": "new-message", "data": self.message(guid)}, OWNER_CHAT, self.now)
+        accept("m1")
+        self.spool.doorbell({"type": "new-message", "data": {"guid": "earlier"}}, self.now - 1)  # its fetch keeps failing: content unknown
+        self.f.ack()
+        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "paused"}))
+        self.spool.db.execute("DELETE FROM fetch")
+        accept("m2")
+        self.spool.doorbell({"type": "new-message", "data": {"guid": "later"}}, self.now + 5)
         self.f.ack()
         self.assertEqual(len(self.eyes()), 1)
 
@@ -190,22 +214,26 @@ class NotWhenPausedOrUnknown(AckCase):
         self.f.cfg = {**self.cfg, "ack": False}
         self.enqueue("m1")
         self.f.ack()
-        self.assertEqual((self.sender.calls, self.states(), self.pending()), ([], {"m1": "off"}, 1))
+        self.assertEqual((self.sender.calls, self.states(), self.pending(), self.state_asked), ([], {"m1": "off"}, 1, 0))
 
-    def test_state_poll_reads_the_host_answer_and_failures_leave_it_unknown(self):
-        self.f.paused = None
-        with mock.patch.object(self.f, "control", return_value={"op": "state", "paused": False}):
-            self.f.state()
-        self.assertEqual((self.f.paused, self.f.paused_at), (False, self.now))
-        self.f.paused = None
-        for bad in (bridge.BridgeError("transport-error"), ValueError("relay-op"), KeyError("paused"),
-                    bridge.EnvelopeError("mac")):
-            with mock.patch.object(self.f, "control", side_effect=bad):
-                self.f.state()
-            self.assertIsNone(self.f.paused)
+    def test_host_paused_reads_the_answer_and_every_failure_is_unknown(self):
+        self.assertIs(self.f.host_paused(self.spool), False)
+        self.host_ok(True)
+        self.assertIs(self.f.host_paused(self.spool), True)
+        for bad in (bridge.BridgeError("transport-error"), ValueError("relay-op"), KeyError("paused"), bridge.EnvelopeError("mac")):
+            with self.subTest(bad=bad), mock.patch.object(self.f, "control", side_effect=bad):
+                self.assertIsNone(self.f.host_paused(self.spool))
         with mock.patch.object(self.f, "control", return_value={"op": "state", "paused": "no"}):
-            self.f.state()
-        self.assertIsNone(self.f.paused)
+            self.assertIsNone(self.f.host_paused(self.spool))
+
+    def test_an_older_host_that_does_not_know_the_op_means_no_ack(self):
+        def old_host(url, body=None):
+            if url.endswith("/v1/relay"): raise bridge.BridgeError("http-error")
+            return ft.ForwarderCase.transport(self, url, body)
+        self.f.transport = self.f.quick = old_host
+        self.enqueue("m1")
+        self.f.ack()
+        self.assertEqual((self.sender.calls, self.states()), ([], {"m1": "unknown"}))
 
 
 class AckNeverBlocks(AckCase):
@@ -247,8 +275,7 @@ class AckNeverBlocks(AckCase):
 class CycleOrderAndPolling(AckCase):
     def setUp(self):
         super().setUp()
-        self.f.paused = None
-        self.cycle_control = lambda body, expected, big=False: (
+        self.cycle_control = lambda body, expected, big=False, **kw: (
             {"op": "state", "paused": False} if body["op"] == "state" else {"op": "replies", "items": []})
         orig = self.transport
 
@@ -257,7 +284,7 @@ class CycleOrderAndPolling(AckCase):
             return orig(url, body)
         self.f.transport = transport
 
-    def test_one_cycle_fetches_acks_then_posts_in_that_order(self):
+    def test_one_cycle_fetches_acks_then_posts_in_that_order_without_a_thread(self):
         self.message("m1")
         self.spool.doorbell({"type": "new-message", "data": {"guid": "m1"}}, self.now)
         with mock.patch.object(self.f, "control", side_effect=self.cycle_control):
@@ -453,15 +480,13 @@ class EndToEnd(host_tests.HostCase):
 
     def go(self):
         """One Mac step and one host step, the way the services take turns."""
-        self.f.state()
         self.f.ack()
         self.f.deliver()
         self.work.cycle()
         self.f.pull()
 
     def test_owner_message_is_seen_first_then_answered_and_the_log_shows_every_stage(self):
-        self.f.state()
-        self.assertFalse(self.f.paused)
+        self.assertIs(self.f.host_paused(self.spool), False)
         self.owner_text("m1", "hours")
         self.f.ack()
         self.assertEqual((self.sent, self.relay_rows()), ([EYES], []))  # 👀 out; the receiver has seen nothing yet
@@ -481,7 +506,6 @@ class EndToEnd(host_tests.HostCase):
                          "reply-queued", "reply-pulled", "bb-send-start", "bb-send-end"} <= stages[0], stages[0])
 
     def test_stranger_in_the_owner_chat_gets_no_ack_and_no_reply(self):
-        self.f.state()
         self.owner_text("s1", "hours", sender=STRANGER)
         self.go()
         self.work.cycle()
@@ -493,12 +517,11 @@ class EndToEnd(host_tests.HostCase):
         self.owner_text("a", "status")
         self.go()
         self.assertEqual(self.sent.count(EYES), 1)
-        self.now += timedelta(seconds=fwd.PAUSE_HOLD + 1)
+        self.now += timedelta(seconds=1)
         self.owner_text("p", "stop changes")
-        self.go()                                   # the pause command is read by the host in this step
-        self.f.state()
-        self.assertTrue(self.f.paused)
-        self.now += timedelta(seconds=fwd.PAUSE_HOLD + 1)
+        self.go()                                   # the pause command is read by the host in this step; it gets no 👀 itself
+        self.assertEqual(self.sent.count(EYES), 1)
+        self.assertTrue(host.paused_flag(self.repo.state))
         before = self.sent.count(EYES)
         self.owner_text("b", "status")
         self.go()
@@ -506,8 +529,7 @@ class EndToEnd(host_tests.HostCase):
         self.assertTrue(any("paused" in s.lower() for s in self.sent))
         self.owner_text("r", "resume changes")
         self.go()
-        self.f.state()
-        self.assertFalse(self.f.paused)
+        self.assertFalse(host.paused_flag(self.repo.state))
         self.now += timedelta(seconds=1)
         self.owner_text("c", "status")
         self.go()
@@ -515,6 +537,45 @@ class EndToEnd(host_tests.HostCase):
         self.owner_text("c", "status")              # the same message again (webhook, catch-up, replay)
         self.go()
         self.assertEqual(self.sent.count(EYES), before + 1)
+
+    def test_pause_set_on_the_host_between_two_polls_stops_the_next_eyes_at_once(self):
+        """The reviewer's case: the last answer was 'not paused', then the pause lands on the real host store, then a fresh owner
+        message is accepted before anything else polls. No cached answer exists, so the host is asked again and says paused."""
+        self.owner_text("a", "status")
+        self.f.ack()
+        self.assertEqual(self.sent, [EYES])
+        self.conv.db.execute(conv_control())
+        self.conv.db.execute("INSERT INTO control(name,value,set_at,provider_id) VALUES ('paused','1','2026-11-02T17:00:00+00:00','synthetic')")
+        self.assertTrue(host.paused_flag(self.repo.state))
+        self.owner_text("after-pause", "status")
+        self.f.ack()
+        self.assertEqual(self.sent, [EYES])
+        self.assertEqual(dict(self.spool.db.execute("SELECT provider_id,state FROM ack").fetchall()), {"a": "sent", "after-pause": "paused"})
+
+    def test_a_pause_command_queued_at_the_host_behind_a_slow_interpretation_stops_the_eyes_before_it_is_read(self):
+        """The owner's 'stop changes' reached the host inbox but the worker is still busy with an earlier message, so the pause
+        flag is not set yet. The next owner message must still get no 👀: the host reports its unread pause command."""
+        self.owner_text("slow", "please add eggs to the shelf")
+        self.f.ack()
+        self.f.deliver()                            # the slow message is in the host inbox, the worker never runs in this test
+        self.owner_text("p", "stop changes")
+        self.f.ack()
+        self.f.deliver()                            # the pause command is queued at the host; its flag is NOT set
+        self.assertFalse(self.conv.db.execute("SELECT name FROM sqlite_master WHERE name='control'").fetchall())  # nothing has paused yet
+        self.assertTrue(host.paused_flag(self.repo.state))
+        self.owner_text("next", "status")
+        self.f.ack()                                # the spool no longer holds the pause command (it is done); only the host knows
+        self.assertEqual(self.sent, [EYES])        # only the 'slow' one, sent before the pause command existed
+        self.assertEqual(self.spool.db.execute("SELECT state FROM ack WHERE provider_id='next'").fetchone()[0], "paused")
+
+    def test_a_failed_state_question_means_no_eyes_even_after_an_unpaused_answer(self):
+        self.owner_text("a", "status")
+        self.f.ack()
+        self.owner_text("b", "status")
+        with mock.patch.object(self.f, "quick", side_effect=bridge.BridgeError("transport-error")):
+            self.f.ack()
+        self.assertEqual(self.sent, [EYES])
+        self.assertEqual(self.spool.db.execute("SELECT state FROM ack WHERE provider_id='b'").fetchone()[0], "unknown")
 
     def test_the_hosts_own_replies_never_cause_an_ack(self):
         self.owner_text("a", "help")
@@ -526,6 +587,189 @@ class EndToEnd(host_tests.HostCase):
         self.f.fetch()
         self.go()
         self.assertEqual(self.sent.count(EYES), 1)
+
+
+class HostPauseSignal(host_tests.HostCase):
+    """host.paused_flag is what the Mac's `state` question reads: the flag, an unread pause command, or 'cannot tell'."""
+
+    def queue(self, text, pid="q1", payload=None):
+        self.inbox.db.execute("INSERT INTO inbound(provider_id, received_at, payload, state, enqueued_at) VALUES (?,?,?,?,?)",
+                              (pid, "2026-11-02T17:00:00+00:00", payload or json.dumps({"text": text}), "pending", "2026-11-02T17:00:00+00:00"))
+
+    def test_an_unread_pause_command_counts_as_paused_and_other_queued_text_does_not(self):
+        self.assertFalse(host.paused_flag(self.repo.state))
+        self.queue("status", "s")
+        self.queue("please add eggs to the shelf", "f")
+        self.queue("resume changes", "r")
+        self.assertFalse(host.paused_flag(self.repo.state))
+        for i, text in enumerate(("stop changes", "pause", "Pause changes.", "stop", "STOP!")):
+            with self.subTest(text=text):
+                self.queue(text, f"p{i}")
+                self.assertTrue(host.paused_flag(self.repo.state))
+                self.inbox.db.execute("DELETE FROM inbound WHERE provider_id=?", (f"p{i}",))
+        self.assertFalse(host.paused_flag(self.repo.state))
+
+    def test_a_handled_pause_command_no_longer_counts_only_the_flag_does(self):
+        self.queue("stop changes", "p")
+        self.inbox.db.execute("UPDATE inbound SET state='done', payload=NULL")
+        self.assertFalse(host.paused_flag(self.repo.state))
+
+    def test_an_unreadable_queued_message_counts_as_paused(self):
+        self.queue("", "x", payload="not json")
+        self.assertTrue(host.paused_flag(self.repo.state))
+        self.inbox.db.execute("DELETE FROM inbound")
+        self.queue("", "y", payload=json.dumps({"other": 1}))
+        self.assertTrue(host.paused_flag(self.repo.state))
+
+    def test_it_stays_read_only(self):
+        self.queue("stop changes")
+        before = (Path(self.repo.state) / "inbox.sqlite3").stat().st_mtime_ns
+        host.paused_flag(self.repo.state)
+        self.assertEqual((Path(self.repo.state) / "inbox.sqlite3").stat().st_mtime_ns, before)
+
+
+class ThreadedAck(AckCase):
+    """The real ack thread with real (slow) waits: the 👀 and the rest of the loop never delay each other."""
+
+    def start(self):
+        self.f.start_ack()
+        self.addCleanup(self.f.stop_ack)
+
+    def until(self, test, seconds=5.0):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and not test(): time.sleep(0.01)
+        return test()
+
+    def test_a_slow_failing_ack_send_does_not_delay_the_post_to_the_receiver(self):
+        sends = []
+
+        def slow(chat, text, attachments=()):
+            sends.append(time.monotonic())
+            time.sleep(1.2)
+            raise bridge.BridgeError("transport-error")
+        self.sender.send = slow
+        self.start()
+        self.message("m1")
+        self.spool.doorbell({"type": "new-message", "data": {"guid": "m1"}}, self.now)
+        started = time.monotonic()
+        self.f.cycle()                                   # fetch, kick, deliver, pull in the main loop
+        elapsed = time.monotonic() - started
+        self.assertEqual(len(self.posts), 1)             # delivered while the ack send is still sleeping
+        self.assertLess(elapsed, 0.8)
+        self.assertTrue(self.until(lambda: self.states().get("m1") == "failed", 4))  # the failure is recorded, nothing retried
+        self.assertEqual(len(sends), 1)
+
+    def test_a_slow_reply_pull_does_not_delay_the_eyes_after_acceptance(self):
+        self.start()
+        accepted, sent = [], []
+        original = self.spool.owner_arrived
+        self.spool.owner_arrived = lambda *a: (accepted.append(time.monotonic()), original(*a))[1]
+        plain = self.sender.send
+        self.sender.send = lambda chat, text, attachments=(): (sent.append(time.monotonic()) if text == EYES else None, plain(chat, text, attachments))[1]
+        self.query = [self.message("poll-owner")]
+        self.f.pull = lambda: time.sleep(1.5)            # a reply send / picture work that takes a while
+        started = time.monotonic()
+        self.f.cycle()
+        cycle_took = time.monotonic() - started
+        self.assertTrue(self.until(lambda: sent))
+        self.assertGreaterEqual(cycle_took, 1.5)         # the slow work really ran in the main loop
+        self.assertLess(sent[0] - accepted[0], 0.5)      # and the 👀 did not wait for it
+        self.assertEqual(self.states(), {"poll-owner": "sent"})
+
+    def test_a_slow_catch_up_in_the_same_cycle_does_not_delay_the_eyes_of_a_message_just_fetched(self):
+        self.start()
+        self.message("m1")
+        self.spool.doorbell({"type": "new-message", "data": {"guid": "m1"}}, self.now)   # a webhook announced it; fetch accepts it
+        order = []
+        plain = self.sender.send
+        self.sender.send = lambda chat, text, attachments=(): (order.append("ack"), plain(chat, text, attachments))[1]
+
+        def slow_query():
+            time.sleep(0.8)
+            order.append("catch-up-done")
+        self.f.catch_up = slow_query
+        self.f.cycle()
+        self.assertTrue(self.until(lambda: self.eyes()))
+        self.assertEqual(order, ["ack", "catch-up-done"])
+
+    def test_the_eyes_go_out_before_the_slow_work_returns(self):
+        self.start()
+        self.enqueue("m1")
+        order = []
+        plain = self.sender.send
+        self.sender.send = lambda chat, text, attachments=(): (order.append("ack"), plain(chat, text, attachments))[1]
+
+        def slow_pull():
+            time.sleep(0.6)
+            order.append("pull-done")
+        self.f.pull = slow_pull
+        self.f.cycle()
+        self.assertTrue(self.until(lambda: len(order) == 2))
+        self.assertEqual(order, ["ack", "pull-done"])
+
+    def test_two_threads_one_spool_still_one_ack_per_message(self):
+        other = fwd.Spool(self.root, self.now)
+        self.addCleanup(other.db.close)
+        second = fwd.Forwarder(self.cfg, other, lambda: self.now, self.transport, self.sender)
+        for fw in (self.f, second): fw.start_ack()
+        self.addCleanup(second.stop_ack)
+        self.addCleanup(self.f.stop_ack)
+        for i in range(12): self.enqueue(f"m{i}")
+        for fw in (self.f, second): fw.ack_kick()
+        self.assertTrue(self.until(lambda: set(self.states().values()) == {"sent"} and len(self.states()) == 12))
+        time.sleep(0.3)
+        self.assertEqual(len(self.eyes()), 12)
+
+    def test_heavy_main_loop_writes_and_the_ack_thread_share_the_spool_without_loss(self):
+        self.start()
+        for i in range(25):
+            self.message(f"m{i}")
+            self.spool.doorbell({"type": "new-message", "data": {"guid": f"m{i}"}}, self.now)
+        for _ in range(60):
+            self.f.cycle()
+            if self.pending() == 0: break
+        self.assertTrue(self.until(lambda: len(self.states()) == 25 and set(self.states().values()) == {"sent"}))
+        self.assertEqual((len(self.eyes()), len(self.posts)), (25, 25))
+
+    def test_the_thread_survives_a_broken_table_and_a_raising_sender(self):
+        self.start()
+        self.sender.send = mock.Mock(side_effect=RuntimeError("boom"))
+        self.enqueue("a")
+        self.f.ack_kick()
+        self.assertTrue(self.until(lambda: self.states().get("a") == "failed"))
+        self.sender.send = self._send
+        self.enqueue("b")
+        self.f.ack_kick()
+        self.assertTrue(self.until(lambda: self.states().get("b") == "sent"))
+        self.assertTrue(self.f.ack_thread.is_alive())
+
+    def test_stop_ends_the_thread_and_start_is_idempotent(self):
+        self.f.start_ack()
+        first = self.f.ack_thread
+        self.f.start_ack()
+        self.assertIs(self.f.ack_thread, first)
+        self.f.stop_ack()
+        self.assertFalse(first.is_alive())
+        self.assertIsNone(self.f.ack_thread)
+
+    def test_without_a_thread_kick_runs_the_ack_inline(self):
+        self.enqueue("m1")
+        self.f.ack_kick()
+        self.assertEqual(len(self.eyes()), 1)
+
+    def test_the_state_question_and_the_ack_send_have_their_own_short_timeouts(self):
+        seen = []
+
+        class Opener:
+            def open(self, req, timeout=None):
+                seen.append(timeout)
+                raise OSError("down")
+        with mock.patch.object(bridge, "_OPENER", Opener()):
+            f = fwd.Forwarder(self.cfg, self.spool, lambda: self.now, fwd.request_json, self.sender)
+            self.assertIsNone(f.host_paused(self.spool))
+            with self.assertRaises(bridge.BridgeError): f.transport("http://127.0.0.1:1/x")
+        self.assertEqual(seen, [fwd.ACK_STATE_TIMEOUT, 10])
+        self.assertLessEqual(fwd.ACK_STATE_TIMEOUT + fwd.ACK_TIMEOUT, 2.0)  # the worst one attempt can take, state question plus send
 
 
 class StageLog(unittest.TestCase):

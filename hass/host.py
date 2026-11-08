@@ -132,15 +132,33 @@ def _worktree(cfg) -> str:
     except editor_mod.UnsafeState: raise HostConfigError(["state"]) from None
 
 
+def _pause_waiting(db) -> bool:
+    """True when a pause command sits unread in the inbox (or a queued payload cannot be read): the pause is on its way."""
+    for (payload,) in db.execute("SELECT payload FROM inbound WHERE state = 'pending'"):
+        try:
+            text = json.loads(payload)["text"]
+            found = conversation.read_command(text) or conversation.parse_command(text)
+        except (TypeError, ValueError, KeyError, AttributeError):
+            return True  # cannot tell what it says: treat it as a pause
+        if found and found[0] == "pause": return True
+    return False
+
+
 def paused_flag(state) -> bool:
-    """HASS-FAST-1: True when changes are paused or this cannot be read. Read-only (`mode=ro`), one SELECT, nothing written;
+    """HASS-FAST-1: True when changes are paused, when a pause command is queued but not yet read (the worker may be busy
+    with an earlier message), or when this cannot be read. Read-only (`mode=ro`), nothing written, asked fresh on every 👀;
     the Mac sends its 👀 only when this is False, so an unreadable store means no 👀 (the safe answer)."""
     try:
-        path = Path(state).resolve() / "conversation.sqlite3"
+        base = Path(state).resolve()
+        path = base / "conversation.sqlite3"
         if not path.is_file(): return True
         with contextlib.closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=1)) as db:
-            if not db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone(): return False
-            return db.execute("SELECT 1 FROM control WHERE name = 'paused'").fetchone() is not None
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'control'").fetchone() \
+                    and db.execute("SELECT 1 FROM control WHERE name = 'paused'").fetchone() is not None: return True
+        inbox = base / "inbox.sqlite3"
+        if not inbox.is_file(): return False
+        with contextlib.closing(sqlite3.connect(f"{inbox.as_uri()}?mode=ro", uri=True, timeout=1)) as db:
+            return _pause_waiting(db)
     except (OSError, ValueError, sqlite3.Error):
         return True
 

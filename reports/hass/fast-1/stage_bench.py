@@ -6,13 +6,14 @@ deliver, pull), the host Server (hass/host.py) answering the forwarder's sealed 
 the Worker + Conversation + Inbox + RelayStore (temp state dir and throwaway key), and the stage log (hass/stagelog.py).
 What is a stand-in: BlueBubbles (a Python function; its send takes 0 s, a real AppleScript send adds about 1-3 s,
 unmeasured here) and the model (FixtureInterpreter, 0 s: the real model time is measured by HASS-MODEL-1 and added in the
-report, not simulated). The three services are driven from one thread the way they take turns on the real machines:
-forwarder cycle every 0.2 s, worker cycle every 1 s, receiver handles a request the moment one arrives.
+report, not simulated). The services run the way they do on the real machines: the forwarder cycle every 0.2 s with its 👀 on its own thread (real HTTP to
+the host), the worker cycle every 1 s, and the host's HTTP server in its own thread answering the moment a request arrives.
+(One lock stands in for the host's separate processes so the throwaway sqlite connections can be shared between threads.)
 
 Run from the repo root:  python3.12 reports/hass/fast-1/stage_bench.py [--quick] > reports/hass/fast-1/stage-bench-results.json
 The variant "before" sets the forwarder back to its pre-FAST-1 intervals (reply pull 5 s, catch-up poll 60 s, no 👀).
 """
-import argparse, json, os, sys, tempfile, threading, time, unittest  # noqa: E401
+import argparse, functools, json, os, sqlite3, sys, tempfile, threading, time, unittest  # noqa: E401
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,6 +26,13 @@ from hass.tests.test_conversation import OWNER  # noqa: E402
 from mac import hass_forwarder as fwd  # noqa: E402
 
 RESULTS = []
+sqlite3.connect = functools.partial(sqlite3.connect, check_same_thread=False)  # the throwaway host stores are shared by the bench's threads
+
+
+def locked(lock, handle):
+    def run(h):
+        with lock: return handle(h)
+    return run
 
 
 class Bench(host_tests.HostCase):
@@ -53,6 +61,13 @@ class Bench(host_tests.HostCase):
         srv = host.Server(cfg, bytes.fromhex(host_tests.KEY_HEX), rx, self.store, self.clock, paused=lambda: host.paused_flag(self.repo.state))
         srv.timeout = 5
         self.addCleanup(srv.server_close)
+        lock = threading.RLock()
+        handle = host.Handler._handle
+        host.Handler._handle = locked(lock, handle)
+        self.addCleanup(lambda: setattr(host.Handler, "_handle", handle))
+        serving = threading.Thread(target=srv.serve_forever, kwargs=dict(poll_interval=0.02), daemon=True)
+        serving.start()
+        self.addCleanup(lambda: (srv.shutdown(), serving.join()))
         fcfg = dict(ownerChat=OWNER_CHAT, receiverUrl=f"http://127.0.0.1:{srv.server_port}", bbPort=1, bbPasswordFile=str(root / "password"),
                     secretFile=str(root / "key"), webhookTokenFile=str(root / "token"), spoolDir=str(root), webhookPort=0, ack=not before)
         spool = fwd.Spool(root, time.time())
@@ -60,25 +75,19 @@ class Bench(host_tests.HostCase):
         bb, sent = [], []
 
         def transport(url, body=None):
-            if url.startswith(fcfg["receiverUrl"]):
-                box = {}
-
-                def go():
-                    try: box["r"] = fwd.request_json(url, body)
-                    except Exception as exc: box["e"] = exc  # noqa: BLE001
-                t = threading.Thread(target=go)
-                t.start()
-                srv.handle_request()
-                t.join()
-                if "e" in box: raise box["e"]
-                return box["r"]
+            if url.startswith(fcfg["receiverUrl"]): return fwd.request_json(url, body)
             if url.split("?")[0].endswith("/query"): return {"data": [m for m in bb if m["dateCreated"] > body["after"]]}
             return {"data": next(m for m in bb if m["guid"] == url.split("/api/v1/message/")[1].split("?")[0])}
 
         class Sender:
-            def send(self, chat, text, attachments=()): sent.append((time.time(), text))
+            def send(self, chat, text, attachments=()):
+                time.sleep(p.get("send_s", 0))  # a BlueBubbles send that takes this long (0 in the default scenarios)
+                sent.append((time.time(), text))
         # An ack would be a second Sender call; the bench tells them apart by text, the real code by the ack table.
         f = fwd.Forwarder(fcfg, spool, time.time, transport, Sender(), stage=log)
+        f.quick = functools.partial(fwd.request_json, timeout=fwd.ACK_STATE_TIMEOUT)  # as the real default transport does
+        f.start_ack()  # the 👀 goes out from its own thread, the way main() runs it
+        self.addCleanup(f.stop_ack)
         guid = "bench-" + p["name"]
         started, send_at, next_worker, done_at = time.time(), None, 0.0, None
         while time.time() - started < p["limit"]:
@@ -91,7 +100,7 @@ class Bench(host_tests.HostCase):
                 if p["webhook"]: spool.doorbell({"type": "new-message", "data": {"guid": guid}}, now)
             f.cycle()
             if now >= next_worker:
-                work.cycle()
+                with lock: work.cycle()
                 next_worker = now + 1.0
             replies = [s for s in sent if s[1] != fwd.ACK_TEXT]
             if send_at and replies and done_at is None: done_at = time.time()
@@ -102,7 +111,7 @@ class Bench(host_tests.HostCase):
         accepted_via = next((r.get("via") for r in rows if r["stage"] == "accepted" and r["id"] == ident), None)
         if p.get("warm"): return
         RESULTS.append({"name": p["name"], "variant": p["variant"], "text": p["text"], "webhook": p["webhook"], "phase_s": p["phase"],
-                        "via": accepted_via, "stages_s_after_sent": stages, "eyes_sent": sum(1 for s in sent if s[1] == fwd.ACK_TEXT),
+                        "via": accepted_via, "stages_s_after_sent": stages, "send_s": p.get("send_s", 0), "eyes_sent": sum(1 for s in sent if s[1] == fwd.ACK_TEXT),
                         "replies_sent": sum(1 for s in sent if s[1] != fwd.ACK_TEXT), "end_to_end_s": stages.get("bb-send-end")})
 
 
@@ -118,6 +127,8 @@ def main(argv=None):
         if not args.quick:  # the webhook never fires: only the catch-up poll finds the message (poll runs at start, then every N s)
             for phase in ((14.0, 44.0) if variant == "before" else (5.0, 11.0)):
                 plan.append(dict(variant=variant, text="status", webhook=False, phase=phase, limit=phase + 90))
+    for send_s in (0.5, 1.5):  # attempt versus confirmed send: the 👀 send itself takes this long (BlueBubbles' real time is unmeasured)
+        plan.append(dict(variant="after", text="status", webhook=True, phase=2.0, limit=40, send_s=send_s))
     for n, p in enumerate(plan):
         p["name"] = f"{p['variant']}-{p['text']}-{'hook' if p['webhook'] else 'poll'}{p['phase']:g}-{n}"
         Bench.params = p
