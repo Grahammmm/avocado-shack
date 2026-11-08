@@ -540,7 +540,7 @@ def registry_skills():
         from hass.skills import load_skills
     except ImportError:
         return ()
-    return tuple(load_skills())
+    return load_skills().active()
 
 
 def skill_for(skills, path, rows):

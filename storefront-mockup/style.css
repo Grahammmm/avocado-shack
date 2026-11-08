@@ -81,3 +81,4 @@ dialog .close{position:sticky;top:0;right:auto;float:right;width:44px;height:44p
 .weekly-specials .special-link{display:inline-block;margin-top:2px}
 .weekly-specials[hidden],.weekly-specials li[hidden]{display:none}
 @media(max-width:800px){.weekly-specials{margin:10px 0 0;padding:26px 6% 24px}.weekly-specials ul{grid-template-columns:1fr}}
+.catalog-only .filters.views{border-bottom:0;margin:15px 0 0;padding-bottom:8px}.catalog-only .filters.views+.filters{margin-top:0}
