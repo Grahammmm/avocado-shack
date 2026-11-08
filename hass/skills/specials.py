@@ -106,7 +106,10 @@ NOT_AVAILABLE = "I can't see the specials right now. Could you ask again in a mi
 NO_SPECIALS_NOW = "There are no specials on right now."
 
 _WHY_WORDS = (("web address", "a web address"), ("email address", "an email address"), ("phone number", "a phone number"))
-_MONEY = re.compile(r"\$|\d\s*(?:dollars?|bucks|cents|usd)\b|\d\s*¢", re.I)
+_NUMBER_WORDS = ("a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|"
+                 "eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|half|couple|few|bunch")
+_MONEY = re.compile(r"\$|\d\s*(?:dollars?|bucks?|cents?|usd)\b|\d\s*¢"
+                    rf"|\b(?:{_NUMBER_WORDS})[\s-]+(?:and[\s-]+(?:a[\s-]+)?(?:half|quarter)[\s-]+)?(?:dollars?|bucks?|cents?|usd)\b", re.I)
 
 
 # -- the rules (each id is one named, tested function) --------------------------------------------------------------
@@ -153,7 +156,8 @@ def rule_deal_as_typed(slots, texts, ctx):
     if not texts or not isinstance(deal, str):
         return None
     said = [" ".join(str(t).split()) for t in texts]
-    if not any(" ".join(deal.split()) in t for t in said):
+    whole = re.compile(r"(?<!\w)" + re.escape(" ".join(deal.split())) + r"(?!\w)")  # a whole token run: '2 for 5' is not inside '12 for 5'
+    if not any(whole.search(t) for t in said):
         return NOT_AS_TYPED, "other"
     return None
 
