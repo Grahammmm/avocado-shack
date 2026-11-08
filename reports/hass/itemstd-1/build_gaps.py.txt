@@ -170,6 +170,14 @@ out = {
                          "3": "card face shows a vague place (a region, not a town)", "4": "shelf worth a look", "5": "minor display note"},
     "summary": summary,
     "by_maker": {k: v for k, v in sorted(by_maker.items(), key=lambda kv: (-len([x for x in kv[1] if x["missing"]]), kv[0]))},
+    "audit": {
+        "about": "Duplicate and near-duplicate findings, kept so a human can read them without rerunning anything. Heuristics, not verdicts: nothing here is an error and none of it is asked of Mike.",
+        "exact_duplicates": audit["exact_duplicates"], "same_folded_name": audit["same_folded_name"], "repeated_description": audit["repeated_description"],
+        "near_duplicate_names": [dict(x, disposition="keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)") for x in audit["near_duplicate_names"]],
+        "near_duplicate_names_rule": "difflib ratio of the lower-cased, accent-folded names >= 0.86 and names not identical; all products including held; same_maker says whether the producer key matches",
+        "generic_vs_specific_same_shelf": [dict(x, disposition="human look: a general listing beside specific ones; keep, never asked of Mike, no data changed") for x in audit["generic_vs_specific_same_shelf"]],
+        "generic_vs_specific_rule": "the product's name words are a strict subset of another active product's name words on the same shelf with the same producer key",
+    },
     "rows": rows,
 }
 out_path.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")

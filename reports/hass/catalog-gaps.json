@@ -1190,6 +1190,228 @@
    }
   ]
  },
+ "audit": {
+  "about": "Duplicate and near-duplicate findings, kept so a human can read them without rerunning anything. Heuristics, not verdicts: nothing here is an error and none of it is asked of Mike.",
+  "exact_duplicates": [],
+  "same_folded_name": [],
+  "repeated_description": [],
+  "near_duplicate_names": [
+   {
+    "a": "photo-product-037",
+    "a_name": "Cal Poly chipotle cheddar",
+    "b": "photo-product-038",
+    "b_name": "Cal Poly white cheddar",
+    "ratio": 0.894,
+    "same_maker": true,
+    "disposition": "keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)"
+   },
+   {
+    "a": "photo-product-008",
+    "a_name": "Cal Poly strawberry jam",
+    "b": "photo-product-009",
+    "b_name": "Cal Poly raspberry jam",
+    "ratio": 0.889,
+    "same_maker": true,
+    "disposition": "keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)"
+   },
+   {
+    "a": "photo-product-003",
+    "a_name": "Linn's blueberry preserves",
+    "b": "photo-product-004",
+    "b_name": "Linn's boysenberry preserves",
+    "ratio": 0.885,
+    "same_maker": true,
+    "disposition": "keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)"
+   },
+   {
+    "a": "photo-product-151",
+    "a_name": "King oyster mushrooms",
+    "b": "photo-product-136",
+    "b_name": "Dried king oyster mushrooms",
+    "ratio": 0.875,
+    "same_maker": false,
+    "disposition": "keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)"
+   },
+   {
+    "a": "photo-product-114",
+    "a_name": "Lemon Bar white chocolate",
+    "b": "photo-product-117",
+    "b_name": "Lemon Lavender white chocolate",
+    "ratio": 0.873,
+    "same_maker": true,
+    "disposition": "keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)"
+   },
+   {
+    "a": "photo-product-150",
+    "a_name": "Lion’s mane mushrooms",
+    "b": "photo-product-046",
+    "b_name": "Dried lion’s mane mushrooms",
+    "ratio": 0.87,
+    "same_maker": false,
+    "disposition": "keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)"
+   },
+   {
+    "a": "photo-product-002",
+    "a_name": "Linn's triple berry preserves",
+    "b": "photo-product-003",
+    "b_name": "Linn's blueberry preserves",
+    "ratio": 0.868,
+    "same_maker": true,
+    "disposition": "keep: different flavour or form, not a duplicate (name ratio >= 0.86 with the same words changed)"
+   }
+  ],
+  "near_duplicate_names_rule": "difflib ratio of the lower-cased, accent-folded names >= 0.86 and names not identical; all products including held; same_maker says whether the producer key matches",
+  "generic_vs_specific_same_shelf": [
+   {
+    "generic": "photo-product-067",
+    "generic_name": "Potatoes",
+    "specific": "photo-product-145",
+    "specific_name": "Gold potatoes",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-067",
+    "generic_name": "Potatoes",
+    "specific": "photo-product-146",
+    "specific_name": "Red potatoes",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-067",
+    "generic_name": "Potatoes",
+    "specific": "photo-product-147",
+    "specific_name": "Purple potatoes",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-068",
+    "generic_name": "Lettuce",
+    "specific": "photo-product-062",
+    "specific_name": "Romaine lettuce",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-071",
+    "generic_name": "Mushrooms",
+    "specific": "photo-product-150",
+    "specific_name": "Lion’s mane mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-071",
+    "generic_name": "Mushrooms",
+    "specific": "photo-product-151",
+    "specific_name": "King oyster mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-071",
+    "generic_name": "Mushrooms",
+    "specific": "photo-product-152",
+    "specific_name": "Shiitake mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-071",
+    "generic_name": "Mushrooms",
+    "specific": "photo-product-153",
+    "specific_name": "Maitake mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-071",
+    "generic_name": "Mushrooms",
+    "specific": "photo-product-154",
+    "specific_name": "Chanterelle mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-071",
+    "generic_name": "Mushrooms",
+    "specific": "photo-product-155",
+    "specific_name": "Lobster mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-071",
+    "generic_name": "Mushrooms",
+    "specific": "photo-product-156",
+    "specific_name": "Crimini mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-076",
+    "generic_name": "Peppers",
+    "specific": "photo-product-163",
+    "specific_name": "Sweet peppers",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-076",
+    "generic_name": "Peppers",
+    "specific": "photo-product-164",
+    "specific_name": "Red bell peppers",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-076",
+    "generic_name": "Peppers",
+    "specific": "photo-product-165",
+    "specific_name": "Poblano peppers",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-077",
+    "generic_name": "Tomatoes",
+    "specific": "photo-product-168",
+    "specific_name": "San Marzano tomatoes",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-077",
+    "generic_name": "Tomatoes",
+    "specific": "photo-product-169",
+    "specific_name": "Cherry tomatoes",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-077",
+    "generic_name": "Tomatoes",
+    "specific": "photo-product-170",
+    "specific_name": "Sun Gold tomatoes",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-044",
+    "generic_name": "Dried mushrooms",
+    "specific": "photo-product-046",
+    "specific_name": "Dried lion’s mane mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-044",
+    "generic_name": "Dried mushrooms",
+    "specific": "photo-product-047",
+    "specific_name": "Dried maitake mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-044",
+    "generic_name": "Dried mushrooms",
+    "specific": "photo-product-136",
+    "specific_name": "Dried king oyster mushrooms",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   },
+   {
+    "generic": "photo-product-049",
+    "generic_name": "Fair Hills Farm black tea",
+    "specific": "photo-product-050",
+    "specific_name": "Fair Hills Farm cinnamon black tea",
+    "disposition": "human look: a general listing beside specific ones; keep, never asked of Mike, no data changed"
+   }
+  ],
+  "generic_vs_specific_rule": "the product's name words are a strict subset of another active product's name words on the same shelf with the same producer key"
+ },
  "rows": [
   {
    "kind": "product",
