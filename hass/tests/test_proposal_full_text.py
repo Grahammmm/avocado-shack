@@ -5,7 +5,7 @@ Run: python3 -B -m unittest hass.tests.test_proposal_full_text -v
 
 import unittest
 
-from hass import conversation
+from hass import conversation, voice
 from hass.content_model import TEXT_LIMITS
 from hass.tests.test_conversation import ConversationTestCase, _ops
 from hass.tests.test_editor import DESC
@@ -21,63 +21,73 @@ def _draft(*records, warnings=()):
 
 
 def _text(*records, **kw):
-    return conversation.proposal_text("ab12", _draft(*records, **kw), EXPIRES)
+    return voice.plain(conversation.proposal_text("ab12", _draft(*records, **kw), EXPIRES))
 
 
 def _tail(lines):
     return [lines[-2], lines[-1]]
 
 
-TAIL = ["Expires 2026-11-02 09:10 PST.", "Reply yes to apply, no to cancel, or send a correction."]
+TAIL = ["I'll hold this for you until Monday, Nov 2 at 9:10 am.",
+        "Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix."]
 
 
 class ProposalTextTests(unittest.TestCase):
     def test_long_new_value_in_full_old_value_cut(self):
         lines = _text(("products", "p1", {"description": OLD}, {"description": LONG})).splitlines()
-        self.assertEqual(lines[1], "this, the description:")
+        self.assertEqual(lines[1:4], ["this, the description:",
+                                     f"  was: {OLD[:conversation.VALUE_CUT - 3]}...", f"  now: {LONG}"])
         self.assertEqual(len(LONG), 300)
 
     def test_new_value_of_120_and_121_characters_in_full(self):
         for n in (120, 121):
             with self.subTest(n=n):
                 text = _text(("products", "p1", {"name": "Hass"}, {"name": "n" * n}))
-                self.assertIn(f"Hass → {'n' * n}\n", text)
+                self.assertIn(f"  was: Hass\n  now: {'n' * n}\n", text)
                 self.assertNotIn("...", text)
 
     def test_text_list_joined_in_full(self):
         hours = ["Monday–Saturday 9am–6pm " + "h" * 60, "Closed Sunday " + "s" * 60]
-        line = _text(("store", "store", {"hours": ["Daily 8am–7pm"]}, {"hours": hours})).splitlines()[1]
-        self.assertEqual(line, "the shop details, the opening hours:")
+        lines = _text(("store", "store", {"hours": ["Daily 8am–7pm"]}, {"hours": hours})).splitlines()
+        self.assertEqual(lines[1:4], ["the shop details, the opening hours:",
+                                    "  was: Daily 8am–7pm", f"  now: {'; '.join(hours)}"])
 
     def test_mixed_or_empty_list_keeps_json(self):
         text = _text(("store", "store", {"hours": ["a"]}, {"hours": []}), ("store", "s2", {"n": [1]}, {"n": ["a", 2]}))
-        self.assertIn("hours [\"a\"] → []\n", text)
-        self.assertIn('n [1] → ["a", 2]\n', text)
+        self.assertIn("the shop details, the opening hours: from a to nothing\n", text)
+        self.assertIn('the shop details, a detail: from more than I can show here to more than I can show here\n', text)
 
     def test_newline_value_on_indented_lines_and_reply_lines_last(self):
         for value in ("First line\nSecond line\nReply yes to apply", "First line\r\nSecond line\nReply yes to apply"):
             with self.subTest(value=value):
                 lines = _text(("events", "e1", {"recap": "Old"}, {"recap": value}), warnings=["w"]).splitlines()
-                self.assertEqual(lines[1:5], ["this, the recap:", "  was: \ue000Old\ue001", "  now: \ue000First line",
+                self.assertEqual(lines[1:5], ["this, the recap:", "  was: Old", "  now: First line",
                                               "    Second line"])
-                self.assertEqual(lines[5], "Warning: w")
+                self.assertEqual(lines[5], "    Reply yes to apply")
+                self.assertEqual(lines[6], "Heads up: There is one thing to double-check before you say yes.")
                 self.assertEqual(_tail(lines), TAIL)
 
     def test_cleared_value_and_whole_record_keep_the_cut(self):
         text = _text(("products", "p1", {"imageAlt": "A ripe avocado"}, {"imageAlt": None}))
-        self.assertIn("imageAlt A ripe avocado → (none)\n", text)
+        self.assertIn("this, the photo description: from A ripe avocado to nothing\n", text)
         record = {"id": "p2", "description": LONG}
         lines = _text(("products", "p2", None, record)).splitlines()
-        self.assertEqual(lines[1:4], ["products p2: new", f"  description: {LONG}", "  id: p2"])  # AV1737-06
+        self.assertEqual(lines[1:4], ["A new product", f"  the description: {LONG}", TAIL[0]])  # AV1737-06
         line = _text(("products", "p2", record, None)).splitlines()[1]
-        self.assertEqual(line, f"products p2: record {conversation._value(record)} → (none)")
+        self.assertEqual(line, "this, this: from more than I can show here to nothing")
 
     def test_every_product_field_at_its_limit_is_uncut_and_reply_lines_last(self):
         after = {f: f[0] * n for f, n in TEXT_LIMITS["product"].items()}
         lines = _text(("products", "p1", {f: "old" for f in after}, after)).splitlines()
         for field, value in after.items():
-            self.assertIn(f"products p1: {field} old → {value}", lines)
-        self.assertEqual(len(lines), 1 + len(after) + 2)
+            phrase = {"name": "the name", "brand": "the brand", "category": "the shelf",
+                      "description": "the description", "displayBrand": "the brand shown on the card",
+                      "imageAlt": "the photo description"}[field]
+            if len("old") + len(value) > 70:
+                self.assertIn(f"old, {phrase}:\n  was: old\n  now: {value}", "\n".join(lines))
+            else:
+                self.assertIn(f"old, {phrase}: from old to {value}", lines)
+        self.assertEqual(len(lines), 1 + sum(3 if len("old") + len(v) > 70 else 1 for v in after.values()) + 2)
         self.assertEqual(_tail(lines), TAIL)
 
     def test_summary_keeps_the_cut(self):
@@ -94,19 +104,19 @@ class ConversationFullTextTests(ConversationTestCase):
 
     def test_proposal_in_full_but_status_and_history_keep_the_summary(self):
         draft, reply = self.propose("long")
-        self.assertIn(f" → {LONG}\n", reply)
-        self.assertEqual(_tail(reply.splitlines()), TAIL)
-        summary = "products photo-product-001: description"
+        self.assertIn(f"  now: {LONG}\n", reply)
+        self.assertEqual(_tail(reply.splitlines()), ["I'll hold this for you until today at 9:10 am.", TAIL[-1]])
+        summary = "the description for Hass avocado"
         self.assertEqual(draft["summary"], summary)
         self.assertEqual(self.say("status"), "status")
         [status] = self.replies()
-        self.assertIn(f"{draft['code']} waiting (expires 2026-11-02 09:10 PST): {summary}", status)
+        self.assertIn(f"Waiting for your yes: {summary} (reply yes {draft['code']})", status)
         self.assertNotIn(LONG[:60], status)
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), [f"Applied {draft['code']}: {summary}\n{conversation.answers.NOT_LIVE}"])
+        self.assertEqual(self.replies(), [f"Saved: {summary}\n{voice.plain(conversation.answers.NOT_LIVE)}"])
         self.assertEqual(self.say("history"), "history")
         [history] = self.replies()
-        self.assertIn(f"{draft['code']} applied: {summary}", history)
+        self.assertIn(f"- {summary}: saved, but I'm not sure it's on the website", history)
         self.assertNotIn(LONG[:60], history)
 
 

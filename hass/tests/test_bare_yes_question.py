@@ -14,7 +14,7 @@ from hass.tests.test_conversation import T0
 
 class BareYesQuestionTests(h16.NeedsDetailsExpiryTests):
     def still(self, row):
-        return f"{row['code']} still needs details: {row['summary']}"
+        return f"I still need an answer from you first. {row['summary']}"
 
     def assert_nothing_applied(self):
         approvals = self.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0]
@@ -46,7 +46,7 @@ class BareYesQuestionTests(h16.NeedsDetailsExpiryTests):
         draft, _reply = self.propose("desc")
         self.assertEqual(self.say("yes"), "approved")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Applied {draft['code']}"), reply)
+        self.assertTrue(reply.startswith(f"Saved: {draft['summary']}"), reply)
         self.assertNotIn(q["code"], reply)
         self.assertEqual(self.state(q)["state"], "needs-details")
         self.assertEqual(self.say("yes"), "no-target")  # now only the question waits

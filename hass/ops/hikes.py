@@ -116,7 +116,7 @@ def _start(day: str, clock: str, now):
     if first <= now:
         return Refused("start is in the past")
     if first - now > timedelta(days=MAX_AHEAD_DAYS):
-        return NeedsDetails(["date"], f"{day} is more than {MAX_AHEAD_DAYS} days away; check the year. "
+        return NeedsDetails(["date"], f"{first:%B} {first.day}, {first.year} is more than {MAX_AHEAD_DAYS} days away; check the year. "
                                       "What date should it be?")
     return first.isoformat(timespec="seconds")
 

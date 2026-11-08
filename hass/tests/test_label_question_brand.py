@@ -6,12 +6,13 @@ Run: python3 -m unittest hass.tests.test_label_question_brand -v
 import unittest
 
 from hass.label_reader import question
+from hass import voice
 
-TAIL = ". Is that right? Say which product it is either way."
+TAIL = ". Is that right? Either way, tell me which product it is."
 
 
 def line(words):
-    return f"The label looks like: {words}{TAIL}"
+    return f"The label looks like {voice.quote(words)}{TAIL}"
 
 
 class QuestionBrandTests(unittest.TestCase):
@@ -50,9 +51,9 @@ class QuestionBrandTests(unittest.TestCase):
         makers = {"sn": {"name": "Sierra Nevada", "place": "Chico"}}
         products = [{"id": "p-9", "name": "Sierra Nevada Pale Ale", "brand": "Sierra Nevada", "status": "active"}]
         self.assertEqual(question(found, makers, products),
-                         line("Sierra Nevada Pale Ale") + " Maker on file: Sierra Nevada."
-                         " Already listed: p-9 (Sierra Nevada Pale Ale); reply with that id to update it instead.")
-        self.assertEqual(question(found, makers), line("Sierra Nevada Pale Ale") + " Maker on file: Sierra Nevada.")
+                         line("Sierra Nevada Pale Ale") + f" I know the maker as {voice.quote('Sierra Nevada')}."
+                         f" {voice.quote('Sierra Nevada Pale Ale')} is already on the website. Reply with that name if you want to update it instead.")
+        self.assertEqual(question(found, makers), line("Sierra Nevada Pale Ale") + f" I know the maker as {voice.quote('Sierra Nevada')}.")
         held = [{**products[0], "status": "held"}]
         self.assertEqual(question(found, None, held), line("Sierra Nevada Pale Ale"))
         self.assertEqual(found, {"name": "Sierra Nevada Pale Ale", "brand": "Sierra Nevada"})  # found not changed

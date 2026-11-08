@@ -27,7 +27,7 @@ class BareUndoSkipsUndoTests(H06TestCase):
         """A bare undo proposes the revert of ``target``; returns the proposed row."""
         self.assertEqual(self.say("undo"), "proposed")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Undo {target['code']}:\nDraft "), reply)
+        self.assertTrue(reply.startswith("To undo that, I'd change it back:\nHere's the change I'd make:"), reply)
         row = self.drafts()[-1]
         self.assertEqual(json.loads(row["ops_json"]), [{"op": REVERT, "args": {"changeId": target["change_id"]}}])
         return row
@@ -46,7 +46,7 @@ class BareUndoSkipsUndoTests(H06TestCase):
         self.assertEqual([d["state"] for d in self.drafts()], ["reverted", "reverted", "verified", "verified"])
         rows, commits = len(self.drafts()), self.commits()
         self.assertEqual(self.say("undo"), "no-target")
-        self.assertEqual(self.replies(), ["Nothing to undo."])
+        self.assertEqual(self.replies(), ["There's nothing to undo."])
         self.assertEqual((len(self.drafts()), self.commits()), (rows, commits))
 
     def test_only_an_undo_left_is_nothing_to_undo(self):
@@ -57,7 +57,7 @@ class BareUndoSkipsUndoTests(H06TestCase):
         for text in ("undo", "Undo.", "UNDO!"):
             with self.subTest(text):
                 self.assertEqual(self.say(text), "no-target")
-                self.assertEqual(self.replies(), ["Nothing to undo."])
+                self.assertEqual(self.replies(), ["There's nothing to undo."])
         self.assertEqual((len(self.drafts()), self.commits()), (rows, commits))
 
     def test_undo_naming_an_undo_is_still_refused(self):
@@ -66,7 +66,7 @@ class BareUndoSkipsUndoTests(H06TestCase):
         u = self.approve()
         self.assertEqual(self.say(f"undo {u['code']}"), "not-drafted")
         self.assertEqual(self.replies(),
-                         [f"Not undone: {u['change_id']} is an undo; to bring the change back, ask for it again"])
+                         ["I couldn't undo that, so nothing changed. Could you say it another way?"])
         self.assertEqual([d["state"] for d in self.drafts()], ["reverted", "verified"])
 
     def test_proposed_undo_does_not_change_the_choice(self):

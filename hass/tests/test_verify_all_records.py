@@ -78,7 +78,7 @@ class VerifyAllRecordsTests(H06TestCase):
         first = str(self.repo.state / "screenshots" / files[0])
         self.assertEqual((row["state"], row["screenshot"], row["reason"]), ("verified", first, None))
         self.assertEqual((reply["text"], reply["attachments"]),
-                         (f"Applied and checked {row['code']}: {row['summary']}\n{answers.NOT_LIVE}", [first]))
+                         (f"Saved and checked: {row['summary']}\n{answers.NOT_LIVE}", [first]))
         self.assertEqual(self.log, "")
 
     def test_second_of_three_fails_names_it_and_stops(self):
@@ -101,7 +101,7 @@ class VerifyAllRecordsTests(H06TestCase):
         self.assertEqual([t["id"] for t, _n in self.previewer.results], ["p1", "p2", "p3", "p4", "p5"])
         self.assertEqual([n for _t, n in self.previewer.results], self.names(row, 5))
         self.assertEqual((row["state"], reply["text"]),
-                         ("verified", f"Applied and checked {row['code']}: {row['summary']}\n{answers.NOT_LIVE}"))
+                         ("verified", f"Saved and checked: {row['summary']}\n{answers.NOT_LIVE}"))
         self.assertEqual(self.log,
                          f"verify {row['change_id']}: over 5 records, not checked: products p6, products p7\n")
 

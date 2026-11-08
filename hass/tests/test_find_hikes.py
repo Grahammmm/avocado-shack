@@ -4,13 +4,15 @@ and the same while paused. Synthetic titles in the throwaway writer worktree onl
 Run: python3 -B -m unittest hass.tests.test_find_hikes -v
 """
 
+import json
+
 from hass import conversation
 from hass.content_model import ContentError, load_and_validate
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests import test_find
 from hass.tests.test_status_pause import StoreMixin
 
-NONE = 'No product, maker, hike or route idea matches "{}".'
+NONE = "I couldn't find anything called {}."
 
 
 def event(eid, title, starts, status="scheduled"):
@@ -43,20 +45,21 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
             "Cerro Cabrillo sunrise (hike, Saturday, Oct 17 at 7:05 am, coming up)",
             "Cerro Cabrillo winter loop (hike, Saturday, Dec 5 at 1:30 pm, coming up)",
             "Cerro Cabrillo summit (route idea, just an idea)"])
-        self.assertEqual(self.find("find cerro summit"), ["route idea-cerro-cabrillo: Cerro Cabrillo summit (idea)"])
+        self.assertEqual(self.find("find cerro summit"), ["Cerro Cabrillo summit (route idea, just an idea)"])
         self.community([event("hike-2026-12-05", "Peña Zzridge bluffs", "2026-12-05T12:00:00-08:00")])
         self.assertEqual(self.find("find PENA zzridge"), [  # accents folded; noon is pm
-            "hike hike-2026-12-05: Peña Zzridge bluffs (Saturday Dec 5, 12:00 pm, scheduled)"])
+            "Peña Zzridge bluffs (hike, Saturday, Dec 5 at 12 pm, coming up)"])
 
     def test_eight_products_and_five_hikes_share_the_cap(self):
         self.rename("Zzqx", products=8)
         self.community([event(f"hike-2026-12-0{d}", f"Zzqx walk {d}", f"2026-12-0{d}T09:00:00-08:00") for d in range(1, 6)])
         lines = self.find("find zzqx")
         self.assertEqual(len(lines), 11)
-        self.assertEqual([ln.split()[0] for ln in lines[:10]], ["product"] * 8 + ["hike"] * 2)
-        self.assertEqual(lines[8:], ["hike hike-2026-12-01: Zzqx walk 1 (Tuesday Dec 1, 9:00 am, scheduled)",
-                                     "hike hike-2026-12-02: Zzqx walk 2 (Wednesday Dec 2, 9:00 am, scheduled)",
-                                     "… 3 more; add a word."])
+        products = sorted(json.loads((self.repo.wt / "hass/content/products.json").read_text())["products"], key=lambda p: p["id"])[:8]
+        self.assertEqual(lines[:8], [f"{p['name']} (on the website)" for p in products])
+        self.assertEqual(lines[8:], ["Zzqx walk 1 (hike, Tuesday, Dec 1 at 9 am, coming up)",
+                                     "Zzqx walk 2 (hike, Wednesday, Dec 2 at 9 am, coming up)",
+                                     "There are more. Add a word to narrow it down."])
 
     def test_cancelled_and_completed_hikes_show_their_status(self):
         self.community([event("hike-2026-10-03", "Zzst coast", "2026-10-03T08:00:00-07:00", "completed"),
@@ -112,7 +115,7 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
             self.assertEqual(self.find("find zzinj"), [test_find.UNAVAILABLE])
         path.write_text(good, "utf-8")
         self.community([event("hike-2026-12-05", "Zzinj walk", "bad")])  # the same record, safe fields: listed
-        self.assertEqual(self.find("find zzinj"), ["hike hike-2026-12-05: Zzinj walk (date unreadable, scheduled)"])
+        self.assertEqual(self.find("find zzinj"), ["Zzinj walk (hike, no date I can read, coming up)"])
 
     def test_paused_gives_the_same_answer_and_changes_nothing(self):
         self.community([event("hike-2026-12-05", "Zzps walk", "2026-12-05T09:00:00-08:00")], [("idea-zzps", "Zzps loop")])
@@ -132,7 +135,7 @@ class FindHikeTests(StoreMixin, ConversationTestCase):
         self.community([event("hike-2026-12-05", "Cerro Cabrillo", "2026-12-05T09:00:00-08:00")],
                        [("idea-cerro-alto", "Cerro Alto")])
         self.assertEqual(self.find("find cerro zzqx"), [NONE.format("cerro zzqx")])
-        self.assertEqual(self.find("find alto cerro"), ["route idea-cerro-alto: Cerro Alto (idea)"])
+        self.assertEqual(self.find("find alto cerro"), ["Cerro Alto (route idea, just an idea)"])
         self.assertEqual(self.find("find ''"), [NONE.format("''")])
 
 

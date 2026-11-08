@@ -15,8 +15,8 @@ from hass.tests.test_conversation import T0, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS, NEW_HOURS
 from hass.tests.test_status_pause import StoreMixin
 
-NOTHING_WAITING = "\n\nWaiting for you: nothing"  # AV1102-11: the block every report now ends with
-UNAVAILABLE = "Shelf report unavailable right now; nothing changed." + NOTHING_WAITING
+NOTHING_WAITING = "\n\nNothing is waiting for you."  # AV1102-11: the block every report now ends with
+UNAVAILABLE = "I can't read the shelf report right now, so I can't tell you what's on the shelves. Nothing has changed." + NOTHING_WAITING
 
 
 class ReportParseTests(unittest.TestCase):
@@ -56,7 +56,7 @@ class ReportTests(StoreMixin, ConversationTestCase):
 
     def test_report_wordings_reply_the_rendered_report_and_change_nothing(self):
         want = self.expected(date(2026, 11, 2))
-        self.assertTrue(want.startswith("Shelf check: Monday, October 26\n"), want)
+        self.assertTrue(want.startswith("Your last shelf check was Monday, October 26.\n"), want)
         for text in ("report", "Report.", "morning report!"):
             with self.subTest(text=text):
                 self.assertEqual(self.report(text), want)
@@ -68,7 +68,7 @@ class ReportTests(StoreMixin, ConversationTestCase):
             with self.subTest(text=text):
                 self.interp.mapping[text] = _ops((HOURS, {"hours": NEW_HOURS}))
                 self.assertEqual(self.say(text), "proposed")
-                self.assertNotIn("Shelf check", "\n".join(self.replies()))
+                self.assertNotIn("Your last shelf check", "\n".join(self.replies()))
         self.assertIn("interpret", self.calls)
 
     def test_report_while_paused_and_with_a_lapsed_proposal(self):
@@ -114,7 +114,7 @@ class ReportTests(StoreMixin, ConversationTestCase):
         self.now = datetime(2026, 11, 3, 7, 30, tzinfo=timezone.utc)  # 2026-11-02 23:30 PST
         pacific, utc = self.expected(date(2026, 11, 2)), self.expected(date(2026, 11, 3))
         self.assertNotEqual(pacific, utc)
-        self.assertTrue(utc.startswith("Shelf check: Monday, October 26 - more than a week ago"), utc)
+        self.assertTrue(utc.startswith("Your last shelf check was Monday, October 26. That was more than a week ago"), utc)
         self.assertEqual(self.report(), pacific)
 
 

@@ -79,7 +79,7 @@ class PhotoNewProductTests(unittest.TestCase):
         [row] = self.drafts()
         self.assertEqual((row["state"], row["code"]), ("proposed", SHA[:4]))
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Draft {SHA[:4]}:"), reply)
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
         self.assertEqual(self.say("yes"), "approved")
         self.assertEqual(self.drafts()[0]["state"], "applied")
         [product] = self.added()
@@ -96,7 +96,7 @@ class PhotoNewProductTests(unittest.TestCase):
     def test_new_product_naming_another_photo_is_refused(self):
         before = self.photo_draft()
         self.assertRefused("new product, other photo", [_op("product.add", **ADD, photo=PNG_SHA)], "photo-mismatch",
-                           "That draft is for another photo.", before)
+                           "That answer goes with a different photo, so nothing changed. Which product is this photo for?", before)
 
     def test_new_product_with_an_image_too_gets_the_photo_and_is_not_drafted(self):
         real = "assets/products/real-quince.webp"  # PhotoRepo links other images; image args need a real file
@@ -105,7 +105,7 @@ class PhotoNewProductTests(unittest.TestCase):
         git(self.repo.wt, "commit", "-q", "-s", "-m", "real image")
         before = self.photo_draft()
         self.assertRefused("new product with image", [_op("product.add", **ADD, image=real)], "not-drafted",
-                           "Not drafted: give image or photo, not both", before)
+                           "I couldn't make that change, so nothing changed. Could you say it another way?", before)
 
     def test_two_photo_ops_in_one_answer_change_nothing(self):
         before = self.photo_draft()
@@ -116,7 +116,7 @@ class PhotoNewProductTests(unittest.TestCase):
                  "two add": [_op("product.add", **ADD), _op("product.add", **{**ADD, "name": "Test medlar"})]}
         for name, ops in cases.items():
             with self.subTest(name):
-                self.assertRefused(name, ops, "photo-many-ops", "One photo can go on one product; say which.", before)
+                self.assertRefused(name, ops, "photo-many-ops", "A photo can go on one product at a time. Which product is it for?", before)
         self.assertEqual(self.repo.product(PID)["image"], IMAGE)
 
     def test_add_that_revises_no_photo_draft_gets_no_photo(self):
@@ -125,7 +125,7 @@ class PhotoNewProductTests(unittest.TestCase):
         self.assertEqual(self.drafts(), [])
         before = self.photo_draft()  # a waiting photo question is not filled by an add that does not revise it
         self.assertRefused("add Test quince again", [_op("product.add", **ADD)], "not-drafted",
-                           "Not drafted: Send the photo with the product name as its caption.", before, revises=False)
+                           "Send the photo with the product name as its caption.", before, revises=False)
 
     def test_prompt_snapshot_holds_the_new_vs_existing_rule_once(self):
         rule = ("- When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a "

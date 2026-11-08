@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from hass import owner_answers as answers
 
 NOW = datetime(2026, 11, 2, 18, 0, tzinfo=timezone.utc)
-WORDS = "install failed, some website files not put back - ask for help"
+WORDS = "it didn't finish, and some website files could not be put back - please ask Graham"
 BOTH = {"state": "failed", "reason": "write failed: x; rollback failed: y"}
-DID_BOTH = ("This did not reach the website, and some website files could not be put back. "
-            "The website files could not be written. Please ask for help before more changes.")
+DID_BOTH = ("That didn't reach the website, and some website files could not be put back. "
+            "I couldn't update the website pages. Please ask Graham before making more changes.")
 PUT_BACK = "some website files could not be put back"
 
 
@@ -36,10 +36,10 @@ class RollbackFailedHistoryTests(unittest.TestCase):
 
     def test_other_install_states_with_the_phrase_unchanged(self):
         for install, words in (({"state": "installed", "reason": "rollback failed: y"}, "on the website"),
-                               ({"state": "running", "reason": "rollback failed: y"}, "not confirmed on the website"),
-                               ({"reason": "rollback failed: y"}, "not confirmed on the website"),
-                               ("rollback failed", "not confirmed on the website"),
-                               ([BOTH], "not confirmed on the website")):
+                               ({"state": "running", "reason": "rollback failed: y"}, "saved, but I'm not sure it's on the website"),
+                               ({"reason": "rollback failed: y"}, "saved, but I'm not sure it's on the website"),
+                               ("rollback failed", "saved, but I'm not sure it's on the website"),
+                               ([BOTH], "saved, but I'm not sure it's on the website")):
             with self.subTest(install=install):
                 self.assertEqual(answers.history_words({"state": "applied"}, install), words)
 
@@ -55,14 +55,14 @@ class RollbackFailedHistoryTests(unittest.TestCase):
                     did = answers.did_it_work({"state": state}, install, NOW)
                     self.assertEqual(history == WORDS, expected)
                     self.assertEqual(PUT_BACK in did, expected)
-                    self.assertEqual(history, WORDS if expected else "not on the website yet")
+                    self.assertEqual(history, WORDS if expected else "saved, but it didn't reach the website")
 
     def test_non_saved_states_ignore_the_install(self):
-        for state, words in (("approved", "approved, not saved yet"), ("reverted", "undone"),
-                             ("failed", "not saved; website unchanged"), ("proposed", "waiting for your OK"),
-                             ("needs-details", "waiting for your OK"), ("rejected", "nothing changed"),
-                             ("expired", "nothing changed"), (None, "waiting for your OK"),
-                             ("bogus", "state unknown - ask for help")):
+        for state, words in (("approved", "you said yes, but it isn't saved yet"), ("reverted", "undone"),
+                             ("failed", "I couldn't save it, so nothing changed"), ("proposed", 'waiting for your yes'),
+                             ("needs-details", 'waiting for your yes'), ("rejected", "cancelled, nothing changed"),
+                             ("expired", "timed out, nothing changed"), (None, 'waiting for your yes'),
+                             ("bogus", "I'm not sure where this one stands - please ask Graham")):
             with self.subTest(state=state):
                 self.assertEqual(answers.history_words({"state": state}, BOTH), words)
                 self.assertNotIn(PUT_BACK, answers.did_it_work({"state": state}, BOTH, NOW))

@@ -8,11 +8,11 @@ from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
-from hass import conversation
+from hass import conversation, voice
 from hass.tests.test_conversation import CHAT, OWNER, T0, ConversationTestCase
 from hass.tests.test_undo import H06TestCase
 
-USAGE = "Send show and a draft code, e.g. show a1b2."
+USAGE = "Say show on its own to see the change that is waiting for you."
 
 
 class ShowTestMixin:
@@ -38,7 +38,7 @@ class ShowPreviewTests(ShowTestMixin, H06TestCase):
         targets = len(self.previewer.targets)
         text, shots = self.show(f"Show {draft['code'].upper()}.")
         code = draft["code"]
-        self.assertEqual(text, f"Draft {code} (waiting):" + original["text"][len(f"Draft {code}:"):])
+        self.assertEqual(text, "Here's the change that is waiting:\n" + original["text"].split("\n", 1)[1])
         png = self.repo.state / "screenshots" / f"{draft['change_id']}-proposal.png"
         self.assertEqual((shots, conversation.json.loads(original["attachments"])), ([str(png)], [str(png)]))
         self.assertEqual((self.state(), len(self.previewer.targets)), (before, targets))  # nothing rendered again
@@ -50,7 +50,7 @@ class ShowPreviewTests(ShowTestMixin, H06TestCase):
         draft = conversation.editor_mod.show(row["change_id"], state=str(self.repo.state))["change"]
         text, shots = self.show(f"show {row['code']}")
         lines = conversation._record_lines(draft)
-        self.assertEqual(text, "\n".join([f"Applied {row['code']} ({row['commit'][:7]}):"] + lines))
+        self.assertEqual(text, voice.plain("\n".join(["Here's what was saved:"] + lines)))
         self.assertNotIn("Expires", text)
         self.assertNotIn("Reply yes", text)
         self.assertEqual(shots, [row["screenshot"]])
@@ -82,19 +82,19 @@ class ShowTests(ShowTestMixin, ConversationTestCase):
         self.sent()
         row = self.drafts()[0]
         text, shots = self.show(f"show {row['code']}")
-        self.assertTrue(text.startswith(f"Applied {row['code']} ({row['commit'][:7]}):\nstore store: hours"), text)
+        self.assertTrue(text.startswith("Here's what was saved:\nAvocado Shack, the opening hours:"), text)
         self.assertEqual(shots, [])
 
     def test_waiting_draft_without_screenshot_is_text_only(self):
         draft, reply = self.propose("hours")
         self.assertEqual(self.show(f"show {draft['code']}"),
-                         (f"Draft {draft['code']} (waiting):" + reply[len(f"Draft {draft['code']}:"):], []))
+                         ("Here's the change that is waiting:\n" + reply.split("\n", 1)[1], []))
 
     def test_lapsed_draft_is_worded_expired_and_show_sweeps_nothing(self):
         draft, _ = self.propose("hours")
         self.now = T0 + timedelta(seconds=601)
         before = self.state()
-        expired = f"{draft['code']} expired at 2026-11-02 09:10 PST; nothing changed."
+        expired = "That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."
         self.assertEqual(self.show(f"show {draft['code']}"), (expired, []))
         self.assertEqual(self.state(), before)
         self.assertEqual(self.drafts()[0]["state"], "proposed")  # still proposed after show
@@ -112,12 +112,12 @@ class ShowTests(ShowTestMixin, ConversationTestCase):
         self.conv.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, expires_at)"
                              " VALUES ('beef', 'needs-details', '[]', 'Which day?', ?, ?, ?, ?)",
                              (OWNER, CHAT, T0.isoformat(), (T0 + timedelta(hours=1)).isoformat()))
-        self.assertEqual(self.show("show beef"), ("beef still needs details: Which day?", []))
+        self.assertEqual(self.show("show beef"), ("I'm waiting for details: Which day?", []))
 
     def test_usage_and_unknown_code(self):
         for text in ("show", "Show!", "show zz", "show 123", "show me the avocado page", "show a1b2c3d4e5f6a"):
             with self.subTest(text=text):
-                self.assertEqual(self.show(text), (USAGE, []))
+                self.assertEqual(self.show(text), ("Nothing is waiting for your yes." if text in ("show", "Show!") else USAGE, []))
         self.assertEqual(self.show("show abcd"), ("I don't have a change with that code.", []))
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 

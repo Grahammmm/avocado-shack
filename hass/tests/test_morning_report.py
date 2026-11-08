@@ -14,7 +14,7 @@ from pathlib import Path
 from hass import morning_report
 
 TODAY = date(2026, 11, 2)
-LAST = "These are your last shelf checks, not stock counts."
+LAST = "These come from your last shelf check, so they are not stock counts."
 
 
 def product(name, available=None, status="active"):
@@ -55,16 +55,16 @@ class MorningReportTests(unittest.TestCase):
     def test_no_check_yet_ignores_availability(self):
         self.content([product("Apples", "limited"), product("Pears", "no"), product("Figs", "yes"), product("Kale")])
         lines = self.report().split("\n")
-        self.assertEqual(lines, ["Shelf check: not done yet",
-                                 "Available 0 · Limited 0 · Sold out 0 · Not confirmed 4", LAST])
+        self.assertEqual(lines, ["I still need your shelf check.",
+                                 "On the shelves: 0 available, 0 running low, 0 sold out, 4 not confirmed.", LAST])
 
     def test_recent_check_counts_and_names(self):
         self.content([product("Zucchini", "limited"), product("apples", "limited"), product("Pears", "no"),
                       product("Figs", "yes"), product("Kale"), product("Plums", "maybe")], checked_days_ago=3)
         lines = self.report().split("\n")
-        self.assertEqual(lines, ["Shelf check: Friday, October 30",
-                                 "Available 1 · Limited 2 · Sold out 1 · Not confirmed 2",
-                                 "Limited: apples, Zucchini", "Sold out: Pears", LAST])
+        self.assertEqual(lines, ["Your last shelf check was Friday, October 30.",
+                                 "On the shelves: 1 available, 2 running low, 1 sold out, 2 not confirmed.",
+                                 "Running low: apples, Zucchini", "Sold out: Pears", LAST])
 
     def test_stale_after_more_than_seven_days(self):
         self.content([product("Figs", "yes")], checked_days_ago=7)
@@ -80,14 +80,14 @@ class MorningReportTests(unittest.TestCase):
         self.assertEqual({len(n) for n in names}, {80})
         self.content([product(n, "limited") for n in names], checked_days_ago=1)
         text = self.report()
-        self.assertEqual(text.split("\n")[2], "Limited: " + ", ".join(names[:10]) + ", +2 more")
+        self.assertEqual(text.split("\n")[2], "Running low: " + ", ".join(names[:10]) + ", and 2 more")
         self.assertLessEqual(len(text), 1200)
         sold = [n[:-1] + "s" for n in names]  # distinct names, still the 80-character maximum
         self.content([product(n, "limited") for n in names] + [product(n, "no") for n in sold], checked_days_ago=1)
         text = self.report()
         self.assertLessEqual(len(text), 1200)
         self.assertEqual(text.split("\n")[-1], LAST)
-        self.assertIn("Limited 12 · Sold out 12", text)  # counts stay exact when names are shortened
+        self.assertIn("12 running low, 12 sold out", text)  # counts stay exact when names are shortened
 
     def test_ten_names_without_more_line(self):
         self.content([product(f"P{i:02d}", "no") for i in range(10)], checked_days_ago=1)
@@ -97,7 +97,7 @@ class MorningReportTests(unittest.TestCase):
         self.content([product("Held thing", "no", "held"), product("Hidden thing", "limited", "hidden"),
                       product("Open thing", "yes")], checked_days_ago=1)
         text = self.report()
-        self.assertIn("Available 1 · Limited 0 · Sold out 0 · Not confirmed 0", text)
+        self.assertIn("On the shelves: 1 available, 0 running low, 0 sold out, 0 not confirmed.", text)
         self.assertNotIn("thing", text.replace("Open thing", ""))
         self.assertNotIn("Sold out:", text)
         facts = json.loads(self.report("--json"))
@@ -116,7 +116,7 @@ class MorningReportTests(unittest.TestCase):
 
     def test_default_today_is_the_shop_date(self):
         self.content([product("Figs", "yes")])
-        self.assertTrue(self.run_report().startswith("Shelf check: not done yet"))
+        self.assertTrue(self.run_report().startswith("I still need your shelf check."))
 
     def test_unreadable_content_exits_1_and_changes_nothing(self):
         self.content([product("Figs", "yes")], checked_days_ago=1)

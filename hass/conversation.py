@@ -613,9 +613,9 @@ def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False,
     if live_site:
         reasons = live_policy.check(draft)
         return "\n".join(lines + [wait, live_policy.refusal(reasons) if reasons else
-                                 f"Reply yes {code} to put it on the website (it should show within a few minutes), or no {code} to cancel."])
+                                 f"Reply {q('yes ' + code)} to put it on the website (it should show within a few minutes), or {q('no ' + code)} to cancel."])
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
-    lines += [wait, f"Reply {yes} to save it, or no to cancel. If something's wrong, tell me what to fix."]
+    lines += [wait, f"Reply {q(yes)} to save it, or no to cancel. If something's wrong, tell me what to fix."]
     return "\n".join(lines)
 
 
@@ -1867,7 +1867,7 @@ class Conversation:
     def _control(self, msg, now, verb) -> str:
         since = self._paused()
         if verb == "status":
-            self._reply(self._status(now, since))
+            self._reply(self._status(now, since), long_ok=True)
         elif verb == "pause" and since:
             self._reply(answers.stopped_state(since, self._queue(msg)))
         elif verb == "pause":

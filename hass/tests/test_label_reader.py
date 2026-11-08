@@ -11,7 +11,7 @@ import unittest
 import urllib.error
 from pathlib import Path
 
-from hass import conversation, media
+from hass import voice, conversation, media
 from hass.conversation import PHOTO_QUESTION, Inbound
 from hass.fixture_chat import FixtureAdapter
 from hass.label_reader import LabelReader
@@ -166,19 +166,19 @@ class LabelConversationTests(unittest.TestCase):
         return [dict(r) for r in self.conv.db.execute("SELECT * FROM drafts ORDER BY row_id")]
 
     def asked(self):
-        return f"{PHOTO_QUESTION} Reply with the product and description (draft {SHA[:4]})."
+        return PHOTO_QUESTION
 
     def test_label_becomes_a_question_never_ops(self):
         self.assertEqual(self.say(), "photo-draft")
-        line = (f"The label looks like: Far West Fungi Lion's Mane ({self.categories[0]}). Is that right? "
-                "Say which product it is either way.")
+        line = (f"The label looks like \ue000Far West Fungi Lion's Mane ({self.categories[0]})\ue001. Is that right? "
+                "Either way, tell me which product it is.")
         self.assertEqual(self.replies(), [f"{self.asked()} {line}"])
         [row] = self.drafts()
         self.assertEqual((row["state"], row["summary"]), ("needs-details", f"{PHOTO_QUESTION} {line}"))
         self.assertEqual(json.loads(row["ops_json"]), [{"op": "product.set_photo", "args": {"photo": SHA}}])
         self.assertEqual((self.interp.texts, len(self.transport.calls)), ([], 1))
         self.assertEqual(self.say(attachments=1), "photo-duplicate")  # the waiting question names the label
-        self.assertEqual(self.replies(), [f"That photo is already in draft {SHA[:4]}. {PHOTO_QUESTION} {line}"])
+        self.assertEqual(self.replies(), [voice.plain(f"I already have that photo, and I'm waiting on you. {PHOTO_QUESTION} {line}")])
         self.assertEqual(len(self.transport.calls), 1)
 
     def test_extra_keys_never_reach_the_question_or_ops(self):
@@ -186,8 +186,7 @@ class LabelConversationTests(unittest.TestCase):
         self.say()
         [reply] = self.replies()
         [row] = self.drafts()
-        self.assertTrue(reply.endswith("The label looks like: Lion's Mane. Is that right? Say which product it is "
-                                       "either way."), reply)
+        self.assertTrue(voice.plain(reply).endswith("The label looks like Lion's Mane. Is that right? Either way, tell me which product it is."), reply)
         for text in (reply, row["summary"], row["ops_json"]):
             for word in ("Secret Farm", "Marin", "organic", "True"):
                 self.assertNotIn(word, text)

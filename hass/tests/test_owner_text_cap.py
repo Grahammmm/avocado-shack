@@ -8,12 +8,12 @@ Run: python3 -m unittest hass.tests.test_owner_text_cap -v
 import unittest
 from datetime import timedelta
 
-from hass import content_model, conversation
+from hass import content_model, conversation, voice
 from hass.tests.test_interpreter_cap import CapTestCase
 
 LIMIT = conversation.MAX_OWNER_TEXT
 AT_CAP, OVER = "a" * LIMIT, "a" * (LIMIT + 1)
-TEXT_BAD = "Not saved: text must be 1–500 plain characters."
+TEXT_BAD = "I couldn't save that. The note needs to be short, plain text."
 
 
 class OwnerTextCapTests(CapTestCase):
@@ -28,11 +28,11 @@ class OwnerTextCapTests(CapTestCase):
     def too_long(self, text):
         drafts = self.drafts()
         self.assertEqual(self.say(text), "too-long")
-        self.assertEqual(self.replies(), [conversation.TOO_LONG])
+        self.assertEqual(self.replies(), [voice.plain(conversation.TOO_LONG)])
         self.assertEqual(self.drafts(), drafts)
 
     def test_reply_names_the_limit(self):
-        self.assertIn(f"over {LIMIT} characters", conversation.TOO_LONG)
+        self.assertEqual(conversation.TOO_LONG, "That message is too long for me to read, so nothing changed. Could you send a shorter one?")
 
     def test_text_at_the_cap_is_interpreted(self):
         self.assertEqual(self.say(AT_CAP), "proposed")
@@ -46,7 +46,7 @@ class OwnerTextCapTests(CapTestCase):
     def test_duplicate_over_long_delivery_replies_once(self):
         self.assertEqual(self.say(OVER, pid="long1"), "too-long")
         self.assertEqual(self.say(OVER, pid="long1"), "duplicate")
-        self.assertEqual(self.replies(), [conversation.TOO_LONG])
+        self.assertEqual(self.replies(), [voice.plain(conversation.TOO_LONG)])
         self.assertEqual(self.interp.calls, 0)
 
     def test_code_points_not_bytes(self):
@@ -87,12 +87,12 @@ class OwnerTextCapWithDailyCapTests(CapTestCase):
 
     def test_over_long_text_does_not_use_the_days_call(self):
         self.assertEqual(self.say(OVER), "too-long")
-        self.assertEqual(self.replies(), [conversation.TOO_LONG])
+        self.assertEqual(self.replies(), [voice.plain(conversation.TOO_LONG)])
         self.assertEqual((self.usage(), self.interp.calls), ([], 0))
         self.propose("hours")  # the one call of the day is still free
         self.assertEqual(self.usage()[0][1], 1)
         self.assertEqual(self.say(OVER), "too-long")  # over the cap: still the length reply, not the daily one
-        self.assertEqual(self.replies(), [conversation.TOO_LONG])
+        self.assertEqual(self.replies(), [voice.plain(conversation.TOO_LONG)])
         self.assertEqual((self.usage()[0][1], self.interp.calls), (1, 1))
 
 

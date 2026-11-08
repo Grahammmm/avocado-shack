@@ -3,7 +3,7 @@ import copy
 import unittest
 from datetime import timedelta
 
-from hass import conversation
+from hass import conversation, voice
 from hass.tests import test_photo_draft as photos
 from hass.tests.test_conversation import T0
 
@@ -23,10 +23,10 @@ class PhotoWordsTests(unittest.TestCase):
                       {"image": PHOTO.replace("jpg", ext), "imageAlt": "New"})
             before = copy.deepcopy(d)
             text = conversation.proposal_text("ab12", d, EXPIRES)
-            self.assertIn(PREFIX + "photo: the photo from your message", text.splitlines())
+            self.assertIn("this: the photo will be the one from your message", text.splitlines())
             self.assertNotIn("assets/products/", text)
-            self.assertIn(PREFIX + "imageAlt Old → New", text)
-            self.assertEqual(conversation._summary(d), PREFIX + "image, imageAlt")
+            self.assertIn("this, the photo description: from \ue000Old\ue001 to \ue000New\ue001", text)
+            self.assertEqual(conversation._summary(d), "the photo, the photo description for this")
             self.assertEqual(d, before)
 
     def test_undo_and_normal_photo_to_plain_file(self):
@@ -34,10 +34,10 @@ class PhotoWordsTests(unittest.TestCase):
                          (PHOTO, PHOTO.replace("jpg", "png"))):
             d = draft({"image": old}, {"image": new})
             text = conversation.proposal_text("ab12", d, EXPIRES, undo=True)
-            self.assertIn(PREFIX + "photo: the previous photo", text.splitlines())
+            self.assertIn("this: the photo goes back to the previous one", text.splitlines())
             self.assertNotIn("assets/products/", text)
         text = conversation.proposal_text("ab12", draft({"image": PHOTO}, {"image": "old.webp"}), EXPIRES)
-        self.assertIn(PREFIX + f"image {PHOTO} → old.webp", text)
+        self.assertIn(f"this, the photo: from {voice.quote(PHOTO)} to {voice.quote('old.webp')}", text)
 
     def test_added_photo_keeps_sorted_place_and_alt(self):
         text = conversation.proposal_text("ab12", draft(None, {"id": "p", "image": PHOTO, "imageAlt": "Crate"}), EXPIRES)
@@ -52,10 +52,11 @@ class PhotoWordsTests(unittest.TestCase):
                      PHOTO.replace("products", "makers"), PHOTO + "\n"):
             with self.subTest(path=path):
                 d = draft({"image": "old.webp"}, {"image": path})
-                self.assertIn(PREFIX + "image old.webp " + conversation._arrow(path),
-                              conversation.proposal_text("ab12", d, EXPIRES))
+                expected = ("this, the photo:\n  was: old.webp\n  now: " + path.replace("\n", "\n    ")
+                            if "\n" in path else "this, the photo: from old.webp to " + path)
+                self.assertIn(expected, voice.plain(conversation.proposal_text("ab12", d, EXPIRES)))
                 added = conversation.proposal_text("ab12", draft(None, {"image": path}), EXPIRES)
-                self.assertIn("  image:", added)
+                self.assertIn("  the photo: " + path.replace("\n", "\n    "), voice.plain(added))
 
 
 class PhotoConversationTests(unittest.TestCase):
@@ -70,24 +71,24 @@ class PhotoConversationTests(unittest.TestCase):
         self.replies()
         self.assertEqual(self.say(photos.ANSWER), "proposed")
         [text] = self.replies()
-        self.assertIn(PREFIX + "photo: the photo from your message", text)
+        self.assertIn("Hass avocado: the photo will be the one from your message", text)
         self.assertNotIn("assets/products/", text)
         return self.drafts()[-1]
 
     def test_proposal_show_undo_and_summary_commands(self):
         row = self.propose()
         self.assertEqual(self.say("status"), "status")
-        self.assertIn(PREFIX + "image, imageAlt", self.replies()[0])
+        self.assertIn("the photo, the photo description for Hass avocado", self.replies()[0])
         self.assertEqual(self.say("yes"), "approved")
         self.replies()
         self.assertEqual(self.say("history"), "history")
-        self.assertIn(PREFIX + "image, imageAlt", self.replies()[0])
+        self.assertIn("the photo, the photo description for Hass avocado", self.replies()[0])
         self.assertEqual(self.say(f"undo {row['code']}"), "proposed")
-        self.assertIn("photo: the previous photo", self.replies()[0])
+        self.assertIn("the photo goes back to the previous one", self.replies()[0])
         undo = self.drafts()[-1]
         self.assertEqual(self.say(f"show {undo['code']}"), "show")
         text = self.replies()[0]
-        self.assertIn("photo: the previous photo", text)
+        self.assertIn("the photo goes back to the previous one", text)
         self.assertNotIn("assets/products/", text)
 
     def test_cancelled_expired_duplicate_and_stale_do_not_apply(self):
@@ -104,7 +105,7 @@ class PhotoConversationTests(unittest.TestCase):
         msg = conversation.Inbound("expired-yes", photos.CHAT, photos.OWNER, f"yes {row['code']}",
                                    received_at=self.conv.clock().isoformat())
         self.assertEqual(self.conv.handle(msg), "no-target")
-        self.assertIn("expired", self.replies()[0])
+        self.assertIn("timed out", self.replies()[0])
         self.assertFalse(any(r["commit"] for r in self.drafts()))
 
     def test_stale_photo_redrafts_without_applying_old_photo(self):
@@ -114,7 +115,7 @@ class PhotoConversationTests(unittest.TestCase):
         old, new = self.drafts()
         self.assertEqual((old["state"], old["reason"], new["state"]), ("rejected", "stale", "proposed"))
         text = self.replies()[0]
-        self.assertIn("photo: the photo from your message", text)
+        self.assertIn("the photo will be the one from your message", text)
         self.assertNotIn("assets/products/", text)
 
 

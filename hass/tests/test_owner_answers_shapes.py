@@ -9,9 +9,9 @@ import unittest
 from hass import owner_answers as answers
 
 PAUSED = "2026-11-01T10:00:00-07:00"
-STOPPED = "Changes are stopped. Nothing new will be applied until you say 'resume'."
+STOPPED = "Changes are stopped. I won't save anything new until you say 'resume changes'."
 STAYS = "Changes already on the website stay there."
-UNKNOWN = "Waiting requests: unknown."
+UNKNOWN = "I don't know how many requests are waiting."
 STARTED = "had already started: the website is as it was before, and nothing is copied to it by itself."
 
 
@@ -25,8 +25,8 @@ class HistoryWordsShapeTests(unittest.TestCase):
     def test_object_install_unchanged(self):
         self.assertEqual(answers.history_words({"state": "applied"}, {"state": "installed"}), "on the website")
         self.assertEqual(answers.history_words({"state": "applied"}, {"state": "failed"}), "saved, but it didn't reach the website")
-        self.assertEqual(answers.history_words({"state": "applied"}, {}), "not confirmed on the website")
-        self.assertEqual(answers.history_words({"state": "applied"}, None), "not confirmed on the website")
+        self.assertEqual(answers.history_words({"state": "applied"}, {}), "saved, but I'm not sure it's on the website")
+        self.assertEqual(answers.history_words({"state": "applied"}, None), "saved, but I'm not sure it's on the website")
 
     def test_unsaved_states_ignore_a_damaged_install(self):
         self.assertEqual(answers.history_words({"state": "reverted"}, "installed"), "undone")
@@ -39,7 +39,7 @@ class StoppedStateShapeTests(unittest.TestCase):
             with self.subTest(waiting=waiting):
                 got = answers.stopped_state(PAUSED, {"waiting": waiting})
                 self.assertEqual(got, f"{STOPPED} {UNKNOWN} {STAYS}")
-                for raw in ("None", "-1", "True", "False", "2.0", "request is", "requests are"):
+                for raw in ("None", "-1", "True", "False", "2.0", "1 request is", "3 requests are"):
                     self.assertNotIn(raw, got)
 
     def test_missing_waiting_is_unknown(self):
@@ -69,9 +69,9 @@ class StoppedStateShapeTests(unittest.TestCase):
                 got = answers.stopped_state(PAUSED, {"waiting": 0, "applying": (item,)})
                 self.assertEqual(got, f"Changes are stopped. I won't save anything new until you say 'resume changes'. No requests are waiting. 1 more had already started. {STAYS}")
         got = answers.stopped_state(PAUSED, {"waiting": 0, "applying": ("A" * 40,) + tuple(bad)})
-        self.assertEqual(got, f"{STOPPED} No requests are waiting. {'A' * 40} {STARTED} "
-                              f"{len(bad)} more change(s) had already started. {STAYS}")
-        self.assertEqual(got.count("more change(s)"), 1)
+        self.assertEqual(got, f"{STOPPED} No requests are waiting. 1 change had already started. The website is as it was before, and nothing is copied to it by itself. "
+                              f"{len(bad)} more had already started. {STAYS}")
+        self.assertEqual(got.count("more"), 1)
 
     def test_non_object_queue_is_empty(self):
         for queue in (None, [], [("waiting", 3)], "waiting", 4):

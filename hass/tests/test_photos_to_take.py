@@ -7,19 +7,19 @@ import shutil
 import unittest
 from datetime import timedelta
 
-from hass import conversation
+from hass import conversation, voice
 from hass.content_model import CATEGORIES
 from hass.tests.test_conversation import T0, ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
-GUIDE = "To replace one, send a photo with the product name as its caption."
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
+GUIDE = "To replace one, send a photo with the product's name as the caption."
 SAVED = "From saved listings, not a live website check."
 HEX = "0123456789abcdef"
 
 
 def head(n):
-    return f"Photos to take: {n} active products still use catalog pictures."
+    return "Some products still show a stock picture instead of your own photo. The first few:"
 
 
 class PhotosParseTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class PhotosParseTests(unittest.TestCase):
             self.assertIsNone(conversation.parse_command(text), text)
         self.assertEqual(conversation.parse_command("hidden"), ("hidden", None))
         self.assertEqual(conversation.parse_command("listing Etto"), ("listing", "Etto"))
-        self.assertIn('photos to take - products needing a photo: "photos to take"', conversation.HELP_TEXT.splitlines())
+        self.assertIn('photos to take - the products that still need a photo', voice.plain(conversation.HELP_TEXT).splitlines())
 
 
 class PhotosTests(StoreMixin, ConversationTestCase):
@@ -83,7 +83,7 @@ class PhotosTests(StoreMixin, ConversationTestCase):
                       ("Installed jpg", "fruit", "active", f"assets/products/photo-{HEX}.jpg"),
                       ("Installed png", "fruit", "active", f"assets/products/photo-{HEX}.png"),
                       ("Hidden legacy", "fruit", "hidden", None), ("Held legacy", "fruit", "held", None)])
-        self.assertEqual(self.photos(), [head(1), SAVED, "Fruit:", "- Legacy", GUIDE])
+        self.assertEqual(self.photos(), [head(1), "- Legacy (Fruit)", GUIDE])
 
     def test_fullmatch_not_similar_filename(self):
         names = {"fifteen": f"photo-{HEX[:15]}.jpg", "seventeen": f"photo-{HEX}0.jpg", "upper": f"photo-{HEX.upper()}.jpg",
@@ -92,7 +92,7 @@ class PhotosTests(StoreMixin, ConversationTestCase):
                      + [(n, "eggs", "active", f"assets/products/{f}") for n, f in names.items()])
         lines = self.photos()
         self.assertEqual(lines[0], head(len(names)))
-        self.assertEqual(sorted(lines[3:-1]), sorted(f"- {n}" for n in names))
+        self.assertEqual(sorted(lines[1:-1]), sorted(f"- {n} (Eggs)" for n in names))
 
     def test_shelf_order_name_ties_and_global_ten_cap(self):
         order = ["fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers"]
@@ -101,19 +101,18 @@ class PhotosTests(StoreMixin, ConversationTestCase):
         rows = [("zed", "flowers", "active", None), ("Bee", "bread", "active", None), ("apple", "bread", "active", None),
                 ("Twin", "fruit", "active", None), ("Twin", "fruit", "active", None), ("cat", "fruit", "active", None)]
         self.fixture(rows)
-        self.assertEqual(self.photos(), [head(6), SAVED, "Fruit:", "- cat", "- Twin", "- Twin", "Bread:", "- apple", "- Bee",
-                                         "Flowers:", "- zed", GUIDE])
-        for total, extra in ((10, None), (11, "... and 1 more"), (23, "... and 13 more")):
+        self.assertEqual(self.photos(), [head(6), "- cat (Fruit)", "- Twin (Fruit)", "- Twin (Fruit)", "- apple (Bread)", "- Bee (Bread)", "- zed (Flowers)", GUIDE])
+        for total, extra in ((10, None), (11, "When you've sent those, ask again and I'll show the next few."), (23, "When you've sent those, ask again and I'll show the next few.")):
             self.fixture([(f"n{i:02d}", order[i % 9], "active", None) for i in range(total)])
             lines = self.photos()
             self.assertEqual(lines[0], head(total))
             names = [ln for ln in lines if ln.startswith("- ")]
             self.assertEqual(len(names), 10)
-            heads = [ln[:-1] for ln in lines if ln.endswith(":") and not ln.startswith(("Photos", "- "))]
-            self.assertEqual(heads, [lb for lb in labels if lb in heads])  # site order
+            heads = [ln.rsplit(" (", 1)[1][:-1] for ln in names]
+            self.assertEqual(heads, sorted(heads, key=labels.index))  # site order
             self.assertEqual(lines[-2:], [extra, GUIDE] if extra else [names[-1], GUIDE])
         self.fixture([])
-        self.assertEqual(self.photos(), [head(0), SAVED, GUIDE])
+        self.assertEqual(self.photos(), ["Every product on the website has your own photo."])
 
     def test_unreadable_and_invalid_catalog(self):
         good = self.path.read_text("utf-8")

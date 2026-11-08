@@ -96,7 +96,7 @@ class SentNotesTests(NotesTestCase):
         with self.assertRaises(sqlite3.OperationalError): self.conv.db.execute("SELECT value FROM memory")
         self.assertEqual(self.say("hours"), "proposed")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Draft "), reply)
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
         self.assertEqual(self.interp.seen[-1][1], {"sent_at": self.now})
 
 
@@ -114,7 +114,7 @@ class NoteIsNotProofTests(NotesTestCase):
         self.save("origin", "all from Watsonville")
         self.assertEqual(self.say("add Hass avocados"), "claim-question")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("I did not draft that: "), reply)
+        self.assertTrue(reply.startswith("You didn't say "), reply)
         self.assertIn('"grown in"', reply)
         self.assertEqual(self.drafts(), [])
         self.assertEqual(self.interp.seen[-1][1]["notes"], [{"key": "origin", "text": "all from Watsonville"}])
@@ -160,8 +160,8 @@ class RequestBytesTests(unittest.TestCase):
         self.assertEqual((user["message"], user["pending"]), ("hi", PENDING))
 
     def test_the_rule_is_the_last_prompt_rule(self):
-        self.assertIn('"notes"', interpreter_prompt.RULES[-2])
-        self.assertIn("never supplies a claim", interpreter_prompt.RULES[-2])
+        self.assertIn('"notes"', interpreter_prompt.RULES[-3])
+        self.assertIn("never supplies a claim", interpreter_prompt.RULES[-3])
 
 
 if __name__ == "__main__":

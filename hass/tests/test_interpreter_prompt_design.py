@@ -29,12 +29,13 @@ class PromptRuleTests(unittest.TestCase):
         rules = _rules(prompt)
         design = [line for line in rules if "design change" in line]
         self.assertEqual(len(design), 1)
-        self.assertEqual(rules[-3], design[0])  # after photo/missing/repeat rules, before the notes and aliases rules
-        self.assertIn("product.set_photo", rules[-6])
-        self.assertIn('"missing" list', rules[-5])
-        self.assertIn("hike.repeat", rules[-4])
-        self.assertIn('"notes"', rules[-2])
+        self.assertEqual(rules[-4], design[0])  # after photo/missing/repeat rules, before the notes and aliases rules
+        self.assertIn("product.set_photo", rules[-7])
+        self.assertIn('"missing" list', rules[-6])
+        self.assertIn("hike.repeat", rules[-5])
+        self.assertIn('"notes"', rules[-3])
         self.assertIn('"aliases"', rules[-1])
+        self.assertIn('Everything you write in a question', rules[-2])
         self.assertEqual(prompt.count(DESIGN_UNSUPPORTED), 1)
         found = re.search(r"\{\"unsupported\": \"[^\"]*\"\}", design[0])
         self.assertEqual(json.loads(found.group(0)), DESIGN)
@@ -44,12 +45,12 @@ class PromptRuleTests(unittest.TestCase):
     def test_rule_matches_the_snapshot_and_stays_small(self):
         prompt = build(TEST_REGISTRY, tiny_content())
         self.assertEqual(prompt, FIXTURE.read_text("utf-8"))
-        without = prompt.replace("- " + RULES[-3] + "\n", "", 1)
+        without = prompt.replace("- " + RULES[-4] + "\n", "", 1)
         self.assertNotEqual(without, prompt)
         self.assertNotIn(DESIGN_UNSUPPORTED, without)
-        self.assertEqual(len(RULES), 29)  # HASS-HIKE-FLOW-1 added three hike.create rules (before the photo rule, so the last six keep their places); HASS-NL-1 added nine rules (before the photo rule, so the last six keep their places); AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule;
+        self.assertEqual(len(RULES), 31)  # HASS-HIKE-FLOW-1 added three hike.create rules (before the photo rule, so the last six keep their places); HASS-NL-1 added nine rules (before the photo rule, so the last six keep their places); AV1937-05 added the hike.repeat rule; AV2152-06 the product.edit description rule;
         # AV0222-03 the no-prices rule; AV0007-03 the pending-question "missing" ids rule; AV0007-06 the aliases rule
-        self.assertLess(len(RULES[-3].encode("utf-8")), 300)
+        self.assertLess(len(RULES[-4].encode("utf-8")), 300)
         self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
 
     def test_empty_catalog_and_store_still_build(self):
@@ -86,7 +87,7 @@ class DesignConversationTests(ConversationTestCase):
         self.assertEqual(self.replies(), [DESIGN_UNSUPPORTED])
         self.assertEqual(self.say("change the intro to 'Fresh every Saturday'"), "proposed")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Draft "), reply)
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
         [draft] = self.drafts()
         self.assertEqual(draft["state"], "proposed")
         self.assertEqual(json.loads(draft["ops_json"])[0]["op"], "store.set_intro")
@@ -97,7 +98,7 @@ class DesignConversationTests(ConversationTestCase):
         self.replies()
         self.assertEqual(self.say("yes"), "approved")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Applied "), reply)
+        self.assertTrue(reply.startswith("Saved:"), reply)
         self.assertEqual(self.commits(), 1)
 
     def test_a_design_reply_leaves_a_pending_draft_alone(self):

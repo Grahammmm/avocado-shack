@@ -7,7 +7,7 @@ Run: python3 -B -m unittest hass.tests.test_interpreter_no_undo
 import unittest
 from unittest import mock
 
-from hass import conversation, interpret_check
+from hass import conversation, interpret_check, voice
 from hass.editor import MAX_OPS
 from hass.interpreter_prompt import build
 from hass.ops import load_registry
@@ -17,8 +17,7 @@ from hass.tests.test_interpreter_prompt import _noop, _section, tiny_content
 from hass.tests.test_undo import H06TestCase
 from hass.ops import Arg, Op
 
-GUIDE = ("To undo a change, send undo for the latest change, undo <code> for a specific change, "
-         "or history to see recent changes.")
+GUIDE = "To undo the last change, say \ue000undo\ue001. To see what we changed lately, say \ue000history\ue001."
 OPS_HEADER = "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):"
 REVERT = Op("history.revert", {"changeId": Arg("id")}, _noop)
 OTHER = Op("history.show", {"changeId": Arg("id")}, _noop)
@@ -88,10 +87,10 @@ class CheckTests(unittest.TestCase):
         ok = [edit(n) for n in range(MAX_OPS - 1)] + [rev(changeId="c")]
         self.assertEqual(self.check(result(*ok)), {"question": GUIDE})
         too_many = self.check(result(*ok, edit(99)))["question"]
-        self.assertIn(f"{MAX_OPS + 1} changes", too_many)
+        self.assertIn("a lot of changes at once", too_many)
         self.assertNotEqual(too_many, GUIDE)
         bad = self.check(result(rev(changeId="c"), {"op": "test.edit"}))["question"]
-        self.assertTrue(bad.startswith("I could not read change 2"), bad)
+        self.assertTrue(bad.startswith("I couldn't read part of that message."), bad)
 
     def test_question_unsupported_and_normal_changes_unchanged(self):
         for res in ({"question": "q?"}, {"unsupported": "no"}):
@@ -101,10 +100,10 @@ class CheckTests(unittest.TestCase):
         for name in ("history.revert2", "history.reverted", "History.revert", "history.revert "):
             with self.subTest(name=name):
                 question = self.check(result(call(name, changeId="c")))["question"]
-                self.assertIn("unknown change type", question)
+                self.assertIn("I can't do that kind of change yet.", question)
         self.assertEqual(self.check(result(edit(1), edit(1)))["question"].split(".")[0],
                          "Two of those changes are the same")
-        self.assertIn("could not find draft", self.check(result(edit(1), revises="zzzz"))["question"])
+        self.assertIn("I can't find that change any more.", self.check(result(edit(1), revises="zzzz"))["question"])
 
 
 class ConversationTests(H06TestCase):
@@ -116,15 +115,15 @@ class ConversationTests(H06TestCase):
         self.interp.mapping["undo and set hours"] = sibling
         with mock.patch.object(self.editor, "prepare", side_effect=AssertionError("prepare called")):
             self.assertEqual(self.say("undo the hours change"), "question")
-            self.assertEqual(self.replies(), [GUIDE])
+            self.assertEqual(self.replies(), [voice.plain(GUIDE)])
             self.assertEqual((self.drafts(), self.commits()), ([], 0))
             self.assertEqual(self.say("undo and set hours"), "question")
-            self.assertEqual(self.replies(), [GUIDE])
+            self.assertEqual(self.replies(), [voice.plain(GUIDE)])
             self.assertEqual((self.drafts(), self.commits()), ([], 0))
         draft, _ = self.propose("desc")
         with mock.patch.object(self.editor, "prepare", side_effect=AssertionError("prepare called")):
             self.assertEqual(self.say("undo the hours change"), "question")
-            self.assertEqual(self.replies(), [GUIDE])
+            self.assertEqual(self.replies(), [voice.plain(GUIDE)])
         self.assertEqual([(d["code"], d["state"]) for d in self.drafts()], [(draft["code"], "proposed")])
         self.assertEqual(self.commits(), 0)
 
@@ -137,7 +136,7 @@ class ConversationTests(H06TestCase):
                 self.replies()
                 self.assertEqual(self.say(f"undo {a['code']}" if explicit else "undo"), "proposed")
                 [reply] = self.sent()
-                self.assertIn(f"Undo {a['code']}:", reply["text"])
+                self.assertIn("To undo that, I'd change it back:", reply["text"])
                 self.assertEqual(self.commits(), before + 1)  # nothing written by the undo proposal
                 self.assertEqual(self.say("yes"), "approved")
                 self.sent()
