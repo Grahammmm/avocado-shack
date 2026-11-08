@@ -158,47 +158,119 @@ def rule_price_in_deal_only(slots, texts, ctx):
     return None
 
 
-# Words that finish a deal, so a deal cut short just before one of them was cut in the wrong place ('buy one get one' of
-# 'buy one get one free', '2 for $5' of '2 for $5 each', '5' of '5 dollars').
-_DEAL_GOES_ON = (r"(?!\s+(?:free|off|each|apiece|per|ea|more|extra|less|percent|dollars?|bucks?|cents?|usd|lbs?|oz|pounds?)\b)"
-                 r"(?!\s+[$£€]?\d)")  # ... or just before a figure ('12 for' of '12 for $5')
+# The deal as typed is one whole clause of his text, never a piece found inside it. A text is cut into clauses at his
+# separators (commas, colons, brackets, a full stop, a dash); in each clause the words about the special come off the
+# front ('put honey on special', 'change the honey special to', the special's own name) and the end date comes off the
+# back ('until Friday', 'this week only', 'on the jam'). What is left, from the first clause with words in it to the last
+# one, is the deal he typed. The model's deal must be equal to it (runs of spaces folded, nothing else), or he is asked.
+# A text with two deals in it, or no clear deal, is asked about too: when in doubt, ask; never save a shortened deal.
+_SEPARATOR = re.compile(r"(?<!\d),|,(?!\d)|[;:\n()\[\]\"\u201c\u201d\u2014\u2013!?|]|\s-+\s|\.(?!\d)")
+_WHEN = (r"(?:this|next|the)\s+(?:week(?:end)?|month)(?:'?s)?(?:\s+only)?|today(?:\s+only)?|tonight|all\s+(?:week(?:end)?|month)"
+         r"|for\s+(?:the|this)\s+(?:week(?:end)?|month)|(?:only\s+)?this\s+week(?:end)?")
+_SPECIAL_WORD = r"(?:special|specials|deal|deals|sale)"
+_JOIN = r"(?:to|is|at|for|of|on|now|will\s+be|should\s+(?:be|say|read)|reads?|says?)"
+_VERBS = r"(?:please\s+)?(?:put|make|add|change|update|rename)"
+# The end date at the back of a clause: a date word and a day, and nothing else after it ('till Friday with any purchase'
+# is not cut: the words after the day may be part of the deal).
+_ONE_DAY = (r"(?:(?:the|this|next|coming)\s+)?(?:(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|today|tomorrow|tonight|week(?:end)?|month)"
+            r"(?:\s+(?:night|morning|evening))?|end\s+of\s+(?:the\s+)?(?:week|month)"
+            r"|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?"
+            r"|nov(?:ember)?|dec(?:ember)?)\.?(?:\s+\d{1,2}(?:st|nd|rd|th)?)?"
+            r"|\d{1,2}(?:st|nd|rd|th)|\d{1,2}/\d{1,2}(?:/\d{2,4})?|\d{4}-\d{2}-\d{2})")
+_A_DATE = _ONE_DAY + r"(?:\s+(?:the\s+)?" + _ONE_DAY + r")*(?:\s+only)?"
+_DATE_TAIL = re.compile(r"(?:^|\s+)(?:(?:good|valid|runs?|running|on|and)\s+)?(?:until|till|til|'til|thru|through|ending|ends|expires)\s+"
+                        + _A_DATE + r"$"
+                        r"|(?:^|\s+)(?:from|starting|beginning|on)\s+" + _A_DATE + r"(?:\s+(?:until|till|til|to|thru|through)\s+"
+                        + _A_DATE + r")?$"
+                        r"|(?:^|\s+)(?:" + _WHEN + r")$", re.I)
 
 
-def _deal_span(deal: str) -> re.Pattern:
-    """The deal exactly as typed, on its own: not the tail of a longer word or figure ('2 for $5' inside '12 for $5'), not
-    the head of one ('$5' inside '$55' or '$5.50'). Case and spelling must match; only runs of spaces are folded."""
-    body = r"\s+".join(re.escape(part) for part in deal.split())
-    return re.compile(r"(?<![\w$£€])(?<!\d[.,])" + body + r"(?![\w%])(?![.,]\d)" + _DEAL_GOES_ON)
+def _special_names(slots, ctx):
+    """The special's own names he may type around the deal: its title, the words for it in an edit, its product's name,
+    the saved special's title, each also by its last words ('strawberries' of 'Fresh strawberries'), longest first."""
+    names = [slots.get("title"), slots.get("special"), (_products(ctx).get(slots.get("product")) or {}).get("name")]
+    try:
+        names.append((_own(slots, ctx) or {}).get("title"))
+    except Exception:  # an odd context: no saved title to add
+        pass
+    out = set()
+    for name in names:
+        words = str(name).split() if isinstance(name, str) else []
+        out |= {" ".join(words[i:]) for i in range(len(words))}
+    return sorted(out, key=len, reverse=True)
 
 
-# Words that, standing just before a deal, mean the deal was cut off at its front ('get one free' of 'buy one get one
-# free', 'for $5' of '12 for $5', 'price' of 'half price'). A figure, a currency sign or a percent in front counts too.
-_DEAL_LEAD = frozenset("""buy buys get gets for free off each per pay save take only just half price and plus of more than less extra
-any every a an second third fourth first next x""".split())
-_DEAL_LEAD |= frozenset("""zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen
-eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred dozen pair couple""".split())
-_BEFORE_TOKEN = re.compile(r"[^\s,;:!?()\"\u201c\u201d\u2014\u2013/|]+$")
+def _cutters(names):
+    """(front patterns, back patterns) for one special's names."""
+    name = r"(?:(?:the|our|my|this|that|new)\s+)*(?:" + "|".join(r"\s+".join(map(re.escape, n.split())) for n in names) + r")\b" if names else None
+    fronts = [re.compile(r".*\bon\s+(?:special|sale)\b(?:\s+" + _JOIN + r"\b)?", re.I | re.S),
+              re.compile(r".*\b" + _SPECIAL_WORD + r"(?:\s+" + _JOIN + r"\b|\s*$)", re.I | re.S),
+              re.compile(_VERBS + r"\b", re.I), re.compile(r"(?:" + _WHEN + r")\b", re.I)]
+    if name:
+        fronts.append(re.compile(name + r"(?:\s+" + _JOIN + r"\b)?", re.I))
+    backs = [_DATE_TAIL] + ([re.compile(r"\s+(?:on|for)\s+" + name + r"$", re.I)] if name else [])
+    return fronts, backs
 
 
-def _cut_at_the_front(before: str) -> bool:
-    """True when what comes just before the match is part of a deal, so the match does not start where the deal starts.
-    Punctuation is stepped over ('buy one, get one free'); the word before that decides."""
-    token = _BEFORE_TOKEN.search(re.sub(r"[\s,;:.!?()\"\u201c\u201d\u2014\u2013/|-]+$", "", before))
-    if not token:
-        return False  # the start of the text: nothing was dropped
-    word = token.group(0).lower().rstrip(".")
-    return word in _DEAL_LEAD or bool(re.search(r"[\d$£€¥¢%]", word))
+def _clause_core(clause: str, cutters) -> tuple:
+    """(start, end) of what is left of a clause once the words about the special are cut off its front and the end date
+    off its back; start == end when nothing is left."""
+    fronts, backs = cutters
+    lo, hi, before = 0, len(clause), None
+    while (lo, hi) != before:
+        before = (lo, hi)
+        lo, hi = _trim(clause, lo, hi)
+        for front in fronts:
+            found = front.match(clause, lo, hi)
+            if found:
+                lo, hi = _trim(clause, found.end(), hi)
+        for back in backs:
+            found = back.search(clause[lo:hi])
+            if found:
+                lo, hi = _trim(clause, lo, lo + found.start())
+    return lo, hi
+
+
+def _trim(text, lo, hi):
+    while lo < hi and (text[lo].isspace() or text[lo] == "."):
+        lo += 1
+    while hi > lo and (text[hi - 1].isspace() or text[hi - 1] == "."):
+        hi -= 1
+    return lo, hi
+
+
+def deals_typed(text, slots=None, ctx=None) -> list:
+    """Each deal he typed in one text, as it stands in the text: the clauses left with words in them, run together.
+    A clause with nothing left (only the special's words or the end date) ends a deal."""
+    cutters = _cutters(_special_names(slots or {}, ctx))
+    text, deals, start, end, cut = str(text), [], None, None, 0
+    for sep in list(_SEPARATOR.finditer(text)) + [None]:
+        stop = sep.start() if sep else len(text)
+        lo, hi = _clause_core(text[cut:stop], cutters)
+        if lo < hi:
+            start = cut + lo if start is None else start
+            end = cut + hi
+        elif start is not None:
+            deals.append(text[start:end])
+            start = None
+        cut = sep.end() if sep else len(text)
+    if start is not None:
+        deals.append(text[start:end])
+    return deals
+
+
+def _spaced(text) -> str:
+    return " ".join(str(text).split())
 
 
 def rule_deal_as_typed(slots, texts, ctx):
     deal = slots.get("deal")
     if not texts or not isinstance(deal, str) or not deal.strip():
         return None
-    span = _deal_span(deal.strip())
-    for text in map(str, texts):
-        for found in span.finditer(text):
-            if not _cut_at_the_front(text[:found.start()]):
-                return None
+    for text in texts:
+        found = deals_typed(text, slots, ctx)
+        if len(found) == 1 and _spaced(found[0]) == _spaced(deal):  # one deal in the text, and it is the whole of it
+            return None
     return NOT_AS_TYPED, "other"
 
 
