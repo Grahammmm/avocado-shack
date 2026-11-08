@@ -135,6 +135,10 @@ class HintTests(unittest.TestCase):
         self.assertEqual(self.ask("Saturday 9 to 5 and Wednesday 9 to 6")["alreadyTrue"], ["Saturday already 9am–5pm", "Wednesday already 9am–6pm"])
         self.assertEqual(self.ask("saturday and wednesday 9 to 5").get("alreadyTrue"), None)
 
+    def test_a_closure_or_open_ended_clause_is_never_a_no_op(self):
+        for text in ("Monday 9 to 6 and Tuesday closed", "Tuesday closed and Monday 9 to 6", "Monday 9 to 6, Tuesday off", "Saturday 9 to 5 and closed Sunday", "Saturday 9 to 5 and Wednesday from 10"):
+            self.assertNotIn("alreadyTrue", self.ask(text), text)
+
     def test_a_shared_prefix_is_not_resolved_to_one_product(self):
         hint = nl_prep.make_hinter(SimpleNamespace(products=[product(1, "Lemons"), product(2, "Lemonade", "drinks")], makers={},
                                                    community={}, store={"hours": []}))

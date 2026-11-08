@@ -349,6 +349,9 @@ def price_hints(text):
     return {"mentioned": True, "amounts": amounts[:MAX_LIST]}
 
 
+CLOSURE_RE = re.compile(r"\b(?:closed?|closes|closing|shut|off|no|not|never|from|after|before|except|until|till|later|earlier|by)\b")
+
+
 def _clock(hour, minute, mark):
     return f"{hour % 12 or 12}{':' + minute if minute and minute != '00' else ''}{mark}"
 
@@ -387,6 +390,8 @@ def hours_hints(text, index):
     ranges = [(m.start(), m.end(), asked_range(m.group(0))) for m in RANGE_RE.finditer(t)]
     days = [(m.start(), m.end(), WEEKDAYS[m.group(2)]) for m in WEEKDAY_RE.finditer(t)]
     if not (ranges and days and index.hours) or any(r[2] is None for r in ranges): return None
+    rest = RANGE_RE.sub(" ", t)  # words around the ranges: a closure or open-ended clause is a change nothing here proves already true
+    if CLOSURE_RE.search(rest): return None
     same, used = [], set()
     for start, end, wd in days:
         dist = sorted((max(r[0] - end, start - r[1], 0), k) for k, r in enumerate(ranges))
