@@ -158,6 +158,17 @@ class ListingTests(StoreMixin, ConversationTestCase):
         head, f = self.fields(rid["id"])
         self.assertEqual((head, f), (rid["title"], {"Title": rid["title"], "Place": rid["place"], "Status": "hidden"}))
 
+    def test_route_idea_by_title(self):
+        """A route idea is found by its title, one word or several, without the interpreter; two matches are not guessed."""
+        for title in ("Zebrawalk", "Zebra Coastal Walk"):
+            self.edit("community.json", lambda doc, t=title: doc["routeIdeas"][0].update(title=t))
+            head, f = self.fields(title)
+            self.assertEqual((head, f["Title"]), (title, title))
+        self.edit("community.json", lambda doc: doc["routeIdeas"].append(dict(doc["routeIdeas"][0], id="route-twin")))
+        self.edit("community.json", lambda doc: doc["routeIdeas"][0].update(title="Zebrawalk"))
+        self.edit("community.json", lambda doc: doc["routeIdeas"][1].update(title="Zebrawalk"))
+        self.assertEqual(self.listing("Zebrawalk"), [NONE])  # two routes share the title: no guess
+
     # -- usage, unknown, collision, lookalikes ---------------------------------------------------------------------
     def test_usage_unknown_collision_and_lookalikes(self):
         self.assertEqual(self.listing(text="listing"), [USAGE])
