@@ -42,9 +42,9 @@ One slot: `hours`, the **whole** new list (1 to 7 lines, 60 characters each). Th
 * `not-already-true`: the same lines as now (spacing aside): "It already says that: Saturday 9am–5pm. Did you mean
   something else?" and nothing is drafted.
 * `holiday-is-notice`: a closed day on a date or a holiday ("closed Thanksgiving", "closed November 12", "closed the
-  12th", "closed 11/12", "closed tomorrow") is a notice, so the hours are not changed and he is asked what the notice
+  12th", "closed 11/12", "closed 2026-11-12", "closed tomorrow", "closed this Thursday", "closed Thursday only") is a notice, so the hours are not changed and he is asked what the notice
   should say and until when. A date written into an hours line is caught too, even when his words are not at hand.
-  Plain weekly words ("closed Sundays") are still hours.
+  Plain weekly words ("closed Sundays", "closed Thursdays from now on", "closed every Thursday") are still hours.
 * `no-price`: a price or a deal in an hours line is refused.
 
 An empty list is refused ("I can't take the hours off the site. What should they say?"). More than 7 lines, a line over
@@ -104,7 +104,7 @@ Slots: `headline` (two lines, 40 characters each, 2 letters each), `intro` (3 le
 
 `claim-in-his-words`: a boast such as "best", "number one", "finest", "award-winning", "family-owned" or "since 2019" is
 only used if he said that word himself (the whole word or phrase, not part of another word such as "bestow", and not
-negated: "do not call us the best" does not say "best"), otherwise he is asked what to say. Origin, organic and health words are not
+negated or taken away in the same sentence: "do not call us the best", "the best is not what we are" and "remove best from the headline" do not say "best"), otherwise he is asked what to say. Origin, organic and health words are not
 repeated here; `hass/claims.py` already asks for those. Parts of a request that are already true are left out of the
 draft. A reset writes the shipped words, because there is no "clear" op: the store file then holds the shipped text and
 the page looks as before. Undoing the earlier change is the exact way back, and the skill says so.

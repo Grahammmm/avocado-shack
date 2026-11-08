@@ -224,8 +224,15 @@ _MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|
           r"nov(?:ember)?|dec(?:ember)?)")
 # a day on the calendar: "November 12", "Nov. 12th", "12 November", "11/12", "the 12th" (never a weekday: "closed Sundays" is the hours)
 DATE_RE = re.compile(rf"\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?{_MONTH}\b|"
-                     r"(?<![\d:/])\d{1,2}/\d{1,2}(?:/\d{2,4})?(?![\d:/])|\bthe\s+\d{1,2}(?:st|nd|rd|th)\b", re.I)
+                     r"(?<![\d:/])\d{1,2}/\d{1,2}(?:/\d{2,4})?(?![\d:/])|\bthe\s+\d{1,2}(?:st|nd|rd|th)\b|"
+                     r"(?<![\d-])\d{4}-\d{1,2}-\d{1,2}(?![\d-])", re.I)
 RELATIVE_DAY_RE = re.compile(r"\b(?:today|tonight|tomorrow|this (?:week|weekend|coming)|next (?:week|weekend))\b", re.I)
+_WEEKDAY = r"(?:mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)"
+# one day only, with no date: "closed this Thursday", "closed next Friday", "closed Thursday only", "just this once"
+ONE_OFF_RE = re.compile(rf"\b(?:this|next|coming)\s+{_WEEKDAY}\b|\b{_WEEKDAY}(?:\s+\S+){{0,2}}\s+only\b|"
+                        r"\b(?:one[- ]?off|one[- ]?time|just once|this once|for one day|just for the day)\b", re.I)
+EVERY_RE = re.compile(r"\b(?:every|each|always|weekly|permanent(?:ly)?|from now on|all year|going forward|"
+                      rf"{_WEEKDAY}s)\b", re.I)
 CLOSED_RE = re.compile(r"\b(?:closed?|closing|closures?|shut|off|not open)\b", re.I)
 
 
@@ -304,6 +311,8 @@ def check_hours_holiday(slots, texts, ctx):
         return SkillStop(HOLIDAY_REPLY, "question")
     for clause in re.split(r"[.!?;\n]", said):
         if CLOSED_RE.search(clause) and (DATE_RE.search(clause) or RELATIVE_DAY_RE.search(clause)):
+            return SkillStop(HOLIDAY_REPLY, "question")
+        if CLOSED_RE.search(clause) and ONE_OFF_RE.search(clause) and not EVERY_RE.search(clause):
             return SkillStop(HOLIDAY_REPLY, "question")
     return None
 

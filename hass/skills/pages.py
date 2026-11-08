@@ -65,17 +65,25 @@ def _negator(word: str) -> bool:
     return word in NEGATORS or word.endswith("n't")
 
 
+# a clause that takes a word away is no support for it: "Remove 'best' from the headline", "leave out best"
+_REMOVAL = re.compile(r"\b(?:remove|removing|delete|deleting|drop|dropping|scrap|scrapping|cut|cutting|skip|skipping|avoid|"
+                      r"avoiding|without|stop|stopping|instead of|rather than|get rid|take (?:it |that |this |them )?"
+                      r"(?:out|off|away)|leave (?:it |that |this |them )?out|no more|no longer|not any)\b")
+
+
 def _said_affirmed(claim: str, texts) -> bool:
-    """True when some text of the owner has ``claim`` as whole words (spacing and hyphens alike) and no negator earlier
-    in the same clause: "Do not call us the best" and "Bestow a warm welcome" do not say "best". Fail-closed."""
+    """True when some text of the owner has ``claim`` as whole words (spacing and hyphens alike) in a clause with no
+    negator and no removal word, before or after it: "Do not call us the best", "The best is not what we are",
+    "Remove 'best' from the headline" and "Bestow a warm welcome" do not say "best". Fail-closed."""
     words = [re.escape(w) for w in re.split(r"[\s-]+", fold(claim)) if w]
     rx = re.compile(r"(?<!\w)" + r"[\s-]+".join(words) + r"(?!\w)")
     for text in texts:
         for clause in _CLAUSE.split(fold(text)):
-            for m in rx.finditer(clause):
-                before = [w.strip(",\"()") for w in clause[:m.start()].split()]
-                if not any(_negator(w) for w in before):
-                    return True
+            if not rx.search(clause):
+                continue
+            if any(_negator(w.strip(",\"'()")) for w in clause.split()) or _REMOVAL.search(clause):
+                continue
+            return True
     return False
 
 
