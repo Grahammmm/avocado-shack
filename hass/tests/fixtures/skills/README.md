@@ -1,0 +1,79 @@
+# Skill cases (fixtures/skills)
+
+One cases file per skill: `hass/tests/fixtures/skills/<group>/<skill name>.jsonl`, one JSON object per line. Every skill
+group card adds only its own files here; the kit (`hass/skills/testkit.py`) and the two generic runners
+(`hass/tests/test_skills_plans.py`, `hass/tests/test_skills_cases.py`) pick them up by themselves. A group folder
+starting with `_` is the kit's own self-test and is never run as a skill (see `_selftest/`).
+
+## Run
+
+```
+python3 hass/skills/testkit.py run hass/tests/fixtures/skills/<group>/<name>.jsonl     # one skill
+python3 hass/skills/testkit.py all                                                    # every skill
+python3 hass/skills/testkit.py selftest                                               # the kit proving itself
+python3 -B -m unittest hass.tests.test_skills_plans hass.tests.test_skills_cases -v   # what CI runs
+```
+
+Exit code 0 when every row passes, 1 when a row fails, 2 when the file cannot be read. Each failing row names the
+problem code and the first thing that differs.
+
+## Plan row (level 2: slots in, exact ops out; no model, no git)
+
+```json
+{"id": "plan-describe", "plan": true, "skill": "stock.set", "slots": {...}, "ctx": {}, "expect_ops": [{"op": "...", "args": {...}}]}
+```
+`expect_error` (text the refusal contains) replaces `expect_ops` for a refused combination. The kit also checks the plan
+contract: only registry ops, 1 to 20 of them, the same answer twice, the slots not changed. `skill` is needed only when
+the file name is not the skill name.
+
+## Case row (level 3: the real Conversation, Editor, sitegen and claims on a scratch writer worktree)
+
+```json
+{"id": "clean-1", "kind": "clean", "version": 1,
+ "texts": ["eggs are out"],
+ "replies": [{"skill": "stock.set", "slots": {...}}],
+ "expect": {"skill": "stock.set", "disposition": "proposed", "ops": [...], "diff": [...], "files": [...], "preview": {"kind": "product"}}}
+```
+
+* `kind`: `clean`, `vague`, `typo`, `multi`, `refuse`, `photo`, `turns`.
+* `texts` are the owner's messages, in order (distinct). `replies` is the recorded interpreter reply for each: a skill reply
+  `{"skill", "slots"}` or `{"calls": [{"skill", "slots"}, ...]}` goes through the skill's own `plan`; a `{"question"}`,
+  `{"unsupported"}` or raw `{"ops"}` reply is played as it is. A plan that raises (a refusal) becomes an `unsupported`
+  reply carrying the exception's `reply` text.
+* `version`: the skill version the row was written for; a different skill version fails the row as `stale-row`.
+* `approve: false` stops after the draft and the wrong-code check (no apply, no undo).
+
+`expect` fields (all optional except `diff` when the row ends in a draft):
+
+| field | checks |
+|---|---|
+| `skill` | the skill (or list) whose plan ran |
+| `disposition` / `dispositions` | how the last message (or each message) ended: `proposed`, `question`, `unsupported`, `refused`, ... |
+| `question_contains`, `reply_contains`, `reply_not_contains` | words in the last owner reply (case does not matter) |
+| `left_off`, `set_line` | words in a `Left off:` / `I set:` line of the reply |
+| `ops` | the exact ops of the draft |
+| `diff` | the exact content change: `[{"file", "path", "before", "after"}]`. `path` is a key path such as `products[photo-product-001].description` or `hours`; `before` is absent for something added, `after` for something removed; JSON is compared parsed, key order ignored |
+| `files` | the exact set of files the commit touched (content and generated) |
+| `preview` | fields the preview request must contain, e.g. `{"kind": "product", "id": "photo-product-001"}` |
+| `residue` | what `undo` leaves behind: `[{"file", "path"}]`; empty or absent means the tree must come back identical |
+| `allow_words` | words a reply may show although they look technical (a product's own name) |
+
+### What the runner does with a row
+
+1. Starts a scratch writer worktree and private state (a copy of the repo content, a fixed Sunday 09:00 PST clock, a synthetic owner).
+2. Sends each text. After **every** message the worktree must be unchanged: no commit, no file (`write-before-yes`).
+3. If the last message ended in a draft: asks the preview (the request is recorded, no browser), sends `yes zzzz` with a wrong code (nothing may change), then `yes <code>`.
+4. Compares the commit with `expect.diff` and `expect.files` (`wrong-diff`) and with the skill's declared `edits` (`edit-undeclared`).
+5. Sends `undo`, then `yes <code>` for the undo draft. The content must equal the start, except the row's `residue`; the skill's `residue` sentence must say so (`undo-not-identical`, `residue-undeclared`). Generated files are judged through the content, because the editor re-sorts JSON keys on every write.
+6. Checks every owner-facing reply for plain words: no internal id (`photo-product-001`), operation or skill name, `json`, `slot`, hash or braces (`jargon`). The draft's own record lines are the conversation's house format and are left alone.
+
+A model-written text is machine-valid here, never accepted: a person reads it in the acceptance report.
+
+## The kit proves itself
+
+`_selftest/toy.py` has four toy skills (not in any registry). `_selftest/toy.jsonl` has plan and case rows; a row with
+`"must_fail": "<code>"` (and optionally `"fault": "write-on-prepare" | "undo-leaves"`, a deliberately broken skill path)
+has to fail for exactly that code, and every other row has to pass. `must_fail` and `fault` are refused in any other file.
+
+Not covered yet (later cards): pictures (`photo` rows need the house render of SKILLS-PIC-1), the real dispatcher
+(SKILLS-FW-3; until then the kit turns skill replies into ops itself), and the live-model run (`ACC-1`).
