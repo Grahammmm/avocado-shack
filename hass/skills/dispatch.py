@@ -19,6 +19,14 @@ Interface assumptions about SKILLS-FW-2 (router / prompt / reply check), all opt
   * The interpreter receives the continue-mode snapshot through its existing ``recent`` argument (keys ``question``,
     ``earlier``, plus ``skill``, ``slots``, ``asked_slot``, ``draft``); the Skills section of its prompt is FW-2's.
   * ``hass.interpret_check.check_skill`` is NOT needed: this module validates the reply shape and every slot itself.
+
+Optional hooks a skill's module may define (found in the module that defines the skill's ``plan``; each is fail-safe):
+  * ``question(slot name, slots, ctx) -> str|None``: the skill's own wording of the one question for a missing slot (it can name the
+    product or offer a saved maker); ``None`` or an error keeps the slot's static ``ask``.
+  * a plan error with ``.reply`` (and ``.kind`` "question" | "refuse", ``.backlog`` a backlog reason or None) is said to the owner as it
+    is: a question keeps the open request, so his short answer continues it; a refusal closes it. No ``.reply``: PLAN_FAILED.
+  * ``notes(skill name, slots, ctx) -> {"say": [...], "set": [...], "warn": [...]}``: lines shown beside the draft, before the owner's yes.
+  * ``ctx.media_root`` (the ``mediaRoot`` setting) and ``ctx.house_render`` (the ``houseRender`` setting) for a photo check.
 """
 from __future__ import annotations
 
@@ -35,6 +43,7 @@ from hass.skills.model import MAX_OPS
 MODES = ("ops-only", "both", "skills-first")
 DEFAULT_MODE = "ops-only"
 MAX_CALLS = MAX_OPS
+BACKLOG_REASONS = ("unknown-skill", "policy", "unsupported-page", "stuck", "price", "other")  # the reasons a refusal may name (see _read_only)
 NEAR_TIE = 0.10  # the router's top two within 10%: the owner is asked (same figure as hass/skills/router.py)
 
 # which op families a skill group owns: in skills-first a raw-ops reply is refused for these (spec 2.4)
@@ -74,8 +83,9 @@ RULES.setdefault("no-price", _no_price)
 class Ctx:
     """What a skill's ``plan`` and rules may read: the saved content (read-only), today (Pacific), aliases, the owner's texts."""
 
-    def __init__(self, content, today, aliases, texts, now):
+    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False):
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
+        self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
 
 
 # -- reply shapes ---------------------------------------------------------------------------------------------
@@ -324,10 +334,26 @@ def next_missing(skill, slots: dict):
         or next((s for s in skill.slots if _required(s, slots) and s.kind == "attachment" and not slots.get(s.name)), None)
 
 
-def question_for(slot, problem=None, ask=None) -> str:
-    """The one short question: the resolver's own reply when it has one (it names the choices), else the slot's ``ask``."""
+def skill_hook(skill, name):
+    """A function the skill's own module offers by name (``question``, ``notes``), else None. The module is the one that defines
+    the skill's ``plan``, the same lookup ``apply_defaults`` uses for ``derive:`` functions."""
+    fn = getattr(sys.modules.get(getattr(getattr(skill, "plan", None), "__module__", "")), name, None)
+    return fn if callable(fn) else None
+
+
+def question_for(slot, problem=None, ask=None, *, skill=None, slots=None, ctx=None) -> str:
+    """The one short question: the resolver's own reply when it has one (it names the choices), else the skill's own wording
+    (``question(slot name, slots, ctx)``: it may name the product or offer a saved maker), else the slot's ``ask``."""
     if problem:
         return problem
+    hook = skill_hook(skill, "question") if skill is not None else None
+    if hook is not None:
+        try:
+            said = hook(slot.name, dict(slots or {}), ctx)
+        except Exception:  # noqa: BLE001 - the skill's wording is a convenience: the static ask still stands
+            said = None
+        if isinstance(said, str) and said.strip():
+            return said.strip()
     text = (slot.ask or "").replace("{candidates}", ", ".join((ask or {}).get("names", []))).strip()
     if text:
         return text
@@ -360,7 +386,9 @@ class Dispatcher:
         from hass import editor as editor_mod
         from hass.content_model import load_content, shop_today
         content = load_content(editor_mod._load(str(self.conv.sdir))[2] / "hass" / "content")
-        return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now)
+        settings = getattr(self.conv, "settings", None) or {}
+        return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
+                   house_render=settings.get("houseRender") is True)
 
     def _owner(self):
         return self.conv.settings["ownerChat"]
@@ -501,7 +529,8 @@ class Dispatcher:
         slots, defaults = apply_defaults(skill, slots, ctx)
         slot = next_missing(skill, slots)
         if slot is not None:
-            return self._ask(msg, now, req, skill, given, texts, attachments, skill_slot=slot.name, problem=None, ask=None, revises=revises)
+            return self._ask(msg, now, req, skill, given, texts, attachments, skill_slot=slot.name, problem=None, ask=None, revises=revises,
+                             shown=slots, ctx=ctx)
         for rule in skill.rules:
             hit = RULES.get(rule, lambda *a: None)(slots, texts, ctx)
             if hit:
@@ -510,10 +539,8 @@ class Dispatcher:
             return self._read_only(msg, now, req, skill, slots, ctx, texts)
         try:
             ops = skill.plan(dict(slots), ctx)
-        except Exception:  # noqa: BLE001 - a plan must not raise; if one does, nothing is drafted
-            conv.requests.mark(req["request_id"], "closed", now) if req else None
-            conv._reply(PLAN_FAILED)
-            return "not-drafted"
+        except Exception as exc:  # noqa: BLE001 - a plan must not raise; a Refusal (a sentence of the skill's own) is said, any other error is not
+            return self._plan_stopped(msg, now, req, skill, given, texts, attachments, exc, revises)
         if not isinstance(ops, list) or not ops or not all(isinstance(o, dict) and set(o) == {"op", "args"} for o in ops):
             conv.requests.mark(req["request_id"], "closed", now) if req else None
             conv._reply(PLAN_FAILED)
@@ -524,7 +551,35 @@ class Dispatcher:
         return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off,
                            queued=req["calls"] if req else ())
 
-    def _ask(self, msg, now, req, skill, slots, texts, attachments, *, skill_slot, problem, ask, revises):
+    def _plan_stopped(self, msg, now, req, skill, given, texts, attachments, exc, revises):
+        """A plan raised. A skill's own refusal (``exc.reply`` is a sentence for the owner, ``exc.kind`` is ``question`` when one
+        answer fixes it, ``exc.backlog`` a backlog reason) is said as it is: a question keeps the request open with what he has given
+        so far, so his short answer continues it; anything else closes it. An error with no such sentence is the generic failure."""
+        conv, owner = self.conv, self._owner()
+        reply = getattr(exc, "reply", None)
+        if not (isinstance(reply, str) and reply.strip()):
+            conv.requests.mark(req["request_id"], "closed", now) if req else None
+            conv._reply(PLAN_FAILED)
+            return "not-drafted"
+        reply = reply.strip()
+        if getattr(exc, "backlog", None) in BACKLOG_REASONS:
+            return self._backlog(msg, now, req, "", exc.backlog, reply=reply, texts=texts)
+        if getattr(exc, "kind", None) == "question":
+            asks = (req["asks"] + 1) if req and req["asked_slot"] is None and req["question"] == reply else 1
+            if asks > openreq.MAX_UNRESOLVED:  # the same question three times: give up, as for a slot
+                example = next((t.text for t in skill.triggers if getattr(t, "tag", "") == "clean"), skill.triggers[0].text)
+                conv.requests.mark(req["request_id"], "closed", now)
+                return self._backlog(msg, now, None, "", "stuck", reply=STUCK.format(example=example), texts=texts)
+            conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=req["request_id"] if req else None, skill=skill.name,
+                              slots=given, asked_slot=None, question=reply, attachments=attachments, asks=asks,
+                              calls=req["calls"] if req else [], draft_code=(req["draft_code"] if req else None))
+            conv._reply(reply)
+            return "question"
+        conv.requests.mark(req["request_id"], "closed", now) if req else None
+        conv._reply(reply)
+        return "refused"
+
+    def _ask(self, msg, now, req, skill, slots, texts, attachments, *, skill_slot, problem, ask, revises, shown=None, ctx=None):
         """Ask the one question for ``skill_slot`` and keep the request. A slot asked three times and still open closes it."""
         conv, owner = self.conv, self._owner()
         slot = next(s for s in skill.slots if s.name == skill_slot)
@@ -538,7 +593,8 @@ class Dispatcher:
             if queued:  # this ask is given up; the owner's other asks are not
                 self._queue_only(msg, now, None, queued[0], queued[1:], texts, attachments, None)
             return stuck
-        question = question_for(slot, problem, ask)
+        question = question_for(slot, problem, ask, skill=skill, slots=shown if shown is not None else slots,
+                                ctx=ctx if ctx is not None else (self._ctx(now, texts) if skill_hook(skill, "question") else None))
         conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=req["request_id"] if req else None,
                           skill=skill.name, slots=slots, asked_slot=skill_slot, question=question, ask=ask,
                           attachments=attachments, asks=asks, calls=req["calls"] if req else [],
@@ -546,15 +602,37 @@ class Dispatcher:
         conv._reply(question)
         return "question"
 
+    def _skill_notes(self, skill, slots, now, texts) -> dict:
+        """``notes(skill name, slots, ctx)`` of the skill's module -> ``{say, set, warn}`` lines shown beside the draft (before the
+        owner's yes). Missing, failing or malformed: no lines (the draft is then shown as before). Each line once, plain strings only."""
+        out = {"say": [], "set": [], "warn": []}
+        hook = skill_hook(skill, "notes")
+        if hook is None:
+            return out
+        try:
+            got = hook(skill.name, dict(slots), self._ctx(now, texts))
+        except Exception:  # noqa: BLE001 - a note is advice, never a reason to lose the draft
+            return out
+        for key in out:
+            lines = got.get(key) if isinstance(got, dict) else None
+            out[key] = list(dict.fromkeys(line.strip() for line in (lines if isinstance(lines, (list, tuple)) else ())
+                                          if isinstance(line, str) and line.strip()))
+        return out
+
     def _draft(self, msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, left_off, queued=()):
         """Hand the plan to the conversation's ordinary draft path (editor.prepare, claims over the JOINED texts, proposal)."""
         conv, owner = self.conv, self._owner()
         earlier = _earlier(texts, msg)
         note = []
+        hooked = self._skill_notes(skill, slots, now, texts)  # the skill's own lines: what it said and did, and what to know before yes
+        note += hooked["say"]
         if defaults:
             note.append("I set: " + "; ".join(defaults) + ".")
+        else:
+            note += hooked["set"]
         if left_off:
             note.append("Left off (you didn't say it): " + ", ".join(n.replace("_", " ") for n in left_off) + ".")
+        note += hooked["warn"]
         disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
@@ -618,8 +696,10 @@ class Dispatcher:
                 continue
             try:
                 planned = skill.plan(dict(slots), ctx)
-            except Exception:  # noqa: BLE001
-                waiting.append({"skill": skill.name, "slots": slots, "problem": None, "ask": None, "slot": None})
+            except Exception as exc:  # noqa: BLE001 - a skill's own sentence is the one question asked for this call
+                said = getattr(exc, "reply", None)
+                waiting.append({"skill": skill.name, "slots": slots, "ask": None, "slot": None,
+                                "problem": said.strip() if isinstance(said, str) and said.strip() and getattr(exc, "kind", None) == "question" else None})
                 continue
             ops += planned if isinstance(planned, list) else []
             defaults += shown
@@ -654,7 +734,9 @@ class Dispatcher:
         conv = self.conv
         skill = self.registry.get(first["skill"])
         slot = next((s for s in skill.slots if s.name == first.get("slot")), None) or next_missing(skill, first["slots"])
-        question = question_for(slot, first.get("problem"), first.get("ask")) if slot else None
+        question = (question_for(slot, first.get("problem"), first.get("ask"), skill=skill, slots=first["slots"],
+                                 ctx=ctx if ctx is not None else (self._ctx(now, texts) if skill_hook(skill, "question") else None))
+                    if slot else first.get("problem"))
         conv.requests.put(self._owner(), msg.provider_id, now, texts=texts, request_id=req["request_id"] if req else None,
                           skill=skill.name, slots=first["slots"], calls=rest, attachments=attachments,
                           asked_slot=slot.name if slot else None, question=question, ask=first.get("ask"), asks=1)
