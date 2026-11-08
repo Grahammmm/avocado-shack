@@ -16,7 +16,7 @@ from hass.content_model import AVAILABILITY, CATEGORIES, FORBIDDEN_TEXT, SHELF_L
 from hass.editor import MAX_OPS
 
 HIDDEN = {"Cc", "Cf", "Zl", "Zp", "Cs", "Co", "Cn"}
-STRING_KINDS = ("id", "maker_key", "text", "url", "enum", "date", "time", "image")
+STRING_KINDS = ("id", "maker_key", "text", "url", "enum", "date", "time", "image", "deal")  # deal: the owner's special deal line (AVO-SPECIALS-1)
 NAME_CUT = 40
 AGAIN = "Could you say it another way?"
 UNDO_GUIDANCE = "To undo the last change, say " + voice.quote("undo") + ". To see what we changed lately, say " + voice.quote("history") + "."

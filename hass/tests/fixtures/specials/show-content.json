@@ -1,0 +1,211 @@
+{
+ "none": [],
+ "only-finished-ones": [
+  {
+   "id": "a",
+   "title": "Old eggs",
+   "deal": "2 for $7",
+   "start": "2026-11-01",
+   "end": "2026-11-07",
+   "order": 0
+  }
+ ],
+ "one-live": [
+  {
+   "id": "avocado-honey",
+   "title": "Avocado honey",
+   "deal": "2 for 5 dollars",
+   "start": "2026-11-06",
+   "end": "2026-11-13",
+   "order": 0
+  }
+ ],
+ "two-live-in-order": [
+  {
+   "id": "b",
+   "title": "Plum jam",
+   "deal": "3 for $10",
+   "start": "2026-11-08",
+   "end": "2026-11-14",
+   "order": 1
+  },
+  {
+   "id": "a",
+   "title": "Free samples",
+   "deal": "Free sample Saturday",
+   "start": "2026-11-08",
+   "end": "2026-11-08",
+   "order": 0
+  }
+ ],
+ "live-and-coming-up": [
+  {
+   "id": "a",
+   "title": "Fresh strawberries",
+   "deal": "2 for $5",
+   "start": "2026-11-07",
+   "end": "2026-11-12",
+   "order": 0
+  },
+  {
+   "id": "b",
+   "title": "Figs",
+   "deal": "buy one get one",
+   "start": "2026-11-10",
+   "end": "2026-11-14",
+   "order": 1
+  }
+ ],
+ "only-coming-up": [
+  {
+   "id": "a",
+   "title": "Figs",
+   "deal": "buy one get one",
+   "start": "2026-11-12",
+   "end": "2026-11-14",
+   "order": 0
+  }
+ ],
+ "finished-ones-are-not-listed": [
+  {
+   "id": "a",
+   "title": "Old eggs",
+   "deal": "2 for $7",
+   "start": "2026-11-01",
+   "end": "2026-11-07",
+   "order": 0
+  },
+  {
+   "id": "b",
+   "title": "Lemons",
+   "deal": "2 for $3",
+   "start": "2026-11-08",
+   "end": "2026-11-09",
+   "order": 1
+  }
+ ],
+ "deal-with-odd-marks": [
+  {
+   "id": "a",
+   "title": "Salt & pepper",
+   "deal": "Buy 2, get 1 free!",
+   "start": "2026-11-08",
+   "end": "2026-11-15",
+   "order": 0
+  }
+ ],
+ "three-coming-up-only-three-shown": [
+  {
+   "id": "1",
+   "title": "Special 1",
+   "deal": "1 for $5",
+   "start": "2026-11-10",
+   "end": "2026-11-13",
+   "order": 1
+  },
+  {
+   "id": "2",
+   "title": "Special 2",
+   "deal": "2 for $5",
+   "start": "2026-11-11",
+   "end": "2026-11-14",
+   "order": 2
+  },
+  {
+   "id": "3",
+   "title": "Special 3",
+   "deal": "3 for $5",
+   "start": "2026-11-12",
+   "end": "2026-11-15",
+   "order": 3
+  },
+  {
+   "id": "4",
+   "title": "Special 4",
+   "deal": "4 for $5",
+   "start": "2026-11-13",
+   "end": "2026-11-16",
+   "order": 4
+  }
+ ],
+ "starts-next-year": [
+  {
+   "id": "a",
+   "title": "New year fruit",
+   "deal": "10% off",
+   "start": "2027-01-02",
+   "end": "2027-01-09",
+   "order": 0
+  }
+ ],
+ "one-day-special": [
+  {
+   "id": "a",
+   "title": "Sample Sunday",
+   "deal": "Free sample",
+   "start": "2026-11-08",
+   "end": "2026-11-08",
+   "order": 0
+  }
+ ],
+ "six-live": [
+  {
+   "id": "s0",
+   "title": "Special 0",
+   "deal": "0 for $5",
+   "start": "2026-11-08",
+   "end": "2026-11-14",
+   "order": 0
+  },
+  {
+   "id": "s1",
+   "title": "Special 1",
+   "deal": "1 for $5",
+   "start": "2026-11-08",
+   "end": "2026-11-14",
+   "order": 1
+  },
+  {
+   "id": "s2",
+   "title": "Special 2",
+   "deal": "2 for $5",
+   "start": "2026-11-08",
+   "end": "2026-11-14",
+   "order": 2
+  },
+  {
+   "id": "s3",
+   "title": "Special 3",
+   "deal": "3 for $5",
+   "start": "2026-11-08",
+   "end": "2026-11-14",
+   "order": 3
+  },
+  {
+   "id": "s4",
+   "title": "Special 4",
+   "deal": "4 for $5",
+   "start": "2026-11-08",
+   "end": "2026-11-14",
+   "order": 4
+  },
+  {
+   "id": "s5",
+   "title": "Special 5",
+   "deal": "5 for $5",
+   "start": "2026-11-08",
+   "end": "2026-11-14",
+   "order": 5
+  }
+ ],
+ "title-and-deal-with-apostrophes": [
+  {
+   "id": "a",
+   "title": "Mike's pick",
+   "deal": "It's 2 for $5",
+   "start": "2026-11-08",
+   "end": "2026-11-12",
+   "order": 0
+  }
+ ]
+}
