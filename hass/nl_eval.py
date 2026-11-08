@@ -5,7 +5,8 @@ from a phone (typos, fragments, slang, voice-to-text slips, several asks at once
 to a question, questions that are not change requests, jokes). Each row says what Hass must do with it:
   {"id", "text", "intent", "expect", "ask", "refuse", "pending": [...]}   plus optional
   "also": [expect, ...]   other acceptable outcomes (for example a question OR the exact-name draft),
-  "recent": {"question": "..."}   Hass's last question, when the text is the owner's short answer to it,
+  "recent": {"question": "...", "earlier": ["..."]}   Hass's last question, when the text is the owner's short answer to it;
+                                          "earlier" (optional) = the owner's earlier texts of the same request, oldest first,
   "notes", "aliases"   the saved context interpreter_eval cases may carry, "mustContain": [str], "tags": [str].
 `expect` is the interpreter_eval shape: {"ops": [...], "revises": code|None}, {"question": true} or {"unsupported": true}.
 `ask` is true when the right outcome is one short question, `refuse` when it is a plain refusal (nothing drafted).
@@ -76,7 +77,8 @@ def load_corpus(path=CORPUS) -> list:
         if "aliases" in row and not (isinstance(row["aliases"], list) and all(isinstance(a, dict) and set(a) == {"name", "kind", "id"}
                                                                                and all(isinstance(v, str) for v in a.values()) for a in row["aliases"])):
             raise bad("bad aliases")
-        if "recent" in row and not (isinstance(row["recent"], dict) and set(row["recent"]) == {"question"} and isinstance(row["recent"]["question"], str)): raise bad("bad recent")
+        if "recent" in row and not (isinstance(row["recent"], dict) and set(row["recent"]) <= {"question", "earlier"} and isinstance(row["recent"].get("question"), str)
+                                    and _strs(row["recent"].get("earlier", ["x"]))): raise bad("bad recent")  # HASS-HIKE-FLOW-1: earlier = the owner's texts of the same request
         if "mustContain" in row and not _strs(row["mustContain"]): raise bad("bad mustContain")
         if "tags" in row and not _strs(row["tags"]): raise bad("bad tags")
         rows.append(row)
