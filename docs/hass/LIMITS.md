@@ -17,8 +17,8 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 ## Waiting changes
 
 - In live mode, only these changes go from chat to the website (HASS-LIVE-PLAN-1): hide or restore a product, edit a
-  product's description or category, stock words, specials (no price), hikes with sign-up off (add, edit, cancel), a maker's
-  about text, and undo. Anything else (new items, pictures, brands, producers, maker places or links, club details, trail
+  product's description or category (not its name), stock words, specials (no price), hikes with sign-up off (add, edit, cancel), a maker's
+  about text, and undo. Anything else (new items, product names, pictures, brands, producers, hiding or restoring a maker, maker places or links, club details, trail
   facts, route ideas, sample hikes, prices, phone, address, shop hours or notice, the home page photo) is refused in plain
   words and saved for Graham to do by hand.
 - Sentences containing origin or organic claims, health claims, awards or endorsements, trail facts, prices or

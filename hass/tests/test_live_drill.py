@@ -201,6 +201,47 @@ class Drill(pl.ReleaseCase):
         self.assertEqual(self.live.operate("revert-last"), {"result": "nothing-to-revert"})
         self.assertEqual(self.push_calls, 2)
 
+    def drafts_states(self):
+        return [r[0] for r in self.conv.db.execute("SELECT state FROM drafts ORDER BY row_id")]
+
+    def published_then_undo_with(self, fault):
+        """Publish one change, then run Graham's revert while the push is faulty. Returns (site as published, revert result)."""
+        self.publish_hours()
+        self.sent()
+        self.settle_and_flush()
+        published, before = self.site_index(), self.drafts_states()
+        self.assertEqual(before, ["applied"])
+        self.fault = fault
+        self.now += timedelta(seconds=61)
+        return published, self.live.operate("revert-last")
+
+    def test_7c_a_revert_that_does_not_publish_leaves_the_change_and_its_chat_status_alone(self):
+        def refuse(cwd, args):
+            if args[0] == "push": raise subprocess.CalledProcessError(128, args, stderr=BARE_PUSH_REFUSED)
+        published, out = self.published_then_undo_with(refuse)
+        self.assertEqual((out["result"], out["state"]), ("not-published", "not-published"))  # never "ok"
+        self.assertEqual(self.site_index(), published)  # the change is still on the website
+        self.settle_and_flush()
+        self.assertEqual(self.drafts_states(), ["applied"])  # still the live change, not "undone"
+
+    def test_7d_an_unknown_revert_stays_open_and_closes_the_chat_draft_only_when_proved_live(self):
+        from hass.tests.test_publish_live import git
+
+        def lose(cwd, args):  # the push reaches the remote, but the answer is lost
+            if args[0] == "push":
+                git(cwd, *args)
+                raise subprocess.TimeoutExpired("git", 60)
+            if args[0] == "ls-remote": raise subprocess.TimeoutExpired("git", 60)
+        published, out = self.published_then_undo_with(lose)
+        self.assertEqual((out["result"], out["state"]), ("unknown", "unknown"))
+        self.settle_and_flush()
+        self.assertEqual(self.drafts_states(), ["applied"])  # not proved yet
+        self.fault = None
+        self.now += timedelta(minutes=11)
+        self.settle_and_flush()  # a later tick (or a restart) reads the remote, then reads the page back
+        self.assertEqual(self.entry()["state"], "live")
+        self.assertEqual(self.drafts_states(), ["reverted"])
+
     def test_7b_revert_is_refused_while_stopped_or_unsettled(self):
         self.publish_hours()
         self.sent()

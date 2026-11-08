@@ -391,6 +391,7 @@ class LiveEditor(conversation.Editor):
             if new != state or fields: self.books.write(j, new, **fields)
             if new in ('unknown', 'unconfirmed', 'not-published'): self.alert(new)
             if notify: self.notify(j)
+        self._close_undone_chat_drafts()
 
     def notify(self, j):
         state = j['state']
@@ -433,14 +434,26 @@ class LiveEditor(conversation.Editor):
         draft = made['draft']
         out = self.apply(draft['change_id'], draft['draft_hash'])
         if out['result'] not in ('applied', 'already-applied'): return {'result': out['result'], 'reason': out.get('reason')}
-        self._close_chat_draft(target['change_id'])
-        return {'result': 'ok', 'change_id': draft['change_id'], 'undid': target['change_id'], 'state': self.entry_state(draft['change_id'])}
+        # The chat draft stays as it was until the undo is proved live (see _close_undone_chat_drafts, run by every reconcile).
+        state = self.entry_state(draft['change_id'])
+        fact = {'change_id': draft['change_id'], 'undid': target['change_id'], 'state': state}
+        if state not in journal.LANDED: return {'result': state or 'unknown', 'reason': 'the change is still on the website', **fact}
+        return {'result': 'ok', **fact}
 
     def entry_state(self, cid):
         return next((j['state'] for j in self.books.journals() if j['change_id'] == cid), None)
 
+    def _close_undone_chat_drafts(self):
+        """Graham's one-command revert has no chat draft of its own. Only when that undo is proved live is the chat draft it took
+        back marked undone; a failed, unknown or unconfirmed undo leaves it as it was, and a restart picks it up here again."""
+        try: _books, entries = self.load()
+        except journal.BooksError: return
+        for j in entries:
+            if j['kind'] == 'undo' and j['state'] == 'live' and j.get('orig') and not self._has_draft(j['change_id']):
+                self._close_chat_draft(j['orig'])
+
     def _close_chat_draft(self, cid):
-        """Keep Mike's `history`/`status` honest: the chat draft that was just undone by the operator is marked undone."""
+        """Keep Mike's `history`/`status` honest: the chat draft that was undone by the operator is marked undone."""
         path = Path(editor.open_state(self.state_dir)) / 'conversation.sqlite3'
         if not path.is_file(): return
         import sqlite3
@@ -487,7 +500,13 @@ class LiveEditor(conversation.Editor):
                 files = self.build(head, self.day(), 'baseline', 'new', checks=True)
                 manifest = sha(json.dumps({p: sha(b) for p, b in files.items()}, sort_keys=True).encode())[:12]
                 risks = privacy(files, {}, 'hass baseline: ' + head, self.private_values())
-                if confirm != manifest or risks: return {'result': 'preview', 'paths': len(files), 'privacy': risks, 'manifest': manifest}
+                if confirm != manifest or risks:
+                    # The exact pages this baseline would publish (writer HEAD, today's date), for G to open and look at.
+                    shown = self.root / 'build' / 'baseline-preview'
+                    if shown.exists(): shutil.rmtree(shown)
+                    shown.mkdir(parents=True, mode=0o700)
+                    sitegen.write_files(files, shown)
+                    return {'result': 'preview', 'paths': len(files), 'privacy': risks, 'manifest': manifest, 'preview_dir': str(shown), 'writer_head': head}
                 cid = 'chg-' + sha((head + manifest + self.clock().isoformat()).encode())[:12]
                 j = dict(change_id=cid, code=manifest, kind='baseline', orig=None, draft_hash=manifest, writer_before=head,
                     writer_after=head, site_before=books['last_site_commit'], today=self.day(), seq=self.books.next_seq(),

@@ -2,7 +2,7 @@
 
 Plain words, in order. Everything is typed by G on AgentOrange unless it says otherwise. **Nobody else (no agent) holds the key, the GitHub or Cloudflare login, or the phone numbers.** If a "Check" fails, stop and do not go on; the site is not touched until step 7.
 
-Before you start: runbook steps 1–19 are done (Mac forwarder, receiver and worker running, `approvals` still `hold`), a reply **picture** arrives on the phone, and the test battery has passed.
+Before you start: runbook steps 1–19 are done (Mac forwarder, receiver and worker running, `approvals` still `hold`), reply **pictures** reach Michael's phone (runbook step 19), and the full test battery has passed.
 
 **1. Make the site-only key (G, AgentOrange).**
 ```
@@ -36,30 +36,34 @@ Check: the two long numbers are identical. If not, go back to step 3.
 * Michael first texts the business number once ("hi") so his chat exists; G does the same.
 Check: `cd ~/.local/share/hass/runtime && python3 hass/host.py check --host ~/.local/state/hass/host/host.json` prints `"result": "ok"`. A text from any other number gets no answer and starts nothing.
 
-**6. First publish: bring the site level with Hass (G).**
+**6. First publish: bring the site level with Hass (G).** Everything below uses the host file from step 5; set `H=~/.local/state/hass/host/host.json` once in this terminal.
 ```
 cd ~/.local/share/hass/runtime
-python3 hass/publish_live.py adopt --host ~/.local/state/hass/host/host.json
+python3 hass/publish_live.py adopt --host $H
 ```
 `adopted` → go to step 7. `differs` → (the site's one commit is older than today's code, so expect this):
 ```
-python3 hass/publish_live.py adopt --from-remote --host ~/.local/state/hass/host/host.json
-python3 hass/publish_live.py baseline --host ~/.local/state/hass/host/host.json
-python3 hass/sitegen.py --publish ~/hass-preview
-python3 -m http.server 8089 --bind 127.0.0.1 --directory ~/hass-preview
+python3 hass/publish_live.py adopt --from-remote --host $H
+python3 hass/publish_live.py baseline --host $H
 ```
-Look at the preview in a browser (SSH-forward port 8089). **This publishes everything now on avocado-shack main that the site does not have.** Only if the privacy list printed by `baseline` is empty and the pages look right:
-`python3 hass/publish_live.py baseline --host ~/.local/state/hass/host/host.json --confirm <manifest from the preview>`, then `rm -rf ~/hass-preview`.
-Check: `python3 hass/publish_live.py status --host ~/.local/state/hass/host/host.json` shows no open release; `https://theavocadoman.com` looks right.
+`baseline` changes nothing yet. It prints `"result": "preview"`, a `privacy` list, a `manifest` and a `preview_dir`: the exact pages Hass would publish (built from the writer copy's current state and today's date; **not** the runtime folder, which can be a different version). **Look at them.** In a **second terminal** on AgentOrange (leave the first free for the next command):
+```
+python3 -m http.server 8089 --bind 127.0.0.1 --directory <preview_dir printed above>
+```
+and open it from your computer with an SSH forward (`ssh -L 8089:127.0.0.1:8089 <agentorange>`, then http://127.0.0.1:8089). When you have looked, press Ctrl-C in the second terminal to stop the server. **Confirming publishes everything now in Hass's copy that the site does not have.** Only if `privacy` is empty and the pages look right, in the first terminal:
+```
+python3 hass/publish_live.py baseline --host $H --confirm <manifest printed above>
+```
+Check: `python3 hass/publish_live.py status --host $H` shows no open release (give it a minute); `https://theavocadoman.com` looks right. If the privacy list is not empty or the pages look wrong: do not confirm, tell the operator.
 
 **7. Switch on (G).**
 ```
-python3 hass/host.py mode live --host ~/.local/state/hass/host/host.json && systemctl --user restart hass-worker
+python3 hass/host.py mode live --host $H && systemctl --user restart hass-worker
 ```
-Check: it prints `"approvals": "live"`; `systemctl --user is-active hass-worker` says `active`. **To switch back at any time:** `python3 hass/host.py mode private --host ~/.local/state/hass/host/host.json && systemctl --user restart hass-worker`.
+Check: it prints `"approvals": "live"`; `systemctl --user is-active hass-worker` says `active`; `python3 hass/host.py check --host $H` still says `ok`. **To switch back at any time:** `python3 hass/host.py mode private --host $H && systemctl --user restart hass-worker`.
 
-**8. G tries it on G's own phone first.** Send one small description change, reply `yes <code>`. Expect "Saved…", then within a few minutes "Your change is on the website now." with a picture; look at the page; then send `undo`, `yes <code>` and see it go back. Anything else: switch back (step 7), tell the operator.
+**8. Michael starts (no trial first; G watches).** Michael sends one small change in his own words, checks what Hass says it will do, and replies `yes <code>`. He gets "Saved", then within a few minutes "Your change is on the website now." **with a picture**; he opens theavocadoman.com and looks. If it is wrong, he texts `undo` then `yes <code>`. Hass says plainly when it cannot put something on the website from chat (it saves it for Graham instead). G does not send a test change first. G's own chat is also an owner chat and is text only: whatever G sends is answered in words, never with a picture, and that is correct.
 
-**9. Michael.** After G says go: send one small change in your own words, check what Hass says it will do, reply `yes <code>`. You get "Saved", then "Your change is on the website now." with a picture; open theavocadoman.com and look. If it is wrong, text `undo` then `yes <code>`. Hass will say plainly if it cannot put something on the website from chat; Graham sees those.
+**9. G watches (G, any time).** In G's chat send `problems` (what went wrong) and `status`. Each session report has one problem line. If anything looks wrong, switch back (step 7) and tell the operator.
 
 **If something goes wrong:** `touch ~/.config/hass/STOP` stops all publishing at once. Taking the last change off the site: `cd ~/.local/share/hass/runtime && python3 hass/publish_live.py revert-last --host ~/.local/state/hass/host/host.json`, then the same `status` a minute later.

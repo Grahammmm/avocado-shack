@@ -36,8 +36,8 @@ class TableShape(unittest.TestCase):
         self.assertEqual(sorted(policy.LIVE), sorted([
             "product.hide", "product.restore", "product.edit", "product.set_availability", "product.clear_availability",
             "store.confirm_selection", "specials.add", "specials.edit", "specials.remove", "specials.clear_expired",
-            "hike.create", "hike.update", "hike.cancel", "maker.edit", "maker.hide", "maker.restore", "history.revert"]))
-        self.assertEqual(policy.LIVE["product.edit"], {"id", "name", "description", "category"})
+            "hike.create", "hike.update", "hike.cancel", "maker.edit", "history.revert"]))
+        self.assertEqual(policy.LIVE["product.edit"], {"id", "description", "category"})
         self.assertEqual(policy.LIVE["maker.edit"], {"key", "story"})
 
     def test_every_private_reason_is_plain_and_passes_the_voice_check(self):
@@ -64,6 +64,9 @@ class RealDrafts(unittest.TestCase):
     def refused(self, *ops):
         return policy.check(self.draft(*ops))
 
+    def maker_key(self):
+        return next(iter(json.loads((self.repo.wt / "hass/content/makers.json").read_text())["makers"]))
+
     def test_live_from_chat(self):
         for label, ops in {
             "hide": [op("product.hide", id=PRODUCT)],
@@ -86,6 +89,16 @@ class RealDrafts(unittest.TestCase):
                 reasons = self.refused(op("maker.edit", key=key, **{field: value}))
                 self.assertTrue(reasons, reasons)
 
+    def test_a_product_name_and_maker_hide_and_restore_are_private_and_named_in_plain_words(self):
+        """G's list is description and category, and the maker's about text: not a name, not hiding or restoring a maker."""
+        self.assertEqual(self.refused(op("product.edit", id=PRODUCT, name="New plain name")), ["not live: product.edit.name"])
+        self.assertIn("more than the part I can change from chat", policy.refusal(["not live: product.edit.name"]))
+        for name in ("maker.hide", "maker.restore"):
+            self.assertIn(name, policy.PRIVATE)
+            self.assertNotIn(name, policy.LIVE)
+            self.assertIn("I've saved it for Graham", policy.refusal([f"not live: {name}"]))
+        self.assertEqual(self.refused(op("maker.hide", key=self.maker_key(), withProducts=True)), ["not live: maker.hide"])
+
     def test_undo_always_passes(self):
         self.assertEqual(policy.check(edit("old", "new", op="history.revert")), [])
 
@@ -93,6 +106,8 @@ class RealDrafts(unittest.TestCase):
         cases = {
             "product.edit brand": [op("product.edit", id=PRODUCT, brand="Someone Else")],
             "product.edit producer": [op("product.edit", id=PRODUCT, producerKey="Etto")],
+            "product.edit name": [op("product.edit", id=PRODUCT, name="New plain name")],
+            "maker hide": [op("maker.hide", key=self.maker_key(), withProducts=True)],
             "new item": [op("product.add", name="Test jam", brand="Test Orchard", category="pantry", image="assets/products/photo-product-001.webp",
                             description="Sweet jam.")],
             "hours": [op("store.set_hours", hours=["Monday 9am-5pm"])],

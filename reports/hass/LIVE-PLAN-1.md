@@ -55,14 +55,15 @@ See `reports/hass/LIVE-STEPS-G-MICHAEL.md` (one page, plain words, copy-paste, w
 | Skill (operation) | Live from chat? | Reason |
 |---|---|---|
 | Hide / restore a product (`product.hide`, `product.restore`) | **Live** | Changes visibility only; held products stay refused by the editor |
-| Edit a product's name, description or category (`product.edit`, args `id name description category` only) | **Live** | Free text, still claim-scanned; brand, producer and picture are not allowed args. (`name` is kept live because the merged item skill declares it chat-live; G's list named description and category; remove `name` from `LIVE` if G wants it private) |
+| Edit a product's description or category (`product.edit`, args `id description category` only) | **Live** | Free text, still claim-scanned; name, brand, producer and picture are not allowed args |
+| Rename a product (`product.edit` with `name`) | Private | Not on G's list; a name is what Mike's other words point at and what the page and search show, so it waits for Graham |
 | Stock word, with the shelf-check day (`product.set_availability`, `product.clear_availability`, `store.confirm_selection`) | **Live** | A status word, not a number; the check day is the owner's own statement |
 | Weekly specials (`specials.add/edit/remove/clear_expired`) | **Live, if no price** | A price in the deal line is a protected sentence, so "2 for $5" stays private (G's "prices" rule). Ask G if deal-line prices should be allowed |
 | Hikes: add / edit / cancel (`hike.create/update/cancel`) | **Live, sign-up off only** | If the hike (before or after) has sign-up on, people are involved: private. Trail fields (`trailId`, distance, difficulty, duration, access note, meeting address) stay private |
 | Maker "about" text (`maker.edit`, args `key story` only) | **Live** | Free text, claim-scanned; place, link and name are not allowed args |
 | Undo (`history.revert`) | **Live** | Restores earlier content |
 | Add a product (`product.add`), change its picture (`product.set_photo`) | Private | A new item carries a brand and maker; pictures cannot be claim-checked. Revisit with the picture cards |
-| Hide / restore a maker (`maker.hide`, `maker.restore`) | **Live** | Visibility only; kept live because the merged maker skills declare it chat-live and pin it in tests; not on G's list, so G can remove the two rows |
+| Hide / restore a maker (`maker.hide`, `maker.restore`) | Private | Not on G's list: it can take several products off or put them back in one go. The maker skills now declare `private-only` for both |
 | Add a maker; a maker's place, link or name | Private | Brands, producer places and links |
 | Product brand, display brand, producer | Private | Brands and producers |
 | Hike repeat / complete / recap / sample hikes | Private | Not in G's list |
@@ -88,7 +89,7 @@ A refused change gets the plain message above and **one row in the private backl
 * **Rollout (decision 4):** G does the steps file; the test battery (section F plus the 72-message skills battery) passes; then Michael. G watches `problems`/`weekly`.
 * **One-line switch back to private mode:** `python3 hass/host.py mode private --host ~/.local/state/hass/host/host.json && systemctl --user restart hass-worker`. Rewrites only `approvals` (file stays 0600, refuses and changes nothing if the result would not load). In `private` mode a `yes` saves to the writer branch only and the replies say "saved, not on the website yet". The site is not touched. `mode hold` stops applying anything. `mode live` is refused unless the release block, `liveSite`, pictures and previewer are in place. **Returning to live after a private period** needs G's adopt/baseline (the writer is ahead of the site), exactly step 21 of the runbook.
 * **Fastest stop (no restart):** `touch ~/.config/hass/STOP`: refuses any publication (an in-flight push cannot be recalled).
-* **One-command revert of the last live change:** `cd ~/.local/share/hass/runtime && python3 hass/publish_live.py revert-last --host ~/.local/state/hass/host/host.json`. It finds the newest change that reached the site and was not undone and puts it back through the normal release path (new commit; checks; one push; live check), refuses while STOP is present or a release is open, and tells Mike "Graham took your last change off the website." Run `status` a minute later. From the phone the same thing is `undo` then `yes <code>`. If the site itself is wrong and nothing else works: Cloudflare Pages → Rollback (G), then `resolve <id> --as reverted`.
+* **One-command revert of the last live change:** `cd ~/.local/share/hass/runtime && python3 hass/publish_live.py revert-last --host ~/.local/state/hass/host/host.json`. It finds the newest change that reached the site and was not undone and puts it back through the normal release path (new commit; checks; one push; live check), refuses while STOP is present or a release is open, and tells Mike "Graham took your last change off the website." It reports `ok` only when the undo reached the site; a refused or unknown push is reported as such (`not-published`, `unknown`), and the original change stays recorded as live until a later check proves the undo live. Run `status` a minute later. From the phone the same thing is `undo` then `yes <code>`. If the site itself is wrong and nothing else works: Cloudflare Pages → Rollback (G), then `resolve <id> --as reverted`.
 
 ## F. Test plan on a scratch site (never the live site)
 
@@ -102,7 +103,7 @@ A refused change gets the plain message above and **one row in the private backl
 | 4 | refused risky edit | origin/organic edit → refusal text; `yes` cannot get round it; no push, no commit, no journal; one private backlog row |
 | 5 | stranger | 5 texts × 3 stranger kinds → no reply, no change, nothing stored |
 | 6 | G as second owner | G's yes publishes; every message to G's chat, none with a picture; Mike's yes cannot publish G's change; G's numbers are in the privacy scan |
-| 7 | revert-last | site back to before; Mike told; draft marked undone; second call: nothing to revert; refused under STOP |
+| 7 | revert-last | site back to before; Mike told; the chat draft is marked undone **only after the undo is proved live**; second call: nothing to revert; refused under STOP. (7c) undo push refused → result `not-published`, the change is still on the site and its chat draft is left as it was; (7d) answer lost → `unknown`, draft left alone, and closed on the later tick that proves it live |
 | 8 | switch to private | `mode` round trip keeps 0600 and validity; an invalid `live` leaves the file unchanged; private mode ignores `liveSite` |
 
 Other new tests: `test_live_table.py` (every real operation classified; G's table exactly; real drafts of every allowed skill pass and the private ones are refused; plain reasons pass the voice check) and `test_live_owners.py` (13 tests, section D). Results (HASS_VOICE_STRICT=1): live_table 12 OK, live_owners 13 OK, live_drill 34 OK (includes inherited receiver cases), plus the existing live_policy/live_proposal/publish_live/host/conversation modules OK. Full-suite result: see the PR.
@@ -113,6 +114,6 @@ Other new tests: `test_live_table.py` (every real operation classified; G's tabl
 2. Deal-line prices in specials stay private; say so if G wants them live.
 3. Prerequisite not checked by me: runbook step 19 (reply pictures reach the phone) — the live-audit of 2026-11-07 said they did not; live mode requires it.
 4. The 72-message skills battery (SKILLS-SPEC §4.3) is the gate in decision 4; I did not run it.
-5. The first `baseline` publishes everything currently on avocado-shack main that differs from the site's only commit (built from main c02e1eb): G must look before confirming (steps file, step 6).
+5. The first `baseline` publishes everything currently in the writer copy that differs from the site's only commit: G must look before confirming. The preview command now writes the exact pages it would publish (writer HEAD, today's date) to a folder it names (`preview_dir`), so what G looks at is what the manifest confirms (steps file, step 6).
 6. Weekly top 3 to G on a schedule (decision 5) is not built; follow-up card.
 7. Three of my own tool calls this run were refused by the command guard (inline interpreter forms); none changed anything; none retried.

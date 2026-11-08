@@ -516,7 +516,7 @@ SKILLS = (
         plan=plan_hide,
         edits=((_MAKERS, "makers[key].hidden"), (_PRODUCTS, "products[id].status")) + _GEN + _CARDS,
         side_effects=("none",),
-        preview="home", approval="owner-yes", live_class="chat-live",
+        preview="home", approval="owner-yes", live_class="private-only",
         undo=Undo("revert", "none"),
         refuse=(
             ("the maker is already hidden", "<Maker> is hidden already."),
@@ -542,7 +542,7 @@ SKILLS = (
         plan=plan_restore,
         edits=((_MAKERS, "makers[key].hidden"),) + _GEN,
         side_effects=("none",),
-        preview="home", approval="owner-yes", live_class="chat-live",
+        preview="home", approval="owner-yes", live_class="private-only",
         undo=Undo("revert", "none"),
         refuse=(
             ("the maker is already on the site", "<Maker> is already on the site."),
