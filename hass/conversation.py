@@ -810,6 +810,8 @@ class Conversation:
             self._record(msg, "attachment-unsupported")
             return "attachment-unsupported", None
         now, command = self._now(), None if msg.attachments > 0 else read_command(msg.text)
+        if command and command[0] == "post" and len(command[1].split()) >= 2 and not self._post_names_something(command[1]):
+            command = None  # HASS-VOICE-1: "post a sale on social media" is a sentence for the interpreter, not a product or hike name
         self._close_asks(now)  # HASS-HIKE-FLOW-1: an open request older than RECENT_MINUTES is forgotten
         # AV0022-06 (H16): a yes/no is judged at the time it was sent, so a reply queued while the service was down counts
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
@@ -1416,6 +1418,19 @@ class Conversation:
         pack, _, units = row["value"].partition(" for ")
         since = datetime.fromisoformat(row["created_at"]).astimezone(LOCAL_TZ)
         return f"Using the cost you gave me {voice.natural(since, self._now())}.\n" + margins.say(margins.compute(pack, units, shrink or "0", margin))
+
+    def _post_names_something(self, text) -> bool:
+        """HASS-VOICE-1: post takes a name, so several words only count as the post command when they point at one product
+        or hike; anything else keeps going to the interpreter as before. Unreadable content counts as a name so the usual
+        'can't read' answer follows."""
+        try:
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            return True
+        words = text.split()
+        if words[0].lower() == "hike" and len(words) == 2: return True  # one id after 'hike': the usual 'I don't know a hike' answer
+        if words[0].lower() == "hike": return self._pick_hike(content, text[4:].strip()) != text[4:].strip()
+        return self._pick("product", text, content) != text
 
     def _post(self, pid) -> str:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
