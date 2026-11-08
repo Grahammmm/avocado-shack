@@ -49,6 +49,7 @@ class ReadOnlyQuestionTests(H06TestCase):
                      "listing photo-product-024", "help"):
             with self.subTest(text=text):
                 plain = (self.say(text, pid="p-" + text), self.replies())
+                plain = (plain[0], [r.removesuffix("\n\n" + conv.SHELF_ASK) for r in plain[1]])  # HASS-SHELFCHECK-FLOW-1: the report asks that once a day
                 asked = (self.say(text + "?", pid="q-" + text), self.replies())
                 self.assertEqual(asked, plain)
                 self.assertEqual((self.interp.texts, self.approvals()), ([], 0))
