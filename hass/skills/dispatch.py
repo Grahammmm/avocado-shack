@@ -12,7 +12,7 @@ Nothing here approves, applies, releases or sends anything. Every draft goes thr
 proposal, owner ``yes <code>``), exactly as a raw-ops draft does. The owner's texts are private: never logged or printed.
 
 Interface assumptions about SKILLS-FW-2 (router / prompt / reply check), all optional, all fail-safe:
-  * ``hass.skills.router.candidates(text, hints, open_request, attachment)`` returns up to 3 candidates, best first, each a
+  * ``hass.skills.router.candidates(text, hints, open_request, attachment, skills=registry)`` returns up to 3 candidates, best first, each a
     ``(name, score)`` pair, a dict with ``skill``/``name`` and ``score``, or an object with ``.skill``/``.name`` and ``.score``.
     If the module is missing, or raises, the agreement rule (spec 2.5) is skipped and the model's skill is used: a wrong
     choice can only produce a wrong DRAFT, which the owner still has to approve by code.
@@ -323,13 +323,21 @@ class Dispatcher:
         return [s for s in self.registry.active() if any(sl.kind == "attachment" and sl.from_attachment for sl in s.slots)]
 
     # routing agreement (spec 2.5 step 3) -------------------------------------------------------------------
-    def _agreement(self, text, req, skill_name, attachments):
+    def _hints(self, text, now):
+        """The nl_prep hints the router scores with; never raises (a hint is a convenience)."""
+        try:
+            ctx = self._ctx(now, [text])
+            return nl_prep.make_hinter(ctx.content)(text, ctx.today, self.conv.aliases())
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _agreement(self, text, req, skill_name, attachments, now):
         """None to accept the model's skill, or the one question that asks which task the owner means."""
         try:
             router = importlib.import_module("hass.skills.router")
-            found = candidates_of(router.candidates(text, {}, req, bool(attachments)))
-        except Exception:  # noqa: BLE001 - no router, or it failed: the model's skill stands (the owner approves any draft)
+        except ImportError:  # FW-2 not present: the model's skill stands (the owner approves any draft)
             return None
+        found = candidates_of(router.candidates(text, self._hints(text, now), req, bool(attachments), skills=self.registry))
         if not found:
             return None
         names = [n for n, _ in found]
@@ -383,7 +391,7 @@ class Dispatcher:
             self.conv._reply(PHOTO_MISMATCH.format(labels=labels))
             return "question"
         if not same:
-            asked = self._agreement(msg.text, req, name, attachments)
+            asked = self._agreement(msg.text, req, name, attachments, now)
             if asked:
                 texts = _joined(req, msg)
                 self.conv.requests.put(owner, msg.provider_id, now, texts=texts, skill=None, question=asked, attachments=attachments)
@@ -441,7 +449,8 @@ class Dispatcher:
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
             return "question"
-        return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off)
+        return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off,
+                           queued=(req["calls"] if req else ()))
 
     def _ask(self, msg, now, req, skill, slots, texts, attachments, *, skill_slot, problem, ask, revises):
         """Ask the one question for ``skill_slot`` and keep the request. A slot asked three times and still open closes it."""
@@ -479,6 +488,8 @@ class Dispatcher:
         if disposition == "proposed":
             rid = conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=rid, state="drafted", skill=skill.name,
                                     slots=slots, attachments=attachments, draft_code=code, calls=list(queued))
+            if queued:  # the next incomplete call of the same message is asked now, one question at a time (spec 2.6 rule 7)
+                self._queue_only(msg, now, {"request_id": rid}, queued[0], list(queued[1:]), texts, attachments, None)
         elif disposition in ("needs-details", "claim-question", "question"):
             rid = conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=rid, skill=skill.name, slots=slots,
                                     question=conv._said, attachments=attachments, draft_code=code if disposition == "needs-details" else None,

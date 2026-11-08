@@ -259,6 +259,28 @@ class SeveralItemsTests(SkillCase):
         self.nothing_written()
         self.assertEqual(self.say("yes"), "approved")  # the draft can be approved while the next question waits
 
+    def test_two_incomplete_calls_are_asked_and_drafted_in_sequence(self):
+        text = "add the Mill Creek hike at Mill Creek trailhead and the Fiscalini Ranch hike at Fiscalini parking lot Saturday, easy"
+        no_time = {k: v for k, v in MILL.items() if k != "time"}
+        fisc = {**no_time, "title": "Fiscalini Ranch hike", "place": "Fiscalini parking lot"}
+        self.script(text, {"calls": [{"skill": "hike.add", "slots": no_time}, {"skill": "hike.add", "slots": fisc}], "revises": None})
+        self.assertEqual(self.say(text), "question")
+        self.assertEqual(self.replies(), ["What time does it start?"])
+        self.assertEqual(len(self.live()["calls"]), 1)  # the second call waits in the store
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say("8am"), "proposed")
+        replies = self.replies()
+        self.assertIn("Mill Creek hike", replies[0])
+        self.assertEqual(replies[-1], "What time does it start?")  # the queued call is asked next
+        req = self.live()
+        self.assertEqual((req["skill"], req["slots"]["title"], req["calls"]), ("hike.add", "Fiscalini Ranch hike", []))
+        self.now += timedelta(minutes=1)
+        self.conv = self.open()  # a restart between the two answers keeps the queue
+        self.assertEqual(self.say("9am"), "proposed")
+        self.assertIn("Fiscalini Ranch hike", self.replies()[0])
+        self.assertEqual(len([d for d in self.drafts() if d["state"] == "proposed"]), 2)
+        self.nothing_written()
+
     def test_more_than_the_limit_of_calls_is_not_a_skill_reply(self):
         many = {"calls": [{"skill": "hike.add", "slots": {}}] * (dispatch.MAX_CALLS + 1), "revises": None}
         self.assertIsNone(dispatch.checked(many))
@@ -435,3 +457,37 @@ class OnlyTheOwnerTests(SkillCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AgreementTests(SkillCase):
+    """The routing agreement (spec 2.5) uses the FW-2 router contract: candidates(text, hints, open_request, attachment, skills)."""
+
+    def fake_router(self, found):
+        import sys
+        import types
+        seen = []
+        mod = types.ModuleType("hass.skills.router")
+
+        def candidates(text, hints=None, open_request=None, attachment=None, skills=()):
+            seen.append({"hints": hints, "skills": skills})
+            return found if skills else []
+        mod.candidates = candidates
+        old = sys.modules.get("hass.skills.router")
+        sys.modules["hass.skills.router"] = mod
+        self.addCleanup(lambda: sys.modules.pop("hass.skills.router", None) if old is None else sys.modules.__setitem__("hass.skills.router", old))
+        return seen
+
+    def test_the_registry_is_passed_and_a_near_tie_asks_which_task(self):
+        seen = self.fake_router([("item.describe", 4.0), ("hike.add", 3.8)])
+        self.script(OPEN1, skill_reply("hike.add", **MILL))
+        self.assertEqual(self.say(OPEN1), "question")
+        self.assertIs(seen[0]["skills"], self.registry)
+        self.assertIsInstance(seen[0]["hints"], dict)
+        self.assertEqual(self.replies(), ["Do you want to add a hike, or change an item's description?"])
+        self.nothing_written()
+
+    def test_a_clear_agreement_goes_on_to_the_draft(self):
+        self.fake_router([("hike.add", 5.0), ("item.describe", 1.0)])
+        self.script(LIVE1, skill_reply("hike.add", **MILL))
+        draft, _ = self.propose(LIVE1)
+        self.assertEqual(draft["state"], "proposed")
