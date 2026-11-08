@@ -171,14 +171,35 @@ def _deal_span(deal: str) -> re.Pattern:
     return re.compile(r"(?<![\w$£€])(?<!\d[.,])" + body + r"(?![\w%])(?![.,]\d)" + _DEAL_GOES_ON)
 
 
+# Words that, standing just before a deal, mean the deal was cut off at its front ('get one free' of 'buy one get one
+# free', 'for $5' of '12 for $5', 'price' of 'half price'). A figure, a currency sign or a percent in front counts too.
+_DEAL_LEAD = frozenset("""buy buys get gets for free off each per pay save take only just half price and plus of more than less extra
+any every a an second third fourth first next x""".split())
+_DEAL_LEAD |= frozenset("""zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen
+eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred dozen pair couple""".split())
+_BEFORE_TOKEN = re.compile(r"[^\s,;:!?()\"\u201c\u201d\u2014\u2013/|]+$")
+
+
+def _cut_at_the_front(before: str) -> bool:
+    """True when what comes just before the match is part of a deal, so the match does not start where the deal starts.
+    Punctuation is stepped over ('buy one, get one free'); the word before that decides."""
+    token = _BEFORE_TOKEN.search(re.sub(r"[\s,;:.!?()\"\u201c\u201d\u2014\u2013/|-]+$", "", before))
+    if not token:
+        return False  # the start of the text: nothing was dropped
+    word = token.group(0).lower().rstrip(".")
+    return word in _DEAL_LEAD or bool(re.search(r"[\d$£€¥¢%]", word))
+
+
 def rule_deal_as_typed(slots, texts, ctx):
     deal = slots.get("deal")
     if not texts or not isinstance(deal, str) or not deal.strip():
         return None
     span = _deal_span(deal.strip())
-    if not any(span.search(str(t)) for t in texts):
-        return NOT_AS_TYPED, "other"
-    return None
+    for text in map(str, texts):
+        for found in span.finditer(text):
+            if not _cut_at_the_front(text[:found.start()]):
+                return None
+    return NOT_AS_TYPED, "other"
 
 
 def rule_end_date_required(slots, texts, ctx):

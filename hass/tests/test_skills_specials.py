@@ -174,6 +174,28 @@ class RuleTests(unittest.TestCase):
                            ("$5 off", "jam $5 off till Friday"), ("buy one get one free", "jam buy one get one free, through Sunday")):
             self.assertIsNone(rule(deal, text), (deal, text))
 
+    def test_a_deal_missing_its_front_is_not_the_deal_he_typed(self):
+        rule = lambda deal, text: self.rule("specials-deal-as-typed", {"deal": deal}, texts=[text])
+        for deal, text in (("get one free", "put honey on special, buy one get one free, until Friday"),
+                           ("one get one free", "put honey on special, buy one get one free, until Friday"),
+                           ("get one free", "honey on special, buy one, get one free, till Friday"),  # a comma between does not hide it
+                           ("for $5", "put honey on special, 12 for $5, until Friday"),
+                           ("for 5 dollars", "honey two for 5 dollars till Friday"),
+                           ("get the third free", "honey buy two get the third free"),
+                           ("price", "honey half price till Friday"),
+                           ("off", "honey 20% off till Friday"),
+                           ("$2 off", "honey save $2 off till Friday")):
+            self.assertIn("exactly as you type it", rule(deal, text)[0], (deal, text))
+        for deal, text in (("buy one get one free", "put honey on special, buy one get one free, until Friday"),  # whole deals stay
+                           ("12 for $5", "put honey on special, 12 for $5, until Friday"),
+                           ("get one free", "honey on special, get one free, till Friday"),  # said that way, so kept that way
+                           ("20% off", "honey 20% off till Friday"),
+                           ("half price", "honey half price till Friday"),
+                           ("2 for $5", "special on jam: 2 for $5 till Friday"),
+                           ("2 for $5", "put the jam on special this week, 2 for $5"),
+                           ("2 for $5", "2 for $5 on the jam till Friday")):
+            self.assertIsNone(rule(deal, text), (deal, text))
+
     def test_a_spelled_out_amount_in_a_title_is_a_price_too(self):
         for title in ("Honey five dollars", "Honey twenty-five cents", "Honey twenty five bucks", "Eggs a buck", "Eggs one hundred dollars",
                       "Eggs 5 euros", "Eggs €5", "Eggs £3", "Eggs three DOLLARS", "Eggs ten bucks each"):
@@ -717,6 +739,25 @@ class GroundedEndToEndTests(unittest.TestCase):
             self.assertIsNone(saved, cut)
             self.assertEqual(drafts, [], cut)
             self.assertTrue(any("exactly as you type it" in r for r in replies), (cut, replies))
+
+    def test_add_and_edit_refuse_a_deal_missing_its_front_and_keep_the_whole_one(self):
+        for skill, text, slots_for, seed in (
+                (ADD, "put honey on special, buy one get one free, until Friday", lambda d: self.add_slots("Honey", d), None),
+                (EDIT, "change the honey special to buy one get one free", lambda d: {"special": "honey", "deal": d}, self.edit_seed)):
+            disposition, _replies, saved, _drafts = self.go(text, skill, slots_for("buy one get one free"), seed and seed())
+            self.assertEqual(disposition, "proposed", skill)
+            self.assertEqual([x["deal"] for x in saved], ["buy one get one free"], skill)  # the whole deal, read back from the store
+            disposition, replies, saved, drafts = self.go(text, skill, slots_for("get one free"), seed and seed())
+            self.assertNotEqual(disposition, "proposed", skill)
+            self.assertEqual((saved, drafts), (None, []), skill)  # no draft, nothing saved
+            self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
+        for skill, text, slots_for, seed in (
+                (ADD, "put honey on special, 12 for $5, until Friday", lambda d: self.add_slots("Honey", d), None),
+                (EDIT, "change the honey special to 12 for $5", lambda d: {"special": "honey", "deal": d}, self.edit_seed)):
+            disposition, replies, saved, drafts = self.go(text, skill, slots_for("for $5"), seed and seed())
+            self.assertNotEqual(disposition, "proposed", skill)
+            self.assertEqual((saved, drafts), (None, []), skill)
+            self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
 
     def test_add_refuses_a_spelled_out_price_in_the_title_and_keeps_a_plain_one(self):
         text = "put Honey five dollars on special, buy one get one, until Friday"
