@@ -14,7 +14,7 @@ import unittest
 from datetime import timedelta
 from unittest import mock
 
-from hass import conversation
+from hass import conversation, voice
 from hass.skills import dispatch
 from hass.skills.model import Registry, Skill, Slot, Trigger, Undo
 from hass.tests.test_conversation import CHAT, OWNER, SETTINGS, STRANGER, ConversationTestCase
@@ -168,6 +168,61 @@ class CompleteRequestTests(SkillCase):
         self.script(LIVE1, skill_reply("hike.add", **{k: v for k, v in MILL.items() if k != "difficulty"}))
         _, reply = self.propose(LIVE1)
         self.assertIn("I set: difficulty: easy.", reply)
+
+
+class SetPhrasesTests(SkillCase):
+    """D8: a skill words the defaults it chose; the real dispatcher puts those plain phrases in the `I set:` line."""
+
+    def sign_up_skill(self, **kw):  # the hikes default: sign-up off, which the generic wording would render as "signup: False"
+        slots = (*HIKE_ADD.slots[:4], Slot("signup", "bool", False, default=False))
+        self.registry = registry_of(toy("hike.add", "add a hike", slots, _plan_hike, **kw))
+        self.conv = self.open()
+
+    def tearDown(self):
+        dispatch.SET_PHRASES.pop("hike.add", None)
+        super().tearDown()
+
+    def propose_mill(self, **extra):
+        slots = {k: v for k, v in MILL.items() if k != "difficulty"}
+        self.script(LIVE1, skill_reply("hike.add", **slots, **extra))
+        return self.propose(LIVE1)[1]
+
+    def test_the_skills_own_wording_of_a_default_is_the_i_set_line(self):
+        seen = []
+        dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: seen.append(dict(slots)) or ["sign-up off"]
+        self.sign_up_skill()
+        reply = self.propose_mill()
+        self.assertIn("I set: sign-up off.", reply)
+        self.assertNotIn("signup", reply)
+        self.assertNotIn("False", reply)
+        self.assertEqual(len(seen), 1)
+        self.assertNotIn("signup", seen[0])  # the slots as the owner gave them, before defaults
+        self.assertEqual(voice.check(reply, long_ok=True), [])
+        self.nothing_written()
+
+    def test_several_phrases_are_joined_and_a_skill_module_can_carry_its_own(self):
+        module = types.ModuleType("fake_skill_module")
+        module.SET_PHRASES = {"hike.add": lambda slots, ctx: ["sign-up off", "the title Mill Creek hike"]}
+        sys.modules["fake_skill_module"] = module
+        self.addCleanup(sys.modules.pop, "fake_skill_module")
+        plan = lambda slots, ctx: _plan_hike(slots, ctx)
+        plan.__module__ = "fake_skill_module"
+        self.registry = registry_of(toy("hike.add", "add a hike", (*HIKE_ADD.slots[:4], Slot("signup", "bool", False, default=False)), plan))
+        self.conv = self.open()
+        self.assertIn("I set: sign-up off; the title Mill Creek hike.", self.propose_mill())
+
+    def test_nothing_set_means_no_line_and_a_value_the_owner_gave_is_not_a_default(self):
+        dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: ["sign-up off"]
+        self.sign_up_skill()
+        self.assertNotIn("I set", self.propose_mill(signup=True))
+
+    def test_a_skill_that_words_nothing_says_nothing_and_one_without_a_hook_keeps_the_name_and_value_line(self):
+        dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: []
+        self.sign_up_skill()
+        self.assertNotIn("I set", self.propose_mill())
+        del dispatch.SET_PHRASES["hike.add"]
+        slots, shown = dispatch.apply_defaults(self.registry.skills["hike.add"], {"title": "T"}, None)
+        self.assertEqual(shown, ["signup: False"])
 
 
 class MultiTurnTests(SkillCase):

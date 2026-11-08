@@ -57,8 +57,10 @@ MONEY = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s
 #   RULES[id](slots, texts, ctx) -> None | (owner reply, backlog reason)        first hit stops
 #   DERIVERS[name](slots, ctx)   -> a value for a slot whose default is "derive:<name>"
 #   READ_ONLY[skill name](slots, ctx) -> the reply of a read-only skill other than the backlog ones
+#   SET_PHRASES[skill name](slots as the owner gave them, ctx) -> the plain phrases for "I set: ..." (D8); a skill without one gets "name: value"
 RULES: dict = {}
 DERIVERS: dict = {}
+SET_PHRASES: dict = {}
 READ_ONLY: dict = {}
 
 
@@ -296,7 +298,7 @@ def _required(slot, slots) -> bool:
 
 def apply_defaults(skill, slots: dict, ctx) -> tuple:
     """(slots with defaults, ["name: value", ...] shown to the owner as "I set ..."). A default fills only an empty slot."""
-    out, shown = dict(slots), []
+    out, shown, given = dict(slots), [], dict(slots)
     for slot in skill.slots:
         if slot.name in out or slot.default is None:
             continue
@@ -310,6 +312,9 @@ def apply_defaults(skill, slots: dict, ctx) -> tuple:
         if value is not None:
             out[slot.name] = value
             shown.append(f"{slot.name.replace('_', ' ')}: {value}")
+    words = SET_PHRASES.get(skill.name) or getattr(sys.modules.get(getattr(skill.plan, "__module__", "")), "SET_PHRASES", {}).get(skill.name)
+    if shown and callable(words):  # the skill words its own defaults (D8: "sign-up off", not "signup: False")
+        shown = [p for p in (words(given, ctx) or []) if p]  # the skill decides what is worth saying, as the kit does
     return out, shown
 
 
