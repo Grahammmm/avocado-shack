@@ -63,6 +63,7 @@ RETAKE = {  # defect code -> the plain sentence for Mike (docs/hass/VOICE.md: sh
 RENDER_REPLY = {  # newitem_render's own refusals, in the owner's voice (its fixed texts are for a drafting tool, not for him)
     "too-many-pixels": "That photo is too big for me to open. Could you send a smaller copy, or a screenshot of it?",
     "blank": "I couldn't find the item in that photo. Could you send another one?",
+    "too-narrow": "That photo is a thin strip, so I can't use it. Could you send an ordinary photo of the item?",
     "unreadable": media.REPLIES["unreadable"],
 }
 ORDER = ("busy", "dark", "blurry", "small", "style")  # which defect is told first when there are several

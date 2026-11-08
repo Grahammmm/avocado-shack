@@ -35,6 +35,8 @@ REPLIES = {
                        "Please send a smaller copy or a screenshot of it.",
     "blank": "I could not find the item in that photo (the picture is empty or see-through), so nothing was drafted. "
              "Please send another photo of it.",
+    "too-narrow": "That photo is a very thin strip (more than 40 times longer than it is wide), so nothing was drafted. "
+                  "Please send an ordinary photo of the item.",
 }
 
 
@@ -44,6 +46,7 @@ class Refused(ValueError):
         super().__init__(code)
         self.code, self.reply = code, REPLIES[code]
 ANALYSIS = 320  # long side of the working copy the coarse mask is found on
+MIN_WORKING = 8  # short side (px) the working copy needs: the border ring and the mask maths need real rows and columns
 JPEG_QUALITIES = (90, 85, 80, 74)
 SHADOW = {"colour": (70, 55, 40), "alpha": 0.055, "blur": 11, "width": 0.8, "height": 0.055, "lift": 0.012}  # tuned to the measured shadow_depth
 MAX_UPSCALE = 2.5
@@ -106,9 +109,16 @@ def _shadowlike(c, ref) -> bool:
     return .35 < k < .98 and max(abs(c[i] - ref[i] * k) for i in range(3)) <= 12
 
 
+def _too_thin(size) -> bool:
+    """True for a strip: scaled so its long side is ANALYSIS, its short side would be under MIN_WORKING px (over about 40:1)."""
+    return round(min(size) * ANALYSIS / max(size)) < MIN_WORKING
+
+
 def _coarse(img):
-    """(coarse L mask, plane image, cast-shadow L mask, (w, h), delta, report) at analysis size, or (None, ..., report)."""
+    """(coarse L mask, plane image, cast-shadow L mask, (w, h), delta, report) at analysis size, or (None, ..., report).
+    Raises Refused("too-narrow") for a strip (a 1000x1 image has no border ring to measure)."""
     Image, _, ImageChops, ImageDraw, _, ImageFilter = _modules()
+    if _too_thin(img.size): raise Refused("too-narrow")
     scale = ANALYSIS / max(img.size)
     small = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), _resample(Image, "BOX"))
     w, h = small.size
@@ -249,6 +259,7 @@ def render(data: bytes, spec=None) -> dict:
     ivory = tuple(int(stats[f"bg_{c}"]["p50"]) for c in "rgb")
     lanczos = _resample(Image, "LANCZOS")
     img, alpha, turned = _upright(data)
+    if _too_thin(img.size): raise Refused("too-narrow")  # also a supplied cut-out: the straightening maths needs width and height
     report = {"input": f"{img.width}x{img.height}", "rotation_applied": turned}
     if alpha is not None:
         mask, found = alpha.filter(ImageFilter.GaussianBlur(.9)), {"isolation": "cutout", "source": "alpha channel"}

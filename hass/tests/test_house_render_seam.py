@@ -254,6 +254,55 @@ class RefusalTests(unittest.TestCase):
         self.assertIsInstance(photos.house_check(bare.settings, "a" * 64), Refused)  # not in the store
 
 
+def strip(size, mode="RGB", colour=(240, 238, 230)):
+    out = io.BytesIO()
+    Image.new(mode, size, colour).save(out, "PNG")
+    return out.getvalue()
+
+
+@unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
+class ExtremeAspectTests(unittest.TestCase):
+    """A strip (1000x1) has no border ring to measure: it is refused with one fixed reply, never an IndexError."""
+
+    STRIPS = {"wide-opaque": strip((1000, 1)), "tall-opaque": strip((1, 1000)), "wide-short": strip((2000, 10)),
+              "wide-with-alpha": strip((1000, 1), "RGBA", (200, 30, 30, 120)), "tall-with-alpha": strip((1, 1000), "RGBA", (200, 30, 30, 120))}
+
+    def test_the_renderer_refuses_a_strip_with_its_own_code(self):
+        for name, data in self.STRIPS.items():
+            with self.subTest(photo=name), self.assertRaises(newitem_render.Refused) as caught:
+                newitem_render.render(data)
+            self.assertEqual(caught.exception.code, "too-narrow")
+
+    def test_isolate_alone_refuses_a_strip_too(self):
+        with self.assertRaises(newitem_render.Refused) as caught:
+            newitem_render.isolate(Image.new("RGB", (1000, 1), (240, 238, 230)))
+        self.assertEqual(caught.exception.code, "too-narrow")
+
+    def test_install_and_the_stored_photo_check_give_one_plain_reply(self):
+        for name, data in self.STRIPS.items():
+            with self.subTest(photo=name):
+                bare = Bare(self, houseRender=True)
+                sha = bare.store(data)
+                want = Refused(photos.RENDER_REPLY["too-narrow"])
+                self.assertEqual(photos.install(bare.ctx, sha, ALT), want)
+                self.assertEqual(photos.house_check(bare.settings, sha), want)
+                self.assertEqual(bare.ctx.assets, {})
+                self.assertEqual(voice.check(want.reason), [])
+
+    def test_the_limit_is_about_forty_to_one(self):
+        for size in ((800, 19), (19, 800)):  # 320x8 working copy (7.6 rounds up): the last shape that is rendered, no crash
+            with self.subTest(size=size):
+                made = newitem_render.render(strip(size))
+                self.assertEqual(Image.open(io.BytesIO(made["jpeg"])).size, (800, 800))
+        for size in ((800, 18), (18, 800)):  # 7.2 rounds down to 7
+            with self.subTest(size=size), self.assertRaises(newitem_render.Refused):
+                newitem_render.render(strip(size))
+
+    def test_the_drafting_tool_reports_the_strip_as_refused(self):
+        self.assertIn("too-narrow", newitem_render.REPLIES)
+        self.assertEqual(voice.check(photos.RENDER_REPLY["too-narrow"]), [])
+
+
 @unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
 class EditorTests(unittest.TestCase):
     """Through the real editor: prepare, apply, commit, undo on a throwaway repo (the PhotoRepo harness)."""
@@ -269,6 +318,57 @@ class EditorTests(unittest.TestCase):
 
     def committed_image(self, sha, ext="jpg"):
         return (self.repo.wt / "storefront-mockup" / "assets" / "products" / f"photo-{sha[:16]}.{ext}").read_bytes()
+
+    def test_a_strip_stops_prepare_with_the_plain_reply(self):
+        from hass.tests.test_set_photo import PID, _photo
+        from hass.tests.test_catalog_ops import _req
+        self.flag(houseRender=True)
+        sha = self.repo.store(strip((1000, 1)))
+        head, drafts = self.repo.head(), self.repo.drafts()
+        result = self.repo.prepare(_req(_photo(PID, sha, ALT)))
+        self.assertEqual((result["result"], result["reason"]), ("refused", photos.RENDER_REPLY["too-narrow"]))
+        self.assertEqual((self.repo.head(), self.repo.drafts(), self.repo.status()), (head, drafts, ""))
+
+    def test_the_approved_draft_names_the_picture_bytes(self):
+        from hass.tests.test_set_photo import PID, _photo
+        from hass.tests.test_catalog_ops import _req
+        self.flag(houseRender=True)
+        sha = self.repo.store(photo("jar-white-sheet"))
+        draft = self.repo.prepare(_req(_photo(PID, sha, ALT)))["draft"]
+        target = f"assets/products/photo-{sha[:16]}.jpg"
+        self.assertEqual(draft["assets"], {target: "sha256:" + hashlib.sha256(photos.house_check({"mediaRoot": str(self.repo.media)}, sha)["jpeg"]).hexdigest()})
+        self.assertEqual(self.repo.prepare(_req(_photo(PID, sha, ALT)))["draft"], draft)  # same bytes: same draft
+        self.assertEqual(self.repo.apply(draft)["result"], "applied")
+        self.assertEqual("sha256:" + hashlib.sha256(self.committed_image(sha)).hexdigest(), draft["assets"][target])
+
+    def test_turning_the_flag_on_after_prepare_does_not_commit_a_different_picture(self):
+        from hass.tests.test_set_photo import PID, _photo
+        from hass.tests.test_catalog_ops import _req
+        self.flag()
+        sha = self.repo.store(photo("jar-white-sheet"))
+        raw = self.repo.prepare(_req(_photo(PID, sha, ALT)))["draft"]  # the owner previewed and approved the picture as it came
+        self.flag(houseRender=True)
+        head = self.repo.head()
+        result = self.repo.apply(raw)
+        self.assertEqual(result["result"], "stale", result)
+        self.assertEqual((self.repo.head(), self.repo.status()), (head, ""))
+        self.assertFalse((self.repo.wt / "storefront-mockup" / "assets" / "products" / f"photo-{sha[:16]}.jpg").exists())
+        fresh = self.repo.prepare(_req(_photo(PID, sha, ALT)))["draft"]  # a new look at the new picture needs its own approval
+        self.assertNotEqual(fresh["draft_hash"], raw["draft_hash"])
+        self.assertNotEqual(fresh["assets"], raw["assets"])
+
+    def test_turning_the_flag_off_after_prepare_does_not_commit_the_raw_picture(self):
+        from hass.tests.test_set_photo import PID, _photo
+        from hass.tests.test_catalog_ops import _req
+        self.flag(houseRender=True)
+        sha = self.repo.store(photo("jar-white-sheet"))
+        house = self.repo.prepare(_req(_photo(PID, sha, ALT)))["draft"]
+        self.flag()
+        head = self.repo.head()
+        result = self.repo.apply(house)
+        self.assertEqual(result["result"], "stale", result)
+        self.assertEqual((self.repo.head(), self.repo.status()), (head, ""))
+        self.assertNotEqual(self.repo.prepare(_req(_photo(PID, sha, ALT)))["draft"]["draft_hash"], house["draft_hash"])
 
     def test_flag_off_is_the_old_bytes_through_the_editor(self):
         from hass.tests.test_set_photo import PID, _photo
