@@ -1,0 +1,264 @@
+{
+ "model": "qwen3.8:27b-thinkingcap-q6",
+ "n": 10,
+ "failedCalls": 0,
+ "seconds": {
+  "first": 2.42,
+  "p50": 2.09,
+  "p95": 2.38,
+  "max": 2.42
+ },
+ "sameAsCpu": 9,
+ "gpuScore": {
+  "cases": 10,
+  "fields": {
+   "name": {
+    "right": 10,
+    "wrong": 0,
+    "none": 0
+   },
+   "brand": {
+    "right": 9,
+    "wrong": 0,
+    "none": 1
+   },
+   "category": {
+    "right": 1,
+    "wrong": 0,
+    "none": 9
+   }
+  },
+  "wrongIds": {
+   "name": [],
+   "brand": [],
+   "category": []
+  }
+ },
+ "cpuScore": {
+  "cases": 10,
+  "fields": {
+   "name": {
+    "right": 10,
+    "wrong": 0,
+    "none": 0
+   },
+   "brand": {
+    "right": 9,
+    "wrong": 0,
+    "none": 1
+   },
+   "category": {
+    "right": 0,
+    "wrong": 0,
+    "none": 10
+   }
+  },
+  "wrongIds": {
+   "name": [],
+   "brand": [],
+   "category": []
+  }
+ },
+ "cpuSecondsP50": 64.74,
+ "detail": [
+  {
+   "id": "l01",
+   "seconds": 2.42,
+   "failed": null,
+   "gpu": {
+    "name": "Hass avocado",
+    "brand": "AVOCADO SHACK"
+   },
+   "cpu": {
+    "name": "Hass avocado",
+    "brand": "AVOCADO SHACK"
+   },
+   "cpuSeconds": 23.65,
+   "expected": {
+    "name": "Hass avocado",
+    "brand": "Avocado Shack",
+    "category": "fruit"
+   },
+   "same": true
+  },
+  {
+   "id": "l02",
+   "seconds": 2.14,
+   "failed": null,
+   "gpu": {
+    "name": "Raspberries",
+    "brand": "AG BERRIES"
+   },
+   "cpu": {
+    "name": "Raspberries",
+    "brand": "AG BERRIES"
+   },
+   "cpuSeconds": 70.35,
+   "expected": {
+    "name": "Raspberries",
+    "brand": "AG Berries",
+    "category": "fruit"
+   },
+   "same": true
+  },
+  {
+   "id": "l03",
+   "seconds": 2.12,
+   "failed": null,
+   "gpu": {
+    "name": "Spring Greens",
+    "brand": "JAYLEAF"
+   },
+   "cpu": {
+    "name": "Spring Greens",
+    "brand": "JAYLEAF"
+   },
+   "cpuSeconds": 68.47,
+   "expected": {
+    "name": "Spring Greens",
+    "brand": "Jayleaf",
+    "category": "vegetables"
+   },
+   "same": true
+  },
+  {
+   "id": "l04",
+   "seconds": 1.99,
+   "failed": null,
+   "gpu": {
+    "name": "Cal Poly eggs",
+    "brand": "CAL POLY",
+    "category": "eggs"
+   },
+   "cpu": {
+    "name": "Cal Poly eggs",
+    "brand": "CAL POLY"
+   },
+   "cpuSeconds": 61.14,
+   "expected": {
+    "name": "Cal Poly eggs",
+    "brand": "Cal Poly",
+    "category": "eggs"
+   },
+   "same": false
+  },
+  {
+   "id": "l05",
+   "seconds": 2.05,
+   "failed": null,
+   "gpu": {
+    "name": "Straus half-and-half",
+    "brand": "STRAUS"
+   },
+   "cpu": {
+    "name": "Straus half-and-half",
+    "brand": "STRAUS"
+   },
+   "cpuSeconds": 65.18,
+   "expected": {
+    "name": "Straus half-and-half",
+    "brand": "Straus",
+    "category": "dairy"
+   },
+   "same": true
+  },
+  {
+   "id": "l06",
+   "seconds": 2.02,
+   "failed": null,
+   "gpu": {
+    "name": "Rye bread",
+    "brand": "BRIAN'S"
+   },
+   "cpu": {
+    "name": "Rye bread",
+    "brand": "BRIAN'S"
+   },
+   "cpuSeconds": 64.82,
+   "expected": {
+    "name": "Rye bread",
+    "brand": "Brian's",
+    "category": "bread"
+   },
+   "same": true
+  },
+  {
+   "id": "l07",
+   "seconds": 2.33,
+   "failed": null,
+   "gpu": {
+    "name": "Linn's blueberry preserves",
+    "brand": "LINN'S"
+   },
+   "cpu": {
+    "name": "Linn's blueberry preserves",
+    "brand": "LINN'S"
+   },
+   "cpuSeconds": 64.66,
+   "expected": {
+    "name": "Linn's blueberry preserves",
+    "brand": "Linn's",
+    "category": "pantry"
+   },
+   "same": true
+  },
+  {
+   "id": "l08",
+   "seconds": 2.23,
+   "failed": null,
+   "gpu": {
+    "name": "Alle-Pia guanciale",
+    "brand": "ALLE-PIA"
+   },
+   "cpu": {
+    "name": "Alle-Pia guanciale",
+    "brand": "ALLE-PIA"
+   },
+   "cpuSeconds": 69.02,
+   "expected": {
+    "name": "Alle-Pia guanciale",
+    "brand": "Alle-Pia",
+    "category": "meat"
+   },
+   "same": true
+  },
+  {
+   "id": "l09",
+   "seconds": 2.07,
+   "failed": null,
+   "gpu": {
+    "name": "Zero non-alcoholic cider",
+    "brand": "SLO CIDER"
+   },
+   "cpu": {
+    "name": "Zero non-alcoholic cider",
+    "brand": "SLO CIDER"
+   },
+   "cpuSeconds": 62.69,
+   "expected": {
+    "name": "Zero non-alcoholic cider",
+    "brand": "SLO Cider",
+    "category": "drinks"
+   },
+   "same": true
+  },
+  {
+   "id": "l10",
+   "seconds": 1.88,
+   "failed": null,
+   "gpu": {
+    "name": "Watermelon"
+   },
+   "cpu": {
+    "name": "Watermelon"
+   },
+   "cpuSeconds": 62.74,
+   "expected": {
+    "name": "Watermelon",
+    "brand": null,
+    "category": "fruit"
+   },
+   "same": true
+  }
+ ]
+}

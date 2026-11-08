@@ -65,6 +65,24 @@ def _ip(value):
     except (ValueError, TypeError): return None
 
 
+def _interpreter_ok(itp, nested=False) -> bool:
+    """host.json `interpreter`: url + model, optional timeout (1-120) and think (Ollama only), and (HASS-INTERP-OPENAI-1) `api`
+    ("ollama" default, "openai") and, with api openai only, `fallback`: the same keys for the Ollama model asked once when the
+    first answer fails. url is loopback http."""
+    allowed = {"url", "model", "timeout", "think"} | (set() if nested else {"api", "fallback"})
+    if not (isinstance(itp, dict) and {"url", "model"} <= set(itp) <= allowed): return False
+    api = itp.get("api", "ollama")
+    ok = (isinstance(itp["model"], str) and 0 < len(itp["model"]) <= 100
+          and type(itp.get("timeout", 30)) is int and 1 <= itp.get("timeout", 30) <= 120
+          and type(itp.get("think", False)) is bool and api in interpreter_local.APIS
+          and not ("think" in itp and api == "openai")  # the openai request is always non-thinking
+          and ("fallback" not in itp or api == "openai") and (nested or "fallback" not in itp or _interpreter_ok(itp["fallback"], True)))
+    if ok:
+        try: interpreter_local.check_url(itp["url"])
+        except ValueError: return False
+    return ok
+
+
 def _listen(value, allow_zero):
     host, _, port = value.rpartition(":") if isinstance(value, str) else ("", "", "")
     ip = _ip(host.strip("[]"))
@@ -85,15 +103,9 @@ def load_host(path, allow_port_zero=False) -> dict:
               "previewer": type(raw.get("previewer", False)) is bool,
               "runtimeCommit": isinstance(raw.get("runtimeCommit"), str) and len(raw["runtimeCommit"]) == 40
               and all(c in "0123456789abcdef" for c in raw["runtimeCommit"]),
-              "interpreter": isinstance(itp, dict) and {"url", "model"} <= set(itp) <= {"url", "model", "timeout", "think"}
-              and isinstance(itp["model"], str) and 0 < len(itp["model"]) <= 100
-              and (type(itp.get("timeout", 30)) is int and 1 <= itp.get("timeout", 30) <= 120)
-              and type(itp.get("think", False)) is bool,
+              "interpreter": _interpreter_ok(itp),
               "allowedPeers": isinstance(peers, list) and all(_ip(p) for p in peers),
               "listen": _listen(raw.get("listen"), allow_port_zero) is not None}
-    if checks["interpreter"]:
-        try: interpreter_local.check_url(itp["url"])
-        except ValueError: checks["interpreter"] = False
     bad += [name for name, ok in checks.items() if not ok and name not in bad]
     if not bad and not peers and not _listen(raw["listen"], allow_port_zero)[0].is_loopback: bad.append("allowedPeers")
     if raw.get("approvals") == "live":
@@ -241,9 +253,14 @@ def interpreter_builder(cfg, worktree):
     def build():
         content = load_content(Path(worktree) / "hass" / "content")
         prompt = interpreter_prompt.build(load_registry(), content)
-        return interpreter_local.LocalInterpreter(cfg["interpreter"]["url"], cfg["interpreter"]["model"], prompt,
-                                               timeout=cfg["interpreter"].get("timeout", 30), think=cfg["interpreter"].get("think"),
-                                               hinter=nl_prep.make_hinter(content))  # HASS-NL-1
+        itp, hinter = cfg["interpreter"], nl_prep.make_hinter(content)  # HASS-NL-1
+
+        def one(c, api):
+            return interpreter_local.LocalInterpreter(c["url"], c["model"], prompt, timeout=c.get("timeout", 30),
+                                                      think=c.get("think"), hinter=hinter, api=api)
+        main = one(itp, itp.get("api", "ollama"))
+        if "fallback" not in itp: return main  # HASS-INTERP-OPENAI-1: no fallback block, no second call
+        return interpreter_local.FallbackInterpreter(main, one(itp["fallback"], "ollama"), lambda r: conversation._checked(r) is r)
     return build
 
 

@@ -1,0 +1,22 @@
+{"id": "n044", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-006", "available": "no"}}], "revises": null}, "failed": null, "ms": 9334, "seconds": 9.334}
+{"id": "n072", "reply": {"question": "Which jam should I take off: strawberry, raspberry, or blackberry?"}, "failed": null, "ms": 1089, "seconds": 1.089}
+{"id": "n083", "reply": {"ops": [{"op": "product.restore", "args": {"id": "photo-product-064"}}], "revises": null}, "failed": null, "ms": 1459, "seconds": 1.459}
+{"id": "n091", "reply": {"ops": [{"op": "maker.edit", "args": {"key": "Linn's", "place": "Cambria"}}], "revises": null}, "failed": null, "ms": 1917, "seconds": 1.917}
+{"id": "n110", "reply": {"ops": [{"op": "product.edit", "args": {"id": "photo-product-017", "description": "Not an afterthought. A squeeze of lemon can wake up fish, greens, or a pot of beans that has been minding its own business for hours. They are also great in cocktails."}}], "revises": null}, "failed": null, "ms": 2903, "seconds": 2.903}
+{"id": "n138", "reply": {"question": "Which hike should I move to 9:00: the Fiscalini Ranch walk (Nov 1), the Point Buchon walk (Nov 14), or the Cass Hill hike (Nov 22)?"}, "failed": null, "ms": 2007, "seconds": 2.007}
+{"id": "n170", "reply": {"question": "Which photo should I put back on the homepage?"}, "failed": null, "ms": 954, "seconds": 0.954}
+{"id": "n178", "reply": {"unsupported": "The website does not show prices, so nothing was drafted. Send the change without the price."}, "failed": null, "ms": 1324, "seconds": 1.324}
+{"id": "n187", "reply": {"unsupported": "design changes cannot be made by message yet"}, "failed": null, "ms": 1013, "seconds": 1.013}
+{"id": "n192", "reply": {"unsupported": "send undo"}, "failed": null, "ms": 672, "seconds": 0.672}
+{"id": "n198", "reply": {"unsupported": "send status"}, "failed": null, "ms": 686, "seconds": 0.686}
+{"id": "n207", "reply": {"unsupported": "2190 Main Street, Morro Bay"}, "failed": null, "ms": 950, "seconds": 0.95}
+{"id": "n215", "reply": {"unsupported": "The website does not send email; it only shows the hike list. Did you mean to change the hike or add a note to it?"}, "failed": null, "ms": 1499, "seconds": 1.499}
+{"id": "n229", "reply": {"unsupported": "send no"}, "failed": null, "ms": 661, "seconds": 0.661}
+{"id": "n240", "reply": {"question": "Which cheese should I look at: Ragged Point, Rocky Butte, Bixby, or Big Sur?"}, "failed": null, "ms": 1438, "seconds": 1.438}
+{"id": "n243", "reply": {"question": "Which photo should I use for the homepage?"}, "failed": null, "ms": 917, "seconds": 0.917}
+{"id": "n248", "reply": {"ops": [{"op": "product.edit", "args": {"id": "photo-product-045", "description": "Picual olive oil from Sunshine Olive in Templeton, cold pressed. Use it where you can actually taste it: over vegetables, a bowl of beans, or good bread."}}], "revises": null}, "failed": null, "ms": 3618, "seconds": 3.618}
+{"id": "n253", "reply": {"question": "Which avocado should I mark as Bacon: the Hass avocado, or is Bacon a new product to add to the fruit shelf?"}, "failed": null, "ms": 1681, "seconds": 1.681}
+{"id": "n257", "reply": {"question": "Which honey should I mark limited: Stepladder avocado blossom honey or Big Sur Honey Company honey?"}, "failed": null, "ms": 1289, "seconds": 1.289}
+{"id": "n276", "reply": {"unsupported": "send no c3d4"}, "failed": null, "ms": 811, "seconds": 0.811}
+{"id": "n286", "reply": {"unsupported": "send no a1b2"}, "failed": null, "ms": 856, "seconds": 0.856}
+{"id": "n304", "reply": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-041", "available": "no"}}], "revises": null}, "failed": null, "ms": 1905, "seconds": 1.905}

@@ -100,6 +100,10 @@ FETCH_FAILED = "I could not download that photo after 3 tries, so nothing was ch
 CONTROL = """CREATE TABLE IF NOT EXISTS control(name TEXT PRIMARY KEY, value TEXT NOT NULL, set_at TEXT NOT NULL,
   provider_id TEXT NOT NULL)"""
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
+# HASS-INTERP-OPENAI-1: which backend answered each message. Lazy like CONTROL; written only for an interpreter that names its
+# backend. Short codes and seconds only: never the owner's text, the prompt, a URL or a model reply.
+AUDIT = """CREATE TABLE IF NOT EXISTS interpreter_audit(provider_id TEXT PRIMARY KEY, at TEXT NOT NULL, backend TEXT NOT NULL,
+  fallback INTEGER NOT NULL, primary_error TEXT, error TEXT, seconds REAL)"""
 DAILY_LIMIT = ("Today's limit for reading change requests is reached, so nothing was drafted. "
                "Commands (status, yes/no, undo) still work; send the change again tomorrow.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
@@ -907,6 +911,20 @@ class Conversation:
             return {"question": row["text"]}
         except (sqlite3.Error, ValueError, TypeError, KeyError): return None
 
+    def _audit_backend(self, msg, now, failed):
+        """HASS-INTERP-OPENAI-1: one audit row per interpreted message when the interpreter names the backend that answered
+        (and whether the fallback was asked). No such interpreter, or a call that raised: no row."""
+        itp = self.interpreter
+        backend = getattr(itp, "last_backend", None)
+        if failed is None or not isinstance(backend, str) or not backend: return
+        code = lambda v: v if isinstance(v, str) and len(v) <= 40 else None  # noqa: E731 - short reason codes only
+        seconds = getattr(itp, "last_seconds", None)
+        self.db.execute(AUDIT)
+        self.db.execute("INSERT OR REPLACE INTO interpreter_audit VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (msg.provider_id, _iso(now), backend[:20], 1 if getattr(itp, "last_fallback", False) is True else 0,
+                         code(getattr(itp, "last_primary_error", None)), code(getattr(itp, "last_error", None)),
+                         float(seconds) if isinstance(seconds, (int, float)) else None))
+
     def _request(self, msg, now) -> str:
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
             self._reply(TOO_LONG)
@@ -933,6 +951,7 @@ class Conversation:
             failed = getattr(self.interpreter, "last_error", None) or ""
         except Exception if cap is not None else ():  # H22: no cap: unchanged (an error rolls the message back)
             result = dict(UNREADABLE)  # keep the counted call; a failure stops safely with the unreadable reply
+        self._audit_backend(msg, now, failed)
         if failed:  # AV1052-10: the reader itself failed: remember it for status (latest only, no error detail kept)
             self.db.execute(CONTROL)
             self.db.execute("INSERT INTO control(name, value, set_at, provider_id) VALUES ('reader-failed', ?, ?, ?)"

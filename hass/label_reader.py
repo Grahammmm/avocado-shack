@@ -10,10 +10,11 @@ a short code in `last_error` only; nothing is logged. Not wired into a service: 
 import base64
 import json
 import re
+import time
 import unicodedata
 from types import SimpleNamespace
 
-from hass import claims
+from hass import claims, interpreter_local
 from hass.content_model import FORBIDDEN_TEXT, TEXT_LIMITS
 from hass.interpreter_local import LocalInterpreter, _Failed
 from hass.ops import catalog
@@ -96,20 +97,39 @@ class LabelReader(LocalInterpreter):
     """read(image_bytes, categories) -> dict. Transport is (url, body_bytes, headers, timeout) -> (status, body_bytes),
     as for LocalInterpreter; base_url, model and timeout are validated the same way (no default model)."""
 
-    def __init__(self, base_url, model, timeout=30, transport=None):
-        super().__init__(base_url, model, PROMPT, timeout=timeout, transport=transport)
+    def __init__(self, base_url, model, timeout=30, transport=None, api="ollama", fallback=None):
+        super().__init__(base_url, model, PROMPT, timeout=timeout, transport=transport, api=api)
+        if fallback is not None and not isinstance(fallback, LabelReader): raise ValueError("fallback must be a LabelReader")
+        self.fallback = fallback  # HASS-INTERP-OPENAI-1: asked once, and only, when this reader failed
 
     def _label_request(self, image_bytes) -> bytes:
-        image = base64.b64encode(bytes(image_bytes)).decode("ascii")
-        return json.dumps({"model": self.model, "messages": [{"role": "user", "content": PROMPT, "images": [image]}],
+        image = bytes(image_bytes)
+        if self.api == "openai":  # HASS-INTERP-OPENAI-1: the photo as a data URI, same prompt, non-thinking JSON reply
+            uri = f"data:{interpreter_local.image_type(image)};base64,{base64.b64encode(image).decode('ascii')}"
+            return self._openai_body([{"role": "user", "content": [{"type": "text", "text": PROMPT},
+                                                                   {"type": "image_url", "image_url": {"url": uri}}]}])
+        return json.dumps({"model": self.model, "messages": [{"role": "user", "content": PROMPT,
+                                                              "images": [base64.b64encode(image).decode("ascii")]}],
                            "stream": False, "format": "json", "options": {"temperature": 0}}).encode("utf-8")
 
     def read(self, image_bytes, categories) -> dict:
         """The checked label fields (possibly {}); on any failure {} and the reason code in last_error."""
-        self.last_error = None
+        found = self._read_once(image_bytes, categories)
+        if not self.last_error or self.fallback is None: return found
+        first = self.last_error  # the one retry on the fallback reader; its answer, good or failed, is final
+        found = self.fallback.read(image_bytes, categories)
+        self.last_error, self.last_backend, self.last_fallback, self.last_primary_error = (
+            self.fallback.last_error, self.fallback.last_backend, True, first)
+        return found
+
+    def _read_once(self, image_bytes, categories) -> dict:
+        self.last_error, self.last_backend, self.last_fallback, self.last_primary_error = None, self.api, False, None
+        started = time.monotonic()
         try:
             if not isinstance(image_bytes, (bytes, bytearray)) or not image_bytes: raise _Failed("shape")
             return keep(self._call(self._label_request(image_bytes)), list(categories or ()))
         except _Failed as failure:
             self.last_error = failure.args[0]
             return {}
+        finally:
+            self.last_seconds = round(time.monotonic() - started, 3)
