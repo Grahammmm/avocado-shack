@@ -220,6 +220,9 @@ HOLIDAY_REPLY = ("A closed day on a date is a notice, not the usual hours. What 
                  "and what is the last day it should stay up?")
 HOLIDAY_RE = re.compile(r"\b(?:thanksgiving|christmas|xmas|new years?|easter|memorial day|labor day|independence day|"
                         r"july (?:4|4th|fourth)|fourth of july|veterans day|holiday|holidays)\b", re.I)
+DATED_RE = re.compile(r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|"
+                      r"nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}(?:st|nd|rd|th)?\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?"
+                      r"(?:jan|feb|mar|apr|may|june?|july?|aug|sept?|oct|nov|dec)[a-z]*\b|\b\d{1,2}/\d{1,2}\b", re.I)
 
 
 def _line_problem(i, line):
@@ -285,7 +288,7 @@ def check_hours_holiday(slots, texts, ctx):
     """holiday-is-notice: a closed day on a date or holiday is a notice, not the weekly hours."""
     store = store_of(ctx)
     said = " ".join(texts)
-    if store is not None and HOLIDAY_RE.search(said) and not _same(slots["hours"], store.get("hours") or []):
+    if store is not None and (HOLIDAY_RE.search(said) or DATED_RE.search(said)) and not _same(slots["hours"], store.get("hours") or []):
         return SkillStop(HOLIDAY_REPLY, "question")
     return None
 
@@ -430,7 +433,7 @@ def check_contact_already(slots, texts, ctx):
     given = {ADDRESS_KEYS[f]: slots[f] for f in ADDRESS_KEYS if slots.get(f)}
     if given and all(_spaced(store.get(f, "")) == _spaced(v) for f, v in given.items()):
         same.append("the address is " + ", ".join(store[f] for f in ("streetAddress", "town") if f in given))
-    wanted = int("phone" in slots) + int(bool(given))
+    wanted = int("phone" in slots) + int(bool(given)) + int(bool(slots.get("clear")))  # a removal is never already true
     if same and len(same) == wanted:
         return SkillStop("It already says that: " + " and ".join(same) + ". Did you mean something else?", "question")
     return None
@@ -455,6 +458,8 @@ def plan_contact(slots, ctx):
         if "$" in value:
             raise SkillStop(PRICE_REPLY, "refused", "price")
     clean = {k: v for k, v in (("phone", phone), ("street_address", street), ("town", town)) if v}
+    if clear:
+        clean["clear"] = True
     store = store_of(ctx)
     if phone:
         if (stop := CONTACT_CHECKS["phone-ten-digits"](clean, texts_of(ctx), ctx)):
