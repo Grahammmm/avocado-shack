@@ -27,7 +27,7 @@ class ToySkill:
 def _describe(slots, ctx):
     text = slots["description"]
     if "$" in text:
-        raise Refusal("The website does not show prices, so nothing was drafted. Send the change without the price.")
+        raise Refusal("The website doesn't show prices, so I haven't made any change. Could you send it without the price?")
     return [{"op": "product.edit", "args": {"id": slots["product"], "description": text}}]
 
 
