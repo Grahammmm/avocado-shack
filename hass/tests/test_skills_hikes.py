@@ -266,6 +266,15 @@ class Rules(unittest.TestCase):
         self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 20}, texts=[said]))
         self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 12}, texts=["sign up, no more than 12"]))
 
+    def test_a_limit_word_needs_a_guest_noun_and_a_later_correction_wins(self):
+        no = lambda cap, *texts: self.hit("hike-no-invention", {"signup": True, "capacity": cap}, texts=list(texts))
+        self.assertEqual(no(2, "sign up please, bring at most 2 apples")[0], hikes.R_SPOTS_NOT_SAID)
+        self.assertEqual(no(12, "sign up please, 12 spots", "actually make it 20 spots")[0], hikes.R_SPOTS_NOT_SAID)
+        self.assertIsNone(no(20, "sign up please, 12 spots", "actually make it 20 spots"))
+        self.assertIsNone(no(12, "sign up please, 12 spots"))
+        self.assertIsNone(no(12, "sign up please, max 12"))
+        self.assertIsNone(no(12, "sign up please, at most 12 people"))
+
     def test_the_latest_sign_up_instruction_wins(self):
         self.assertEqual(self.hit("hike-no-invention", {"signup": True}, texts=["sign up please", "actually no sign ups"])[0],
                          hikes.R_SIGNUP_NOT_SAID)

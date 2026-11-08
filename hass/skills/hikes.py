@@ -308,21 +308,31 @@ def _words_to_digits(text):
     return _NUM_WORD.sub(one, text)
 
 
+_LIMIT_TAIL = re.compile(r"^\s*(?:(?:more|open|available|total|extra|in\s+total|please|thanks|tops|max)\s*)*(?:$|" + _COUNTED + r"\b)", re.I)
+
+
 def _said_limits(said):
-    """The guest limits the owner's words state: a number right next to a counted noun ("12 spots", "twelve people") or
-    a limit word ("max 12", "up to 20"), in an affirmative clause. A date, a clock time, a year, a quantity of something
-    else ("only 2 liters of water") or a rejected number ("not 12 spots, 20 spots") never counts."""
-    found = set()
+    """The effective guest limit the owner's words state: a number right next to a counted noun ("12 spots", "twelve
+    people") or after a limit word that is itself followed by a guest noun or nothing ("max 12", "up to 20 people"), in
+    an affirmative clause. A date, a clock time, a year, a quantity of something else ("only 2 liters of water", "at
+    most 2 apples") or a rejected number ("not 12 spots, 20 spots") never counts; the latest instruction wins, so
+    "12 spots" then "actually make it 20 spots" leaves only 20, and a later "no limit" leaves none."""
+    effective = set()
     for clause in _clauses(said):
-        text = _words_to_digits(_DATE_TIME.sub(" ", clause.lower()))
+        if _NO_LIMIT.search(clause):
+            effective = set()
+        text = _words_to_digits(_DATE_TIME.sub(" ", _NO_LIMIT.sub(" ", clause.lower())))
         text = _REPLACED.sub(" ", text)
-        if _NEGATED.search(re.sub(r"\bno\s+more\s+than\b", "at most", _NO_LIMIT.sub(" ", text))):
+        if _NEGATED.search(re.sub(r"\bno\s+more\s+than\b", "at most", text)):
             continue
+        hits = []
         for pat in (_LIMIT_AFTER, _LIMIT_BEFORE):
             for m in pat.finditer(text):
-                if not _UNIT_AFTER.match(text[m.end():]):
-                    found.add(int(m.group(1)))
-    return found
+                if pat is _LIMIT_AFTER or _LIMIT_TAIL.match(text[m.end():]):
+                    hits.append((m.start(), int(m.group(1))))
+        if hits:
+            effective = {max(hits)[1]}
+    return effective
 
 
 RULES = {"no-price": rule_no_price, "hike-in-future": rule_in_future, "hike-twin": rule_twin,
