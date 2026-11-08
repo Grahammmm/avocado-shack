@@ -389,10 +389,10 @@ class NeverAText(AckCase):
         for guid in ("m1", "9F3A6B1C-1234-4DEF-8ABC-0123456789AB", "A" * 128): self.assertTrue(fwd.valid_guid(guid), guid)
 
     def test_a_message_whose_guid_is_malformed_is_still_delivered_but_gets_no_tapback(self):
-        self.enqueue("bad guid?x=1")
+        self.enqueue("bad.guid:1")
         with contextlib.redirect_stderr(io.StringIO()) as err: self.f.ack()
         self.f.deliver()
-        self.assertEqual((self.out(), self.states(), len(self.posts), self.info_asked), ([], {"bad guid?x=1": "bad_guid"}, 1, 0))
+        self.assertEqual((self.out(), self.states(), len(self.posts), self.info_asked), ([], {"bad.guid:1": "bad_guid"}, 1, 0))
         self.assertIn("ack_skipped reason=bad_guid", err.getvalue())
 
     def test_the_reactor_refuses_bad_arguments_before_any_network_call(self):

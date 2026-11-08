@@ -1,5 +1,7 @@
 # HASS-FAST-1: the 👀 on receipt, per-stage timing, faster replies
 
+> **Superseded in part by HASS-TAPBACK-1 (2026-11-08):** the ack is no longer a text 👀; it is one real tapback on the owner's message (see `reports/hass/TAPBACK-1.md`). The timing, pause, burst and exactly-once design below still holds; read "👀 send" as "tapback call".
+
 Card t_09e48987, 2026-11-07, author sonnet-coder. Synthetic messages only. Nothing was restarted, no Mac, key, `~/.config/hass`, fleet model or real owner message was touched. Files: `reports/hass/fast-1/` (bench, raw results, prompt sizes).
 
 ## 1. Answers
