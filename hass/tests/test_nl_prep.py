@@ -120,7 +120,7 @@ class HintTests(unittest.TestCase):
     def test_a_year_that_cannot_be_checked_leaves_the_date_hint_out(self):
         for text in ("hike on feb 30 2027", "hike on 2/30/2027", "hike on 2027-02-30", "hike on dec 5 1999", "hike on dec 5 3027",
                      "hike on 12/5/202", "hike on 12/5/20277", "hike on 5 dec 0027", "hike on 2027/12/5", "hike on dec 5 1530",
-                     "hike on feb 29 2027", "hike on December 5 202", "hike on 5 December 20277", "hike on dec 5, 202", "hike on 5th of dec 20277",
+                     "hike on feb 29 2027", "hike on December 5 202", "hike on 5 December 20277", "hike on dec 5, 202", "hike on 5th of dec 20277", "hike on 5 Dec. 202", "hike on 5 Dec. 20277",
                      "hike on dec 5 0202"):
             self.assertNotIn("dates", self.ask(text), text)
         [row] = self.ask("hike on feb 29 2028")["dates"]  # a real leap day
