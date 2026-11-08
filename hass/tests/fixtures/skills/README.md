@@ -50,6 +50,13 @@ the file name is not the skill name.
   The kit's stand-in dispatcher calls it for every plan and puts `I set: <phrases>.` in front of the proposal text (what
   SKILLS-FW-3's dispatcher does with the defaults it shows), so `expect.set_line` and `reply_not_contains: ["I set:"]` read it
   in an actual owner reply. A module without the hook gets no line from the kit.
+* `setup` (optional): a list of `{op, args}` ops applied through the real editor before the row starts, so the row can begin
+  from a state the shop's content does not have (for example a hidden product to bring back). They are the row's base, never
+  part of its diff or its undo. Used by `items/item.restore.jsonl`.
+* `undo: true` (optional marker): the row ends in an approved draft that the kit then undoes; the kit fails the row if it did not.
+* **Proposal notes** (assumed contract, `items.py` is the first user): when a skill's module defines `notes(name, slots, ctx)` returning
+  `{say, set, warn}` lists of lines, the kit plays it after the skill's plan and appends the lines (once each, in that order) to the reply of
+  a message that ends in a draft. This is what the dispatcher is assumed to show beside the proposal; the live conversation does not show them yet.
 
 `expect` fields (all optional except `diff` when the row ends in a draft):
 
@@ -57,8 +64,8 @@ the file name is not the skill name.
 |---|---|
 | `skill` | the skill (or list) whose plan ran |
 | `disposition` / `dispositions` | how the last message (or each message) ended: `proposed`, `question`, `unsupported`, `refused`, ... |
-| `question_contains`, `reply_contains`, `reply_not_contains` | words in the last owner reply (case does not matter) |
-| `left_off`, `set_line` | words in a `Left off:` / `I set:` line of the reply |
+| `question_contains`, `reply_contains`, `reply_not_contains` | words in the last owner reply (case does not matter). When the final message ends in a draft, the reply also carries the skill's proposal notes (see below) |
+| `left_off`, `set_line` | words in a `Left off:` / `I set:` line of the reply (the `I set:` lines come from a skill's proposal notes) |
 | `ops` | the exact ops of the draft |
 | `diff` | the exact content change: `[{"file", "path", "before", "after"}]`. `path` is a key path such as `products[photo-product-001].description` or `hours`; `before` is absent for something added, `after` for something removed; JSON is compared parsed, key order ignored |
 | `files` | required on every row that ends in a draft: the exact set of files the commit touched (content and generated); a missing or extra file is `wrong-diff` |
