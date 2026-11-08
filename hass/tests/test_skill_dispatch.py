@@ -224,6 +224,28 @@ class SetPhrasesTests(SkillCase):
         slots, shown = dispatch.apply_defaults(self.registry.skills["hike.add"], {"title": "T"}, None)
         self.assertEqual(shown, ["signup: False"])
 
+    def test_the_default_is_still_said_when_the_owner_answers_a_missing_detail(self):
+        dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: ["sign-up off"] if "signup" not in slots else []
+        self.sign_up_skill()
+        self.script(OPEN1, skill_reply("hike.add", **{k: v for k, v in MILL.items() if k not in ("time", "difficulty")}))
+        self.assertEqual(self.say(OPEN1), "question")
+        self.assertEqual(self.replies(), ["What time does it start?"])
+        self.assertNotIn("signup", self.live()["slots"])  # the open request keeps what he said, not what the skill chose
+        self.now += timedelta(minutes=2)
+        _, reply = self.propose("8am")
+        self.assertIn("I set: sign-up off.", reply)
+        self.assertEqual(voice.check(reply, long_ok=True), [])
+        self.nothing_written()
+
+    def test_a_sign_up_the_owner_gave_before_the_question_is_not_called_a_default(self):
+        dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: ["sign-up off"] if "signup" not in slots else []
+        self.sign_up_skill()
+        self.script(OPEN1, skill_reply("hike.add", **{k: v for k, v in MILL.items() if k not in ("time", "difficulty")}, signup=True))
+        self.assertEqual(self.say(OPEN1), "question")
+        self.assertEqual(self.replies(), ["What time does it start?"])
+        self.now += timedelta(minutes=2)
+        self.assertNotIn("I set", self.propose("8am")[1])
+
 
 class MultiTurnTests(SkillCase):
     """The live hike texts of 2026-11-08 as multi-turn rows: the answer is joined to what it answers."""

@@ -497,10 +497,11 @@ class Dispatcher:
         if filled.problem:
             return self._ask(msg, now, req, skill, slots, texts, attachments, skill_slot=filled.problem_slot,
                              problem=filled.problem, ask=filled.ask, revises=revises)
+        given = slots  # what the owner gave: a default the skill picks is not kept across a question, so it is still said as "I set" when he answers
         slots, defaults = apply_defaults(skill, slots, ctx)
         slot = next_missing(skill, slots)
         if slot is not None:
-            return self._ask(msg, now, req, skill, slots, texts, attachments, skill_slot=slot.name, problem=None, ask=None, revises=revises)
+            return self._ask(msg, now, req, skill, given, texts, attachments, skill_slot=slot.name, problem=None, ask=None, revises=revises)
         for rule in skill.rules:
             hit = RULES.get(rule, lambda *a: None)(slots, texts, ctx)
             if hit:
