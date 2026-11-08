@@ -579,13 +579,15 @@ def _shown(field, v, cut=True) -> str:
     return voice.value_words(v, field)
 
 
-def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's visible fields, one per line (at most 40)
+def _added(r: dict, titles=None) -> list:  # AV1737-06 (H05/H06): an added record's visible fields, one per line (at most 40)
     rows = [(k, v) for k, v in sorted(r["after"].items()) if v not in (None, "", []) and k not in voice.SKIP_FIELDS and k in voice.FIELDS]
     word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _name(r)
     lines = [f"A new {word}" + (f": {q(name)}" if name else "")]
     for k, v in rows[:40]:
         photo = k == "image" and PHOTO_PATH_RE.fullmatch(str(v))
-        lines.append(f"  {voice.field_phrase(k)}: " + ("the photo from your message" if photo else q(_shown(k, v, False)).replace("\n", "\n    ")))
+        if k == "trailId": shown = q((titles or {}).get(v) or "one of your saved route ideas")  # never the id
+        else: shown = "the photo from your message" if photo else q(_shown(k, v, False)).replace("\n", "\n    ")
+        lines.append(f"  {voice.field_phrase(k)}: " + shown)
     return lines + (["  and a few more details"] if len(rows) > 40 else [])
 
 
@@ -599,16 +601,16 @@ def _change_line(r: dict, field, b, a, undo: bool, full_before: bool) -> str:
     return f"{who}, {phrase}: from {q(old)} to {q(new)}"
 
 
-def _record_lines(draft: dict, undo: bool = False, full_before=False) -> list:  # AV0022-08: proposal_text and show
+def _record_lines(draft: dict, undo: bool = False, full_before=False, titles=None) -> list:  # AV0022-08: proposal_text and show
     lines = []
     for r in draft["records"]:
-        lines += _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
+        lines += _added(r, titles) if r.get("before") is None and isinstance(r.get("after"), dict) else [
             _change_line(r, f, b, a, undo, full_before) for f, b, a in _changes(r)]
     return lines + [f"Heads up: {voice.explain_warning(w)}" for w in draft.get("warnings") or []]
 
 
-def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None, now=None) -> str:
-    lines = [head or "Here's the change I'd make:"] + _record_lines(draft, undo, full_before=bool(live_site))
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None, now=None, titles=None) -> str:
+    lines = [head or "Here's the change I'd make:"] + _record_lines(draft, undo, full_before=bool(live_site), titles=titles)
     wait = f"I'll hold this for you until {voice.natural_iso(expires_at, now)}."
     if live_site:
         reasons = live_policy.check(draft)
@@ -708,6 +710,13 @@ class Conversation:
         if not row["draft_hash"]: return False
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
+    def _repeat_why(self, row) -> str:
+        """How the earlier copy of a repeated change ended, in everyday words (the truth, not always 'cancelled')."""
+        earlier = self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"])
+        last = earlier[-1] if earlier else None
+        if last is not None and last["state"] == "rejected" and last["replaced_by"]: return "replaced"
+        return {"expired": "timed out", "rejected": "cancelled", "failed": "not saved"}.get(last["state"] if last is not None else "", "closed")
+
     def _reply(self, text, attachments=(), **flags):
         self.outbox.add(self.settings["ownerChat"], text, attachments, self._answering or None, **flags)
 
@@ -726,7 +735,7 @@ class Conversation:
 
     def _proposal_reply(self, row, draft, prefix=""):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
-        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=self._now()), []
+        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=self._now(), titles=self._route_titles()), []
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
@@ -889,7 +898,7 @@ class Conversation:
             self._record(msg, "no-target")
             return "no-target", None
         if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
-            self._reply(f"That is the same change that was cancelled earlier, so I want to be sure. Reply yes {target['code']} if you still want it.")
+            self._reply(f"That is the same change that was {self._repeat_why(target)} earlier, so I want to be sure. Reply yes {target['code']} if you still want it.")
             self._record(msg, "no-target")
             return "no-target", None
         if self.settings.get("liveSite") and (reasons := live_policy.check(self.editor.show(target["change_id"]).get("draft"))):
@@ -969,6 +978,10 @@ class Conversation:
             return {i["id"]: i for i in ideas if isinstance(i, dict) and isinstance(i.get("id"), str)} if isinstance(ideas, list) else None
         except (OSError, ValueError, KeyError, TypeError, RecursionError, editor_mod.UnsafeState):
             return None
+
+    def _route_titles(self) -> dict:
+        """Route idea id -> its title, so a proposal names the route and never shows its id."""
+        return {k: v["title"] for k, v in (self._routes() or {}).items() if isinstance(v.get("title"), str)}
 
     def _sources(self):
         """AV1937-05: the worktree's real hikes by id (read-only) for a hike.repeat copy; None when unreadable (no exemption)."""
@@ -1228,7 +1241,7 @@ class Conversation:
         with self._tx():
             if line and self.db.execute("UPDATE drafts SET summary = summary || ? WHERE code = ? AND state = "
                                         "'needs-details'", (" " + line, code)).rowcount:
-                self.db.execute("UPDATE outbox SET text = text || ? WHERE id = ? AND sent_at IS NULL", (" " + line, reply_id))
+                self.db.execute("UPDATE outbox SET text = text || ? WHERE id = ? AND sent_at IS NULL", (" " + voice.plain(line), reply_id))  # the outbox holds plain text; the draft summary keeps the marks
 
     def _outcome(self, row, out, now):
         """Store the apply result and its reply in one transaction (before anything is sent)."""
@@ -1649,10 +1662,10 @@ class Conversation:
             rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
             draft = {"records": rec["records"], "warnings": rec.get("warnings")}
             if state == "proposed":
-                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), now=now)
+                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), now=now, titles=self._route_titles())
                 shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
             else:
-                text, shot = "\n".join(["Here's what was saved:"] + _record_lines(draft, _is_undo(row))), row["screenshot"]
+                text, shot = "\n".join(["Here's what was saved:"] + _record_lines(draft, _is_undo(row), titles=self._route_titles())), row["screenshot"]
             return text, [str(shot)] if shot and Path(shot).is_file() else []
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             return "I can't find the details of that change any more.", []

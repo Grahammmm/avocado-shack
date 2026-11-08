@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from hass.claims import REPEAT_FIELDS
 from hass.content_model import EVENT_REQUIRED, EVENT_TEXT_FIELDS, LINE_SEPARATORS, TEXT_LIMITS
+from hass import voice
 from hass.field_words import field_list
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched
 
@@ -109,14 +110,14 @@ def _start(day: str, clock: str, now):
     first, second = naive.replace(tzinfo=TZ, fold=0), naive.replace(tzinfo=TZ, fold=1)
     if first.utcoffset() != second.utcoffset():
         gap = first.astimezone(timezone.utc).astimezone(TZ).replace(tzinfo=None) != naive
-        question = (f"{day} {clock} does not exist in Pacific time (clocks jump forward); what time should it start?"
-                    if gap else f"{day} {clock} happens twice in Pacific time ({_fmt(first.utcoffset())} and "
-                    f"{_fmt(second.utcoffset())}); which one do you mean?")
+        say = f"{naive:%A, %b} {naive.day}, {naive.year} at {naive.hour % 12 or 12}:{naive:%M} {'am' if naive.hour < 12 else 'pm'}"
+        question = (f"{say} doesn't exist, because the clocks jump forward that night. What time should it start?"
+                    if gap else f"{say} happens twice, because the clocks go back that night. Do you mean the first one or the second one?")
         return NeedsDetails(["time"], question)
     if first <= now:
         return Refused("start is in the past")
     if first - now > timedelta(days=MAX_AHEAD_DAYS):
-        return NeedsDetails(["date"], f"{day} is more than {MAX_AHEAD_DAYS} days away; check the year. "
+        return NeedsDetails(["date"], f"{naive:%A, %b} {naive.day}, {naive.year} is more than a year away. Did you mean a different year? "
                                       "What date should it be?")
     return first.isoformat(timespec="seconds")
 
@@ -282,7 +283,7 @@ def _hike_update(content, args, ctx):
             return Refused(why.format(bad))
     given = {f: args[f] for f in UPDATE_FIELDS if f in args and not (f == "noCapacityLimit" and not args[f])}
     if not given and not clear:
-        return NeedsDetails(list(UPDATE_FIELDS), f"What should change on {args['id']}? Give at least one of: "
+        return NeedsDetails(list(UPDATE_FIELDS), f"What should change on {voice.quote(event.get('title') or 'that hike')}? Give at least one of: "
                             + field_list(UPDATE_FIELDS))
     given = {f: v for f, v in given.items() if not (f in ("title", "meetingPoint") + TEXT_FIELDS
                                                     and isinstance(event.get(f), str) and _spaced(event[f]) == _spaced(v))}

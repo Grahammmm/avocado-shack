@@ -56,6 +56,7 @@ PATTERNS = (  # (rule name, regex). A hit anywhere outside quoted words breaks t
 )
 _CODE_RE = re.compile(r"(?<![\w-])(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{4,6}(?![\w-])", re.I)
 _AFTER_YES_RE = re.compile(r"\b(?:yes|no|undo|show|cancel)[ ,]+$", re.I)
+_APPROVAL_RE = re.compile(r"\b(yes|no|undo|show|cancel)([ ,]+)(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{4,12}\b", re.I)
 _EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\u2B50\u2B55\u2705\u274C\uFE0F\u200D]")
 _PHONE_OR_NUMBER = re.compile(r"\d")
 
@@ -97,6 +98,7 @@ def check(text, *, emoji_ok=False, long_ok=False, ids_ok=False) -> list:
     ids_ok: the message teaches a command whose answer is an id he has to type (find, listing, post, alias)."""
     if not isinstance(text, str) or not text.strip(): return ["empty"]
     ours = _ours(text)
+    ours = _APPROVAL_RE.sub(r"\1\2code", ours)  # an approval code right after yes / no / undo / show (up to 12 characters) is allowed
     broken = []
     for hit in _WORD_RE.finditer(ours):
         if ids_ok and hit.group(1).lower() in ("id", "ids"): continue
@@ -276,7 +278,8 @@ FIELDS = {  # the shop's own words for what can change; an unknown field is "a d
     "headline": "the headline", "notice": "the notice", "phone": "the phone number", "streetAddress": "the street address",
     "town": "the town", "homeImage": "the home page photo", "selection_checked_on": "the shelf check", "routeType": "the route type",
     "elevationLabel": "the elevation", "sourceName": "the source name", "sourceUrl": "the source link", "trailId": "the route idea",
-    "record": "this",
+    "record": "this", "bring": "what to bring", "meetingAddress": "the meeting address", "meetTime": "the meeting time",
+    "walkTime": "the walk time", "returnTime": "the return time", "invitation": "the invitation",
 }
 SKIP_FIELDS = ("id", "addedOn", "key", "createdAt", "updatedAt")  # internal; never listed for a new record
 STATUS_WORDS = {"active": "showing", "hidden": "hidden", "held": "on hold", "scheduled": "scheduled", "cancelled": "cancelled",

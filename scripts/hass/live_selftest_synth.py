@@ -115,7 +115,7 @@ class LiveSelftest(HostCase):
         self.assertEqual(draft["state"], "proposed")
         self.assertEqual(self.mac("pull"), {"out": None})
         [reply] = self.texts()
-        self.assertTrue(reply.startswith(f"Draft {draft['code']}:"), reply)
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
         self.assertEqual(self.store.status(), {"waiting": 0, "total": 1})  # pulled and acknowledged
 
     def test_2_status_gets_one_reply_and_no_draft(self):
@@ -182,7 +182,7 @@ class LiveSelftest(HostCase):
         self.mac("pull")
         self.assertEqual(self.drafts()[0]["state"], "expired")
         self.assertEqual((self.editor.applies, self.commits()), (0, 0))
-        self.assertTrue(any("expired" in t for t in self.texts()))
+        self.assertTrue(any("timed out" in t for t in self.texts()))
 
 
 if __name__ == "__main__":

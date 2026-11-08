@@ -15,6 +15,7 @@ import re
 import unicodedata
 
 from hass.content_model import AVAILABILITY, CATEGORIES, TEXT_LIMITS, checked_on, shop_today
+from hass import voice
 from hass.field_words import field_list
 from hass.ops import Arg, NeedsDetails, NotFound, Op, Refused, Touched, _image_file_problem
 
@@ -161,7 +162,7 @@ def _product_edit(content, args, ctx):
     clear_alt = bool(args.get("clearImageAlt")) and "imageAlt" in product  # clearing an absent alt is no change
     if not changes and not clear_alt:
         fields = list(PRODUCT_EDITABLE) + ["producerKey", "clearProducer", "clearImageAlt"]
-        return NeedsDetails(fields, f"What should change on {args['id']}? Give at least one of: " + field_list(fields))
+        return NeedsDetails(fields, f"What should change on {voice.quote(product.get('name') or 'that product')}? Give at least one of: " + field_list(fields))
     changes = _drop_unchanged(changes, product, args["id"], more=clear_alt)
     if isinstance(changes, Refused):
         return changes
@@ -273,7 +274,7 @@ def _maker_edit(content, args, ctx):
     clear_url = bool(args.get("clearUrl"))
     if not changes and not clear_url:
         fields = list(MAKER_EDITABLE) + ["clearUrl"]
-        return NeedsDetails(fields, f"What should change on maker {args['key']}? Give at least one of: "
+        return NeedsDetails(fields, f"What should change on {voice.quote(args['key'])}? Give at least one of: "
                             + field_list(fields))
     clear_url = clear_url and "url" in maker  # clearing an absent url is no change
     changes = _drop_unchanged(changes, maker, f"maker {args['key']}", more=clear_url) if changes else changes

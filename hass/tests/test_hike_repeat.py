@@ -169,7 +169,7 @@ class StartAndTwinTests(RepeatTestCase):
         repo = self.source()
         gap = self.rejected(repo, "needs-details", {**REPEAT, "date": "2027-03-14", "time": "02:30"})
         self.assertEqual(gap["missing"], ["time"])
-        self.assertIn("does not exist in Pacific time", gap["question"])
+        self.assertIn("doesn't exist", gap["question"])
         fold = self.rejected(repo, "needs-details", {**REPEAT, "date": "2026-11-01", "time": "01:30"})
         self.assertIn("happens twice", fold["question"])
         self.assertEqual(self.rejected(repo, "refused", {**REPEAT, "date": "2026-10-29"})["reason"], "start is in the past")

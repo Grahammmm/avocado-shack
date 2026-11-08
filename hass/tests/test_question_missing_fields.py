@@ -32,15 +32,15 @@ class QuestionWordsTests(HikeTestCase):
         cases = [
             (("route.add", {"title": "T", "place": "P", "sourceUrl": "https://trails.example.org/x", "sourceName": "N"}),
              "Please provide: "),
-            (("product.edit", {"id": "photo-product-001"}), "What should change on photo-product-001? Give at least one of: "),
-            (("maker.edit", {"key": "Etto"}), "What should change on maker Etto? Give at least one of: "),
-            (("hike.update", {"id": HIKE_ID}), f"What should change on {HIKE_ID}? Give at least one of: "),
+            (("product.edit", {"id": "photo-product-001"}), "What should change on \ue000Hass avocado\ue001? Give at least one of: "),
+            (("maker.edit", {"key": "Etto"}), "What should change on \ue000Etto\ue001? Give at least one of: "),
+            (("hike.update", {"id": HIKE_ID}), "What should change on \ue000Test hike\ue001? Give at least one of: "),
         ]
         for (op, args), prefix in cases:
             with self.subTest(op=op):
                 missing, question = self.missing_of(repo, op, args)
                 self.assertTrue(question.startswith(prefix), question)
-                self.assertEqual(question[len(prefix):], field_list(missing))  # prose mapped, ids untouched
+                self.assertEqual(question[len(prefix):], field_list(missing))  # prose mapped; the name, never the id
                 self.assertTrue(missing and all(isinstance(m, str) for m in missing))
         missing, question = self.missing_of(repo, "product.edit", {"id": "photo-product-001"})
         self.assertTrue({"producerKey", "clearProducer", "clearImageAlt"} <= set(missing))
