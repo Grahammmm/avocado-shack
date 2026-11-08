@@ -3,6 +3,7 @@ from datetime import timedelta
 from unittest import mock
 
 from hass import conversation as conv, owner_answers as answers, voice
+from hass.tests import fixture_ops
 from hass.tests.test_conversation import ConversationTestCase, SETTINGS, T0, _ops
 from hass.tests.test_editor import DESC
 from hass.tests.test_live_policy import edit
@@ -13,6 +14,7 @@ SITE = "fixture.example.invalid"
 class LiveProposalTests(ConversationTestCase):
     def setUp(self):
         super().setUp()
+        fixture_ops.allow_live(self)
         self.conv.db.close()
         self.set_settings({**SETTINGS, "liveSite": SITE, "approvalNeedsCode": True})
         self.conv = self.open()
@@ -32,7 +34,7 @@ class LiveProposalTests(ConversationTestCase):
         draft = edit("Organic fruit", "Not organic fruit")
         text = conv.proposal_text("a1b2", draft, "2026-11-02T17:10:00+00:00", live_site=SITE)
         self.assertIn("I can't put this on the website from chat: it touches where the food comes from or whether it is organic.", text)
-        self.assertIn("Nothing will be published. Graham can do it by hand.", text)
+        self.assertIn("Nothing will be published. I've saved it for Graham to look at, and he can do it by hand.", text)
         self.assertNotIn("Reply yes", text)
         # Even an explicitly named yes cannot bypass the content boundary.
 
@@ -141,6 +143,7 @@ class LiveProposalTests(ConversationTestCase):
 class LiveShowAndLongCodes(ConversationTestCase):
     def setUp(self):
         super().setUp()
+        fixture_ops.allow_live(self)
         self.conv.db.close()
         self.set_settings({**SETTINGS, "liveSite": SITE, "approvalNeedsCode": True})
         self.conv = self.open()

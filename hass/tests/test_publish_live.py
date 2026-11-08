@@ -24,6 +24,7 @@ class Crash(BaseException): pass
 
 class ReleaseCase(unittest.TestCase):
     def setUp(self):
+        fixture_ops.allow_live(self)
         self.repo = WriterRepo()
         self.addCleanup(self.repo.cleanup)
         self.tmp = tempfile.TemporaryDirectory(prefix='hass-release-')

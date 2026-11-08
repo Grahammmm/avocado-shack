@@ -16,8 +16,11 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 ## Waiting changes
 
-- In live mode, chat cannot change product brands or producers, maker places or links, club details, trail facts,
-  route ideas, sample hikes, or the store phone or address. G can do those by hand.
+- In live mode, only these changes go from chat to the website (HASS-LIVE-PLAN-1): hide or restore a product, edit a
+  product's description or category, stock words, specials (no price), hikes with sign-up off (add, edit, cancel), a maker's
+  about text, and undo. Anything else (new items, pictures, brands, producers, maker places or links, club details, trail
+  facts, route ideas, sample hikes, prices, phone, address, shop hours or notice, the home page photo) is refused in plain
+  words and saved for Graham to do by hand.
 - Sentences containing origin or organic claims, health claims, awards or endorsements, trail facts, prices or
   contact details cannot be added, removed, substituted or negated. Other sentences can change; undo is allowed.
 - A live change can touch at most **10** <!-- live_policy.MAX_RECORDS --> records.
