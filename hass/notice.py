@@ -32,18 +32,29 @@ def slots(notice, today: str) -> dict[str, str]:
 
 
 def stale_paths(content, root: Path) -> list[str]:
-    """Allow either exact expired render; never ignore corruption, missing files or symlinks.
+    """Allow an earlier exact render of a notice or special that has since expired; never ignore corruption,
+    missing files or symlinks.
 
-    Writes and publishing continue using the current render, removing expired notices.
-    The notice clock override does not change the selection freshness clock.
+    Writes and publishing continue using the current render, removing expired notices and specials.
+    The notice and specials clock overrides do not change the selection freshness clock. A path is stale only when
+    it differs from the current render and from every earlier-day render the content allows (the day a notice's
+    last day was, and each day the set of active specials changed).
     """
     from hass.sitegen import diff_paths, render, shop_today
+    from hass.specials import change_days
 
     today = shop_today()
     templates = Path(root) / "hass" / "templates"
     stale = diff_paths(render(content, templates, today=today), root)
     notice = content.store.get("notice")
-    if stale and notice and notice["until"] < today.isoformat():
-        before = diff_paths(render(content, templates, today=today, notice_today=date.fromisoformat(notice["until"])), root)
-        stale = [rel for rel in stale if rel in before]
+    notice_days = [date.fromisoformat(notice["until"])] if notice and notice["until"] < today.isoformat() else []
+    for notice_day in [None, *notice_days]:
+        for special_day in [None, *change_days(content.store, today)]:
+            if not stale:
+                return stale
+            if notice_day is None and special_day is None:
+                continue
+            before = diff_paths(render(content, templates, today=today, notice_today=notice_day,
+                                       specials_today=special_day), root)
+            stale = [rel for rel in stale if rel in before]
     return stale

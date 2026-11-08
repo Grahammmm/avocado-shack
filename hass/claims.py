@@ -147,7 +147,14 @@ def _fields(r: dict, before: dict, after: dict):
     dict or string counts as empty, a new one that is not a dict is handled as any top-level value. Other dicts: skipped."""
     for field in sorted(after):
         new, old = after[field], before.get(field)
-        if r.get("collection") == "store" and field in NESTED_TEXT and isinstance(new, dict):
+        if r.get("collection") == "store" and field == "specials" and isinstance(new, list):  # AVO-SPECIALS-1: each special's words
+            old_by_id = {sp.get("id"): sp for sp in old if isinstance(sp, dict)} if isinstance(old, list) else {}
+            for sp in new:
+                if isinstance(sp, dict) and isinstance(sp.get("id"), str):
+                    for leaf in ("title", "deal"):
+                        if isinstance(sp.get(leaf), str):
+                            yield f"specials.{sp['id']}.{leaf}", sp[leaf], old_by_id.get(sp["id"], {}).get(leaf)
+        elif r.get("collection") == "store" and field in NESTED_TEXT and isinstance(new, dict):
             old = old if isinstance(old, dict) else {}
             for leaf in NESTED_TEXT[field]:
                 if isinstance(new.get(leaf), str):

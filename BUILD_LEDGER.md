@@ -2109,3 +2109,5 @@ Branch rb/av1322-15 (AV1322-15, PR #319, merged as 836c43ed97337201ce508aadceeaa
 Checks at PR head: `python3 -B -m unittest hass.tests.test_health_backup_content hass.tests.test_health hass.tests.test_support_doc hass.tests.test_statebackup -v` ran 28 tests, OK (recorded in PR #319; historical evidence, not rerun for this ledger).
 
 Limits: Info only, with no path or commit in the detail; older backups are ignored and ok, notify and exit status are unchanged.
+
+AVO-SPECIALS-1 (branch rb/avo-specials-1): weekly specials. Additive `store.specials` list (content_model.py), a "This week's specials" section at the top of the home/shop page rendered only for specials active on the Pacific date plus a small client-side date check (hass/specials.py), and the editor ops specials.add, specials.edit, specials.remove, specials.clear_expired (hass/ops/specials.py) with undo, preview target and the normal approval flow. No price field; the site shows no prices anywhere except inside an owner-written deal line. Tests: hass/tests/test_specials.py (browser tests need PLAYWRIGHT_MODULE). The Hass chat skill is the separate SKILLS-SPECIALS-1 card.
