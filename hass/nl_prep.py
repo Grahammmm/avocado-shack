@@ -52,7 +52,9 @@ TIME_RE = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b([01]?\d|2[0
 ORDINAL_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b")
 MONTH_DAY_RE = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b")
 DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b")
-SLASH_RE = re.compile(r"\b(1[0-2]|0?[1-9])/([0-3]?\d)\b")
+SLASH_RE = re.compile(r"(?<!/)\b(1[0-2]|0?[1-9])/([0-3]?\d)\b(?:/(\d+))?")  # m/d or m/d/yy(yy); a year-first 2027/12/5 is not read
+ISO_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+YEAR_RE = re.compile(r"(?:,\s*|\s+)(?:'(\d{2})|(\d{4}))(?![\d:])")  # a year the owner wrote right after a month and day
 WEEKDAY_RE = re.compile(r"\b(?:(this|next|last|coming|on)\s+)?(" + "|".join(sorted(WEEKDAYS, key=len, reverse=True)) + r")s?\b")
 RELATIVE_RE = re.compile(r"\b(today|tonight|tomorrow|tmrw|tmr|yesterday|day after tomorrow)\b")
 IN_RE = re.compile(r"\bin\s+(\d{1,2}|" + "|".join(WORD_NUMBERS) + r")\s+(day|week)s?\b")
@@ -273,6 +275,33 @@ def _safe_date(year, month, day):
     except ValueError: return None
 
 
+def _date_row(said, d):
+    return {"said": said, "date": d.isoformat(), "weekday": WEEKDAY_NAMES[d.weekday()]}
+
+
+def _named_date(t, m, month, day, today, year=True):
+    """(said, date) for a month and day the owner wrote, or None. An explicit year after it (December 5 2027, 5 Dec '27) is used as
+    written and an odd one (a four digits that are not 2000-2099, e.g. a clock) leaves the hint out; with no year the next such day
+    from ``today`` is the hint. A hint is never a different year than the one the owner wrote."""
+    y = YEAR_RE.match(t, m.end()) if year else None
+    if y:
+        n = int(y.group(1)) + 2000 if y.group(1) else int(y.group(2))
+        d = _safe_date(n, month, day) if 2000 <= n <= 2099 else None
+        return (t[m.start():y.end()], d) if d is not None else None
+    d = _safe_date(today.year, month, day)
+    if d is not None and d < today: d = _safe_date(today.year + 1, month, day)
+    return (m.group(0), d) if d is not None else None
+
+
+def _slash_year(m):
+    """(said, date) for 12/5/2027 or 12/5/27; None for a bad day or a year that is not two or four digits."""
+    n = m.group(3)
+    if len(n) not in (2, 4): return None
+    n = int(n) + 2000 if len(n) == 2 else int(n)
+    d = _safe_date(n, int(m.group(1)), int(m.group(2))) if 2000 <= n <= 2099 else None
+    return (m.group(0), d) if d is not None else None
+
+
 def date_hints(text, today: date):
     """(rows, [(said weekday, weekday number)]): every day the message names, in Pacific time (``today`` is the Pacific day)."""
     t, rows, hits = fold(text), [], []
@@ -304,17 +333,18 @@ def date_hints(text, today: date):
         if d is not None and not MONTH_DAY_RE.search(t[max(0, m.start() - 12):m.end()]) and not DAY_MONTH_RE.search(t[m.start():m.end() + 14]):
             rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
     for m in MONTH_DAY_RE.finditer(t):
-        d = _safe_date(today.year, MONTHS[m.group(1)], int(m.group(2)))
-        if d is not None and d < today: d = _safe_date(today.year + 1, MONTHS[m.group(1)], int(m.group(2)))
-        if d is not None: rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
+        found = _named_date(t, m, MONTHS[m.group(1)], int(m.group(2)), today)
+        if found: rows.append(_date_row(*found))
     for m in DAY_MONTH_RE.finditer(t):
-        d = _safe_date(today.year, MONTHS[m.group(2)], int(m.group(1)))
-        if d is not None and d < today: d = _safe_date(today.year + 1, MONTHS[m.group(2)], int(m.group(1)))
-        if d is not None: rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
+        found = _named_date(t, m, MONTHS[m.group(2)], int(m.group(1)), today)
+        if found: rows.append(_date_row(*found))
     for m in SLASH_RE.finditer(t):
-        d = _safe_date(today.year, int(m.group(1)), int(m.group(2)))
-        if d is not None and d < today: d = _safe_date(today.year + 1, int(m.group(1)), int(m.group(2)))
-        if d is not None: rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
+        if m.group(3) is None: found = _named_date(t, m, int(m.group(1)), int(m.group(2)), today, year=False)
+        else: found = _slash_year(m)
+        if found: rows.append(_date_row(*found))
+    for m in ISO_RE.finditer(t):
+        d = _safe_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if d is not None and 2000 <= d.year <= 2099: rows.append(_date_row(m.group(0), d))
     for m in IN_RE.finditer(t):
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_NUMBERS[m.group(1)]
         d = today + timedelta(days=n * (7 if m.group(2) == "week" else 1))

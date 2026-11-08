@@ -37,7 +37,7 @@ If you ask for something that is already true, Hass tells you instead of making 
 
 **Hide or bring back a product or a maker.** `hide the plums`, `take the cashews off the site`, `bring back the lemons`.
 
-**Hikes.** Say what and when; Hass works out the date from today in California time.
+**Hikes.** Say what and when; Hass works out the date from today in California time. A year you write (December 5 2027, 12/5/27, 2027-12-05) is used as written; a date with no year means the next one coming, and a date Hass cannot check (February 30 2027) gets no date hint, so the model asks you.
 
 - `post a hike at Cass Hill on Saturday at 9, meet at the trailhead gate`
 - `cancel the Point Buchon walk, it's raining`
