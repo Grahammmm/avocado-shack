@@ -233,6 +233,44 @@ class DrillWithG(Drill):
         self.sent()
         self.assertEqual((self.push_calls, self.live.books.journals()), (0, []))
 
+    def two_identical_proposals(self, first, second):
+        """Mike and G ask for the same change before either says yes: one shared change_id, two drafts, `second` asked last."""
+        for chat, sender in (first, second):
+            self.assertEqual(self.say("hours", chat=chat, sender=sender), "proposed")
+        self.sent()
+        rows = self.conv.db.execute("SELECT chat, code, change_id FROM drafts WHERE state = 'proposed' ORDER BY row_id").fetchall()
+        self.assertEqual(len({r["change_id"] for r in rows}), 1)  # the editor's deterministic id is shared
+        self.assertEqual([r["chat"] for r in rows], [first[0], second[0]])
+        return {r["chat"]: r["code"] for r in rows}
+
+    def approve_and_expect_every_message_in(self, chat, sender, codes, text_part):
+        self.assertEqual(self.say(f"yes {codes[chat]}", chat=chat, sender=sender), "approved")
+        self.assertEqual(self.entry()["chat"], chat)  # the approver's chat is kept in the release record
+        told = self.sent() + self.settle_and_flush()
+        self.assertTrue(any(text_part in text for _c, text in told), told)
+        self.assertTrue(told and all(c == chat for c, _t in told), told)  # nothing for the other owner
+
+    def test_6d_mike_approving_his_own_is_told_even_when_gs_identical_draft_is_newest(self):
+        codes = self.two_identical_proposals((CHAT, OWNER), (GCHAT, G))
+        self.approve_and_expect_every_message_in(CHAT, OWNER, codes, answers.LIVE_SHOWN)
+        self.assertEqual(self.conv.db.execute("SELECT count(*) FROM outbox WHERE chat = ?", (GCHAT,)).fetchone()[0], 1)  # only G's own proposal
+
+    def test_6e_g_approving_his_own_is_told_in_g_chat_even_when_mikes_identical_draft_is_newest(self):
+        codes = self.two_identical_proposals((GCHAT, G), (CHAT, OWNER))
+        self.approve_and_expect_every_message_in(GCHAT, G, codes, answers.LIVE_SHOWN)
+
+    def test_6f_a_failed_release_is_told_to_the_approver_not_the_newest_drafts_owner(self):
+        def refuse(cwd, args):
+            if args[0] == "push": raise subprocess.CalledProcessError(128, args, stderr=BARE_PUSH_REFUSED)
+        self.fault = refuse
+        codes = self.two_identical_proposals((CHAT, OWNER), (GCHAT, G))
+        self.approve_and_expect_every_message_in(CHAT, OWNER, codes, "did not go on the website")
+
+    def test_6g_the_routing_chat_is_read_from_the_release_record_only(self):
+        entry = {"chat": GCHAT}
+        self.assertEqual(self.live._asker(entry), GCHAT)
+        self.assertEqual(self.live._asker({}), CHAT)  # an older record, or Graham's one-command revert: Mike's chat, no guessing
+
     def test_6c_g_numbers_never_reach_a_published_file(self):
         self.assertIn(G, self.live.private_values())
         self.assertIn(GCHAT, self.live.private_values())

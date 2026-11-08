@@ -16,7 +16,7 @@ ANCHOR = {'anchor_site_commit', 'anchor_build_today', 'anchor_seq', 'anchor_at'}
 REQUIRED = {'change_id', 'code', 'kind', 'orig', 'draft_hash', 'writer_before', 'site_before', 'today',
             'seq', 'push_attempts', 'state', 'notified', 'at'}
 OPTIONAL = {'writer_after', 'manifest', 'site_commit', 'step', 'reason', 'observed_before', 'checked_at',
-            'pushed_at', 'next_check', 'unchecked', 'alerted', 'summary'}
+            'pushed_at', 'next_check', 'unchecked', 'alerted', 'summary', 'chat'}
 SHA = re.compile(r'[0-9a-f]{40}')
 CID = re.compile(r'chg-[0-9a-f]{12}')
 
@@ -85,6 +85,7 @@ def validate(j):
         if j['kind'] not in {'change', 'undo', 'baseline'}: raise ValueError
         if j['orig'] is not None and not CID.fullmatch(j['orig']): raise ValueError
         if not isinstance(j['draft_hash'], str): raise ValueError
+        if 'chat' in j and (not isinstance(j['chat'], str) or not j['chat']): raise ValueError
         for key in ('writer_before', 'site_before'):
             if not SHA.fullmatch(j[key]): raise ValueError
         for key in ('writer_after', 'site_commit'):

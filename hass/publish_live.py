@@ -169,11 +169,11 @@ class LiveEditor(conversation.Editor):
         if files != self.tree(): raise ValueError('baseline')
         return files
 
-    def _asker(self, cid):
-        """The owner chat whose yes started this release (Mike's unless G's chat asked); ownerChat when no draft row is known."""
-        db = getattr(self.conv, 'db', None)
-        row = db.execute('SELECT chat FROM drafts WHERE change_id = ? ORDER BY row_id DESC LIMIT 1', (cid,)).fetchone() if db else None
-        return row[0] if row and row[0] else self.settings['ownerChat']
+    def _asker(self, j):
+        """The owner chat whose yes started this release, as recorded in the release entry when that yes was applied (two owners
+        can hold drafts with the same change_id, so the newest draft row is never used). An entry with no recorded chat (written
+        before this field, or Graham's one-command revert) goes to ownerChat."""
+        return j.get('chat') or self.settings['ownerChat']
 
     def _has_draft(self, cid):
         db = getattr(self.conv, 'db', None)
@@ -185,7 +185,9 @@ class LiveEditor(conversation.Editor):
             if row: return row[0]
         return cid[-4:]
 
-    def apply(self, change_id, draft_hash):
+    routes_chat = True  # the conversation passes the approving owner's chat, kept in the release entry
+
+    def apply(self, change_id, draft_hash, chat=None):
         if not journal.CID.fullmatch(str(change_id)): return self.refuse('the change could not be read')
         with self.books.lock() as held:
             if not held: return self.refuse('another change is going live')
@@ -217,7 +219,7 @@ class LiveEditor(conversation.Editor):
                      orig=draft['ops'][0]['args']['changeId'] if undo else None, draft_hash=draft_hash,
                      writer_before=self.git('rev-parse', 'HEAD', cwd=self.wt), site_before=books['last_site_commit'],
                      today=self.day(), seq=self.books.next_seq(), push_attempts=[],
-                     state='intent', notified=[], at=self.clock().isoformat())
+                     state='intent', notified=[], at=self.clock().isoformat(), **({'chat': chat} if chat else {}))
             self.books.write(j)
             result = super().apply(change_id, draft_hash)
             if result['result'] not in ('applied', 'already-applied'):
@@ -388,7 +390,7 @@ class LiveEditor(conversation.Editor):
         elif state == 'unknown': text = owner_answers.LIVE_UNKNOWN.format(code=j['code'])
         elif state == 'unconfirmed': text = owner_answers.LIVE_UNCONFIRMED.format(code=j['code'])
         else: return
-        chat = self._asker(j['change_id'])
+        chat = self._asker(j)
         if chat != self.settings['ownerChat']: attachments = []  # G's chat is text only
         self.conv.outbox.add(chat, text, attachments)
         self.books.write(j, notified=[*j['notified'], state])

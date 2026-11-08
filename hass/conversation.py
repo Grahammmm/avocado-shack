@@ -198,6 +198,8 @@ class Editor:
     def prepare(self, ops):
         return editor_mod.prepare({"ops": ops}, state=self.state, registry=self.registry)
 
+    routes_chat = False  # True on an editor that records which owner chat approved (LiveEditor); fixtures keep two arguments
+
     def apply(self, change_id, draft_hash):
         return editor_mod.apply(change_id, draft_hash, state=self.state, registry=self.registry)
 
@@ -862,7 +864,8 @@ class Conversation:
             return "approval-held"
         if self._label_job: self._read_label(*self._label_job)  # AV1537-15: after the commit, never holding the lock
         if approved is None: return disposition
-        out = self.editor.apply(approved["change_id"], approved["draft_hash"])
+        out = self.editor.apply(approved["change_id"], approved["draft_hash"], chat=approved["chat"]) \
+            if getattr(self.editor, "routes_chat", False) else self.editor.apply(approved["change_id"], approved["draft_hash"])
         with self._tx():
             self._outcome(self._row(approved["row_id"]), out, self._now())
         self._verify_pending()
@@ -1535,7 +1538,8 @@ class Conversation:
                 for r in rows]) if rows else "We haven't made any changes yet.", long_ok=True)
             return "history"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")  # AV0022-07: skip undos
-                if code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code]
+                if self._mine(r) and (code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code)]
+        # HASS-LIVE-PLAN-1: only the asking owner's own changes (by chat) can be taken back, with or without a code
         if not done:
             self._reply("I don't have a change with that code to undo." if code else "There's nothing to undo.")
             return "no-target"

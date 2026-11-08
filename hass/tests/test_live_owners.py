@@ -172,15 +172,35 @@ class TwoOwnerTests(Base):
         self.assertEqual(self.interp.asked[-1][1]["earlier"], ["when?"])
         self.assertEqual(self.interp.asked[-1][1]["question"], "Which day should change?")
 
-    def test_undo_from_g_takes_back_the_last_change_in_g_chat(self):
-        self.propose("hours")
-        self.say("yes")
+    def test_undo_from_g_takes_back_only_gs_own_change_in_g_chat(self):
+        self.say("hours", chat=GCHAT, sender=G)
+        self.say("yes", chat=GCHAT, sender=G)
         self.sent()
         self.assertEqual(self.say("undo", chat=GCHAT, sender=G), "proposed")
         [(chat, _t, _a)] = self.sent()
         self.assertEqual(chat, GCHAT)
         self.assertEqual(self.say("yes", chat=GCHAT, sender=G), "approved")
         self.assertEqual(self.commits(), 2)
+
+    def test_undo_never_reaches_the_other_owners_change(self):
+        mine, _ = self.propose("hours")
+        self.say("yes")
+        self.sent()
+        commits, states = self.commits(), [d["state"] for d in self.drafts()]
+        for text in ("undo", f"undo {mine['code']}"):
+            with self.subTest(text=text, who="G"):
+                self.assertEqual(self.say(text, chat=GCHAT, sender=G), "no-target")
+                [(chat, reply, _a)] = self.sent()
+                self.assertEqual(chat, GCHAT)
+                self.assertNotIn(mine["summary"], reply)
+                self.assertEqual((self.commits(), [d["state"] for d in self.drafts()]), (commits, states))
+        self.say("hours", chat=GCHAT, sender=G)  # a proposal of G's own is still not Mike's to undo, nor Mike's G's
+        self.sent()
+        self.assertEqual(self.say("undo"), "proposed")  # Mike's own applied change
+        [(chat, _t, _a)] = self.sent()
+        self.assertEqual(chat, CHAT)
+        self.assertEqual(self.say(f"undo {mine['code']}", chat=GCHAT, sender=G), "no-target")
+        self.sent()
 
     def test_g_problems_command_still_answers_only_g(self):
         self.assertEqual(self.say("problems", chat=GCHAT, sender=G), "g-problems")
