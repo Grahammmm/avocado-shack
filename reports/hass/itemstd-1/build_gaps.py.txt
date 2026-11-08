@@ -1,0 +1,176 @@
+"""ITEMSTD-1: turn audit.json + pictures-summary.json into reports/hass/catalog-gaps.json (one row per product and per maker).
+
+Run: python3 build_gaps.py REPO AUDIT_JSON PICTURES_SUMMARY_JSON COMMIT OUT_JSON
+Every question is checked with hass/voice.py (the shop's own voice rules) before it is written; a question that breaks a rule stops the build.
+"""
+import json
+import statistics
+import sys
+from collections import Counter, defaultdict
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+sys.path.insert(0, str(repo))
+from hass import voice  # noqa: E402
+
+audit = json.loads(Path(sys.argv[2]).read_text())
+pics = json.loads(Path(sys.argv[3]).read_text())
+commit, out_path = sys.argv[4], Path(sys.argv[5])
+products = json.loads((repo / "hass/content/products.json").read_text())["products"]
+makers = json.loads((repo / "hass/content/makers.json").read_text())["makers"]
+SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & cheese", "eggs": "Eggs", "meat": "Meat",
+                "pantry": "Pantry", "drinks": "Drinks & coffee", "bread": "Bread", "flowers": "Flowers"}
+SHELF_ORDER = list(SHELF_LABELS)
+FRESH = ("fruit", "vegetables", "flowers")
+PACKAGED_IDS = ("photo-product-018",)
+KEEP_CAPS = ("Hass", "Lion’s", "Sun", "San")
+ASK_ORDER = ["name", "shelf", "producer", "producer_town", "website", "own_photo"]  # fixed asking order (design, section 4 of the report)
+P95_DEV = pics["deviation_distribution"]["p95"]
+
+
+def item_type(p):
+    return "packaged" if (p["id"] in PACKAGED_IDS or p["category"] not in FRESH) else "fresh"
+
+
+def say(name):  # the product as a sentence part: lower-case first letter unless it is a proper name
+    first = name.split()[0]
+    return name if first in KEEP_CAPS or any(w[:1].isupper() for w in name.split()[1:]) else name[:1].lower() + name[1:]
+
+
+def ask(code, p=None, maker=None, place=None):
+    n = voice.quote(say(p["name"])) if p else ""
+    if code == "producer":
+        if p["producerKey"] is None and p["brand"] == "Avocado Shack":
+            return f"{voice.quote(p['brand'])} is shown as the brand on the {n}. Who grows or makes them?" if p["name"].endswith("s") else f"{voice.quote(p['brand'])} is shown as the brand on the {n}. Who grows or makes it?"
+        return f"Who grew the {n} this week?" if item_type(p) == "fresh" else f"Who supplies the {n}?"
+    if code == "producer_town":
+        if maker:
+            who = voice.quote(maker)
+        elif p and p["producerKey"] is None and p["brand"] not in ("Producer not identified", "Avocado Shack"):
+            who = voice.quote(p["brand"])
+        else:
+            who = "that farm"
+        return f"Which town is {who} in?"
+    if code == "shelf":
+        return None
+    if code == "own_photo":
+        return f"Could you send me a photo of the {n}?"
+    return None
+
+
+rows = []
+by_maker = defaultdict(list)
+cnt_vis = Counter()
+for p in sorted(products, key=lambda x: (SHELF_ORDER.index(x["category"]), x["name"].casefold(), x["id"])):
+    f = audit["rows_products"][p["id"]]
+    k = p.get("producerKey")
+    m = makers.get(k) if k else None
+    active = p["status"] == "active"
+    missing = [c for c in f["missing"]] if active else []
+    review = list(f["review"]) if active else []
+    display = list(f["display"]) if active else []
+    pic = pics["pictures"].get(p["id"]) if active else None
+    if pic and pic["deviation"] >= P95_DEV:
+        display.append("picture_unlike_the_rest")
+    # visibility tier (1 = most visible to a visitor)
+    t = item_type(p)
+    if not active:
+        tier = None
+    elif "producer" in missing:
+        tier = 1 if t == "packaged" else 2
+    elif "producer_town" in missing:
+        tier = 3
+    elif review:
+        tier = 4
+    elif [d for d in display if not d.startswith(("alt_is_default", "no_availability_word", "name_repeats_producer_line"))]:
+        tier = 5
+    else:
+        tier = None
+    order = [c for c in ASK_ORDER if c in missing]
+    shelf_q = None
+    if active and p["id"] == "photo-product-018":
+        shelf_q = f"Should the {voice.quote(say(p['name']))} be on the Pantry shelf? It is in a bag, but it sits with the vegetables now."
+    elif active and any(r.startswith("shelf_hint:fruit") for r in review):
+        shelf_q = f"Should the {voice.quote(say(p['name']))} be on the Fruit shelf? It sits with the vegetables now."
+    if shelf_q:
+        order = ["shelf"] + order
+    q = None
+    q_code = None
+    if active and order:
+        q_code = order[0]
+        q = shelf_q if q_code == "shelf" else ask(q_code, p, maker=(m["name"] if m else None))
+    if q:
+        assert not voice.check(q), (p["id"], q, voice.check(q))
+        q = voice.plain(q)
+    # the photo question is a separate, low-priority track: it is never the first gap question while another gap is open
+    row = {
+        "kind": "product", "id": p["id"], "name": p["name"], "status": p["status"], "shelf": SHELF_LABELS[p["category"]],
+        "item_type": t if active else None, "maker": (m["name"] if m else None),
+        "producer_class": ("maker" if k else ("market" if p["brand"] == "Producer not identified" else "own-brand")) if active else None,
+        "missing": missing, "display_problems": display, "needs_a_look": review,
+        "stock_picture": bool(active and "own_photo" in missing),
+        "visibility_tier": tier, "ask_order": order, "first_question_code": q_code, "question": q,
+        "track": ("information" if [c for c in order if c not in ("own_photo",)] else ("photo" if order else None)),
+    }
+    if not active:
+        row["note"] = "held for a manufacturer concern; not shown on the site; nothing to ask"
+    rows.append(row)
+    if active:
+        by_maker[k or "(no maker on file)"].append({"id": p["id"], "name": p["name"], "missing": [c for c in missing if c != "own_photo"]})
+    if tier:
+        cnt_vis[tier] += 1
+use = audit["makers_products"]
+for key, m in makers.items():
+    f = audit["rows_makers"][key]
+    missing = list(f["missing"])
+    q = None
+    if "producer_town" in missing:
+        q = f"Which town is {voice.quote(m['name'])} in? The website says {voice.quote(m['place'])}."
+        assert not voice.check(q), (key, q, voice.check(q))
+        q = voice.plain(q)
+    elif "story" in missing:
+        q = f"What would you like the website to say about {voice.quote(m['name'])}?"
+        q = voice.plain(q)
+    rows.append({
+        "kind": "maker", "id": key, "name": m["name"], "status": "hidden" if m.get("hidden") else "active", "place_on_site": m.get("place"),
+        "active_products": use.get(key, 0), "missing": missing, "display_problems": list(f["display"]), "needs_a_look": list(f["review"]),
+        "visibility_tier": 3 if "producer_town" in missing else None, "ask_order": [c for c in ASK_ORDER if c in missing],
+        "first_question_code": ("producer_town" if "producer_town" in missing else None), "question": q,
+    })
+
+act = [r for r in rows if r["kind"] == "product" and r["status"] == "active"]
+mk = [r for r in rows if r["kind"] == "maker"]
+miss = Counter(c for r in act for c in r["missing"])
+info_gap = [r for r in act if [c for c in r["missing"] if c != "own_photo"]]
+summary = {
+    "products_active": len(act), "products_held": sum(1 for r in rows if r["kind"] == "product" and r["status"] == "held"),
+    "makers": len(mk), "makers_with_a_gap": sum(1 for r in mk if r["missing"]),
+    "products_with_an_information_gap": len(info_gap),
+    "products_with_an_information_gap_percent": round(100 * len(info_gap) / len(act), 1),
+    "missing_by_field_products": dict(miss.most_common()),
+    "missing_by_field_makers": dict(Counter(c for r in mk for c in r["missing"]).most_common()),
+    "most_common_missing_field_information": max(((c, n) for c, n in miss.items() if c != "own_photo"), key=lambda x: x[1])[0],
+    "stock_picture_products": miss.get("own_photo", 0),
+    "producer_class": dict(Counter(r["producer_class"] for r in act)),
+    "item_type": dict(Counter(r["item_type"] for r in act)),
+    "visibility_tiers": {"1_generic_source_line_on_packaged_card": cnt_vis[1], "2_generic_source_line_on_fresh_card": cnt_vis[2],
+                         "3_vague_place_on_card": cnt_vis[3], "4_shelf_to_check": cnt_vis[4], "5_minor_display_note": cnt_vis[5]},
+    "display_problem_counts": dict(Counter(d.split(":")[0] for r in act for d in r["display_problems"]).most_common()),
+    "questions_ready": sum(1 for r in rows if r["question"]),
+}
+out = {
+    "schema": 1,
+    "about": "ITEMSTD-1 catalog audit: one row per product and per maker, measured against docs/hass/ITEM-STANDARD.md. Read from hass/content/*.json and storefront-mockup/assets/products at the commit below; nothing was changed. 'missing' lists what the standard requires and the saved record does not have; 'question' is the one plain question to ask Mike first (words checked with hass/voice.py). A held product is listed but never asked about.",
+    "source_commit": commit,
+    "codes": {"producer": "who grew or made it (no maker or farm on file; the card says 'From the market' and 'Ask us about the source in store.')",
+              "producer_town": "the producer's town (no maker, or the maker's place on the site is a region, not a town)",
+              "own_photo": "Mike's own photo (the card shows the stock picture; an upgrade, not a blocker)",
+              "website": "the maker's website (optional)", "story": "the maker's about text", "shelf": "the item may be on the wrong shelf (asked as a yes/no)"},
+    "visibility_tiers": {"1": "card face shows the generic source line on the packaged view the shop opens on", "2": "same, on the fresh-produce view",
+                         "3": "card face shows a vague place (a region, not a town)", "4": "shelf worth a look", "5": "minor display note"},
+    "summary": summary,
+    "by_maker": {k: v for k, v in sorted(by_maker.items(), key=lambda kv: (-len([x for x in kv[1] if x["missing"]]), kv[0]))},
+    "rows": rows,
+}
+out_path.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+print(json.dumps(summary, indent=1))

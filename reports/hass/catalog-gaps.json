@@ -1,0 +1,6444 @@
+{
+ "schema": 1,
+ "about": "ITEMSTD-1 catalog audit: one row per product and per maker, measured against docs/hass/ITEM-STANDARD.md. Read from hass/content/*.json and storefront-mockup/assets/products at the commit below; nothing was changed. 'missing' lists what the standard requires and the saved record does not have; 'question' is the one plain question to ask Mike first (words checked with hass/voice.py). A held product is listed but never asked about.",
+ "source_commit": "56c907093b6ba62c2e5a6188d5363961b560b00b",
+ "codes": {
+  "producer": "who grew or made it (no maker or farm on file; the card says 'From the market' and 'Ask us about the source in store.')",
+  "producer_town": "the producer's town (no maker, or the maker's place on the site is a region, not a town)",
+  "own_photo": "Mike's own photo (the card shows the stock picture; an upgrade, not a blocker)",
+  "website": "the maker's website (optional)",
+  "story": "the maker's about text",
+  "shelf": "the item may be on the wrong shelf (asked as a yes/no)"
+ },
+ "visibility_tiers": {
+  "1": "card face shows the generic source line on the packaged view the shop opens on",
+  "2": "same, on the fresh-produce view",
+  "3": "card face shows a vague place (a region, not a town)",
+  "4": "shelf worth a look",
+  "5": "minor display note"
+ },
+ "summary": {
+  "products_active": 170,
+  "products_held": 2,
+  "makers": 26,
+  "makers_with_a_gap": 6,
+  "products_with_an_information_gap": 80,
+  "products_with_an_information_gap_percent": 47.1,
+  "missing_by_field_products": {
+   "own_photo": 170,
+   "producer_town": 80,
+   "producer": 64
+  },
+  "missing_by_field_makers": {
+   "producer_town": 6
+  },
+  "most_common_missing_field_information": "producer_town",
+  "stock_picture_products": 170,
+  "producer_class": {
+   "market": 62,
+   "own-brand": 3,
+   "maker": 105
+  },
+  "item_type": {
+   "fresh": 65,
+   "packaged": 105
+  },
+  "visibility_tiers": {
+   "1_generic_source_line_on_packaged_card": 8,
+   "2_generic_source_line_on_fresh_card": 56,
+   "3_vague_place_on_card": 16,
+   "4_shelf_to_check": 1,
+   "5_minor_display_note": 11
+  },
+  "display_problem_counts": {
+   "alt_is_default": 170,
+   "no_availability_word": 170,
+   "name_repeats_producer_line": 32,
+   "picture_unlike_the_rest": 9,
+   "name_odd_char": 3,
+   "name_long": 1
+  },
+  "questions_ready": 176
+ },
+ "by_maker": {
+  "(no maker on file)": [
+   {
+    "id": "photo-product-098",
+    "name": "Blackberries",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-058",
+    "name": "Blueberries",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-097",
+    "name": "Figs",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-059",
+    "name": "Golden raspberries",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-001",
+    "name": "Hass avocado",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-080",
+    "name": "Honeydew-type melon",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-017",
+    "name": "Lemons",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-016",
+    "name": "Oranges",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-096",
+    "name": "Passion fruit",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-056",
+    "name": "Strawberries",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-078",
+    "name": "Watermelon",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-063",
+    "name": "Bok choy",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-061",
+    "name": "Broccoli",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-066",
+    "name": "Bunched carrots",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-079",
+    "name": "Cantaloupe",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-065",
+    "name": "Celery",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-154",
+    "name": "Chanterelle mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-169",
+    "name": "Cherry tomatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-156",
+    "name": "Crimini mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-075",
+    "name": "Eggplant",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-060",
+    "name": "Fennel",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-099",
+    "name": "Garlic",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-073",
+    "name": "Ginger",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-145",
+    "name": "Gold potatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-149",
+    "name": "Green cabbage",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-167",
+    "name": "Green onions",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-161",
+    "name": "Horseradish",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-162",
+    "name": "Jalapeños",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-151",
+    "name": "King oyster mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-064",
+    "name": "Leeks",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-068",
+    "name": "Lettuce",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-150",
+    "name": "Lion’s mane mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-155",
+    "name": "Lobster mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-148",
+    "name": "Loose carrots",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-153",
+    "name": "Maitake mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-071",
+    "name": "Mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-076",
+    "name": "Peppers",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-165",
+    "name": "Poblano peppers",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-067",
+    "name": "Potatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-104",
+    "name": "Purple daikon",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-147",
+    "name": "Purple potatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-103",
+    "name": "Radicchio",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-164",
+    "name": "Red bell peppers",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-102",
+    "name": "Red onions",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-146",
+    "name": "Red potatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-062",
+    "name": "Romaine lettuce",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-168",
+    "name": "San Marzano tomatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-100",
+    "name": "Shallots",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-152",
+    "name": "Shiitake mushrooms",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-170",
+    "name": "Sun Gold tomatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-163",
+    "name": "Sweet peppers",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-077",
+    "name": "Tomatoes",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-074",
+    "name": "Turmeric",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-101",
+    "name": "Yellow onions",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-166",
+    "name": "Zucchini",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-142",
+    "name": "Almonds",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-140",
+    "name": "Black beans",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-055",
+    "name": "Cashews",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-141",
+    "name": "Chickpeas",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-138",
+    "name": "Crimson lentils",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-143",
+    "name": "Pistachios",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-139",
+    "name": "Red beans",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-144",
+    "name": "Trail mix",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-014",
+    "name": "Zero non-alcoholic cider",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-006",
+    "name": "Mixed flower bouquet",
+    "missing": [
+     "producer",
+     "producer_town"
+    ]
+   }
+  ],
+  "Straus": [
+   {
+    "id": "photo-product-126",
+    "name": "Greek Whole Milk Plain yogurt",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-027",
+    "name": "Organic whole milk",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-127",
+    "name": "Sour cream",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-028",
+    "name": "Straus butter",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-025",
+    "name": "Straus half-and-half",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-026",
+    "name": "Straus heavy whipping cream",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-125",
+    "name": "Whole Milk Plain European Style yogurt",
+    "missing": [
+     "producer_town"
+    ]
+   }
+  ],
+  "Alle-Pia": [
+   {
+    "id": "photo-product-021",
+    "name": "Alle-Pia Calabrese salamini",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-022",
+    "name": "Alle-Pia guanciale",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-023",
+    "name": "Alle-Pia mortadella",
+    "missing": [
+     "producer_town"
+    ]
+   }
+  ],
+  "Sierra Nevada": [
+   {
+    "id": "photo-product-132",
+    "name": "Habanero Sierra Jack",
+    "missing": [
+     "producer_town"
+    ]
+   },
+   {
+    "id": "photo-product-131",
+    "name": "Hatch Chile Sierra Jack",
+    "missing": [
+     "producer_town"
+    ]
+   }
+  ],
+  "Ava’s": [
+   {
+    "id": "photo-product-081",
+    "name": "Keitt mango",
+    "missing": [
+     "producer_town"
+    ]
+   }
+  ],
+  "Corberosa": [
+   {
+    "id": "photo-product-087",
+    "name": "Packer’s Blend coffee bags",
+    "missing": [
+     "producer_town"
+    ]
+   }
+  ],
+  "Massa Organics": [
+   {
+    "id": "photo-product-054",
+    "name": "Massa Organics brown rice",
+    "missing": [
+     "producer_town"
+    ]
+   }
+  ],
+  "AG Berries": [
+   {
+    "id": "photo-product-057",
+    "name": "Raspberries",
+    "missing": []
+   }
+  ],
+  "Big Sur Honey Company": [
+   {
+    "id": "photo-product-042",
+    "name": "Big Sur Honey Company honey",
+    "missing": []
+   }
+  ],
+  "Brian's": [
+   {
+    "id": "photo-product-015",
+    "name": "Brian's sourdough bread",
+    "missing": []
+   },
+   {
+    "id": "photo-product-124",
+    "name": "Cracked Wheat Sourdough",
+    "missing": []
+   },
+   {
+    "id": "photo-product-123",
+    "name": "Rosemary Sourdough with Olive Oil",
+    "missing": []
+   },
+   {
+    "id": "photo-product-122",
+    "name": "Rye bread",
+    "missing": []
+   }
+  ],
+  "Cal Poly": [
+   {
+    "id": "photo-product-037",
+    "name": "Cal Poly chipotle cheddar",
+    "missing": []
+   },
+   {
+    "id": "photo-product-039",
+    "name": "Cal Poly Highland cheddar",
+    "missing": []
+   },
+   {
+    "id": "photo-product-038",
+    "name": "Cal Poly white cheddar",
+    "missing": []
+   },
+   {
+    "id": "photo-product-130",
+    "name": "Gouda",
+    "missing": []
+   },
+   {
+    "id": "photo-product-024",
+    "name": "Cal Poly eggs",
+    "missing": []
+   },
+   {
+    "id": "photo-product-118",
+    "name": "Birthday Cake chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-010",
+    "name": "Cal Poly blackberry jam",
+    "missing": []
+   },
+   {
+    "id": "photo-product-012",
+    "name": "Cal Poly chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-009",
+    "name": "Cal Poly raspberry jam",
+    "missing": []
+   },
+   {
+    "id": "photo-product-008",
+    "name": "Cal Poly strawberry jam",
+    "missing": []
+   },
+   {
+    "id": "photo-product-110",
+    "name": "Cookies and Cream chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-112",
+    "name": "Dark chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-115",
+    "name": "Habanero chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-114",
+    "name": "Lemon Bar white chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-117",
+    "name": "Lemon Lavender white chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-113",
+    "name": "Milk chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-119",
+    "name": "Mustang Kick BBQ sauce",
+    "missing": []
+   },
+   {
+    "id": "photo-product-109",
+    "name": "Peppermint Crunch chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-011",
+    "name": "Sweet Hickory BBQ sauce",
+    "missing": []
+   },
+   {
+    "id": "photo-product-116",
+    "name": "S’mores chocolate",
+    "missing": []
+   },
+   {
+    "id": "photo-product-111",
+    "name": "Zesty Orange chocolate",
+    "missing": []
+   }
+  ],
+  "Cayucos": [
+   {
+    "id": "photo-product-120",
+    "name": "Carrot Habanero hot sauce",
+    "missing": []
+   },
+   {
+    "id": "photo-product-121",
+    "name": "Green hot sauce",
+    "missing": []
+   },
+   {
+    "id": "photo-product-013",
+    "name": "Original hot sauce",
+    "missing": []
+   }
+  ],
+  "Etto": [
+   {
+    "id": "photo-product-082",
+    "name": "Artisan short-cut pasta",
+    "missing": []
+   },
+   {
+    "id": "photo-product-173",
+    "name": "Casarecce pasta",
+    "missing": []
+   },
+   {
+    "id": "photo-product-174",
+    "name": "Conchiglie pasta",
+    "missing": []
+   },
+   {
+    "id": "photo-product-171",
+    "name": "Radiatori pasta",
+    "missing": []
+   },
+   {
+    "id": "photo-product-172",
+    "name": "Rigatoni pasta",
+    "missing": []
+   }
+  ],
+  "Fair Hills Farm": [
+   {
+    "id": "photo-product-007",
+    "name": "Fair Hills Farm apple juice",
+    "missing": []
+   },
+   {
+    "id": "photo-product-049",
+    "name": "Fair Hills Farm black tea",
+    "missing": []
+   },
+   {
+    "id": "photo-product-048",
+    "name": "Fair Hills Farm chamomile tea",
+    "missing": []
+   },
+   {
+    "id": "photo-product-050",
+    "name": "Fair Hills Farm cinnamon black tea",
+    "missing": []
+   },
+   {
+    "id": "photo-product-051",
+    "name": "Ginger black tea",
+    "missing": []
+   }
+  ],
+  "Green Gold": [
+   {
+    "id": "photo-product-159",
+    "name": "Arugula microgreens",
+    "missing": []
+   },
+   {
+    "id": "photo-product-160",
+    "name": "Broccoli microgreens",
+    "missing": []
+   },
+   {
+    "id": "photo-product-157",
+    "name": "Cilantro microgreens",
+    "missing": []
+   },
+   {
+    "id": "photo-product-158",
+    "name": "Radish Mix microgreens",
+    "missing": []
+   },
+   {
+    "id": "photo-product-072",
+    "name": "Sunflower microgreens",
+    "missing": []
+   }
+  ],
+  "Jayleaf": [
+   {
+    "id": "photo-product-069",
+    "name": "Spring Greens",
+    "missing": []
+   },
+   {
+    "id": "photo-product-070",
+    "name": "Wild Arugula",
+    "missing": []
+   }
+  ],
+  "Joebella / Avocado Shack": [
+   {
+    "id": "photo-product-093",
+    "name": "Avocado Shack (Hands)",
+    "missing": []
+   },
+   {
+    "id": "photo-product-083",
+    "name": "Albino Coast Redwood Blend",
+    "missing": []
+   },
+   {
+    "id": "photo-product-092",
+    "name": "Avocado Shack Blend (Hut)",
+    "missing": []
+   },
+   {
+    "id": "photo-product-095",
+    "name": "Cambria Blend",
+    "missing": []
+   },
+   {
+    "id": "photo-product-094",
+    "name": "Cass Hill Blend",
+    "missing": []
+   },
+   {
+    "id": "photo-product-084",
+    "name": "Cone Peak Blend",
+    "missing": []
+   },
+   {
+    "id": "photo-product-085",
+    "name": "Dream Girl Decaf",
+    "missing": []
+   },
+   {
+    "id": "photo-product-086",
+    "name": "Peace Be With You Blend",
+    "missing": []
+   }
+  ],
+  "Linn's": [
+   {
+    "id": "photo-product-108",
+    "name": "Blood Orange marmalade",
+    "missing": []
+   },
+   {
+    "id": "photo-product-107",
+    "name": "California Apricot preserves",
+    "missing": []
+   },
+   {
+    "id": "photo-product-003",
+    "name": "Linn's blueberry preserves",
+    "missing": []
+   },
+   {
+    "id": "photo-product-004",
+    "name": "Linn's boysenberry preserves",
+    "missing": []
+   },
+   {
+    "id": "photo-product-005",
+    "name": "Linn's orange marmalade",
+    "missing": []
+   },
+   {
+    "id": "photo-product-002",
+    "name": "Linn's triple berry preserves",
+    "missing": []
+   },
+   {
+    "id": "photo-product-106",
+    "name": "Strawberry preserves",
+    "missing": []
+   },
+   {
+    "id": "photo-product-105",
+    "name": "Sunshine Peach preserves",
+    "missing": []
+   }
+  ],
+  "Love Beets": [
+   {
+    "id": "photo-product-019",
+    "name": "Organic beet juice",
+    "missing": []
+   }
+  ],
+  "Maple Valley": [
+   {
+    "id": "photo-product-052",
+    "name": "Maple Valley dark and robust maple syrup",
+    "missing": []
+   }
+  ],
+  "Mighty Cap Mushrooms": [
+   {
+    "id": "photo-product-136",
+    "name": "Dried king oyster mushrooms",
+    "missing": []
+   },
+   {
+    "id": "photo-product-046",
+    "name": "Dried lion’s mane mushrooms",
+    "missing": []
+   },
+   {
+    "id": "photo-product-047",
+    "name": "Dried maitake mushrooms",
+    "missing": []
+   },
+   {
+    "id": "photo-product-134",
+    "name": "Dried morels",
+    "missing": []
+   },
+   {
+    "id": "photo-product-044",
+    "name": "Dried mushrooms",
+    "missing": []
+   },
+   {
+    "id": "photo-product-135",
+    "name": "Dried shiitake",
+    "missing": []
+   },
+   {
+    "id": "photo-product-137",
+    "name": "Mushroom Umami Sauce",
+    "missing": []
+   }
+  ],
+  "Ocean Ranch": [
+   {
+    "id": "photo-product-088",
+    "name": "Cranberry Orange granola",
+    "missing": []
+   },
+   {
+    "id": "photo-product-090",
+    "name": "Lemon Blueberry granola",
+    "missing": []
+   },
+   {
+    "id": "photo-product-089",
+    "name": "Oaxacan Chocolate granola",
+    "missing": []
+   },
+   {
+    "id": "photo-product-091",
+    "name": "Turmeric Goji Berry granola",
+    "missing": []
+   }
+  ],
+  "Sean's": [
+   {
+    "id": "photo-product-053",
+    "name": "Sean's muesli munch",
+    "missing": []
+   }
+  ],
+  "Stardust Grove": [
+   {
+    "id": "photo-product-032",
+    "name": "Garlic pesto",
+    "missing": []
+   },
+   {
+    "id": "photo-product-031",
+    "name": "Guacamole",
+    "missing": []
+   }
+  ],
+  "Stepladder": [
+   {
+    "id": "photo-product-128",
+    "name": "Big Sur cheese",
+    "missing": []
+   },
+   {
+    "id": "photo-product-035",
+    "name": "Chèvre",
+    "missing": []
+   },
+   {
+    "id": "photo-product-129",
+    "name": "Marinated Fromage Blanc",
+    "missing": []
+   },
+   {
+    "id": "photo-product-029",
+    "name": "Ragged Point cheese",
+    "missing": []
+   },
+   {
+    "id": "photo-product-034",
+    "name": "Stepladder Bixby cheese",
+    "missing": []
+   },
+   {
+    "id": "photo-product-030",
+    "name": "Stepladder cultured butter",
+    "missing": []
+   },
+   {
+    "id": "photo-product-033",
+    "name": "Stepladder Rocky Butte cheese",
+    "missing": []
+   },
+   {
+    "id": "photo-product-041",
+    "name": "Stepladder avocado blossom honey",
+    "missing": []
+   }
+  ],
+  "Sunshine Olive": [
+   {
+    "id": "photo-product-043",
+    "name": "Sunshine Estate olive oil",
+    "missing": []
+   },
+   {
+    "id": "photo-product-045",
+    "name": "Sunshine Olive Spanish Oaks Picual olive oil",
+    "missing": []
+   }
+  ],
+  "Taco Works": [
+   {
+    "id": "photo-product-018",
+    "name": "Montaña de Oro Sea Salt tortilla chips",
+    "missing": []
+   }
+  ]
+ },
+ "rows": [
+  {
+   "kind": "product",
+   "id": "photo-product-098",
+   "name": "Blackberries",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the blackberries this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-058",
+   "name": "Blueberries",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the blueberries this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-097",
+   "name": "Figs",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the figs this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-059",
+   "name": "Golden raspberries",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the golden raspberries this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-001",
+   "name": "Hass avocado",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "own-brand",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Avocado Shack is shown as the brand on the Hass avocado. Who grows or makes it?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-080",
+   "name": "Honeydew-type melon",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the honeydew-type melon this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-081",
+   "name": "Keitt mango",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": "Ava’s",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Ava’s in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-017",
+   "name": "Lemons",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the lemons this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-016",
+   "name": "Oranges",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the oranges this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-096",
+   "name": "Passion fruit",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the passion fruit this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-057",
+   "name": "Raspberries",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": "AG Berries",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the raspberries?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-056",
+   "name": "Strawberries",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the strawberries this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-078",
+   "name": "Watermelon",
+   "status": "active",
+   "shelf": "Fruit",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the watermelon this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-159",
+   "name": "Arugula microgreens",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": "Green Gold",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the arugula microgreens?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-063",
+   "name": "Bok choy",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the bok choy this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-061",
+   "name": "Broccoli",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the broccoli this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-160",
+   "name": "Broccoli microgreens",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": "Green Gold",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the broccoli microgreens?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-066",
+   "name": "Bunched carrots",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the bunched carrots this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-079",
+   "name": "Cantaloupe",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [
+    "shelf_hint:fruit(cantaloupe)"
+   ],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "shelf",
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "shelf",
+   "question": "Should the cantaloupe be on the Fruit shelf? It sits with the vegetables now.",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-065",
+   "name": "Celery",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the celery this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-154",
+   "name": "Chanterelle mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the chanterelle mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-169",
+   "name": "Cherry tomatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the cherry tomatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-157",
+   "name": "Cilantro microgreens",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": "Green Gold",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the cilantro microgreens?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-156",
+   "name": "Crimini mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the crimini mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-075",
+   "name": "Eggplant",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the eggplant this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-060",
+   "name": "Fennel",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the fennel this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-099",
+   "name": "Garlic",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the garlic this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-073",
+   "name": "Ginger",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the ginger this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-145",
+   "name": "Gold potatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the gold potatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-149",
+   "name": "Green cabbage",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the green cabbage this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-167",
+   "name": "Green onions",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the green onions this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-161",
+   "name": "Horseradish",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the horseradish this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-162",
+   "name": "Jalapeños",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_odd_char:LATIN SMALL LETTER N WITH TILDE",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the jalapeños this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-151",
+   "name": "King oyster mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the king oyster mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-064",
+   "name": "Leeks",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the leeks this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-068",
+   "name": "Lettuce",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the lettuce this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-150",
+   "name": "Lion’s mane mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the Lion’s mane mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-155",
+   "name": "Lobster mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the lobster mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-148",
+   "name": "Loose carrots",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the loose carrots this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-153",
+   "name": "Maitake mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the maitake mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-018",
+   "name": "Montaña de Oro Sea Salt tortilla chips",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "packaged",
+   "maker": "Taco Works",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_odd_char:LATIN SMALL LETTER N WITH TILDE",
+    "no_availability_word"
+   ],
+   "needs_a_look": [
+    "shelf_hint:pantry(chips)",
+    "packaged_word_on_fresh_shelf",
+    "hard_coded_packaged_exception_in_shop_js"
+   ],
+   "stock_picture": true,
+   "visibility_tier": 4,
+   "ask_order": [
+    "shelf",
+    "own_photo"
+   ],
+   "first_question_code": "shelf",
+   "question": "Should the Montaña de Oro Sea Salt tortilla chips be on the Pantry shelf? It is in a bag, but it sits with the vegetables now.",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-071",
+   "name": "Mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-076",
+   "name": "Peppers",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the peppers this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-165",
+   "name": "Poblano peppers",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the poblano peppers this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-067",
+   "name": "Potatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the potatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-104",
+   "name": "Purple daikon",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the purple daikon this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-147",
+   "name": "Purple potatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the purple potatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-103",
+   "name": "Radicchio",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the radicchio this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-158",
+   "name": "Radish Mix microgreens",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": "Green Gold",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Radish Mix microgreens?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-164",
+   "name": "Red bell peppers",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the red bell peppers this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-102",
+   "name": "Red onions",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the red onions this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-146",
+   "name": "Red potatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the red potatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-062",
+   "name": "Romaine lettuce",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the romaine lettuce this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-168",
+   "name": "San Marzano tomatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the San Marzano tomatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-100",
+   "name": "Shallots",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the shallots this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-152",
+   "name": "Shiitake mushrooms",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the shiitake mushrooms this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-069",
+   "name": "Spring Greens",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": "Jayleaf",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Spring Greens?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-170",
+   "name": "Sun Gold tomatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the Sun Gold tomatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-072",
+   "name": "Sunflower microgreens",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": "Green Gold",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the sunflower microgreens?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-163",
+   "name": "Sweet peppers",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the sweet peppers this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-077",
+   "name": "Tomatoes",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the tomatoes this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-074",
+   "name": "Turmeric",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the turmeric this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-070",
+   "name": "Wild Arugula",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": "Jayleaf",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Wild Arugula?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-101",
+   "name": "Yellow onions",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the yellow onions this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-166",
+   "name": "Zucchini",
+   "status": "active",
+   "shelf": "Vegetables",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the zucchini this week?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-128",
+   "name": "Big Sur cheese",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Big Sur cheese?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-037",
+   "name": "Cal Poly chipotle cheddar",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly chipotle cheddar?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-039",
+   "name": "Cal Poly Highland cheddar",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly Highland cheddar?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-038",
+   "name": "Cal Poly white cheddar",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly white cheddar?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-035",
+   "name": "Chèvre",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_odd_char:LATIN SMALL LETTER E WITH GRAVE",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the chèvre?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-130",
+   "name": "Gouda",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the gouda?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-126",
+   "name": "Greek Whole Milk Plain yogurt",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Straus",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-132",
+   "name": "Habanero Sierra Jack",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Sierra Nevada",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Sierra Nevada in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-131",
+   "name": "Hatch Chile Sierra Jack",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Sierra Nevada",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Sierra Nevada in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-129",
+   "name": "Marinated Fromage Blanc",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Marinated Fromage Blanc?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-027",
+   "name": "Organic whole milk",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Straus",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-029",
+   "name": "Ragged Point cheese",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Ragged Point cheese?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-133",
+   "name": "Raw Milk Goat Cheddar",
+   "status": "held",
+   "shelf": "Dairy & cheese",
+   "item_type": null,
+   "maker": null,
+   "producer_class": null,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "stock_picture": false,
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null,
+   "track": null,
+   "note": "held for a manufacturer concern; not shown on the site; nothing to ask"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-040",
+   "name": "Raw milk white cheddar",
+   "status": "held",
+   "shelf": "Dairy & cheese",
+   "item_type": null,
+   "maker": null,
+   "producer_class": null,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "stock_picture": false,
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null,
+   "track": null,
+   "note": "held for a manufacturer concern; not shown on the site; nothing to ask"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-127",
+   "name": "Sour cream",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Straus",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-034",
+   "name": "Stepladder Bixby cheese",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Stepladder Bixby cheese?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-030",
+   "name": "Stepladder cultured butter",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the stepladder cultured butter?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-033",
+   "name": "Stepladder Rocky Butte cheese",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Stepladder Rocky Butte cheese?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-028",
+   "name": "Straus butter",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Straus",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-025",
+   "name": "Straus half-and-half",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Straus",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-026",
+   "name": "Straus heavy whipping cream",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Straus",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-125",
+   "name": "Whole Milk Plain European Style yogurt",
+   "status": "active",
+   "shelf": "Dairy & cheese",
+   "item_type": "packaged",
+   "maker": "Straus",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-024",
+   "name": "Cal Poly eggs",
+   "status": "active",
+   "shelf": "Eggs",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly eggs?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-021",
+   "name": "Alle-Pia Calabrese salamini",
+   "status": "active",
+   "shelf": "Meat",
+   "item_type": "packaged",
+   "maker": "Alle-Pia",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Alle-Pia in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-022",
+   "name": "Alle-Pia guanciale",
+   "status": "active",
+   "shelf": "Meat",
+   "item_type": "packaged",
+   "maker": "Alle-Pia",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Alle-Pia in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-023",
+   "name": "Alle-Pia mortadella",
+   "status": "active",
+   "shelf": "Meat",
+   "item_type": "packaged",
+   "maker": "Alle-Pia",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Alle-Pia in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-142",
+   "name": "Almonds",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who supplies the almonds?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-082",
+   "name": "Artisan short-cut pasta",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Etto",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the artisan short-cut pasta?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-093",
+   "name": "Avocado Shack (Hands)",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Avocado Shack (Hands)?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-042",
+   "name": "Big Sur Honey Company honey",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Big Sur Honey Company",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Big Sur Honey Company honey?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-118",
+   "name": "Birthday Cake chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Birthday Cake chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-140",
+   "name": "Black beans",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who supplies the black beans?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-108",
+   "name": "Blood Orange marmalade",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Blood Orange marmalade?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-010",
+   "name": "Cal Poly blackberry jam",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly blackberry jam?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-012",
+   "name": "Cal Poly chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-009",
+   "name": "Cal Poly raspberry jam",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly raspberry jam?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-008",
+   "name": "Cal Poly strawberry jam",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cal Poly strawberry jam?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-107",
+   "name": "California Apricot preserves",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the California Apricot preserves?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-120",
+   "name": "Carrot Habanero hot sauce",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cayucos",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Carrot Habanero hot sauce?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-173",
+   "name": "Casarecce pasta",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Etto",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the casarecce pasta?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-055",
+   "name": "Cashews",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "own-brand",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Avocado Shack is shown as the brand on the cashews. Who grows or makes them?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-141",
+   "name": "Chickpeas",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who supplies the chickpeas?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-174",
+   "name": "Conchiglie pasta",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Etto",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the conchiglie pasta?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-110",
+   "name": "Cookies and Cream chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cookies and Cream chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-088",
+   "name": "Cranberry Orange granola",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Ocean Ranch",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cranberry Orange granola?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-138",
+   "name": "Crimson lentils",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who supplies the crimson lentils?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-112",
+   "name": "Dark chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the dark chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-136",
+   "name": "Dried king oyster mushrooms",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Mighty Cap Mushrooms",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the dried king oyster mushrooms?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-046",
+   "name": "Dried lion’s mane mushrooms",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Mighty Cap Mushrooms",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the dried lion’s mane mushrooms?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-047",
+   "name": "Dried maitake mushrooms",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Mighty Cap Mushrooms",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the dried maitake mushrooms?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-134",
+   "name": "Dried morels",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Mighty Cap Mushrooms",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the dried morels?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-044",
+   "name": "Dried mushrooms",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Mighty Cap Mushrooms",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the dried mushrooms?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-135",
+   "name": "Dried shiitake",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Mighty Cap Mushrooms",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the dried shiitake?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-032",
+   "name": "Garlic pesto",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Stardust Grove",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the garlic pesto?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-121",
+   "name": "Green hot sauce",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cayucos",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the green hot sauce?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-031",
+   "name": "Guacamole",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Stardust Grove",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the guacamole?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-115",
+   "name": "Habanero chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the habanero chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-114",
+   "name": "Lemon Bar white chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Lemon Bar white chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-090",
+   "name": "Lemon Blueberry granola",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Ocean Ranch",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Lemon Blueberry granola?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-117",
+   "name": "Lemon Lavender white chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Lemon Lavender white chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-003",
+   "name": "Linn's blueberry preserves",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the linn's blueberry preserves?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-004",
+   "name": "Linn's boysenberry preserves",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the linn's boysenberry preserves?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-005",
+   "name": "Linn's orange marmalade",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the linn's orange marmalade?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-002",
+   "name": "Linn's triple berry preserves",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the linn's triple berry preserves?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-052",
+   "name": "Maple Valley dark and robust maple syrup",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Maple Valley",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Maple Valley dark and robust maple syrup?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-054",
+   "name": "Massa Organics brown rice",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Massa Organics",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Massa Organics in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-113",
+   "name": "Milk chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the milk chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-137",
+   "name": "Mushroom Umami Sauce",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Mighty Cap Mushrooms",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Mushroom Umami Sauce?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-119",
+   "name": "Mustang Kick BBQ sauce",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Mustang Kick BBQ sauce?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-089",
+   "name": "Oaxacan Chocolate granola",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Ocean Ranch",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Oaxacan Chocolate granola?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-013",
+   "name": "Original hot sauce",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cayucos",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the original hot sauce?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-109",
+   "name": "Peppermint Crunch chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Peppermint Crunch chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-143",
+   "name": "Pistachios",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who supplies the pistachios?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-171",
+   "name": "Radiatori pasta",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Etto",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the radiatori pasta?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-139",
+   "name": "Red beans",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who supplies the red beans?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-172",
+   "name": "Rigatoni pasta",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Etto",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the rigatoni pasta?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-053",
+   "name": "Sean's muesli munch",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Sean's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the sean's muesli munch?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-041",
+   "name": "Stepladder avocado blossom honey",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Stepladder",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the stepladder avocado blossom honey?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-106",
+   "name": "Strawberry preserves",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the strawberry preserves?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-043",
+   "name": "Sunshine Estate olive oil",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Sunshine Olive",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Sunshine Estate olive oil?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-045",
+   "name": "Sunshine Olive Spanish Oaks Picual olive oil",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Sunshine Olive",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_long:44",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Sunshine Olive Spanish Oaks Picual olive oil?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-105",
+   "name": "Sunshine Peach preserves",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Linn's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Sunshine Peach preserves?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-011",
+   "name": "Sweet Hickory BBQ sauce",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Sweet Hickory BBQ sauce?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-116",
+   "name": "S’mores chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the s’mores chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-144",
+   "name": "Trail mix",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 1,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who supplies the trail mix?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-091",
+   "name": "Turmeric Goji Berry granola",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Ocean Ranch",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Turmeric Goji Berry granola?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-111",
+   "name": "Zesty Orange chocolate",
+   "status": "active",
+   "shelf": "Pantry",
+   "item_type": "packaged",
+   "maker": "Cal Poly",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Zesty Orange chocolate?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-083",
+   "name": "Albino Coast Redwood Blend",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Albino Coast Redwood Blend?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-092",
+   "name": "Avocado Shack Blend (Hut)",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Avocado Shack Blend (Hut)?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-095",
+   "name": "Cambria Blend",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cambria Blend?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-094",
+   "name": "Cass Hill Blend",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cass Hill Blend?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-084",
+   "name": "Cone Peak Blend",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cone Peak Blend?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-085",
+   "name": "Dream Girl Decaf",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Dream Girl Decaf?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-007",
+   "name": "Fair Hills Farm apple juice",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Fair Hills Farm",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Fair Hills Farm apple juice?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-049",
+   "name": "Fair Hills Farm black tea",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Fair Hills Farm",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Fair Hills Farm black tea?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-048",
+   "name": "Fair Hills Farm chamomile tea",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Fair Hills Farm",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Fair Hills Farm chamomile tea?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-050",
+   "name": "Fair Hills Farm cinnamon black tea",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Fair Hills Farm",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Fair Hills Farm cinnamon black tea?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-051",
+   "name": "Ginger black tea",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Fair Hills Farm",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the ginger black tea?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-019",
+   "name": "Organic beet juice",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Love Beets",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the organic beet juice?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-087",
+   "name": "Packer’s Blend coffee bags",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Corberosa",
+   "producer_class": "maker",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Corberosa in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-086",
+   "name": "Peace Be With You Blend",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": "Joebella / Avocado Shack",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Peace Be With You Blend?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-014",
+   "name": "Zero non-alcoholic cider",
+   "status": "active",
+   "shelf": "Drinks & coffee",
+   "item_type": "packaged",
+   "maker": null,
+   "producer_class": "own-brand",
+   "missing": [
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [
+    "brand_without_maker_record:SLO Cider"
+   ],
+   "stock_picture": true,
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is SLO Cider in?",
+   "track": "information"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-015",
+   "name": "Brian's sourdough bread",
+   "status": "active",
+   "shelf": "Bread",
+   "item_type": "packaged",
+   "maker": "Brian's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "name_repeats_producer_line",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the brian's sourdough bread?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-124",
+   "name": "Cracked Wheat Sourdough",
+   "status": "active",
+   "shelf": "Bread",
+   "item_type": "packaged",
+   "maker": "Brian's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Cracked Wheat Sourdough?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-123",
+   "name": "Rosemary Sourdough with Olive Oil",
+   "status": "active",
+   "shelf": "Bread",
+   "item_type": "packaged",
+   "maker": "Brian's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word",
+    "picture_unlike_the_rest"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 5,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the Rosemary Sourdough with Olive Oil?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-122",
+   "name": "Rye bread",
+   "status": "active",
+   "shelf": "Bread",
+   "item_type": "packaged",
+   "maker": "Brian's",
+   "producer_class": "maker",
+   "missing": [
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": null,
+   "ask_order": [
+    "own_photo"
+   ],
+   "first_question_code": "own_photo",
+   "question": "Could you send me a photo of the rye bread?",
+   "track": "photo"
+  },
+  {
+   "kind": "product",
+   "id": "photo-product-006",
+   "name": "Mixed flower bouquet",
+   "status": "active",
+   "shelf": "Flowers",
+   "item_type": "fresh",
+   "maker": null,
+   "producer_class": "market",
+   "missing": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "display_problems": [
+    "alt_is_default",
+    "no_availability_word"
+   ],
+   "needs_a_look": [],
+   "stock_picture": true,
+   "visibility_tier": 2,
+   "ask_order": [
+    "producer",
+    "producer_town",
+    "own_photo"
+   ],
+   "first_question_code": "producer",
+   "question": "Who grew the mixed flower bouquet this week?",
+   "track": "information"
+  },
+  {
+   "kind": "maker",
+   "id": "Etto",
+   "name": "Etto",
+   "status": "active",
+   "place_on_site": "Paso Robles, California",
+   "active_products": 5,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Stepladder",
+   "name": "Stepladder",
+   "status": "active",
+   "place_on_site": "Cambria, California",
+   "active_products": 8,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Fair Hills Farm",
+   "name": "Fair Hills Farm",
+   "status": "active",
+   "place_on_site": "San Miguel, California",
+   "active_products": 5,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Ocean Ranch",
+   "name": "Ocean Ranch",
+   "status": "active",
+   "place_on_site": "Carpinteria, California",
+   "active_products": 4,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Linn's",
+   "name": "Linn's",
+   "status": "active",
+   "place_on_site": "Cambria, California",
+   "active_products": 8,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Straus",
+   "name": "Straus",
+   "status": "active",
+   "place_on_site": "Northern California",
+   "active_products": 7,
+   "missing": [
+    "producer_town"
+   ],
+   "display_problems": [],
+   "needs_a_look": [
+    "place_is_a_region:Northern California"
+   ],
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Straus in? The website says Northern California."
+  },
+  {
+   "kind": "maker",
+   "id": "Cal Poly",
+   "name": "Cal Poly",
+   "status": "active",
+   "place_on_site": "San Luis Obispo, California",
+   "active_products": 21,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Alle-Pia",
+   "name": "Alle-Pia",
+   "status": "active",
+   "place_on_site": "California’s Central Coast",
+   "active_products": 3,
+   "missing": [
+    "producer_town"
+   ],
+   "display_problems": [],
+   "needs_a_look": [
+    "place_is_a_region:California’s Central Coast"
+   ],
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Alle-Pia in? The website says California’s Central Coast."
+  },
+  {
+   "kind": "maker",
+   "id": "Joebella / Avocado Shack",
+   "name": "Joebella / Avocado Shack",
+   "status": "active",
+   "place_on_site": "Atascadero, California",
+   "active_products": 8,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [
+    "name_contains_slash"
+   ],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Corberosa",
+   "name": "Corberosa",
+   "status": "active",
+   "place_on_site": "California’s Central Coast",
+   "active_products": 1,
+   "missing": [
+    "producer_town"
+   ],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [
+    "place_is_a_region:California’s Central Coast"
+   ],
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Corberosa in? The website says California’s Central Coast."
+  },
+  {
+   "kind": "maker",
+   "id": "Sunshine Olive",
+   "name": "Sunshine Olive",
+   "status": "active",
+   "place_on_site": "Templeton, California",
+   "active_products": 2,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Big Sur Honey Company",
+   "name": "Big Sur Honey Company",
+   "status": "active",
+   "place_on_site": "Big Sur, California",
+   "active_products": 1,
+   "missing": [],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Massa Organics",
+   "name": "Massa Organics",
+   "status": "active",
+   "place_on_site": "Near Chico, California",
+   "active_products": 1,
+   "missing": [
+    "producer_town"
+   ],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [
+    "place_is_a_region:Near Chico, California"
+   ],
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Massa Organics in? The website says Near Chico, California."
+  },
+  {
+   "kind": "maker",
+   "id": "Mighty Cap Mushrooms",
+   "name": "Mighty Cap Mushrooms",
+   "status": "active",
+   "place_on_site": "Paso Robles, California",
+   "active_products": 7,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "AG Berries",
+   "name": "AG Berries",
+   "status": "active",
+   "place_on_site": "Arroyo Grande, California",
+   "active_products": 1,
+   "missing": [],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Green Gold",
+   "name": "Green Gold",
+   "status": "active",
+   "place_on_site": "Arroyo Grande, California",
+   "active_products": 5,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Stardust Grove",
+   "name": "Stardust Grove",
+   "status": "active",
+   "place_on_site": "Cambria, California",
+   "active_products": 2,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Taco Works",
+   "name": "Taco Works",
+   "status": "active",
+   "place_on_site": "San Luis Obispo, California",
+   "active_products": 1,
+   "missing": [],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Maple Valley",
+   "name": "Maple Valley",
+   "status": "active",
+   "place_on_site": "Cashton, Wisconsin",
+   "active_products": 1,
+   "missing": [],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Sierra Nevada",
+   "name": "Sierra Nevada",
+   "status": "active",
+   "place_on_site": "Glenn County, California",
+   "active_products": 2,
+   "missing": [
+    "producer_town"
+   ],
+   "display_problems": [],
+   "needs_a_look": [
+    "place_is_a_region:Glenn County, California"
+   ],
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Sierra Nevada in? The website says Glenn County, California."
+  },
+  {
+   "kind": "maker",
+   "id": "Cayucos",
+   "name": "Cayucos",
+   "status": "active",
+   "place_on_site": "Cayucos, California",
+   "active_products": 3,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Brian's",
+   "name": "Brian's",
+   "status": "active",
+   "place_on_site": "Atascadero, California",
+   "active_products": 4,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Jayleaf",
+   "name": "Jayleaf",
+   "status": "active",
+   "place_on_site": "Hollister, California",
+   "active_products": 2,
+   "missing": [],
+   "display_problems": [],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Sean's",
+   "name": "Sean's",
+   "status": "active",
+   "place_on_site": "San Luis Obispo, California",
+   "active_products": 1,
+   "missing": [],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Love Beets",
+   "name": "Love Beets",
+   "status": "active",
+   "place_on_site": "Rochester, New York",
+   "active_products": 1,
+   "missing": [],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [],
+   "visibility_tier": null,
+   "ask_order": [],
+   "first_question_code": null,
+   "question": null
+  },
+  {
+   "kind": "maker",
+   "id": "Ava’s",
+   "name": "Ava’s",
+   "status": "active",
+   "place_on_site": "Coachella Valley, California",
+   "active_products": 1,
+   "missing": [
+    "producer_town"
+   ],
+   "display_problems": [
+    "single_product_no_see_all_link"
+   ],
+   "needs_a_look": [
+    "place_is_a_region:Coachella Valley, California"
+   ],
+   "visibility_tier": 3,
+   "ask_order": [
+    "producer_town"
+   ],
+   "first_question_code": "producer_town",
+   "question": "Which town is Ava’s in? The website says Coachella Valley, California."
+  }
+ ]
+}
