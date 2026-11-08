@@ -11,7 +11,7 @@ Cards t_54fda9c4 (first run) and t_d877c651 (this run) · repo Grahammmm/avocado
 ## The three most important findings (plain words)
 
 1. **Weekly specials cannot be added or edited from chat.** The interpreter's own check does not know the "deal" kind of detail, so every attempt answers "I need a detail as words. Could you say it another way?" and "take the special off" cannot find a special because the prompt never lists any. With a one-line fix (applied in memory only) the add works, but the draft then reads "Avocado Shack, a detail: from nothing to more than I can show here", so Mike cannot see what he is approving.
-2. **Undo is not a real revert.** It is a new edit that rewrites the record. For hide, restore, stock and hike time the files differ in bytes after apply+undo (same meaning); undo of an added hike leaves it on the page as cancelled, undo of an added maker leaves a hidden maker, undo of an added product leaves a hidden product and its picture file. Only plain edits (description, place, hike cancel) undo to an identical tree.
+2. **Undo is not a real revert.** It is a new edit that rewrites the record. For restore, stock, maker hide and hike time the files differ in bytes after apply+undo (same meaning; a later figs hide+undo was byte-identical, so it depends on the record); undo of an added hike leaves it on the page as cancelled, undo of an added maker leaves a hidden maker, undo of an added product leaves a hidden product and its picture file. Only plain edits (description, place, hike cancel) undo to an identical tree.
 3. **A crash halfway is clean only after a restart, and private mode lets claims through.** If the editor fails after writing the first file, the file stays half-changed, the draft stays "approved", Mike gets no reply (and `status` says nothing is waiting) until the worker restarts; then it says "interrupted and not saved" and the tree is clean. Separately, in private mode "certified organic, grown at our own farm" was drafted and would be applied (the live-policy refusal only runs in `live` mode). Also: the real worker refuses all photos, so a new item with a picture cannot be done through chat today.
 
 What works: every skill in the table applies through the real chat with a draft, a diff, a signed-off writer commit, passing checks and a truthful reply; pause, expiry, strangers, two drafts waiting, risky edits and a failing build all behave safely.
@@ -20,7 +20,7 @@ What works: every skill in the table applies through the real chat with a draft,
 
 | Skill | Owner message | Code in draft | Apply commit | Checks after apply | Undo commit | Checks after undo | Tree after undo vs before |
 |---|---|---|---|---|---|---|---|
-| Item hide | `Hide the lemons` | code shown | `20a7cdf` | pass | `1c38b75` | pass | differs in bytes only |
+| Item hide | `Hide the lemons` | code shown | `20a7cdf` | pass | `1c38b75` | pass | not measured in that run (a later figs hide+undo was byte-identical to the tree before it) |
 | Item restore | `Bring the cashews back on the site` | no code | `657cd34` | pass | `83685cc` | pass | differs in bytes only (products.json) |
 | Item edit | `The lemons description should say they are great in cocktails` | no code | `1531f77` | pass | `2ae9579` | pass | byte-identical |
 | Maker edit | `Stepladder is based in Paso Robles, not Cambria` | no code | `29ae7d4` | pass | `c9ac6e0` | pass | byte-identical |
@@ -76,7 +76,7 @@ I'll hold this for you until today at 2:14 pm.
 Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
 ```
 
-Undo commit `1c38b75`; checks {"sitegen --check": 0, "migration_check": 0}; tree vs the pre-change base: `null` (differs in bytes only).
+Undo commit `1c38b75`; checks {"sitegen --check": 0, "migration_check": 0}; tree vs the pre-change base: `null` (not measured in that run (a later figs hide+undo was byte-identical to the tree before it)).
 
 ### Item restore (`s1b-restore`)
 
