@@ -334,7 +334,13 @@ class Forwarder:
                 if not self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=?", (item["id"],)).fetchone():
                     self.stage("reply-pulled", item["id"])
                     self.stage("bb-send-start", item["id"])
-                    self.sender.send(item["chat"], item["text"], (None,) * item["pictures"])
+                    try:
+                        self.sender.send(item["chat"], item["text"], (None,) * item["pictures"])
+                    except Exception:  # noqa: BLE001 - G's chat must never hold back Mike's replies
+                        if item["chat"] == self.cfg["ownerChat"]: raise
+                        self.stage("g-send-failed", item["id"])
+                        ids.append(item["id"])  # given up on, so it is not handed out again and again ahead of Mike's rows
+                        continue
                     self.stage("bb-send-end", item["id"])
                     self.spool.db.execute("INSERT INTO sent VALUES (?,?)", (item["id"], self.clock()))
                 if self.deliver_shots(item): ids.append(item["id"])

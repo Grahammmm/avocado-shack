@@ -269,6 +269,25 @@ class GChatTests(ForwarderCase):
         self.assertEqual(self.sender.calls, [(self.G_CHAT, "the last problems", ()), (OWNER_CHAT, "for Mike", ())])
         self.assertEqual(self.acks, [1, 4])
 
+    def test_a_failed_send_to_g_does_not_hold_back_mikes_later_reply(self):
+        real = self.sender.send
+        def send(chat, text, attachments=()):
+            if chat == self.G_CHAT: raise bridge.BridgeError("transport-error")
+            real(chat, text, attachments)
+        self.sender.send = send
+        self.items = [{"id": 1, "chat": self.G_CHAT, "text": "for G", "pictures": 0},
+                      {"id": 2, "chat": OWNER_CHAT, "text": "for Mike", "pictures": 0}]
+        self.f.pull()
+        self.assertEqual(self.sender.calls, [(OWNER_CHAT, "for Mike", ())])
+        self.assertEqual(self.acks, [1, 2])  # G's is given up, not handed out again every 60 s
+        self.assertIsNone(self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=1").fetchone())
+
+    def test_a_failed_send_to_mike_still_stops_the_pull_unacked(self):
+        self.sender.fail = True
+        self.items = [{"id": 1, "chat": OWNER_CHAT, "text": "for Mike", "pictures": 0}]
+        with self.assertRaises(bridge.BridgeError): self.f.pull()
+        self.assertEqual(self.acks, [])
+
     def test_without_g_chat_a_g_reply_is_not_sent(self):
         plain = fwd.Forwarder({k: v for k, v in self.cfg.items() if k != "gChat"}, self.spool, lambda: self.now, self.transport, self.sender)
         self.items = [{"id": 1, "chat": self.G_CHAT, "text": "the last problems", "pictures": 0}]
