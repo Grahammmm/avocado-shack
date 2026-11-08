@@ -18,10 +18,14 @@ GAVE_UP = "The picture for that message didn't come through. What the message sa
 # endpoint needs the Private API, which stays off, and iMessage has no 👀 tapback anyway: see reports/hass/FAST-1.md).
 ACK_TEXT = "\N{EYES}"
 ACK_MAX_AGE = 120   # a message older than this when accepted (catch-up after sleep or an outage) is never acked
-ACK_STALE = 10      # an ack still unsent this long after it was queued is dropped, not sent late
+ACK_BUDGET = 2.0    # the 👀 should be CONFIRMED sent this many seconds after the message was stored; one sent after it is recorded `late`
+ACK_STALE = 10      # an ack still unsent this long after it was queued is recorded `stale` and not sent at all (a late 👀 is sent until then)
 ACK_TIMEOUT = 1.5   # seconds the 👀 send itself may take (a reply send gets 10); with ACK_STATE_TIMEOUT: <= 2 s per attempt
 ACK_STATE_TIMEOUT = 0.5  # seconds the fresh "paused?" question to the host may take; no answer means no 👀
 ACK_TICK = 0.25     # the ack thread also looks every this many seconds (a restart, a missed wake-up)
+CATCH_UP_PAGE = 50  # the most messages one catch-up query returns, so the most owner messages one cycle can accept at once
+ACK_WORKERS = CATCH_UP_PAGE  # one ack worker per pending message, up to the largest burst a cycle accepts: every attempt starts at once
+ACK_CLAIM_STALE = 8  # a row left `checking` this long (a worker died before deciding) goes back to `pending`; nothing was sent
 PULL_SLOW, PULL_FAST, FAST_WINDOW = 5, 1, 180  # reply pull every 5 s, every 1 s for 3 minutes after an owner message
 CATCH_UP_EVERY = 15  # was 60: the safety net that finds a message the BlueBubbles webhook did not announce
 KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack"}
@@ -87,7 +91,8 @@ def request_json(url, body=None, limit=1024 * 1024, timeout=10):
 
 
 class Spool:
-    def __init__(self, directory, now):
+    def __init__(self, directory, now, ready=False):
+        """ready=True: the file and its tables already exist (an ack worker's own connection): no schema or meta writes."""
         self.clock = time.time
         self.directory = directory
         path = Path(directory) / "spool.sqlite3"
@@ -97,6 +102,8 @@ class Spool:
             if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o177: raise ValueError("spool-file")
         finally: os.close(fd)
         self.db = sqlite3.connect(path, isolation_level=None)
+        self.stage = stagelog.off  # HASS-FAST-1: the Forwarder swaps in a StageLog
+        if ready: return
         self.db.executescript(
             "CREATE TABLE IF NOT EXISTS inbound(provider_id TEXT PRIMARY KEY,payload TEXT,state TEXT,tries INTEGER,"
             "next_try_at REAL,created_at REAL,done_at REAL);"
@@ -108,7 +115,6 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY,seen_at REAL);"
             "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);"
             "CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);")
-        self.stage = stagelog.off  # HASS-FAST-1: the Forwarder swaps in a StageLog
         for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0),
                             ("fast_until", 0)):
             self.db.execute("INSERT OR IGNORE INTO meta VALUES (?,?)", (name, value))
@@ -181,6 +187,7 @@ class Forwarder:
         self.next_poll = self.next_pull = 0
         self.query_offset, self.query_high = 0, 0
         self.ack_thread, self.ack_stop, self.ack_wake = None, threading.Event(), threading.Event()
+        self.ack_live, self.ack_lock = set(), threading.Lock()
 
     def bb(self, path, body=None):
         password = private_read(self.cfg["bbPasswordFile"], 4096).decode().strip()
@@ -206,7 +213,7 @@ class Forwarder:
 
     def catch_up(self):
         cursor = int(self.spool.get("last_seen_ms"))
-        query = {"chatGuid": self.cfg["ownerChat"], "after": cursor, "sort": "ASC", "limit": 50,
+        query = {"chatGuid": self.cfg["ownerChat"], "after": cursor, "sort": "ASC", "limit": CATCH_UP_PAGE,
                  "with": ["chats", "handle", "attachment"]}
         # Keep the durable cursor fixed until a page is exhausted, including timestamp ties.
         if self.query_offset: query["offset"] = self.query_offset
@@ -220,11 +227,11 @@ class Forwarder:
                 self.spool.accept({"type": "updated-message", "data": msg}, self.cfg["ownerChat"], self.clock(), via="poll")
             cursor = max(cursor, msg["dateCreated"])
         self.query_high = max(self.query_high, cursor)
-        if len(rows) == 50: self.query_offset += 50
+        if len(rows) == CATCH_UP_PAGE: self.query_offset += CATCH_UP_PAGE
         else:
             self.spool.set("last_seen_ms", self.query_high)
             self.query_offset = 0
-        self.next_poll = self.clock() + (0 if len(rows) == 50 else CATCH_UP_EVERY)
+        self.next_poll = self.clock() + (0 if len(rows) == CATCH_UP_PAGE else CATCH_UP_EVERY)
 
     def deliver(self):
         db, now = self.spool.db, self.clock()
@@ -333,34 +340,46 @@ class Forwarder:
         except Exception: print("retry", file=sys.stderr)  # noqa: BLE001 - an ack can never stop the loop (a broken table, a full disk)
 
     def _ack(self, spool):
-        """Send the 👀 for each owner message queued by Spool.owner_arrived, before delivery and before any model. At most
-        once per message id: the row goes pending -> sending (committed before the send) -> sent | failed, and a row found
-        `sending` after a crash is never sent again. Every row is decided once and finally: no 👀 when the ack is switched
-        off, when it is too old, when a pause command is ahead of it (stored here or queued at the host), when the host says
-        paused, or when the host cannot be asked right now (fail closed: an unknown state is not an unpaused state). A
-        failure or timeout is recorded and ignored."""
+        """Inline path (no ack thread: unit tests and `ack()`): decide up to three pending rows one after another with
+        _ack_row. Returns True when three were done (more may be waiting)."""
         db = spool.db
         for _ in range(3):
             row = db.execute("SELECT provider_id,created_at FROM ack WHERE state='pending' ORDER BY created_at,rowid LIMIT 1").fetchone()
             if row is None: return False
-            now, (pid, created) = self.clock(), row
+            if self._claim(spool, row[0]): self._ack_row(spool, *row)
+        return True
 
-            def close(state): db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='pending'", (state, now, pid))
-            if now - created > ACK_STALE: close("stale"); continue
-            if not self.cfg.get("ack", True): close("off"); continue
-            if self.pause_ahead(spool, created): close("paused"); continue
-            paused = self.host_paused(spool)
-            if paused is not False: close("paused" if paused else "unknown"); continue
-            if db.execute("UPDATE ack SET state='sending',done_at=? WHERE provider_id=? AND state='pending'", (now, pid)).rowcount != 1: continue
-            self.stage("ack-start", pid)
-            try:
-                self.acker.send(self.cfg["ownerChat"], ACK_TEXT)
-                state = "sent"
-            except Exception:  # noqa: BLE001 - an ack never blocks, retries or leaks: the state records it, nothing else
-                state = "failed"
-            db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=?", (state, self.clock(), pid))
-            self.stage("ack-end", pid, outcome=state)
-        return True  # three rows done: more may be waiting (the ack thread goes straight round again; inline callers stop here)
+    def _claim(self, spool, pid):
+        """pending -> checking, atomic: exactly one caller (thread or process) gets True for a given message id."""
+        return spool.db.execute("UPDATE ack SET state='checking',done_at=? WHERE provider_id=? AND state='pending'", (self.clock(), pid)).rowcount == 1
+
+    def _ack_row(self, spool, pid, created):
+        """Decide one claimed (`checking`) row, once and finally, and send its 👀 if it is due. At most once per message id:
+        checking -> sending (committed before the send) -> sent | late | failed, and a row found `sending` after a crash is
+        never sent again. No 👀 (and the state says why) when the ack is switched off, when it is older than ACK_STALE, when a
+        pause command is ahead of it (stored here or queued at the host), when the host says paused, or when the host cannot
+        be asked right now (fail closed). A failure or timeout is recorded and ignored. A 👀 that was sent but not confirmed
+        within ACK_BUDGET of the message being stored is recorded `late`, never `sent`: it is not counted as on time."""
+        db = spool.db
+        now = self.clock()
+
+        def close(state): db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=? AND state='checking'", (state, now, pid))
+        if now - created > ACK_STALE: return close("stale")
+        if not self.cfg.get("ack", True): return close("off")
+        if self.pause_ahead(spool, created): return close("paused")
+        paused = self.host_paused(spool)
+        if paused is not False: return close("paused" if paused else "unknown")
+        if db.execute("UPDATE ack SET state='sending',done_at=? WHERE provider_id=? AND state='checking'", (now, pid)).rowcount != 1: return
+        self.stage("ack-start", pid)
+        try:
+            self.acker.send(self.cfg["ownerChat"], ACK_TEXT)
+            state = "sent"
+        except Exception:  # noqa: BLE001 - an ack never blocks, retries or leaks: the state records it, nothing else
+            state = "failed"
+        done = self.clock()
+        if state == "sent" and done - created > ACK_BUDGET: state = "late"
+        db.execute("UPDATE ack SET state=?,done_at=? WHERE provider_id=?", (state, done, pid))
+        self.stage("ack-end", pid, outcome=state)
 
     def ack_kick(self):
         """Tell the ack thread there is work; with no thread running (unit tests) do the work here instead."""
@@ -368,7 +387,7 @@ class Forwarder:
         else: self.ack()
 
     def start_ack(self):
-        """Start the ack thread (main() does; it owns its own spool connection, opened inside the thread)."""
+        """Start the ack dispatcher thread (main() does; it owns its own spool connection, opened inside the thread)."""
         if self.ack_thread is not None: return
         self.ack_stop.clear()
         self.ack_thread = threading.Thread(target=self._ack_loop, name="hass-ack", daemon=True)
@@ -379,8 +398,13 @@ class Forwarder:
         self.ack_wake.set()
         if self.ack_thread is not None: self.ack_thread.join(ACK_TIMEOUT + ACK_STATE_TIMEOUT + 2)
         self.ack_thread = None
+        with self.ack_lock: live = list(self.ack_live)
+        for worker in live: worker.join(ACK_TIMEOUT + ACK_STATE_TIMEOUT + 2)
 
     def _ack_loop(self):
+        """The dispatcher: it only claims pending rows and starts one worker thread per claimed row, so every attempt starts
+        at once instead of waiting behind the sends before it (a burst of four 0.8 s sends used to start at 0.1, 0.9, 1.7 and
+        2.5 s). It never sends anything itself."""
         spool = None
         try:
             while not self.ack_stop.is_set():
@@ -391,13 +415,49 @@ class Forwarder:
                     if spool is None:
                         spool = Spool(self.spool.directory, self.clock())
                         spool.clock, spool.stage = self.clock, self.stage
-                    while self._ack(spool) and not self.ack_stop.is_set(): pass  # a burst is worked off without waiting a tick per three
+                    self._ack_dispatch(spool)
                 except Exception:  # noqa: BLE001 - the thread outlives any single failure (a locked file, a full disk)
                     print("retry", file=sys.stderr)
         finally:
             if spool is not None:
                 try: spool.db.close()
                 except sqlite3.Error: pass
+
+    def _ack_dispatch(self, spool):
+        db = spool.db
+        db.execute("UPDATE ack SET state='pending' WHERE state='checking' AND done_at<?", (self.clock() - ACK_CLAIM_STALE,))
+        with self.ack_lock: room = ACK_WORKERS - len(self.ack_live)  # fewer than the pending rows only past one catch-up page; the rest follow as workers finish
+        if room <= 0: return
+        db.execute("BEGIN IMMEDIATE")  # one transaction claims the whole burst (pending -> checking, atomic: a row is claimed by exactly one caller)
+        try:
+            rows = db.execute("SELECT provider_id,created_at FROM ack WHERE state='pending' ORDER BY created_at,rowid LIMIT ?", (room,)).fetchall()
+            db.executemany("UPDATE ack SET state='checking',done_at=? WHERE provider_id=? AND state='pending'", [(self.clock(), pid) for pid, _ in rows])
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        for pid, created in rows:
+            worker = threading.Thread(target=self._ack_worker, args=(pid, created), name="hass-ack-worker", daemon=True)
+            with self.ack_lock: self.ack_live.add(worker)
+            try: worker.start()
+            except RuntimeError:  # no thread could be started: nothing was sent, the row goes back and the next pass retries it
+                with self.ack_lock: self.ack_live.discard(worker)
+                db.execute("UPDATE ack SET state='pending' WHERE provider_id=? AND state='checking'", (pid,))
+
+    def _ack_worker(self, pid, created):
+        spool = None
+        try:
+            spool = Spool(self.spool.directory, self.clock(), ready=True)
+            spool.clock, spool.stage = self.clock, self.stage
+            self._ack_row(spool, pid, created)
+        except Exception:  # noqa: BLE001 - one message's failure never touches another's
+            print("retry", file=sys.stderr)
+        finally:
+            if spool is not None:
+                try: spool.db.close()
+                except sqlite3.Error: pass
+            with self.ack_lock: self.ack_live.discard(threading.current_thread())
+            self.ack_wake.set()  # a pending row may have been waiting for a free worker
 
     def cycle(self):
         fast = self.clock() < self.spool.get("fast_until")  # an owner message arrived in the last FAST_WINDOW seconds

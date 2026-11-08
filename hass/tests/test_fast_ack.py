@@ -666,9 +666,7 @@ class EndToEnd(host_tests.HostCase):
     def test_a_flag_that_appears_between_the_two_flag_reads_is_paused(self):
         """No queued pause at all: the flag is set by a pause that was handled elsewhere. Whenever it lands during the read
         the answer is paused, and once it is there it stays paused."""
-        reached = []
-
-        landed = []
+        reached, landed = [], []
 
         def set_flag():  # a writer that finds the store locked by the reader simply lands after it
             try:
@@ -819,6 +817,145 @@ class ThreadedAck(AckCase):
         self.f.cycle()
         self.assertTrue(self.until(lambda: len(order) == 2))
         self.assertEqual(order, ["ack", "pull-done"])
+
+    # -- HASS-FAST-1-FIX item 1: a burst of owner messages, sends that take real time ------------------------------------
+    def real_clock(self):
+        """The test clock moves with real time, starting at the fixed test time (envelopes and ack ages need a moving clock)."""
+        t0, base = time.monotonic(), self.now
+        self.f.clock = self.spool.clock = lambda: base + (time.monotonic() - t0)
+        return self.f.clock
+
+    def queue_acks(self, clock, names, age=0.0):
+        for name in names: self.spool.db.execute("INSERT INTO ack VALUES (?,'pending',?,NULL)", (name, clock() - age))
+
+    def record_stages(self):
+        seen = []
+        self.f.stage = lambda stage, ident, **kw: seen.append((stage, ident, self.f.clock(), kw))
+        return seen
+
+    def timings(self, seen, clock0):
+        """{id: (attempt delay, confirmed delay)} in seconds after the row was queued."""
+        created = dict(self.spool.db.execute("SELECT provider_id,created_at FROM ack").fetchall())
+        starts = {i: t - created[i] for st, i, t, _ in seen if st == "ack-start"}
+        ends = {i: t - created[i] for st, i, t, _ in seen if st == "ack-end"}
+        return {i: (starts[i], ends.get(i)) for i in starts}
+
+    def test_a_burst_of_four_with_0_8_s_sends_starts_every_attempt_at_once_and_confirms_each_within_the_budget(self):
+        """The reviewer's round 2 case: four owner messages accepted together, every send really takes 0.8 s. One at a time the
+        attempts started at 0.13 / 0.92 / 1.71 / 2.49 s and were confirmed at 0.93 / 1.72 / 2.51 / 3.29 s."""
+        clock = self.real_clock()
+        seen = self.record_stages()
+        plain = self._send
+
+        def slow(chat, text, attachments=()):
+            time.sleep(0.8)
+            plain(chat, text, attachments)
+        self.sender.send = slow
+        self.start()
+        self.queue_acks(clock, ["b1", "b2", "b3", "b4"])
+        self.f.ack_kick()
+        self.assertTrue(self.until(lambda: len(self.states()) == 4 and set(self.states().values()) == {"sent"}, 10), self.states())
+        times = self.timings(seen, clock)
+        self.assertEqual(len(times), 4)
+        attempts = sorted(a for a, _ in times.values())
+        confirmed = sorted(c for _, c in times.values())
+        self.assertLess(attempts[-1], 0.5, times)                      # every attempt started at once, not one send after another
+        self.assertLess(attempts[-1] - attempts[0], 0.4, times)       # ... all four together
+        self.assertGreaterEqual(confirmed[0], 0.8)                     # the sends really took their 0.8 s
+        self.assertLess(confirmed[-1], fwd.ACK_BUDGET, times)          # and each confirmation is inside the 2 s budget
+        self.assertEqual(len(self.eyes()), 4)
+
+    def slow_sender(self, seconds):
+        """A BlueBubbles stand-in whose send really takes `seconds`; the returned dict holds how many sends overlapped at most."""
+        box, lock, plain = {"now": 0, "peak": 0}, threading.Lock(), self._send
+
+        def slow(chat, text, attachments=()):
+            with lock: box["now"] += 1; box["peak"] = max(box["peak"], box["now"])  # noqa: E702
+            try: time.sleep(seconds)
+            finally:
+                with lock: box["now"] -= 1
+            plain(chat, text, attachments)
+        self.sender.send = slow
+        return box
+
+    def test_twelve_messages_with_0_4_s_sends_start_every_attempt_within_a_second(self):
+        clock = self.real_clock()
+        seen = self.record_stages()
+        self.slow_sender(0.4)
+        self.start()
+        names = [f"t{i}" for i in range(12)]
+        self.queue_acks(clock, names)
+        self.f.ack_kick()
+        self.assertTrue(self.until(lambda: len(self.states()) == 12 and set(self.states().values()) == {"sent"}, 20), self.states())
+        times = self.timings(seen, clock)
+        self.assertEqual(len(times), 12)
+        self.assertLess(max(a for a, _ in times.values()), 1.0, sorted(times.values()))
+        self.assertEqual(len(self.eyes()), 12)
+
+    def test_the_largest_burst_one_catch_up_page_can_accept_is_worked_in_parallel_one_send_each_none_dropped(self):
+        """50 at once (the catch-up page size). The sends run side by side (a serial queue never overlaps two), every message is
+        decided exactly once and none is dropped. How fast the 50 start depends on the machine's disk (each worker commits to the
+        spool): a row that misses the budget is recorded `late`, and that is allowed here; the timing is not asserted."""
+        self.assertGreaterEqual(fwd.ACK_WORKERS, fwd.CATCH_UP_PAGE)
+        clock = self.real_clock()
+        box = self.slow_sender(0.4)
+        self.start()
+        names = [f"p{i}" for i in range(fwd.CATCH_UP_PAGE)]
+        self.queue_acks(clock, names)
+        self.f.ack_kick()
+        self.assertTrue(self.until(lambda: len(self.states()) == len(names) and set(self.states().values()) <= {"sent", "late"} and len(self.eyes()) == len(names), 30), set(self.states().values()))
+        time.sleep(0.3)
+        self.assertEqual(len(self.eyes()), len(names))   # one each, never two
+        self.assertGreaterEqual(box["peak"], 4, box)  # a serial queue peaks at 1
+
+    def test_an_ack_whose_budget_has_passed_is_sent_but_recorded_late_not_as_a_success(self):
+        clock = self.real_clock()
+        self.queue_acks(clock, ["old"], age=fwd.ACK_BUDGET + 1)       # waited 3 s before anything looked at it
+        self.f.ack()
+        self.assertEqual(self.states(), {"old": "late"})
+        self.assertEqual(len(self.eyes()), 1)                          # not dropped silently: it still goes out, once
+        self.f.ack()
+        self.assertEqual(len(self.eyes()), 1)
+        self.queue_acks(clock, ["slow"])
+        plain = self._send
+        self.sender.send = lambda chat, text, attachments=(): (time.sleep(0.5), plain(chat, text, attachments))[1]
+        with mock.patch.object(fwd, "ACK_BUDGET", 0.3):               # attempted at once, but confirmed after the budget
+            self.f.ack()
+        self.assertEqual(self.states(), {"old": "late", "slow": "late"})
+        self.queue_acks(clock, ["ontime"])
+        self.sender.send = plain
+        self.f.ack()
+        self.assertEqual(self.states()["ontime"], "sent")
+        self.queue_acks(clock, ["ancient"], age=fwd.ACK_STALE + 1)    # past the outer limit: recorded stale, not sent
+        before = len(self.eyes())
+        self.f.ack()
+        self.assertEqual((self.states()["ancient"], len(self.eyes())), ("stale", before))
+
+    def test_a_late_ack_is_visible_in_the_stage_log_outcome(self):
+        clock = self.real_clock()
+        seen = self.record_stages()
+        self.queue_acks(clock, ["old"], age=fwd.ACK_BUDGET + 1)
+        self.f.ack()
+        self.assertEqual([(st, kw) for st, _, _, kw in seen if st == "ack-end"], [("ack-end", {"outcome": "late"})])
+
+    def test_more_pending_acks_than_workers_are_all_still_decided_none_dropped(self):
+        clock = self.real_clock()
+        with mock.patch.object(fwd, "ACK_WORKERS", 2):
+            self.start()
+            self.queue_acks(clock, [f"w{i}" for i in range(7)])
+            self.f.ack_kick()
+            self.assertTrue(self.until(lambda: len(self.states()) == 7 and set(self.states().values()) <= {"sent", "late"} and len(self.eyes()) == 7, 10), self.states())
+        self.assertEqual(len(self.eyes()), 7)
+
+    def test_a_row_left_checking_by_a_dead_worker_is_retried_once_after_a_while_and_a_fresh_one_is_left_alone(self):
+        clock = self.real_clock()
+        self.spool.db.execute("INSERT INTO ack VALUES ('dead','checking',?,?)", (clock(), clock() - fwd.ACK_CLAIM_STALE - 1))
+        self.spool.db.execute("INSERT INTO ack VALUES ('busy','checking',?,?)", (clock(), clock()))
+        self.start()
+        self.f.ack_kick()
+        self.assertTrue(self.until(lambda: self.states().get("dead") == "sent"))
+        time.sleep(0.3)
+        self.assertEqual((self.states()["busy"], len(self.eyes())), ("checking", 1))
 
     def test_two_threads_one_spool_still_one_ack_per_message(self):
         other = fwd.Spool(self.root, self.now)
