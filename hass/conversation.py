@@ -1137,7 +1137,9 @@ class Conversation:
             pending, texts = row["pending"], row["texts"]
             ops = pending["ops"]
             if not (isinstance(ops, list) and all(isinstance(c, dict) and isinstance(c.get("op"), str) for c in ops)): return None
-            return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else []}
+            calls = row.get("calls") if hasattr(row, "get") else row["calls"]
+            return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else [],
+                    "calls": calls if isinstance(calls, list) else []}
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
 
     def _check_day(self):
@@ -1160,6 +1162,15 @@ class Conversation:
         return "question"
 
     def _shelf_answer(self, msg, now, verb, ask) -> str:
+        """SKILLS-FW-3: the shelf-check answer (below), then the owner's other queued asks go on one at a time: the next one
+        becomes the open request and its question is asked, whichever way the shelf-check change went."""
+        disposition = self._shelf_decide(msg, now, verb, ask)
+        calls = ask.get("calls") or []
+        if calls and self.skills_mode != dispatch_mod.DEFAULT_MODE:
+            self.dispatch._next_queued(msg, now, None, calls, ask["texts"], [], disposition)
+        return disposition
+
+    def _shelf_decide(self, msg, now, verb, ask) -> str:
         """HASS-SHELFCHECK-FLOW-1: the owner's bare yes or no to the open shelf-check question (never a draft's yes/no).
         yes: one draft that marks today's shelf check and then makes the waiting change (none, for the morning report's
         question), with the normal approval; no: nothing is changed and the question is closed."""

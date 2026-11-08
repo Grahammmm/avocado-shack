@@ -57,6 +57,10 @@ DESCRIBE = toy("item.describe", "change an item's description", (
     Slot("product", "product_ref", True, ask="Which product?"),
     Slot("description", "text", True, ask="What should it say?", owner_words=True)), _plan_describe,
     edits=(("hass/content/products.json", "products[id].description"),), preview="product:x")
+STOCK = toy("stock.set", "mark an item's stock", (
+    Slot("level", "text", True, ask="Is it in stock, limited or out?"),),
+    lambda s, c: [{"op": "product.set_availability", "args": {"id": "photo-product-001", "available": s["level"]}}],
+    edits=(("hass/content/products.json", "products[id].available"),), preview="product:x")
 PHOTO_ITEM = toy("item.picture", "put this photo on an item", (
     Slot("product", "product_ref", True, ask="Which product is it?"),
     Slot("photo", "attachment", True, from_attachment=True)),
@@ -677,6 +681,95 @@ class RouterContractTests(SkillCase):
         self.script(LIVE1, skill_reply("hike.add", **MILL))
         draft, _ = self.propose(LIVE1)
         self.assertEqual(draft["state"], "proposed")
+
+class ShelfCheckQueueTests(SkillCase):
+    """RETURN (round 2) item 1: calls waiting behind a change that needs today's shelf check are not lost by the check."""
+    SKILLS = (HIKE_ADD, DESCRIBE, STOCK)
+    TEXT = "mark the avocados out, then add the Mill hike and the Pine hike on Saturday"
+
+    def hikes(self):
+        return [{"skill": "hike.add", "slots": {"title": f"{n} hike", "place": n, "day": SATURDAY}} for n in ("Mill", "Pine")]
+
+    def test_complete_call_needing_the_shelf_check_keeps_the_incomplete_calls_waiting(self):
+        self.script(self.TEXT, {"calls": [{"skill": "stock.set", "slots": {"level": "no"}}, *self.hikes()], "revises": None})
+        self.assertEqual(self.say(self.TEXT), "question")
+        self.assertEqual(self.replies(), [conversation.SHELF_QUESTION])
+        self.assertEqual(len(self.live()["calls"]), 2)
+        self.conv = self.open()  # a restart in between
+        self.assertEqual(len(self.live()["calls"]), 2)
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say("yes"), "proposed")
+        replies = self.replies()
+        self.assertEqual(len(replies), 2, replies)
+        self.assertEqual(replies[1], "What time does it start?")
+        self.assertEqual((self.live()["skill"], len(self.live()["calls"])), ("hike.add", 1))
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say("8am"), "proposed")
+        self.assertEqual(self.replies()[-1], "What time does it start?")
+        self.assertEqual((self.live()["slots"]["title"], self.live()["calls"]), ("Pine hike", []))
+
+    def test_a_no_to_the_shelf_check_still_goes_on_to_the_next_call(self):
+        self.script(self.TEXT, {"calls": [{"skill": "stock.set", "slots": {"level": "no"}}, *self.hikes()], "revises": None})
+        self.say(self.TEXT)
+        self.replies()
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say("no"), "shelf-no")
+        self.assertEqual(self.replies()[-1], "What time does it start?")
+        self.assertEqual((self.live()["slots"]["title"], len(self.live()["calls"])), ("Mill hike", 1))
+
+    def test_a_queued_call_behind_an_answered_incomplete_call_keeps_waiting_through_the_shelf_check(self):
+        calls = [{"skill": "hike.add", "slots": {"title": "Mill hike", "place": "Mill", "day": SATURDAY}},
+                 {"skill": "stock.set", "slots": {}}, self.hikes()[1]]
+        text = "add the Mill hike, mark the avocados, add the Pine hike"
+        self.script(text, {"calls": calls, "revises": None})
+        self.say(text)
+        self.replies()
+        self.assertEqual(self.say("8am"), "proposed")
+        self.assertEqual(self.replies()[-1], "Is it in stock, limited or out?")
+        self.script("out", skill_reply("stock.set", level="no"))
+        self.assertEqual(self.say("out"), "question")  # the shelf check is asked, the Pine hike waits on it
+        self.assertEqual(self.replies(), [conversation.SHELF_QUESTION])
+        self.assertEqual(len(self.live()["calls"]), 1)
+        self.assertEqual(self.say("yes"), "proposed")
+        self.assertEqual(self.replies()[-1], "What time does it start?")
+        self.assertEqual(self.live()["slots"]["title"], "Pine hike")
+
+
+class RetainedFactTests(SkillCase):
+    """RETURN (round 2) item 2: a stored owner-word fact the owner later denies is dropped, even when the new reply omits it."""
+
+    def test_an_earlier_easy_is_dropped_when_a_later_message_says_not_easy_and_only_the_time_arrives(self):
+        self.script(OPEN1, skill_reply("hike.add", title="Mill Creek hike", place="Mill Creek trailhead", day=SATURDAY, difficulty="easy"))
+        self.assertEqual(self.say(OPEN1), "question")
+        self.assertEqual(self.live()["slots"]["difficulty"], "easy")
+        text = "it is not easy; start at 8am"
+        self.script(text, skill_reply("hike.add", time="08:00"))  # the model repeats nothing but the time
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say(text), "proposed")
+        reply = self.replies()[-1]
+        self.assertNotIn("difficulty", json.loads(self.drafts()[-1]["ops_json"])[0]["args"])
+        self.assertIn("Left off (you didn't say it): difficulty.", reply)
+
+    def test_an_earlier_denied_required_place_is_asked_again(self):
+        self.script(OPEN1, skill_reply("hike.add", title="Mill Creek hike", place="Mill Creek trailhead", day=SATURDAY))
+        self.say(OPEN1)
+        text = "not at Mill Creek trailhead after all; start at 8am"
+        self.script(text, skill_reply("hike.add", time="08:00"))
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say(text), "question")
+        self.assertEqual(self.replies()[-1], "Where should we meet?")
+        self.assertNotIn("place", self.live()["slots"])
+
+    def test_the_dropping_is_checked_on_the_cheap_answer_path_too(self):
+        slots = dict(title="Mill hike", place="Mill", day=SATURDAY, difficulty="easy")
+        self.script("add Mill easy", skill_reply("hike.add", **slots))
+        self.say("add Mill easy")
+        self.assertEqual(self.live()["asked_slot"], "time")
+        self.conv.requests.put(CHAT, "x", self.now, texts=["add Mill easy", "it is not easy"], request_id=self.live()["request_id"],
+                               skill="hike.add", slots=slots, asked_slot="time", question="What time does it start?")
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say("8am"), "proposed")
+        self.assertNotIn("difficulty", json.loads(self.drafts()[-1]["ops_json"])[0]["args"])
 
 
 if __name__ == "__main__":

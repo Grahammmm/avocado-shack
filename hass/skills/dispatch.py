@@ -210,6 +210,19 @@ class Filled:
         self.refused: str | None = None
 
 
+def drop_denied(skill, slots: dict, keep, texts) -> list:
+    """Owner-word slots already held (not among ``keep``, the names just given) are read again against the owner's texts as
+    they stand now: one he has since denied ("it is not easy") is removed, so it is asked again or left off. Returns the names."""
+    gone = []
+    for sl in skill.slots:
+        v = slots.get(sl.name)
+        if sl.owner_words and sl.name not in keep and v not in (None, "", []) and not traceable(
+                v if isinstance(v, str) else " ".join(v) if isinstance(v, list) else str(v), texts):
+            slots.pop(sl.name)
+            gone.append(sl.name)
+    return gone
+
+
 def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Filled:
     """Merge ``new`` (the model's values or a cheap answer) into ``current``. Valid values are kept and replace older ones;
     the first value that cannot be used is the one asked again (its plain-words reason and slot are returned) while every
@@ -247,6 +260,7 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
             out.slots.pop(name, None)
             continue
         out.slots[name] = value.strip() if isinstance(value, str) else value
+    out.left_off += [n for n in drop_denied(skill, out.slots, set(new or {}), texts) if n not in out.left_off]
     return out
 
 
@@ -459,6 +473,7 @@ class Dispatcher:
         if resolved:  # a cheap answer: already a checked value (an id the owner picked from our own list), not words to resolve
             filled = Filled()
             filled.slots = {**slots, **new_slots}
+            filled.left_off = drop_denied(skill, filled.slots, set(new_slots), texts)
         else:
             filled = validate(skill, slots, new_slots, texts, ctx, attachments)
         slots = filled.slots
@@ -611,6 +626,9 @@ class Dispatcher:
                                   prefix=("I set: " + "; ".join(defaults) + ".\n") if defaults else "", legacy=False)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
+            if waiting:  # the shelf-check question holds the open request: the incomplete calls wait on it, not lost
+                conv.requests.put(owner, msg.provider_id, now, texts=live["texts"], request_id=live["request_id"], pending=live["pending"],
+                                  question=live["question"], calls=list(waiting), legacy=True)
             return disposition  # the shelf-check question took the open request over
         if disposition != "proposed" or not waiting:
             if req is not None:
