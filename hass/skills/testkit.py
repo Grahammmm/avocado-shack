@@ -53,7 +53,7 @@ CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
                "left_off", "set_line", "ops", "diff", "files", "preview", "residue", "allow_words"}
 KINDS = ("clean", "vague", "typo", "multi", "refuse", "photo", "turns")
-PREVIEW_KINDS = {"product": {"product"}, "hike": {"event"}, "home": {"store"}, "picture": {"product", "store"}, "none": set()}
+PREVIEW_KINDS = {"product": {"product", "maker"}, "hike": {"event"}, "home": {"store", "maker"}, "picture": {"product", "store"}, "none": set()}  # a maker record previews as the "maker" target (hass/preview.py)
 MAX_OPS = 20
 
 # -- plain words -------------------------------------------------------------------------------------------------
@@ -135,7 +135,7 @@ def declared_covers(declared, file, path):
     """Is the changed key path inside one of the skill's declared edits `(file, "products[id].available")`?"""
     for dfile, dpath in declared:
         if dfile != file: continue
-        pattern = re.escape(re.sub(r"\[[A-Za-z_]+\]", "[*]", dpath)).replace(r"\[\*\]", r"\[[^\]]+\]")
+        pattern = re.escape(re.sub(r"\[[A-Za-z_]+\]", "[*]", dpath)).replace(r"\[\*\]", r"(?:\[[^\]]+\]|\..+?)")  # [id] also matches a dict key (makers.Etto), which json_diff writes with a dot
         if re.fullmatch(pattern + r"(?:[.\[].*)?", path): return True
     return False
 
@@ -149,7 +149,7 @@ def _declared_edits(skill):
 
 
 def _residue_declared(skill):
-    r = getattr(skill, "residue", None)
+    r = getattr(skill, "residue", None) or getattr(getattr(skill, "undo", None), "residue", None)  # a toy skill's residue, or a real Skill's Undo.residue
     return isinstance(r, str) and r.strip().lower().rstrip(".") not in ("", "none")
 
 
