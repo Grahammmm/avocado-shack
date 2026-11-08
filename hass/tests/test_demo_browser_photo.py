@@ -56,8 +56,8 @@ class DemoBrowserPhotoTests(unittest.TestCase):
         rows, seen = self.run_chain(repo, [stranger])
         texts = [r["text"] for r in rows]
         self.assertEqual([next((k for k in photo.KINDS if t.startswith(k)), t) for t in texts],
-                         photo.EXPECTED[:4] + ["Applied and checked ", "Recent changes:", "Undo ",
-                                               "Applied and checked "])
+                         photo.EXPECTED[:4] + ["Saved and checked: ", "Here's what we changed lately:",
+                                               "To undo that, I'd change it back:", "Saved and checked: "])
         edit, undo = self.query(repo, "SELECT * FROM drafts ORDER BY row_id")
         self.assertEqual((edit["state"], undo["state"]), ("reverted", "verified"))
         results = [(name, target, shot) for name, target, shot in seen if "-result" in name]
@@ -84,7 +84,7 @@ class DemoBrowserPhotoTests(unittest.TestCase):
         rows, seen = self.run_chain(repo, playwright=MISSING_PLAYWRIGHT)
         texts = [r["text"] for r in rows]
         edit, undo = self.query(repo, "SELECT * FROM drafts ORDER BY row_id")
-        self.assertTrue(texts[4].startswith(f"Applied {edit['code']}, but the preview check failed: "), texts[4])
+        self.assertTrue(texts[4].startswith("I saved it, but the preview check didn't pass: "), texts[4])
         self.assertTrue(all(not r["attachments"] for r in rows))
         self.assertTrue(all(not shot["ok"] for _n, _t, shot in seen))
         self.assertNotIn("verified", (edit["state"], undo["state"]))
