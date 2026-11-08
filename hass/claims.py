@@ -147,7 +147,14 @@ def _fields(r: dict, before: dict, after: dict):
     dict or string counts as empty, a new one that is not a dict is handled as any top-level value. Other dicts: skipped."""
     for field in sorted(after):
         new, old = after[field], before.get(field)
-        if r.get("collection") == "store" and field in NESTED_TEXT and isinstance(new, dict):
+        if r.get("collection") == "store" and field == "specials" and isinstance(new, list):  # AVO-SPECIALS-1: each special's words
+            old_by_id = {sp.get("id"): sp for sp in old if isinstance(sp, dict)} if isinstance(old, list) else {}
+            for sp in new:
+                if isinstance(sp, dict) and isinstance(sp.get("id"), str):
+                    for leaf in ("title", "deal"):
+                        if isinstance(sp.get(leaf), str):
+                            yield f"specials.{sp['id']}.{leaf}", sp[leaf], old_by_id.get(sp["id"], {}).get(leaf)
+        elif r.get("collection") == "store" and field in NESTED_TEXT and isinstance(new, dict):
             old = old if isinstance(old, dict) else {}
             for leaf in NESTED_TEXT[field]:
                 if isinstance(new.get(leaf), str):
@@ -254,11 +261,12 @@ def unstated(draft: dict, owner_text, makers, routes=None, sources=None) -> list
 
 
 def question(hits) -> str:
-    """One owner question naming the first two hits (field and term), then how many more."""
-    named = " and ".join(f'"{term}" in {where}' for where, term in hits[:2])
-    more = f" and {len(hits) - 2} more" if len(hits) > 2 else ""
-    if len(hits) == 1:
-        return (f"I did not draft that: {named} is not in your message. Is it true? "
-                "Send the change again with it in your words, or without it.")
-    return (f"I did not draft that: {named}{more} are not in your message. Are they true? "
-            "Send the change again with them in your words, or without them.")
+    """One owner question naming the first two claim words that his message did not contain."""
+    from hass.voice import quote
+    terms = list(dict.fromkeys(term for _where, term in hits))
+    named = " and ".join(quote(f'"{t}"') for t in terms[:2])
+    if len(terms) == 1:
+        return f"You didn't say {named} in your message. Is that true? Send the change again with it in your own words, or without it."
+    more = " (and a few more)" if len(terms) > 2 else ""
+    return (f"You didn't say {named}{more} in your message. Are they true? "
+            "Send the change again with them in your own words, or without them.")

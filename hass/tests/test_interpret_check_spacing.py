@@ -24,7 +24,7 @@ def call(op, **args):
 
 
 def same(j, i):
-    return {"question": f"Changes {j} and {i} in that message are the same. Did you mean to change something else? {AGAIN}"}
+    return {"question": "Two of those changes are the same. Did you mean to change something else?"}
 
 
 class SpacingRepeatTests(unittest.TestCase):

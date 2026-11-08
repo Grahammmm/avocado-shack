@@ -33,7 +33,7 @@ class PhoneAnswerTests(H06TestCase):
         self.assertEqual((self.drafts(), self.approvals(), self.commits(), self.interp.texts), (drafts, 0, 0, []))
 
     def one(self, code):
-        return f"Nothing was changed. To apply {code}, reply yes {code}; to cancel it, no {code}."
+        return f"I haven't changed anything yet. To go ahead, reply yes {code}, or no {code} to cancel."
 
     def test_decorated_yes_applies_exactly_the_named_draft(self):
         a, b = self.proposal("hours"), self.proposal("desc")
@@ -67,7 +67,7 @@ class PhoneAnswerTests(H06TestCase):
     def test_decorated_no_cancels_exactly_the_named_draft(self):
         a, b = self.proposal("hours"), self.proposal("desc")
         self.assertEqual(self.say(f"no {a['code']} please"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {a['code']}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         states = {d["code"]: d["state"] for d in self.drafts()}
         self.assertEqual((states[a["code"]], states[b["code"]], self.approvals(), self.interp.texts),
                          ("rejected", "proposed", 0, []))
@@ -80,7 +80,7 @@ class PhoneAnswerTests(H06TestCase):
                      f"{a['code']}", f"?yes {a['code']}", f"approve? {a['code']}", f"{a['code']} cancel thanks?"):
             with self.subTest(text=text):
                 self.hint(text, a_hint)
-        many = f"Nothing was changed. Reply yes <code> or no <code> with one of: {a['code']}, {b['code']}."
+        many = f"I haven't changed anything yet. Which one do you mean?\nyes {a['code']}: {a['summary']}\nyes {b['code']}: {b['summary']}"
         for text in ("yes?", "no?", "approve?", "yes 0000?"):
             with self.subTest(text=text):
                 self.hint(text, many)
@@ -135,7 +135,7 @@ class PhoneAnswerTests(H06TestCase):
     def test_yes_please_stays_the_near_approval(self):
         code = self.proposal()["code"]
         self.assertEqual(self.say("yes please"), "near-approval")
-        self.assertEqual(self.replies(), [f"Nothing was applied. To apply {code}, reply yes {code}."])
+        self.assertEqual(self.replies(), [f"I haven't changed anything yet. To go ahead, reply yes {code}."])
         self.assertEqual((self.approvals(), self.interp.texts), (0, []))
 
     def test_delayed_decorated_yes_is_judged_at_the_time_it_was_sent(self):

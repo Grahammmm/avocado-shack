@@ -81,7 +81,7 @@ class PhotoDraftTests(unittest.TestCase):
         return sorted(p for p in root.rglob("*") if p.is_file()) if root.exists() else []
 
     def asked(self, code):
-        return f"{PHOTO_QUESTION} Reply with the product and description (draft {code})."
+        return PHOTO_QUESTION
 
     def test_photo_opens_one_needs_details_draft_and_stores_the_original_once(self):
         self.assertEqual(self.say(attachments=1), "photo-draft")
@@ -105,7 +105,7 @@ class PhotoDraftTests(unittest.TestCase):
         self.assertEqual((row["state"], row["code"]), ("proposed", SHA[:4]))
         self.assertEqual(_photo_ids(row), {SHA})
         [reply] = self.replies()
-        self.assertTrue(reply.startswith(f"Draft {SHA[:4]}:"), reply)
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
         self.assertEqual(self.say("yes"), "approved")
         self.assertEqual(self.drafts()[0]["state"], "applied")
         self.assertEqual(self.repo.product(PID)["image"], f"assets/products/photo-{SHA[:16]}.jpg")
@@ -117,7 +117,7 @@ class PhotoDraftTests(unittest.TestCase):
         self.assertEqual((row["state"], row["code"]), ("proposed", SHA[:4]))
         replies = self.replies()
         self.assertEqual(replies[0], self.asked(SHA[:4]))
-        self.assertTrue(replies[1].startswith(f"Draft {SHA[:4]}:"), replies)
+        self.assertTrue(replies[1].startswith("Here's the change I'd make:"), replies)
         self.assertEqual(self.interp.texts, [ANSWER])
 
     def test_caption_is_never_a_keyword_or_command(self):
@@ -137,11 +137,11 @@ class PhotoDraftTests(unittest.TestCase):
         self.say(attachments=1)
         self.replies()
         self.assertEqual(self.say(attachments=1), "photo-duplicate")
-        self.assertEqual(self.replies(), [f"That photo is already in draft {SHA[:4]}. {PHOTO_QUESTION}"])
+        self.assertEqual(self.replies(), [f"I already have that photo, and I'm waiting on you. {PHOTO_QUESTION}"])
         self.say(ANSWER)
         self.replies()
         self.assertEqual(self.say(ANSWER, attachments=1), "photo-duplicate")  # still waiting as a proposal
-        self.assertEqual(self.replies(), [f"That photo is already in draft {SHA[:4]}."])
+        self.assertEqual(self.replies(), ["I already have that photo, and I'm waiting on you. It's in a change waiting for your yes."])
         self.assertEqual((len(self.drafts()), len(self.originals())), (1, 2))
         self.assertEqual(self.interp.texts, [ANSWER])
         self.assertEqual(self.say("yes"), "approved")
@@ -165,14 +165,14 @@ class PhotoDraftTests(unittest.TestCase):
         self.replies()
         self.interp.mapping["other"] = {"id": PID, "imageAlt": ALT, "photo": PNG_SHA}
         self.assertEqual(self.say("other"), "photo-mismatch")
-        self.assertEqual(self.replies(), ["That draft is for another photo."])
+        self.assertEqual(self.replies(), ["That answer goes with a different photo, so nothing changed. Which product is this photo for?"])
         [row] = self.drafts()
         self.assertEqual((row["state"], _photo_ids(row)), ("needs-details", {SHA}))
         self.interp.mapping["same"] = {"id": PID, "imageAlt": ALT, "photo": SHA}  # naming its own photo is fine
         self.assertEqual(self.say("same"), "proposed")
         self.replies()
         self.assertEqual(self.say(f"no {SHA[:4]}"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {SHA[:4]}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         self.assertEqual(self.say(attachments=1), "photo-draft")  # a cancelled draft no longer holds the photo
         self.assertEqual([d["state"] for d in self.drafts()], ["rejected", "needs-details"])
         self.assertEqual(self.repo.product(PID)["image"], "assets/products/photo-product-001.webp")
@@ -183,9 +183,9 @@ class PhotoDraftTests(unittest.TestCase):
         for keyword in ("yes", f"yes {SHA[:4]}"):  # a needs-details draft is never approved
             with self.subTest(keyword):
                 self.assertEqual(self.say(keyword), "no-target")
-        self.assertEqual(self.replies(), [f"{SHA[:4]} still needs details: {PHOTO_QUESTION}"] * 2)  # AV1537-02, AV1737-05
+        self.assertEqual(self.replies(), [f"I still need an answer from you first. {PHOTO_QUESTION}"] * 2)  # AV1537-02, AV1737-05
         self.assertEqual(self.say(f"no {SHA[:4]}"), "rejected")
-        self.assertEqual(self.replies(), [f"Cancelled {SHA[:4]}; nothing changed."])
+        self.assertEqual(self.replies(), ["Okay, I've cancelled that. Nothing changed."])
         [row] = self.drafts()
         self.assertEqual((row["state"], row["reason"]), ("rejected", "owner"))
         self.assertEqual(self.say(attachments=1), "photo-draft")  # the photo can open a new draft, new code

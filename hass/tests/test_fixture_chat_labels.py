@@ -17,7 +17,7 @@ from hass.tests.test_conversation import SETTINGS
 from hass.tests.test_demo_transcript_photo import DEMO, MAPPING
 from hass.tests.test_set_photo import FIXTURES as MEDIA, PhotoRepo, _settings
 
-URL, MODEL, LABEL = "http://127.0.0.1:11434", "vision-test", "The label looks like: "
+URL, MODEL, LABEL = "http://127.0.0.1:11434", "vision-test", "The label looks like \ue000"
 
 
 class FakeReader:
@@ -83,7 +83,7 @@ class FixtureChatLabelTests(unittest.TestCase):
         self.assertTrue(FakeReader.reads and all(r is reader for r in FakeReader.reads))
         asked = self.texts(out)[0]
         self.assertTrue(asked.startswith(PHOTO_QUESTION))
-        self.assertIn(LABEL + "Fake Co Fake Jam.", asked)
+        self.assertIn(LABEL + "Fake Co Fake Jam\ue001.", asked)
 
     def test_only_one_label_flag_is_refused(self):
         for flags in (("--labels", URL), ("--label-model", MODEL)):

@@ -101,7 +101,7 @@ class ConversationUndoTests(H06TestCase):
         self.apply("maker")
         drafts, commits = len(self.drafts()), self.commits()
         self.assertEqual(self.say(f"undo {hidden['code']}"), "not-drafted")
-        self.assertEqual(self.replies(), [f"Not undone: {MAKER_REASON}"])
+        self.assertEqual(self.replies(), ["That one is hidden right now. Do you want me to bring it back first?"])
         self.assertEqual((len(self.drafts()), self.commits()), (drafts, commits))
         self.assertEqual(self.product(P1)["status"], "hidden")
 

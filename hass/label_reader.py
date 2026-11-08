@@ -14,7 +14,7 @@ import time
 import unicodedata
 from types import SimpleNamespace
 
-from hass import claims, interpreter_local
+from hass import claims, interpreter_local, voice
 from hass.content_model import FORBIDDEN_TEXT, TEXT_LIMITS
 from hass.interpreter_local import LocalInterpreter, _Failed
 from hass.ops import catalog
@@ -72,7 +72,7 @@ def _maker_line(found, makers) -> str:
     if not isinstance(makers, dict) or "brand" not in found: return ""
     names = [m["name"] for m in makers.values() if isinstance(m, dict) and m.get("hidden") is not True
              and isinstance(m.get("name"), str) and catalog._same(m["name"], found["brand"])]
-    return f" Maker on file: {names[0]}." if len(names) == 1 else ""
+    return f" I know the maker as {voice.quote(names[0])}." if len(names) == 1 else ""
 
 
 def _product_line(found, products) -> str:
@@ -80,7 +80,7 @@ def _product_line(found, products) -> str:
     if not products or "name" not in found or "brand" not in found: return ""
     shown = SimpleNamespace(products=[p for p in products if isinstance(p, dict) and p.get("status") != "held"])
     twin = catalog._twin(shown, found["name"], found["brand"])
-    return f" Already listed: {twin['id']} ({twin['name']}); reply with that id to update it instead." if twin else ""
+    return f" {voice.quote(twin['name'])} is already on the website. Reply with that name if you want to update it instead." if twin else ""
 
 
 def question(found, makers=None, products=None) -> str:
@@ -89,7 +89,7 @@ def question(found, makers=None, products=None) -> str:
     skip_brand = bool(fb) and fn[:len(fb)] == fb and len(fn) > len(fb)  # the name already begins with the brand
     words = " ".join(found[f] for f in ("brand", "name") if f in found and not (f == "brand" and skip_brand))
     if "category" in found: words = f"{words} ({found['category']})" if words else found["category"]
-    return (f"The label looks like: {words}. Is that right? Say which product it is either way."
+    return (f"The label looks like {voice.quote(words)}. Is that right? Either way, tell me which product it is."
             + _maker_line(found, makers) + _product_line(found, products))
 
 

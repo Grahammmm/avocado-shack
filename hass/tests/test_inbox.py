@@ -102,7 +102,7 @@ class CrashTests(InboxTestCase):
         self.assertEqual(self.commits(), 1)
         self.assertEqual(self.editor.applies, 1)
         texts = self.outbox_texts()
-        self.assertEqual(len([t for t in texts if t.startswith("Applied")]), 1, texts)
+        self.assertEqual(len([t for t in texts if t.startswith("Saved:")]), 1, texts)
         self.assertEqual(len(texts), 2)  # one proposal, one result reply
         self.assertEqual((self.rows()["p2"]["state"], self.rows()["p2"]["disposition"]), ("done", "duplicate"))
 

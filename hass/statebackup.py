@@ -28,7 +28,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import editor, media as photos  # noqa: E402
+from hass import corrlog, editor, media as photos  # noqa: E402
 from hass.conversation import CONTROL, _iso  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.editor import UnsafeState  # noqa: E402
@@ -110,6 +110,8 @@ def _scan(sdir: Path):
     files, bad = [], []
     for entry in sorted(os.scandir(sdir), key=lambda e: e.name):
         if entry.is_symlink(): bad.append(f"symlink: {entry.name}")
+        elif entry.is_dir(follow_symlinks=False) and entry.name == corrlog.FOLDER:
+            continue  # The private log is not backed up; never traverse its contents.
         elif entry.is_dir(follow_symlinks=False) and entry.name in DIRS + ("journal",):
             for sub in sorted(os.scandir(entry.path), key=lambda e: e.name):
                 rel = f"{entry.name}/{sub.name}"

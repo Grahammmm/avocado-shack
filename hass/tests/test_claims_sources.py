@@ -103,7 +103,7 @@ class SourceConversationTests(ConversationTestCase):
     def test_unsaid_brand_asks_and_writes_no_row(self):
         self.assertEqual(self.brand("change the milk brand", STRAUS), "claim-question")
         [reply] = self.replies()
-        self.assertIn(f'"brand" in products {P1} brand is not in your message', reply)
+        self.assertIn('"brand" in your message. Is that true?', reply)
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_brand_in_owner_text_proposes(self):

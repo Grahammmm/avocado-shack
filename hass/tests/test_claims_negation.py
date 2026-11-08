@@ -92,8 +92,8 @@ class NegatedConversationTests(ConversationTestCase):
         self.interp.mapping[text] = _ops(("product.edit", {"id": P1, "description": "Organic Hass avocados"}))
         self.assertEqual(self.say(text), "claim-question")
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("I did not draft that: "), reply)
-        self.assertIn(f'"organic" in products {P1} description is not in your message', reply)
+        self.assertTrue(reply.startswith("You didn't say "), reply)
+        self.assertIn('"organic" in your message', reply)
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_plain_owner_text_still_proposes(self):

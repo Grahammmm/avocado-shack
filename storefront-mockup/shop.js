@@ -1,4 +1,4 @@
-let activeCategory='all',limit=12,visibleCount=0,linkedItem='',activeFrom='';
+let activeCategory='all',activeView='packaged',limit=12,visibleCount=0,linkedItem='',activeFrom='';
 const makerCounts=new Map();catalog.forEach(p=>makerCounts.set(p.producerKey,(makerCounts.get(p.producerKey)||0)+1));
 const validFrom=key=>Object.hasOwn(producers,key)&&makerCounts.get(key)>=2;
 $('#catalog-grid').insertAdjacentHTML('beforebegin','<p class="catalog-from" hidden></p>');
@@ -8,7 +8,6 @@ function maker(p){return producers[p.producerKey]}
 function organic(p){return /\borganic\b/i.test(p.name)||['Ocean Ranch','Straus','Green Gold','Massa Organics'].includes(p.producerKey)}
 // AV1352-01: only an installed owner photo (same shape as content_model.HOME_IMAGE_RE) is not an illustration; JS $ without the m flag is a true end.
 const installedImage=s=>typeof s==='string'&&/^assets\/products\/photo-[0-9a-f]{16}\.(jpg|png)$/.test(s);
-if(catalog.some(p=>!installedImage(p.image))){const n=document.createElement('p');n.className='catalog-note';n.textContent='Some product pictures are illustrations made from photos of our shelves, so a label or package in the store may look different.';$('.catalog-controls').before(n)}
 function photo(p){return `<img loading=\"lazy\" width=\"800\" height=\"800\" src=\"${esc(p.image)}\" alt=\"${esc((p.imageAlt||p.name)+(installedImage(p.image)?'':' (illustration)'))}\">`}
 function origin(p){return maker(p)?`Based in ${maker(p).place}`:'Ask us about the source in store.'}
 function badges(p){const tags=(organic(p)?'<span>Organic</span>':'')+(isNew(p,pinNow||undefined)?'<span>New</span>':'');return (tags?`<div class="food-badges">${tags}</div>`:'')+(p.availability?`<p class="product-meta availability">${esc(p.availability)}</p>`:'')}
@@ -54,7 +53,17 @@ const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').repl
 const SHELF=Object.fromEntries([...document.querySelectorAll('[data-filter]')].filter(b=>b.dataset.filter!=='all').map(b=>[b.dataset.filter,b.textContent.trim()]));
 // AV1052-02: a shelf with no product in the published catalog is not offered; worked out once per page load.
 const SHELVES=new Set(catalog.map(p=>p.category));
-document.querySelectorAll('[data-filter]').forEach(b=>{b.hidden=b.dataset.filter!=='all'&&!SHELVES.has(b.dataset.filter)});
+// AVO-SHOP-CLEAN-1: the shop opens on packaged goods. The shelves split into packaged goods and fresh produce (fruit, vegetables,
+// flowers); photo-product-018 (tortilla chips) is filed under vegetables but is sold in a bag, so it is packaged. ?view=packaged|produce|all
+// is the shareable state; a link with ?shelf= but no view opens on that shelf's own view, ?from= or ?item= on all items.
+const PRODUCE_SHELVES=new Set(['fruit','vegetables','flowers']),PACKAGED_IDS=new Set(['photo-product-018']),VIEWS=['packaged','produce','all'];
+const isPackaged=p=>PACKAGED_IDS.has(p.id)||!PRODUCE_SHELVES.has(p.category);
+const inView=p=>activeView==='all'||isPackaged(p)===(activeView==='packaged');
+const viewOfShelf=s=>PRODUCE_SHELVES.has(s)?'produce':'packaged';
+function shelfButtons(){document.querySelectorAll('[data-filter]').forEach(b=>{const f=b.dataset.filter;b.hidden=f!=='all'&&(!SHELVES.has(f)||(activeView!=='all'&&viewOfShelf(f)!==activeView))})}
+function setView(v){activeView=v;document.querySelectorAll('[data-view]').forEach(x=>{x.classList.toggle('selected',x.dataset.view===v);x.setAttribute('aria-pressed',String(x.dataset.view===v))});
+ const cur=document.querySelector('[data-filter].selected');if(cur&&cur.dataset.filter!=='all'&&activeView!=='all'&&viewOfShelf(cur.dataset.filter)!==activeView)selectShelf($('[data-filter="all"]'));shelfButtons()}
+shelfButtons();
 // One search normalization for filtering, the address and restore: trimmed, at most 80 characters (code points).
 const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 // AV0222-09: products the badge shows as New come first, newest addedOn first (ties and every other product keep catalog sequence).
@@ -62,21 +71,22 @@ const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew(p,now)}));
  d.sort((x,y)=>x.n!==y.n?(x.n?-1:1):x.n&&x.p.addedOn!==y.p.addedOn?(x.p.addedOn>y.p.addedOn?-1:1):x.i-y.i);return d.map(x=>x.p)}
 function drawCards(l){pinNow=renderNow;try{return l.map(card).join('')}finally{pinNow=null}}
-function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return orderedProducts().filter(p=>(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
-function renderCatalog(append=false){refreshFreshness();const t=new Date();if(!append||pacificDay(t)!==pacificDay(renderNow)){append=false;renderNow=t}const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',drawCards(list.slice(visibleCount,end)));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':'Nothing here just yet. Try another category or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
-function anyFilter(){return activeCategory!=='all'||!!searchText($('#product-search').value)||!!$('#brand-filter').value||!!activeFrom||!!availBox?.checked}
+function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return orderedProducts().filter(p=>inView(p)&&(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
+function renderCatalog(append=false){refreshFreshness();const t=new Date();if(!append||pacificDay(t)!==pacificDay(renderNow)){append=false;renderNow=t}const chip=$('.catalog-from');chip.hidden=!activeFrom;chip.innerHTML=activeFrom?`From ${esc(producers[activeFrom].name)} <button type="button" data-clear-from>Show everything</button>`:'';const list=filteredProducts(),end=Math.min(limit,list.length);if(!append){$('#catalog-grid').innerHTML='';visibleCount=0}$('#catalog-grid').insertAdjacentHTML('beforeend',drawCards(list.slice(visibleCount,end)));visibleCount=end;$('#catalog-count').textContent=`${list.length} selections · ${visibleCount} shown`;$('#catalog-sentinel').textContent=visibleCount<list.length?'More good things as you scroll.':list.length?'That’s this selection. Explore another category, producer, or town.':activeView==='all'?'Nothing here just yet. Try another category or clear your filters.':'Nothing here just yet. Try All items, another category, or clear your filters.';$('#more-products').hidden=('IntersectionObserver' in window)||visibleCount>=list.length;$('#clear-filters').hidden=!anyFilter()}
+function anyFilter(){return activeView!=='packaged'||activeCategory!=='all'||!!searchText($('#product-search').value)||!!$('#brand-filter').value||!!activeFrom||!!availBox?.checked}
 function syncUrl(){const p=new URLSearchParams(location.search),set=(k,v)=>v?p.set(k,v):p.delete(k),s=()=>p.toString();
  linkedItem='';p.delete('item');const gone=$('#catalog-item-status');gone.hidden=true;gone.textContent='';  // A filter change also cancels any pending item scroll/focus.
- set('from',activeFrom);set('shelf',activeCategory==='all'?'':activeCategory);set('q',searchText($('#product-search').value));set('maker',$('#brand-filter').value);set('avail',availBox?.checked?'1':'');
+ set('from',activeFrom);set('shelf',activeCategory==='all'?'':activeCategory);set('view',activeView===(activeCategory!=='all'?viewOfShelf(activeCategory):activeFrom?'all':'packaged')?'':activeView);set('q',searchText($('#product-search').value));set('maker',$('#brand-filter').value);set('avail',availBox?.checked?'1':'');
  history.replaceState(null,'',location.pathname+(s()?'?'+s():'')+location.hash)}
 function resetCatalog(){limit=12;syncUrl();renderCatalog();scheduleScroll()}
-$('#clear-filters').onclick=()=>{selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';activeFrom='';if(availBox)availBox.checked=false;resetCatalog();$('#product-search').focus()};
+$('#clear-filters').onclick=()=>{setView('packaged');selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';activeFrom='';if(availBox)availBox.checked=false;resetCatalog();$('#product-search').focus()};
 function loadMore(){if(visibleCount>=filteredProducts().length)return;limit+=12;renderCatalog(true)}
 // Typed or pasted text past the limit is cut in the box too, so the box, the results and a shared address agree.
 $('#product-search').oninput=()=>{const box=$('#product-search');if([...box.value.trim()].length>80)box.value=searchText(box.value);resetCatalog()};$('#brand-filter').onchange=resetCatalog;if(availBox)availBox.onchange=resetCatalog;$('#more-products').onclick=loadMore;
 function selectShelf(b){activeCategory=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-pressed',String(x===b))})}
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{selectShelf(b);resetCatalog()});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-from],[data-clear-from]');if(!b)return;const key=b.dataset.from||'';if(key&&!validFrom(key))return;activeFrom=key;selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';resetCatalog();$('#catalog-grid').scrollIntoView({block:'start'})});
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{setView(b.dataset.view);resetCatalog()});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-from],[data-clear-from]');if(!b)return;const key=b.dataset.from||'';if(key&&!validFrom(key))return;activeFrom=key;setView('all');selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';resetCatalog();$('#catalog-grid').scrollIntoView({block:'start'})});
 let scrollFrame=0, sectionNavigation=false, sectionTimer;
 function checkScroll(){
  scrollFrame=0;
@@ -99,15 +109,16 @@ window.addEventListener('hashchange',()=>followSection(location.hash));
 // A malformed address must never stop the catalog, so the whole restore is guarded.
 try{const u=new URLSearchParams(location.search),shelf=[...document.querySelectorAll('[data-filter]')].find(x=>x.dataset.filter===u.get('shelf')),mk=u.get('maker');
  activeFrom=validFrom(u.get('from'))?u.get('from'):'';
+ setView(VIEWS.includes(u.get('view'))?u.get('view'):shelf&&(shelf.dataset.filter==='all'||SHELVES.has(shelf.dataset.filter))?viewOfShelf(shelf.dataset.filter):activeFrom?'all':'packaged');
  if(shelf&&!shelf.hidden)selectShelf(shelf);$('#product-search').value=searchText(u.get('q'));$('#brand-filter').value=mk&&[...$('#brand-filter').options].some(o=>o.value===mk)?mk:'';
  // AV1322-10: ?item=<catalog id> wins over the filters: show everything, load enough cards to reach it.
  // An unknown, empty or over-80-character id is ignored and the filters above apply as before.
  const item=u.get('item'),i=item&&[...item].length<=80?orderedProducts().findIndex(p=>p.id===item):-1;
- if(i>=0){activeFrom='';selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item;if(availBox)availBox.checked=false}
+ if(i>=0){activeFrom='';setView('all');selectShelf($('[data-filter="all"]'));$('#product-search').value='';$('#brand-filter').value='';limit=Math.max(12,Math.ceil((i+1)/12)*12);linkedItem=item;if(availBox)availBox.checked=false}
  if(availBox)availBox.checked=u.get('avail')==='1'&&i<0;
  let fix=false;
  // AV1352-02: a nonempty id of at most 80 characters that is not in the catalog gets one neutral line and loses ?item (exact id, nothing echoed).
- if(i<0&&item&&[...item].length<=80){const s=$('#catalog-item-status');s.textContent='That item is not in our catalog right now. Here is everything else.';s.hidden=false;u.delete('item');fix=true}if(shelf?.hidden){u.delete('shelf');fix=true}if(u.has('from')&&!activeFrom){u.delete('from');fix=true}if(u.has('avail')&&!availBox?.checked){u.delete('avail');fix=true}
+ if(i<0&&item&&[...item].length<=80){const s=$('#catalog-item-status');s.textContent='That item is not in our catalog right now. Here is everything else.';s.hidden=false;u.delete('item');fix=true}if(shelf?.hidden){u.delete('shelf');fix=true}if(u.has('view')&&!VIEWS.includes(u.get('view'))){u.delete('view');fix=true}if(u.has('from')&&!activeFrom){u.delete('from');fix=true}if(u.has('avail')&&!availBox?.checked){u.delete('avail');fix=true}
  if(fix){const q=u.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash)}}catch(e){}
 renderCatalog();
 // Prefer load, after the browser's #market jump, but do not wait indefinitely for a nonessential asset.

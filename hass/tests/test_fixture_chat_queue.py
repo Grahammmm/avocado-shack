@@ -107,7 +107,7 @@ class FixtureChatQueueTests(unittest.TestCase):
         fixed = self.run_cli(repo, [*PAIR, bad[2]], "--queue", START)
         self.assertEqual((fixed.returncode, self.summary(fixed)), (0, "queued=3 duplicate=0 history=0 handled=3"))
         texts = [json.loads(r)["text"] for r in fixed.stdout.splitlines()]
-        self.assertEqual([t.split(" ")[0] for t in texts[:2]], ["Draft", "Applied"])
+        self.assertEqual([t.split(" ")[0] for t in texts[:2]], ["Here's", "Saved:"])
         self.assertEqual(len(self.query(repo, "conversation", "SELECT code FROM drafts")), 1)
         self.assertEqual(self.query(repo, "inbox", "SELECT DISTINCT state FROM inbound"), [("done",)])
 
@@ -116,7 +116,7 @@ class FixtureChatQueueTests(unittest.TestCase):
         run = self.run_cli(repo, [PAIR[1], PAIR[0]], "--queue", START)
         self.assertEqual((run.returncode, self.summary(run)), (0, "queued=2 duplicate=0 history=0 handled=2"))
         texts = [json.loads(r)["text"] for r in run.stdout.splitlines()]
-        self.assertEqual([t.split(" ")[0] for t in texts], ["Draft", "Applied"])
+        self.assertEqual([t.split(" ")[0] for t in texts], ["Here's", "Saved:"])
         proposed, = self.query(repo, "conversation", "SELECT proposed_at FROM drafts")
         self.assertEqual(proposed[0], "2026-11-02T17:00:00+00:00")
 
@@ -126,8 +126,8 @@ class FixtureChatQueueTests(unittest.TestCase):
         run = self.run_cli(repo, [PAIR[0], early, {**PAIR[1], "id": "q-3"}])
         self.assertEqual((run.returncode, run.stderr), (0, ""))
         texts = [json.loads(r)["text"] for r in run.stdout.splitlines()]
-        self.assertIn("was sent before", texts[1])
-        self.assertTrue(texts[2].startswith("Applied "), texts)
+        self.assertIn("came before", texts[1])
+        self.assertTrue(texts[2].startswith("Saved:"), texts)
 
     def test_fixture_clock_advances_so_late_yes_expires(self):
         repo = self.fresh()

@@ -12,8 +12,8 @@ from hass import conversation
 from hass.tests.test_interpreter_cap import CapTestCase
 from hass.tests.test_undo import H06TestCase
 
-FAILED = {"unsupported": "I could not work that out right now, so nothing was drafted. Please try again in a few minutes."}
-LINE = "Last request not read: Monday 09:00 - the reader was not working; send it again"
+FAILED = {"unsupported": "I couldn't work that out just now, so nothing was changed. Please try again in a few minutes."}
+LINE = "I couldn't read your request from today at 9 am. Could you send it again?"
 SUPPORT = Path(__file__).resolve().parents[2] / "docs" / "hass" / "SUPPORT.md"
 
 
@@ -61,17 +61,16 @@ class ReaderFailedTests(H06TestCase):
         self.conv = self.open()  # restart
         self.assertEqual(self.status().count(LINE), 1)
 
-    def test_line_sits_before_waiting_drafts_and_survives_commands_and_pause(self):
+    def test_line_sits_after_waiting_drafts_and_survives_commands_and_pause(self):
         self.propose("hours")
         self.say("down")
         self.say("pause changes")
         lines = self.status()
         i = lines.index(LINE)
-        self.assertTrue(lines[i + 1].endswith(": store store: hours") or "waiting" in lines[i + 1], lines)
-        self.assertTrue(lines[0].startswith("Changes: paused"))
+        self.assertTrue(any("waiting" in line.lower() for line in lines[1:i]), lines)
+        self.assertTrue(lines[0].startswith("Changes are paused since"))
         self.now += timedelta(days=3)
-        self.assertEqual(self.status().count("Last request not read: Monday 09:00 - the reader was not working; "
-                                             "send it again"), 1)
+        self.assertEqual(self.status().count("I couldn't read your request from Monday, Nov 2 at 9 am. Could you send it again?"), 1)
 
     def test_a_read_request_clears_only_the_marker(self):
         self.say("pause changes")
@@ -79,7 +78,7 @@ class ReaderFailedTests(H06TestCase):
         self.assertEqual(self.say("when?"), "question")  # a clarification is still a read
         self.replies()
         self.assertNotIn(LINE, self.status())
-        self.assertTrue(self.status()[0].startswith("Changes: paused"))
+        self.assertTrue(self.status()[0].startswith("Changes are paused since"))
         self.assertEqual(self.conv.db.execute("SELECT name FROM control").fetchall()[0][0], "paused")
         self.assertEqual(self.conv.db.execute(
             "SELECT disposition FROM messages WHERE disposition = 'reader-failed'").fetchone()[0], "reader-failed")
@@ -98,20 +97,20 @@ class ReaderFailedTests(H06TestCase):
         self.say("down")
         self.now += timedelta(hours=2)
         self.say("down")
-        self.assertIn("Last request not read: Monday 11:00 - the reader was not working; send it again", self.status())
+        self.assertIn("I couldn't read your request from today at 11 am. Could you send it again?", self.status())
         self.conv.db.execute("UPDATE control SET set_at = 'garbage' WHERE name = 'reader-failed'")
-        self.assertIn("Last request not read: time unavailable - the reader was not working; send it again",
+        self.assertIn("I couldn't read your request from a time I can't read. Could you send it again?",
                       self.status())
 
     def test_no_marker_means_no_line_and_no_control_table_from_status(self):
-        self.assertFalse(any(line.startswith("Last request not read") for line in self.status()))
+        self.assertFalse(any(line.startswith("I couldn't read your request") for line in self.status()))
         self.assertIsNone(self.control())
 
     def test_support_row_is_not_a_health_heading(self):
         text = SUPPORT.read_text("utf-8")
         head, _, _ = text.partition("## Problems")
         self.assertIn("## Reader not working", head)
-        self.assertIn("the reader was not working; send it again", head)
+        self.assertIn("Could you send it again?", head)
         self.assertNotIn("### `reader-failed`", text)
 
 

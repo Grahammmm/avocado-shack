@@ -24,6 +24,9 @@ class KeyFileError(Exception):
 class RelayRefused(Exception): """The reply may not go to the Mac (other chat, text too long, too many pictures)."""
 
 
+G_PENDING_MAX = 2  # replies for G's own chat that may wait at once, so a Mac that does not carry that chat can never crowd out Mike's
+
+
 def read_key(path) -> bytes:
     """D5: a regular file (not a link) owned by this user, 0600-or-tighter, <= 128 bytes: 64 hex chars and an optional
     newline. Returns the 32 key bytes."""
@@ -146,6 +149,9 @@ class RelayStore:
         self.db.execute("COMMIT")
         return rid
 
+    def unacked(self, chat) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM relay WHERE chat = ? AND acked_at IS NULL", (chat,)).fetchone()[0]
+
     def picture(self, rid, idx):
         """(sha256 hex, bytes) of a stored shot whose row is not yet acknowledged, else None."""
         row = self.db.execute("SELECT p.sha256, p.data FROM picture p JOIN relay r ON r.id = p.relay_id WHERE p.relay_id = ?"
@@ -206,14 +212,17 @@ def read_shot(path, base):
 
 
 class RelaySender:
-    """Outbox adapter: send() stores the reply for the Mac to pull. Only the owner chat; no path is ever stored.
+    """Outbox adapter: send() stores the reply for the Mac to pull. Only the owner chat (and G's own chat, text only, when configured); no path is ever stored.
     With `shots_dir` (host `pictures` true) up to 2 screenshots from it travel as pictures; the rest are counted."""
-    def __init__(self, store, owner_chat, clock, shots_dir=None):
+    def __init__(self, store, owner_chat, clock, shots_dir=None, g_chat=None):
         self.store, self.owner_chat, self.clock, self.shots_dir = store, owner_chat, clock, shots_dir
+        self.g_chat = g_chat if isinstance(g_chat, str) and g_chat and g_chat != owner_chat else None  # G's one chat, text only
 
     def send(self, chat, text, attachments=()):
         """Stores the reply for the Mac to pull; returns the relay id (HASS-FAST-1: the stage log joins reply to message by it)."""
-        if chat != self.owner_chat or len(text) > MAX_TEXT or len(attachments) > 10 or bridge.SURROGATE_RE.search(text):
+        if self.g_chat is not None and chat == self.g_chat and (attachments or self.store.unacked(chat) >= G_PENDING_MAX):
+            raise RelayRefused("reply refused")  # G's chat: text only, and never more than G_PENDING_MAX waiting for the Mac
+        if (chat != self.owner_chat and chat != self.g_chat) or len(text) > MAX_TEXT or len(attachments) > 10 or bridge.SURROGATE_RE.search(text):
             raise RelayRefused("reply refused")
         shots = []
         if self.shots_dir is not None:

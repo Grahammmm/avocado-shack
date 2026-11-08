@@ -92,6 +92,18 @@ def check(draft) -> list[str]:
         return UNREADABLE.copy()
 
 
+PLAIN_KINDS = {"origin/organic": "where the food comes from or whether it is organic", "health/awards/endorsements": "a health claim or an award",
+               "trail facts": "trail details", "prices": "a price", "contact": "contact details"}
+
+
+def _plain_reason(reason: str) -> str:
+    if reason.startswith("protected sentences: "): return "it touches " + PLAIN_KINDS.get(reason.split(": ", 1)[1], "a claim I can't check")
+    if reason.startswith("protected operation"): return "it is a kind of change only Graham can make"
+    if reason.startswith("protected field"): return "it changes something only Graham can change"
+    if reason.startswith("more than"): return "it changes too many things at once"
+    return "I couldn't read the change"
+
+
 def refusal(reasons):
-    return ("This change can't go live from chat (" + "; ".join(reasons)
-            + "). Nothing will be published; G can do it by hand.")
+    why = "; ".join(dict.fromkeys(_plain_reason(r) for r in reasons)) or "I couldn't check it"
+    return f"I can't put this on the website from chat: {why}. Nothing will be published. Graham can do it by hand."

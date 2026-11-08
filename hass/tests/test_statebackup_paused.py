@@ -10,7 +10,6 @@ from hass.tests import fixture_ops
 from hass.tests.test_conversation import T0
 from hass.tests.test_editor import git
 from hass.tests.test_statebackup import SCRIPT, BackupTestCase, tree
-from hass.tests.test_status_pause import gated
 
 FIXED, ISO = T0 + timedelta(minutes=3), conversation._iso  # FIXED is 2026-11-02 09:03 PST
 
@@ -42,9 +41,9 @@ class PausedRestoreTests(BackupTestCase):
         self.assertEqual(self.query(new), [("paused", "1", ISO(FIXED), "statebackup-restore")])
         self.restored(new)
         self.assertEqual(self.say("status"), "status")
-        self.assertEqual(self.replies()[0].splitlines()[0], "Changes: paused since 2026-11-02 09:03 PST")
+        self.assertEqual(self.replies()[0].splitlines()[0], "Changes are paused since today at 9:03 am. Say resume changes when you're ready.")
         for text in (f"yes {self.draft['code']}", "yes"):
-            self.assertEqual((self.say(text), self.replies()), ("paused", [gated(self.draft["code"])]), text)
+            self.assertEqual((self.say(text), self.replies()), ("paused", [f"Changes are paused, so I haven't saved that. Say resume changes, then reply yes {self.draft['code']}."]), text)
             self.assertEqual((self.drill_commits(), self.drafts()[0]["state"]), (base, "proposed"))
         self.assertEqual((self.say("resume changes"), len(self.replies())), ("resume", 1))
         self.assertEqual(self.say(f"yes {self.draft['code']}"), "approved")

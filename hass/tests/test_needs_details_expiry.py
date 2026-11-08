@@ -53,7 +53,7 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
 
     def test_expired_question_leaves_status_and_pending(self):
         q = self.ask()
-        self.assertIn(f"{q['code']} needs details:", self.status())
+        self.assertIn("I'm waiting for details:", self.status())
         self.assertEqual(self.say("hello there"), "unsupported")
         self.assertEqual(self.interp.pendings[-1], [q["code"]])
         self.now = T0 + TTL + timedelta(seconds=1)
@@ -61,7 +61,7 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
         self.replies()
         self.assertEqual(self.interp.pendings[-1], [])
         self.assertEqual(self.state(q)["state"], "expired")
-        self.assertNotIn(q["code"], self.status())
+        self.assertNotIn("I'm waiting for details:", self.status())
         self.assertEqual((self.commits(), self.editor.applies), (0, 0))
 
     def test_boundary_uses_the_proposal_rule(self):
@@ -87,7 +87,7 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
         q = self.ask()
         self.now = T0 + TTL + timedelta(seconds=1)
         reply = self.status()
-        self.assertNotIn(q["code"], reply)
+        self.assertNotIn("I'm waiting for details:", reply)
         self.assertIn(conversation.NOTHING, reply)
         self.assertEqual(self.state(q)["state"], "needs-details")
 
@@ -113,11 +113,11 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
         self.assertEqual((old["state"], old["replaced_by"]), ("expired", None))
         self.assertEqual(new["state"], "proposed")
         self.assertNotEqual(new["code"], q["code"])
-        self.assertTrue(reply.startswith(f"Draft {new['code']}:"), reply)
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
         self.assertEqual(self.interp.pendings[-1], [])
         # A second late answer still cannot reopen the expired question: it never becomes proposed.
         self.assertEqual(self.say(f"yes {q['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual((self.state(old)["state"], self.commits()), ("expired", 0))
 
     def make_legacy(self, row):
@@ -127,26 +127,26 @@ class NeedsDetailsExpiryTests(ConversationTestCase):
         q = self.ask()
         self.make_legacy(q)
         self.now = T0 + TTL - timedelta(seconds=1)
-        self.assertIn(f"{q['code']} needs details:", self.status())
+        self.assertIn("I'm waiting for details:", self.status())
         self.assertEqual(self.say("hello there"), "unsupported")
         self.replies()
         self.assertEqual(self.interp.pendings[-1], [q["code"]])
         self.assertEqual(self.state(q)["state"], "needs-details")
         self.now = T0 + TTL + timedelta(seconds=1)
-        self.assertNotIn(q["code"], self.status())
+        self.assertNotIn("I'm waiting for details:", self.status())
         self.assertEqual(self.say(f"yes {q['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual(self.state(q)["state"], "expired")
 
     def test_yes_to_an_expired_question_changes_nothing(self):
         q = self.ask()
         self.now = T0 + TTL + timedelta(seconds=1)
         self.assertEqual(self.say("yes"), "no-target")  # the lapse is named by the message that expires it
-        self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual(self.say(f"yes {q['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual(self.say(f"no {q['code']}"), "no-target")
-        self.assertEqual(self.replies(), [f"{q['code']} expired at 2026-11-02 09:10 PST; nothing changed."])
+        self.assertEqual(self.replies(), ["That change timed out today at 9:10 am, so nothing changed. Tell me again if you still want it."])
         self.assertEqual((self.state(q)["state"], self.commits(), self.editor.applies), ("expired", 0, 0))
 
 

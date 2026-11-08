@@ -27,20 +27,18 @@ EXT = {"jpeg": "jpg", "png": "png"}
 PNG_END = b"\x00\x00\x00\x00IEND\xaeB`\x82"  # zero-length IEND chunk with its fixed CRC32 (0xAE426082)
 SOURCE_RE = re.compile(r"[a-z0-9-]{1,32}")
 REPLIES = {
-    "empty": "That photo arrived empty. Please send it again.",
-    "too-large": "That photo is too large for me (20 MB limit). Please send a smaller copy or a screenshot of it.",
-    "unsupported-type": "I can't use that file (JPEG or PNG only), so nothing was saved. On iPhone: Settings > Camera > "
-                        "Formats > Most Compatible, or send a screenshot of the photo.",
-    "truncated": "That photo arrived incomplete. Please send it again.",
-    "corrupt-store": "I could not save that photo safely, so nothing was changed. The operator needs to check the photo store.",
-    "not-found": "I could not find that photo any more, so nothing was changed. Please send it again.",
-    "unreadable": "I could not read that photo safely, so nothing was changed. Please send it again as a screenshot "
-                  "(JPEG or PNG, up to 20 MB).",
-    "needs-rotation": "This photo is stored sideways, and it has to be stored the right way up, so nothing was changed. "
-                      "Please send it again as a screenshot.",
-    "many": "Please send one photo at a time (one per message); nothing was saved.",  # NB-AV-10 (H12)
-    "audio": "That looks like a voice note or audio file. I can't understand voice notes yet, so nothing was saved. "
-             "Please type the change as a text message.",  # AV2022-05 (H11/H12)
+    "empty": "That photo came through empty. Could you send it again?",
+    "too-large": "That photo is too big for me. Could you send a smaller copy, or a screenshot of it?",
+    "unsupported-type": "I can't use that kind of photo, so nothing was saved. Could you send a screenshot of it instead? "
+                        "On an iPhone you can also set Camera, then Formats, to Most Compatible.",
+    "truncated": "That photo only came through partly. Could you send it again?",
+    "corrupt-store": "I couldn't save that photo safely, so nothing changed. Please ask Graham to take a look.",
+    "not-found": "I can't find that photo any more, so nothing changed. Could you send it again?",
+    "unreadable": "I couldn't read that photo safely, so nothing changed. Could you send it again as a screenshot?",
+    "needs-rotation": "That photo is sideways and I can't turn it, so nothing changed. Could you send it again as a screenshot?",
+    "many": "Please send one photo at a time. I haven't saved any of these.",  # NB-AV-10 (H12)
+    "audio": "That looks like a voice note. I can't understand voice notes yet, so nothing was saved. "
+             "Could you type the change instead?",  # AV2022-05 (H11/H12)
 }
 AUDIO_BRANDS = (b"M4A ", b"M4B ", b"M4P ", b"3gp4", b"3gp5", b"3gp6", b"3gr6", b"3g2a")  # AVB-11: + MMS 3GPP voice
 SHA_RE = re.compile(r"[0-9a-f]{64}")

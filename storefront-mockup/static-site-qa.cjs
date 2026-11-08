@@ -63,10 +63,15 @@ server.listen(0,'127.0.0.1',async()=>{
   assert.ok(await control.locator(COMMERCE_SELECTORS).count()>0);assert.match(archived,COMMERCE_TEXT);await control.close();
   assert.equal(fs.existsSync(path.join(root,'archive')),false);
 
-  await page.goto(base+'/');await page.locator('#catalog-grid article').first().waitFor();
+  // AVO-SHOP-CLEAN-1: the shop opens on packaged goods (?view=all is every item); the three catalog notices are gone.
+  await page.goto(base+'/?view=all');await page.locator('#catalog-grid article').first().waitFor();
   assert.equal((await page.locator('#catalog-count').textContent()).split(' · ')[0],'170 selections');
   assert.equal(await page.locator('.selection-checked').count(),0);
-  assert.ok(await page.getByText('It isn’t a claim that every ingredient was grown there.').isVisible(),'sourcing sentence');
+  await page.goto(base+'/');await page.locator('#catalog-grid article').first().waitFor();
+  assert.equal((await page.locator('#catalog-count').textContent()).split(' · ')[0],'105 selections','default view: packaged goods');
+  assert.equal(await page.locator('[data-view="packaged"]').getAttribute('aria-pressed'),'true');
+  const pageText=await page.locator('body').innerText();
+  for(const gone of ['names the town a producer or maker calls home','Our selection changes with the seasons','illustrations made from photos of our shelves'])assert.ok(!pageText.includes(gone),'notice gone: '+gone);
   await closedUpfront(page,'#community-newsletter',['#newsletter-email','#community-newsletter input[name=hikes]']);
 
   // AV1422-09: heading levels on /hike (closed dialog excluded) start h1,h2 and never jump by more than one.
@@ -180,7 +185,7 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(hits,1,route+': one GET /api/community');assert.equal(posts,0,route+': nothing posted');await p.close();
   }
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
-  Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,sourcingSentence:true,catalog:170,errors});
+  Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,noticesGone:true,defaultView:"packaged",catalog:170,errors});
   fs.writeFileSync(path.join(out,'static-site-QA.json'),JSON.stringify(result,null,1));
   console.log('Static published site passed');console.log(JSON.stringify(result));
  }finally{await browser.close();server.close()}

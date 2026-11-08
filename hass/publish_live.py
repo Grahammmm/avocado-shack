@@ -363,9 +363,9 @@ class LiveEditor(conversation.Editor):
         if state == 'live':
             shot = self.conv.screenshot(j['change_id'])
             attachments = [shot] if shot else []
-            text = owner_answers.LIVE_SHOWN.format(site=self.settings['liveSite'], code=j['code'], summary='the approved change')
+            text = owner_answers.LIVE_SHOWN.format()
             text += ' ' + (owner_answers.LIVE_PICTURE if shot else owner_answers.LIVE_NO_PICTURE)
-        elif state == 'not-published': text = owner_answers.LIVE_NOT_PUBLISHED.format(code=j['code'], reason=j.get('reason', 'release interrupted'))
+        elif state == 'not-published': text = owner_answers.LIVE_NOT_PUBLISHED.format(code=j['code'], reason=owner_answers.live_reason(j.get('reason')))
         elif state == 'unknown': text = owner_answers.LIVE_UNKNOWN.format(code=j['code'])
         elif state == 'unconfirmed': text = owner_answers.LIVE_UNCONFIRMED.format(code=j['code'])
         else: return

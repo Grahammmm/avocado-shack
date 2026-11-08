@@ -63,7 +63,12 @@ EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 PHONE_DIGITS = 10  # US number: area code, exchange, line; LIMITS.md cites it
 PHONE_RE = re.compile(rf"[2-9][0-9]{{2}}[2-9][0-9]{{{PHONE_DIGITS - 4}}}", re.ASCII)
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone")  # all absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone", "specials")  # all absent by default
+# AVO-SPECIALS-1: store.specials, a list of weekly specials (absent = none; the saved files do not change).
+SPECIAL_FIELDS = ("id", "title", "deal", "start", "end", "order")
+SPECIAL_OPTIONAL = ("product", "picture")  # product: an existing product id; picture: true reuses that product's picture
+MAX_SPECIALS_AT_ONCE, MAX_SPECIALS_STORED, MAX_SPECIAL_DAYS = 6, 20, 31  # active on one day / kept in the file / start to end
+MAX_SPECIAL_TITLE, MAX_SPECIAL_DEAL, MAX_SPECIAL_ORDER = 60, 60, 99
 MAX_NOTICE, MAX_NOTICE_DAYS = 160, 60  # store.notice text characters; its last day at most this many days ahead (set)
 HOME_IMAGE_RE = re.compile(r"^assets/products/photo-[0-9a-f]{16}\.(jpg|png)$")  # the path photos.install writes
 MAX_STORY = 400  # characters in the optional store.story (the "COME ON IN" paragraph)
@@ -448,7 +453,110 @@ def iso_day(value) -> date | None:
         return None
 
 
-def validate_store(problems, store, today: date | None = None):
+SPECIAL_LINK_RE = re.compile(r"https?:|www\.|\b[a-z0-9-]+\.[a-z]{2,24}\b|//|\bdot\s?com\b", re.I)
+SPECIAL_EMAIL_RE = re.compile(r"@|\b\w+\s+(?:at|\(at\))\s+\w+\s+dot\s+\w+", re.I)
+SPECIAL_PHONE_RE = re.compile(r"\d[\d\s().+-]{8,}\d")  # ten or more digits with only separators between: a phone number
+SPECIAL_FORBIDDEN = tuple(c for c in FORBIDDEN_TEXT if c != "$") + ("&lt", "&gt", "&#", "&amp")
+
+
+def special_text_problem(value, *, deal=False) -> str | None:
+    """Why a special's title or deal line is not allowed, else None. Both: no markup, links, email or phone
+    numbers. Only the deal line may carry a price (``$``); the title may not."""
+    if not isinstance(value, str):
+        return "must be a string"
+    if (m := INVISIBLE_RE.search(value)):
+        return f"contains invisible or control character U+{ord(m.group()):04X}"
+    if not value.strip() or value != value.strip():
+        return "must not be empty or start or end with a space"
+    if any(c in value for c in LINE_SEPARATORS):
+        return "must be one line"
+    if sum(c.isalpha() for c in value) < 3:
+        return "needs at least 3 letters"
+    for bad in SPECIAL_FORBIDDEN:
+        if bad in value:
+            return f"contains forbidden text {bad!r}"
+    if "$" in value and not deal:
+        return "may not contain a price; put it in the deal line"
+    if SPECIAL_LINK_RE.search(value):
+        return "may not contain a web address"
+    if SPECIAL_EMAIL_RE.search(value):
+        return "may not contain an email address"
+    if SPECIAL_PHONE_RE.search(value):
+        return "may not contain a phone number"
+    return None
+
+
+def active_specials(store, today: date | None = None) -> list[dict]:
+    """The specials whose first day <= Pacific today <= last day, in show order (order, then title). The one rule
+    the page, the preview and the editor all use; an unreadable entry is never active."""
+    day = today or shop_today()
+    out = []
+    for sp in (store.get("specials") if isinstance(store, dict) else None) or []:
+        start, end = iso_day(sp.get("start")), iso_day(sp.get("end"))
+        if start is not None and end is not None and start <= day <= end:
+            out.append(sp)
+    return sorted(out, key=lambda sp: (sp.get("order", 0), sp.get("title", ""), sp.get("id", "")))
+
+
+def validate_specials(problems, specials, product_ids, today: date | None = None):
+    """Shape and limits of store.specials. ``product_ids``: every product id (any status) or None to skip that check.
+    Active-at-once limit: on no single day from today on may more than MAX_SPECIALS_AT_ONCE be active, so content
+    that is valid today cannot become invalid tomorrow. Expired specials are valid and are not counted."""
+    if not isinstance(specials, list):
+        problems.append("store.specials: must be a list")
+        return
+    if len(specials) > MAX_SPECIALS_STORED:
+        problems.append(f"store.specials: at most {MAX_SPECIALS_STORED} saved (remove the expired ones)")
+    seen, spans = set(), []
+    for i, sp in enumerate(specials):
+        where = f"store.specials[{i}]"
+        if not _closed_keys(problems, where, sp, SPECIAL_FIELDS + SPECIAL_OPTIONAL, SPECIAL_FIELDS):
+            continue
+        sid = sp.get("id")
+        if not isinstance(sid, str) or not ID_RE.fullmatch(sid):
+            problems.append(f"{where}: invalid id {sid!r}")
+        elif sid in seen:
+            problems.append(f"{where}: duplicate id {sid}")
+        else:
+            seen.add(sid)
+            where = f"store.specials {sid}"
+        for field, limit in (("title", MAX_SPECIAL_TITLE), ("deal", MAX_SPECIAL_DEAL)):
+            value = sp.get(field)
+            if isinstance(value, str) and len(value) > limit:
+                problems.append(f"{where}.{field}: longer than {limit} characters")
+            elif (why := special_text_problem(value, deal=field == "deal")):
+                problems.append(f"{where}.{field}: {why}")
+        start, end = iso_day(sp.get("start")), iso_day(sp.get("end"))
+        for field, day in (("start", start), ("end", end)):
+            if day is None:
+                problems.append(f"{where}.{field}: must be a real date YYYY-MM-DD" + ("; an end date is required" if field == "end" else ""))
+        if start is not None and end is not None:
+            if end < start:
+                problems.append(f"{where}: end date {sp['end']} is before the start date {sp['start']}")
+            elif (end - start).days + 1 > MAX_SPECIAL_DAYS:
+                problems.append(f"{where}: runs longer than {MAX_SPECIAL_DAYS} days")
+            else:
+                spans.append((start, end))
+        order = sp.get("order")
+        if isinstance(order, bool) or not isinstance(order, int) or not 0 <= order <= MAX_SPECIAL_ORDER:
+            problems.append(f"{where}.order: must be a whole number 0 to {MAX_SPECIAL_ORDER}")
+        if "product" in sp:
+            pid = sp["product"]
+            if not isinstance(pid, str) or not ID_RE.fullmatch(pid):
+                problems.append(f"{where}.product: invalid id")
+            elif product_ids is not None and pid not in product_ids:
+                problems.append(f"{where}.product: {pid} is not a product")
+        if "picture" in sp and (sp["picture"] is not True or "product" not in sp):
+            problems.append(f"{where}.picture: only true, and only together with a product")
+    day = today or shop_today()
+    live = [(max(s, day), e) for s, e in spans if e >= day]  # nothing expired counts
+    for start in {s for s, _ in live}:
+        if sum(s <= start <= e for s, e in live) > MAX_SPECIALS_AT_ONCE:
+            problems.append(f"store.specials: more than {MAX_SPECIALS_AT_ONCE} would be active on {start.isoformat()}")
+            break
+
+
+def validate_store(problems, store, today: date | None = None, product_ids=None):
     if not _closed_keys(problems, "store", store, STORE_FIELDS + STORE_OPTIONAL, STORE_FIELDS):
         return
     if "selection_checked_on" in store:
@@ -497,6 +605,8 @@ def validate_store(problems, store, today: date | None = None):
                 date.fromisoformat(notice["until"] if DATE_RE.fullmatch(str(notice["until"])) else "")
             except ValueError:
                 problems.append("store.notice.until: must be a real date YYYY-MM-DD")
+    if "specials" in store:
+        validate_specials(problems, store["specials"], product_ids, today)
     for field in ("name", "streetAddress", "town"):
         _text(problems, f"store.{field}", store.get(field))
     for field in ("streetAddress", "town"):
@@ -523,7 +633,7 @@ def validate(content: Content, site_dir: Path | None = SITE_DIR) -> None:
     validate_makers(problems, content.makers)
     validate_products(problems, content.products, makers, site_dir, checked_on(content.store))
     validate_community(problems, content.community)
-    validate_store(problems, content.store)
+    validate_store(problems, content.store, product_ids={p.get("id") for p in content.products if isinstance(p, dict)})
     if problems:
         raise ContentError(problems)
 

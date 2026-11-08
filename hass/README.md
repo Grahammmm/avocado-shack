@@ -247,3 +247,11 @@ Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.
 - Site: real hikes show their route and trail-information link (AV2022-12).
 - Retention reports approval and closed-memory counts only, deletes nothing (AV2022-13).
 - Owner phone guide: `docs/hass/PHONE_GUIDE.md`, with quoted commands checked against the parser (AV2022-14).
+
+## Weekly specials (AVO-SPECIALS-1)
+
+`store.specials` is an optional list (absent = none; the saved files and the generated page are byte-identical without it). Each special has `id`, `title`, `deal` (the owner's own deal line, shown exactly as typed; the only text that may hold a price), `start`, `end` (required, last day inclusive), `order` (0-99, lower first) and optionally `product` (an existing product id) and `picture: true` (reuse that product's picture). Limits: title and deal at most 60 characters; no markup, links, email or phone numbers; end not before start; at most 31 days long; at most 6 active on any one day (checked for every future day, so valid content cannot turn invalid later); at most 20 saved.
+
+The home page (which is also the shop page: the catalog is on it) shows "This week’s specials" at the top of `<main>` only for specials with start <= Pacific today <= end; with none active nothing is rendered. Expiry uses the build date plus a small inline script (`hass/specials.py`) that hides a card, and the whole section, once the visitor's Pacific day passes its last day. `sitegen --check` accepts the exact earlier page of a special that has since ended (as for the notice) and flags any other difference.
+
+Ops (`hass/ops/specials.py`), all through draft, preview, approval and `history.revert`: `specials.add` {title, deal, end, start?, product?, picture?, order?}, `specials.edit` {id, title?, deal?, start?, end?, product?, picture?, clearProduct?, order?}, `specials.remove` {id}, `specials.clear_expired` {}.

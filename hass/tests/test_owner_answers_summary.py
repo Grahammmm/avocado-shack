@@ -17,14 +17,14 @@ UNREADABLE = ("   ", "", None, ["x"], {"a": 1}, 42, "Hours\nupdated", "Hours\r\n
 NOT_LIVE = answers.NOT_LIVE
 # Captured from origin/main before RF1300-19: these answers never print the summary.
 GOLDEN = {
-    "proposed": "Waiting for your OK - nothing has changed yet.",
-    "needs-details": "Waiting for your OK - nothing has changed yet.",
-    "approved": "You said yes; it is still being saved, so nothing has changed on the website yet.",
+    "proposed": "It's waiting for your yes. Nothing has changed yet.",
+    "needs-details": "It's waiting for your yes. Nothing has changed yet.",
+    "approved": "You said yes, but it isn't saved yet, so nothing has changed on the website.",
     "reverted": "That change was undone.",
-    "failed": "This was not saved, and the website is unchanged; send the change again to retry.",
+    "failed": "I couldn't save that, and the website is unchanged. Please send the change again.",
 }
-INSTALL_FAILED = ("This did not reach the website, and the website is unchanged. "
-                  "The website files could not be written.")
+INSTALL_FAILED = ("That didn't reach the website, and the website is unchanged. "
+                  "I couldn't update the website pages.")
 
 
 def done(summary):
@@ -33,27 +33,27 @@ def done(summary):
 
 class DidItWorkSummaryTests(unittest.TestCase):
     def test_readable_summary_unchanged(self):
-        self.assertEqual(done("Hours updated"), "Done. Hours updated is on the website now (checked today 09:05).")
+        self.assertEqual(done("Hours updated"), "Done. \ue000Hours updated\ue001 is on the website now (I checked today at 9:05 am).")
 
     def test_unreadable_summary_reads_the_change(self):
         for summary in UNREADABLE:
             with self.subTest(summary=summary):
                 got = done(summary)
-                self.assertEqual(got, "Done. the change is on the website now (checked today 09:05).")
+                self.assertEqual(got, "Done. the change is on the website now (I checked today at 9:05 am).")
                 self.assertNotIn("[", got)
                 self.assertNotIn("{", got)
 
     def test_missing_summary_key_reads_the_change(self):
         got = answers.did_it_work({"state": "verified"}, INSTALLED, NOW)
-        self.assertEqual(got, "Done. the change is on the website now (checked today 09:05).")
+        self.assertEqual(got, "Done. the change is on the website now (I checked today at 9:05 am).")
 
     def test_summary_is_stripped(self):
-        self.assertEqual(done("  Hours  "), "Done. Hours is on the website now (checked today 09:05).")
+        self.assertEqual(done("  Hours  "), "Done. \ue000Hours\ue001 is on the website now (I checked today at 9:05 am).")
 
     def test_length_limit(self):
-        self.assertEqual(done("y" * 200), f"Done. {'y' * 200} is on the website now (checked today 09:05).")
-        self.assertEqual(done("  " + "y" * 200 + "  "), f"Done. {'y' * 200} is on the website now (checked today 09:05).")
-        self.assertEqual(done("y" * 201), "Done. the change is on the website now (checked today 09:05).")
+        self.assertEqual(done("y" * 200), f"Done. \ue000{'y' * 200}\ue001 is on the website now (I checked today at 9:05 am).")
+        self.assertEqual(done("  " + "y" * 200 + "  "), f"Done. \ue000{'y' * 200}\ue001 is on the website now (I checked today at 9:05 am).")
+        self.assertEqual(done("y" * 201), "Done. the change is on the website now (I checked today at 9:05 am).")
 
     def test_other_states_byte_identical_for_any_summary(self):
         for state, want in GOLDEN.items():
@@ -70,22 +70,21 @@ class DidItWorkSummaryTests(unittest.TestCase):
 
 class AppliedTextSummaryTests(unittest.TestCase):
     def test_readable_summary_unchanged(self):
-        self.assertEqual(answers.applied_text("AB12", "Hours updated"), f"Applied AB12: Hours updated\n{NOT_LIVE}")
-        self.assertEqual(answers.applied_text("AB12", " Hours ", checked=True), f"Applied and checked AB12: Hours\n{NOT_LIVE}")
+        self.assertEqual(answers.applied_text("AB12", "Hours updated"), f"Saved: \ue000Hours updated\ue001\n{NOT_LIVE}")
+        self.assertEqual(answers.applied_text("AB12", " Hours ", checked=True), f"Saved and checked: \ue000Hours\ue001\n{NOT_LIVE}")
 
     def test_unreadable_summary_reads_the_change(self):
         for summary in UNREADABLE:
             with self.subTest(summary=summary):
                 got = answers.applied_text("AB12", summary)
-                self.assertEqual(got, f"Applied AB12: the change\n{NOT_LIVE}")
+                self.assertEqual(got, f"Saved: the change\n{NOT_LIVE}")
                 self.assertEqual(got.count("\n"), 1)
 
     def test_error_reply_unchanged_and_summary_not_printed(self):
         for summary in UNREADABLE + ("Hours updated",):
             with self.subTest(summary=summary):
                 got = answers.applied_text("AB12", summary, error="preview server did not start")
-                self.assertEqual(got, f"Applied AB12, but the preview check failed: the preview could not be started.\n"
-                                      f"{NOT_LIVE}")
+                self.assertEqual(got, f"I saved it, but the preview check didn't pass: I couldn't make a preview.\n{NOT_LIVE}")
 
 
 if __name__ == "__main__":

@@ -340,8 +340,11 @@ class RecentQuestionTests(ConversationTestCase):
         self.assertIsNone(self.asked[-1][1])
 
     def test_a_question_is_kept_only_up_to_500_characters(self):
-        self.interp.mapping["long?"] = {"question": "Which one? " + "x" * 600}
+        self.interp.mapping["long?"] = {"question": "Which one?"}
         self.say("long?")
+        # A legacy overlong answer in storage is not passed back as recent context.
+        self.conv.db.execute("UPDATE outbox SET text = ?", ("Which one? " + "x" * 600,))
+        self.conv.db.commit()
         self.say("hours")
         self.assertIsNone(self.asked[-1][1])
         self.assertEqual(conversation.RECENT_MAX, 500)

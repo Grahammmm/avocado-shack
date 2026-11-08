@@ -38,6 +38,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from hass.content_model import REPO_ROOT  # noqa: E402
+from hass import voice  # noqa: E402
 
 FIXTURES = REPO_ROOT / "hass" / "tests" / "fixtures" / "skills"
 OWNER, CHAT = "owner@example.invalid", "chat-testkit-owner"
@@ -48,11 +49,11 @@ CODES = ("write-before-yes", "wrong-diff", "edit-undeclared", "undo-not-identica
          "stale-row", "bad-row", "bad-plan", "no-skill")
 FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "skip-later-preview")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a revision whose preview is never requested
 PLAN_KEYS = {"id", "plan", "kind", "slots", "ctx", "expect_ops", "expect_error", "version", "note", "must_fail"}
-CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan"}
+CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "setup", "undo"}
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
                "left_off", "set_line", "ops", "diff", "files", "preview", "residue", "allow_words"}
 KINDS = ("clean", "vague", "typo", "multi", "refuse", "photo", "turns")
-PREVIEW_KINDS = {"product": {"product"}, "hike": {"event"}, "home": {"store"}, "picture": {"product", "store"}, "none": set()}
+PREVIEW_KINDS = {"product": {"product", "maker"}, "hike": {"event"}, "home": {"store", "maker"}, "picture": {"product", "store"}, "none": set()}  # a maker record previews as the "maker" target (hass/preview.py)
 MAX_OPS = 20
 
 # -- plain words -------------------------------------------------------------------------------------------------
@@ -134,7 +135,7 @@ def declared_covers(declared, file, path):
     """Is the changed key path inside one of the skill's declared edits `(file, "products[id].available")`?"""
     for dfile, dpath in declared:
         if dfile != file: continue
-        pattern = re.escape(re.sub(r"\[[A-Za-z_]+\]", "[*]", dpath)).replace(r"\[\*\]", r"\[[^\]]+\]")
+        pattern = re.escape(re.sub(r"\[[A-Za-z_]+\]", "[*]", dpath)).replace(r"\[\*\]", r"(?:\[[^\]]+\]|\..+?)")  # [id] also matches a dict key (makers.Etto), which json_diff writes with a dot
         if re.fullmatch(pattern + r"(?:[.\[].*)?", path): return True
     return False
 
@@ -148,7 +149,7 @@ def _declared_edits(skill):
 
 
 def _residue_declared(skill):
-    r = getattr(skill, "residue", None)
+    r = getattr(skill, "residue", None) or getattr(getattr(skill, "undo", None), "residue", None)  # a toy skill's residue, or a real Skill's Undo.residue
     return isinstance(r, str) and r.strip().lower().rstrip(".") not in ("", "none")
 
 
@@ -195,12 +196,26 @@ class SkillInterpreter:
 
     def __init__(self, mapping, skills, ctx_for):
         self.mapping, self.skills, self.ctx_for, self.used, self.errors = mapping, skills, ctx_for, [], []
+        self.notes = []  # the proposal-note lines of the message being answered (reset by Scratch.say)
 
     def _plan(self, call):
         skill = self.skills.get(call.get("skill"))
         if skill is None: raise KeyError(f"no skill named {call.get('skill')!r}")
         self.used.append(skill.name)
-        return skill.plan(copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        ops = skill.plan(copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        self._notes(skill, call)
+        return ops
+
+    def _notes(self, skill, call):
+        """The assumed proposal-notes contract: a skill module may define ``notes(name, slots, ctx)`` returning
+        ``{say, set, warn}`` lines the dispatcher shows beside the draft. They are collected here, in that order and
+        once each, so the row can assert what the owner would be shown (the live conversation does not show them yet)."""
+        fn = getattr(sys.modules.get(getattr(skill.plan, "__module__", None)), "notes", None)
+        if not callable(fn): return
+        got = fn(skill.name, copy.deepcopy(call.get("slots") or {}), self.ctx_for())
+        for key in ("say", "set", "warn"):
+            for line in got.get(key, []):
+                if line not in self.notes: self.notes.append(line)
 
     def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
         reply = copy.deepcopy(self.mapping.get(text, {"unsupported": "Sorry, I can't do that yet."}))
@@ -217,7 +232,7 @@ class SkillInterpreter:
 class Scratch:
     """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry."""
 
-    def __init__(self, mapping, skills, fault=None):
+    def __init__(self, mapping, skills, fault=None, setup=None):
         from hass import conversation, editor
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo  # the H02 throwaway repo the demo transcript uses
@@ -229,8 +244,21 @@ class Scratch:
         self.previewer = RecordingPreviewer(skip_after=1 if fault == "skip-later-preview" else None)
         self.turn_previews = []  # the preview requests each message caused, in message order
         self.editor = _fault_editor(conversation.Editor, self, str(self.repo.state), fault)
+        if setup:
+            try: self._setup(setup)
+            except Exception:  # noqa: BLE001 - nothing else owns the throwaway repo yet
+                self.repo.cleanup()
+                raise
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now, self.previewer)
         self.Inbound = conversation.Inbound
+
+    def _setup(self, ops):
+        """A row's starting state (for example a hidden product): the ops go through the real editor, prepare then
+        apply, before the row starts, so the row's base is the tree after them. They are never part of the row's diff."""
+        out = self.editor.prepare(ops)
+        if out.get("result") != "ok": raise ValueError(f"setup ops were not accepted: {json.dumps(out, sort_keys=True)[:200]}")
+        done = self.editor.apply(out["draft"]["change_id"], out["draft"]["draft_hash"])
+        if done.get("result") != "applied": raise ValueError(f"setup ops were not applied: {json.dumps(done, sort_keys=True)[:200]}")
 
     def _ctx(self):
         from hass.content_model import load_and_validate
@@ -243,11 +271,14 @@ class Scratch:
         self.now += timedelta(minutes=1)
         msg = self.Inbound(f"tk-{self.n}", CHAT, OWNER, text, False, "new", self.now.isoformat())
         asked = len(self.previewer.requests)
+        self.interp.notes = []
         disposition = self.conv.handle(msg)
         before = len(self.out.sent)
         self.conv.flush(self.out)
         self.turn_previews.append(self.previewer.requests[asked:])
-        return disposition, [r["text"] for r in self.out.sent[before:]]
+        texts = [r["text"] for r in self.out.sent[before:]]
+        if disposition == "proposed" and self.interp.notes: texts.append(voice.plain("\n".join(self.interp.notes)))  # the proposal notes, as the dispatcher will show them
+        return disposition, texts
 
     def head(self): return _git(self.wt, "rev-parse", "HEAD").strip()
 
@@ -354,14 +385,20 @@ def run_case_row(row, skills, skill=None, selftest=False):
         bad = "texts must be distinct non-empty strings, one recorded reply each"
     if not bad and (("fault" in row or "must_fail" in row) and not selftest): bad = "fault / must_fail exist only for the kit self-test"
     if not bad and row.get("fault") not in (None, *FAULTS): bad = f"fault must be one of {', '.join(FAULTS)}"
+    setup = row.get("setup") if isinstance(row, dict) else None
+    if not bad and setup is not None and not (isinstance(setup, list) and setup and all(isinstance(o, dict) and set(o) == {"op", "args"} for o in setup)):
+        bad = "setup is a list of {op, args} ops applied before the row starts"
+    if not bad and "undo" in row and row["undo"] is not True: bad = "undo, when given, is true (the row ends in an approved draft that is undone)"
     if bad: res.fail("bad-row", bad); return res
     expect, mapping = row["expect"], dict(zip(row["texts"], row["replies"]))
     names = {c.get("skill") for r in row["replies"] for c in ([r] + list(r.get("calls", []))) if isinstance(c, dict) and "skill" in c}
     if skill is not None and "version" in row and getattr(skill, "version", None) not in (None, row["version"]):
         res.fail("stale-row", f"row written for version {row['version']}, skill is version {skill.version}"); return res
-    scratch = Scratch(mapping, skills, row.get("fault"))
+    try: scratch = Scratch(mapping, skills, row.get("fault"), setup)
+    except ValueError as exc: res.fail("bad-row", exc); return res
     try: _drive(row, expect, scratch, skills, skill, names, res)
     finally: scratch.close()
+    if row.get("undo") is True and "undo" not in res.facts and res.ok: res.fail("wrong-turn", "the row says undo, but it did not end in an approved draft that was undone")
     return res
 
 
@@ -376,6 +413,8 @@ def _drive(row, expect, sc, skills, skill, names, res):
 
     for text in row["texts"]:
         try: disposition, out = sc.say(text)
+        except voice.VoiceError as exc:  # HASS-VOICE-1: strict mode refuses a reply that breaks the voice rules
+            res.fail("jargon", f"owner reply breaks the voice rules: {str(exc)[:160]}"); return
         except Exception as exc:  # noqa: BLE001
             res.fail("wrong-turn", f"{type(exc).__name__}: {exc}"); return
         dispositions.append(disposition), replies.append(out)
@@ -540,7 +579,8 @@ def registry_skills():
         from hass.skills import load_skills
     except ImportError:
         return ()
-    return tuple(load_skills())
+    loaded = load_skills()
+    return tuple(getattr(loaded, "skills", loaded).values()) if hasattr(getattr(loaded, "skills", None), "values") else tuple(loaded)
 
 
 def skill_for(skills, path, rows):

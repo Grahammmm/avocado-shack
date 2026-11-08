@@ -62,7 +62,7 @@ class ClassifierTests(unittest.TestCase):
 
 
 class SocialConversationTests(H06TestCase):
-    FIXED = "Nothing changed. Send a change in plain words, or help."
+    FIXED = "Nothing changed. Tell me what you'd like to change, or say help."
     def setUp(self):
         super().setUp()
         self.interp = TextInterpreter(self.interp.mapping)
@@ -102,15 +102,15 @@ class SocialConversationTests(H06TestCase):
         self.social("thanks")
 
     def test_near_emoji_one_many_none_question_expired(self):
-        self.near(THUMB, "Nothing is waiting for approval.")
+        self.near(THUMB, "Nothing is waiting for your yes.")
         one = self.proposal("hours")
         self.near(THUMB, self.one(one["code"]))
         self.near(CHECKS[0], self.one(one["code"]))
         two = self.proposal("desc")
-        self.near(OK_HAND, f"Nothing was applied. Reply yes <code> with one of: {one['code']}, {two['code']}.")
+        self.near(OK_HAND, f"I haven't changed anything yet. Which one do you want?\nyes {one['code']}: {one['summary']}\nyes {two['code']}: {two['summary']}")
         self.advance_past_expiry()
         self.assertEqual(self.say(THUMB), "near-approval")  # the normal sweep expires both; nothing is renewed or applied
-        self.assertEqual(self.replies(), ["Nothing is waiting for approval."])
+        self.assertEqual(self.replies(), ["Nothing is waiting for your yes."])
         self.assertEqual(({d["state"] for d in self.drafts()}, self.approvals(), self.interp.texts), ({"expired"}, 0, []))
 
     def test_duplicate_gets_one_reply_and_mixed_words_still_interpreted(self):

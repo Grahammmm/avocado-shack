@@ -15,7 +15,7 @@ from hass.tests.test_commands_doc import verb
 from hass.tests.test_conversation import ConversationTestCase
 from hass.tests.test_status_pause import StoreMixin
 
-UNAVAILABLE = "Catalog unavailable right now; nothing changed."
+UNAVAILABLE = "I can't look that up right now. Nothing has changed. Could you try again in a little while?"
 
 
 class PostParseTests(unittest.TestCase):
@@ -24,8 +24,10 @@ class PostParseTests(unittest.TestCase):
                            ("POST x!", "x")):
             self.assertEqual(conversation.parse_command(text), ("post", want), text)
         self.assertEqual(conversation.parse_command("post"), ("post", ""))
-        for text in ("post a b", "posts a", "please post a", "post\na b", "postit a"):
+        for text in ("posts a", "please post a", "postit a"):
             self.assertIsNone(verb(text), text)
+        # several words read as the command here; the conversation sends them to the interpreter unless they name a product
+        self.assertEqual(conversation.parse_command("post Hass avocado"), ("post", "Hass avocado"))
 
 
 class PostTests(StoreMixin, ConversationTestCase):
@@ -62,40 +64,40 @@ class PostTests(StoreMixin, ConversationTestCase):
         self.assertTrue(want["draft"], want)
         with mock.patch("socket.socket", side_effect=AssertionError("network")):
             text, files = self.post(f"post {self.ids[0]}")
-        self.assertEqual(text, f"Draft post (not posted):\n{want['caption']}\nPhoto description: {want['alt']}")
+        self.assertEqual(text, f"Here's a post you can copy. I haven't posted anything.\n{want['caption']}\nWhat the photo shows: {want['alt']}")
         self.assertEqual(files, [str(self.site / "post-test" / "real.jpg")])
         self.assertEqual((self.drafts(), self.commits(), self.approvals()), ([], 0, 0))
 
     def test_refusals_are_plain_words_and_attach_nothing(self):
-        for send, words in ((f"post {self.ids[0]}x", f"No product {self.ids[0]}x; send find <words> for ids."),
-                            (f"post {self.ids[2]}", f"{self.ids[2]} is not on the site."),
-                            (f"post {self.ids[3]}", f"{self.ids[3]} is not on the site."),
-                            (f"post {self.ids[1]}", f"{self.ids[1]} has no photo on the site."),
-                            (f"post {self.ids[4]}", f"{self.ids[4]} has no photo on the site."),  # link to a file outside
-                            (f"post {self.ids[5]}", f"{self.ids[5]} has no photo on the site."),  # a link is not a regular file
-                            (f"post {self.ids[6]}", f"Cannot draft a post for {self.ids[6]}: free text has a hashtag or account name.")):
+        for send, words in ((f"post {self.ids[0]}x", f"I don't know a product called {self.ids[0]}x. Try find and a word from its name."),
+                            (f"post {self.ids[2]}", f"{self.ids[2]} isn't on the website right now."),
+                            (f"post {self.ids[3]}", f"{self.ids[3]} isn't on the website right now."),
+                            (f"post {self.ids[1]}", f"{self.ids[1]} has no photo on the website yet, so I can't make a post for it."),
+                            (f"post {self.ids[4]}", f"{self.ids[4]} has no photo on the website yet, so I can't make a post for it."),  # link to a file outside
+                            (f"post {self.ids[5]}", f"{self.ids[5]} has no photo on the website yet, so I can't make a post for it."),  # a link is not a regular file
+                            (f"post {self.ids[6]}", f"I can't make a post for {self.ids[6]} right now. Nothing was posted.")):
             with self.subTest(send=send):
                 self.assertEqual(self.post(send), (words, []))
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_no_id_gets_usage_and_two_words_fall_through(self):
-        self.assertEqual(self.post("post"), ("Send post and a product id, e.g. post photo-product-001.", []))
-        self.interp.mapping["post a b"] = {"question": "Which?"}
-        self.assertNotEqual(self.say("post a b"), "post")
+        self.assertEqual(self.post("post"), ("Which product is the post for? Say it like post Hass avocado.", []))
+        self.interp.mapping["post x y"] = {"question": "Which?"}
+        self.assertNotEqual(self.say("post x y"), "post")
         self.assertNotIn("Draft post", "\n".join(self.replies()))
 
     def test_id_is_matched_as_typed(self):
         upper = self.ids[0].upper()
         self.assertNotEqual(upper, self.ids[0])
-        self.assertEqual(self.post(f"post {upper}")[0], f"No product {upper}; send find <words> for ids.")
-        self.assertTrue(self.post(f"post {self.ids[0]}")[0].startswith("Draft post (not posted):"))
+        self.assertEqual(self.post(f"post {upper}")[0], f"I don't know a product called {upper}. Try find and a word from its name.")
+        self.assertTrue(self.post(f"post {self.ids[0]}")[0].startswith("Here's a post you can copy. I haven't posted anything."))
 
     def test_works_while_paused_and_changes_nothing(self):
         self.assertEqual(self.say("pause changes"), "pause")
         self.replies()
         tables, control = self.tables(), [dict(r) for r in self.conv.db.execute("SELECT * FROM control")]
         text, files = self.post(f"post {self.ids[0]}")
-        self.assertTrue(text.startswith("Draft post (not posted):") and "paused" not in text.lower(), text)
+        self.assertTrue(text.startswith("Here's a post you can copy. I haven't posted anything.") and "paused" not in text.lower(), text)
         self.assertEqual(files, [str(self.site / "post-test" / "real.jpg")])
         self.assertEqual((self.drafts(), self.tables(), self.commits(), self.approvals()), ([], tables, 0, 0))
         self.assertEqual([dict(r) for r in self.conv.db.execute("SELECT * FROM control")], control)

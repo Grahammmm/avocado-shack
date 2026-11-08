@@ -98,7 +98,7 @@ const allowed=req=>{
       else if(places>0)checks.routeShown=got.lines.every(l=>!!l&&l.before===(l.link?`Route: ${title} ·`:`Route: ${title}`))&&got.archive.every(a=>a===title)&&(got.sample===null||got.sample===title);
       else unshown=true;
     }else{
-      await page.goto(base+'/',{waitUntil:'networkidle'});
+      await page.goto(base+'/?view=all',{waitUntil:'networkidle'});
       if(target.kind==='product'||target.kind==='maker'){
         await page.locator('#product-search').fill(target.name||'');
         await page.waitForTimeout(200);
@@ -153,6 +153,10 @@ const allowed=req=>{
           checks.homeImageShown=await img.evaluate((el,p)=>el.complete&&el.naturalWidth>0&&el.currentSrc.endsWith('/'+p),target.homeImage);}
         if(target.homeImageCleared===true){const img=page.locator('.hero .hero-image').first();await img.scrollIntoViewIfNeeded();
           checks.homeImageCleared=await img.evaluate(el=>el.complete&&el.naturalWidth>0&&el.currentSrc.endsWith('/assets/store.jpg'));}
+        if(Array.isArray(target.specials)){const items=page.locator('main > .weekly-specials li:not([hidden])');  // AVO-SPECIALS-1
+          const shown=await items.evaluateAll(els=>els.map(e=>[e.querySelector('h3').textContent,e.querySelector('.special-deal').textContent].map(v=>v.replace(/\s+/g,' ').trim())));
+          const want=target.specials.map(s=>[s.title,s.deal].map(ws));
+          checks.specialsShown=JSON.stringify(shown)===JSON.stringify(want)&&(want.length>0?await page.locator('main > .weekly-specials h2').isVisible():await page.locator('.weekly-specials').count()===0);}
         if(typeof target.notice==='string'){const n=page.locator('main > .home-notice');
           checks.noticeShown=await n.count()===1&&await n.isVisible()&&ws(await n.textContent())===ws(target.notice);}
       }

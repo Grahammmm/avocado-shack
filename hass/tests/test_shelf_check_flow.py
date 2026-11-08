@@ -114,9 +114,9 @@ class AskThenYesTests(ShelfCase):
         self.assertEqual(draft["state"], "proposed")
         self.assertEqual([c["op"] for c in json.loads(draft["ops_json"])], ["store.confirm_selection", "product.set_availability"])
         self.assertIn("Got it. This draft also records that the shelf list was checked today.", reply)
-        self.assertIn("selection_checked_on", reply)
-        self.assertIn(f"{HASS}: available", reply)
-        self.assertIn("Reply yes to apply, no to cancel", reply)
+        self.assertIn("the shelf check: from nothing to", reply)
+        self.assertIn("the shelf word: from nothing to no", reply)
+        self.assertIn("Reply yes to save it, or no to cancel", reply)
         self.assertEqual(self.open_asks(), [])
         self.nothing_written()  # the draft is not applied: his normal approval is still needed
         self.assertNotIn("selection_checked_on", self.store())
@@ -208,7 +208,7 @@ class TodaysCheckTests(ShelfCase):
         self.replies()
         self.assertEqual(self.say(SOLD_OUT), "not-drafted")  # already sold out
         [reply] = self.replies()
-        self.assertTrue(reply.startswith("Not drafted: "), reply)
+        self.assertEqual(reply, "That's already how it is, so nothing changed.")
         self.assertEqual(self.open_asks(), [])
 
 
@@ -342,7 +342,7 @@ class MorningReportTests(ShelfCase):
 
     def test_the_report_asks_the_same_question_once(self):
         first = self.report()
-        self.assertTrue(first.startswith("Shelf check: not done yet"), first)
+        self.assertTrue(first.startswith("I still need your shelf check."), first)
         self.assertTrue(first.endswith("\n\n" + Q_REPORT), first)
         self.assertEqual(first.count("Is the shelf list right for today?"), 1)
         self.assertNotIn("Is the shelf list right for today?", self.report())  # once a day
