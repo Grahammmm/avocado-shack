@@ -46,6 +46,9 @@ concurrency:
 
 env:
   PLAYWRIGHT_VERSION: "1.64.1"
+  # SKILLS-PIC-2: the image library the house-style picture code needs (hass/newitem_render.py). One exact
+  # version here and in docs/hass/PILLOW-HOST.md (the host install); change both together.
+  PILLOW_VERSION: "12.0.0"
   # Hass shard jobs on the full tier. The suite is ~1150 s of measured module time (hass/tests/ci_weights.json),
   # so 4 shards are ~290 s each; 4 shards + quick + 2 site jobs fit in the 8 avocado-shack runners with one
   # free. Retune with the repo variable HASS_SHARD_JOBS (1-8) without a code change.
@@ -81,6 +84,15 @@ jobs:
       - name: Plan hass tests (tier, shards, union proof)
         id: plan
         run: python3 hass/tests/ci_shards.py plan --event "$GITHUB_EVENT_NAME" --base HEAD^1 --shards "$HASS_SHARD_JOBS"
+
+      - name: Install pinned Pillow (per job, no shared files)
+        run: |
+          dir="$RUNNER_TEMP/pillow"
+          python3 -m pip install --quiet --disable-pip-version-check --no-input --only-binary=:all: --target "$dir" "Pillow==$PILLOW_VERSION"
+          echo "PYTHONPATH=$dir" >> "$GITHUB_ENV"
+
+      - name: Pillow is installed at the pinned version (fails, never skips, without it)
+        run: python3 -m unittest discover -s tests -p test_pillow_ci.py -v
 
       - name: Python syntax check
         run: python3 -m compileall -q storefront-mockup reports/hermes-handoff
@@ -146,6 +158,12 @@ jobs:
           node-version: "22"
 
       - uses: ./.github/actions/test-env
+
+      - name: Install pinned Pillow (per job, no shared files)
+        run: |
+          dir="$RUNNER_TEMP/pillow"
+          python3 -m pip install --quiet --disable-pip-version-check --no-input --only-binary=:all: --target "$dir" "Pillow==$PILLOW_VERSION"
+          echo "PYTHONPATH=$dir" >> "$GITHUB_ENV"
 
       # Each shard is one plain unittest run (verbosity 2) of its planned module list, printed as it runs,
       # so the "=====" rule stays directly above every FAIL:/ERROR: header that bin/mergegate.py parses.
