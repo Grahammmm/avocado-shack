@@ -156,7 +156,7 @@ def rule_deal_as_typed(slots, texts, ctx):
     if not texts or not isinstance(deal, str):
         return None
     said = [" ".join(str(t).split()) for t in texts]
-    whole = re.compile(r"(?<!\w)" + re.escape(" ".join(deal.split())) + r"(?!\w)")  # a whole token run: '2 for 5' is not inside '12 for 5'
+    whole = re.compile(r"(?<!\w)(?<!\d[.,])" + re.escape(" ".join(deal.split())) + r"(?!\w)(?![.,]\d)")  # whole tokens: '2 for 5' is not inside '12 for 5', '5 dollars' not inside '1.5 dollars'
     if not any(whole.search(t) for t in said):
         return NOT_AS_TYPED, "other"
     return None

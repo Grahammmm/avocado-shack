@@ -151,10 +151,13 @@ class RuleTests(unittest.TestCase):
         self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=["special on honey", "2 for 5 dollars"]))  # said in a later text
         for reworded in ("2 for $5", "2 For 5 Dollars", "two for 5 dollars", "2 for 5 dollars!"):
             self.assertIn("exactly as you type it", self.rule("specials-deal-as-typed", {"deal": reworded}, texts=["honey 2 for 5 dollars"])[0], reworded)
-        for inside in ("Eggs 12 for 5 dollars till Friday", "x2 for 5 dollars", "2 for 5 dollarsX"):  # not a whole token run
+        for inside in ("Eggs 12 for 5 dollars till Friday", "x2 for 5 dollars", "2 for 5 dollarsX", "Eggs 1,2 for 5 dollars"):  # not a whole token run
             self.assertIn("exactly as you type it", self.rule("specials-deal-as-typed", slots, texts=[inside])[0], inside)
         self.assertIsNone(self.rule("specials-deal-as-typed", {"deal": "$5"}, texts=["eggs $5, till Friday"]))
         self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=["honey (2 for 5 dollars)."]))
+        for decimal, deal in (("Eggs 1.5 dollars till Friday", "5 dollars"), ("Eggs 2 for 1.5 dollars", "2 for 1")):  # a decimal is one amount
+            self.assertIn("exactly as you type it", self.rule("specials-deal-as-typed", {"deal": deal}, texts=[decimal])[0], decimal)
+        self.assertIsNone(self.rule("specials-deal-as-typed", {"deal": "1.5 dollars"}, texts=["Eggs 1.5 dollars. Till Friday"]))
         self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=None))  # no owner texts to compare (plan golden)
 
     def test_both_add_and_edit_run_the_as_typed_and_word_price_rules(self):
@@ -327,6 +330,13 @@ class PlanTests(unittest.TestCase):
         c = ctx(texts=["eggs on special, 2 for 5 dollars till Friday"])
         self.assertTrue(sp.SPECIALS_ADD.plan({"title": "Eggs", "deal": "2 for 5 dollars", "end": "2026-11-13"}, c))
         self.assertIn("exactly as you type it", refusal(sp.SPECIALS_ADD, {"title": "Eggs", "deal": "2 for $5", "end": "2026-11-13"}, c))
+
+    def test_a_decimal_amount_is_not_cut_in_add_or_edit(self):
+        c = ctx(special("avocado-honey", "Avocado honey", deal="2 for $5", product="photo-product-041", picture=True), texts=["Eggs 1.5 dollars till Friday"])
+        self.assertIn("exactly as you type it", refusal(sp.SPECIALS_ADD, {"title": "Eggs", "deal": "5 dollars", "end": "2026-11-13"}, c))
+        self.assertIn("exactly as you type it", refusal(sp.SPECIALS_EDIT, {"special": "honey", "deal": "5 dollars"}, c))
+        ok = ctx(texts=["Eggs 1.5 dollars till Friday"])
+        self.assertTrue(sp.SPECIALS_ADD.plan({"title": "Eggs", "deal": "1.5 dollars", "end": "2026-11-13"}, ok))
 
     def test_edit_sends_only_what_changes(self):
         c = ctx(special("avocado-honey", "Avocado honey", deal="2 for $5", product="photo-product-041", picture=True))
