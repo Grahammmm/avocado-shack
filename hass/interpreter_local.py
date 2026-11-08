@@ -8,7 +8,7 @@ RF1240-20: repeated keys and NaN/Infinity in a reply are a failed call (`not-jso
 Not wired into any service: the operator names the existing local model; nothing is pulled or changed here.
 """
 import json, urllib.error, urllib.parse, urllib.request  # noqa: E401
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
@@ -73,7 +73,8 @@ class LocalInterpreter:
     """The Conversation interpreter contract: interpret(text, pending) -> dict. Transport is
     (url, body_bytes, headers, timeout) -> (status, body_bytes); the default never uses a proxy or follows a redirect."""
 
-    def __init__(self, base_url, model, system_prompt, timeout=30, transport=None, clock=None, think=None):
+    def __init__(self, base_url, model, system_prompt, timeout=30, transport=None, clock=None, think=None,
+                 hinter=None):
         self.url = check_url(base_url) + CHAT_PATH
         if not (isinstance(model, str) and 0 < len(model) <= MAX_MODEL and not any(c.isspace() for c in model)):
             raise ValueError(f"model must be a name of 1-{MAX_MODEL} characters without spaces")
@@ -83,9 +84,11 @@ class LocalInterpreter:
             raise ValueError("timeout must be a whole number of seconds from 1 to 120")
         if think is not None and type(think) is not bool: raise ValueError("think must be true, false or unset")
         if clock is not None and not callable(clock): raise ValueError("clock must be callable")
+        if hinter is not None and not callable(hinter): raise ValueError("hinter must be callable")  # HASS-NL-1
         self.model, self.system_prompt, self.timeout, self.think = model, system_prompt, timeout, think
         self.transport = transport or urllib_transport
         self.clock = clock if clock is not None else (lambda: datetime.now(timezone.utc))
+        self.hinter = hinter  # HASS-NL-1: hinter(text, date, aliases) -> dict of facts worked out from the owner's words
         self.last_error = None
 
     def _today(self, sent_at=None):
@@ -99,12 +102,25 @@ class LocalInterpreter:
             raise _Failed("clock") from None
         return local.date().isoformat(), WEEKDAYS[local.weekday()]
 
-    def _request(self, text, pending, notes=None, aliases=None, sent_at=None) -> bytes:
+    def _hints(self, text, today, aliases) -> dict:
+        """HASS-NL-1: the hinter's facts, or {} (a hint is a convenience: no hinter, a raising one or a non-dict is no hint)."""
+        if self.hinter is None: return {}
+        try:
+            hints = self.hinter(text, date.fromisoformat(today), aliases)
+            return hints if isinstance(hints, dict) else {}
+        except Exception:  # noqa: BLE001 - the request goes out without hints
+            return {}
+
+    def _request(self, text, pending, notes=None, aliases=None, sent_at=None, recent=None) -> bytes:
         today, weekday = self._today(sent_at)
         try:  # a lone surrogate or a non-JSON value is a failed call, never a crash
             fields = {"message": text, "pending": pending, "today": today, "weekday": weekday}
             if isinstance(notes, list) and notes: fields["notes"] = notes  # AV1102-09: owner preferences, never claims
             if isinstance(aliases, list) and aliases: fields["aliases"] = aliases  # AV0007-06: identifiers, never claims
+            hints = self._hints(text, today, aliases)
+            if hints: fields["hints"] = hints  # HASS-NL-1: facts, never claims
+            if isinstance(recent, dict) and isinstance(recent.get("question"), str) and recent["question"]:
+                fields["recent"] = {"question": recent["question"]}  # HASS-NL-1: Hass's last question, which this text answers
             user = json.dumps(fields, ensure_ascii=False)
             body = {"model": self.model, "messages": [{"role": "system", "content": self.system_prompt},
                                                       {"role": "user", "content": user}],
@@ -141,12 +157,12 @@ class LocalInterpreter:
         if not isinstance(result, dict): raise _Failed("shape")
         return result
 
-    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None) -> dict:
+    def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None) -> dict:
         """AV1352-06: sent_at (aware, from Conversation) is the day 'today' means; None reads the clock. The model's decoded JSON object as-is (Conversation's checks decide if it is usable), else the fixed
         unsupported reply with the reason code in last_error."""
         self.last_error = None
         try:
-            return self._call(self._request(text, pending, notes, aliases, sent_at))
+            return self._call(self._request(text, pending, notes, aliases, sent_at, recent))
         except _Failed as failure:
             self.last_error = failure.args[0]
             return {"unsupported": FAILED}

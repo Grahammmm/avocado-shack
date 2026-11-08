@@ -17,7 +17,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
-from hass import preview, receiver, relay  # noqa: E402
+from hass import nl_prep, preview, receiver, relay  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
 
@@ -239,9 +239,11 @@ class Worker:
 
 def interpreter_builder(cfg, worktree):
     def build():
-        prompt = interpreter_prompt.build(load_registry(), load_content(Path(worktree) / "hass" / "content"))
+        content = load_content(Path(worktree) / "hass" / "content")
+        prompt = interpreter_prompt.build(load_registry(), content)
         return interpreter_local.LocalInterpreter(cfg["interpreter"]["url"], cfg["interpreter"]["model"], prompt,
-                                               timeout=cfg["interpreter"].get("timeout", 30), think=cfg["interpreter"].get("think"))
+                                               timeout=cfg["interpreter"].get("timeout", 30), think=cfg["interpreter"].get("think"),
+                                               hinter=nl_prep.make_hinter(content))  # HASS-NL-1
     return build
 
 
