@@ -70,4 +70,15 @@ dialog .close{position:sticky;top:0;right:auto;float:right;width:44px;height:44p
 .catalog-controls .avail-filter input{display:inline-block;width:24px;height:24px;margin:0;flex:none}
 .catalog-controls #clear-filters{min-height:44px;justify-self:start}
 .catalog-controls #clear-filters[hidden]{display:block;visibility:hidden}
+/* AVO-SPECIALS-1: "This week's specials" at the top of the page (rendered only while a special is active). */
+.weekly-specials{margin:12px 4% 0;padding:34px 38px 30px;background:var(--soft);border-top:3px solid var(--orange)}
+.weekly-specials h2{margin-bottom:18px;max-width:none}
+.weekly-specials ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.weekly-specials li{display:flex;gap:14px;align-items:center;background:var(--cream);border:1px solid var(--line);padding:14px}
+.weekly-specials .special-image{flex:none;width:84px;height:84px;object-fit:cover;border-radius:2px}
+.weekly-specials h3{font-family:Georgia,serif;font-weight:400;font-size:22px;line-height:1.15;margin:0 0 4px;overflow-wrap:anywhere}
+.weekly-specials .special-deal{margin:0;font-weight:700;color:var(--orange);overflow-wrap:anywhere}
+.weekly-specials .special-link{display:inline-block;margin-top:2px}
+.weekly-specials[hidden],.weekly-specials li[hidden]{display:none}
+@media(max-width:800px){.weekly-specials{margin:10px 0 0;padding:26px 6% 24px}.weekly-specials ul{grid-template-columns:1fr}}
 .catalog-only .filters.views{border-bottom:0;margin:15px 0 0;padding-bottom:8px}.catalog-only .filters.views+.filters{margin-top:0}

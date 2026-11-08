@@ -70,6 +70,8 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Undoing an older change to the shop details (hours, address, intro, headline, story, home photo, notice, phone or shelf check date) puts back only the details that change wrote, and keeps later edits to the other details.
 - If a later edit gave one of those same details a different value, the undo is refused until that later edit is undone. A notice, with its dates, counts as one detail.
 - Changes to products, hikes, makers and routes are still undone one whole item at a time.
+- Weekly specials (the "This week's specials" box at the top of the page) are one saved detail: undoing an older specials change is refused if you changed the specials again after it. Undo the newer change first.
+- A special shows through its last day (Pacific) and never after, even if nobody removes it. At most 6 show on one day, each runs at most 31 days, and the title and deal line are at most 60 characters with no links, email addresses or phone numbers. Only the deal line may have a price, and it appears exactly as typed.
 
 ## Problems log (for Graham, not for Mike)
 

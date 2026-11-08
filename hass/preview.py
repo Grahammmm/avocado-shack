@@ -12,6 +12,7 @@ import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, t
 from pathlib import Path, PurePosixPath
 
 from hass.content_model import DEFAULT_INTRO, shop_today
+from hass.content_model import active_specials
 from hass.notice import live_text
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
@@ -43,6 +44,10 @@ def _readable(record) -> bool:
         return False
     home = after.get("homeImage") if collection == "store" else None
     if not (home is None or isinstance(home, dict) and isinstance(home.get("image"), (str, type(None)))):
+        return False
+    specials = after.get("specials") if collection == "store" else None
+    if not (specials is None or isinstance(specials, list) and all(
+            isinstance(sp, dict) and isinstance(sp.get("title"), str) and isinstance(sp.get("deal"), str) for sp in specials)):
         return False
     notice = after.get("notice") if collection == "store" else None
     if not (notice is None or isinstance(notice, dict) and isinstance(notice.get("text"), (str, type(None)))):
@@ -81,7 +86,9 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
         cleared = bool((record.get("before") or {}).get("homeImage")) and "homeImage" not in after  # shop photo back
         phone = ({"phone": phone_text(after["phone"]) if after.get("phone") else None}
                  if before.get("phone") != after.get("phone") else {})  # AV1222-04
-        return {"kind": "store", **phone, **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
+        shown = ({"specials": [{"title": sp["title"], "deal": sp["deal"]} for sp in active_specials(after, today)]}
+                 if before.get("specials") != after.get("specials") else {})  # AVO-SPECIALS-1: what the page shows today
+        return {"kind": "store", **phone, **shown, **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
                 "intro": after.get("intro"), **line,
