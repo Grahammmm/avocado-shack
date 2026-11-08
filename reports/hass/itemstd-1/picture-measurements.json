@@ -1,0 +1,4014 @@
+{
+ "n_files": 182,
+ "n_active_pictures": 170,
+ "not_used_by_an_active_product": [
+  {
+   "path": "assets/products/box-large.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/box-medium.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/box-small.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-bottle.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-cap.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-coast.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-mug.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-stickers.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-sweat.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-tee.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/merch-tote.webp",
+   "used_by": []
+  },
+  {
+   "path": "assets/products/photo-product-040.webp",
+   "used_by": [
+    "photo-product-040"
+   ]
+  }
+ ],
+ "formats": {
+  "WEBP": 170
+ },
+ "modes": {
+  "RGB": 170
+ },
+ "sizes": {
+  "800x800": 170
+ },
+ "riff_chunk_sets": {
+  "VP8 ": 170
+ },
+ "with_exif": 0,
+ "with_icc": 0,
+ "with_alpha": 0,
+ "animated": 0,
+ "no_subject_found": [],
+ "touches_edge": [
+  "assets/products/photo-product-002.webp",
+  "assets/products/photo-product-005.webp",
+  "assets/products/photo-product-007.webp",
+  "assets/products/photo-product-008.webp",
+  "assets/products/photo-product-009.webp",
+  "assets/products/photo-product-012.webp",
+  "assets/products/photo-product-015.webp",
+  "assets/products/photo-product-017.webp",
+  "assets/products/photo-product-023.webp",
+  "assets/products/photo-product-024.webp",
+  "assets/products/photo-product-028.webp",
+  "assets/products/photo-product-031.webp",
+  "assets/products/photo-product-033.webp",
+  "assets/products/photo-product-038.webp",
+  "assets/products/photo-product-054.webp",
+  "assets/products/photo-product-075.webp",
+  "assets/products/photo-product-077.webp",
+  "assets/products/photo-product-078.webp",
+  "assets/products/photo-product-085.webp",
+  "assets/products/photo-product-092.webp",
+  "assets/products/photo-product-093.webp",
+  "assets/products/photo-product-094.webp",
+  "assets/products/photo-product-097.webp",
+  "assets/products/photo-product-098.webp",
+  "assets/products/photo-product-099.webp",
+  "assets/products/photo-product-105.webp",
+  "assets/products/photo-product-109.webp",
+  "assets/products/photo-product-110.webp",
+  "assets/products/photo-product-111.webp",
+  "assets/products/photo-product-112.webp",
+  "assets/products/photo-product-113.webp",
+  "assets/products/photo-product-114.webp",
+  "assets/products/photo-product-115.webp",
+  "assets/products/photo-product-116.webp",
+  "assets/products/photo-product-117.webp",
+  "assets/products/photo-product-118.webp",
+  "assets/products/photo-product-129.webp",
+  "assets/products/photo-product-131.webp",
+  "assets/products/photo-product-157.webp",
+  "assets/products/photo-product-168.webp"
+ ],
+ "distributions": {
+  "bg_r": {
+   "n": 170,
+   "min": 246,
+   "p05": 249.0,
+   "p25": 252.0,
+   "median": 254.0,
+   "p75": 254.0,
+   "p95": 254.0,
+   "max": 255,
+   "mean": 252.6529
+  },
+  "bg_g": {
+   "n": 170,
+   "min": 233,
+   "p05": 237.0,
+   "p25": 244.0,
+   "median": 248.0,
+   "p75": 250.0,
+   "p95": 251.0,
+   "max": 253,
+   "mean": 246.4059
+  },
+  "bg_b": {
+   "n": 170,
+   "min": 214,
+   "p05": 224.0,
+   "p25": 232.0,
+   "median": 236.0,
+   "p75": 240.0,
+   "p95": 243.0,
+   "max": 249,
+   "mean": 235.3706
+  },
+  "bg_luma": {
+   "n": 170,
+   "min": 235.62,
+   "p05": 238.898,
+   "p25": 245.2675,
+   "median": 248.065,
+   "p75": 250.0025,
+   "p95": 251.28,
+   "max": 252.84,
+   "mean": 247.015
+  },
+  "bg_spread": {
+   "n": 170,
+   "min": 0.012,
+   "p05": 0.5241,
+   "p25": 1.1935,
+   "median": 1.876,
+   "p75": 2.948,
+   "p95": 5.2612,
+   "max": 8.262,
+   "mean": 2.3234
+  },
+  "frame_clean": {
+   "n": 170,
+   "min": 0.865,
+   "p05": 0.9454,
+   "p25": 0.973,
+   "median": 0.9919,
+   "p75": 1.0,
+   "p95": 1.0,
+   "max": 1.0,
+   "mean": 0.984
+  },
+  "corner_luma_range": {
+   "n": 170,
+   "min": 0.0,
+   "p05": 0.23,
+   "p25": 1.0,
+   "median": 2.265,
+   "p75": 4.795,
+   "p95": 11.49,
+   "max": 23.26,
+   "mean": 3.4723
+  },
+  "bytes": {
+   "n": 170,
+   "min": 23672,
+   "p05": 30954.2,
+   "p25": 48808.0,
+   "median": 62170.0,
+   "p75": 83057.0,
+   "p95": 98784.0,
+   "max": 158926,
+   "mean": 65140.5059
+  },
+  "bits_per_pixel": {
+   "n": 170,
+   "min": 0.296,
+   "p05": 0.3874,
+   "p25": 0.6102,
+   "median": 0.777,
+   "p75": 1.038,
+   "p95": 1.2347,
+   "max": 1.987,
+   "mean": 0.8142
+  },
+  "fill_w": {
+   "n": 170,
+   "min": 0.28,
+   "p05": 0.4823,
+   "p25": 0.6912,
+   "median": 0.85,
+   "p75": 0.935,
+   "p95": 0.97,
+   "max": 1.0,
+   "mean": 0.7937
+  },
+  "fill_h": {
+   "n": 170,
+   "min": 0.35,
+   "p05": 0.51,
+   "p25": 0.72,
+   "median": 0.79,
+   "p75": 0.8738,
+   "p95": 0.9427,
+   "max": 0.965,
+   "mean": 0.7802
+  },
+  "fill_max": {
+   "n": 170,
+   "min": 0.705,
+   "p05": 0.79,
+   "p25": 0.8512,
+   "median": 0.905,
+   "p75": 0.945,
+   "p95": 0.97,
+   "max": 1.0,
+   "mean": 0.8935
+  },
+  "margin_left": {
+   "n": 170,
+   "min": 0.0,
+   "p05": 0.0,
+   "p25": 0.04,
+   "median": 0.095,
+   "p75": 0.2037,
+   "p95": 0.315,
+   "max": 0.405,
+   "mean": 0.1248
+  },
+  "margin_right": {
+   "n": 170,
+   "min": 0.0,
+   "p05": 0.0,
+   "p25": 0.025,
+   "median": 0.06,
+   "p75": 0.1237,
+   "p95": 0.225,
+   "max": 0.315,
+   "mean": 0.0815
+  },
+  "margin_top": {
+   "n": 170,
+   "min": 0.01,
+   "p05": 0.02,
+   "p25": 0.06,
+   "median": 0.115,
+   "p75": 0.1537,
+   "p95": 0.2677,
+   "max": 0.37,
+   "mean": 0.1168
+  },
+  "margin_bottom": {
+   "n": 170,
+   "min": 0.025,
+   "p05": 0.035,
+   "p25": 0.0663,
+   "median": 0.095,
+   "p75": 0.13,
+   "p95": 0.2227,
+   "max": 0.28,
+   "mean": 0.103
+  },
+  "center_x": {
+   "n": 170,
+   "min": -0.1075,
+   "p05": -0.035,
+   "p25": 0.0,
+   "median": 0.0125,
+   "p75": 0.0475,
+   "p95": 0.0925,
+   "max": 0.13,
+   "mean": 0.0216
+  },
+  "center_y": {
+   "n": 170,
+   "min": -0.025,
+   "p05": -0.015,
+   "p25": -0.005,
+   "median": 0.005,
+   "p75": 0.0125,
+   "p95": 0.0414,
+   "max": 0.0975,
+   "mean": 0.0069
+  },
+  "area_share": {
+   "n": 170,
+   "min": 0.1588,
+   "p05": 0.2256,
+   "p25": 0.3386,
+   "median": 0.3982,
+   "p75": 0.4612,
+   "p95": 0.5606,
+   "max": 0.6428,
+   "mean": 0.3982
+  },
+  "shadow_depth": {
+   "n": 170,
+   "min": -3.423,
+   "p05": -0.3735,
+   "p25": 0.86,
+   "median": 2.053,
+   "p75": 3.8102,
+   "p95": 5.8157,
+   "max": 7.448,
+   "mean": 2.4048
+  },
+  "subject_luma": {
+   "n": 170,
+   "min": 67.09,
+   "p05": 88.0015,
+   "p25": 118.945,
+   "median": 140.41,
+   "p75": 157.0975,
+   "p95": 184.0915,
+   "max": 206.36,
+   "mean": 137.7941
+  },
+  "subject_sat": {
+   "n": 170,
+   "min": 0.1407,
+   "p05": 0.2635,
+   "p25": 0.4088,
+   "median": 0.484,
+   "p75": 0.591,
+   "p95": 0.7081,
+   "max": 0.8185,
+   "mean": 0.4907
+  },
+  "bg_dist_from_median": {
+   "n": 170,
+   "min": 0.0,
+   "p05": 1.0,
+   "p25": 2.45,
+   "median": 4.795,
+   "p75": 7.87,
+   "p95": 16.8845,
+   "max": 27.09,
+   "mean": 6.1611
+  }
+ },
+ "bg_median_rgb": [
+  254,
+  248,
+  236
+ ],
+ "bg_median_hex": "#fef8ec",
+ "bg_within": {
+  "3": 50,
+  "6": 105,
+  "10": 139,
+  "15": 158
+ },
+ "shadow": {
+  "measured": 170,
+  "present_ge_1_level": 124,
+  "present_ge_2_levels": 91,
+  "none_lt_1_level": 46,
+  "not_measurable": 0
+ },
+ "bytes_total_active": 11073886,
+ "naming": {
+  "id_equals_file_stem": 170,
+  "mismatch": []
+ },
+ "files_shared_by_several_products": [],
+ "identical_pictures": [],
+ "near_identical_pictures": [],
+ "near_identical_pictures_count": 0,
+ "score_center": {
+  "bg_dist": 4.795,
+  "bg_spread": 1.876,
+  "frame_clean": 0.9919,
+  "fill_max": 0.905,
+  "center_x": 0.0125,
+  "center_y": 0.005,
+  "margin_bottom": 0.095,
+  "bytes_log": 11.0376,
+  "shadow_depth": 2.053
+ },
+ "score_scale_robust_sigma": {
+  "bg_dist": 3.788,
+  "bg_spread": 1.2913,
+  "frame_clean": 0.0121,
+  "fill_max": 0.0667,
+  "center_x": 0.0259,
+  "center_y": 0.013,
+  "margin_bottom": 0.0445,
+  "bytes_log": 0.4146,
+  "shadow_depth": 2.1246
+ },
+ "best10": [
+  {
+   "path": "assets/products/photo-product-164.webp",
+   "product": "Red bell peppers",
+   "id": "photo-product-164",
+   "deviation": 1.012,
+   "bg": "#fefbf0",
+   "fill_max": 0.93,
+   "center": [
+    0.0,
+    0.0
+   ],
+   "margin_bottom": 0.085,
+   "bytes": 58828,
+   "frame_clean": 0.988,
+   "shadow": 1.103,
+   "main_reasons": [
+    "bg_spread",
+    "center_x"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-169.webp",
+   "product": "Cherry tomatoes",
+   "id": "photo-product-169",
+   "deviation": 1.042,
+   "bg": "#fefaf1",
+   "fill_max": 0.86,
+   "center": [
+    0.01,
+    0.0075
+   ],
+   "margin_bottom": 0.125,
+   "bytes": 67602,
+   "frame_clean": 1.0,
+   "shadow": 2.833,
+   "main_reasons": [
+    "fill_max",
+    "margin_bottom"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-103.webp",
+   "product": "Radicchio",
+   "id": "photo-product-103",
+   "deviation": 1.044,
+   "bg": "#fefaee",
+   "fill_max": 0.895,
+   "center": [
+    -0.0025,
+    0.0075
+   ],
+   "margin_bottom": 0.105,
+   "bytes": 86422,
+   "frame_clean": 1.0,
+   "shadow": 0.859,
+   "main_reasons": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-073.webp",
+   "product": "Ginger",
+   "id": "photo-product-073",
+   "deviation": 1.073,
+   "bg": "#fef9ef",
+   "fill_max": 0.93,
+   "center": [
+    0.005,
+    0.0025
+   ],
+   "margin_bottom": 0.13,
+   "bytes": 78928,
+   "frame_clean": 0.9909,
+   "shadow": 0.867,
+   "main_reasons": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-016.webp",
+   "product": "Oranges",
+   "id": "photo-product-016",
+   "deviation": 1.085,
+   "bg": "#fefaf2",
+   "fill_max": 0.925,
+   "center": [
+    -0.0075,
+    0.0
+   ],
+   "margin_bottom": 0.11,
+   "bytes": 55800,
+   "frame_clean": 1.0,
+   "shadow": 1.551,
+   "main_reasons": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-130.webp",
+   "product": "Gouda",
+   "id": "photo-product-130",
+   "deviation": 1.095,
+   "bg": "#fdf8ee",
+   "fill_max": 0.885,
+   "center": [
+    0.0075,
+    0.0025
+   ],
+   "margin_bottom": 0.07,
+   "bytes": 53318,
+   "frame_clean": 1.0,
+   "shadow": 1.72,
+   "main_reasons": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-149.webp",
+   "product": "Green cabbage",
+   "id": "photo-product-149",
+   "deviation": 1.146,
+   "bg": "#fefaf0",
+   "fill_max": 0.87,
+   "center": [
+    -0.005,
+    0.0125
+   ],
+   "margin_bottom": 0.07,
+   "bytes": 62986,
+   "frame_clean": 1.0,
+   "shadow": 1.207,
+   "main_reasons": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-063.webp",
+   "product": "Bok choy",
+   "id": "photo-product-063",
+   "deviation": 1.182,
+   "bg": "#fefaf2",
+   "fill_max": 0.95,
+   "center": [
+    0.0,
+    0.0075
+   ],
+   "margin_bottom": 0.115,
+   "bytes": 50634,
+   "frame_clean": 0.9911,
+   "shadow": 0.391,
+   "main_reasons": [
+    "fill_max",
+    "shadow_depth"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-010.webp",
+   "product": "Cal Poly blackberry jam",
+   "id": "photo-product-010",
+   "deviation": 1.198,
+   "bg": "#fefbf3",
+   "fill_max": 0.935,
+   "center": [
+    -0.0025,
+    0.015
+   ],
+   "margin_bottom": 0.1,
+   "bytes": 54908,
+   "frame_clean": 0.9917,
+   "shadow": 1.262,
+   "main_reasons": [
+    "bg_dist",
+    "center_y"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-165.webp",
+   "product": "Poblano peppers",
+   "id": "photo-product-165",
+   "deviation": 1.239,
+   "bg": "#fef9ef",
+   "fill_max": 0.91,
+   "center": [
+    0.0,
+    -0.0025
+   ],
+   "margin_bottom": 0.09,
+   "bytes": 86278,
+   "frame_clean": 1.0,
+   "shadow": 4.511,
+   "main_reasons": [
+    "shadow_depth",
+    "frame_clean"
+   ]
+  }
+ ],
+ "worst10": [
+  {
+   "path": "assets/products/photo-product-015.webp",
+   "product": "Brian's sourdough bread",
+   "id": "photo-product-015",
+   "deviation": 8.773,
+   "bg": "#f6ecdf",
+   "fill_max": 0.815,
+   "center": [
+    0.0925,
+    0.0975
+   ],
+   "margin_bottom": 0.03,
+   "bytes": 82192,
+   "frame_clean": 0.865,
+   "shadow": 2.381,
+   "main_reasons": [
+    "center_y",
+    "frame_clean"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-110.webp",
+   "product": "Cookies and Cream chocolate",
+   "id": "photo-product-110",
+   "deviation": 8.175,
+   "bg": "#f9e9d6",
+   "fill_max": 0.94,
+   "center": [
+    0.03,
+    0.01
+   ],
+   "margin_bottom": 0.24,
+   "bytes": 44438,
+   "frame_clean": 0.8869,
+   "shadow": 5.282,
+   "main_reasons": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-093.webp",
+   "product": "Avocado Shack (Hands)",
+   "id": "photo-product-093",
+   "deviation": 6.668,
+   "bg": "#f8ede1",
+   "fill_max": 0.8,
+   "center": [
+    0.1,
+    0.015
+   ],
+   "margin_bottom": 0.115,
+   "bytes": 53316,
+   "frame_clean": 0.8994,
+   "shadow": 3.797,
+   "main_reasons": [
+    "frame_clean",
+    "bg_dist"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-085.webp",
+   "product": "Dream Girl Decaf",
+   "id": "photo-product-085",
+   "deviation": 6.02,
+   "bg": "#f8ecdd",
+   "fill_max": 0.8,
+   "center": [
+    -0.1025,
+    0.01
+   ],
+   "margin_bottom": 0.09,
+   "bytes": 71132,
+   "frame_clean": 0.9753,
+   "shadow": 4.461,
+   "main_reasons": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-005.webp",
+   "product": "Linn's orange marmalade",
+   "id": "photo-product-005",
+   "deviation": 5.75,
+   "bg": "#f9edde",
+   "fill_max": 1.0,
+   "center": [
+    0.0,
+    0.0025
+   ],
+   "margin_bottom": 0.13,
+   "bytes": 63686,
+   "frame_clean": 0.9437,
+   "shadow": 0.188,
+   "main_reasons": [
+    "bg_dist",
+    "bg_spread"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-024.webp",
+   "product": "Cal Poly eggs",
+   "id": "photo-product-024",
+   "deviation": 5.537,
+   "bg": "#fdf3e6",
+   "fill_max": 0.99,
+   "center": [
+    0.005,
+    0.045
+   ],
+   "margin_bottom": 0.28,
+   "bytes": 44588,
+   "frame_clean": 0.9487,
+   "shadow": 3.632,
+   "main_reasons": [
+    "margin_bottom",
+    "frame_clean"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-094.webp",
+   "product": "Cass Hill Blend",
+   "id": "photo-product-094",
+   "deviation": 5.529,
+   "bg": "#f9eee1",
+   "fill_max": 0.785,
+   "center": [
+    0.1075,
+    0.0
+   ],
+   "margin_bottom": 0.115,
+   "bytes": 50476,
+   "frame_clean": 0.9613,
+   "shadow": -3.423,
+   "main_reasons": [
+    "center_x",
+    "bg_dist"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-046.webp",
+   "product": "Dried lion\u2019s mane mushrooms",
+   "id": "photo-product-046",
+   "deviation": 5.365,
+   "bg": "#f9ebdb",
+   "fill_max": 0.905,
+   "center": [
+    0.08,
+    0.0125
+   ],
+   "margin_bottom": 0.035,
+   "bytes": 99510,
+   "frame_clean": 0.9832,
+   "shadow": -2.227,
+   "main_reasons": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-123.webp",
+   "product": "Rosemary Sourdough with Olive Oil",
+   "id": "photo-product-123",
+   "deviation": 5.048,
+   "bg": "#f9eee1",
+   "fill_max": 0.955,
+   "center": [
+    0.035,
+    -0.0125
+   ],
+   "margin_bottom": 0.035,
+   "bytes": 102894,
+   "frame_clean": 0.9382,
+   "shadow": -1.344,
+   "main_reasons": [
+    "frame_clean",
+    "bg_dist"
+   ]
+  },
+  {
+   "path": "assets/products/photo-product-038.webp",
+   "product": "Cal Poly white cheddar",
+   "id": "photo-product-038",
+   "deviation": 4.985,
+   "bg": "#f7ede1",
+   "fill_max": 0.835,
+   "center": [
+    0.0825,
+    0.0175
+   ],
+   "margin_bottom": 0.125,
+   "bytes": 34644,
+   "frame_clean": 0.954,
+   "shadow": 1.56,
+   "main_reasons": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  }
+ ],
+ "deviation_distribution": {
+  "n": 170,
+  "min": 1.012,
+  "p05": 1.2165,
+  "p25": 1.8228,
+  "median": 2.333,
+  "p75": 3.2065,
+  "p95": 5.0196,
+  "max": 8.773,
+  "mean": 2.7062
+ },
+ "outliers_beyond_2_5_sigma": {
+  "bg_dist": {
+   "count": 16,
+   "ids": [
+    "photo-product-005",
+    "photo-product-007",
+    "photo-product-013",
+    "photo-product-015",
+    "photo-product-018",
+    "photo-product-022",
+    "photo-product-038",
+    "photo-product-041",
+    "photo-product-046",
+    "photo-product-048",
+    "photo-product-085",
+    "photo-product-089"
+   ]
+  },
+  "bg_spread": {
+   "count": 12,
+   "ids": [
+    "photo-product-005",
+    "photo-product-015",
+    "photo-product-023",
+    "photo-product-024",
+    "photo-product-031",
+    "photo-product-055",
+    "photo-product-085",
+    "photo-product-093",
+    "photo-product-094",
+    "photo-product-109",
+    "photo-product-110",
+    "photo-product-117"
+   ]
+  },
+  "frame_clean": {
+   "count": 17,
+   "ids": [
+    "photo-product-005",
+    "photo-product-015",
+    "photo-product-024",
+    "photo-product-031",
+    "photo-product-038",
+    "photo-product-055",
+    "photo-product-059",
+    "photo-product-093",
+    "photo-product-094",
+    "photo-product-104",
+    "photo-product-109",
+    "photo-product-110"
+   ]
+  },
+  "fill_max": {
+   "count": 1,
+   "ids": [
+    "photo-product-029"
+   ]
+  },
+  "center_x": {
+   "count": 20,
+   "ids": [
+    "photo-product-013",
+    "photo-product-015",
+    "photo-product-019",
+    "photo-product-029",
+    "photo-product-038",
+    "photo-product-041",
+    "photo-product-046",
+    "photo-product-048",
+    "photo-product-055",
+    "photo-product-085",
+    "photo-product-086",
+    "photo-product-092"
+   ]
+  },
+  "center_y": {
+   "count": 10,
+   "ids": [
+    "photo-product-012",
+    "photo-product-015",
+    "photo-product-023",
+    "photo-product-024",
+    "photo-product-031",
+    "photo-product-057",
+    "photo-product-098",
+    "photo-product-111",
+    "photo-product-112",
+    "photo-product-116"
+   ]
+  },
+  "margin_bottom": {
+   "count": 10,
+   "ids": [
+    "photo-product-012",
+    "photo-product-024",
+    "photo-product-028",
+    "photo-product-109",
+    "photo-product-110",
+    "photo-product-113",
+    "photo-product-114",
+    "photo-product-116",
+    "photo-product-117",
+    "photo-product-118"
+   ]
+  },
+  "bytes_log": {
+   "count": 0,
+   "ids": []
+  },
+  "shadow_depth": {
+   "count": 2,
+   "ids": [
+    "photo-product-094",
+    "photo-product-156"
+   ]
+  }
+ },
+ "pictures": {
+  "photo-product-001": {
+   "path": "assets/products/photo-product-001.webp",
+   "deviation": 2.426,
+   "bg": "#fdf7ec",
+   "bg_dist": 1.41,
+   "fill_max": 0.97,
+   "margin_bottom": 0.11,
+   "center_x": -0.01,
+   "center_y": 0.0075,
+   "frame_clean": 0.9637,
+   "bytes": 83060,
+   "shadow": -0.291,
+   "touches_edge": false,
+   "why": [
+    "frame_clean",
+    "fill_max"
+   ]
+  },
+  "photo-product-002": {
+   "path": "assets/products/photo-product-002.webp",
+   "deviation": 2.377,
+   "bg": "#faf2e8",
+   "bg_dist": 8.25,
+   "fill_max": 0.94,
+   "margin_bottom": 0.12,
+   "center_x": 0.03,
+   "center_y": 0.0075,
+   "frame_clean": 0.9658,
+   "bytes": 67502,
+   "shadow": 0.191,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "bg_spread"
+   ]
+  },
+  "photo-product-003": {
+   "path": "assets/products/photo-product-003.webp",
+   "deviation": 2.838,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.78,
+   "margin_bottom": 0.105,
+   "center_x": 0.075,
+   "center_y": 0.005,
+   "frame_clean": 1.0,
+   "bytes": 57386,
+   "shadow": 3.988,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-004": {
+   "path": "assets/products/photo-product-004.webp",
+   "deviation": 2.665,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.765,
+   "margin_bottom": 0.115,
+   "center_x": 0.0475,
+   "center_y": 0.0025,
+   "frame_clean": 0.99,
+   "bytes": 56338,
+   "shadow": 5.703,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-005": {
+   "path": "assets/products/photo-product-005.webp",
+   "deviation": 5.75,
+   "bg": "#f9edde",
+   "bg_dist": 18.49,
+   "fill_max": 1.0,
+   "margin_bottom": 0.13,
+   "center_x": 0.0,
+   "center_y": 0.0025,
+   "frame_clean": 0.9437,
+   "bytes": 63686,
+   "shadow": 0.188,
+   "touches_edge": true,
+   "why": [
+    "bg_dist",
+    "bg_spread"
+   ]
+  },
+  "photo-product-006": {
+   "path": "assets/products/photo-product-006.webp",
+   "deviation": 2.452,
+   "bg": "#fdf4e8",
+   "bg_dist": 5.74,
+   "fill_max": 0.965,
+   "margin_bottom": 0.025,
+   "center_x": -0.0075,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 92650,
+   "shadow": -0.292,
+   "touches_edge": false,
+   "why": [
+    "bg_spread",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-007": {
+   "path": "assets/products/photo-product-007.webp",
+   "deviation": 4.975,
+   "bg": "#f6ebdd",
+   "bg_dist": 21.4,
+   "fill_max": 0.95,
+   "margin_bottom": 0.065,
+   "center_x": 0.025,
+   "center_y": -0.005,
+   "frame_clean": 0.9631,
+   "bytes": 44754,
+   "shadow": 2.04,
+   "touches_edge": true,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-008": {
+   "path": "assets/products/photo-product-008.webp",
+   "deviation": 2.907,
+   "bg": "#faf1e4",
+   "bg_dist": 11.36,
+   "fill_max": 0.97,
+   "margin_bottom": 0.135,
+   "center_x": 0.015,
+   "center_y": -0.005,
+   "frame_clean": 0.9678,
+   "bytes": 67876,
+   "shadow": 2.777,
+   "touches_edge": true,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-009": {
+   "path": "assets/products/photo-product-009.webp",
+   "deviation": 2.689,
+   "bg": "#faf1e5",
+   "bg_dist": 10.68,
+   "fill_max": 0.95,
+   "margin_bottom": 0.105,
+   "center_x": 0.025,
+   "center_y": 0.0075,
+   "frame_clean": 0.973,
+   "bytes": 57144,
+   "shadow": 3.968,
+   "touches_edge": true,
+   "why": [
+    "bg_spread",
+    "bg_dist"
+   ]
+  },
+  "photo-product-010": {
+   "path": "assets/products/photo-product-010.webp",
+   "deviation": 1.198,
+   "bg": "#fefbf3",
+   "bg_dist": 7.62,
+   "fill_max": 0.935,
+   "margin_bottom": 0.1,
+   "center_x": -0.0025,
+   "center_y": 0.015,
+   "frame_clean": 0.9917,
+   "bytes": 54908,
+   "shadow": 1.262,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "center_y"
+   ]
+  },
+  "photo-product-011": {
+   "path": "assets/products/photo-product-011.webp",
+   "deviation": 2.121,
+   "bg": "#fbf4e8",
+   "bg_dist": 6.4,
+   "fill_max": 0.865,
+   "margin_bottom": 0.075,
+   "center_x": 0.0475,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 31084,
+   "shadow": 5.836,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "shadow_depth"
+   ]
+  },
+  "photo-product-012": {
+   "path": "assets/products/photo-product-012.webp",
+   "deviation": 4.443,
+   "bg": "#fdf8ee",
+   "bg_dist": 2.24,
+   "fill_max": 0.925,
+   "margin_bottom": 0.225,
+   "center_x": 0.0375,
+   "center_y": 0.0525,
+   "frame_clean": 0.9773,
+   "bytes": 41250,
+   "shadow": 6.854,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-013": {
+   "path": "assets/products/photo-product-013.webp",
+   "deviation": 4.985,
+   "bg": "#fbf0e0",
+   "bg_dist": 14.73,
+   "fill_max": 0.905,
+   "margin_bottom": 0.065,
+   "center_x": 0.13,
+   "center_y": -0.0175,
+   "frame_clean": 0.9788,
+   "bytes": 31130,
+   "shadow": 2.461,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "bg_dist"
+   ]
+  },
+  "photo-product-014": {
+   "path": "assets/products/photo-product-014.webp",
+   "deviation": 2.07,
+   "bg": "#fffbf3",
+   "bg_dist": 7.68,
+   "fill_max": 0.835,
+   "margin_bottom": 0.07,
+   "center_x": 0.04,
+   "center_y": 0.0125,
+   "frame_clean": 1.0,
+   "bytes": 36548,
+   "shadow": 4.729,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-015": {
+   "path": "assets/products/photo-product-015.webp",
+   "deviation": 8.773,
+   "bg": "#f6ecdf",
+   "bg_dist": 19.42,
+   "fill_max": 0.815,
+   "margin_bottom": 0.03,
+   "center_x": 0.0925,
+   "center_y": 0.0975,
+   "frame_clean": 0.865,
+   "bytes": 82192,
+   "shadow": 2.381,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "frame_clean"
+   ]
+  },
+  "photo-product-016": {
+   "path": "assets/products/photo-product-016.webp",
+   "deviation": 1.085,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.925,
+   "margin_bottom": 0.11,
+   "center_x": -0.0075,
+   "center_y": 0.0,
+   "frame_clean": 1.0,
+   "bytes": 55800,
+   "shadow": 1.551,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  "photo-product-017": {
+   "path": "assets/products/photo-product-017.webp",
+   "deviation": 2.846,
+   "bg": "#fcf5ea",
+   "bg_dist": 4.12,
+   "fill_max": 0.965,
+   "margin_bottom": 0.165,
+   "center_x": 0.0175,
+   "center_y": -0.025,
+   "frame_clean": 0.9714,
+   "bytes": 44248,
+   "shadow": 0.148,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-018": {
+   "path": "assets/products/photo-product-018.webp",
+   "deviation": 3.073,
+   "bg": "#fcf0e0",
+   "bg_dist": 14.56,
+   "fill_max": 0.895,
+   "margin_bottom": 0.06,
+   "center_x": 0.0475,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 70676,
+   "shadow": 1.129,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  "photo-product-019": {
+   "path": "assets/products/photo-product-019.webp",
+   "deviation": 2.998,
+   "bg": "#fdf3e6",
+   "bg_dist": 7.87,
+   "fill_max": 0.865,
+   "margin_bottom": 0.075,
+   "center_x": 0.09,
+   "center_y": -0.0075,
+   "frame_clean": 0.9994,
+   "bytes": 30472,
+   "shadow": 4.039,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "bytes_log"
+   ]
+  },
+  "photo-product-021": {
+   "path": "assets/products/photo-product-021.webp",
+   "deviation": 1.687,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.875,
+   "margin_bottom": 0.055,
+   "center_x": 0.05,
+   "center_y": 0.0075,
+   "frame_clean": 1.0,
+   "bytes": 48460,
+   "shadow": 0.632,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-022": {
+   "path": "assets/products/photo-product-022.webp",
+   "deviation": 4.742,
+   "bg": "#f6ebdc",
+   "bg_dist": 22.11,
+   "fill_max": 0.875,
+   "margin_bottom": 0.055,
+   "center_x": -0.0025,
+   "center_y": 0.0075,
+   "frame_clean": 1.0,
+   "bytes": 93136,
+   "shadow": 0.558,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-023": {
+   "path": "assets/products/photo-product-023.webp",
+   "deviation": 4.596,
+   "bg": "#f9efe4",
+   "bg_dist": 13.04,
+   "fill_max": 0.915,
+   "margin_bottom": 0.145,
+   "center_x": 0.0425,
+   "center_y": 0.0525,
+   "frame_clean": 0.9666,
+   "bytes": 47032,
+   "shadow": -0.557,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "bg_dist"
+   ]
+  },
+  "photo-product-024": {
+   "path": "assets/products/photo-product-024.webp",
+   "deviation": 5.537,
+   "bg": "#fdf3e6",
+   "bg_dist": 7.87,
+   "fill_max": 0.99,
+   "margin_bottom": 0.28,
+   "center_x": 0.005,
+   "center_y": 0.045,
+   "frame_clean": 0.9487,
+   "bytes": 44588,
+   "shadow": 3.632,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "frame_clean"
+   ]
+  },
+  "photo-product-025": {
+   "path": "assets/products/photo-product-025.webp",
+   "deviation": 2.125,
+   "bg": "#fefaf1",
+   "bg_dist": 5.39,
+   "fill_max": 0.845,
+   "margin_bottom": 0.08,
+   "center_x": 0.0575,
+   "center_y": -0.0025,
+   "frame_clean": 1.0,
+   "bytes": 28562,
+   "shadow": 3.541,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "bytes_log"
+   ]
+  },
+  "photo-product-026": {
+   "path": "assets/products/photo-product-026.webp",
+   "deviation": 2.195,
+   "bg": "#fffbf5",
+   "bg_dist": 9.54,
+   "fill_max": 0.865,
+   "margin_bottom": 0.07,
+   "center_x": 0.0425,
+   "center_y": -0.0025,
+   "frame_clean": 1.0,
+   "bytes": 35226,
+   "shadow": 2.271,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "bg_spread"
+   ]
+  },
+  "photo-product-027": {
+   "path": "assets/products/photo-product-027.webp",
+   "deviation": 2.698,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.955,
+   "margin_bottom": 0.035,
+   "center_x": 0.06,
+   "center_y": -0.0125,
+   "frame_clean": 0.9977,
+   "bytes": 25932,
+   "shadow": 3.573,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "center_y"
+   ]
+  },
+  "photo-product-028": {
+   "path": "assets/products/photo-product-028.webp",
+   "deviation": 3.336,
+   "bg": "#fefaf0",
+   "bg_dist": 4.47,
+   "fill_max": 0.945,
+   "margin_bottom": 0.24,
+   "center_x": 0.0275,
+   "center_y": 0.025,
+   "frame_clean": 0.9764,
+   "bytes": 50394,
+   "shadow": 6.111,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "center_y"
+   ]
+  },
+  "photo-product-029": {
+   "path": "assets/products/photo-product-029.webp",
+   "deviation": 4.308,
+   "bg": "#fdf6eb",
+   "bg_dist": 2.45,
+   "fill_max": 0.705,
+   "margin_bottom": 0.17,
+   "center_x": 0.0875,
+   "center_y": 0.02,
+   "frame_clean": 1.0,
+   "bytes": 33632,
+   "shadow": 3.631,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-030": {
+   "path": "assets/products/photo-product-030.webp",
+   "deviation": 1.846,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.895,
+   "margin_bottom": 0.07,
+   "center_x": -0.0025,
+   "center_y": -0.0175,
+   "frame_clean": 1.0,
+   "bytes": 49944,
+   "shadow": 4.869,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "shadow_depth"
+   ]
+  },
+  "photo-product-031": {
+   "path": "assets/products/photo-product-031.webp",
+   "deviation": 4.981,
+   "bg": "#fbf2e7",
+   "bg_dist": 8.37,
+   "fill_max": 1.0,
+   "margin_bottom": 0.145,
+   "center_x": 0.0,
+   "center_y": 0.0425,
+   "frame_clean": 0.9327,
+   "bytes": 44660,
+   "shadow": 2.951,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "center_y"
+   ]
+  },
+  "photo-product-032": {
+   "path": "assets/products/photo-product-032.webp",
+   "deviation": 2.282,
+   "bg": "#fcf5ea",
+   "bg_dist": 4.12,
+   "fill_max": 0.825,
+   "margin_bottom": 0.13,
+   "center_x": 0.0125,
+   "center_y": 0.0325,
+   "frame_clean": 1.0,
+   "bytes": 50508,
+   "shadow": 3.398,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "fill_max"
+   ]
+  },
+  "photo-product-033": {
+   "path": "assets/products/photo-product-033.webp",
+   "deviation": 2.195,
+   "bg": "#fcf6ef",
+   "bg_dist": 4.12,
+   "fill_max": 0.89,
+   "margin_bottom": 0.14,
+   "center_x": 0.055,
+   "center_y": 0.01,
+   "frame_clean": 0.9675,
+   "bytes": 68580,
+   "shadow": 0.376,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "center_x"
+   ]
+  },
+  "photo-product-034": {
+   "path": "assets/products/photo-product-034.webp",
+   "deviation": 1.979,
+   "bg": "#fdf8ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.85,
+   "margin_bottom": 0.155,
+   "center_x": 0.05,
+   "center_y": 0.01,
+   "frame_clean": 0.9805,
+   "bytes": 65870,
+   "shadow": 2.066,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-035": {
+   "path": "assets/products/photo-product-035.webp",
+   "deviation": 2.176,
+   "bg": "#fefaf4",
+   "bg_dist": 8.25,
+   "fill_max": 0.885,
+   "margin_bottom": 0.16,
+   "center_x": -0.0025,
+   "center_y": 0.005,
+   "frame_clean": 1.0,
+   "bytes": 41486,
+   "shadow": 6.385,
+   "touches_edge": false,
+   "why": [
+    "shadow_depth",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-037": {
+   "path": "assets/products/photo-product-037.webp",
+   "deviation": 2.293,
+   "bg": "#fbf6ef",
+   "bg_dist": 4.69,
+   "fill_max": 0.825,
+   "margin_bottom": 0.145,
+   "center_x": 0.0575,
+   "center_y": 0.005,
+   "frame_clean": 0.9772,
+   "bytes": 59084,
+   "shadow": 4.021,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-038": {
+   "path": "assets/products/photo-product-038.webp",
+   "deviation": 4.985,
+   "bg": "#f7ede1",
+   "bg_dist": 17.06,
+   "fill_max": 0.835,
+   "margin_bottom": 0.125,
+   "center_x": 0.0825,
+   "center_y": 0.0175,
+   "frame_clean": 0.954,
+   "bytes": 34644,
+   "shadow": 1.56,
+   "touches_edge": true,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-039": {
+   "path": "assets/products/photo-product-039.webp",
+   "deviation": 2.688,
+   "bg": "#fcf8ee",
+   "bg_dist": 2.83,
+   "fill_max": 0.8,
+   "margin_bottom": 0.14,
+   "center_x": 0.07,
+   "center_y": 0.0075,
+   "frame_clean": 0.9798,
+   "bytes": 44706,
+   "shadow": 1.801,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-041": {
+   "path": "assets/products/photo-product-041.webp",
+   "deviation": 4.156,
+   "bg": "#fbf0e0",
+   "bg_dist": 14.73,
+   "fill_max": 0.815,
+   "margin_bottom": 0.09,
+   "center_x": 0.0925,
+   "center_y": 0.0025,
+   "frame_clean": 0.9869,
+   "bytes": 41292,
+   "shadow": 7.044,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  "photo-product-042": {
+   "path": "assets/products/photo-product-042.webp",
+   "deviation": 2.359,
+   "bg": "#faf1e4",
+   "bg_dist": 11.36,
+   "fill_max": 0.84,
+   "margin_bottom": 0.085,
+   "center_x": 0.005,
+   "center_y": -0.005,
+   "frame_clean": 1.0,
+   "bytes": 45270,
+   "shadow": 5.169,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "fill_max"
+   ]
+  },
+  "photo-product-043": {
+   "path": "assets/products/photo-product-043.webp",
+   "deviation": 2.233,
+   "bg": "#fdf7ee",
+   "bg_dist": 2.45,
+   "fill_max": 0.935,
+   "margin_bottom": 0.04,
+   "center_x": 0.045,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 26198,
+   "shadow": 0.452,
+   "touches_edge": false,
+   "why": [
+    "bytes_log",
+    "center_x"
+   ]
+  },
+  "photo-product-044": {
+   "path": "assets/products/photo-product-044.webp",
+   "deviation": 2.3,
+   "bg": "#faf1e8",
+   "bg_dist": 9.0,
+   "fill_max": 0.88,
+   "margin_bottom": 0.06,
+   "center_x": 0.0175,
+   "center_y": 0.0,
+   "frame_clean": 0.9725,
+   "bytes": 89162,
+   "shadow": 0.682,
+   "touches_edge": false,
+   "why": [
+    "bg_spread",
+    "frame_clean"
+   ]
+  },
+  "photo-product-045": {
+   "path": "assets/products/photo-product-045.webp",
+   "deviation": 3.244,
+   "bg": "#f9efe5",
+   "bg_dist": 12.45,
+   "fill_max": 0.96,
+   "margin_bottom": 0.03,
+   "center_x": 0.055,
+   "center_y": -0.01,
+   "frame_clean": 0.9994,
+   "bytes": 30848,
+   "shadow": 4.161,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  "photo-product-046": {
+   "path": "assets/products/photo-product-046.webp",
+   "deviation": 5.365,
+   "bg": "#f9ebdb",
+   "bg_dist": 21.98,
+   "fill_max": 0.905,
+   "margin_bottom": 0.035,
+   "center_x": 0.08,
+   "center_y": 0.0125,
+   "frame_clean": 0.9832,
+   "bytes": 99510,
+   "shadow": -2.227,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  "photo-product-047": {
+   "path": "assets/products/photo-product-047.webp",
+   "deviation": 2.783,
+   "bg": "#fbf1e3",
+   "bg_dist": 11.79,
+   "fill_max": 0.895,
+   "margin_bottom": 0.05,
+   "center_x": 0.0425,
+   "center_y": 0.0025,
+   "frame_clean": 0.9888,
+   "bytes": 87104,
+   "shadow": 0.08,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "bg_spread"
+   ]
+  },
+  "photo-product-048": {
+   "path": "assets/products/photo-product-048.webp",
+   "deviation": 4.932,
+   "bg": "#f7ede1",
+   "bg_dist": 17.06,
+   "fill_max": 0.86,
+   "margin_bottom": 0.07,
+   "center_x": 0.1225,
+   "center_y": 0.0,
+   "frame_clean": 0.9858,
+   "bytes": 32432,
+   "shadow": -0.374,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "bg_dist"
+   ]
+  },
+  "photo-product-049": {
+   "path": "assets/products/photo-product-049.webp",
+   "deviation": 2.567,
+   "bg": "#fef7ee",
+   "bg_dist": 2.24,
+   "fill_max": 0.865,
+   "margin_bottom": 0.08,
+   "center_x": 0.07,
+   "center_y": -0.0125,
+   "frame_clean": 1.0,
+   "bytes": 27526,
+   "shadow": 3.657,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "center_y"
+   ]
+  },
+  "photo-product-050": {
+   "path": "assets/products/photo-product-050.webp",
+   "deviation": 2.532,
+   "bg": "#fdf6eb",
+   "bg_dist": 2.45,
+   "fill_max": 0.9,
+   "margin_bottom": 0.07,
+   "center_x": 0.06,
+   "center_y": -0.02,
+   "frame_clean": 1.0,
+   "bytes": 30298,
+   "shadow": 4.026,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "center_x"
+   ]
+  },
+  "photo-product-051": {
+   "path": "assets/products/photo-product-051.webp",
+   "deviation": 2.723,
+   "bg": "#fdf6eb",
+   "bg_dist": 2.45,
+   "fill_max": 0.83,
+   "margin_bottom": 0.1,
+   "center_x": 0.0575,
+   "center_y": -0.015,
+   "frame_clean": 1.0,
+   "bytes": 23672,
+   "shadow": 4.683,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "center_y"
+   ]
+  },
+  "photo-product-052": {
+   "path": "assets/products/photo-product-052.webp",
+   "deviation": 2.504,
+   "bg": "#fdf6ec",
+   "bg_dist": 2.24,
+   "fill_max": 0.925,
+   "margin_bottom": 0.055,
+   "center_x": 0.0625,
+   "center_y": -0.0175,
+   "frame_clean": 0.9948,
+   "bytes": 48610,
+   "shadow": 5.078,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "center_y"
+   ]
+  },
+  "photo-product-053": {
+   "path": "assets/products/photo-product-053.webp",
+   "deviation": 1.855,
+   "bg": "#fcf5ea",
+   "bg_dist": 4.12,
+   "fill_max": 0.855,
+   "margin_bottom": 0.075,
+   "center_x": 0.05,
+   "center_y": -0.0025,
+   "frame_clean": 0.992,
+   "bytes": 72374,
+   "shadow": 5.761,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "shadow_depth"
+   ]
+  },
+  "photo-product-054": {
+   "path": "assets/products/photo-product-054.webp",
+   "deviation": 2.307,
+   "bg": "#fdf8ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.935,
+   "margin_bottom": 0.1,
+   "center_x": 0.0325,
+   "center_y": 0.0325,
+   "frame_clean": 0.9795,
+   "bytes": 72450,
+   "shadow": 1.092,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "bg_dist"
+   ]
+  },
+  "photo-product-055": {
+   "path": "assets/products/photo-product-055.webp",
+   "deviation": 4.572,
+   "bg": "#f9f4ea",
+   "bg_dist": 6.71,
+   "fill_max": 0.88,
+   "margin_bottom": 0.055,
+   "center_x": 0.1125,
+   "center_y": 0.005,
+   "frame_clean": 0.9459,
+   "bytes": 54630,
+   "shadow": 0.625,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  "photo-product-056": {
+   "path": "assets/products/photo-product-056.webp",
+   "deviation": 2.63,
+   "bg": "#fdfcf3",
+   "bg_dist": 8.12,
+   "fill_max": 0.76,
+   "margin_bottom": 0.115,
+   "center_x": 0.01,
+   "center_y": 0.01,
+   "frame_clean": 1.0,
+   "bytes": 94524,
+   "shadow": 4.74,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "bg_dist"
+   ]
+  },
+  "photo-product-057": {
+   "path": "assets/products/photo-product-057.webp",
+   "deviation": 3.344,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.88,
+   "margin_bottom": 0.05,
+   "center_x": 0.0,
+   "center_y": 0.055,
+   "frame_clean": 1.0,
+   "bytes": 87596,
+   "shadow": 0.405,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-058": {
+   "path": "assets/products/photo-product-058.webp",
+   "deviation": 2.307,
+   "bg": "#fefbf2",
+   "bg_dist": 6.71,
+   "fill_max": 0.83,
+   "margin_bottom": 0.15,
+   "center_x": 0.03,
+   "center_y": 0.0225,
+   "frame_clean": 1.0,
+   "bytes": 75802,
+   "shadow": 5.682,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_y"
+   ]
+  },
+  "photo-product-059": {
+   "path": "assets/products/photo-product-059.webp",
+   "deviation": 4.059,
+   "bg": "#fcf5ea",
+   "bg_dist": 4.12,
+   "fill_max": 0.86,
+   "margin_bottom": 0.085,
+   "center_x": 0.04,
+   "center_y": 0.0175,
+   "frame_clean": 0.9263,
+   "bytes": 83154,
+   "shadow": 1.526,
+   "touches_edge": false,
+   "why": [
+    "frame_clean",
+    "center_x"
+   ]
+  },
+  "photo-product-060": {
+   "path": "assets/products/photo-product-060.webp",
+   "deviation": 1.525,
+   "bg": "#fcf4ea",
+   "bg_dist": 4.9,
+   "fill_max": 0.95,
+   "margin_bottom": 0.075,
+   "center_x": 0.0,
+   "center_y": -0.01,
+   "frame_clean": 1.0,
+   "bytes": 99306,
+   "shadow": 0.554,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "fill_max"
+   ]
+  },
+  "photo-product-061": {
+   "path": "assets/products/photo-product-061.webp",
+   "deviation": 2.188,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.97,
+   "margin_bottom": 0.11,
+   "center_x": 0.005,
+   "center_y": 0.0275,
+   "frame_clean": 0.9762,
+   "bytes": 114110,
+   "shadow": 0.615,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "fill_max"
+   ]
+  },
+  "photo-product-062": {
+   "path": "assets/products/photo-product-062.webp",
+   "deviation": 1.838,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.965,
+   "margin_bottom": 0.115,
+   "center_x": 0.0025,
+   "center_y": 0.025,
+   "frame_clean": 0.9922,
+   "bytes": 89348,
+   "shadow": 0.863,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "fill_max"
+   ]
+  },
+  "photo-product-063": {
+   "path": "assets/products/photo-product-063.webp",
+   "deviation": 1.182,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.95,
+   "margin_bottom": 0.115,
+   "center_x": 0.0,
+   "center_y": 0.0075,
+   "frame_clean": 0.9911,
+   "bytes": 50634,
+   "shadow": 0.391,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "shadow_depth"
+   ]
+  },
+  "photo-product-064": {
+   "path": "assets/products/photo-product-064.webp",
+   "deviation": 1.335,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.965,
+   "margin_bottom": 0.12,
+   "center_x": 0.0025,
+   "center_y": -0.0025,
+   "frame_clean": 0.9998,
+   "bytes": 61820,
+   "shadow": 1.694,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_y"
+   ]
+  },
+  "photo-product-065": {
+   "path": "assets/products/photo-product-065.webp",
+   "deviation": 1.808,
+   "bg": "#fcf7f0",
+   "bg_dist": 4.58,
+   "fill_max": 0.95,
+   "margin_bottom": 0.14,
+   "center_x": 0.005,
+   "center_y": -0.0025,
+   "frame_clean": 0.9798,
+   "bytes": 55958,
+   "shadow": 0.639,
+   "touches_edge": false,
+   "why": [
+    "bg_spread",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-066": {
+   "path": "assets/products/photo-product-066.webp",
+   "deviation": 1.997,
+   "bg": "#fcf8ee",
+   "bg_dist": 2.83,
+   "fill_max": 0.97,
+   "margin_bottom": 0.13,
+   "center_x": 0.0,
+   "center_y": -0.0075,
+   "frame_clean": 0.9996,
+   "bytes": 94836,
+   "shadow": -1.233,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "shadow_depth"
+   ]
+  },
+  "photo-product-067": {
+   "path": "assets/products/photo-product-067.webp",
+   "deviation": 1.782,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.96,
+   "margin_bottom": 0.155,
+   "center_x": 0.015,
+   "center_y": 0.005,
+   "frame_clean": 0.9771,
+   "bytes": 72830,
+   "shadow": 0.628,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "frame_clean"
+   ]
+  },
+  "photo-product-068": {
+   "path": "assets/products/photo-product-068.webp",
+   "deviation": 2.457,
+   "bg": "#fdf8ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.95,
+   "margin_bottom": 0.115,
+   "center_x": 0.015,
+   "center_y": 0.035,
+   "frame_clean": 0.9728,
+   "bytes": 59464,
+   "shadow": 2.078,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "frame_clean"
+   ]
+  },
+  "photo-product-069": {
+   "path": "assets/products/photo-product-069.webp",
+   "deviation": 1.346,
+   "bg": "#f9f5f0",
+   "bg_dist": 7.07,
+   "fill_max": 0.87,
+   "margin_bottom": 0.065,
+   "center_x": 0.01,
+   "center_y": 0.0,
+   "frame_clean": 1.0,
+   "bytes": 100164,
+   "shadow": 2.737,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "bytes_log"
+   ]
+  },
+  "photo-product-070": {
+   "path": "assets/products/photo-product-070.webp",
+   "deviation": 1.812,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.81,
+   "margin_bottom": 0.085,
+   "center_x": 0.035,
+   "center_y": 0.01,
+   "frame_clean": 0.9923,
+   "bytes": 83048,
+   "shadow": 2.882,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-071": {
+   "path": "assets/products/photo-product-071.webp",
+   "deviation": 2.151,
+   "bg": "#fef7ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.88,
+   "margin_bottom": 0.08,
+   "center_x": 0.01,
+   "center_y": 0.0325,
+   "frame_clean": 1.0,
+   "bytes": 91804,
+   "shadow": 2.001,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "bg_dist"
+   ]
+  },
+  "photo-product-072": {
+   "path": "assets/products/photo-product-072.webp",
+   "deviation": 1.773,
+   "bg": "#fcf6eb",
+   "bg_dist": 3.0,
+   "fill_max": 0.805,
+   "margin_bottom": 0.125,
+   "center_x": 0.0225,
+   "center_y": 0.0,
+   "frame_clean": 0.9944,
+   "bytes": 73372,
+   "shadow": 1.959,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-073": {
+   "path": "assets/products/photo-product-073.webp",
+   "deviation": 1.073,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.93,
+   "margin_bottom": 0.13,
+   "center_x": 0.005,
+   "center_y": 0.0025,
+   "frame_clean": 0.9909,
+   "bytes": 78928,
+   "shadow": 0.867,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-074": {
+   "path": "assets/products/photo-product-074.webp",
+   "deviation": 2.062,
+   "bg": "#fdf8ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.91,
+   "margin_bottom": 0.13,
+   "center_x": 0.0,
+   "center_y": 0.025,
+   "frame_clean": 1.0,
+   "bytes": 72714,
+   "shadow": -0.506,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "bg_dist"
+   ]
+  },
+  "photo-product-075": {
+   "path": "assets/products/photo-product-075.webp",
+   "deviation": 1.851,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.965,
+   "margin_bottom": 0.115,
+   "center_x": 0.0175,
+   "center_y": 0.01,
+   "frame_clean": 0.9678,
+   "bytes": 57890,
+   "shadow": 0.341,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "fill_max"
+   ]
+  },
+  "photo-product-076": {
+   "path": "assets/products/photo-product-076.webp",
+   "deviation": 2.57,
+   "bg": "#fdf6eb",
+   "bg_dist": 2.45,
+   "fill_max": 0.945,
+   "margin_bottom": 0.19,
+   "center_x": 0.0075,
+   "center_y": 0.02,
+   "frame_clean": 0.9714,
+   "bytes": 36746,
+   "shadow": 1.315,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "frame_clean"
+   ]
+  },
+  "photo-product-077": {
+   "path": "assets/products/photo-product-077.webp",
+   "deviation": 3.207,
+   "bg": "#fdf6eb",
+   "bg_dist": 2.45,
+   "fill_max": 0.91,
+   "margin_bottom": 0.13,
+   "center_x": -0.045,
+   "center_y": 0.0175,
+   "frame_clean": 0.9634,
+   "bytes": 63734,
+   "shadow": 5.791,
+   "touches_edge": true,
+   "why": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  "photo-product-078": {
+   "path": "assets/products/photo-product-078.webp",
+   "deviation": 1.69,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.955,
+   "margin_bottom": 0.13,
+   "center_x": 0.0225,
+   "center_y": 0.015,
+   "frame_clean": 0.978,
+   "bytes": 91802,
+   "shadow": 1.015,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "fill_max"
+   ]
+  },
+  "photo-product-079": {
+   "path": "assets/products/photo-product-079.webp",
+   "deviation": 1.941,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.945,
+   "margin_bottom": 0.16,
+   "center_x": -0.0025,
+   "center_y": 0.02,
+   "frame_clean": 0.9906,
+   "bytes": 98146,
+   "shadow": 1.007,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "center_y"
+   ]
+  },
+  "photo-product-080": {
+   "path": "assets/products/photo-product-080.webp",
+   "deviation": 2.779,
+   "bg": "#fefdf7",
+   "bg_dist": 12.08,
+   "fill_max": 0.865,
+   "margin_bottom": 0.05,
+   "center_x": 0.0,
+   "center_y": 0.0175,
+   "frame_clean": 1.0,
+   "bytes": 25022,
+   "shadow": 2.234,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "bytes_log"
+   ]
+  },
+  "photo-product-081": {
+   "path": "assets/products/photo-product-081.webp",
+   "deviation": 2.997,
+   "bg": "#fefdf9",
+   "bg_dist": 13.93,
+   "fill_max": 0.81,
+   "margin_bottom": 0.105,
+   "center_x": 0.0,
+   "center_y": 0.0175,
+   "frame_clean": 1.0,
+   "bytes": 56400,
+   "shadow": 2.016,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "fill_max"
+   ]
+  },
+  "photo-product-082": {
+   "path": "assets/products/photo-product-082.webp",
+   "deviation": 1.993,
+   "bg": "#fdf4e8",
+   "bg_dist": 5.74,
+   "fill_max": 0.865,
+   "margin_bottom": 0.08,
+   "center_x": 0.05,
+   "center_y": -0.0125,
+   "frame_clean": 1.0,
+   "bytes": 51408,
+   "shadow": 3.177,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "center_y"
+   ]
+  },
+  "photo-product-083": {
+   "path": "assets/products/photo-product-083.webp",
+   "deviation": 3.172,
+   "bg": "#fef7ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.765,
+   "margin_bottom": 0.115,
+   "center_x": 0.0725,
+   "center_y": 0.0025,
+   "frame_clean": 0.9975,
+   "bytes": 53606,
+   "shadow": 5.427,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-084": {
+   "path": "assets/products/photo-product-084.webp",
+   "deviation": 3.157,
+   "bg": "#faf2e5",
+   "bg_dist": 10.05,
+   "fill_max": 0.77,
+   "margin_bottom": 0.11,
+   "center_x": 0.0675,
+   "center_y": 0.005,
+   "frame_clean": 0.9812,
+   "bytes": 54772,
+   "shadow": 3.857,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-085": {
+   "path": "assets/products/photo-product-085.webp",
+   "deviation": 6.02,
+   "bg": "#f8ecdd",
+   "bg_dist": 20.12,
+   "fill_max": 0.8,
+   "margin_bottom": 0.09,
+   "center_x": -0.1025,
+   "center_y": 0.01,
+   "frame_clean": 0.9753,
+   "bytes": 71132,
+   "shadow": 4.461,
+   "touches_edge": true,
+   "why": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  "photo-product-086": {
+   "path": "assets/products/photo-product-086.webp",
+   "deviation": 2.982,
+   "bg": "#fef6e9",
+   "bg_dist": 3.61,
+   "fill_max": 0.835,
+   "margin_bottom": 0.085,
+   "center_x": 0.095,
+   "center_y": -0.0025,
+   "frame_clean": 0.9775,
+   "bytes": 57490,
+   "shadow": 3.706,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-087": {
+   "path": "assets/products/photo-product-087.webp",
+   "deviation": 2.075,
+   "bg": "#faf2e5",
+   "bg_dist": 10.05,
+   "fill_max": 0.83,
+   "margin_bottom": 0.085,
+   "center_x": 0.0,
+   "center_y": 0.0,
+   "frame_clean": 1.0,
+   "bytes": 87762,
+   "shadow": -0.163,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "fill_max"
+   ]
+  },
+  "photo-product-088": {
+   "path": "assets/products/photo-product-088.webp",
+   "deviation": 1.565,
+   "bg": "#fffbf3",
+   "bg_dist": 7.68,
+   "fill_max": 0.895,
+   "margin_bottom": 0.06,
+   "center_x": 0.0,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 86248,
+   "shadow": 2.38,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "bg_dist"
+   ]
+  },
+  "photo-product-089": {
+   "path": "assets/products/photo-product-089.webp",
+   "deviation": 3.56,
+   "bg": "#fbefe1",
+   "bg_dist": 14.53,
+   "fill_max": 0.945,
+   "margin_bottom": 0.035,
+   "center_x": 0.01,
+   "center_y": -0.0075,
+   "frame_clean": 0.9686,
+   "bytes": 86856,
+   "shadow": -1.503,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-090": {
+   "path": "assets/products/photo-product-090.webp",
+   "deviation": 2.87,
+   "bg": "#fdf3e6",
+   "bg_dist": 7.87,
+   "fill_max": 0.915,
+   "margin_bottom": 0.035,
+   "center_x": -0.05,
+   "center_y": 0.0075,
+   "frame_clean": 0.9772,
+   "bytes": 88710,
+   "shadow": 0.687,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "bg_spread"
+   ]
+  },
+  "photo-product-091": {
+   "path": "assets/products/photo-product-091.webp",
+   "deviation": 1.868,
+   "bg": "#fbf4e8",
+   "bg_dist": 6.4,
+   "fill_max": 0.915,
+   "margin_bottom": 0.035,
+   "center_x": 0.04,
+   "center_y": 0.0075,
+   "frame_clean": 1.0,
+   "bytes": 90796,
+   "shadow": -0.473,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "center_x"
+   ]
+  },
+  "photo-product-092": {
+   "path": "assets/products/photo-product-092.webp",
+   "deviation": 4.611,
+   "bg": "#faf2e7",
+   "bg_dist": 8.77,
+   "fill_max": 0.795,
+   "margin_bottom": 0.1,
+   "center_x": -0.1075,
+   "center_y": 0.0025,
+   "frame_clean": 0.9647,
+   "bytes": 60112,
+   "shadow": 1.422,
+   "touches_edge": true,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-093": {
+   "path": "assets/products/photo-product-093.webp",
+   "deviation": 6.668,
+   "bg": "#f8ede1",
+   "bg_dist": 16.67,
+   "fill_max": 0.8,
+   "margin_bottom": 0.115,
+   "center_x": 0.1,
+   "center_y": 0.015,
+   "frame_clean": 0.8994,
+   "bytes": 53316,
+   "shadow": 3.797,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "bg_dist"
+   ]
+  },
+  "photo-product-094": {
+   "path": "assets/products/photo-product-094.webp",
+   "deviation": 5.529,
+   "bg": "#f9eee1",
+   "bg_dist": 15.68,
+   "fill_max": 0.785,
+   "margin_bottom": 0.115,
+   "center_x": 0.1075,
+   "center_y": 0.0,
+   "frame_clean": 0.9613,
+   "bytes": 50476,
+   "shadow": -3.423,
+   "touches_edge": true,
+   "why": [
+    "center_x",
+    "bg_dist"
+   ]
+  },
+  "photo-product-095": {
+   "path": "assets/products/photo-product-095.webp",
+   "deviation": 3.231,
+   "bg": "#f9f0e4",
+   "bg_dist": 12.37,
+   "fill_max": 0.815,
+   "margin_bottom": 0.09,
+   "center_x": 0.075,
+   "center_y": 0.0025,
+   "frame_clean": 0.9762,
+   "bytes": 57828,
+   "shadow": 2.007,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  "photo-product-096": {
+   "path": "assets/products/photo-product-096.webp",
+   "deviation": 1.744,
+   "bg": "#fefaee",
+   "bg_dist": 2.83,
+   "fill_max": 0.935,
+   "margin_bottom": 0.16,
+   "center_x": -0.0025,
+   "center_y": -0.005,
+   "frame_clean": 1.0,
+   "bytes": 96230,
+   "shadow": 1.608,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "center_y"
+   ]
+  },
+  "photo-product-097": {
+   "path": "assets/products/photo-product-097.webp",
+   "deviation": 2.119,
+   "bg": "#fefaf0",
+   "bg_dist": 4.47,
+   "fill_max": 0.97,
+   "margin_bottom": 0.155,
+   "center_x": 0.015,
+   "center_y": -0.0025,
+   "frame_clean": 0.9699,
+   "bytes": 66640,
+   "shadow": 0.157,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-098": {
+   "path": "assets/products/photo-product-098.webp",
+   "deviation": 3.205,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.985,
+   "margin_bottom": 0.115,
+   "center_x": 0.0075,
+   "center_y": 0.0425,
+   "frame_clean": 0.9661,
+   "bytes": 84562,
+   "shadow": 1.579,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "frame_clean"
+   ]
+  },
+  "photo-product-099": {
+   "path": "assets/products/photo-product-099.webp",
+   "deviation": 2.697,
+   "bg": "#fdf8ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.97,
+   "margin_bottom": 0.19,
+   "center_x": -0.015,
+   "center_y": -0.005,
+   "frame_clean": 0.9725,
+   "bytes": 56074,
+   "shadow": 1.463,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "frame_clean"
+   ]
+  },
+  "photo-product-100": {
+   "path": "assets/products/photo-product-100.webp",
+   "deviation": 2.62,
+   "bg": "#fbf0e2",
+   "bg_dist": 13.15,
+   "fill_max": 0.905,
+   "margin_bottom": 0.1,
+   "center_x": 0.0025,
+   "center_y": 0.0025,
+   "frame_clean": 0.973,
+   "bytes": 91188,
+   "shadow": -0.36,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-101": {
+   "path": "assets/products/photo-product-101.webp",
+   "deviation": 1.877,
+   "bg": "#fdf8ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.945,
+   "margin_bottom": 0.16,
+   "center_x": -0.0025,
+   "center_y": -0.0075,
+   "frame_clean": 0.9901,
+   "bytes": 52832,
+   "shadow": 0.867,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-102": {
+   "path": "assets/products/photo-product-102.webp",
+   "deviation": 1.596,
+   "bg": "#fef8ea",
+   "bg_dist": 2.0,
+   "fill_max": 0.96,
+   "margin_bottom": 0.1,
+   "center_x": 0.0,
+   "center_y": 0.0025,
+   "frame_clean": 0.9793,
+   "bytes": 80178,
+   "shadow": -0.26,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "bg_dist"
+   ]
+  },
+  "photo-product-103": {
+   "path": "assets/products/photo-product-103.webp",
+   "deviation": 1.044,
+   "bg": "#fefaee",
+   "bg_dist": 2.83,
+   "fill_max": 0.895,
+   "margin_bottom": 0.105,
+   "center_x": -0.0025,
+   "center_y": 0.0075,
+   "frame_clean": 1.0,
+   "bytes": 86422,
+   "shadow": 0.859,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-104": {
+   "path": "assets/products/photo-product-104.webp",
+   "deviation": 3.934,
+   "bg": "#fdf7ec",
+   "bg_dist": 1.41,
+   "fill_max": 0.94,
+   "margin_bottom": 0.125,
+   "center_x": 0.01,
+   "center_y": -0.02,
+   "frame_clean": 0.9348,
+   "bytes": 80100,
+   "shadow": -0.373,
+   "touches_edge": false,
+   "why": [
+    "frame_clean",
+    "center_y"
+   ]
+  },
+  "photo-product-105": {
+   "path": "assets/products/photo-product-105.webp",
+   "deviation": 4.249,
+   "bg": "#fbf2e4",
+   "bg_dist": 10.44,
+   "fill_max": 0.815,
+   "margin_bottom": 0.095,
+   "center_x": 0.1125,
+   "center_y": -0.0025,
+   "frame_clean": 0.965,
+   "bytes": 56216,
+   "shadow": 3.323,
+   "touches_edge": true,
+   "why": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  "photo-product-106": {
+   "path": "assets/products/photo-product-106.webp",
+   "deviation": 2.119,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.845,
+   "margin_bottom": 0.075,
+   "center_x": 0.0625,
+   "center_y": 0.0025,
+   "frame_clean": 1.0,
+   "bytes": 63570,
+   "shadow": 1.565,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-107": {
+   "path": "assets/products/photo-product-107.webp",
+   "deviation": 2.16,
+   "bg": "#fffcf1",
+   "bg_dist": 6.48,
+   "fill_max": 0.84,
+   "margin_bottom": 0.075,
+   "center_x": 0.0625,
+   "center_y": 0.005,
+   "frame_clean": 1.0,
+   "bytes": 56418,
+   "shadow": 4.009,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-108": {
+   "path": "assets/products/photo-product-108.webp",
+   "deviation": 3.555,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.79,
+   "margin_bottom": 0.095,
+   "center_x": 0.095,
+   "center_y": 0.01,
+   "frame_clean": 0.9681,
+   "bytes": 62172,
+   "shadow": 5.279,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-109": {
+   "path": "assets/products/photo-product-109.webp",
+   "deviation": 4.32,
+   "bg": "#faf2e7",
+   "bg_dist": 8.77,
+   "fill_max": 0.95,
+   "margin_bottom": 0.23,
+   "center_x": 0.025,
+   "center_y": 0.02,
+   "frame_clean": 0.9596,
+   "bytes": 45704,
+   "shadow": 2.664,
+   "touches_edge": true,
+   "why": [
+    "bg_spread",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-110": {
+   "path": "assets/products/photo-product-110.webp",
+   "deviation": 8.175,
+   "bg": "#f9e9d6",
+   "bg_dist": 27.09,
+   "fill_max": 0.94,
+   "margin_bottom": 0.24,
+   "center_x": 0.03,
+   "center_y": 0.01,
+   "frame_clean": 0.8869,
+   "bytes": 44438,
+   "shadow": 5.282,
+   "touches_edge": true,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-111": {
+   "path": "assets/products/photo-product-111.webp",
+   "deviation": 4.902,
+   "bg": "#fdf7ec",
+   "bg_dist": 1.41,
+   "fill_max": 0.95,
+   "margin_bottom": 0.16,
+   "center_x": 0.025,
+   "center_y": 0.065,
+   "frame_clean": 0.952,
+   "bytes": 55874,
+   "shadow": 1.402,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "frame_clean"
+   ]
+  },
+  "photo-product-112": {
+   "path": "assets/products/photo-product-112.webp",
+   "deviation": 4.233,
+   "bg": "#fef9ee",
+   "bg_dist": 2.24,
+   "fill_max": 0.91,
+   "margin_bottom": 0.195,
+   "center_x": 0.045,
+   "center_y": 0.05,
+   "frame_clean": 0.9757,
+   "bytes": 41426,
+   "shadow": 7.186,
+   "touches_edge": true,
+   "why": [
+    "center_y",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-113": {
+   "path": "assets/products/photo-product-113.webp",
+   "deviation": 3.727,
+   "bg": "#fefaf0",
+   "bg_dist": 4.47,
+   "fill_max": 0.965,
+   "margin_bottom": 0.22,
+   "center_x": -0.0175,
+   "center_y": 0.0225,
+   "frame_clean": 0.952,
+   "bytes": 46140,
+   "shadow": 3.083,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-114": {
+   "path": "assets/products/photo-product-114.webp",
+   "deviation": 3.499,
+   "bg": "#fbf1e2",
+   "bg_dist": 12.57,
+   "fill_max": 0.95,
+   "margin_bottom": 0.225,
+   "center_x": 0.025,
+   "center_y": 0.02,
+   "frame_clean": 0.9809,
+   "bytes": 44364,
+   "shadow": 2.207,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-115": {
+   "path": "assets/products/photo-product-115.webp",
+   "deviation": 2.749,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.96,
+   "margin_bottom": 0.2,
+   "center_x": 0.02,
+   "center_y": 0.025,
+   "frame_clean": 0.9808,
+   "bytes": 45542,
+   "shadow": 5.394,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "center_y"
+   ]
+  },
+  "photo-product-116": {
+   "path": "assets/products/photo-product-116.webp",
+   "deviation": 4.037,
+   "bg": "#fef6e9",
+   "bg_dist": 3.61,
+   "fill_max": 0.955,
+   "margin_bottom": 0.23,
+   "center_x": -0.0225,
+   "center_y": 0.04,
+   "frame_clean": 0.9647,
+   "bytes": 38642,
+   "shadow": 1.711,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "center_y"
+   ]
+  },
+  "photo-product-117": {
+   "path": "assets/products/photo-product-117.webp",
+   "deviation": 4.654,
+   "bg": "#f9f0e3",
+   "bg_dist": 13.04,
+   "fill_max": 0.96,
+   "margin_bottom": 0.25,
+   "center_x": -0.02,
+   "center_y": 0.0175,
+   "frame_clean": 0.964,
+   "bytes": 49456,
+   "shadow": 5.185,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-118": {
+   "path": "assets/products/photo-product-118.webp",
+   "deviation": 3.426,
+   "bg": "#fcf4e8",
+   "bg_dist": 6.0,
+   "fill_max": 0.95,
+   "margin_bottom": 0.275,
+   "center_x": 0.025,
+   "center_y": 0.0075,
+   "frame_clean": 0.9838,
+   "bytes": 45424,
+   "shadow": 2.521,
+   "touches_edge": true,
+   "why": [
+    "margin_bottom",
+    "fill_max"
+   ]
+  },
+  "photo-product-119": {
+   "path": "assets/products/photo-product-119.webp",
+   "deviation": 2.533,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.925,
+   "margin_bottom": 0.06,
+   "center_x": 0.0075,
+   "center_y": -0.0225,
+   "frame_clean": 1.0,
+   "bytes": 34426,
+   "shadow": 6.781,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "shadow_depth"
+   ]
+  },
+  "photo-product-120": {
+   "path": "assets/products/photo-product-120.webp",
+   "deviation": 2.826,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.93,
+   "margin_bottom": 0.05,
+   "center_x": 0.075,
+   "center_y": -0.015,
+   "frame_clean": 1.0,
+   "bytes": 38486,
+   "shadow": 3.053,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "center_y"
+   ]
+  },
+  "photo-product-121": {
+   "path": "assets/products/photo-product-121.webp",
+   "deviation": 1.757,
+   "bg": "#fef7ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.93,
+   "margin_bottom": 0.04,
+   "center_x": 0.0,
+   "center_y": -0.005,
+   "frame_clean": 1.0,
+   "bytes": 42492,
+   "shadow": 2.01,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-122": {
+   "path": "assets/products/photo-product-122.webp",
+   "deviation": 1.746,
+   "bg": "#fef6e9",
+   "bg_dist": 3.61,
+   "fill_max": 0.945,
+   "margin_bottom": 0.035,
+   "center_x": 0.0,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 95352,
+   "shadow": 3.077,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "center_y"
+   ]
+  },
+  "photo-product-123": {
+   "path": "assets/products/photo-product-123.webp",
+   "deviation": 5.048,
+   "bg": "#f9eee1",
+   "bg_dist": 15.68,
+   "fill_max": 0.955,
+   "margin_bottom": 0.035,
+   "center_x": 0.035,
+   "center_y": -0.0125,
+   "frame_clean": 0.9382,
+   "bytes": 102894,
+   "shadow": -1.344,
+   "touches_edge": false,
+   "why": [
+    "frame_clean",
+    "bg_dist"
+   ]
+  },
+  "photo-product-124": {
+   "path": "assets/products/photo-product-124.webp",
+   "deviation": 1.883,
+   "bg": "#faf2e7",
+   "bg_dist": 8.77,
+   "fill_max": 0.915,
+   "margin_bottom": 0.03,
+   "center_x": 0.025,
+   "center_y": 0.0125,
+   "frame_clean": 1.0,
+   "bytes": 90574,
+   "shadow": 3.871,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-125": {
+   "path": "assets/products/photo-product-125.webp",
+   "deviation": 3.246,
+   "bg": "#fdf8ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.805,
+   "margin_bottom": 0.075,
+   "center_x": 0.09,
+   "center_y": 0.0225,
+   "frame_clean": 0.9878,
+   "bytes": 48856,
+   "shadow": 0.795,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-126": {
+   "path": "assets/products/photo-product-126.webp",
+   "deviation": 2.66,
+   "bg": "#fef7ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.8,
+   "margin_bottom": 0.095,
+   "center_x": 0.0575,
+   "center_y": 0.005,
+   "frame_clean": 0.9708,
+   "bytes": 44126,
+   "shadow": 2.382,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-127": {
+   "path": "assets/products/photo-product-127.webp",
+   "deviation": 2.415,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.79,
+   "margin_bottom": 0.095,
+   "center_x": -0.035,
+   "center_y": 0.01,
+   "frame_clean": 1.0,
+   "bytes": 54812,
+   "shadow": 1.12,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-128": {
+   "path": "assets/products/photo-product-128.webp",
+   "deviation": 2.72,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.8,
+   "margin_bottom": 0.07,
+   "center_x": 0.02,
+   "center_y": 0.035,
+   "frame_clean": 1.0,
+   "bytes": 54894,
+   "shadow": 3.14,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "fill_max"
+   ]
+  },
+  "photo-product-129": {
+   "path": "assets/products/photo-product-129.webp",
+   "deviation": 4.487,
+   "bg": "#fef6e9",
+   "bg_dist": 3.61,
+   "fill_max": 0.83,
+   "margin_bottom": 0.145,
+   "center_x": -0.085,
+   "center_y": 0.0025,
+   "frame_clean": 0.945,
+   "bytes": 69688,
+   "shadow": 2.549,
+   "touches_edge": true,
+   "why": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  "photo-product-130": {
+   "path": "assets/products/photo-product-130.webp",
+   "deviation": 1.095,
+   "bg": "#fdf8ee",
+   "bg_dist": 2.24,
+   "fill_max": 0.885,
+   "margin_bottom": 0.07,
+   "center_x": 0.0075,
+   "center_y": 0.0025,
+   "frame_clean": 1.0,
+   "bytes": 53318,
+   "shadow": 1.72,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "frame_clean"
+   ]
+  },
+  "photo-product-131": {
+   "path": "assets/products/photo-product-131.webp",
+   "deviation": 2.472,
+   "bg": "#fef6e9",
+   "bg_dist": 3.61,
+   "fill_max": 0.895,
+   "margin_bottom": 0.105,
+   "center_x": -0.0525,
+   "center_y": 0.0,
+   "frame_clean": 0.9707,
+   "bytes": 80936,
+   "shadow": 2.847,
+   "touches_edge": true,
+   "why": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  "photo-product-132": {
+   "path": "assets/products/photo-product-132.webp",
+   "deviation": 1.504,
+   "bg": "#fefaf0",
+   "bg_dist": 4.47,
+   "fill_max": 0.855,
+   "margin_bottom": 0.07,
+   "center_x": 0.04,
+   "center_y": 0.0025,
+   "frame_clean": 0.9803,
+   "bytes": 75530,
+   "shadow": 3.799,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-134": {
+   "path": "assets/products/photo-product-134.webp",
+   "deviation": 1.472,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.915,
+   "margin_bottom": 0.035,
+   "center_x": 0.0175,
+   "center_y": 0.0075,
+   "frame_clean": 0.9875,
+   "bytes": 108476,
+   "shadow": 0.831,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bytes_log"
+   ]
+  },
+  "photo-product-135": {
+   "path": "assets/products/photo-product-135.webp",
+   "deviation": 1.548,
+   "bg": "#fef8ea",
+   "bg_dist": 2.0,
+   "fill_max": 0.89,
+   "margin_bottom": 0.065,
+   "center_x": 0.0125,
+   "center_y": -0.01,
+   "frame_clean": 1.0,
+   "bytes": 88972,
+   "shadow": 1.544,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "bg_dist"
+   ]
+  },
+  "photo-product-136": {
+   "path": "assets/products/photo-product-136.webp",
+   "deviation": 1.547,
+   "bg": "#fef7ea",
+   "bg_dist": 2.24,
+   "fill_max": 0.895,
+   "margin_bottom": 0.06,
+   "center_x": 0.0075,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 83494,
+   "shadow": 2.015,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "bg_spread"
+   ]
+  },
+  "photo-product-137": {
+   "path": "assets/products/photo-product-137.webp",
+   "deviation": 1.605,
+   "bg": "#fef4e8",
+   "bg_dist": 5.66,
+   "fill_max": 0.86,
+   "margin_bottom": 0.07,
+   "center_x": 0.05,
+   "center_y": 0.0,
+   "frame_clean": 0.9872,
+   "bytes": 49050,
+   "shadow": 0.514,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-138": {
+   "path": "assets/products/photo-product-138.webp",
+   "deviation": 1.834,
+   "bg": "#fefaf2",
+   "bg_dist": 6.32,
+   "fill_max": 0.875,
+   "margin_bottom": 0.07,
+   "center_x": -0.0175,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 66508,
+   "shadow": 4.188,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "bg_spread"
+   ]
+  },
+  "photo-product-139": {
+   "path": "assets/products/photo-product-139.webp",
+   "deviation": 2.29,
+   "bg": "#fdfcf5",
+   "bg_dist": 9.9,
+   "fill_max": 0.92,
+   "margin_bottom": 0.04,
+   "center_x": -0.02,
+   "center_y": 0.0,
+   "frame_clean": 1.0,
+   "bytes": 50234,
+   "shadow": 1.014,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "center_x"
+   ]
+  },
+  "photo-product-140": {
+   "path": "assets/products/photo-product-140.webp",
+   "deviation": 3.685,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.95,
+   "margin_bottom": 0.035,
+   "center_x": -0.095,
+   "center_y": -0.01,
+   "frame_clean": 0.9906,
+   "bytes": 51504,
+   "shadow": 2.636,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-141": {
+   "path": "assets/products/photo-product-141.webp",
+   "deviation": 2.229,
+   "bg": "#fdfcf3",
+   "bg_dist": 8.12,
+   "fill_max": 0.92,
+   "margin_bottom": 0.045,
+   "center_x": 0.06,
+   "center_y": -0.005,
+   "frame_clean": 1.0,
+   "bytes": 44544,
+   "shadow": 2.124,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-142": {
+   "path": "assets/products/photo-product-142.webp",
+   "deviation": 1.482,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.9,
+   "margin_bottom": 0.06,
+   "center_x": 0.0075,
+   "center_y": -0.01,
+   "frame_clean": 1.0,
+   "bytes": 82272,
+   "shadow": 0.351,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-143": {
+   "path": "assets/products/photo-product-143.webp",
+   "deviation": 1.324,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.91,
+   "margin_bottom": 0.05,
+   "center_x": 0.02,
+   "center_y": -0.005,
+   "frame_clean": 1.0,
+   "bytes": 74384,
+   "shadow": 3.167,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "center_y"
+   ]
+  },
+  "photo-product-144": {
+   "path": "assets/products/photo-product-144.webp",
+   "deviation": 2.372,
+   "bg": "#fdf7ec",
+   "bg_dist": 1.41,
+   "fill_max": 0.94,
+   "margin_bottom": 0.04,
+   "center_x": -0.035,
+   "center_y": -0.01,
+   "frame_clean": 1.0,
+   "bytes": 76466,
+   "shadow": 0.207,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-145": {
+   "path": "assets/products/photo-product-145.webp",
+   "deviation": 1.306,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.935,
+   "margin_bottom": 0.135,
+   "center_x": 0.0025,
+   "center_y": 0.0025,
+   "frame_clean": 1.0,
+   "bytes": 67852,
+   "shadow": 0.633,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_spread"
+   ]
+  },
+  "photo-product-146": {
+   "path": "assets/products/photo-product-146.webp",
+   "deviation": 1.345,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.94,
+   "margin_bottom": 0.115,
+   "center_x": -0.01,
+   "center_y": 0.0175,
+   "frame_clean": 0.9938,
+   "bytes": 80010,
+   "shadow": 1.689,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "center_x"
+   ]
+  },
+  "photo-product-147": {
+   "path": "assets/products/photo-product-147.webp",
+   "deviation": 1.53,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.94,
+   "margin_bottom": 0.095,
+   "center_x": 0.005,
+   "center_y": 0.005,
+   "frame_clean": 0.9831,
+   "bytes": 158926,
+   "shadow": 1.967,
+   "touches_edge": false,
+   "why": [
+    "bytes_log",
+    "bg_spread"
+   ]
+  },
+  "photo-product-148": {
+   "path": "assets/products/photo-product-148.webp",
+   "deviation": 1.994,
+   "bg": "#fffbf3",
+   "bg_dist": 7.68,
+   "fill_max": 0.94,
+   "margin_bottom": 0.18,
+   "center_x": 0.0,
+   "center_y": 0.0125,
+   "frame_clean": 1.0,
+   "bytes": 62168,
+   "shadow": 1.284,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-149": {
+   "path": "assets/products/photo-product-149.webp",
+   "deviation": 1.146,
+   "bg": "#fefaf0",
+   "bg_dist": 4.47,
+   "fill_max": 0.87,
+   "margin_bottom": 0.07,
+   "center_x": -0.005,
+   "center_y": 0.0125,
+   "frame_clean": 1.0,
+   "bytes": 62986,
+   "shadow": 1.207,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "fill_max"
+   ]
+  },
+  "photo-product-150": {
+   "path": "assets/products/photo-product-150.webp",
+   "deviation": 1.712,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.91,
+   "margin_bottom": 0.04,
+   "center_x": 0.0275,
+   "center_y": 0.005,
+   "frame_clean": 0.9872,
+   "bytes": 97982,
+   "shadow": 4.649,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-151": {
+   "path": "assets/products/photo-product-151.webp",
+   "deviation": 1.778,
+   "bg": "#fef7ea",
+   "bg_dist": 2.24,
+   "fill_max": 0.83,
+   "margin_bottom": 0.08,
+   "center_x": -0.0125,
+   "center_y": 0.005,
+   "frame_clean": 1.0,
+   "bytes": 75142,
+   "shadow": 3.593,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_x"
+   ]
+  },
+  "photo-product-152": {
+   "path": "assets/products/photo-product-152.webp",
+   "deviation": 1.274,
+   "bg": "#fefaf0",
+   "bg_dist": 4.47,
+   "fill_max": 0.865,
+   "margin_bottom": 0.09,
+   "center_x": -0.0025,
+   "center_y": 0.0125,
+   "frame_clean": 1.0,
+   "bytes": 105906,
+   "shadow": 0.538,
+   "touches_edge": false,
+   "why": [
+    "bytes_log",
+    "fill_max"
+   ]
+  },
+  "photo-product-153": {
+   "path": "assets/products/photo-product-153.webp",
+   "deviation": 2.052,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.875,
+   "margin_bottom": 0.08,
+   "center_x": 0.0025,
+   "center_y": -0.0175,
+   "frame_clean": 1.0,
+   "bytes": 94408,
+   "shadow": 3.104,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "bg_dist"
+   ]
+  },
+  "photo-product-154": {
+   "path": "assets/products/photo-product-154.webp",
+   "deviation": 2.713,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.78,
+   "margin_bottom": 0.125,
+   "center_x": 0.0,
+   "center_y": 0.0275,
+   "frame_clean": 1.0,
+   "bytes": 82986,
+   "shadow": 5.616,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "center_y"
+   ]
+  },
+  "photo-product-155": {
+   "path": "assets/products/photo-product-155.webp",
+   "deviation": 2.007,
+   "bg": "#fcf5e8",
+   "bg_dist": 5.39,
+   "fill_max": 0.845,
+   "margin_bottom": 0.085,
+   "center_x": 0.0075,
+   "center_y": -0.0075,
+   "frame_clean": 1.0,
+   "bytes": 87236,
+   "shadow": 7.152,
+   "touches_edge": false,
+   "why": [
+    "shadow_depth",
+    "fill_max"
+   ]
+  },
+  "photo-product-156": {
+   "path": "assets/products/photo-product-156.webp",
+   "deviation": 2.088,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.91,
+   "margin_bottom": 0.105,
+   "center_x": 0.0,
+   "center_y": 0.02,
+   "frame_clean": 1.0,
+   "bytes": 96032,
+   "shadow": 7.448,
+   "touches_edge": false,
+   "why": [
+    "shadow_depth",
+    "center_y"
+   ]
+  },
+  "photo-product-157": {
+   "path": "assets/products/photo-product-157.webp",
+   "deviation": 3.406,
+   "bg": "#fdf8ee",
+   "bg_dist": 2.24,
+   "fill_max": 0.9,
+   "margin_bottom": 0.15,
+   "center_x": 0.05,
+   "center_y": 0.005,
+   "frame_clean": 0.9539,
+   "bytes": 76640,
+   "shadow": 5.772,
+   "touches_edge": true,
+   "why": [
+    "frame_clean",
+    "bg_spread"
+   ]
+  },
+  "photo-product-158": {
+   "path": "assets/products/photo-product-158.webp",
+   "deviation": 1.53,
+   "bg": "#fef7ea",
+   "bg_dist": 2.24,
+   "fill_max": 0.855,
+   "margin_bottom": 0.11,
+   "center_x": -0.0075,
+   "center_y": -0.0025,
+   "frame_clean": 1.0,
+   "bytes": 89370,
+   "shadow": 1.532,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "bg_dist"
+   ]
+  },
+  "photo-product-159": {
+   "path": "assets/products/photo-product-159.webp",
+   "deviation": 2.08,
+   "bg": "#fef8ec",
+   "bg_dist": 0.0,
+   "fill_max": 0.85,
+   "margin_bottom": 0.115,
+   "center_x": 0.01,
+   "center_y": 0.005,
+   "frame_clean": 0.9695,
+   "bytes": 88434,
+   "shadow": 2.788,
+   "touches_edge": false,
+   "why": [
+    "frame_clean",
+    "bg_dist"
+   ]
+  },
+  "photo-product-160": {
+   "path": "assets/products/photo-product-160.webp",
+   "deviation": 1.987,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.85,
+   "margin_bottom": 0.115,
+   "center_x": -0.03,
+   "center_y": 0.0125,
+   "frame_clean": 0.9867,
+   "bytes": 76028,
+   "shadow": 3.814,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "bg_dist"
+   ]
+  },
+  "photo-product-161": {
+   "path": "assets/products/photo-product-161.webp",
+   "deviation": 1.69,
+   "bg": "#fffbf3",
+   "bg_dist": 7.68,
+   "fill_max": 0.92,
+   "margin_bottom": 0.145,
+   "center_x": 0.0,
+   "center_y": 0.0125,
+   "frame_clean": 1.0,
+   "bytes": 93114,
+   "shadow": 1.368,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-162": {
+   "path": "assets/products/photo-product-162.webp",
+   "deviation": 1.997,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.865,
+   "margin_bottom": 0.08,
+   "center_x": 0.0025,
+   "center_y": 0.0225,
+   "frame_clean": 1.0,
+   "bytes": 81330,
+   "shadow": 3.423,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "bg_spread"
+   ]
+  },
+  "photo-product-163": {
+   "path": "assets/products/photo-product-163.webp",
+   "deviation": 1.249,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.915,
+   "margin_bottom": 0.07,
+   "center_x": 0.0125,
+   "center_y": 0.01,
+   "frame_clean": 1.0,
+   "bytes": 79526,
+   "shadow": 3.963,
+   "touches_edge": false,
+   "why": [
+    "bg_spread",
+    "shadow_depth"
+   ]
+  },
+  "photo-product-164": {
+   "path": "assets/products/photo-product-164.webp",
+   "deviation": 1.012,
+   "bg": "#fefbf0",
+   "bg_dist": 5.0,
+   "fill_max": 0.93,
+   "margin_bottom": 0.085,
+   "center_x": 0.0,
+   "center_y": 0.0,
+   "frame_clean": 0.988,
+   "bytes": 58828,
+   "shadow": 1.103,
+   "touches_edge": false,
+   "why": [
+    "bg_spread",
+    "center_x"
+   ]
+  },
+  "photo-product-165": {
+   "path": "assets/products/photo-product-165.webp",
+   "deviation": 1.239,
+   "bg": "#fef9ef",
+   "bg_dist": 3.16,
+   "fill_max": 0.91,
+   "margin_bottom": 0.09,
+   "center_x": 0.0,
+   "center_y": -0.0025,
+   "frame_clean": 1.0,
+   "bytes": 86278,
+   "shadow": 4.511,
+   "touches_edge": false,
+   "why": [
+    "shadow_depth",
+    "frame_clean"
+   ]
+  },
+  "photo-product-166": {
+   "path": "assets/products/photo-product-166.webp",
+   "deviation": 1.614,
+   "bg": "#fdf6e9",
+   "bg_dist": 3.74,
+   "fill_max": 0.85,
+   "margin_bottom": 0.105,
+   "center_x": 0.0,
+   "center_y": 0.0075,
+   "frame_clean": 1.0,
+   "bytes": 100872,
+   "shadow": 5.651,
+   "touches_edge": false,
+   "why": [
+    "shadow_depth",
+    "fill_max"
+   ]
+  },
+  "photo-product-167": {
+   "path": "assets/products/photo-product-167.webp",
+   "deviation": 1.819,
+   "bg": "#fffbf3",
+   "bg_dist": 7.68,
+   "fill_max": 0.945,
+   "margin_bottom": 0.03,
+   "center_x": 0.0025,
+   "center_y": -0.0025,
+   "frame_clean": 1.0,
+   "bytes": 48792,
+   "shadow": 1.562,
+   "touches_edge": false,
+   "why": [
+    "margin_bottom",
+    "bg_dist"
+   ]
+  },
+  "photo-product-168": {
+   "path": "assets/products/photo-product-168.webp",
+   "deviation": 2.856,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.915,
+   "margin_bottom": 0.17,
+   "center_x": -0.0425,
+   "center_y": 0.0125,
+   "frame_clean": 0.9686,
+   "bytes": 65390,
+   "shadow": 4.549,
+   "touches_edge": true,
+   "why": [
+    "center_x",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-169": {
+   "path": "assets/products/photo-product-169.webp",
+   "deviation": 1.042,
+   "bg": "#fefaf1",
+   "bg_dist": 5.39,
+   "fill_max": 0.86,
+   "margin_bottom": 0.125,
+   "center_x": 0.01,
+   "center_y": 0.0075,
+   "frame_clean": 1.0,
+   "bytes": 67602,
+   "shadow": 2.833,
+   "touches_edge": false,
+   "why": [
+    "fill_max",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-170": {
+   "path": "assets/products/photo-product-170.webp",
+   "deviation": 1.488,
+   "bg": "#fdf8ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.86,
+   "margin_bottom": 0.105,
+   "center_x": 0.0,
+   "center_y": 0.005,
+   "frame_clean": 1.0,
+   "bytes": 65918,
+   "shadow": 1.012,
+   "touches_edge": false,
+   "why": [
+    "bg_dist",
+    "fill_max"
+   ]
+  },
+  "photo-product-171": {
+   "path": "assets/products/photo-product-171.webp",
+   "deviation": 1.936,
+   "bg": "#fef6e9",
+   "bg_dist": 3.61,
+   "fill_max": 0.935,
+   "margin_bottom": 0.035,
+   "center_x": -0.03,
+   "center_y": -0.0025,
+   "frame_clean": 1.0,
+   "bytes": 63044,
+   "shadow": 3.271,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "margin_bottom"
+   ]
+  },
+  "photo-product-172": {
+   "path": "assets/products/photo-product-172.webp",
+   "deviation": 2.565,
+   "bg": "#fef7ec",
+   "bg_dist": 1.0,
+   "fill_max": 0.935,
+   "margin_bottom": 0.04,
+   "center_x": 0.065,
+   "center_y": -0.0075,
+   "frame_clean": 0.9733,
+   "bytes": 58772,
+   "shadow": 1.79,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "frame_clean"
+   ]
+  },
+  "photo-product-173": {
+   "path": "assets/products/photo-product-173.webp",
+   "deviation": 2.37,
+   "bg": "#fdf7ea",
+   "bg_dist": 2.45,
+   "fill_max": 0.925,
+   "margin_bottom": 0.05,
+   "center_x": 0.0675,
+   "center_y": -0.0125,
+   "frame_clean": 1.0,
+   "bytes": 57368,
+   "shadow": 0.409,
+   "touches_edge": false,
+   "why": [
+    "center_x",
+    "center_y"
+   ]
+  },
+  "photo-product-174": {
+   "path": "assets/products/photo-product-174.webp",
+   "deviation": 2.048,
+   "bg": "#fef9ed",
+   "bg_dist": 1.41,
+   "fill_max": 0.955,
+   "margin_bottom": 0.035,
+   "center_x": 0.0275,
+   "center_y": -0.0125,
+   "frame_clean": 1.0,
+   "bytes": 56858,
+   "shadow": 2.859,
+   "touches_edge": false,
+   "why": [
+    "center_y",
+    "margin_bottom"
+   ]
+  }
+ }
+}

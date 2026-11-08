@@ -1,0 +1,146 @@
+"""ITEMSTD-1: measure every product picture on the site (read only; writes JSON under --out).
+
+Run: python3 measure_pictures.py REPO OUT_JSON
+Pure Pillow (no numpy). Subject = pixels that differ from the picture's own border colour by more than T on any channel,
+found on a 4x-reduced copy (200x200). Everything is a fraction of the frame unless named otherwise.
+"""
+import hashlib
+import json
+import statistics
+import struct
+import sys
+from pathlib import Path
+
+from PIL import Image
+
+T = 30          # a pixel is "subject" when any channel differs from the background by more than this
+MIN_ROW = 2     # a row / column belongs to the subject when it holds at least this many subject pixels (of 200)
+BORDER = 8      # frame strip width in pixels (full size) used for the background colour
+
+
+def luma(p):
+    return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]
+
+
+def med(vals):
+    return statistics.median(vals)
+
+
+def riff_chunks(data):
+    out = []
+    if data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        return out
+    pos = 12
+    while pos + 8 <= len(data):
+        tag = data[pos:pos + 4].decode("latin1")
+        size = struct.unpack("<I", data[pos + 4:pos + 8])[0]
+        out.append(tag)
+        pos += 8 + size + (size & 1)
+    return out
+
+
+def pct(vals, q):
+    vals = sorted(vals)
+    if not vals:
+        return None
+    k = (len(vals) - 1) * q
+    lo, hi = int(k), min(int(k) + 1, len(vals) - 1)
+    return round(vals[lo] + (vals[hi] - vals[lo]) * (k - lo), 4)
+
+
+def dist(vals):
+    vals = [v for v in vals if v is not None]
+    if not vals:
+        return {}
+    return {"n": len(vals), "min": round(min(vals), 4), "p05": pct(vals, .05), "p25": pct(vals, .25), "median": pct(vals, .5),
+            "p75": pct(vals, .75), "p95": pct(vals, .95), "max": round(max(vals), 4), "mean": round(statistics.fmean(vals), 4)}
+
+
+def measure(path):
+    data = path.read_bytes()
+    img = Image.open(path)
+    info = {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "format": img.format, "mode": img.mode,
+            "width": img.width, "height": img.height, "chunks": riff_chunks(data) if img.format == "WEBP" else [],
+            "animated": bool(getattr(img, "is_animated", False)), "has_exif": bool(img.info.get("exif")),
+            "has_icc": bool(img.info.get("icc_profile")), "has_alpha": img.mode in ("RGBA", "LA")}
+    rgb = img.convert("RGB")
+    w, h = rgb.size
+    info["bits_per_pixel"] = round(len(data) * 8 / (w * h), 3)
+    # background = per-channel median of the 8 px frame
+    strips = [rgb.crop((0, 0, w, BORDER)), rgb.crop((0, h - BORDER, w, h)), rgb.crop((0, 0, BORDER, h)), rgb.crop((w - BORDER, 0, w, h))]
+    px = []
+    for s in strips:
+        px.extend(s.getdata())
+    bg = tuple(int(med([p[c] for p in px])) for c in range(3))
+    info["bg_rgb"] = bg
+    info["bg_hex"] = "#%02x%02x%02x" % bg
+    info["bg_luma"] = round(luma(bg), 2)
+    info["bg_spread"] = round(statistics.fmean(max(abs(p[c] - bg[c]) for c in range(3)) for p in px), 3)
+    info["frame_clean"] = round(sum(1 for p in px if max(abs(p[c] - bg[c]) for c in range(3)) <= 12) / len(px), 4)
+    # corners vs edge middles (vignette / gradient)
+    corner = [rgb.getpixel(xy) for xy in ((4, 4), (w - 5, 4), (4, h - 5), (w - 5, h - 5))]
+    info["corner_luma_range"] = round(max(luma(p) for p in corner) - min(luma(p) for p in corner), 2)
+    # subject on a 200x200 copy
+    small = rgb.reduce(4)
+    sw, sh = small.size
+    sp = list(small.getdata())
+    mask = [max(abs(p[c] - bg[c]) for c in range(3)) > T for p in sp]
+    rows = [sum(mask[y * sw:(y + 1) * sw]) for y in range(sh)]
+    cols = [sum(mask[y * sw + x] for y in range(sh)) for x in range(sw)]
+    ys = [y for y, n in enumerate(rows) if n >= MIN_ROW]
+    xs = [x for x, n in enumerate(cols) if n >= MIN_ROW]
+    if not ys or not xs:
+        info["subject"] = None
+        return info
+    y0, y1, x0, x1 = ys[0], ys[-1] + 1, xs[0], xs[-1] + 1
+    fw, fh = (x1 - x0) / sw, (y1 - y0) / sh
+    info["subject"] = {
+        "fill_w": round(fw, 4), "fill_h": round(fh, 4), "fill_max": round(max(fw, fh), 4),
+        "margin_left": round(x0 / sw, 4), "margin_right": round((sw - x1) / sw, 4),
+        "margin_top": round(y0 / sh, 4), "margin_bottom": round((sh - y1) / sh, 4),
+        "center_x": round(((x0 + x1) / 2 - sw / 2) / sw, 4), "center_y": round(((y0 + y1) / 2 - sh / 2) / sh, 4),
+        "area_share": round(sum(mask) / (sw * sh), 4), "bbox_fill": round(sum(mask) / ((x1 - x0) * (y1 - y0)), 4),
+        "touches_edge": x0 == 0 or y0 == 0 or x1 == sw or y1 == sh,
+    }
+    # soft shadow: luma of the band just under the subject (12 reduced px = 48 px) vs the background luma
+    band = []
+    for y in range(y1, min(y1 + 12, sh)):
+        for x in range(x0, x1):
+            i = y * sw + x
+            if not mask[i]:
+                band.append(luma(sp[i]))
+    info["shadow_depth"] = round(luma(bg) - statistics.fmean(band), 3) if len(band) >= 20 else None
+    # mean colour strength of the subject (how saturated the product itself is)
+    sub = [p for p, m in zip(sp, mask) if m]
+    if sub:
+        info["subject_luma"] = round(statistics.fmean(luma(p) for p in sub), 2)
+        info["subject_sat"] = round(statistics.fmean((max(p) - min(p)) / max(max(p), 1) for p in sub), 4)
+    # 8x8 average hash for near-duplicate detection
+    g = rgb.convert("L").resize((8, 8), Image.LANCZOS)
+    gv = list(g.getdata())
+    m = statistics.fmean(gv)
+    info["ahash"] = "".join("1" if v > m else "0" for v in gv)
+    return info
+
+
+def main():
+    repo = Path(sys.argv[1])
+    out = Path(sys.argv[2])
+    products = json.loads((repo / "hass/content/products.json").read_text())["products"]
+    pdir = repo / "storefront-mockup"
+    refs = {}
+    for p in products:
+        refs.setdefault(p["image"], []).append(p["id"])
+    files = sorted(f.name for f in (pdir / "assets/products").iterdir() if f.is_file())
+    rows = []
+    for name in files:
+        rel = "assets/products/" + name
+        rec = {"path": rel, "used_by": refs.get(rel, [])}
+        rec.update(measure(pdir / rel))
+        rows.append(rec)
+    out.write_text(json.dumps(rows, indent=1))
+    print("measured", len(rows), "files ->", out)
+
+
+if __name__ == "__main__":
+    main()

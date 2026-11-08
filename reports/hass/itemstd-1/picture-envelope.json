@@ -1,0 +1,201 @@
+{
+ "about": "Proposed picture checks applied to the 170 active product pictures (ITEMSTD-1). hard = rejects a new render; soft = advice only.",
+ "pictures_checked": 170,
+ "checks": {
+  "size_800x800": {
+   "class": "hard",
+   "fails": 0,
+   "ids": []
+  },
+  "no_metadata": {
+   "class": "hard",
+   "fails": 0,
+   "ids": []
+  },
+  "bytes_at_most_160KB": {
+   "class": "hard",
+   "fails": 0,
+   "ids": []
+  },
+  "background_within_28_of_fef8ec": {
+   "class": "hard",
+   "fails": 0,
+   "ids": []
+  },
+  "clean_frame_at_least_90pct": {
+   "class": "hard",
+   "fails": 3,
+   "ids": [
+    "photo-product-015",
+    "photo-product-093",
+    "photo-product-110"
+   ]
+  },
+  "bytes_31_to_99KB": {
+   "class": "soft",
+   "fails": 18,
+   "ids": [
+    "photo-product-019",
+    "photo-product-025",
+    "photo-product-027",
+    "photo-product-043",
+    "photo-product-045",
+    "photo-product-046",
+    "photo-product-049",
+    "photo-product-050",
+    "photo-product-051",
+    "photo-product-060",
+    "photo-product-061",
+    "photo-product-069",
+    "photo-product-080",
+    "photo-product-123",
+    "photo-product-134",
+    "photo-product-147",
+    "photo-product-152",
+    "photo-product-166"
+   ]
+  },
+  "background_within_17_of_fef8ec": {
+   "class": "soft",
+   "fails": 9,
+   "ids": [
+    "photo-product-005",
+    "photo-product-007",
+    "photo-product-015",
+    "photo-product-022",
+    "photo-product-038",
+    "photo-product-046",
+    "photo-product-048",
+    "photo-product-085",
+    "photo-product-110"
+   ]
+  },
+  "background_variation_at_most_6": {
+   "class": "soft",
+   "fails": 5,
+   "ids": [
+    "photo-product-005",
+    "photo-product-015",
+    "photo-product-093",
+    "photo-product-109",
+    "photo-product-110"
+   ]
+  },
+  "subject_longest_side_79_to_97pct": {
+   "class": "soft",
+   "fails": 12,
+   "ids": [
+    "photo-product-003",
+    "photo-product-004",
+    "photo-product-005",
+    "photo-product-024",
+    "photo-product-029",
+    "photo-product-031",
+    "photo-product-056",
+    "photo-product-083",
+    "photo-product-084",
+    "photo-product-094",
+    "photo-product-098",
+    "photo-product-154"
+   ]
+  },
+  "centre_down_within_4pct": {
+   "class": "soft",
+   "fails": 9,
+   "ids": [
+    "photo-product-012",
+    "photo-product-015",
+    "photo-product-023",
+    "photo-product-024",
+    "photo-product-031",
+    "photo-product-057",
+    "photo-product-098",
+    "photo-product-111",
+    "photo-product-112"
+   ]
+  },
+  "centre_across_within_10pct": {
+   "class": "soft",
+   "fails": 7,
+   "ids": [
+    "photo-product-013",
+    "photo-product-048",
+    "photo-product-055",
+    "photo-product-085",
+    "photo-product-092",
+    "photo-product-094",
+    "photo-product-105"
+   ]
+  },
+  "margin_below_at_least_2_5pct": {
+   "class": "soft",
+   "fails": 0,
+   "ids": []
+  },
+  "subject_area_20_to_60pct": {
+   "class": "soft",
+   "fails": 7,
+   "ids": [
+    "photo-product-013",
+    "photo-product-043",
+    "photo-product-045",
+    "photo-product-120",
+    "photo-product-121",
+    "photo-product-130",
+    "photo-product-132"
+   ]
+  },
+  "shadow_at_most_7_5_levels": {
+   "class": "soft",
+   "fails": 0,
+   "ids": []
+  },
+  "phone_thumbnail_fill_at_least_80pct": {
+   "class": "soft",
+   "fails": 11,
+   "ids": [
+    "photo-product-003",
+    "photo-product-004",
+    "photo-product-029",
+    "photo-product-056",
+    "photo-product-083",
+    "photo-product-084",
+    "photo-product-092",
+    "photo-product-094",
+    "photo-product-108",
+    "photo-product-127",
+    "photo-product-154"
+   ]
+  }
+ },
+ "hard_failures": {
+  "photo-product-015": [
+   "clean_frame_at_least_90pct"
+  ],
+  "photo-product-093": [
+   "clean_frame_at_least_90pct"
+  ],
+  "photo-product-110": [
+   "clean_frame_at_least_90pct"
+  ]
+ },
+ "hard_failure_detail": {
+  "photo-product-015": {
+   "clean_frame": 0.865,
+   "bg": "#f6ecdf",
+   "subject_longest_side": 0.815
+  },
+  "photo-product-093": {
+   "clean_frame": 0.8994,
+   "bg": "#f8ede1",
+   "subject_longest_side": 0.8
+  },
+  "photo-product-110": {
+   "clean_frame": 0.8869,
+   "bg": "#f9e9d6",
+   "subject_longest_side": 0.94
+  }
+ },
+ "pictures_passing_every_hard_check": 167,
+ "pictures_missing_at_least_one_soft_check": 54
+}
