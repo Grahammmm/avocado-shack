@@ -32,7 +32,7 @@ import re
 import subprocess
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -50,7 +50,7 @@ CODES = ("write-before-yes", "wrong-diff", "edit-undeclared", "undo-not-identica
 FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "skip-later-preview")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a revision whose preview is never requested
 PLAN_KEYS = {"id", "plan", "kind", "slots", "ctx", "expect_ops", "expect_error", "version", "note", "must_fail"}
 CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "seed", "setup", "undo",
-             "photos", "house_render"}
+             "photos", "house_render", "live", "maker_pages"}
 ASSET_DIR = "storefront-mockup/assets/products/"  # a picture file the editor commits; undo leaves it, unused (a declared residue)
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
                "left_off", "set_line", "ops", "diff", "files", "preview", "residue", "allow_words"}
@@ -250,13 +250,15 @@ class SetupError(ValueError):
 class Scratch:
     """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry."""
 
-    def __init__(self, mapping, skills, fault=None, seed=None, setup=None, photos=(), house_render=False):
+    def __init__(self, mapping, skills, fault=None, seed=None, setup=None, photos=(), house_render=False, live=False, maker_pages=None):
         from hass import conversation, editor, media
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo  # the H02 throwaway repo the demo transcript uses
         self.repo = WriterRepo()
-        self.media_root, self.house_render = None, bool(house_render)
+        self.media_root, self.house_render, self.live = None, bool(house_render), bool(live)
+        self.maker_pages = maker_pages or {}  # HASS-LIVE-ADD-2: address -> recorded page (a repo path) or "unreachable"; no network ever
         settings = dict(SETTINGS)
+        if house_render: settings["houseRender"] = True  # the real house render runs in the editor too (a bad photo is asked to be retaken)
         if photos:  # a row's photos: stored originals in a private media root, found again by their sha256 in the row's slots
             import tempfile
             self.media_root = tempfile.mkdtemp(prefix="testkit-media-")
@@ -298,6 +300,18 @@ class Scratch:
         _git(self.repo.wt, "add", "-A")
         _git(self.repo.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "real assets/products folder")
 
+    def _maker_page(self):
+        """ctx.maker_page over RECORDED responses (hass/maker_site.py's own fetch, robots.txt and rules included, nothing cached)."""
+        from hass import maker_site
+        pages = self.maker_pages
+
+        def get(url, headers, timeout):
+            if url.endswith("/robots.txt"): return 404, "", b""
+            want = pages.get(url)
+            if want in (None, "unreachable"): return 503, "", b""
+            return 200, "text/html; charset=utf-8", (REPO_ROOT / want).read_bytes()
+        return lambda url: maker_site.fetch(url, get=get, sleep=lambda _s: None, today=date.fromisoformat("2026-11-08"), cache=False)
+
     def _with_set_line(self, row, draft, prefix=""):
         line, self.interp.chosen = self.interp.set_line(), []  # once, and only for the message whose plan chose something
         return self._proposal_reply(row, draft, line + prefix)
@@ -335,7 +349,7 @@ class Scratch:
     def _ctx(self):
         from hass.content_model import load_and_validate
         return types.SimpleNamespace(today="2026-11-08", now=self.now, texts=list(self.interp.said), media_root=self.media_root,
-                                     house_render=self.house_render,
+                                     house_render=self.house_render, live=self.live, maker_page=self._maker_page(),
                                      content=load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup"))
 
     def say(self, text):
@@ -475,7 +489,8 @@ def run_case_row(row, skills, skill=None, selftest=False):
     seed = row.get("seed")
     if seed is not None and not (isinstance(seed, dict) and all(k in ("products", "makers", "community", "store") and isinstance(v, dict) for k, v in seed.items())):
         res.fail("bad-row", "seed must be {products|makers|community|store: {top-level key: value}}"); return res
-    try: scratch = Scratch(mapping, skills, row.get("fault"), seed, setup, row.get("photos") or (), row.get("house_render") is True)
+    try: scratch = Scratch(mapping, skills, row.get("fault"), seed, setup, row.get("photos") or (), row.get("house_render") is True,
+                    row.get("live") is True, row.get("maker_pages"))
     except SetupError as exc: res.fail("bad-row", exc); return res
     except ValueError as exc:  # a row whose photos cannot be stored is a bad row with its own words; a refused seed has its own line
         res.fail("bad-row", exc if seed is None else f"the seed could not be applied: {type(exc).__name__}: {str(exc)[:200]}"); return res

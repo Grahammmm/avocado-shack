@@ -36,9 +36,11 @@ class TableShape(unittest.TestCase):
         self.assertEqual(sorted(policy.LIVE), sorted([
             "product.hide", "product.restore", "product.edit", "product.set_availability", "product.clear_availability",
             "store.confirm_selection", "specials.add", "specials.edit", "specials.remove", "specials.clear_expired",
-            "hike.create", "hike.update", "hike.cancel", "maker.edit", "history.revert"]))
+            "hike.create", "hike.update", "hike.cancel", "maker.edit", "history.revert",
+            "product.set_photo"]))  # HASS-LIVE-ADD-2: a picture, for a new or an existing product
         self.assertEqual(policy.LIVE["product.edit"], {"id", "description", "category"})
         self.assertEqual(policy.LIVE["maker.edit"], {"key", "story"})
+        self.assertEqual(policy.LIVE["product.set_photo"], {"id", "photo", "imageAlt"})
 
     def test_every_private_reason_is_plain_and_passes_the_voice_check(self):
         for name in policy.PRIVATE:

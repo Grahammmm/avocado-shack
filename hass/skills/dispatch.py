@@ -83,9 +83,11 @@ RULES.setdefault("no-price", _no_price)
 class Ctx:
     """What a skill's ``plan`` and rules may read: the saved content (read-only), today (Pacific), aliases, the owner's texts."""
 
-    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False):
+    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, live=False, maker_page=None):
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
+        self.live = live is True  # HASS-LIVE-ADD-2: settings liveSite is on, so a change goes to the real website on his yes
+        self.maker_page = maker_page  # HASS-LIVE-ADD-2: fn(address) -> the page of a maker's own website (hass/maker_site.py) or PageError
 
 
 # -- reply shapes ---------------------------------------------------------------------------------------------
@@ -374,6 +376,18 @@ def candidates_of(router_result) -> list:
 
 
 # -- the orchestrator -----------------------------------------------------------------------------------------
+def maker_site_log(sdir, code, rows, now) -> None:
+    """Append one JSON line per recorded source to ``<state>/maker-sources.jsonl`` (0600). Owner text is never written."""
+    import json
+    import os
+    path = os.path.join(str(sdir), "maker-sources.jsonl")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as out:
+        for row in rows:
+            out.write(json.dumps({"draft": code, "at": now.isoformat() if hasattr(now, "isoformat") else str(now), **row},
+                                 sort_keys=True, ensure_ascii=False) + "\n")
+
+
 class Dispatcher:
     """One per Conversation. ``conv`` supplies the db, the editor and the draft path; nothing here is reachable by anyone but
     the owner, because ``Conversation._handle`` drops every other sender and chat before a request exists."""
@@ -387,8 +401,11 @@ class Dispatcher:
         from hass.content_model import load_content, shop_today
         content = load_content(editor_mod._load(str(self.conv.sdir))[2] / "hass" / "content")
         settings = getattr(self.conv, "settings", None) or {}
-        return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
-                   house_render=settings.get("houseRender") is True)
+        from hass import maker_site
+        today = shop_today(now)
+        read = getattr(self.conv, "maker_page", None) or maker_site.reader(today=today)  # a test hands the conversation a recorded reader
+        return Ctx(content, today, self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
+                   house_render=settings.get("houseRender") is True, live=bool(settings.get("liveSite")), maker_page=read)
 
     def _owner(self):
         return self.conv._chat()  # the answering chat, so each owner has their own open request (HASS-LIVE-PLAN-1)
@@ -645,6 +662,8 @@ class Dispatcher:
         disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
+        if disposition == "proposed":
+            self._keep_sources(skill, slots, now, texts, code)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if queued:  # the shelf-check question now holds the open request: the queued asks wait on it, not lost
@@ -666,6 +685,19 @@ class Dispatcher:
             if queued:
                 return self._next_queued(msg, now, None, queued, texts, attachments, disposition)
         return disposition
+
+    def _keep_sources(self, skill, slots, now, texts, code) -> None:
+        """HASS-LIVE-ADD-2: where a drafted maker story was read (address, day, the page sentences it came from), one private line
+        per draft in ``maker-sources.jsonl`` in the state folder. A hook of the skill's module; best effort, never a reason to lose the draft."""
+        hook = skill_hook(skill, "sources")
+        if hook is None:
+            return
+        try:
+            rows = hook(skill.name, dict(slots), self._ctx(now, texts))
+            if rows:
+                maker_site_log(self.conv.sdir, code, rows, now)
+        except Exception:  # noqa: BLE001
+            return
 
     def _next_queued(self, msg, now, rid, queued, texts, attachments, disposition):
         """The current call is done: the next queued call becomes the open request and its one question is asked. Calls whose
