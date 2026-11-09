@@ -49,7 +49,9 @@ CODES = ("write-before-yes", "wrong-diff", "edit-undeclared", "undo-not-identica
          "stale-row", "bad-row", "bad-plan", "no-skill")
 FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "skip-later-preview")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a revision whose preview is never requested
 PLAN_KEYS = {"id", "plan", "kind", "slots", "ctx", "expect_ops", "expect_error", "version", "note", "must_fail"}
-CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "seed", "setup", "undo"}
+CASE_KEYS = {"id", "kind", "texts", "replies", "expect", "approve", "version", "note", "fault", "must_fail", "plan", "seed", "setup", "undo",
+             "photos", "house_render"}
+ASSET_DIR = "storefront-mockup/assets/products/"  # a picture file the editor commits; undo leaves it, unused (a declared residue)
 EXPECT_KEYS = {"skill", "disposition", "dispositions", "question_contains", "reply_contains", "reply_not_contains",
                "left_off", "set_line", "ops", "diff", "files", "preview", "residue", "allow_words"}
 KINDS = ("clean", "vague", "typo", "multi", "refuse", "photo", "turns")
@@ -248,13 +250,22 @@ class SetupError(ValueError):
 class Scratch:
     """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry."""
 
-    def __init__(self, mapping, skills, fault=None, seed=None, setup=None):
-        from hass import conversation, editor
+    def __init__(self, mapping, skills, fault=None, seed=None, setup=None, photos=(), house_render=False):
+        from hass import conversation, editor, media
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo  # the H02 throwaway repo the demo transcript uses
         self.repo = WriterRepo()
+        self.media_root, self.house_render = None, bool(house_render)
+        settings = dict(SETTINGS)
+        if photos:  # a row's photos: stored originals in a private media root, found again by their sha256 in the row's slots
+            import tempfile
+            self.media_root = tempfile.mkdtemp(prefix="testkit-media-")
+            for rel in photos:
+                media.store_original(self.media_root, (REPO_ROOT / rel).read_bytes(), received_at=START.isoformat(), source="testkit")
+            settings["mediaRoot"] = self.media_root
+            self._real_assets()
         cfg = json.loads((self.repo.state / "config.json").read_text("utf-8"))
-        editor._write_json(self.repo.state / "config.json", {**cfg, "settings": SETTINGS})
+        editor._write_json(self.repo.state / "config.json", {**cfg, "settings": settings})
         self.wt, self.now, self.n, self.out = self.repo.wt, START, 0, FixtureAdapter()
         if seed: self._seed_or_clean(seed)
         self.interp = SkillInterpreter(mapping, skills, self._ctx)
@@ -270,6 +281,22 @@ class Scratch:
         self._proposal_reply = self.conv._proposal_reply
         self.conv._proposal_reply = self._with_set_line  # the stand-in dispatcher's job: the `I set:` line goes in front of the proposal (FW-3: prefix=...)
         self.Inbound = conversation.Inbound
+
+    def _real_assets(self):
+        """The worktree's ``assets/products`` becomes a real folder (the editor refuses to write a picture into a symlinked one),
+        the way the photo tests do it; the other asset entries stay links. Committed, so it is the row's base and never its diff."""
+        import shutil
+        site = REPO_ROOT / "storefront-mockup" / "assets"
+        assets = self.repo.wt / "storefront-mockup" / "assets"
+        assets.unlink()
+        (assets / "products").mkdir(parents=True)
+        for entry in site.iterdir():
+            if entry.name == "products": continue
+            (assets / entry.name).symlink_to(entry)
+        for entry in (site / "products").iterdir():
+            shutil.copyfile(entry, assets / "products" / entry.name)  # a listing image must be a regular file, not a link
+        _git(self.repo.wt, "add", "-A")
+        _git(self.repo.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "real assets/products folder")
 
     def _with_set_line(self, row, draft, prefix=""):
         line, self.interp.chosen = self.interp.set_line(), []  # once, and only for the message whose plan chose something
@@ -307,7 +334,8 @@ class Scratch:
 
     def _ctx(self):
         from hass.content_model import load_and_validate
-        return types.SimpleNamespace(today="2026-11-08", now=self.now, texts=list(self.interp.said),
+        return types.SimpleNamespace(today="2026-11-08", now=self.now, texts=list(self.interp.said), media_root=self.media_root,
+                                     house_render=self.house_render,
                                      content=load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup"))
 
     def say(self, text):
@@ -334,7 +362,11 @@ class Scratch:
 
     def close(self):
         try: self.conv.db.close()
-        finally: self.repo.cleanup()
+        finally:
+            self.repo.cleanup()
+            if self.media_root:
+                import shutil
+                shutil.rmtree(self.media_root, ignore_errors=True)
 
 
 def _fault_editor(base, scratch, state, fault):
@@ -443,8 +475,10 @@ def run_case_row(row, skills, skill=None, selftest=False):
     seed = row.get("seed")
     if seed is not None and not (isinstance(seed, dict) and all(k in ("products", "makers", "community", "store") and isinstance(v, dict) for k, v in seed.items())):
         res.fail("bad-row", "seed must be {products|makers|community|store: {top-level key: value}}"); return res
-    try: scratch = Scratch(mapping, skills, row.get("fault"), seed, setup)
+    try: scratch = Scratch(mapping, skills, row.get("fault"), seed, setup, row.get("photos") or (), row.get("house_render") is True)
     except SetupError as exc: res.fail("bad-row", exc); return res
+    except ValueError as exc:  # a row whose photos cannot be stored is a bad row with its own words; a refused seed has its own line
+        res.fail("bad-row", exc if seed is None else f"the seed could not be applied: {type(exc).__name__}: {str(exc)[:200]}"); return res
     except Exception as exc:  # noqa: BLE001 - a seed the content rules refuse is a bad row, not a crash
         res.fail("bad-row", f"the seed could not be applied: {type(exc).__name__}: {str(exc)[:200]}"); return res
     try: _drive(row, expect, scratch, skills, skill, names, res)
@@ -510,6 +544,8 @@ def _drive(row, expect, sc, skills, skill, names, res):
     disposition, out = sc.say(f"yes {sc.drafts()[-1]['code']}")
     flat += out
     ufiles, leftover = tree_diff(sc.wt, base_head)
+    leftover = sorted(leftover + [{"file": f, "path": "(file)"} for f in ufiles if f.startswith(ASSET_DIR)],  # a picture file stays, unused
+                      key=lambda e: (e["file"], e["path"]))
     wanted = expect.get("residue", [])
     hard = _undo_problems(sc, ufiles, leftover)
     if hard: res.fail("undo-not-identical", "; ".join(hard))
@@ -537,7 +573,7 @@ def _undo_problems(sc, ufiles, leftover):
     out = []
     if sc.dirty(): out.append("the worktree is not clean after undo: " + sc.dirty().replace("\n", ", ")[:160])
     contentish = lambda f: f.startswith("hass/content/") and f.endswith(".json")  # noqa: E731 - the editor re-sorts keys; judged parsed
-    other = [f for f in ufiles if not contentish(f) and f not in GENERATED_PATHS]
+    other = [f for f in ufiles if not contentish(f) and f not in GENERATED_PATHS and not f.startswith(ASSET_DIR)]
     if other: out.append("undo left these files different from the start: " + ", ".join(other))
     try:
         stale = sitegen.stale_paths(load_and_validate(sc.wt / "hass" / "content", sc.wt / "storefront-mockup"), sc.wt)
@@ -592,6 +628,12 @@ def _check_preview(expect, requests, skill, res):
         res.fail("wrong-preview", f"the skill previews {kind!r} but the request is for {last.get('kind')!r}")
 
 
+def _declared_picture(declared, file):
+    """A new picture file the editor commits is fine when the skill declares one: `(".../assets/products/photo-<sha16>.jpg", "file")`."""
+    return file.startswith(ASSET_DIR) and any(
+        d.startswith(ASSET_DIR) and re.fullmatch(re.sub(r"<[^>]+>", "[^/]+", re.escape(d)), file) for d, _p in declared)
+
+
 def _check_diff(expect, files, diff, chosen, res):
     want = sorted(expect["diff"], key=lambda e: (e["file"], e["path"]))
     if diff != want: res.fail("wrong-diff", f"diff {_fmt(diff)} != expected {_fmt(want)}")
@@ -602,7 +644,8 @@ def _check_diff(expect, files, diff, chosen, res):
         for e in diff:
             if not declared_covers(declared, e["file"], e["path"]): res.fail("edit-undeclared", f"{e['file']} {e['path']} is outside the skill's declared edits")
         for f in files:
-            if f not in GENERATED_PATHS and not f.startswith("hass/content/"): res.fail("edit-undeclared", f"{f} is neither content nor a generated file")
+            if f not in GENERATED_PATHS and not f.startswith("hass/content/") and not _declared_picture(declared, f):
+                res.fail("edit-undeclared", f"{f} is neither content nor a generated file")
 
 
 # -- loading and running files -----------------------------------------------------------------------------------
