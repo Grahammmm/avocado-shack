@@ -107,6 +107,11 @@ def render(r):
 
 def say(r) -> str:
     """The chat answer: the price to charge, what it earns, and that nothing changes until he says so. No steps."""
+    with localcontext(_outer()):  # never the caller's precision, rounding or traps; its context and flags are restored on any exit
+        return _say(r)
+
+
+def _say(r) -> str:
     price, cost = D(r["price"]), D(str(r["sellable_cost"]).rstrip("."))
     paid = cost.quantize(CENT, ROUND_CEILING)
     if r.get("below_cost") is True:
