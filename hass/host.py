@@ -282,8 +282,11 @@ class Worker:
     def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None, stage=stagelog.off):
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
         self.stage, self.current = stage, ""  # HASS-FAST-1: `current` is the message being handled (stage log only)
-        self.sender = relay.RelaySender(store, conv.settings.get("ownerChats") or conv.settings["ownerChat"], lambda: int(clock().timestamp()), shots_dir,
-                                         conv.settings.get("gChat"))
+        main, listed = conv.settings["ownerChat"], conv.settings.get("ownerChats")
+        # HASS-OWNERS-2: the relay treats the FIRST chat as the picture-capable main one (the Mac forwarder carries pictures only to its
+        # own ownerChat), so the configured ownerChat goes first whatever order ownerChats is listed in.
+        chats = (main, *(c for c in listed if c != main)) if listed else main
+        self.sender = relay.RelaySender(store, chats, lambda: int(clock().timestamp()), shots_dir, conv.settings.get("gChat"))
         self.rev = editor_mod.content_revision(self.worktree)
         conv.interpreter = _Timed(conv.interpreter, self)
         raw_send = self.sender.send
