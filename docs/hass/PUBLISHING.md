@@ -75,6 +75,19 @@ Design, the live table and the test plan: `reports/hass/LIVE-PLAN-1.md`. The ste
 
 - `hass/live_policy.py` `LIVE` is the allow-list of operations (and argument names) that may go live from chat; `PRIVATE` says
   why the others cannot. A refused change is kept as one `policy` row in the private backlog.
+- **New product live (HASS-LIVE-ADD-1, G 2026-11-09).** `product.add` (arguments `name brand category description photo imageAlt
+  producerKey displayBrand`; never `image`) and `maker.add` (`key name place story`; never `url`, and only in the same draft as a
+  `product.add` whose `producerKey` is that key) are in `LIVE`. The field gate (`FIELDS`) lets `brand`, `displayBrand` and
+  `producerKey` through only on a product record the draft creates with `product.add`, and a maker's `place` only on a maker record
+  created with `maker.add` (`live_policy.NEW_RECORD_FIELDS`); the same fields on an existing product or maker, and the maker `url`
+  always, stay protected. The owner's-words rule cannot be judged by the pure `check(draft)` (it never sees his texts), so the
+  conversation applies `live_policy.unsaid(draft, texts)` when it drafts in live mode and asks instead of drafting (the draft
+  hash then binds exactly what he saw). `product.set_photo`, `product.edit` brand/producer, `maker.edit` place/url, `maker.hide`
+  and `maker.restore` stay private. The release `checks` step runs `hass.tests.test_publish`, `test_content` and
+  `test_style_no_commerce` on the built tree, so those tests take their product, maker and picture counts from the content, not
+  from constants (a count constant made every live add or hide end as `not-published`). Rehearsal:
+  `python3 -B reports/hass/rehearse_live_policy.py <checkout>` (output in `reports/hass/rehearse_live_policy.out`); end to end:
+  `python3 -B -m unittest hass.tests.test_live_add`.
 - `gIsOwner: true` (with `gSenders` and `gChat`) makes G's own chat a second owner chat, text only. Each owner's yes, no,
   undo and open request belong to that owner's chat.
 - `python3 hass/host.py mode hold|private|live --host host.json` rewrites `approvals` (then restart `hass-worker`).

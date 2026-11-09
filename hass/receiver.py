@@ -97,6 +97,9 @@ class Receiver:
 
     def _intake(self, raw, secret, now):
         """Size, strict JSON, unseal, enqueue -> (result for a refusal or repeat, None) or (None, the queued message)."""
+        if self.inbox.db.in_transaction:  # RF0824-10: acceptance is reported/logged only after OUR outermost COMMIT
+            raise RuntimeError("receiver intake needs its own transaction: the inbox is already inside one, so a "
+                               "'queued' answer could outlive a rollback")
         if isinstance(raw, (str, bytes, bytearray)):
             size = len(raw.encode("utf-8", "surrogatepass")) if isinstance(raw, str) else len(raw)
             if size > MAX_ENVELOPE_BYTES: return _result("rejected", REJECTED["size"]), None
@@ -106,11 +109,12 @@ class Receiver:
         except (ValueError, UnicodeDecodeError, RecursionError):
             return _result("rejected", REJECTED["shape"]), None
         try:  # a missing or short secret is a ValueError from bridge: a setup fault, raised, never a message result
-            msg = bridge.unseal(envelope, secret, now=now, seen=self.inbox.seen())
+            with self.inbox._tx():  # RF0824-10: the nonce and the queue row commit together or not at all
+                msg = bridge.unseal(envelope, secret, now=now, seen=self.inbox.seen())
+                queued = self.inbox.enqueue(msg)
         except bridge.EnvelopeError as exc:
             if exc.code == "replay": return _result("duplicate", "this exact envelope was already received"), None
             return _result("rejected", REJECTED.get(exc.code, REJECTED["shape"])), None
-        queued = self.inbox.enqueue(msg)
         if queued == "duplicate": return _result("duplicate", "this message id was already received; not queued again"), None
         if queued == "history": return _result("history", "sent before the recorded start point; kept as history only"), None
         self.stage("receiver-accepted", msg.provider_id)  # HASS-FAST-1: stage time only (hashed id); nothing else

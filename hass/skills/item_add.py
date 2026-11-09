@@ -3,7 +3,7 @@
 One skill, ``item.add``. Mike sends a photo and a few words; Hass drafts ONE change that adds the product, the maker when
 the maker is new, the picture and, when he says whether it is in stock, today's shelf check on its own line. He sees a
 preview and says yes. The skill only plans typed ops (``maker.add``, ``product.add``, ``store.confirm_selection`` or
-``product.set_availability``); the editor, claims gate, live boundary, preview and ``yes <code>`` approval are unchanged.
+``product.set_availability``); the editor, claims gate, live boundary, preview and ``yes <code>`` approval are unchanged (HASS-LIVE-ADD-1: the live boundary lets this change go live under its own rules).
 
 Decisions this card applies: D2 (a new item records today's shelf check on its own line), D5 (a maker with no story gets
 the one line "<Maker> is based in <place>."), D6 (a picture that cannot be made to match: kindly ask for a retake; Mike
@@ -822,7 +822,7 @@ ITEM_ADD = Skill(
     plan=plan_add,
     edits=((_MAKERS, "makers[key]"), (_PRODUCTS, "products[id]"), (_STORE, "selection_checked_on"), _PICTURE) + _GEN,
     side_effects=("picture-render", "maker-create", "inventory-word", "shelf-check-day"),
-    preview="product:the new product", approval="owner-yes", live_class="private-only",
+    preview="product:the new product", approval="owner-yes", live_class="chat-live",  # HASS-LIVE-ADD-1: live_policy.LIVE has product.add and maker.add
     undo=Undo("revert", "The product is hidden, not deleted; a new maker is hidden with it; the picture file stays on the site folder, unused."),
     refuse=(
         ("a price is in the message", PRICE_REPLY),

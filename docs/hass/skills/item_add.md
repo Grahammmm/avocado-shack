@@ -46,9 +46,14 @@ want me to bring it back instead?"; a held twin is refused).
   today as the day you checked the shelves." Already recorded today: `product.set_availability{id, available}`, no extra line.
 * **D9:** a price or size is never written: "Left off: the price ($9) and the size (8oz), because the website shows no prices or
   sizes." A name that is still a number after that is asked again.
-* Claims (organic, local, origins) pass only when he said them; the claims gate in the editor checks the draft again. Whether
-  `product.add` and `maker.add` may go live is the live policy's table (`hass/live_policy.py`, HASS-LIVE-ADD-1); this skill
-  does not change those rows, it only makes sure its own draft passes them (see "The live gate").
+* Claims (organic, local, origins) pass only when he said them; the claims gate in the editor checks the draft again.
+  **Live (HASS-LIVE-ADD-1, G 2026-11-09):** a new product may go live from chat, live class `chat-live`. `product.add` (with
+  its own `photo` and `imageAlt`) and `maker.add` (the name and the town, never a link, and only together with a product that
+  names that maker) are in `live_policy.LIVE`; the brand, the maker line, the maker's name and the town must be in his own
+  words of this request (otherwise Hass asks and drafts nothing); every sentence gate, the 10-record limit and undo are
+  unchanged. Changing an existing product's brand or maker, a maker's place or link stay private (D4).
+  `product.set_photo` (HASS-LIVE-ADD-2) is also live: a picture of a stored photo, house style (`id`, `photo`,
+  `imageAlt`), for a new or an existing product.
 * **One photo, one product:** when his words ("add the lemon curd and the plum jam", a name that lists two products, `&`, `+`, or
   "both" beside an "and" in the name) put two products on the one photo, the skill itself asks "One photo can go on one product.
   Which one is this photo for?", whatever the interpreter returned. A single name with an "and" in it ("Salt and vinegar chips") is

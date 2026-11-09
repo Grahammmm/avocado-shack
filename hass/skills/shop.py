@@ -170,14 +170,26 @@ def parse_segment(segment):
     return days, rest
 
 
-def segments_of(lines):
-    """[(line index, text, parsed or None)] for every piece of every hours line (pieces are split at " · " and ";")."""
+def schedule_pieces(line):
+    """Split separators and independent comma schedules, not commas joining days or ordinary prose."""
     out = []
-    for n, line in enumerate(lines):
-        for piece in re.split(r"\s*[·;]\s*", line):
-            if piece.strip():
-                out.append((n, piece.strip(), parse_segment(piece.strip())))
+    for piece in re.split(r"\s*[·;]\s*", line):
+        piece = piece.strip()
+        for comma in re.finditer(",", piece):
+            left, right = piece[:comma.start()].strip(), piece[comma.end():].strip()
+            if parse_segment(left) is not None and parse_segment(right) is not None:
+                out.append(left)
+                out.extend(schedule_pieces(right))
+                break
+        else:
+            if piece:
+                out.append(piece)
     return out
+
+
+def segments_of(lines):
+    """[(line index, text, parsed or None)] for every schedule piece, without rewriting the stored lines."""
+    return [(n, piece, parse_segment(piece)) for n, line in enumerate(lines) for piece in schedule_pieces(line)]
 
 
 def hours_by_day(lines):
@@ -263,7 +275,7 @@ def check_hours_untouched(slots, texts, ctx):
         return None  # without the saved hours or his words this rule cannot judge; the structural checks still ran
     named = days_in_text(" ".join(texts))
     old, new = hours_by_day(store["hours"]), hours_by_day(slots["hours"])
-    kept = {_line_key(piece) for line in slots["hours"] for piece in re.split(r"\s*[·;]\s*", line) if piece.strip()}
+    kept = {_line_key(piece) for line in slots["hours"] for piece in schedule_pieces(line) if piece.strip()}
     for opaque in old[1]:  # a piece of the current hours that names no day: it stays unless he rewrote the whole list around it
         if _line_key(opaque) not in kept:
             return SkillStop(f"Do you want to keep “{opaque}” in the hours?", "question")
@@ -302,9 +314,9 @@ def check_hours_holiday(slots, texts, ctx):
     """holiday-is-notice: a closed day on a date or holiday is a notice, not the weekly hours."""
     store = store_of(ctx)
     old = (store or {}).get("hours") or []
-    old_pieces = {_line_key(p) for line in old for p in re.split(r"\s*[·;]\s*", line) if p.strip()}
+    old_pieces = {_line_key(p) for line in old for p in schedule_pieces(line)}
     for line in slots["hours"]:  # a date in an hours line is never weekly hours (a piece the site already has is left alone)
-        for piece in re.split(r"\s*[·;]\s*", line):
+        for piece in schedule_pieces(line):
             if piece.strip() and _line_key(piece) not in old_pieces and DATE_RE.search(piece):
                 return SkillStop(HOLIDAY_REPLY, "question")
     if store is None or _same(slots["hours"], old):

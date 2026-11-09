@@ -70,7 +70,7 @@ class PublishedSite(unittest.TestCase):
                           | set(images) | {"community.json"})
         self.assertEqual(self.files, expected)
         self.assertEqual(sorted(self.written), expected)
-        self.assertEqual(len(images), 170)
+        self.assertGreaterEqual(len(images), 1)  # HASS-LIVE-ADD-1: not 170: a live add or hide changes it; `expected` above is the exact check
         self.assertEqual({Path(rel).suffix for rel in self.files} - ALLOWED_EXT, set())
         for rel in PRIVATE:
             with self.subTest(rel=rel):

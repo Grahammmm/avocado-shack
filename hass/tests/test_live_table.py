@@ -37,9 +37,12 @@ class TableShape(unittest.TestCase):
             "product.hide", "product.restore", "product.edit", "product.set_availability", "product.clear_availability",
             "store.confirm_selection", "specials.add", "specials.edit", "specials.remove", "specials.clear_expired",
             "hike.create", "hike.update", "hike.cancel", "maker.edit", "history.revert",
-            "product.set_photo"]))  # HASS-LIVE-ADD-2: a picture, for a new or an existing product
+            "product.add", "maker.add", "product.set_photo"]))  # HASS-LIVE-ADD-1 (G, 2026-11-09); HASS-LIVE-ADD-2: a picture
         self.assertEqual(policy.LIVE["product.edit"], {"id", "description", "category"})
         self.assertEqual(policy.LIVE["maker.edit"], {"key", "story"})
+        self.assertEqual(policy.LIVE["product.add"], {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey",
+                                                      "displayBrand"})  # never `image`
+        self.assertEqual(policy.LIVE["maker.add"], {"key", "name", "place", "story"})  # never `url`
         self.assertEqual(policy.LIVE["product.set_photo"], {"id", "photo", "imageAlt"})
 
     def test_every_private_reason_is_plain_and_passes_the_voice_check(self):
@@ -110,7 +113,7 @@ class RealDrafts(unittest.TestCase):
             "product.edit producer": [op("product.edit", id=PRODUCT, producerKey="Etto")],
             "product.edit name": [op("product.edit", id=PRODUCT, name="New plain name")],
             "maker hide": [op("maker.hide", key=self.maker_key(), withProducts=True)],
-            "new item": [op("product.add", name="Test jam", brand="Test Orchard", category="pantry", image="assets/products/photo-product-001.webp",
+            "new item with a picture file that is already on the site (image argument)": [op("product.add", name="Test jam", brand="Test Orchard", category="pantry", image="assets/products/photo-product-001.webp",
                             description="Sweet jam.")],
             "hours": [op("store.set_hours", hours=["Monday 9am-5pm"])],
             "phone": [op("store.set_phone", phone="805 555 0123")],
