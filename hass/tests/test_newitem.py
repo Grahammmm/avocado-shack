@@ -78,10 +78,16 @@ class SpecTests(unittest.TestCase):
         self.assertTrue(hs.check_description("Organic honey from Cal Poly. Spoon a little onto toast.", SPEC, owner_text="it is organic")["pass"])
 
     def test_bad_records_fail(self):
-        self.assertFalse(hs.check_maker({"name": "X", "place": "Nowhere", "story": "Hi"}, SPEC)["pass"] and False)
-        self.assertFalse(hs.check_maker({"name": "X", "place": "Cambria, California", "story": "A $5 story.", "url": "http://x.example"}, SPEC)["pass"])
-        rec = {**CONTENT.active_products()[0], "category": "candy"}
-        self.assertFalse(hs.check_product(rec, CONTENT.makers, SPEC)["pass"])
+        with self.subTest("soft-style maker"):
+            out = hs.check_maker({"name": "X", "place": "Nowhere", "story": "Hi"}, SPEC)
+            self.assertFalse(out["pass"], out)
+        with self.subTest("invalid-URL maker"):
+            out = hs.check_maker({"name": "X", "place": "Cambria, California", "story": "A $5 story.", "url": "http://x.example"}, SPEC)
+            self.assertFalse(out["pass"], out)
+        with self.subTest("invalid-category product"):
+            rec = {**CONTENT.active_products()[0], "category": "candy"}
+            out = hs.check_product(rec, CONTENT.makers, SPEC)
+            self.assertFalse(out["pass"], out)
 
     @unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
     def test_every_live_picture_passes_and_a_phone_photo_fails(self):
