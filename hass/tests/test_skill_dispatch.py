@@ -242,6 +242,33 @@ class SetPhrasesTests(SkillCase):
         self.assertEqual(voice.check(reply, long_ok=True), [])
         self.nothing_written()
 
+    def test_queued_calls_keep_owner_slots_and_the_missing_slot_after_defaults(self):
+        dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: ["sign-up off"] if "signup" not in slots else []
+        slots = (Slot("title", "text", True, default="Mill Creek hike"), *HIKE_ADD.slots[1:4],
+                 Slot("signup", "bool", False, default=False))
+        self.registry = registry_of(toy("hike.add", "add a hike", slots, _plan_hike))
+        self.conv = self.open()
+        text = "add the Mill Creek hike at Mill Creek trailhead and the Pine hike at Pine Saturday"
+        calls = [{"skill": "hike.add", "slots": {"place": "Mill Creek trailhead", "day": SATURDAY}},
+                 {"skill": "hike.add", "slots": {"title": "Pine hike", "place": "Pine", "day": SATURDAY}}]
+        self.script(text, {"calls": calls})
+        self.assertEqual(self.say(text), "question")
+        self.assertEqual(self.replies(), ["What time does it start?"])
+        self.assertEqual(self.live()["asked_slot"], "time")  # not the title filled by a default
+        self.assertNotIn("title", self.live()["slots"])
+        self.assertNotIn("signup", self.live()["slots"])
+        self.assertNotIn("signup", self.live()["calls"][0]["slots"])
+        for answer in ("8am", "9am"):
+            self.now += timedelta(minutes=1)
+            self.conv = self.open()  # persisted waiting and queued calls, not in-memory defaults
+            self.assertEqual(self.say(answer), "proposed")
+            replies = self.replies()
+            self.assertIn("I set: sign-up off.", replies[0].splitlines())
+            if answer == "8am":
+                self.assertEqual(replies[1:], ["What time does it start?"])
+        self.assertEqual(len(self.drafts()), 2)
+        self.nothing_written()
+
     def test_a_sign_up_the_owner_gave_before_the_question_is_not_called_a_default(self):
         dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: ["sign-up off"] if "signup" not in slots else []
         self.sign_up_skill()

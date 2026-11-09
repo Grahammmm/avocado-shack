@@ -241,6 +241,39 @@ class Defaults(unittest.TestCase):
         self.assertIn("place_title", hikes.DERIVERS)
 
 
+class RealDispatcherDefaults(unittest.TestCase):
+    def test_single_and_multi_call_hike_drafts_say_sign_up_off_without_the_kit(self):
+        from hass.tests.test_skill_dispatch import SkillCase, registry_of
+
+        # Reuse only the isolated Conversation/Editor harness, never testkit.Scratch's proposal stand-in.
+        case = SkillCase()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.registry = registry_of(hikes.ADD)
+        case.conv = case.open()
+        slots = {"title": "Cass Hill hike", "day": "2026-12-12", "clock": "08:00", "meeting_point": "Cass Hill gate"}
+        text = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate"
+        case.script(text, {"skill": "hike.add", "slots": slots})
+        draft, reply = case.propose(text)
+        self.assertIn("I set: sign-up off.", reply.splitlines())
+        self.assertIs(json.loads(draft["ops_json"])[0]["args"]["rsvpEnabled"], False)
+        text = "Add Mill Creek hike December 19 at Mill Creek trailhead and Pine hike December 19 at Pine gate"
+        calls = [{"skill": "hike.add", "slots": {"title": f"{name} hike", "day": "2026-12-19", "meeting_point": place}}
+                 for name, place in (("Mill Creek", "Mill Creek trailhead"), ("Pine", "Pine gate"))]
+        case.script(text, {"calls": calls})
+        self.assertEqual(case.say(text), "question")
+        self.assertEqual(case.replies(), ["What time does it start?"])
+        for answer in ("8am", "9am"):
+            self.assertEqual(case.say(answer), "proposed")
+            replies = case.replies()
+            self.assertIn("I set: sign-up off.", replies[0].splitlines())
+            self.assertIs(json.loads(case.drafts()[-1]["ops_json"])[0]["args"]["rsvpEnabled"], False)
+            if answer == "8am":
+                self.assertEqual(replies[1:], ["What time does it start?"])
+        self.assertEqual(len(case.drafts()), 3)
+        case.nothing_written()
+
+
 class Rules(unittest.TestCase):
     def hit(self, rule, slots, c=None, texts=()):
         return hikes.RULES[rule](slots, texts, c or ctx(CASS, DONE, CALLED))
