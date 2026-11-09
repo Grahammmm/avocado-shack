@@ -292,15 +292,21 @@ for(const stat of [false,true])for(const tz of ['America/Los_Angeles','Asia/Toky
  q=await view(after,tz,[ev('bad',0),{...ev('done',-1e5,'completed')}].map(e=>e.id==='bad'?{...e,startsAt:'not a date'}:e),none,stat);
  check(!q.cards.some(c=>c.label==='TODAY'),m+'Malformed or completed hike became TODAY: '+L(q));
 }
+// RF0814-11: the home Next hike line skips a started walk, but /hike keeps it as TODAY and labels the future walk THE NEXT HIKE (live and static).
+{const evt=(id,title,startsAt)=>({...hike,id,title,status:'scheduled',startsAt,timezone:'America/Los_Angeles'}),pair=[evt('r-3','QA future afternoon walk','2026-11-09T15:00:00-08:00'),evt('r-9','QA started morning walk','2026-11-09T09:00:00-08:00')];
+ for(const stat of [false,true]){const v=await view(Date.parse('2026-11-09T20:00:00Z'),'America/Los_Angeles',pair,e=>false,stat),card=t=>v.cards.find(c=>c.title===t);
+  check(card('QA started morning walk')&&card('QA started morning walk').label==='TODAY','/hike lost the TODAY card (static='+stat+'): '+v.up);
+  check(card('QA future afternoon walk')&&card('QA future afternoon walk').label==='THE NEXT HIKE','/hike lost THE NEXT HIKE card (static='+stat+'): '+v.up)}}
 }
 // AV1102-04/AV0007-01: the home page shows one "Next hike" line from the live API, else the published community.json; none, cancelled-only, past-only or both sources failing leaves it hidden. A valid live answer is never second-guessed by the static file.
 const days=n=>new Date(Date.now()+n*864e5).toISOString(),oneLine=s=>s.replace(/\s+/g,' ').trim();
-const nextLine=async(events,width=390,stat)=>{const c=await b.newContext({viewport:{width,height:800}}),pg=await c.newPage(),errs=[],reqs=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('request',q=>reqs.push(q.url()));
+// RF0814-11: optional 4th argument {now,tz} fixes the page clock (and viewer timezone) before load; without it the callers behave as before.
+const nextLine=async(events,width=390,stat,clock)=>{const c=await b.newContext({viewport:{width,height:800},...(clock&&clock.tz?{timezoneId:clock.tz}:{})}),pg=await c.newPage(),errs=[],reqs=[],posts=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('request',q=>{reqs.push(q.url());if(q.method()==='POST')posts.push(q.url())});if(clock&&clock.now!==undefined)await pg.clock.setFixedTime(new Date(clock.now));
  if(stat!==undefined)await pg.route('**/community.json',r=>stat===null?r.fulfill({status:404,contentType:'text/html',body:'<p>no</p>'}):r.fulfill({json:{clubName:'QA',events:stat}}));
  await pg.route('**/api/community',async r=>{if(typeof events==='string')return r.fulfill({status:events==='500'?500:200,contentType:'text/html',body:'<p>no</p>'});const res=await r.fetch(),j=await res.json();j.events=events(j.events);await r.fulfill({response:res,json:j})});
  await Promise.all([pg.waitForResponse('**/api/community'),pg.goto(process.env.COMMUNITY_TEST_URL+'/')]);await pg.evaluate(()=>new Promise(r=>setTimeout(r,150)));
  const el=pg.locator('#next-hike-line'),a=el.locator('a'),box=await pg.evaluate(()=>{const l=document.querySelector('#next-hike-line').getBoundingClientRect(),h=document.querySelector('.hero-copy').getBoundingClientRect();return {out:l.width>0&&(l.left<h.left-1||l.right>h.right+1),page:document.documentElement.scrollWidth>innerWidth}});
- const r={staticAsked:reqs.some(u=>u.endsWith('/community.json')),hidden:await el.isHidden(),n:await el.count(),links:await a.count(),text:oneLine(await el.textContent()),href:await a.first().getAttribute('href').catch(()=>null),bold:await el.locator('b').count(),preview:reqs.some(u=>u.includes('hiking-preview')),...box};
+ const r={staticAsked:reqs.some(u=>u.endsWith('/community.json')),hidden:await el.isHidden(),n:await el.count(),links:await a.count(),text:oneLine(await el.textContent()),href:await a.first().getAttribute('href').catch(()=>null),bold:await el.locator('b').count(),preview:reqs.some(u=>u.includes('hiking-preview')),sampleAsked:reqs.some(u=>/hiking-preview|trail-invitation/.test(u)),posts:posts.length,...box};
  check(!errs.length,'Page errors on the home page: '+JSON.stringify(errs));await c.close();return r};
 const mk=(id,title,days_,status='scheduled')=>({...hike,id,title,status,startsAt:days(days_)}),shownText=(x,t)=>oneLine('Next hike: '+new Date(x.startsAt).toLocaleDateString('en-US',{timeZone:'America/Los_Angeles',weekday:'long',month:'long',day:'numeric'})+', '+new Date(x.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})+' - '+t);
 const soon=mk('n-soon','QA earlier hike',10),late=mk('n-late','QA later hike',60);
@@ -320,6 +326,32 @@ n=await nextLine(e=>[],390,[mk('n-d','QA static decoy',3)]);check(n.hidden&&n.li
 n=await nextLine(e=>[mk('n-c','QA cancelled',3,'cancelled')],390,[mk('n-d','QA static decoy',3)]);check(n.hidden&&n.links===0&&!n.staticAsked,'Cancelled-only live calendar fell back to static: '+JSON.stringify(n));
 n=await nextLine(e=>[soon],390,[mk('n-d','QA static decoy',3)]);check(!n.hidden&&n.text===shownText(soon,'QA earlier hike')&&!n.staticAsked,'Live hike did not win over static: '+JSON.stringify(n));
 for(const width of [390,1440]){n=await nextLine(e=>[mk('n-w','QA a long hike title to check the line wraps inside the hero on a phone and a desktop',3)],width);check(!n.hidden&&!n.out&&!n.page,'Next hike line overflows at '+width+': '+JSON.stringify(n))}
+// RF0814-11: the Next hike line names only a scheduled hike starting strictly after the fixed clock. Live and static-fallback matrices; the sample invitation is never asked for and nothing is POSTed.
+{const NOW='2026-11-09T20:00:00Z',zones=[undefined,'Asia/Tokyo'],ev=(id,title,startsAt,status='scheduled')=>({...hike,id,title,status,startsAt,timezone:'America/Los_Angeles'});
+ const nine=ev('r-9','QA started morning walk','2026-11-09T09:00:00-08:00'),three=ev('r-3','QA future afternoon walk','2026-11-09T15:00:00-08:00'),threeText='Next hike: Monday, November 9, 3:00 PM - QA future afternoon walk';
+ const run=(src,events,clock)=>src==='live'?nextLine(()=>events,390,undefined,clock):nextLine('500',390,events,clock);
+ const shown=(n,text,why)=>check(!n.hidden&&n.n===1&&n.links===1&&n.href==='/hike#upcoming-hikes'&&n.text===text&&!n.sampleAsked&&n.posts===0,why+': '+JSON.stringify(n)),
+  hiddenLine=(n,why)=>check(n.hidden&&n.n===1&&n.links===0&&n.text===''&&!n.sampleAsked&&n.posts===0,why+': '+JSON.stringify(n));
+ for(const src of ['live','static'])for(const tz of zones){const m=src+'/'+(tz||'viewer-default')+': ',clock={now:NOW,tz};
+  // homeNextSkipsStartedWithFutureSibling (both input orders)
+  shown(await run(src,[three,nine],clock),threeText,m+'started+future (future first)');shown(await run(src,[nine,three],clock),threeText,m+'started+future (started first)');
+  shown(await run(src,[three],clock),threeText,m+'future only');hiddenLine(await run(src,[nine],clock),m+'started only');
+  // homeNextStartBoundary
+  shown(await run(src,[three],{now:'2026-11-09T22:59:59.999Z',tz}),threeText,m+'start-1ms');hiddenLine(await run(src,[three],{now:'2026-11-09T23:00:00.000Z',tz}),m+'exact start');hiddenLine(await run(src,[three],{now:'2026-11-09T23:00:00.001Z',tz}),m+'start+1ms');
+  // homeNextAbsoluteTimeAcrossZones: identical 1:30 AM wall text twice on 1 Nov, chosen by instant; equal instants keep input order
+  const pdt=ev('f-pdt','QA first 1:30','2026-11-01T01:30:00-07:00'),pst=ev('f-pst','QA second 1:30','2026-11-01T01:30:00-08:00');
+  shown(await run(src,[pst,pdt],{now:'2026-11-01T08:00:00Z',tz}),'Next hike: Sunday, November 1, 1:30 AM - QA first 1:30',m+'before both 1:30s');
+  shown(await run(src,[pst,pdt],{now:'2026-11-01T09:00:00Z',tz}),'Next hike: Sunday, November 1, 1:30 AM - QA second 1:30',m+'between the 1:30s');
+  hiddenLine(await run(src,[pst,pdt],{now:'2026-11-01T09:30:00Z',tz}),m+'both 1:30s started');
+  shown(await run(src,[ev('e-2','QA equal second','2026-12-06T09:00:00-08:00'),ev('e-1','QA equal first','2026-12-06T09:00:00-08:00')],clock),'Next hike: Sunday, December 6, 9:00 AM - QA equal second',m+'equal instants keep input order');
+  // homeNextFiltersAndFallback: unusable records are never selected beside a valid future sibling; titles stay escaped
+  const bad=[ev('x1','QA bad start','not a date'),{...ev('x2','QA no start',''),startsAt:undefined},ev('x3','QA cancelled','2026-11-09T16:00:00-08:00','cancelled'),ev('x4','QA completed','2026-11-09T16:00:00-08:00','completed')];
+  shown(await run(src,[...bad,nine,ev('x5','QA <b>good</b> sibling','2026-11-09T17:00:00-08:00')],clock),'Next hike: Monday, November 9, 5:00 PM - QA <b>good</b> sibling',m+'filters + escaping');
+  hiddenLine(await run(src,bad,clock),m+'only unusable records')}
+ // a valid live answer with only a started walk (or nothing) is final: the static file's future decoy is never consulted
+ n=await nextLine(()=>[nine],390,[three],{now:NOW});check(n.hidden&&n.links===0&&n.text===''&&!n.staticAsked&&n.posts===0&&!n.sampleAsked,'Started-only live calendar fell back to a static future decoy: '+JSON.stringify(n));
+ n=await nextLine(()=>[],390,[three],{now:NOW});check(n.hidden&&n.links===0&&!n.staticAsked,'Empty live calendar fell back to static under a fixed clock: '+JSON.stringify(n));
+ n=await nextLine('500',390,null,{now:NOW});hiddenLine(n,'API 500 and static 404 under a fixed clock')}
  const result={guestCountUpdatedAfterRSVP:true,demoGuestCountUnchanged:true,checkedAt:new Date().toISOString(),rsvpForm:true,newsletterForm:true,hikingUpdates:true,pastHikes:true,confirmedEventTakesPrecedence:true,realCalendarEmpty:true,demoPosts:posts.length,demoBrowserStorage:false,demoValidation:true,demoSuccessFocus:true,layouts,errors};
  fs.writeFileSync(out+'/community-ui-QA.json',JSON.stringify(result,null,2));
  console.log('Community UI passed');await b.close();
