@@ -1,0 +1,292 @@
+{
+ "jar-white-sheet": {
+  "render": {
+   "input": "1200x900",
+   "rotation_applied": false,
+   "background_noise": 1.0,
+   "area": 0.203,
+   "edges_touched": 0,
+   "isolation": "cutout",
+   "scale": 1.263,
+   "subject_luma": 157.3,
+   "box": [
+    136,
+    44,
+    663,
+    764
+   ],
+   "jpeg_quality": 90,
+   "review": []
+  },
+  "check": {
+   "score": 100,
+   "pass": true,
+   "failed": []
+  },
+  "draft": {
+   "status": "draft",
+   "question": null,
+   "ops": [
+    {
+     "op": "product.add",
+     "args": {
+      "name": "Cal Poly honey",
+      "brand": "Cal Poly",
+      "category": "pantry",
+      "description": "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.",
+      "photo": "2cec1911a59002428a1c22e1a9dd1f9226243e49829bfed452aafd7773446bf3",
+      "imageAlt": "Cal Poly honey in a jar",
+      "producerKey": "Cal Poly"
+     }
+    },
+    {
+     "op": "product.set_availability",
+     "args": {
+      "id": "photo-product-175",
+      "available": "yes"
+     }
+    }
+   ],
+   "left_off": [
+    {
+     "what": "price",
+     "value": "$9",
+     "why": "the site shows no prices"
+    },
+    {
+     "what": "size",
+     "value": "8oz",
+     "why": "the site shows no sizes"
+    }
+   ],
+   "reply": "New item draft: Cal Poly honey, on the Pantry shelf.\nDescription: Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.\nPicture: made to match the shop's other pictures.\nOn the card: Available today\nLeft off the site: price ($9): the site shows no prices.\nLeft off the site: size (8oz): the site shows no sizes.",
+   "alt": "Cal Poly honey in a jar"
+  }
+ },
+ "bottle-grey-wall-tilted": {
+  "render": {
+   "input": "1000x1000",
+   "rotation_applied": false,
+   "background_noise": 2.7,
+   "area": 0.095,
+   "edges_touched": 0,
+   "isolation": "cutout",
+   "straightened_degrees": -12.1,
+   "scale": 1.136,
+   "subject_luma": 136.3,
+   "box": [
+    285,
+    44,
+    514,
+    764
+   ],
+   "jpeg_quality": 90,
+   "review": []
+  },
+  "check": {
+   "score": 100,
+   "pass": true,
+   "failed": []
+  },
+  "draft": {
+   "status": "draft",
+   "question": null,
+   "ops": [
+    {
+     "op": "maker.add",
+     "args": {
+      "key": "Bee Happy Farm",
+      "name": "Bee Happy Farm",
+      "place": "Templeton, California",
+      "story": "Bee Happy Farm grows the peppers themselves."
+     }
+    },
+    {
+     "op": "product.add",
+     "args": {
+      "name": "Bee Happy Farm wildflower hot sauce",
+      "brand": "Bee Happy Farm",
+      "category": "pantry",
+      "description": "Wildflower hot sauce from Bee Happy Farm in Templeton. Try it on eggs.",
+      "photo": "91c700264e60552f4dd0b346c9d315e79d9f5f348c8b64a81841d3f91627cf3d",
+      "imageAlt": "Bee Happy Farm wildflower hot sauce in a bottle",
+      "producerKey": "Bee Happy Farm"
+     }
+    },
+    {
+     "op": "product.set_availability",
+     "args": {
+      "id": "photo-product-175",
+      "available": "yes"
+     }
+    }
+   ],
+   "left_off": [
+    {
+     "what": "price",
+     "value": "$8",
+     "why": "the site shows no prices"
+    },
+    {
+     "what": "size",
+     "value": "6oz",
+     "why": "the site shows no sizes"
+    }
+   ],
+   "reply": "New item draft: Bee Happy Farm wildflower hot sauce, on the Pantry shelf.\nDescription: Wildflower hot sauce from Bee Happy Farm in Templeton. Try it on eggs.\nNew maker: Bee Happy Farm, Templeton, California. Their note: Bee Happy Farm grows the peppers themselves.\nPicture: made to match the shop's other pictures.\nOn the card: Available today\nLeft off the site: price ($8): the site shows no prices.\nLeft off the site: size (6oz): the site shows no sizes.",
+   "alt": "Bee Happy Farm wildflower hot sauce in a bottle"
+  }
+ },
+ "bag-bench-small": {
+  "render": {
+   "input": "480x360",
+   "rotation_applied": false,
+   "background_noise": 0.9,
+   "area": 0.178,
+   "edges_touched": 0,
+   "isolation": "cutout",
+   "scale": 3.172,
+   "subject_luma": 137.7,
+   "box": [
+    220,
+    121,
+    580,
+    689
+   ],
+   "jpeg_quality": 90,
+   "review": [
+    "The photo is small (product only 227 px); enlarged 3.2 times it will look soft."
+   ]
+  },
+  "check": {
+   "score": 91,
+   "pass": true,
+   "failed": [
+    "subject size in frame"
+   ]
+  },
+  "draft": {
+   "status": "question",
+   "question": "Which shelf does it go on: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread or Flowers?",
+   "ops": [],
+   "left_off": [],
+   "reply": "Which shelf does it go on: Fruit, Vegetables, Dairy & cheese, Eggs, Meat, Pantry, Drinks & coffee, Bread or Flowers?"
+  }
+ },
+ "jar-phone-rotated": {
+  "render": {
+   "input": "1134x1512",
+   "rotation_applied": true,
+   "background_noise": 1.4,
+   "area": 0.36,
+   "edges_touched": 0,
+   "isolation": "cutout",
+   "scale": 0.753,
+   "subject_luma": 157.7,
+   "box": [
+    137,
+    44,
+    663,
+    764
+   ],
+   "jpeg_quality": 90,
+   "review": []
+  },
+  "check": {
+   "score": 100,
+   "pass": true,
+   "failed": []
+  }
+ },
+ "bottle-bench-png": {
+  "render": {
+   "input": "900x1200",
+   "rotation_applied": false,
+   "background_noise": 1.1,
+   "area": 0.127,
+   "edges_touched": 0,
+   "isolation": "cutout",
+   "scale": 0.95,
+   "subject_luma": 136.6,
+   "box": [
+    285,
+    44,
+    514,
+    764
+   ],
+   "jpeg_quality": 90,
+   "review": []
+  },
+  "check": {
+   "score": 100,
+   "pass": true,
+   "failed": []
+  }
+ },
+ "jar-cutout-alpha": {
+  "render": {
+   "input": "900x900",
+   "rotation_applied": false,
+   "isolation": "cutout",
+   "source": "alpha channel",
+   "scale": 1.259,
+   "subject_luma": 157.2,
+   "box": [
+    138,
+    44,
+    662,
+    764
+   ],
+   "jpeg_quality": 90,
+   "review": []
+  },
+  "check": {
+   "score": 100,
+   "pass": true,
+   "failed": []
+  }
+ },
+ "jar-dark-wood": {
+  "render": {
+   "input": "1200x900",
+   "rotation_applied": false,
+   "background_noise": 19.4,
+   "isolation": "fallback",
+   "reason": "the background is not plain (its border varies by 19 levels)",
+   "jpeg_quality": 90,
+   "review": [
+    "Could not cut the product out (the background is not plain (its border varies by 19 levels)); it will not look like the catalog pictures.",
+    "The picture does not pass the house-style check: clean ivory around the product (no photo background left)"
+   ]
+  },
+  "check": {
+   "score": 85,
+   "pass": false,
+   "failed": [
+    "background even",
+    "clean ivory around the product (no photo background left)"
+   ]
+  }
+ },
+ "bag-red-cloth": {
+  "render": {
+   "input": "1200x900",
+   "rotation_applied": false,
+   "background_noise": 96.5,
+   "isolation": "fallback",
+   "reason": "the background is not plain (its border varies by 96 levels)",
+   "jpeg_quality": 90,
+   "review": [
+    "Could not cut the product out (the background is not plain (its border varies by 96 levels)); it will not look like the catalog pictures.",
+    "The picture does not pass the house-style check: no photo background left inside the product (patterned cloth, planks)"
+   ]
+  },
+  "check": {
+   "score": 91,
+   "pass": false,
+   "failed": [
+    "no photo background left inside the product (patterned cloth, planks)"
+   ]
+  }
+ }
+}
