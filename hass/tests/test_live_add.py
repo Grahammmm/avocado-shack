@@ -42,6 +42,8 @@ SAID = "New quince jam from Test Orchard in Paso Robles, goes on the pantry shel
 DENIED = "New quince jam, not made by the people at Test Orchard in Paso Robles."
 CORRECTED = "New quince jam from Test Orchard in Paso Robles. Correction: it is not from Test Orchard."
 DENIED_AFTER = "New quince jam from Test Orchard in Paso Robles. Test Orchard is not the maker."
+DENIED_NOAPOS = "New quince jam from Test Orchard in Paso Robles. Test Orchard isnt the maker."
+DENIED_MODIFIED = "New quince jam from Test Orchard in Paso Robles. Test Orchard is definitely not the maker."
 
 
 def op(opname, /, **args): return {"op": opname, "args": args}
@@ -266,10 +268,17 @@ class TheBrandMustBeInHisWords(LiveAddBase):
                      DENIED_AFTER,  # the denial comes after the name
                      "New quince jam from Test Orchard in Paso Robles. Test Orchard didn't make it",
                      "New quince jam from Test Orchard in Paso Robles. Test Orchard was wrong, sorry",
-                     "New quince jam from Test Orchard in Paso Robles\nTest Orchard isn't the maker"):
+                     "New quince jam from Test Orchard in Paso Robles\nTest Orchard isn't the maker",
+                     DENIED_NOAPOS, DENIED_MODIFIED,  # an unpunctuated negator, and a modifier before the negator
+                     "New quince jam from Test Orchard in Paso Robles. Test Orchard has really never made it",
+                     "New quince jam from Test Orchard in Paso Robles. Test Orchard is the wrong maker",
+                     "New quince jam from Test Orchard in Paso Robles. Test Orchard wasnt the maker",
+                     "New quince jam from Test Orchard in Paso Robles. Test Orchard is no longer the maker"):
             with self.subTest(text=text):
                 self.assertNotEqual(policy.unsaid(draft, text), [], text)
         self.assertEqual(policy.unsaid(draft, DENIED_AFTER), ["Test Orchard"])
+        self.assertEqual(policy.unsaid(draft, DENIED_NOAPOS), ["Test Orchard"])
+        self.assertEqual(policy.unsaid(draft, DENIED_MODIFIED), ["Test Orchard"])
         self.assertEqual(policy.unsaid(draft, "New quince jam, not made by the people at Test Orchard in Paso Robles."),
                          ["Test Orchard", "Paso Robles"])  # the denial runs to the end of its clause, so the town is asked too
 
@@ -279,7 +288,9 @@ class TheBrandMustBeInHisWords(LiveAddBase):
                      "Not Acme, it is from Test Orchard in Paso Robles",
                      "No sugar added, from Test Orchard in Paso Robles",
                      "not an old recipe but from Test Orchard in Paso Robles",
-                     "New quince jam. Test Orchard is in Paso Robles, it is made by Test Orchard"):
+                     "New quince jam. Test Orchard is in Paso Robles, it is made by Test Orchard",
+                     "New quince jam. Test Orchard is definitely the maker, in Paso Robles",
+                     "New quince jam. Test Orchard is the maker in Paso Robles, not in Cambria"):
             with self.subTest(text=text):
                 self.assertEqual(policy.unsaid(draft, text), [], text)
 
@@ -315,6 +326,7 @@ class InChat(LiveAddBase):
                 product_op(self.sha, brand="Test Orchard Farm")]
         self.interp = conv.FixtureInterpreter({
             DENIED: {"ops": ops, "revises": None}, CORRECTED: {"ops": ops, "revises": None}, DENIED_AFTER: {"ops": ops, "revises": None},
+            DENIED_NOAPOS: {"ops": ops, "revises": None}, DENIED_MODIFIED: {"ops": ops, "revises": None},
             SAID: {"ops": ops, "revises": None},
             "New quince jam from Test Orchard, goes on the pantry shelf": {"ops": ops, "revises": None},
             "new quince jam please": {"ops": invented, "revises": None},
@@ -342,7 +354,8 @@ class InChat(LiveAddBase):
         self.assertEqual(len(self.drafts()), 1)
 
     def test_a_brand_or_town_he_did_not_say_is_asked_and_nothing_is_drafted(self):
-        for text in ("new quince jam please", "New quince jam from Test Orchard, goes on the pantry shelf", "New quince jam from Test Orchard in Paso Robles", DENIED, CORRECTED, DENIED_AFTER):
+        for text in ("new quince jam please", "New quince jam from Test Orchard, goes on the pantry shelf", "New quince jam from Test Orchard in Paso Robles", DENIED, CORRECTED, DENIED_AFTER,
+                     DENIED_NOAPOS, DENIED_MODIFIED):
             with self.subTest(text=text):
                 self.assertEqual(self.say(text), "claim-question")
                 [reply] = self.replies()

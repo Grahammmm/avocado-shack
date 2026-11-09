@@ -144,12 +144,20 @@ AUXILIARIES = frozenset({"is", "are", "was", "were", "am", "be", "been", "do", "
                          "can", "could", "should"})
 
 
+PREDICATE_FILLER = AUXILIARIES | frozenset({
+    "definitely", "really", "certainly", "absolutely", "actually", "clearly", "obviously", "simply", "just", "also", "still",
+    "truly", "ever", "the", "a", "an", "my", "our", "very", "quite", "so"})
+
+
 def _denied_after(words) -> bool:
-    """The words right after a mention deny it when its verb is negated or called wrong: "X is not the maker", "X isn't it",
-    "X didn't make it", "X is wrong", "X never made it"."""
-    if not words: return False
-    if words[0] in ("never", "wrongly") or words[0].endswith("n't"): return True
-    return len(words) > 1 and words[0] in AUXILIARIES and _denied(words[1:2])
+    """The words right after a mention deny it when its predicate is negated or called wrong, however an auxiliary, an adverb
+    or an article sits in between (up to four words, stopping at the first other word): "X is not the maker", "X isnt it",
+    "X is definitely not the maker", "X didn't make it", "X has really never made it", "X is the wrong maker", "X is wrong"."""
+    for w in words[:4]:
+        w = w.strip("\"()")
+        if w in ("never", "wrongly") or _denied([w]): return True
+        if w not in PREDICATE_FILLER: return False
+    return False
 
 
 def _owner_said(phrase, lines: str) -> bool:
