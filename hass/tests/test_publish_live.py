@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -345,6 +345,9 @@ class ReleaseCase(unittest.TestCase):
         self.assertEqual(self.live.served_path('catalog-products.js'), 'catalog-products.js')
 
     def test_adopt_matching_date_and_real_difference(self):
+        # adopt searches from the site commit's real date to today, so the clock must not sit before the commit (the fixed
+        # fixture day 7 broke this test once the wall clock passed it).
+        self.now = datetime.now(timezone.utc)
         self.assertEqual(self.live.operate('adopt')['result'], 'adopted')
         (self.site / 'style.css').write_bytes(b'changed')
         git(self.site, 'add', '-A'); git(self.site, 'commit', '-q', '-m', 'changed')
@@ -388,6 +391,22 @@ class ReleaseCase(unittest.TestCase):
         self.assertEqual(self.live.operate('baseline', confirm='wrong')['result'], 'preview')
         self.assertEqual(self.push_calls, 0)
         self.assertEqual(self.live.operate('baseline', confirm=preview['manifest'])['result'], 'ok')
+
+    def test_baseline_confirms_over_random_image_bytes_but_not_an_address_in_image_metadata(self):
+        # HASS-BASELINE-FIX-2: the live site's store.jpg and photo-product-054.webp hold byte runs shaped like an address.
+        page = b'<input placeholder="you@example.com">'
+        site = {'index.html': page, 'assets/store.jpg': junk_jpg(), 'assets/products/photo-product-054.webp': junk_webp()}
+        self.live.build = lambda *a, **kw: {**site, 'assets/store.jpg': junk_jpg(exif(b'person@gmail.com'))}
+        preview = self.live.operate('baseline')
+        self.assertEqual((preview['result'], preview['privacy']), ('preview', ['email']))
+        self.assertEqual(self.live.operate('baseline', confirm=preview['manifest'])['result'], 'preview')
+        self.live.build = lambda *a, **kw: dict(site)
+        preview = self.live.operate('baseline')
+        self.assertEqual((preview['result'], preview['privacy'], preview['paths']), ('preview', [], 3))
+        self.assertEqual(self.live.operate('baseline', confirm='wrong')['result'], 'preview')
+        self.assertEqual(self.push_calls, 0)
+        self.assertEqual(self.live.operate('baseline', confirm=preview['manifest'])['result'], 'ok')
+        self.assertEqual(self.push_calls, 1)
 
     def test_undo_uses_same_path_cap_exempt_and_both_ids(self):
         self.apply(); self.settle()
@@ -509,6 +528,33 @@ class PureTests(unittest.TestCase):
         self.assertEqual(p.privacy({'a.js': b'ok'}, {}, 'msg you@example.com person@gmail.com'), ['email'])
         self.assertEqual(p.privacy({'a.js': b'ok'}, {}, 'msg you@example.com'), [])
 
+    def test_email_screen_ignores_random_image_bytes_but_finds_real_addresses_anywhere(self):
+        # HASS-BASELINE-FIX-2: the exact runs from the live store.jpg and photo-product-054.webp never count, in any file.
+        for path, data in (('assets/store.jpg', junk_jpg()), ('assets/products/photo-product-054.webp', junk_webp()),
+                           ('blob', junk_jpg()), ('index.html', b'x w@J.Wa y .@0y.Ty z'), ('a.js', b'"w@J.Wa",".@0y.Ty"')):
+            with self.subTest(path=path):
+                self.assertEqual(p.privacy({path: data}, {}, ''), [])
+                self.assertEqual(p.pattern_hits('email', p.PATTERNS['email'], data.decode('latin1')), set())
+        real = (b'person@gmail.com', b'PERSON@GMAIL.COM', b'first.last+tag@mail.Gmail.Com', b'abc@site.co.uk')
+        for value in real:
+            for path, data in (('index.html', b'<p>Email ' + value + b'.</p>'), ('a.js', b'x="...' + value + b'"'),
+                               ('community.json', b'{"e": "' + value + b'"}'), ('notes.txt', value),
+                               ('menu.pdf', b'%PDF-1.4\n(' + value + b') Tj'), ('assets/store.jpg', junk_jpg(exif(value))),
+                               ('assets/products/photo-product-054.webp', junk_webp(exif(value))), ('blob', junk_jpg(exif(value)))):
+                with self.subTest(value=value, path=path): self.assertEqual(p.privacy({path: data}, {}, ''), ['email'])
+        # A binary file also needs a local part of 3+ characters and a listed top-level domain; text needs neither.
+        for value in (b'ab@gmail.com', b'person@site.zz'):
+            with self.subTest(value=value):
+                self.assertEqual(p.privacy({'index.html': value}, {}, ''), ['email'])
+                self.assertEqual(p.privacy({'assets/store.jpg': junk_jpg(exif(value))}, {}, ''), [])
+        # Reserved example addresses stay ignored, in text and in images.
+        for value in (b'you@example.com', b'person@mail.example.org', b'You@Mail.Example.COM'):
+            for path, data in (('index.html', value), ('assets/store.jpg', junk_jpg(exif(value)))):
+                with self.subTest(value=value, path=path): self.assertEqual(p.privacy({path: data}, {}, ''), [])
+        # Other kinds still fire inside binary bytes.
+        self.assertEqual(p.privacy({'assets/store.jpg': junk_jpg(b'\x00555-111-2222\x00')}, {}, ''), ['phone'])
+        self.assertEqual(p.privacy({'assets/store.jpg': junk_jpg(b'Mike')}, {}, '', ('Mike',)), ['owner'])
+
     def test_fetch_rejects_redirect_http_and_foreign_host(self):
         for url in ('http://theavocadoman.com/x', 'https://elsewhere.invalid/x', 'https://theavocadoman.com:444/x'):
             with self.assertRaises(ValueError): p.fetch_live(url, p.URL)
@@ -525,6 +571,18 @@ class PureTests(unittest.TestCase):
         for over in ({'extra': True}, {'dailyCap': True}, {'dailyCap': 51}, {'minIntervalSeconds': 59},
                      {'verifyMinutes': 61}, {'siteRemote': 'other'}, {'liveUrl': 'http://theavocadoman.com'}, {'stopFile': 'relative'}):
             with self.subTest(over=over), self.assertRaises(ValueError): p.release_config({**cfg, **over})
+
+
+def exif(value): return b'Exif\x00\x00MM\x00*\x00\x00\x00\x08Artist\x00' + value + b'\x00\x01\x02'
+
+
+# Fake images around the exact byte runs found in the live site's images, with non-alphanumeric and digit neighbours.
+def junk_jpg(extra=b''):
+    return b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01' + extra + b'\x8fw@J.Wa\x03\xc1\x00w@J.Wa7\xffw@J.Wa'
+
+
+def junk_webp(extra=b''):
+    return b'RIFF\x02\x1b\x01\x00WEBPVP8 ' + extra + b'\xe2.@0y.Ty\x9a\x00.@0y.Ty3\x0c.@0y.Ty'
 
 
 if __name__ == '__main__': unittest.main()
