@@ -13,7 +13,7 @@ repo installs a unit, starts a timer or restarts a service.
 | `hass-backup.timer` / `.service` | `statebackup.py create` | 03:30 Pacific, `Persistent=true` |
 
 All four use `%h` paths, `UMask=0077`, `NoNewPrivileges=true` and `PrivateTmp=true`; the long-running ones use
-`Restart=on-failure`. No unit holds a secret (the key is a 0600 file read by the program).
+`Restart=on-failure`. After 5 failed starts in 5 minutes (`StartLimitIntervalSec=300`, `StartLimitBurst=5`) the receiver or worker stays `failed` instead of looping: fix the cause, then `systemctl --user reset-failed <unit>` and start it (operator step). No unit holds a secret (the key is a 0600 file read by the program).
 
 The code runs from the **runtime worktree** `~/.local/share/hass/runtime`, detached at the reviewed runtime commit R. `host.py`
 refuses to start when that checkout's HEAD is not `runtimeCommit` in `host.json`, or when it has uncommitted changes. The
