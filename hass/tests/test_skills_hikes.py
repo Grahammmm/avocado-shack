@@ -460,9 +460,32 @@ class Rules(unittest.TestCase):
 
 
 class DispatcherHandOff(unittest.TestCase):
+    @staticmethod
+    def dispatcher(module):
+        """Stand in for the dispatcher. ``from hass.skills import dispatch`` reads the package attribute before sys.modules, so a
+        real dispatcher that is already imported would hide the stand-in unless the attribute is replaced as well."""
+        import contextlib
+        import hass.skills as package
+
+        @contextlib.contextmanager
+        def swapped():
+            absent = object()
+            saved = package.__dict__.get("dispatch", absent)
+            package.__dict__.pop("dispatch", None)
+            if module is not None:
+                package.dispatch = module
+            try:
+                with mock.patch.dict(sys.modules, {"hass.skills.dispatch": module}):
+                    yield
+            finally:
+                package.__dict__.pop("dispatch", None)
+                if saved is not absent:
+                    package.dispatch = saved
+        return swapped()
+
     def test_rules_and_derivers_are_handed_over_without_replacing_the_generic_ones(self):
         stub = types.SimpleNamespace(RULES={"no-price": "theirs"}, DERIVERS={})
-        with mock.patch.dict(sys.modules, {"hass.skills.dispatch": stub}):
+        with self.dispatcher(stub):
             self.assertTrue(hikes._register())
         self.assertEqual(stub.RULES["no-price"], "theirs")
         self.assertIs(stub.RULES["hike-twin"], hikes.rule_twin)
@@ -471,16 +494,16 @@ class DispatcherHandOff(unittest.TestCase):
 
     def test_the_i_set_wording_is_handed_over_only_when_the_dispatcher_has_a_place_for_it(self):
         stub = types.SimpleNamespace(RULES={}, DERIVERS={}, SET_PHRASES={})
-        with mock.patch.dict(sys.modules, {"hass.skills.dispatch": stub}):
+        with self.dispatcher(stub):
             self.assertTrue(hikes._register())
         self.assertIs(stub.SET_PHRASES["hike.add"], hikes.add_set_phrases)
         bare = types.SimpleNamespace(RULES={}, DERIVERS={})  # FW-3 as open today: no such place, nothing is invented there
-        with mock.patch.dict(sys.modules, {"hass.skills.dispatch": bare}):
+        with self.dispatcher(bare):
             self.assertTrue(hikes._register())
         self.assertFalse(hasattr(bare, "SET_PHRASES"))
 
     def test_without_the_dispatcher_nothing_happens(self):
-        with mock.patch.dict(sys.modules, {"hass.skills.dispatch": None}):
+        with self.dispatcher(None):
             self.assertFalse(hikes._register())
 
 

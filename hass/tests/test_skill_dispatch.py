@@ -162,6 +162,11 @@ class CompleteRequestTests(SkillCase):
     def test_defaults_are_shown_as_what_was_set(self):
         dispatch.DERIVERS["toy_difficulty"] = lambda slots, ctx: "easy"
         self.addCleanup(dispatch.DERIVERS.pop, "toy_difficulty")
+        # the hikes module (when this process has loaded it) words "hike.add" defaults for the real skill; this toy has no such wording
+        patched = mock.patch.dict(dispatch.SET_PHRASES)
+        patched.start()
+        self.addCleanup(patched.stop)
+        dispatch.SET_PHRASES.pop("hike.add", None)
         skill = toy("hike.add", "add a hike", (*HIKE_ADD.slots[:4], Slot("difficulty", "text", False, default="derive:toy_difficulty")), _plan_hike)
         self.registry = registry_of(skill)
         self.conv = self.open()
