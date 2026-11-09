@@ -214,15 +214,21 @@ def read_shot(path, base):
 class RelaySender:
     """Outbox adapter: send() stores the reply for the Mac to pull. Only the owner chat (and G's own chat, text only, when configured); no path is ever stored.
     With `shots_dir` (host `pictures` true) up to 2 screenshots from it travel as pictures; the rest are counted."""
-    def __init__(self, store, owner_chat, clock, shots_dir=None, g_chat=None):
-        self.store, self.owner_chat, self.clock, self.shots_dir = store, owner_chat, clock, shots_dir
-        self.g_chat = g_chat if isinstance(g_chat, str) and g_chat and g_chat != owner_chat else None  # G's one chat, text only
+    def __init__(self, store, owner_chat, clock, shots_dir=None, g_chat=None, picture_chats=None):
+        """`owner_chat`: one chat id, or (HASS-OWNERS-2) a tuple of owner chats, each an owner's own one-to-one chat; the first is the main
+        one. `picture_chats`: the owner chats the Mac can send pictures to (default: the main one only; the Mac forwarder carries
+        pictures to its own ownerChat). A picture for any other owner chat is dropped here and its text goes on alone."""
+        chats = tuple(owner_chat) if isinstance(owner_chat, (tuple, list)) else (owner_chat,)
+        self.store, self.owner_chat, self.owner_chats, self.clock, self.shots_dir = store, chats[0], chats, clock, shots_dir
+        self.picture_chats = chats[:1] if picture_chats is None else tuple(picture_chats)
+        self.g_chat = g_chat if isinstance(g_chat, str) and g_chat and g_chat not in chats else None  # G's one chat, text only
 
     def send(self, chat, text, attachments=()):
         """Stores the reply for the Mac to pull; returns the relay id (HASS-FAST-1: the stage log joins reply to message by it)."""
         if self.g_chat is not None and chat == self.g_chat and (attachments or self.store.unacked(chat) >= G_PENDING_MAX):
             raise RelayRefused("reply refused")  # G's chat: text only, and never more than G_PENDING_MAX waiting for the Mac
-        if (chat != self.owner_chat and chat != self.g_chat) or len(text) > MAX_TEXT or len(attachments) > 10 or bridge.SURROGATE_RE.search(text):
+        if chat in self.owner_chats and chat not in self.picture_chats: attachments = ()  # HASS-OWNERS-2: this owner's chat is text only on the Mac for now
+        if (chat not in self.owner_chats and chat != self.g_chat) or len(text) > MAX_TEXT or len(attachments) > 10 or bridge.SURROGATE_RE.search(text):
             raise RelayRefused("reply refused")
         shots = []
         if self.shots_dir is not None:
