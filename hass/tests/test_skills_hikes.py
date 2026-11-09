@@ -273,6 +273,58 @@ class RealDispatcherDefaults(unittest.TestCase):
         self.assertEqual(len(case.drafts()), 3)
         case.nothing_written()
 
+    def fresh_case(self):
+        """One isolated Conversation/Editor world per scenario (a refused call can leave an open request behind)."""
+        from hass.tests.test_skill_dispatch import SkillCase, registry_of
+
+        case = SkillCase()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.registry = registry_of(hikes.ADD)
+        case.conv = case.open()
+        return case
+
+    def test_ambiguous_limit_never_becomes_a_draft(self):
+        slots = {"title": "Harbor Walk", "day": "2026-12-12", "clock": "08:00", "meeting_point": "the gate", "signup": True}
+        pine = {"title": "Pine hike", "day": "2026-12-19", "clock": "09:00", "meeting_point": "Pine gate"}
+        said = "Add Harbor Walk December 12 at 8am, meet at the gate, sign-up on, 15 spots or 20 spots"
+        approvals = lambda c: c.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0]
+        for cap in (15, 20):
+            with self.subTest(envelope="single", cap=cap):
+                case = self.fresh_case()
+                case.script(said, {"skill": "hike.add", "slots": {**slots, "capacity": cap}})
+                self.assertNotEqual(case.say(said), "proposed")
+                self.assertTrue(case.replies()[0].startswith(hikes.R_SPOTS_NOT_SAID), case.replies())  # the plain refusal, then the existing fail-closed note
+                self.assertEqual(case.drafts(), [])
+                case.nothing_written()
+            with self.subTest(envelope="calls", cap=cap):
+                case = self.fresh_case()
+                case.script(said, {"calls": [{"skill": "hike.add", "slots": {**slots, "capacity": cap}}]})
+                self.assertNotEqual(case.say(said), "proposed")  # the existing fail-closed path for a call a rule holds
+                self.assertEqual(case.drafts(), [])
+                case.nothing_written()
+                self.assertEqual(approvals(case), 0)
+        # mixed control, either order: the ambiguous hike contributes no op; the unrelated valid hike drafts as before
+        mixed = said.replace("sign-up on, ", "") + " and Pine hike December 19 at 9am, meet at Pine gate"  # no sign-up word: only the count is unclear
+        for order in ((20, None), (None, 20)):
+            with self.subTest(order=order):
+                case = self.fresh_case()
+                calls = [{"skill": "hike.add", "slots": {**slots, "capacity": 20} if which else pine} for which in (order[0], order[1])]
+                case.script(mixed, {"calls": calls})
+                self.assertEqual(case.say(mixed), "proposed")
+                ops = [op for d in case.drafts() for op in json.loads(d["ops_json"])]
+                self.assertEqual([op["args"]["title"] for op in ops], ["Pine hike"])
+                self.assertNotIn("capacity", ops[0]["args"])
+                case.nothing_written()
+        # exact-capacity control: a later explicit correction proposes capacity 20 and applies nothing before yes
+        case = self.fresh_case()
+        fixed = said + ". Actually make it 20 spots"
+        case.script(fixed, {"skill": "hike.add", "slots": {**slots, "capacity": 20}})
+        self.assertEqual(case.say(fixed), "proposed")
+        self.assertEqual(len(case.drafts()), 1)
+        self.assertEqual(json.loads(case.drafts()[0]["ops_json"])[0]["args"]["capacity"], 20)
+        case.nothing_written()
+
 
 class Rules(unittest.TestCase):
     def hit(self, rule, slots, c=None, texts=()):
@@ -456,6 +508,73 @@ class Rules(unittest.TestCase):
         self.assertIsNone(no(12, "sign up please, at most 12 people"))
         self.assertEqual(no(12, "sign up please, 12 spots", "actually not 12 spots; sign up stays on")[0], hikes.R_SPOTS_NOT_SAID)
         self.assertIsNone(no(20, "sign up please, 12 spots", "actually not 12 spots, 20 spots"))
+
+    def test_both_alternative_guest_counts_are_unresolved(self):
+        base = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate, sign-up on"
+        for said in (base + ", 15 spots or 20 spots", base + ", 20 spots or 15 spots", base + ", twenty people or fifteen people",
+                     base + ", fifteen guests or 20 guests", base + ", max 15 people or 20 people"):
+            for cap in (15, 20):
+                with self.subTest(said=said, cap=cap):
+                    for slots in ({"signup": True, "capacity": cap}, {"hike": CASS["id"], "signup": True, "capacity": cap}):
+                        self.assertEqual(self.hit("hike-no-invention", slots, texts=[said])[0], hikes.R_SPOTS_NOT_SAID)
+        self.assertEqual(hikes._said_limits("15 spots or 20 spots"), {15, 20})
+        # the same count named twice is one count, not an alternative
+        for said in (base + ", 20 spots", base + ", max 20 people", base + ", 20 spots, max 20", base + ", up to twenty people, 20 spots"):
+            with self.subTest(said):
+                self.assertEqual(hikes._said_limits(said), {20})
+                self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "capacity": 20}, texts=[said]))
+                self.assertEqual(self.hit("hike-no-invention", {"signup": True, "capacity": 15}, texts=[said])[0], hikes.R_SPOTS_NOT_SAID)
+
+    def test_effective_limit_alternatives_and_later_corrections(self):
+        no = lambda cap, *texts: self.hit("hike-no-invention", {"signup": True, "capacity": cap}, texts=list(texts))
+        refused = hikes.R_SPOTS_NOT_SAID
+        # one singleton, then alternatives: neither is supported
+        for cap in (15, 20):
+            self.assertEqual(no(cap, "sign up please, 15 spots. Actually 15 spots or 20 spots")[0], refused)
+            self.assertEqual(no(cap, "sign up please, 15 spots", "actually, 15 spots or 20 spots")[0], refused)
+            self.assertEqual(no(cap, "sign up please, 15 spots or 20 spots", "hm, 15 spots or 20 spots")[0], refused)
+        # alternatives, then a later explicit singleton: only that one
+        self.assertIsNone(no(20, "sign up please, 15 spots or 20 spots. Actually make it 20 spots"))
+        self.assertEqual(no(15, "sign up please, 15 spots or 20 spots. Actually make it 20 spots")[0], refused)
+        self.assertIsNone(no(15, "sign up please, 15 spots or 20 spots", "actually, 15 spots"))
+        self.assertEqual(no(20, "sign up please, 15 spots or 20 spots", "actually, 15 spots")[0], refused)
+        # a rejected number, dates, times and units never join the alternatives
+        self.assertIsNone(no(20, "sign up please, not 12 spots, 20 spots"))
+        self.assertIsNone(no(20, "sign up on December 12 at 8am, 20 spots, bring 2 liters"))
+        self.assertIsNone(no(20, "sign up please, 15 spots or 20 spots, not 15 spots"))
+        self.assertEqual(no(20, "sign up please, 20 spots, not 20 spots")[0], refused)
+
+    def test_alternatives_do_not_resurrect_earlier_unlimited(self):
+        base = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate, sign-up on"
+        said = base + ", no limit. Actually 15 spots or 20 spots"
+        self.assertIs(hikes._said_unlimited(said), False)
+        for slots in ({"signup": True, "no_limit": True}, {"signup": True, "capacity": 15}, {"signup": True, "capacity": 20}):
+            self.assertEqual(self.hit("hike-no-invention", slots, texts=[said])[0], hikes.R_SPOTS_NOT_SAID)
+        # a later explicit no-limit keeps its existing behavior
+        again = said + ". No wait, no limit"
+        self.assertIs(hikes._said_unlimited(again), True)
+        self.assertIsNone(self.hit("hike-no-invention", {"signup": True, "no_limit": True}, texts=[again]))
+
+    def test_add_and_edit_plans_refuse_ambiguous_capacity(self):
+        add = {"title": "Cass Hill hike", "day": "2026-12-12", "clock": "08:00", "meeting_point": "Cass Hill gate", "signup": True}
+        edit = {"hike": CASS["id"], "signup": True}
+        said = ["sign-up on, 15 spots or 20 spots"]
+        for cap in (15, 20):
+            for plan, base in ((hikes.plan_add, add), (hikes.plan_edit, edit)):
+                with self.subTest(plan=plan.__name__, cap=cap):
+                    slots, c = {**base, "capacity": cap}, ctx(CASS, texts=said)
+                    before = (dict(slots), list(c.texts))
+                    with self.assertRaises(hikes.Refusal) as caught:
+                        plan(slots, c)
+                    self.assertEqual(caught.exception.reply, hikes.R_SPOTS_NOT_SAID)
+                    self.assertEqual((slots, c.texts), before)
+        # a complete single count keeps its exact typed op, after a correction too
+        for texts in (["sign-up on, 20 spots"], ["sign-up on, 15 spots or 20 spots", "actually make it 20 spots"]):
+            self.assertEqual(hikes.plan_add({**add, "capacity": 20}, ctx(CASS, texts=texts))[0]["args"],
+                             {"title": "Cass Hill hike", "date": "2026-12-12", "time": "08:00", "meetingPoint": "Cass Hill gate",
+                              "rsvpEnabled": True, "capacity": 20})
+            self.assertEqual(hikes.plan_edit({**edit, "capacity": 20}, ctx(CASS, texts=texts))[0]["args"],
+                             {"id": CASS["id"], "rsvpEnabled": True, "capacity": 20})
 
     def test_the_latest_sign_up_instruction_wins(self):
         self.assertEqual(self.hit("hike-no-invention", {"signup": True}, texts=["sign up please", "actually no sign ups"])[0],

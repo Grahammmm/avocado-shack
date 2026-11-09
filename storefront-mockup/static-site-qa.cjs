@@ -140,10 +140,27 @@ server.listen(0,'127.0.0.1',async()=>{
   for(const [name,events] of [['empty',[]],['cancelled only',[nh('c','C','2026-12-06T09:00:00-08:00',{status:'cancelled'})]],['completed only',[nh('d','D','2026-12-06T09:00:00-08:00',{status:'completed'})]],['past day only',[nh('p','P','2026-11-08T09:00:00-08:00')]],['missing file',null],['malformed events',{bad:1}]]){
    const r=await homeNext(events);assert.equal(r.n,1,name);assert.equal(r.hidden,true,name);assert.equal(r.links,0,name);assert.equal(r.text,'',name);assert.deepEqual(r.errs,[],name);assert.ok(!r.reqs.some(q=>q.includes('hiking-preview')),name+': sample requested');}
   {const day=[nh('s','Started today','2026-11-09T07:00:00-08:00')]; // Pacific 9 Nov 07:00
-   let r=await homeNext(day,{iso:'2026-11-09T20:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.links,1,'started today, viewer in Tokyo');assert.equal(r.text,'Next hike: Monday, November 9, 7:00 AM - Started today');
+   // RF0814-11: a walk that has already started is not the "next" hike, even on its own Pacific day and with the viewer in Tokyo; it stays visible as TODAY on /hike.
+   let r=await homeNext(day,{iso:'2026-11-09T20:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.n,1,'started only');assert.equal(r.hidden,true,'started only: hidden');assert.equal(r.links,0,'started only: no link');assert.equal(r.text,'','started only: empty');assert.deepEqual(r.errs,[]);
    r=await homeNext(day,{iso:'2026-11-10T08:30:00Z',tz:'Asia/Tokyo'});assert.equal(r.links,0,'hidden after Pacific midnight');
    r=await homeNext([nh('t','Plain hike','2026-12-06T09:00:00-08:00',{timezone:undefined}),],{width:1440});assert.equal(r.text,'Next hike: Sunday, December 6, 9:00 AM - Plain hike');
    r=await homeNext([nh('w','A very long hike title '.repeat(8),'2026-12-06T09:00:00-08:00')],{width:390});assert.equal(r.overflow,false,'long title overflows the page');}
+  // RF0814-11 homeNextSkipsStartedWithFutureSibling: noon Pacific, 9am started + 3pm future (reverse input order): home names only 3pm; /hike keeps 9am as TODAY and 3pm as THE NEXT HIKE.
+  {const noon='2026-11-09T20:00:00Z',nine=nh('r-9','Started morning walk','2026-11-09T09:00:00-08:00'),three=nh('r-3','Future afternoon walk','2026-11-09T15:00:00-08:00');
+   let r=await homeNext([three,nine],{iso:noon});assert.equal(r.links,1,'mixed');assert.equal(r.text,'Next hike: Monday, November 9, 3:00 PM - Future afternoon walk');assert.equal(r.href,'/hike#upcoming-hikes');assert.deepEqual(r.errs,[]);assert.ok(!r.reqs.some(q=>q.startsWith('POST')),'POST from home');
+   r=await homeNext([nine,three],{iso:noon,tz:'Asia/Tokyo'});assert.equal(r.text,'Next hike: Monday, November 9, 3:00 PM - Future afternoon walk','mixed, other input order, viewer in Tokyo');
+   const h=await hikeAt(noon,{events:[three,nine]});const card=t=>h.arts.find(a=>a.t===t);
+   assert.match(card('Started morning walk').txt,/TODAY/,'/hike keeps the started walk as TODAY');assert.match(card('Future afternoon walk').txt,/THE NEXT HIKE/,'/hike labels the future walk THE NEXT HIKE');assert.deepEqual(h.errs,[]);
+   // homeNextStartBoundary: start-1ms selects it, the exact start and start+1ms do not.
+   for(const [iso,shown] of [['2026-11-09T22:59:59.999Z',true],['2026-11-09T23:00:00.000Z',false],['2026-11-09T23:00:00.001Z',false]]){r=await homeNext([three],{iso});assert.equal(r.links,shown?1:0,iso);assert.equal(r.hidden,!shown,iso);assert.equal(r.text,shown?'Next hike: Monday, November 9, 3:00 PM - Future afternoon walk':'',iso);}
+   // homeNextAbsoluteTimeAcrossZones: fall-back hour, same wall text 1:30 AM twice; decided by instant (PDT 08:30Z, PST 09:30Z), and equal instants keep input order.
+   const pdt=nh('f-pdt','First 1:30','2026-11-01T01:30:00-07:00'),pst=nh('f-pst','Second 1:30','2026-11-01T01:30:00-08:00');
+   r=await homeNext([pst,pdt],{iso:'2026-11-01T08:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.text,'Next hike: Sunday, November 1, 1:30 AM - First 1:30','before both');
+   r=await homeNext([pst,pdt],{iso:'2026-11-01T09:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.text,'Next hike: Sunday, November 1, 1:30 AM - Second 1:30','between the two identical wall times');
+   r=await homeNext([pst,pdt],{iso:'2026-11-01T09:30:00Z'});assert.equal(r.links,0,'both started');
+   r=await homeNext([nh('e-2','Equal second','2026-12-06T09:00:00-08:00'),nh('e-1','Equal first','2026-12-06T09:00:00-08:00')]);assert.equal(r.text,'Next hike: Sunday, December 6, 9:00 AM - Equal second','equal starts keep input order');
+   // homeNextFiltersAndFallback: invalid/missing starts and non-scheduled events are never selected next to a valid future sibling.
+   r=await homeNext([nh('x1','Bad start','not a date'),nh('x2','No start',undefined,{startsAt:undefined}),nh('x3','Cancelled','2026-12-01T09:00:00-08:00',{status:'cancelled'}),nh('x4','Completed','2026-12-02T09:00:00-08:00',{status:'completed'}),nh('x5','Good sibling','2026-12-20T09:00:00-08:00')]);assert.equal(r.text,'Next hike: Sunday, December 20, 9:00 AM - Good sibling');assert.deepEqual(r.errs,[]);}
   // AV1422-09: the no-hike empty state (sample off, no events) keeps the look its h3 had: 32px/8px at desktop, 29px/8px on a phone.
   for(const [w,size] of [[1440,'32px'],[390,'29px']]){const ctx=await browser.newContext({viewport:{width:w,height:900}}),p=await ctx.newPage();
    await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,enabled:false})));await p.route('**/community.json',r=>r.fulfill(json({events:[],routeIdeas:[]})));

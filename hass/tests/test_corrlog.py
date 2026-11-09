@@ -12,6 +12,9 @@ import contextlib
 import io
 import json
 import os
+import multiprocessing
+import socket
+from unittest import mock
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -140,6 +143,136 @@ class NeverRaises(LogCase):
                     + json.dumps({"kind": "error", "at": "2026-11-08T10:00:00"}) + "\n")  # no time zone: not trusted
         (self.state / corrlog.FOLDER / "notes.txt").write_text("hello")
         self.assertEqual([r["reason"] for r in self.log.rows()], ["good"])
+
+
+class PathAdmission(LogCase):
+    def bounded(self, operation):
+        """A regression must fail, not leave a test runner stuck opening a pipe."""
+        ctx = multiprocessing.get_context("fork")
+        parent, child = ctx.Pipe(duplex=False)
+        def run():
+            try: child.send(operation())
+            finally: child.close()
+        process = ctx.Process(target=run)
+        process.start()
+        child.close()
+        try:
+            self.assertTrue(parent.poll(3), "correspondence I/O blocked")
+            result = parent.recv()
+            process.join(3)
+            self.assertEqual(process.exitcode, 0)
+            return result
+        finally:
+            if process.is_alive():
+                process.terminate()
+                process.join()
+            parent.close()
+
+    def foreign_row(self):
+        return json.dumps({"at": NOW.isoformat(), "kind": "corrected", "reason": "foreign",
+                           "excerpt": "foreign synthetic excerpt"}) + "\n"
+
+    def test_unsafe_correspondence_directories_are_never_traversed(self):
+        outside = self.state / "outside"
+        outside.mkdir()
+        (outside / "2026-11-08.jsonl").write_text(self.foreign_row())
+        (outside / "2025-01-01.jsonl").write_text("old synthetic bytes")
+        before = {p.name: p.read_bytes() for p in outside.iterdir()}
+        for kind in ("linked", "dangling", "file", "missing"):
+            with self.subTest(kind=kind):
+                state = self.state / kind
+                state.mkdir()
+                self.log = corrlog.CorrLog(state, lambda: self.now)
+                if kind == "linked": self.log.dir.symlink_to(outside, target_is_directory=True)
+                if kind == "dangling": self.log.dir.symlink_to(self.state / "absent", target_is_directory=True)
+                if kind == "file": self.log.dir.write_text("blocker")
+                self.assertEqual((self.log.rows(), self.log.last(), self.log.top(), self.log.prune()), ([], [], [], 0))
+                if kind != "missing":
+                    self.assertFalse(self.log.record("error", "x"))
+                    self.assertEqual({p.name: p.read_bytes() for p in outside.iterdir()}, before)
+                    self.assertFalse((self.state / "absent").exists())
+                    if kind == "file": self.assertEqual(self.log.dir.read_text(), "blocker")
+                    else: self.assertTrue(self.log.dir.is_symlink())
+                    self.log.dir.unlink()
+                else: self.assertFalse(self.log.dir.exists())
+
+    def test_linked_day_files_are_not_read_or_reported(self):
+        self.assertTrue(self.log.record("error", "local"))
+        foreign = self.state / "foreign"
+        foreign.write_text(self.foreign_row())
+        for name in ("2026-11-07.jsonl", "2025-01-01.jsonl"):
+            (self.log.dir / name).symlink_to(foreign)
+        self.assertEqual([r["reason"] for r in self.log.rows()], ["local"])
+        self.assertNotIn("foreign", corrlog.problems_text(self.log))
+        self.assertNotIn(corrlog.KINDS["corrected"], corrlog.weekly_line(self.log))
+        self.now -= timedelta(days=1)
+        self.assertFalse(self.log.record("error", "x"))
+        self.assertEqual(self.log.prune(), 0)
+        self.assertTrue((self.log.dir / "2025-01-01.jsonl").is_symlink())
+        self.assertEqual(foreign.read_text(), self.foreign_row())
+
+    def test_nonregular_day_files_do_not_block(self):
+        self.log.dir.mkdir()
+        day = self.log.dir / "2026-11-08.jsonl"
+        for kind in ("fifo", "directory", "socket"):
+            with self.subTest(kind=kind):
+                if kind == "fifo": os.mkfifo(day)
+                elif kind == "directory": day.mkdir()
+                else:
+                    sock = socket.socket(socket.AF_UNIX)
+                    self.addCleanup(sock.close)
+                    with contextlib.chdir(self.log.dir): sock.bind(day.name)
+                try:
+                    for read in (False, True):
+                        with self.subTest(read=read):
+                            result = self.bounded(self.log.rows if read else lambda: self.log.record("error", "x"))
+                            self.assertEqual(result, [] if read else False)
+                finally:
+                    if kind == "directory": day.rmdir()
+                    else: day.unlink()
+
+    def test_fifo_swapped_in_at_open_time_does_not_block(self):
+        self.log.dir.mkdir()
+        day = self.log.dir / "2026-11-08.jsonl"
+        real_open = os.open
+        def operation(read):
+            day.write_text(self.foreign_row())
+            def swap(path, flags, *args, **kwargs):
+                if Path(path) == day:
+                    day.unlink()
+                    os.mkfifo(day)
+                return real_open(path, flags, *args, **kwargs)
+            with mock.patch.object(corrlog.os, "open", side_effect=swap):
+                return self.log.rows() if read else self.log.record("error", "x")
+        for read in (False, True):
+            with self.subTest(read=read):
+                try:
+                    self.assertEqual(self.bounded(lambda: operation(read)), [] if read else False)
+                finally: day.unlink(missing_ok=True)
+
+    def test_refused_descriptors_are_closed_without_reading_or_writing(self):
+        self.log.dir.mkdir()
+        (self.log.dir / "2026-11-08.jsonl").write_text(self.foreign_row())
+        for read in (False, True):
+            with self.subTest(read=read), mock.patch.object(corrlog.os, "open", return_value=321), \
+                 mock.patch.object(corrlog.os, "fstat", return_value=self.log.dir.stat()), \
+                 mock.patch.object(corrlog.os, "close") as close, \
+                 mock.patch.object(corrlog.os, "read") as read_bytes, \
+                 mock.patch.object(corrlog.os, "write") as write_bytes:
+                self.assertEqual(self.log.rows() if read else self.log.record("error", "x"), [] if read else False)
+                close.assert_called_once_with(321)
+                read_bytes.assert_not_called()
+                write_bytes.assert_not_called()
+
+    def test_unreadable_disappeared_and_replacement_decoded_day_files(self):
+        self.log.dir.mkdir()
+        day = self.log.dir / "2026-11-08.jsonl"
+        day.write_bytes(self.foreign_row().encode().replace(b"foreign synthetic", b"\xff synthetic"))
+        self.assertIn("\ufffd", self.log.rows()[0]["excerpt"])
+        for error in (PermissionError, FileNotFoundError):
+            with self.subTest(error=error), mock.patch.object(corrlog.os, "open", side_effect=error):
+                self.assertEqual(self.log.rows(), [])
+                self.assertFalse(self.log.record("error", "x"))
 
 
 class Retention(LogCase):
