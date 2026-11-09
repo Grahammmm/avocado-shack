@@ -96,5 +96,24 @@ say("Mike", "no", "rejected", reply_in=MCHAT)
 say("G", f"undo {mcode}", "proposed", reply_in=GCHAT, has=("To undo Mike's change",))  # another owner's work, only by its code, still needs G's own yes
 say("Mike", f"yes {last_code()}", "no-target", reply_in=MCHAT, has=("belongs to G",))
 say("G", "no", "rejected", reply_in=GCHAT)
+# -- a draft kept from before the second owner was added: one shared chat (Mike's), both people in it, then the move to two chats
+print("\n--- migration: one shared chat, a draft by G kept, then ownerChats is switched on ---")
+repo = WriterRepo()
+legacy = {"ownerSenders": [MIKE, GEE], "ownerChat": MCHAT, "approvalTtlSeconds": 600}
+cfg = json.loads((repo.state / "config.json").read_text("utf-8"))
+editor._write_json(repo.state / "config.json", {**cfg, "settings": legacy})
+ed = conv.Editor(repo.state, {**fixture_ops.registry(), "history.revert": load_registry()["history.revert"]})
+c = conv.Conversation(str(repo.state), ed, interp, lambda: now, FakePreviewer())
+say("G", "set the hours", "proposed", chat=MCHAT, sender=GEE, reply_in=MCHAT, has=("yes",))  # G typed it into the one shared chat
+kept = last_code()
+c.db.close()
+editor._write_json(repo.state / "config.json", {**cfg, "settings": settings})  # now two owners, each in their own chat
+c = conv.Conversation(str(repo.state), ed, interp, lambda: now, FakePreviewer())
+say("Mike", f"yes {kept}", "no-target", reply_in=MCHAT, has=("belongs to someone else", "Nothing changed"))  # Mike cannot approve G's kept draft
+say("Mike", "no", "no-target", reply_in=MCHAT)  # nor cancel it
+say("G", f"yes {kept}", "no-target", reply_in=GCHAT, has=("belongs to Mike",))  # G's own chat is not the chat it was made in
+commits = len([r for r in c.db.execute("SELECT 1 FROM approvals")])
+print(f"\n    approvals recorded after the move: {commits}")
+if commits: bad.append(("migration", ["an approval was recorded"]))
 print("\nrows out of line:", "none" if not bad else len(bad))
 sys.exit(1 if bad else 0)

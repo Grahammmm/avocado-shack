@@ -34,7 +34,8 @@ ACK_WORKERS = CATCH_UP_PAGE  # one ack worker per pending message, up to the lar
 ACK_CLAIM_STALE = 8  # a row left `checking` this long (a worker died before deciding) goes back to `pending`; nothing was sent
 PULL_SLOW, PULL_FAST, FAST_WINDOW = 5, 1, 180  # reply pull every 5 s, every 1 s for 3 minutes after an owner message
 CATCH_UP_EVERY = 15  # was 60: the safety net that finds a message the BlueBubbles webhook did not announce
-KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack", "ack_reaction", "gChat"}
+KEYS = {"ownerChat", "receiverUrl", "bbPort", "bbPasswordFile", "secretFile", "spoolDir", "webhookPort", "webhookTokenFile", "ack", "ack_reaction", "gChat", "ownerChats"}  # HASS-OWNERS-2: ownerChats optional
+MAX_OWNER_CHATS = 8
 NOTICE = "Hass can't reach its computer right now, so nothing has changed yet. Your messages are saved and will be handled when it's back."
 
 
@@ -61,12 +62,16 @@ def key_read(path):
 
 def load_config(path):
     cfg = json.loads(private_read(path, 16384))
-    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort", "ack", "ack_reaction", "gChat"} - set(cfg): raise ValueError("config")
+    if type(cfg) is not dict or set(cfg) - KEYS or KEYS - {"webhookPort", "ack", "ack_reaction", "gChat", "ownerChats"} - set(cfg): raise ValueError("config")
     cfg.setdefault("webhookPort", 8796)
     if type(cfg.get("ack", True)) is not bool: raise ValueError("config")  # absent means on; false switches the tapback off
     if "ack_reaction" in cfg and (type(cfg["ack_reaction"]) is not str or cfg["ack_reaction"] not in TAPBACKS): raise ValueError("config")  # HASS-TAPBACK-1: allowlist
     if not isinstance(cfg["ownerChat"], str) or not re.fullmatch(r"iMessage;-;[^;\s]+", cfg["ownerChat"]): raise ValueError("config")
-    if "gChat" in cfg and (not isinstance(cfg["gChat"], str) or cfg["gChat"] == cfg["ownerChat"]  # HASS-VOICE-1: G's own one-to-one chat, optional, text only
+    if "ownerChats" in cfg:  # HASS-OWNERS-2: several owners, each in their own one-to-one chat; ownerChat (the main one) is one of them
+        chats = cfg["ownerChats"]
+        if (type(chats) is not list or not 1 <= len(chats) <= MAX_OWNER_CHATS or not all(type(c) is str and re.fullmatch(r"iMessage;-;[^;\s]+", c) for c in chats)
+                or len(set(chats)) != len(chats) or cfg["ownerChat"] not in chats): raise ValueError("config")
+    if "gChat" in cfg and (not isinstance(cfg["gChat"], str) or cfg["gChat"] in owner_chats(cfg)  # HASS-VOICE-1: G's own one-to-one chat, optional, text only; never an owner chat
                            or not re.fullmatch(r"iMessage;-;[^;\s]+", cfg["gChat"])): raise ValueError("config")
     if any(type(cfg[k]) is not int or not 1 <= cfg[k] <= 65535 for k in ("bbPort", "webhookPort")): raise ValueError("config")
     for k in ("bbPasswordFile", "secretFile", "spoolDir", "webhookTokenFile"):
@@ -86,6 +91,12 @@ def load_config(path):
     st = os.lstat(cfg["spoolDir"])
     if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) != 0o700: raise ValueError("spool-dir")
     return cfg
+
+
+def owner_chats(cfg):
+    """HASS-OWNERS-2: every owner chat, the main `ownerChat` first. No `ownerChats` key: the one chat, as before."""
+    main = cfg["ownerChat"]
+    return (main, *(c for c in cfg.get("ownerChats", ()) if c != main))
 
 
 def request_json(url, body=None, limit=1024 * 1024, timeout=10):
@@ -146,7 +157,8 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS pic_tries(reply_id INTEGER,idx INTEGER,tries INTEGER,next_try_at REAL,PRIMARY KEY(reply_id,idx));"
             "CREATE TABLE IF NOT EXISTS nonces(nonce TEXT PRIMARY KEY,seen_at REAL);"
             "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);"
-            "CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);")
+            "CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);"
+            "CREATE TABLE IF NOT EXISTS ack_chat(provider_id TEXT PRIMARY KEY,chat TEXT);")  # HASS-OWNERS-2: the owner chat a tapback goes back to
         for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0),
                             ("fast_until", 0), ("rejected_streak", 0)):
             self.db.execute("INSERT OR IGNORE INTO meta VALUES (?,?)", (name, value))
@@ -169,14 +181,15 @@ class Spool:
     def accept(self, event, owner, now, via="webhook", also=None):
         msg = bridge.normalize(event)
         if isinstance(msg, bridge.Drop): return self.drop(msg.reason)
-        if msg.chat != owner and (also is None or msg.chat != also): return self.drop("other-chat")  # `also`: G's one chat, when set
+        owners = (owner,) if isinstance(owner, str) else tuple(owner)  # HASS-OWNERS-2: one chat, or every owner chat
+        if msg.chat not in owners and (also is None or msg.chat != also): return self.drop("other-chat")  # `also`: G's one chat, when set
         ms = int(datetime.fromisoformat(msg.received_at).timestamp() * 1000)
         if ms < self.get("start_ms"): return self.drop("history")
         new = self.db.execute("INSERT OR IGNORE INTO inbound VALUES (?,?,'pending',0,0,?,NULL)",
                               (msg.provider_id, json.dumps(asdict(msg)), now)).rowcount
         if new:  # a repeat (webhook then catch-up, a replay, a restart) never reaches this line
             self.stage("accepted", msg.provider_id, via=via)
-            self.owner_arrived(msg, owner, ms)
+            self.owner_arrived(msg, msg.chat if msg.chat in owners else owners[0], ms)  # an owner's own chat, else (G's chat) the main one: no ack
 
     def owner_arrived(self, msg, owner, ms):
         """HASS-FAST-1: a newly stored message from the owner's own address in the owner's one-to-one chat, sent just now,
@@ -190,6 +203,7 @@ class Spool:
             if not mine or self.clock() * 1000 - ms > ACK_MAX_AGE * 1000: return
             self.set("fast_until", self.clock() + FAST_WINDOW)
             self.db.execute("INSERT OR IGNORE INTO ack VALUES (?,'pending',?,NULL)", (msg.provider_id, self.clock()))
+            self.db.execute("INSERT OR IGNORE INTO ack_chat VALUES (?,?)", (msg.provider_id, owner))  # HASS-OWNERS-2: the tapback goes to this chat
         except Exception:  # noqa: BLE001 - an ack is never worth losing the message that was just stored
             pass
 
@@ -215,11 +229,12 @@ class Forwarder:
         self.reactor = reactor or BlueBubblesReactor(f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"])
         self.probe_cache, self.probe_lock = None, threading.Lock()  # (valid until, blocker reason or None)
         self.attach = attach or bridge_attach.BlueBubblesAttachmentSender(
-            f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], cfg["ownerChat"])
+            f'http://127.0.0.1:{cfg["bbPort"]}', cfg["bbPasswordFile"], owner_chats(cfg))
         self.big = functools.partial(request_json, limit=MAX_REPLY) if transport is request_json else transport
         self.quick = functools.partial(request_json, timeout=ACK_STATE_TIMEOUT) if transport is request_json else transport
         self.next_poll = self.next_pull = 0
         self.query_offset, self.query_high = 0, 0
+        self.query_other = {}  # HASS-OWNERS-2: the other owner chats' page state
         self.ack_thread, self.ack_stop, self.ack_wake = None, threading.Event(), threading.Event()
         self.ack_live, self.ack_lock = set(), threading.Lock()
 
@@ -239,33 +254,57 @@ class Forwarder:
             msg = self.bb("/api/v1/message/" + urllib.parse.quote(guid, safe="") + "?with=chats,handle,attachment")
             if type(msg) is not dict or msg.get("guid") != guid: raise ValueError("refetch-shape")
             with self.spool.db:
-                self.spool.accept({"type": kind, "data": msg}, self.cfg["ownerChat"], created, also=self.cfg.get("gChat"))
+                self.spool.accept({"type": kind, "data": msg}, owner_chats(self.cfg), created, also=self.cfg.get("gChat"))
                 self.spool.db.execute("DELETE FROM fetch WHERE guid=? AND event=?", (guid, kind))
         except (bridge.BridgeError, ValueError, KeyError, TypeError):
             self.spool.db.execute("UPDATE fetch SET tries=tries+1,next_try_at=? WHERE guid=? AND event=?",
                                   (self.clock() + min(300, 5 * 2 ** min(tries, 6)), guid, kind))
 
     def catch_up(self):
-        cursor = int(self.spool.get("last_seen_ms"))
-        query = {"chatGuid": self.cfg["ownerChat"], "after": cursor, "sort": "ASC", "limit": CATCH_UP_PAGE,
+        """Each owner chat is asked on its own (HASS-OWNERS-2), with its own cursor and page offset; the main chat keeps the
+        original `last_seen_ms` cursor. One chat failing does not stop the others; the first failure is raised afterwards."""
+        full, error = False, None
+        for n, chat in enumerate(owner_chats(self.cfg)):
+            try: full = self.catch_up_chat(chat, n == 0) or full
+            except (bridge.BridgeError, bridge.EnvelopeError, ValueError, KeyError, TypeError) as exc: error = error or exc
+        if error is not None: raise error
+        self.next_poll = self.clock() + (0 if full else CATCH_UP_EVERY)
+
+    def catch_up_chat(self, chat, main):
+        """One page of one owner chat; True when the page was full (more may be waiting)."""
+        name = "last_seen_ms" if main else "last_seen_ms." + hashlib.sha256(chat.encode()).hexdigest()[:16]
+        if not main: self.spool.db.execute("INSERT OR IGNORE INTO meta VALUES (?,?)", (name, int(self.spool.get("start_ms"))))
+        state = None if main else self.query_other.setdefault(chat, [0, 0])  # [page offset, highest cursor seen]
+        offset, high = (self.query_offset, self.query_high) if main else state
+        cursor = int(self.spool.get(name))
+        query = {"chatGuid": chat, "after": cursor, "sort": "ASC", "limit": CATCH_UP_PAGE,
                  "with": ["chats", "handle", "attachment"]}
         # Keep the durable cursor fixed until a page is exhausted, including timestamp ties.
-        if self.query_offset: query["offset"] = self.query_offset
+        if offset: query["offset"] = offset
         rows = self.bb("/api/v1/message/query", query)
         if type(rows) is not list: raise ValueError("query-shape")
         for msg in rows:
             if type(msg) is not dict or type(msg.get("dateCreated")) is not int: raise ValueError("query-shape")
+        owners = owner_chats(self.cfg)
         for msg in rows:
-            self.spool.accept({"type": "new-message", "data": msg}, self.cfg["ownerChat"], self.clock(), via="poll")
+            self.spool.accept({"type": "new-message", "data": msg}, owners, self.clock(), via="poll")
             if type(msg.get("dateEdited")) is int and msg["dateEdited"] > 0:
-                self.spool.accept({"type": "updated-message", "data": msg}, self.cfg["ownerChat"], self.clock(), via="poll")
+                self.spool.accept({"type": "updated-message", "data": msg}, owners, self.clock(), via="poll")
             cursor = max(cursor, msg["dateCreated"])
-        self.query_high = max(self.query_high, cursor)
-        if len(rows) == CATCH_UP_PAGE: self.query_offset += CATCH_UP_PAGE
+        high = max(high, cursor)
+        if len(rows) == CATCH_UP_PAGE: offset += CATCH_UP_PAGE
         else:
-            self.spool.set("last_seen_ms", self.query_high)
-            self.query_offset = 0
-        self.next_poll = self.clock() + (0 if len(rows) == CATCH_UP_PAGE else CATCH_UP_EVERY)
+            self.spool.set(name, high)
+            offset = 0
+        if main: self.query_offset, self.query_high = offset, high
+        else: state[:] = [offset, high]
+        return len(rows) == CATCH_UP_PAGE
+
+    def notice_chat(self, payload):
+        """HASS-OWNERS-2: the outage notice goes to the owner chat of the message that is stuck (the main chat for anything else)."""
+        try: chat = json.loads(payload)["chat"]
+        except (TypeError, ValueError, KeyError): chat = None
+        return chat if chat in owner_chats(self.cfg) else self.cfg["ownerChat"]
 
     def deliver(self):
         db, now = self.spool.db, self.clock()
@@ -284,7 +323,7 @@ class Forwarder:
             db.execute("UPDATE inbound SET tries=tries+1,next_try_at=? WHERE rowid=?", (now + min(300, 5 * 2 ** min(row[2], 6)), row[0]))
             if not self.spool.get("outage_since"): self.spool.set("outage_since", now)
             if now - row[4] >= 600 and not self.spool.get("outage_notified"):
-                self.sender.send(self.cfg["ownerChat"], NOTICE)
+                self.sender.send(self.notice_chat(row[1]), NOTICE)
                 self.spool.set("outage_notified", 1)
             return
         for name in ("outage_since", "outage_notified"): self.spool.set(name, 0)
@@ -335,7 +374,7 @@ class Forwarder:
         ids = []
         try:
             for item in self.control({"op": "pull", "max": 5}, "replies")["items"]:
-                if item["chat"] != self.cfg["ownerChat"] and not (item["chat"] == self.cfg.get("gChat") and item["pictures"] == 0): continue  # G's chat: text only
+                if item["chat"] not in owner_chats(self.cfg) and not (item["chat"] == self.cfg.get("gChat") and item["pictures"] == 0): continue  # G's chat: text only
                 if not self.spool.db.execute("SELECT 1 FROM sent WHERE reply_id=?", (item["id"],)).fetchone():
                     self.stage("reply-pulled", item["id"])
                     self.stage("bb-send-start", item["id"])
@@ -343,6 +382,9 @@ class Forwarder:
                         self.sender.send(item["chat"], item["text"], (None,) * item["pictures"])
                     except Exception:  # noqa: BLE001 - G's chat must never hold back Mike's replies
                         if item["chat"] == self.cfg["ownerChat"]: raise
+                        if item["chat"] != self.cfg.get("gChat"):  # HASS-OWNERS-2: another owner's chat: not given up, not holding back the rows behind it
+                            self.stage("owner-send-failed", item["id"])
+                            continue
                         self.stage("g-send-failed", item["id"])
                         ids.append(item["id"])  # given up on, so it is not handed out again and again ahead of Mike's rows
                         continue
@@ -433,6 +475,9 @@ class Forwarder:
         reaction = self.cfg.get("ack_reaction", ACK_REACTION)
         if reaction not in TAPBACKS: return close("bad_reaction")
         if not valid_guid(pid): return close("bad_guid")
+        row = db.execute("SELECT chat FROM ack_chat WHERE provider_id=?", (pid,)).fetchone()  # HASS-OWNERS-2: back into the chat the message came from
+        chat = row[0] if row and row[0] in owner_chats(self.cfg) else None if "ownerChats" in self.cfg else self.cfg["ownerChat"]
+        if chat is None: return close("no_chat")
         if self.pause_ahead(spool, created): return close("paused")
         paused = self.host_paused(spool)
         if paused is not False: return close("paused" if paused else "unknown")
@@ -441,7 +486,7 @@ class Forwarder:
         if db.execute("UPDATE ack SET state='sending',done_at=? WHERE provider_id=? AND state='checking'", (now, pid)).rowcount != 1: return
         self.stage("ack-start", pid)
         try:
-            self.reactor.react(self.cfg["ownerChat"], pid, reaction)
+            self.reactor.react(chat, pid, reaction)
             state = "sent"
         except Exception:  # noqa: BLE001 - an ack never blocks, retries or leaks: the state records it, nothing else
             state = "react_failed"

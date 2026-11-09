@@ -111,4 +111,25 @@ rehearsal: two synthetic owners, checkout wt - owner chats: Mike, G
 > G     [G's chat] 'no'  ->  rejected
     reply to G's chat: Okay, I've cancelled that. Nothing changed.
 
+--- migration: one shared chat, a draft by G kept, then ownerChats is switched on ---
+
+> G     [Mike's chat] 'set the hours'  ->  proposed
+    reply to Mike's chat + 1 picture: Here's the change I'd make:
+        Avocado Shack, the opening hours:
+          was: Monday–Friday 9am–6pm; Saturday 9am–5pm · Closed Sunday
+          now: Monday–Saturday 9am–6pm; Closed Sunday
+        I'll hold this for you until today at 9:10 am.
+        Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
+
+> Mike  [Mike's chat] 'yes b299'  ->  no-target
+    reply to Mike's chat: That change belongs to someone else, so I can't save it or cancel it for you. Nothing changed.
+
+> Mike  [Mike's chat] 'no'  ->  no-target
+    reply to Mike's chat: Nothing is waiting for your yes.
+
+> G     [G's chat] 'yes b299'  ->  no-target
+    reply to G's chat: That change belongs to Mike, so I can't save it or cancel it for you. Nothing changed.
+
+    approvals recorded after the move: 0
+
 rows out of line: none

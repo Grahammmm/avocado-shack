@@ -40,10 +40,11 @@ Full G-only setup, live gates and stop commands: [MAC_RUNBOOK.md](MAC_RUNBOOK.md
    one). Every chat must be a one-to-one chat with one of the `ownerSenders` addresses, no chat may be listed twice, and
    G's separate `gChat` may not be one of them. To say whose change it was, add optional first names:
    `"ownerNames": {"iMessage;-;<first address>": "Mike", "iMessage;-;<second address>": "G"}` (letters only; no name
-   means \"the owner\"). Without `ownerChats` nothing changes: one owner, one chat, exactly as before. Run
-   `python3 hass/host.py check` and `python3 hass/health.py` after the edit, then restart the worker. The Mac forwarder
-   carries only one owner chat (`ownerChat`) plus the text-only `gChat`; give the second owner's chat to the forwarder as its
-   `gChat` for now, and the second owner will get text, not pictures (see LIMITS.md, "Several owners").
+   means "the owner"). Without `ownerChats` nothing changes: one owner, one chat, exactly as before. Run
+   `python3 hass/host.py check` and `python3 hass/health.py` after the edit, then restart the worker. Then give the Mac
+   forwarder the same list: in its `config.json` add `"ownerChats": [...]` (the same chats, `ownerChat` among them) and
+   restart it. Upgrade the forwarder and the host together: each owner then gets their answers and pictures in their own
+   chat, and G's separate `gChat` stays text only (it may not be one of the owner chats).
 7. Run, as services, the forwarder on the Mac (HASS-FWD-1: BlueBubbles webhook -> `normalize` -> `seal` -> post to the
    receiver) and the receiver host, `python3 hass/host.py serve|work --host <host.json>` (HASS-RCV-1): `serve` stores sealed
    posts, `work` drains them and queues replies for the Mac to pull. The forwarder is not in this repository yet. First run

@@ -72,6 +72,22 @@ class ConfigTests(ConversationTestCase):
         ok = load({**TWO, "gSenders": ["gg@example.invalid"], "gChat": "iMessage;-;gg@example.invalid"})
         self.assertEqual(ok["gChat"], "iMessage;-;gg@example.invalid")
 
+    def test_entries_that_are_objects_or_lists_are_refused_cleanly(self):
+        for bad in ({}, [], {"a": 1}, [MCHAT], 5, None, True):
+            with self.subTest(bad=bad):
+                self.assertIn("ownerChats entry 2 must be a chat id", self.refused(ownerChats=[MCHAT, bad], ownerChat=None, ownerNames=None))
+        message = self.refused(ownerChats=[MCHAT, {}, MCHAT])
+        self.assertIn("ownerChats has the same chat twice", message)  # the one real duplicate is still found beside a bad entry
+
+    def test_the_health_check_reports_a_bad_entry_as_a_settings_problem_not_a_crash(self):
+        from hass import health
+        self.conv.db.close()
+        for bad in ({}, [], {"a": 1}):
+            with self.subTest(bad=bad):
+                self.set_settings({**TWO, "ownerChats": [MCHAT, bad]})
+                problems, _info, _unsafe = health.check(str(self.repo.state))
+                self.assertIn("settings", [p["check"] for p in problems])
+
     def test_bad_shapes_refused(self):
         for bad in ("", [], "chat", [""], [5], [MCHAT] * 9, [f"iMessage;-;a{i}@example.invalid" for i in range(9)], ["plain-chat-id"]):
             with self.subTest(bad=bad):
@@ -203,13 +219,13 @@ class ReplyTests(Base):
         for chat in (THIRD, GROUP):
             with self.assertRaises(relay.RelayRefused): sender.send(chat, "hi")
         with self.assertRaises(relay.RelayRefused): sender.send("iMessage;-;gg@example.invalid", "hi", ["a.png"])
-        # the Mac carries pictures only to its own chat until it is told otherwise: the other owner's text goes alone
+        # the Mac forwarder carries pictures to every owner chat; G's chat never gets one
         sender.send(MCHAT, "m", ["a.png"])
         sender.send(GCHAT, "g", ["a.png"])
-        self.assertEqual(store.rows[-2:], [(MCHAT, "m", 1), (GCHAT, "g", 0)])
-        both = relay.RelaySender(store, (MCHAT, GCHAT), lambda: 1, None, None, picture_chats=(MCHAT, GCHAT))
-        both.send(GCHAT, "g", ["a.png"])
-        self.assertEqual(store.rows[-1], (GCHAT, "g", 1))
+        self.assertEqual(store.rows[-2:], [(MCHAT, "m", 1), (GCHAT, "g", 1)])
+        narrow = relay.RelaySender(store, (MCHAT, GCHAT), lambda: 1, None, None, picture_chats=(MCHAT,))  # a caller may still narrow it
+        narrow.send(GCHAT, "g", ["a.png"])
+        self.assertEqual(store.rows[-1], (GCHAT, "g", 0))
         alone = relay.RelaySender(store, MCHAT, lambda: 1)  # one owner chat, as before
         alone.send(MCHAT, "m", ["a.png"])
         self.assertEqual(store.rows[-1], (MCHAT, "m", 1))
@@ -461,6 +477,69 @@ class SharedStateTests(Base):
         self.conv = self.open()
         self.assertEqual(self.gee("yes"), "no-target")
         self.assertEqual(self.mike("yes"), "approved")
+
+
+LEGACY = {"ownerSenders": [MIKE, GEE], "ownerChat": MCHAT, "approvalTtlSeconds": 600}  # one shared chat, both people in it, as before
+
+
+class MigrationTests(Base):
+    """A draft kept from before a second owner was added (one shared chat, either person) is bound to the person who made it."""
+    settings = LEGACY
+
+    def reopen_with_two(self):
+        self.conv.db.close()
+        self.set_settings(TWO)
+        self.conv = self.open()
+
+    def test_the_other_person_cannot_approve_or_cancel_a_kept_draft(self):
+        self.assertEqual(self.say("hours", chat=MCHAT, sender=GEE), "proposed")  # G in the one shared chat
+        code = self.drafts()[-1]["code"]
+        self.sent()
+        self.reopen_with_two()
+        for text in (f"yes {code}", "yes", f"no {code}", "no"):
+            with self.subTest(text=text):
+                self.assertEqual(self.mike(text), "no-target")
+                self.sent()
+                self.assertEqual((self.drafts()[-1]["state"], self.commits(), self.editor.applies), ("proposed", 0, 0))
+        self.assertEqual(self.mike(f"yes {code}"), "no-target")
+        [(chat, reply, _a)] = self.sent()
+        self.assertEqual(chat, MCHAT)
+        self.assertIn("belongs to someone else", reply)
+        self.assertIn("Nothing changed", reply)
+        self.assertEqual(self.db_count("approvals"), 0)
+
+    def test_the_person_who_made_it_can_still_approve_it_after_the_move(self):
+        self.assertEqual(self.say("hours", chat=MCHAT, sender=MIKE), "proposed")
+        code = self.drafts()[-1]["code"]
+        self.sent()
+        self.reopen_with_two()
+        self.assertEqual(self.mike(f"yes {code}"), "approved")
+        self.assertEqual(self.commits(), 1)
+        [row] = self.conv.db.execute("SELECT sender, chat FROM approvals").fetchall()
+        self.assertEqual((row["sender"], row["chat"]), (MIKE, MCHAT))
+
+    def test_the_person_who_made_it_can_cancel_it(self):
+        self.assertEqual(self.say("hours", chat=MCHAT, sender=MIKE), "proposed")
+        self.sent()
+        self.reopen_with_two()
+        self.assertEqual(self.mike("no"), "rejected")
+        self.assertEqual(self.drafts()[-1]["state"], "rejected")
+
+    def test_the_other_owner_in_their_own_chat_still_cannot_reach_it(self):
+        self.assertEqual(self.say("hours", chat=MCHAT, sender=GEE), "proposed")
+        code = self.drafts()[-1]["code"]
+        self.sent()
+        self.reopen_with_two()
+        self.assertEqual(self.gee(f"yes {code}"), "no-target")
+        self.assertEqual((self.commits(), self.drafts()[-1]["state"]), (0, "proposed"))
+
+    def test_with_one_owner_chat_a_kept_draft_is_approved_by_either_sender_as_before(self):
+        self.assertEqual(self.say("hours", chat=MCHAT, sender=GEE), "proposed")
+        code = self.drafts()[-1]["code"]
+        self.sent()
+        self.assertEqual(self.say(f"yes {code}", chat=MCHAT, sender=MIKE), "approved")  # unchanged single-chat behaviour
+
+    def db_count(self, table): return self.conv.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
 
 
 if __name__ == "__main__":

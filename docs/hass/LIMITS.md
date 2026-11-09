@@ -107,8 +107,11 @@ Longer text is refused and nothing is changed; shorten it and send it again.
   still only a proposal until the same owner replies `yes`.
 - Pause and resume, the daily limit on new requests, the daily limit on live changes and the STOP file are shared by all owners.
   Open requests and questions are kept for each chat separately.
-- Today the Mac forwarder carries pictures only to its own `ownerChat`. A second owner's chat that reaches Hass through the
-  forwarder's text-only chat gets the words of every answer but no pictures, until the forwarder is extended.
+- The Mac forwarder takes the same list (`ownerChats` in its own config) and reads, taps back and answers in every owner chat,
+  pictures included. Add the second chat to both the host settings and the forwarder config, and restart both. A forwarder that has
+  not been upgraded keeps the second owner's answers waiting (nothing is sent to the wrong chat, nothing is lost).
+- A change kept from before a second owner was added (everyone in one chat) can only be saved or cancelled by the person who asked
+  for it; the other person is told it is not theirs and nothing changes.
 
 ## Problems log (for Graham, not for Mike)
 

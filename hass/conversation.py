@@ -399,7 +399,8 @@ def load_settings(sdir, photos=False) -> dict:
                 elif not direct: problems.append(f"ownerChats entry {n} must be a one-to-one chat id like iMessage;-;<address>")
                 elif sender_key(direct[1]) not in keys: problems.append(f"ownerChats entry {n} is a one-to-one chat with an address that is not in ownerSenders")
                 else: chat_keys[c] = frozenset({sender_key(direct[1])})
-            if len(set(chats_in)) != len(chats_in): problems.append("ownerChats has the same chat twice")
+            strs = [c for c in chats_in if isinstance(c, str)]  # a {} or [] entry is already reported above and is never hashed
+            if len(set(strs)) != len(strs): problems.append("ownerChats has the same chat twice")
             if chat is not None and chat not in chats_in: problems.append("ownerChat must be one of ownerChats")
             if len(problems) == before: chats, chat = tuple(chats_in), chat or chats_in[0]  # no ownerChat: the first owner chat is the main one
     n_in = settings.get("ownerNames")  # HASS-OWNERS-2: optional {chat id: short first name}, used only to say whose change it was
@@ -855,9 +856,16 @@ class Conversation:
                     else f"{who}'s change is going on the website right now, so I haven't started yours. Please ask me again in a few minutes.")
         return "writer-busy"
 
+    _asker = None  # HASS-OWNERS-2: the normalized sender key of the message handle() is running; None outside a message
+
     def _mine(self, row) -> bool:
-        """A draft belongs to the owner chat that made it: another owner's yes, no or undo never reaches it."""
-        return row["chat"] == self._chat()
+        """A draft belongs to the owner chat that made it: another owner's yes, no or undo never reaches it. With several owners a
+        draft that is still open (proposed, waiting for details, approved) is also bound to the sender who made it, so a draft kept
+        from before a second owner was added (one shared chat) is never approved or cancelled by the other person."""
+        if row["chat"] != self._chat(): return False
+        if self._shared and self._asker is not None and row["state"] in ("proposed", "needs-details", "approved"):
+            return sender_key(row["sender"]) == self._asker
+        return True
 
     @contextlib.contextmanager
     def _answer_to(self, chat):
@@ -944,9 +952,10 @@ class Conversation:
     def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
         self._answering = msg.received_at
         self._to = msg.chat if self._is_owner(msg) else None
+        self._asker = sender_key(msg.sender)
         self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)
         try: return self._handle_message(msg, last_try, apply)
-        finally: self._answering, self._to, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, False
+        finally: self._answering, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, False
 
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
@@ -1123,7 +1132,8 @@ class Conversation:
                 (q(f"yes {r['code']}") + ": " + q(r["summary"])) if r["state"] == "proposed" else "I'm waiting for details: " + r["summary"]
                 for r in targets])
         if code and self._by_code(code) is None and self._shared and (other := [r for r in self._drafts("code = ?", code) if not self._mine(r)]):
-            return f"That change belongs to {self._who(other[-1]['chat'])}, so I can't save it or cancel it for you. Nothing changed."  # HASS-OWNERS-2: never its words
+            who = "someone else" if other[-1]["chat"] == self._chat() else self._who(other[-1]["chat"])  # same chat, other sender: a draft kept from before a second owner
+            return f"That change belongs to {who}, so I can't save it or cancel it for you. Nothing changed."  # HASS-OWNERS-2: never its words
         if code and self._by_code(code) is None:  # AV2152-01 (H05/H17): a code that matches no draft; never guessed
             waiting = [r for r in self._drafts("state = 'proposed'") if self._mine(r)]
             return "\n".join(["I don't have a change with that code."] + (["These are waiting for you:"] + [
