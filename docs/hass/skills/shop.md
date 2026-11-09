@@ -39,6 +39,8 @@ One slot: `hours`, the **whole** new list (1 to 7 lines, 60 characters each). Th
   are read from his own words, joined across the open request: "fridays", "mon to sat", "weekdays", "every day".
   A line that names no day ("Open late on market nights") stays unless he rewrites the list around it.
 * `hours-no-conflict`: one day with two different statements ("Mon to Sun 9 to 6 and Mon to Fri 8 to 5") is a question.
+  Independent comma-separated schedules ("Monday 9am–6pm, Monday 10am–4pm") are checked separately too; commas in
+  grouped days ("Mon, Tue & Wed 9am–5pm", "Closed Mon, Tue & Wed") still belong to the same statement. Stored wording stays as given.
 * `not-already-true`: the same lines as now (spacing aside): "It already says that: Saturday 9am–5pm. Did you mean
   something else?" and nothing is drafted.
 * `holiday-is-notice`: a closed day on a date or a holiday ("closed Thanksgiving", "closed November 12", "closed the
