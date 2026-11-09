@@ -98,7 +98,8 @@ def _read(path, uid):
     if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != uid or folder.st_mode & 0o022:
         return "folder", None
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+        # O_NONBLOCK: a FIFO with no writer must not hang the open; the descriptor check below then refuses it as not-regular
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
     except OSError:
         return "unreadable", None
     try:

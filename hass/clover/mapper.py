@@ -223,7 +223,7 @@ class Matches:
 
 def match(products, items, links=None):
     """Pair site products with till items. `links` is the private table {product_id: {"cloverId": id, "sku": sku}}.
-    Order: stored link, the link's SKU, then exact name. A name pairs only when one product and one item hold it."""
+    Order: every stored link and its SKU first (all products), then exact name. A name pairs only when one product and one item hold it."""
     links = links or {}
     by_id, by_sku = {i.id: i for i in items}, {}
     for i in items:
@@ -236,17 +236,24 @@ def match(products, items, links=None):
     for p in products:
         product_names.setdefault(norm_name(p.name), []).append(p)
     pairs, ambiguous, broken, claimed = [], [], [], set()
-    for p in sorted(products, key=lambda x: x.id):
+    ordered = sorted(products, key=lambda x: x.id)
+    # Pass 1: every stored link (then its SKU) is resolved before any name is looked at, so a name match can never take an item
+    # that another product's explicit link points at, whatever the product ids sort like.
+    for p in ordered:
         link = links.get(p.id) or {}
+        if not link:
+            continue
         if link.get("cloverId") in by_id and link["cloverId"] not in claimed:
             pairs.append(Pair(p.id, link["cloverId"], "link")); claimed.add(link["cloverId"])
             continue
-        if link:
-            same = by_sku.get(str(link.get("sku", "")).casefold(), [])
-            if len(same) == 1 and same[0].id not in claimed:
-                pairs.append(Pair(p.id, same[0].id, "sku")); claimed.add(same[0].id)
-                continue
-            broken.append(p.id)
+        same = by_sku.get(str(link.get("sku", "")).casefold(), [])
+        if len(same) == 1 and same[0].id not in claimed:
+            pairs.append(Pair(p.id, same[0].id, "sku")); claimed.add(same[0].id)
+            continue
+        broken.append(p.id)
+    # Pass 2: exact names, only for products with no stored link, among the items no link claimed.
+    for p in ordered:
+        if links.get(p.id):
             continue
         hits = [i for i in names.get(norm_name(p.name), []) if i.id not in claimed]
         if len(hits) == 1 and len(product_names[norm_name(p.name)]) == 1:

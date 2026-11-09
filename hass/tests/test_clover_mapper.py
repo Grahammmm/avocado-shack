@@ -162,6 +162,20 @@ class MatchingTests(unittest.TestCase):
                          {("p1", "I1", "link"), ("p3", "I3", "sku"), ("p2", "I2", "name"), ("p4", "I4", "name")})
         self.assertEqual((got.site_only, got.clover_only, got.ambiguous, got.broken_links), (("p5",), ("I5",), (), ()))
 
+    def test_a_stored_link_beats_a_name_match_whatever_the_product_ids_sort_like(self):
+        till = [item(id="I1", name="Eggs")]
+        site = [product("a", "Eggs"), product("z", "Free-range dozen")]
+        got = m.match(site, till, {"z": {"cloverId": "I1"}})
+        self.assertEqual([(x.product_id, x.item_id, x.how) for x in got.pairs], [("z", "I1", "link")])
+        self.assertEqual((got.broken_links, got.ambiguous, got.site_only, got.clover_only), ((), (), ("a",), ()))
+
+    def test_a_stored_sku_link_also_beats_a_name_match_on_an_earlier_product(self):
+        till = [item(id="I1", name="Eggs", sku="EGG12")]
+        site = [product("a", "Eggs"), product("z", "Free-range dozen")]
+        got = m.match(site, till, {"z": {"cloverId": "GONE", "sku": "egg12"}})
+        self.assertEqual([(x.product_id, x.item_id, x.how) for x in got.pairs], [("z", "I1", "sku")])
+        self.assertEqual((got.broken_links, got.ambiguous, got.site_only), ((), (), ("a",)))
+
     def test_a_link_to_a_vanished_item_with_no_sku_match_is_reported_not_guessed(self):
         got = m.match([product("p1", "Eggs")], [item(id="I2", name="Eggs")], {"p1": {"cloverId": "GONE", "sku": "NOPE"}})
         self.assertEqual((got.pairs, got.broken_links, got.clover_only), ((), ("p1",), ("I2",)))   # not paired by name behind the owner's back

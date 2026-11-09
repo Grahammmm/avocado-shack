@@ -185,23 +185,40 @@ def build_set_price(item, new_cents, config, *, writes_today=0):
                  second_confirmation=big, warnings=tuple(warnings))
 
 
-def _stock_draft(item, after, config, *, headline, extra, site_product, undo_of=None):
+def _site_restore(entry, site_product):
+    """The site op that puts the site word back to what it was before `entry`, or None. The journal (`before`/`after` "site") names the
+    product and both words; the word is restored only while the product still shows the word that draft set, so a newer site change is never
+    overwritten. A product that had no word before is put back to `yes` (no word reads as available)."""
+    mine = (entry.get("before") or {}).get("site"), (entry.get("after") or {}).get("site")
+    if not all(isinstance(x, dict) for x in mine) or site_product is None or site_product.status != "active":
+        return None
+    prior, applied = mine
+    if site_product.id != applied.get("id") or site_product.availability != applied.get("available"):
+        return None
+    word = prior.get("available") or "yes"
+    return word if word in SITE_WORDS and word != site_product.availability else None
+
+
+def _stock_draft(item, after, config, *, headline, extra, site_product, undo_of=None, site_word=None):
     before = item.stock
     if before == after:
         raise DraftRefused(f"{item.name} already shows {format_quantity(after)}. Nothing to change.")
-    word = _site_op(site_product, after)
+    word = site_word if undo_of else _site_op(site_product, after)    # an undo restores the journalled word; it never recomputes one
     lines = [headline, f"  Count: {format_quantity(before) if before is not None else 'not counted'} -> {format_quantity(after)}"] + extra
     warnings = []
     if before is None:
         warnings.append("the till was not counting this item; this starts the count")
     if item.hidden:
         warnings.append("this item is hidden on the till")
-    site_ops = ()
+    site_ops, journal_before, journal_after = (), {"stock": None if before is None else format_quantity(before)}, {"stock": format_quantity(after)}
     if word:
         lines.append(f"  Website: marks {site_product.name} as {SITE_WORDS[word]} (same yes; the site shows a word, never a count)")
         site_ops = ({"op": "product.set_availability", "args": {"id": site_product.id, "available": word}},)
-    return Draft("set_stock", item.id, item.name, tuple(lines), {"stock": None if before is None else format_quantity(before)},
-                 {"stock": format_quantity(after)}, ({"method": "PUT", "path": f"/item_stocks/{item.id}", "json": {"quantity": _number(after)}},),
+        # the journal keeps the word the site showed before, so an undo restores it instead of recomputing one
+        journal_before["site"] = {"id": site_product.id, "available": site_product.availability}
+        journal_after["site"] = {"id": site_product.id, "available": word}
+    return Draft("set_stock", item.id, item.name, tuple(lines), journal_before, journal_after,
+                 ({"method": "PUT", "path": f"/item_stocks/{item.id}", "json": {"quantity": _number(after)}},),
                  _base(item), warnings=tuple(warnings), site_ops=site_ops, undo_of=undo_of)
 
 
@@ -278,7 +295,7 @@ def build_undo(entry, current, config, *, site_product=None):
             raise DraftRefused("That change started the count for this item, and I never delete a count. "
                                f"Tell me the number you want: set {current.name} to <number>.")
         return _stock_draft(current, Decimal(entry["before"]["stock"]), config, headline=f"Undo: put the count of {_label(current)} back?",
-                            extra=[], site_product=site_product, undo_of=cid)
+                            extra=[], site_product=site_product, undo_of=cid, site_word=_site_restore(entry, site_product))
     if kind == "set_sku":
         if current.sku != entry["after"]["sku"]:
             raise moved

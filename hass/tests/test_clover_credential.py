@@ -7,6 +7,7 @@ import pickle
 import shutil
 import stat
 import tempfile
+import threading
 import traceback
 import unittest
 from unittest import mock
@@ -93,6 +94,15 @@ class TokenFileTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "not-regular")
         os.unlink(self.path)
         self.refused("unreadable")
+
+    def test_a_fifo_with_no_writer_is_refused_not_waited_on(self):
+        os.mkfifo(self.path, 0o600)
+        hung = []
+        timer = threading.Timer(5, lambda: (hung.append(1), os.close(os.open(self.path, os.O_WRONLY))))   # a hang would be released after 5 s and fail below
+        timer.start()
+        self.addCleanup(timer.cancel)
+        self.refused("not-regular")
+        self.assertEqual(hung, [])
 
     def test_size_and_format(self):
         self.write("")

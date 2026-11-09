@@ -307,6 +307,32 @@ class UndoTests(unittest.TestCase):
         undo = d.build_undo(self.journal(dr), after, CFG, site_product=site)
         self.assertEqual(undo.site_ops[0]["args"], {"id": "p", "available": "yes"})
 
+    def test_undo_restores_the_original_site_word_not_a_recomputed_one(self):
+        oil = item(id="O", name="Oil", sku="S1", stock=Decimal(5))
+        limited, sold = product("p", "Oil", available="limited"), product("p", "Oil", available="no")
+        dr = d.build_set_stock(oil, 0, CFG, site_product=limited)
+        self.assertEqual(dr.before["site"], {"id": "p", "available": "limited"})
+        after = item(**{**oil.__dict__, "stock": Decimal(0)})
+        undo = d.build_undo(self.journal(dr), after, CFG, site_product=sold)
+        self.assertEqual(undo.site_ops, ({"op": "product.set_availability", "args": {"id": "p", "available": "limited"}},))
+        self.assertIn("marks Oil as Limited", undo.render("u"))
+
+    def test_undo_of_a_restock_puts_the_site_back_to_sold_out(self):
+        zero = item(id="Z", name="Eggs", stock=Decimal(0), stock_modified=1)
+        dr = d.build_received(zero, 6, CFG, site_product=product("p", "Eggs", available="no"))
+        after = item(**{**zero.__dict__, "stock": Decimal(6)})
+        undo = d.build_undo(self.journal(dr), after, CFG, site_product=product("p", "Eggs", available="yes"))
+        self.assertEqual(undo.site_ops[0]["args"], {"id": "p", "available": "no"})
+
+    def test_undo_leaves_a_site_word_that_changed_again_and_one_that_was_never_touched(self):
+        oil = item(id="O", name="Oil", sku="S1", stock=Decimal(5))
+        after = item(**{**oil.__dict__, "stock": Decimal(0)})
+        dr = d.build_set_stock(oil, 0, CFG, site_product=product("p", "Oil", available="limited"))
+        self.assertEqual(d.build_undo(self.journal(dr), after, CFG, site_product=product("p", "Oil", available="yes")).site_ops, ())
+        self.assertEqual(d.build_undo(self.journal(dr), after, CFG).site_ops, ())
+        plain = d.build_set_stock(oil, 0, CFG, site_product=product("p", "Oil", available="no"))      # site already said so: no site op, none to undo
+        self.assertEqual(d.build_undo(self.journal(plain), after, CFG, site_product=product("p", "Oil", available="no")).site_ops, ())
+
     def test_undo_a_count_that_started_the_count_is_not_possible_and_says_so(self):
         free = item(id="F", name="Plain", stock=None)
         dr = d.build_set_stock(free, 5, CFG)
