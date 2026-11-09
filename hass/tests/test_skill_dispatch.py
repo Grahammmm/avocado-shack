@@ -269,6 +269,27 @@ class SetPhrasesTests(SkillCase):
         self.assertEqual(len(self.drafts()), 2)
         self.nothing_written()
 
+    def test_queued_plan_question_does_not_ask_for_a_defaulted_slot(self):
+        class PlanQuestion(Exception):
+            kind = "question"
+            reply = "Which trailhead do you mean: north or south?"
+
+        def plan(slots, ctx):
+            raise PlanQuestion()
+
+        slots = (Slot("title", "text", True, default="Mill Creek hike"), *HIKE_ADD.slots[1:4])
+        self.registry = registry_of(toy("hike.add", "add a hike", slots, plan))
+        self.conv = self.open()
+        text = "add hikes at Mill Creek trailhead and Pine Saturday at 8am"
+        calls = [{"skill": "hike.add", "slots": {"place": place, "day": SATURDAY, "time": "08:00"}}
+                 for place in ("Mill Creek trailhead", "Pine")]
+        self.script(text, {"calls": calls})
+        self.assertEqual(self.say(text), "question")
+        self.assertEqual(self.replies(), [PlanQuestion.reply])
+        self.assertIsNone(self.live()["asked_slot"])
+        self.assertNotIn("title", self.live()["slots"])
+        self.nothing_written()
+
     def test_a_sign_up_the_owner_gave_before_the_question_is_not_called_a_default(self):
         dispatch.SET_PHRASES["hike.add"] = lambda slots, ctx: ["sign-up off"] if "signup" not in slots else []
         self.sign_up_skill()
