@@ -148,7 +148,7 @@ class Spool:
             "CREATE TABLE IF NOT EXISTS drops(reason TEXT PRIMARY KEY,count INTEGER);"
             "CREATE TABLE IF NOT EXISTS ack(provider_id TEXT PRIMARY KEY,state TEXT,created_at REAL,done_at REAL);")
         for name, value in (("start_ms", int(now * 1000)), ("last_seen_ms", int(now * 1000)), ("outage_since", 0), ("outage_notified", 0), ("last_rejected", 0),
-                            ("fast_until", 0)):
+                            ("fast_until", 0), ("rejected_streak", 0)):
             self.db.execute("INSERT OR IGNORE INTO meta VALUES (?,?)", (name, value))
 
     def get(self, name): return self.db.execute("SELECT value FROM meta WHERE name=?", (name,)).fetchone()[0]
@@ -198,6 +198,9 @@ class Spool:
         counts.update(pending_fetch=self.db.execute("SELECT COUNT(*) FROM fetch").fetchone()[0],
                       dropped_events=self.db.execute("SELECT COALESCE(SUM(count),0) FROM drops").fetchone()[0],
                       sent=self.db.execute("SELECT COUNT(*) FROM sent").fetchone()[0], last_rejected=self.get("last_rejected"))
+        head = self.db.execute("SELECT created_at,tries FROM inbound WHERE state='pending' ORDER BY created_at,rowid LIMIT 1").fetchone()
+        counts.update(oldest_pending_s=max(0, int(self.clock() - head[0])) if head else 0, head_tries=head[1] if head else 0,
+                      rejected_streak=int(self.get("rejected_streak")))
         return counts
 
 
@@ -287,8 +290,10 @@ class Forwarder:
         for name in ("outage_since", "outage_notified"): self.spool.set(name, 0)
         if result == "rejected":
             self.spool.set("last_rejected", now)
+            self.spool.set("rejected_streak", self.spool.get("rejected_streak") + 1)
             db.execute("UPDATE inbound SET tries=tries+1,next_try_at=? WHERE rowid=?", (now + 60, row[0]))
         else:
+            self.spool.set("rejected_streak", 0)
             db.execute("UPDATE inbound SET state='done',payload=NULL,done_at=? WHERE rowid=?", (now, row[0]))
 
     def control(self, body, expected, big=False, spool=None, quick=False):
