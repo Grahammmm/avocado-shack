@@ -200,7 +200,8 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
     writes.update({p: files[p] for p in generated})
     writes.update({sitegen.SITE_PREFIX + p: data for p, data in ctx.assets.items()})
     if not writes: return {"result": "refused", "reason": "the operations change nothing"}
-    return {"result": "ok", "base": base, "records": records, "generated": generated,
+    assets = {p: "sha256:" + hashlib.sha256(data).hexdigest() for p, data in sorted(ctx.assets.items())}  # SKILLS-PIC-1
+    return {"result": "ok", "base": base, "records": records, "generated": generated, "assets": assets,
             "warnings": list(ctx.warnings), "summary": summary, "writes": writes, "files": files, "store": new.store}
 
 def prepare(request, *, state=None, registry=None, now=None) -> dict:
@@ -213,6 +214,7 @@ def prepare(request, *, state=None, registry=None, now=None) -> dict:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok": return out
     seed, attempt, change_id, draft_hash = {"base": out["base"], "ops": ops}, 0, "", ""
+    if out["assets"]: seed["assets"] = out["assets"]  # the picture bytes are part of what is approved (same ops, other bytes = new hash)
     while not change_id or (sdir / "changes" / f"{change_id}.json").is_file():  # a recorded change id is never reused
         core = json.dumps(dict(seed, attempt=attempt) if attempt else seed, sort_keys=True, separators=(",", ":"),
                           ensure_ascii=False)
@@ -222,7 +224,7 @@ def prepare(request, *, state=None, registry=None, now=None) -> dict:
     if path.is_file() and _read(path).get("draft_hash") == draft_hash: return {"result": "ok", "draft": _read(path)}
     draft = {"change_id": change_id, "draft_hash": draft_hash, "base": out["base"], "ops": ops,
              "records": out["records"], "generated": out["generated"], "warnings": out["warnings"],
-             "created_at": _now(now)}
+             "created_at": _now(now), **({"assets": out["assets"]} if out["assets"] else {})}
     _write_json(path, draft)
     return {"result": "ok", "draft": draft}
 
@@ -318,7 +320,8 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
         out = _compute(draft["ops"], wt, cfg.get("settings", {}), registry, now, sdir)
     except ContentError as exc:
         return {"result": "invalid", "problems": exc.problems}
-    if out["result"] != "ok" or out["records"] != draft["records"] or out["generated"] != draft["generated"]:
+    if (out["result"] != "ok" or out["records"] != draft["records"] or out["generated"] != draft["generated"]
+            or out["assets"] != draft.get("assets", {})):  # also the picture bytes (a setting turned on or off since prepare)
         return {"result": "stale", "problems": ["re-running the operations gave a different result"]}
     paths, journal = sorted(out["writes"]), sdir / "journal" / f"{change_id}.json"
     _write_json(journal, {"phase": "writing", "change_id": change_id, "paths": paths,
