@@ -7,46 +7,14 @@ Each message stands on its own. A command (such as `status`) must be the whole m
 
 ## Add a product
 
-1. Describe the product in plain words: its name, what it is, and who makes it.
+1. Describe the product in plain words: its name, what it is, and who makes it. A photo of it with those words works too.
    Send (plain words): `Add a new product called Hass avocado jam made by our own kitchen`
-2. Hass replies with a draft and its code, or with a question if a detail is missing. Answer the question in plain words.
+2. Hass replies with one draft (the item, a new maker's story, the tidied picture) and its code, or asks one question at a time, for a new maker: "What should we say about Harbor Lane? A sentence is enough." Answer in plain words, or say skip. Hass never makes up a story.
 3. Read the draft. When it looks right, approve it with its code.
    Send: `yes a1b2`
 4. Hass replies again when the change is saved and whether it is on the website.
 
-Tip: Hass never invents organic claims or farm origins. If you want one on the page, say it in your own words.
-
-## Add a new item with its photo
-
-1. Send the photo with a few words: what it is, who makes it, which shelf, and whether it is in.
-   Send (photo and words): `New strawberry jam in a jar from Harbor Lane in Morro Bay, pantry shelf, it's in`
-2. Hass asks one short question at a time for anything missing: the name, packaged or fresh, who makes it, where they are
-   based, which shelf, whether it is in stock. Just answer in plain words.
-3. If the maker is new to the site, Hass also asks: "What should we say about Harbor Lane? A sentence is enough." Answer in your
-   own words, or send the maker's own web address and Hass reads short sentences from it. Say `skip` to keep only the line
-   about their town. Hass never makes up a story.
-4. Hass shows one draft: the item, the new maker if there is one, the tidied-up picture, a description written in the shop's
-   voice, and what it left off. It tells you where the maker's story came from and the day it read it.
-   Read it. Change any word you like by sending the new wording.
-5. Approve the whole thing with one yes.
-   Send: `yes a1b2`
-6. Changed your mind? One undo takes the item, its picture and a new maker off the website together.
-   Send: `undo a1b2`, then `yes` with the new code.
-
-What you may see instead:
-
-- "The background behind it is too busy ... Could you take it again on a plain surface, like a counter or a sheet?" The picture is
-  not used. Send another photo of the same item and carry on.
-- "Left off: the price ... because the website shows no prices or sizes." A price or size is never written.
-- "I can't put where the food comes from or whether it is organic on the website from chat ..." Words such as organic, local,
-  or a health claim or an award are not put on the website from chat. Send it again without them. Graham gets a note and can add
-  them by hand.
-- "Left off: your wording of the description, because it says ..." Hass used its own description instead. Send a different one if
-  you like.
-- "That website asks programs not to read it, so I won't." or "I couldn't open that website just now." Hass asks the same
-  question about the maker instead.
-
-Tip: one photo is one product. For two products, send two photos, one at a time.
+Tip: Hass never invents organic claims or farm origins. A photo on a busy shelf gets a request to retake it on a plain surface. One undo removes the whole item. See NEW-ITEM-FLOW.md.
 
 ## Add a photo
 

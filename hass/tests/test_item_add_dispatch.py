@@ -156,15 +156,16 @@ class RealDispatcher(unittest.TestCase):
             ("new honey, in stock", reply(name="Honey", availability="yes")),
             ("Bee Happy Farm", reply(maker="Bee Happy Farm")),
             ("Atascadero, California", reply(place="Atascadero, California")),
+            ("skip", reply()),  # HASS-LIVE-ADD-2: a new maker is asked for a story; skip keeps only the town line
         ], JAR)
-        self.assertEqual([o[0] for o in outs], ["question", "question", "proposed"])
+        self.assertEqual([o[0] for o in outs], ["question", "question", "question", "proposed"])
         self.assertEqual(outs[1][1], ["Where is Bee Happy Farm based (town and state)?"])
-        lines = [ln.strip() for ln in "\n".join(outs[2][1]).split("\n")]
+        lines = [ln.strip() for ln in "\n".join(outs[3][1]).split("\n")]
         self.assertIn("This also records today as the day you checked the shelves.", lines)  # D2, its own line
         self.assertIn("Bee Happy Farm is new on the site, so I'm adding them too.", lines)
         self.assertTrue(any("Bee Happy Farm is based in Atascadero, California." in ln for ln in lines))  # D5
         self.assertTrue(any(ln.startswith("Reply yes to save it") for ln in lines))
-        self.assertNotIn("$", "\n".join(outs[2][1]))  # D9: no price anywhere
+        self.assertNotIn("$", "\n".join(outs[3][1]))  # D9: no price anywhere
         self.assertEqual(chat.commits(), 0)
 
     def test_a_new_maker_is_previewed_as_the_new_product_not_as_the_maker(self):
@@ -173,6 +174,7 @@ class RealDispatcher(unittest.TestCase):
             ("new honey, in stock", reply(name="Honey", availability="yes")),
             ("Bee Happy Farm", reply(maker="Bee Happy Farm")),
             ("Atascadero, California", reply(place="Atascadero, California")),
+            ("skip", reply()),  # HASS-LIVE-ADD-2: a new maker is asked for a story; skip keeps only the town line
         ], JAR)
         self.assertEqual({r["kind"] for r in chat.kit.previewer.requests[-1:]}, {"product"})
 
@@ -195,7 +197,9 @@ class RealDispatcher(unittest.TestCase):
         text = "new honey from Bee Happy Farm in Atascadero, California, in stock"
         chat.script(text, {"calls": [{"skill": "item.add", "slots": {
             "name": "Honey", "maker": "Bee Happy Farm", "place": "Atascadero, California", "availability": "yes"}}], "revises": None})
-        disposition, replies = chat.say(text, JAR)
+        self.assertEqual(chat.say(text, JAR)[0], "question")  # a new maker is asked for a story first
+        chat.script("skip", {"skill": "item.add", "slots": {}, "revises": None})
+        disposition, replies = chat.say("skip")
         self.assertEqual(disposition, "proposed")
         lines = [ln.strip() for ln in "\n".join(replies).split("\n")]
         self.assertIn("This also records today as the day you checked the shelves.", lines)  # D2, its own line
