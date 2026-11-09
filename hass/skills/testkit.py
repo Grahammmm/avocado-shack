@@ -428,25 +428,6 @@ class Scratch:
 
 
 def _fault_editor(base, scratch, state, fault):
-    from hass import editor as editor_mod
-
-    class FrozenEditor(base):
-        """The real editor, but on the kit's frozen clock: the editor stamps addedOn / available_on / selection_checked_on from
-        the clock it is given, and left alone that is the real day, so every fixture date would go stale at midnight."""
-
-        def prepare(self, ops):
-            return editor_mod.prepare({"ops": ops}, state=self.state, registry=self.registry, now=scratch.now)
-
-        def apply(self, change_id, draft_hash):
-            return editor_mod.apply(change_id, draft_hash, state=self.state, registry=self.registry, now=scratch.now)
-
-        def render_draft(self, change_id):
-            return editor_mod.render_draft(change_id, state=self.state, registry=self.registry, now=scratch.now)
-
-        def recover(self):
-            return editor_mod.recover(state=self.state, now=scratch.now)
-
-    base = FrozenEditor
     if fault is None: return base(state)
 
     class FaultEditor(base):  # kit self-test only: what a broken skill path would do
