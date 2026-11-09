@@ -50,9 +50,9 @@ class Base(ConversationTestCase):
     def outbox_count(self):
         return self.conv.db.execute("SELECT count(*) FROM outbox").fetchone()[0]
 
-    def asks(self):
-        return [tuple(r) for r in self.conv.db.execute("SELECT provider_id, chat FROM open_asks")] \
-            if self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_asks'").fetchone() else []
+    def asks(self):  # SKILLS-FW-3: the one open-request store (table open_requests, keyed by owner chat)
+        return [tuple(r) for r in self.conv.db.execute("SELECT provider_id, owner FROM open_requests WHERE state IN ('open', 'drafted')")] \
+            if self.conv.db.execute("SELECT 1 FROM sqlite_master WHERE name = 'open_requests'").fetchone() else []
 
 
 class ConfigTests(Base):
@@ -211,13 +211,12 @@ class TwoOwnerTests(Base):
 
 
 class OneOwnerStillWorks(ConversationTestCase):
-    """No gIsOwner: the stores gain a chat column but behave exactly as before."""
+    """No gIsOwner: the stores key by chat but behave exactly as before."""
 
     def test_old_store_without_chat_columns_is_upgraded(self):
         self.say("when?")
         self.replies()
         self.conv.db.execute("DROP TABLE message_chats")
-        self.conv.db.execute("ALTER TABLE open_asks DROP COLUMN chat")
         self.conv.db.close()
         self.conv = self.open()
         self.assertEqual(self.say("hours"), "proposed")

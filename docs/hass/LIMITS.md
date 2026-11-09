@@ -68,6 +68,13 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Home photo: JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->.
 - The home photo needs a real description of at least three letters; a file name like IMG_1234 is refused.
 
+## Open requests
+
+- When Hass asks you a question about a request, it keeps what you said (private, on the shop computer) so your short answer is read together with it. It waits **30** <!-- skills.openreq.TTL_MINUTES --> minutes after your last message, and never more than **120** <!-- skills.openreq.MAX_MINUTES --> minutes from your first one. After that, send the request again.
+- Each message kept for a request is at most **4000 characters** <!-- skills.openreq.MAX_OWNER_TEXT -->, and all of them together at most **8000 characters** <!-- skills.openreq.MAX_TOTAL_TEXT -->. Once a request is finished or dropped, Hass erases those words after **24** <!-- skills.openreq.RETENTION_HOURS --> hours.
+- Only you can start, answer or end a request. `no` or `cancel` drops it. If Hass still cannot tell what you mean after **3** <!-- skills.openreq.MAX_UNRESOLVED --> questions about the same thing, it stops, says so, and writes the request down.
+- `backlog` shows the last **10** <!-- skills.backlog.LIST_MAX --> things Hass could not do yet. Each is kept for **90** <!-- skills.backlog.RETENTION_DAYS --> days, or until you take it off with `forget backlog.<n>`.
+
 ## Undoing a store change
 
 - Undoing an older change to the shop details (hours, address, intro, headline, story, home photo, notice, phone or shelf check date) puts back only the details that change wrote, and keeps later edits to the other details.

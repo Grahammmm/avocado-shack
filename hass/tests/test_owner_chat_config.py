@@ -55,7 +55,8 @@ class OwnerChatConfigTests(unittest.TestCase):
             with self.subTest(chat=chat):
                 self.assertEqual(_load(chat), {
                     "ownerSenders": (OWNER_PHONE,), "ownerKeys": frozenset({OWNER_PHONE}), "ownerChat": chat,
-                    "approvalTtlSeconds": 600, "mediaRoot": None, "guestCountsDb": None, "interpreterDailyCap": None})
+                    "approvalTtlSeconds": 600, "mediaRoot": None, "guestCountsDb": None, "interpreterDailyCap": None,
+                    "skillsMode": "ops-only", "houseRender": False})  # SKILLS-FW-3: the two new settings, defaults
 
     def test_group_chat_and_bad_ttl_report_both_problems_in_one_error(self):
         self.assertEqual(self._refused("iMessage;+;chat123", ttl=5), f"{GROUP_PROBLEM}; {TTL_PROBLEM}")

@@ -42,6 +42,14 @@ the file name is not the skill name.
   reply carrying the exception's `reply` text.
 * `version`: the skill version the row was written for; a different skill version fails the row as `stale-row`.
 * `approve: false` stops after the draft and the wrong-code check (no apply, no undo).
+* `seed`: `{"community": {"events": [...]}}` (a content file name: `products`, `makers`, `community` or `store`, then the
+  top-level keys to replace). Put a record on the scratch page before the row starts: validated, regenerated and committed,
+  so the row's diff and its undo are measured from that start state. A seed the content rules refuse is a `bad-row`. Use it
+  when the repository content has none of what the skill acts on (it has no hikes).
+* `I set:` line: a skill module may define `SET_PHRASES = {skill name: fn(slots as the owner gave them, ctx) -> [plain phrases]}`.
+  The kit's stand-in dispatcher calls it for every plan and puts `I set: <phrases>.` in front of the proposal text (what
+  SKILLS-FW-3's dispatcher does with the defaults it shows), so `expect.set_line` and `reply_not_contains: ["I set:"]` read it
+  in an actual owner reply. A module without the hook gets no line from the kit.
 * `setup` (optional): a list of `{op, args}` ops applied through the real editor before the row starts, so the row can begin
   from a state the shop's content does not have (for example a hidden product to bring back). They are the row's base, never
   part of its diff or its undo. Used by `items/item.restore.jsonl`.

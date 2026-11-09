@@ -7,25 +7,39 @@ becomes measured). Statuses come from the repository and the PR list read on 202
 design choice and not something found in code, it says "design" or "proposed".
 
 Builds on `reports/hass/SKILLS-SPEC.md` (skill model, 32-skill catalog, D1-D9, cards 1-20). This page adds the task inventory, the
-automation tiers, the cloud lane, the skill factory and ten new cards. It does not repeat the spec.
+automation tiers, the cloud lane (with its money cap), the skill factory (with its export contract), a private-action contract for
+the receipt ledger, and the build cards. It does not repeat the spec.
 
 ---
 
 ## Open decisions for G (part 7, placed first)
 
-Eight decisions. Everything not listed is decided by the operator ladder. Nothing in the build waits on a decision that has a
-recommended default, except the one marked **BLOCKS**.
+Nine decisions. Everything not listed is decided by the operator ladder.
+
+**Building is separate from enabling.** Every card below can be designed, built and tested on fixtures and synthetic data without
+an answer. An answer is needed to **turn a behaviour on**, and each of these ships **off** and stays off until the named answer is
+recorded on the card (these are the existing holds, restated, not new requests):
+
+* **Anything that leaves the box or costs money** (Tier 3 cloud jobs, cards 15-17): off until **both G1 and G9** are answered. The
+  bridge is not installed and the dollar cap is `$0` (no job can be queued) until then (3.5).
+* **Anything Hass starts** (the five prompts, cards 7 and 13): off until **G2**; the host's `prompts` list is empty until G names a type.
+* **Finance data** (the receipt ledger, cards 8 and 10): the code ships with `ledger.enabled` false; no receipt is read or saved on the
+  live box until **G3**. Nothing about finance ever leaves the box in any case (no G answer changes that).
+* **Site closures** (cards 11-12): not merged to live until **G4** (and a full CI tier, as a site change).
+* **Learned rules** (card 14): ships with automatic activation off until **G7**; before then rules are only suggested to the operator.
+* **Order drafts** (card 9): the table shape follows **G6**; **prices** (card 18) stay unscheduled until **G8**; **G5** is wording only.
 
 | # | Decision | Recommended | Other option | What waits |
 |---|---|---|---|---|
-| **G1** | May the words Mike wrote about **one item** (name, maker and place he named, his description words) and its metadata-free photo go to a cloud model for the "nicer description" and photo-plan jobs? Never receipts, orders, contacts, notes, costs, backlog text or any owner address. | **A. Yes**, only that closed list, through the operator's bridge (part 3), with a daily cap. | B. No: Tier 3 stays off and the plain template wording is final. | **BLOCKS** the bridge and wiring (cards 14-16), not the plain template path. This is an off-box export decision, G's to make. |
-| **G2** | Hass may **start** a message to Mike (a reminder). | **A. Yes**, five named prompts, each off until G turns it on and Mike says `reminders on`; at most one a day; only Mike's own chat; none from 20:00 to 08:00 Pacific; `reminders off` stops all. | B. Never: Hass only answers. | Cards 6 and 12 (the specials reminder is card 6). |
-| **G3** | Receipts: Hass reads a receipt photo **locally** into a private ledger on the box, Mike confirms each one with `yes`. | **A. Yes**, ledger in the existing private database, nothing leaves the box, no cloud model ever sees it, no email. | B. Not now: Mike keeps receipts himself. | Cards 7 and 9. |
-| **G4** | A holiday closure shown on the site **ahead of time** (from 14 days before), then gone by itself. | **A. Yes**: a date-range closure, built like weekly specials. Until it exists, use the home notice (shows at once, up to 60 days). | B. Notice only, forever. | Cards 10-11 (card 10 is a site change, full CI). |
+| **G1** | May the words Mike wrote about **one item** (name, maker and place he named, his description words) and its metadata-free photo go to a cloud model for the "nicer description" and photo-plan jobs? Never receipts, orders, contacts, notes, costs, backlog text or any owner address. | **A. Yes**, only that closed list, through the operator's bridge (part 3), with a daily cap. | B. No: Tier 3 stays off and the plain template wording is final. | **BLOCKS enabling** the bridge and wiring (cards 15-17), together with G9; the plain template path is unaffected. This is an off-box export decision, G's to make. |
+| **G2** | Hass may **start** a message to Mike (a reminder). | **A. Yes**, five named prompts, each off until G turns it on and Mike says `reminders on`; at most one a day; only Mike's own chat; none from 20:00 to 08:00 Pacific; `reminders off` stops all. | B. Never: Hass only answers. | Enabling cards 7 and 13 (the specials reminder is card 7). |
+| **G3** | Receipts: Hass reads a receipt photo **locally** into a private ledger on the box, Mike confirms each one with `yes`. | **A. Yes**, ledger in the existing private database, nothing leaves the box, no cloud model ever sees it, no email. | B. Not now: Mike keeps receipts himself. | Enabling cards 8 and 10. |
+| **G4** | A holiday closure shown on the site **ahead of time** (from 14 days before), then gone by itself. | **A. Yes**: a date-range closure, built like weekly specials. Until it exists, use the home notice (shows at once, up to 60 days). | B. Notice only, forever. | Cards 11-12 (card 11 is a site change, full CI). |
 | **G5** | What Hass says when it cannot do something. | **A. "I can't do that yet. I wrote it down for Graham. Nothing changed."** Used now; the words "I've asked Graham" only after the daily digest to the board exists (card 2). | B. A real message to G's own chat for every request (a Hass-started message, outbound). | Wording only; the digest is card 2. |
-| **G6** | Supplier order drafts keep **no supplier phone or email**, only the supplier's name and how Mike reaches them ("text", "email"). | **A. Yes**, no contact details stored. | B. Store contacts so the draft can show them. | Card 8. |
-| **G7** | Everyday phrasings Hass learns become fast rules **by themselves** after 5 approved uses on 3 different days, stay only on the box, and are dropped after 2 corrections. | **A. Yes, automatic.** A wrong rule can only produce a draft that still needs Mike's `yes`. | B. Each new rule needs the operator's OK. | Card 13. |
+| **G6** | Supplier order drafts keep **no supplier phone or email**, only the supplier's name and how Mike reaches them ("text", "email"). | **A. Yes**, no contact details stored. | B. Store contacts so the draft can show them. | Card 9's table shape. |
+| **G7** | Everyday phrasings Hass learns become fast rules **by themselves** after 5 approved uses on 3 different days, stay only on the box, and are dropped after 2 corrections. | **A. Yes, automatic.** A wrong rule can only produce a draft that still needs Mike's `yes`. | B. Each new rule needs the operator's OK. | Enabling automatic activation in card 14. |
 | **G8** | Prices stay as D9 says (refused, logged, counted) until the Clover answers in SKILLS-SPEC 5.2 exist. | **A. Confirm.** The weekly count of refused price requests tells G when this starts to matter. | B. A private price note per item now (never on the site). | Nothing. |
+| **G9** | The **daily dollar cap** for cloud jobs (US dollars per Pacific day). It bounds all Tier 3 spend and is a prerequisite of G1: with the cap at $0 the bridge queues nothing and fails closed (3.5). This is spending, so it is G's to set. | **A. Keep $0 (Tier 3 off) until G writes one number.** No amount is invented here; the first 20 measured jobs can tune it afterwards. | B. G names the daily amount now. | Enabling cards 15-17 (with G1). |
 
 **One finding that is not a decision.** The skill modules merged so far (items, makers, stock, the model, the test kit, the backlog)
 are **not reachable from Mike's messages yet**: `hass/conversation.py` on main does not mention skills. They become reachable when
@@ -176,26 +190,30 @@ photo is always a model's job** (a local vision model; a plain OCR route could b
    "I can't do that yet. I wrote it down for Graham. Nothing changed." (G5). Hass does not say "I've asked Graham" unless step 3b
    exists, and promises no time. This is `backlog.log`, merged (#516), plus the plain wording merged in VOICE-1.
 2. **A row** in the private `backlog` table (merged): reason, a one-line summary (what the model said was asked), Mike's text kept
-   privately for 90 days, a state. The weekly report counts the same request seen again within 7 days (grouped by summary, card 2; no schema change).
+   privately for 90 days, a state. **The summary and the text never leave that table**: no digest, report, card, trace or git file
+   carries them (the export contract, 4.4; the merged table stores a model-written summary and, when none is given, the first 160
+   characters of Mike's own words, with no privacy filter, so nothing may read those columns into an export). The weekly report
+   counts the same request seen again within 7 days by a closed **task code** (4.4), not by summary words; no schema change.
 3. **How it reaches G.** (a) *Pull, exists today:* G-only `problems` and `weekly` in G's own chat (merged #523: "could not do" is
    one of the counted kinds). (b) *Push, design, card 2:* one operator-owned timer reads `python3 hass/skills/factory.py digest
-   --state DIR` (counts, reasons, summaries, repeats; **never Mike's text**) and updates one internal Hermes board card per day
-   ("HASS-BACKLOG digest"). It is a digest, not a Telegram alert. Hass itself sends G nothing.
+   --state DIR`, which prints **only counts by reason, task code and day** (4.4; never Mike's text, never a summary), and updates
+   one internal Hermes board card per day ("HASS-BACKLOG digest"). It is a digest, not a Telegram alert. Hass itself sends G nothing.
 4. **What the operator does by hand (the manual lane).**
    * *A site change the existing ops can express* (for example something unusual about one item): the operator prepares it as an
      **ops draft** through the same editor and a normal validation, and Mike approves it with his own `yes <code>` in his chat.
-     That hand-off needs the proposal ingest of card 4 (HASS-MANUAL-1). Until it exists the operator does **not** apply anything
-     for Mike; G tells Mike how to do it (or to send it differently), which is why card 4 is early in the order. (This is the
+     That hand-off needs the proposal ingest of card 5 (HASS-MANUAL-1). Until it exists the operator does **not** apply anything
+     for Mike; G tells Mike how to do it (or to send it differently), which is why card 5 is early in the order. (This is the
      one place "we will do a lot manually at first" is limited: for a site change the only approved writer is a draft Mike
      approves in his chat, so the manual lane needs a way to put the operator's draft in front of him.)
    * *A private or message task* (an order text, a receipt): Mike does it himself; G or the operator may show him the wording.
    * *Policy refusals* (price, page, sales data, sending): never done by hand; they become G decisions (this page's G8, the POS gate).
 5. **How the steps are recorded so it becomes a skill candidate.** The operator runs `factory.py trace add` (card 2). A trace is
    one private JSON line on the box (`<state>/factory/traces.jsonl`, 0700, not in git, not in the backup): backlog number, the
-   candidate skill name, **slot names and kinds only (no values)**, the ops used (names and argument names), the questions that
-   were needed, what Mike corrected, minutes spent, whether a rule alone could do it, its `data_class`, and 3 to 10 **synthetic**
-   example sentences the operator wrote (never copied from Mike). Two traces of the same candidate, or one trace plus 3 backlog
-   rows in 4 weeks, put it on the weekly ranking (part 4).
+   candidate skill name, **slot names and kinds only (no values)**, the ops used (names and argument names), the question **codes**
+   that were needed, which slot Mike corrected (a name and a count, never his words), minutes spent, whether a rule alone could do
+   it, its `data_class`, and 3 to 10 **synthetic** example sentences the operator wrote (never copied from Mike; none at all when
+   the candidate's `data_class` is not `site-public`). Only the export-checked view of a trace (4.4) may go to a card or git.
+   Two traces of the same candidate, or one trace plus 3 backlog rows in 4 weeks, put it on the weekly ranking (part 4).
 6. **When the skill ships**, its backlog rows close, and Mike hears about it once, inside his next ordinary reply ("By the way, I can now
    do X: just say ..."). That is a tip inside an answer, not a message Hass starts.
 
@@ -223,12 +241,13 @@ photo is always a model's job** (a local vision model; a plain OCR route could b
 ```
 item.add (slots complete: photo, name, maker, place, shelf)            [Tier 1 code, in Hass]
  1. code builds the template description and the house render         -> a complete fallback draft now exists
- 2. skill declares assist(kind="item.description"); Hass checks: G1 on? bridge alive? cap not used up?
-      no  -> go straight to the template draft, say so in plain words (3.5)        [no waiting]
+ 2. skill declares assist(kind="item.description"); Hass checks: G1 on? bridge alive? cap.json shows the day open (cap above $0, room left)?
+      no  -> go straight to the template draft, say so in plain words (3.4)        [no waiting]
       yes -> reply "Working on it. This usually takes about a minute."
  3. Hass writes cloud/outbox/<job_id>.json (+ the photo copy) atomically; the request stays open, state `waiting`
- 4. BRIDGE (operator): validates the job against its OWN schema and allowlist, checks its own cap file, creates a Hermes card
-      for the lane's named profile, body = fixed instruction + the brief; max runtime 300 s
+ 4. BRIDGE (operator): validates the job against its OWN schema and allowlist, RESERVES the attempt's cost against its own spend
+      ledger under a lock (3.5; refuses if unknown or over the cap), creates a Hermes card for the lane's named profile,
+      body = fixed instruction + the brief; max runtime 300 s
  5. The profile answers by completing the card with ONE JSON proposal (<= 4 KiB)
  6. BRIDGE writes cloud/inbox/<job_id>.json {job_id, brief_sha, proposal | error}; moves the job to done/
  7. Hass (each tick) validates (3.4). Valid -> the description slot is set -> normal plan -> editor.prepare -> claims gate ->
@@ -241,8 +260,10 @@ Files (design). `cloud/` lives in the private state folder, 0700, never in git, 
 log). Job file keys: `v`, `job_id` (`j-` + 12 hex), `created`, `kind`, `lane` (`standard` or `strong`: Hass names a lane, never a
 profile or a model), `attempt` (1-3), `brief` (closed keys per kind), `brief_sha` (SHA-256 of the canonical brief), `photo` (a
 metadata-free copy, at most 1 MB, 1024 px long side; only for kinds that need it), `deadline_s` (240), `reply_to`. The bridge keeps
-`cloud/bridge.alive` (touched each minute; older than 3 minutes means "bridge down") and `cloud/cap.json` (today's used and limit,
-written by the bridge, which is the **authority** for the cap; Hass reads it so it can answer at once).
+`cloud/bridge.alive` (touched each minute; older than 3 minutes means "bridge down") and `cloud/cap.json` (`{day, cap_usd,
+used_usd, open_reservations, closed}`, rewritten by the bridge after every spend event; the bridge's spend ledger is the
+**authority** for the cap, `cap.json` is only a copy Hass reads so it can answer at once; missing or older than 3 minutes means
+"bridge down").
 
 ### 3.3 The brief and the proposal: the contract
 
@@ -261,35 +282,100 @@ already finds the subject (6 of 8 synthetic cases in #504), no Tier 3 call is ma
 the product limit (600) and, for house style, 59 to 167 characters, 2 or 3 sentences (the measured numbers in #504). `alt` at most
 200 characters.
 
-**Forbidden in any proposal field (checked by code, each a refusal):**
+**Validation has two layers, and every field belongs to exactly one of them.** The structural fields carry digits and numbers by
+design (a version, a job id, a hash, pixel coordinates), so the prose prohibitions are **not** applied to them, and the prose
+prohibitions are applied to **every** generated text field with no exception. A builder must implement both layers; neither may be
+widened to skip a check.
 
-* claims: origin, organic, grade, process, diet, fair-trade, health, awards, "local", "handmade" unless Mike said it affirmed
-  (`claims.unstated` over the joined texts);
-* prices, money, sizes, weights, counts, any digit, the `$` sign, "per", "each", "free";
+**Layer 0, the whole object (any failure rejects it).** At most 4 KiB; strict JSON (no NaN or Infinity); exactly the keys listed
+for the kind (no more, no fewer); no duplicate key; every value of its listed type.
+
+**Layer A, structural fields: schema, type and range only. No prose rule is applied to these.**
+
+| Field | Rule |
+|---|---|
+| `v` | the integer `1` exactly |
+| `job_id` | matches `^j-[0-9a-f]{12}$`, names an open, unexpired job that has no proposal yet |
+| `brief_sha` | matches `^[0-9a-f]{64}$` and equals the job's own `brief_sha` |
+| `subject_box` | four integers `[x0, y0, x1, y1]` with `0 <= x0 < x1 <= width` and `0 <= y0 < y1 <= height` of the copy sent, and an area of at least 10 percent of the image |
+| `rotate` | one of `0`, `90`, `180`, `270` |
+| `background` | `"plain"` or `"busy"` |
+| `retake` | `"none"`, `"plain-surface"`, `"closer"` or `"lighter"` |
+
+These fields are never shown to Mike and never written to the site. A value outside its rule rejects the object.
+
+**Layer B, generated text fields: `description`, each entry of `alternates`, and `alt`. The prose prohibitions apply here, and a
+violation in any one rejects the whole object.**
+
+* claims: origin, organic, grade, process, diet, fair-trade, health, awards, "local", "handmade" unless Mike stated it
+  (`claims.unstated` over the joined texts of the brief);
+* prices, money, sizes, weights, counts, **any digit**, the `$` sign, "per", "each", "free";
 * contact details: phone numbers, addresses, emails, `@names`, `#tags`, "visit", "call";
 * trail facts: distance, difficulty, duration, elevation, access;
 * links and markup: `http`, `www`, `.com`, `<`, `>`, `{{`, `}}`, backticks, invisible or direction characters;
 * a place, maker or person name that is not in the brief; hype words (the #504 list: best, amazing, perfect ...), `!` and `?`;
-* any key not in the schema, any duplicate key, any value of the wrong type, NaN, more than 4 KiB.
+* limits and house style: `TEXT_LIMITS`/`FORBIDDEN_TEXT` of `content_model`, `house_style.check_description` (#504) for
+  `description` and `alternates`, `ops/photos._alt_problem` for `alt` (a file name, placeholder or fewer than 3 letters is refused).
 
-**Validation in Hass, in order:** strict JSON parse; exact keys and types; `job_id` is open, unexpired, not used before, `brief_sha`
-matches; each text field against the limits and `FORBIDDEN_TEXT` of `content_model`; the forbidden list above; `claims.unstated`;
-the house checks (`house_style.check_description`, `ops/photos._alt_problem` for `alt`); photo numbers inside the image and the box at
-least 10 percent of it. Authenticity is **not** a safety property: a forged file would face the same checks. A file that fails is
-dropped and logged with a code, never a text.
+**Order of checks in Hass:** layer 0; layer A; `job_id` open and not used before; then layer B on each text field; then the claims
+gate over the joined text. Authenticity is **not** a safety property: a forged file would face the same checks. A file that fails
+is dropped and logged with a code, never a text.
+
+**Valid examples** (synthetic; the brief was `name` "Wildflower Honey", `maker` "Bee Happy Farm", `place` "Atascadero", `shelf`
+"pantry", `owner_words` "honey from the farm, good on toast"; the real brief also holds the public `style` block, left out here, so
+the `brief_sha` shown is the SHA-256 of that shortened brief as sorted-key, compact, UTF-8 JSON with `kind` `item.description`,
+computed for this page and illustrative only):
+
+```json
+{"v":1,"job_id":"j-3f9a1c07be52","brief_sha":"f8bed92f32a828c57d5b20cf3112d38ee87e5547f3e0192dca8818e710cbecb2",
+ "description":"Wildflower honey from Bee Happy Farm in Atascadero. Good on toast, in tea, or by the spoonful.",
+ "alternates":["From Bee Happy Farm in Atascadero, wildflower honey for the pantry shelf. Try it on warm bread.",
+               "Wildflower honey from Atascadero, by Bee Happy Farm. Stir it into tea or spread it on toast."]}
+```
+
+(The description is 94 characters in 2 sentences; the alternates are 95 and 92 characters in 2 sentences. The digits in `v`,
+`job_id` and `brief_sha` are structural and valid; the three text fields contain none.) A photo plan for a 1024 by 768 copy
+(`brief_sha` of `{"kind":"item.photo_plan","width":1024,"height":768}`):
+
+```json
+{"v":1,"job_id":"j-8c21d4e0a967","brief_sha":"6d73d4c503c4d4c7a14782ccea314072826d2ed8dc90668be792a8f3d7ed2c48",
+ "subject_box":[112,64,688,712],"rotate":0,"background":"busy","retake":"none",
+ "alt":"A glass jar of honey with a plain label on a wooden table."}
+```
+
+(The box is inside the image and covers 47 percent of it; the digits and numbers are structural and valid; `alt` is 58 characters
+and has no digit.)
+
+**Invalid controls** (each must be rejected, and card 15 carries every one as a fixture):
+
+| # | Object (change from the valid example) | Rejected by |
+|---|---|---|
+| 1 | `"v":2` or `"v":"1"` | layer A, `v` |
+| 2 | `"job_id":"j-3F9A1C07BE52"` or a job id never issued | layer A, `job_id` |
+| 3 | `brief_sha` of a different brief | layer A, `brief_sha` |
+| 4 | an extra key (`"note":"..."`) or a duplicate `description` key | layer 0 |
+| 5 | description "Twelve jars of wildflower honey, 4 left." | layer B: count and digit |
+| 6 | description "Organic wildflower honey from Bee Happy Farm in Atascadero." (Mike never said organic) | layer B: claims gate |
+| 7 | description naming "Paso Robles" (not in the brief) | layer B: place not in the brief |
+| 8 | description "The best honey you will ever taste!" | layer B: hype and `!` |
+| 9 | an alternate with `www.example.com` or `{{name}}` | layer B: link and markup |
+| 10 | `alt` "IMG_2041.jpg" or "photo" | layer B: `_alt_problem` |
+| 11 | `subject_box` `[0,0,2000,2000]`, `[600,600,620,620]` (under 10 percent), or `[5,5,5,9]` | layer A, `subject_box` |
+| 12 | `"rotate":45`, `"retake":"call the shop"` | layer A, enums |
+| 13 | a description of 700 characters, or a proposal over 4 KiB | size caps |
 
 ### 3.4 Timeouts and failure replies (plain words, voice rules)
 
-Numbers are proposed, UNMEASURED: the end-to-end time through the real dispatcher has not been measured. Card 16 measures it
+Numbers are proposed, UNMEASURED: the end-to-end time through the real dispatcher has not been measured. Card 17 measures it
 (p50, p95) on a scratch card, and "about a minute" is only promised in words if p50 is under 90 seconds.
 
 | Situation | Hass does | Mike reads |
 |---|---|---|
 | Normal | waits up to 240 s | "Working on it. This usually takes about a minute." then the draft |
-| Bridge down (no heartbeat for 3 minutes), G1 off, or no profile for the lane | no job, no wait | the draft with "I wrote a simple description because my extra writing help isn't available right now. You can change it." |
+| Bridge down (no heartbeat for 3 minutes), G1 off, the daily cap is `$0`, a price or the spend record is missing or unreadable (cost unknown, 3.5), or no profile for the lane | no job, no wait | the draft with "I wrote a simple description because my extra writing help isn't available right now. You can change it." |
 | Not back in 240 s | uses the template, drops a late proposal | "That took too long, so I used a simple description. You can change it." |
-| Proposal fails a check | one more try with the reason **code** only (3.6), then the template | the same simple-description line |
-| Daily cap used up | no job | "I've used up my extra writing help for today, so I used a simple description. You can change it." |
+| Proposal fails a check | one more try with the reason **code** only (3.5), then the template | the same simple-description line |
+| Daily cap used up (the dollar cap or the count fence) | no job | "I've used up my extra writing help for today, so I used a simple description. You can change it." |
 | Cloud error | no job after one retry | the simple-description line |
 
 Every line ends with the one next step Mike already has (`yes <code>` or `no`). None names a model, a queue or a limit. A cap or
@@ -302,19 +388,63 @@ bridge-down day adds one line to the problems log and to G's digest.
   never for any other kind. If that fails too: template, and a backlog row so the cause is read by a person.
 * The bridge maps a lane to a named profile and **never substitutes**: if the configured profile or its route is held or
   unavailable, the job returns `error: unavailable` and Hass uses the template (the fleet rule: a held route stays held).
-* **Cap (proposed, G decides the numbers): 8 jobs a day in all, at most 2 on the strong lane, at most 3 attempts per request, one
-  open job per request.** The bridge counts and refuses; Hass also counts so it can answer without a round trip. The day is the
-  Pacific day. A dollar cap is added by the operator after the first 20 jobs give a measured cost per job; none is invented here.
-* When the cap is reached Hass says so in plain words (3.4) and G's digest shows it. It never silently drops to a different route.
+
+**The cap is money first, counts second.** A count of jobs does not bound spend, because the tokens, context and runtime of a job
+vary, so the cap that matters is a **dollar cap per Pacific day**, designed now and an enablement prerequisite. The amount is
+**G's to set (decision G9)**; nothing here invents it, and measured costs may tune it later. Everything below is enforced by the
+**bridge**, which is operator-owned; Hass never spends and never decides.
+
+1. **Setting and default.** `dailyCapUsd` lives in the bridge's own operator config (never in Hass, a brief or a proposal).
+   **The default is `0`, which means no cloud job is ever queued.** A missing, zero, negative, non-numeric or unreadable value is
+   treated as `0`. Turning Tier 3 on takes G1 **and** a G9 amount, written into that config by the operator from G's answer and
+   recorded on the card.
+2. **A price and reservation table per lane.** For each lane the config lists `reserve_usd`: a conservative **upper bound for one
+   attempt**, which the operator computes from the hard limits it sets on the Hermes card (maximum input tokens for instruction,
+   brief and photo; maximum output tokens, the 4 KiB proposal; maximum runtime, 300 s; text reply only, no tools) times the lane
+   profile's listed price per token, times a safety factor of 2, plus a fixed allowance for the card run itself. A lane with no
+   entry, a zero price, or an entry the operator has not refreshed in 30 days has an **unknown cost** (see 6).
+3. **Reserve before queue, atomically.** Under one exclusive lock on `cloud/spend.jsonl` (append-only, the bridge's authority) the
+   bridge: reads the Pacific-day total (settled spend plus every open reservation), checks `total + reserve_usd(lane) <=
+   dailyCapUsd`, appends `{event:"reserve", job_id, attempt, lane, usd}`, and **only then** creates the card. The check and the
+   append are one locked step, so two simultaneous jobs cannot both pass on the same headroom. A reservation counts as spent until
+   it is settled. The day is the Pacific date, read under the lock; the day rolls over by the date changing, not by a timer.
+4. **Every attempt reserves separately, including retries and the strong lane.** A retry after an invalid proposal reserves another
+   standard attempt. The escalation to the strong lane reserves `reserve_usd(strong)` and runs only if that fits. A request is
+   never started on headroom that covers attempt 1 while assuming escalation will fit: if the next attempt does not fit, the
+   template is used and the log says `refused-cap`. One open job per request still holds, and at most 3 attempts per request.
+5. **Settle when the job returns.** If the card reports its usage and the report parses, the reservation is replaced by the cost
+   at the table's prices (a refund of the unused part). **If usage is missing, unparsable, or the card was killed or timed out,
+   the full reservation stays as the charge** (`basis: reserve`): never a refund on missing data. If `reported` is above the
+   reservation (an overrun), the larger number is charged, the day is **closed** (no more jobs until the next Pacific day) and the
+   digest says so. A job with no result after the card's maximum runtime plus 120 s is settled at its full reservation.
+6. **Fail closed on anything unknown.** Missing, unreadable, locked for more than 2 seconds, or malformed spend ledger; an unknown
+   price or reservation (2); a cap of `0`; a clock that cannot be read; a `cap.json` that cannot be written: the bridge queues
+   **nothing** and returns `error: unavailable`, which Hass shows as the "extra writing help isn't available" line (3.4). Cost is
+   never estimated optimistically.
+7. **Count limits stay as a second fence** (proposed; G may change): 8 jobs a day in all, at most 2 on the strong lane. A job
+   must pass both the dollar check and the count check. The bridge counts and refuses; Hass also counts so it can answer without a
+   round trip.
+8. **Hass's side.** Hass reads `cap.json` only to answer at once; if it says the day is closed or the cap is `0`, or it is missing
+   or older than 3 minutes, Hass queues no job and says the right line from 3.4. The bridge still re-checks. When the cap is reached
+   Hass says so in plain words and G's digest shows `cap reached` (counts only). It never silently drops to a different route or a
+   cheaper model.
+9. **Measure, then tune.** After the first 20 jobs the operator compares settled spend with reservations and tells G (G9 can be
+   asked again with real numbers); reservations are tuned by the operator from measurements, never by a model.
+10. **Tests (cards 15 and 16).** With a fake bridge and a bridge self-test: cap `0` or missing queues no card; a job that exactly
+    fits is queued and the next is refused; two simultaneous reserves let exactly one through; a retry and an escalation each
+    reserve; a lane with no price is refused; missing usage is charged the full reservation; an overrun closes the day; a corrupt
+    or locked ledger refuses; the Pacific date rollover; and no test ever calls a real model.
 
 ### 3.6 Audit log
 
 `cloud/audit.jsonl` (append-only, private, kept 90 days, not backed up): one row per event: `at`, `job_id`, `request` (12-hex
-one-way hash), `kind`, `lane`, `attempt`, `event` (`queued`, `refused-cap`, `refused-off`, `returned`, `invalid:<code>`, `timeout`,
-`error:<code>`, `used`, `template`), `brief_sha`, `proposal_sha`, `bytes_out`, `bytes_in`, `seconds`, `card` (the board card id the
-bridge reports). **No owner text, no proposal text, no prompt, no photo, no sender, no amount.** The bridge keeps its own log of
-cards on the board (the second record, operator-side). The `status` command for Mike never shows any of it; G's weekly line gets
-counts (jobs, caps hit, fallbacks, p50 seconds).
+one-way hash), `kind`, `lane`, `attempt`, `event` (`queued`, `refused-cap`, `refused-off`, `refused-cost-unknown`, `returned`,
+`invalid:<code>`, `timeout`, `error:<code>`, `used`, `template`), `brief_sha`, `proposal_sha`, `bytes_out`, `bytes_in`, `seconds`,
+`card` (the board card id the bridge reports), and the bridge's own money fields `reserved_usd`, `settled_usd` and `basis`
+(`reported` or `reserve`). **No owner text, no proposal text, no prompt, no photo, no sender and no owner amount** (the only money
+in this log is the bridge's own spend). The bridge keeps its own spend ledger (3.5) and its own log of cards on the board (the
+second record, operator-side). The `status` command for Mike never shows any of it; G's weekly line gets counts (jobs, caps hit,
+fallbacks, p50 seconds) and the day's spend against the cap.
 
 ### 3.7 Why code, not the model, writes the change
 
@@ -349,7 +479,7 @@ counts (jobs, caps hit, fallbacks, p50 seconds).
 differs:** the specialist hands back words, never a change, and the first week's unskilled jobs go to the manual lane instead of a
 model with write access. **A hybrid worth considering later** (not built here): for requests with no skill, an operator-started
 (never automatic) Opus session drafts an ops draft for the operator to read, which then enters Mike's chat as an ops-draft
-proposal (card 4). That gives the speed of "Opus does it" with a human before Mike and Mike's `yes` after.
+proposal (card 5). That gives the speed of "Opus does it" with a human before Mike and Mike's `yes` after.
 
 ### 3.9 Other flows I considered
 
@@ -367,15 +497,19 @@ proposal (card 4). That gives the speed of "Opus does it" with a human before Mi
 ### 4.1 Where the work comes from
 
 Four private sources, all on the box: the **backlog** table (merged), the **correspondence log** (merged: "did not understand",
-"could not do", "asked again", "corrected"), the **traces** of manual runs (2.3, card 2) and the **pattern table** (4.3). None leaves
-the box. Only counts, reasons, summaries the model wrote (at most 160 characters), skill names and operator-written synthetic
-sentences reach a card, a report or git.
+"could not do", "asked again", "corrected"), the **traces** of manual runs (2.3, card 2) and the **pattern table** (4.3). None of
+them leaves the box. What may leave the box (reach a Hermes card, a report or git) is defined **once**, in 4.4, and is much
+narrower than "counts and summaries": only **closed codes, integers and fixed sentences**. A free-text summary, even one the
+model wrote, is Mike's words in other letters, so it is not exportable.
 
 ### 4.2 The weekly cycle (the operator, one fixed weekday; target 1-2 skills a week, ESTIMATED)
 
-1. **Count.** `python3 hass/skills/factory.py report --state DIR` (card 2) prints, for the last 28 days: backlog rows by reason and
-   by summary group, repeats, correspondence "could not do" and "did not understand" by kind, traces, pattern hit rate and
-   corrections. Grouping similar summaries is local-worker legwork (a local model on the box), not a cloud turn.
+1. **Count.** `python3 hass/skills/factory.py report --state DIR` (card 2) prints, for the last 28 days and **as closed codes and
+   integers only (4.4)**: backlog rows by reason and by task code, repeats per task code, correspondence "could not do" and "did
+   not understand" by kind, traces by candidate, pattern hit rate and corrections. There is no grouping by summary words: rows the
+   classifier cannot place are counted as `unclassified`. When a person needs to read the actual requests to understand a cluster
+   (for example to write a spec), the operator uses the **on-box** view `factory.py review --local` (4.4), prints to the operator's
+   terminal only, and writes the spec's example sentences by hand from scratch.
 2. **Rank.** Score each candidate = rows in 28 days (or 2 traces) × a pain weight (the owner re-sent or corrected it) ÷ build size
    (a skill over ops that already exist is small; a new op, content field or data class is large), and put it aside if it is policy
    (price, page, sales, sending: those become a decision for G, as G8 did). A candidate is eligible with 3 requests in 4 weeks or 2
@@ -414,6 +548,57 @@ sentences reach a card, a report or git.
   answered with no model call) and the retired count; a falling skip rate or a rising correction rate is the signal to look.
 * **Cost of a bad rule:** a wrong draft Mike can say no to. It is never a wrong change.
 
+### 4.4 The export contract: what may leave the box from the factory (card 2)
+
+The merged backlog stores, per row, a model-written one-line `summary` (up to 160 characters) and, when no summary is supplied, the
+first 160 characters of Mike's own message; neither passes through any privacy filter (`hass/skills/backlog.py: _summary`).
+A synthetic probe by the reviewer confirmed that both retain a vendor name, a dollar amount and an email address. So an
+unsupported receipt request, a supplier message or any request that fails classification would carry finance or contact data into a
+digest if summaries were exported. The factory therefore exports by **allowlist of closed values**, fails closed, and never reads
+free text into anything it prints.
+
+**What is exportable** (to a Hermes card, a report, a log line, git, or any place a cloud model can read), and nothing else:
+
+1. integers (counts, and percentages computed from counts) and ISO day or week labels;
+2. values from closed lists in code: `reason` (the six backlog reasons), `state`, `data_class`, a **task code** from the closed
+   codebook below, a skill name from the registry, a question code, a slot name;
+3. fixed sentences from templates in `factory.py`.
+
+Not exportable, anywhere, ever: a `summary`, any owner text or fragment of it (including a quoted correction), anything a model
+wrote, a vendor, supplier or maker name, an amount, a date taken from a document, a phone, email, address, link, `@name`, a path,
+a sender or chat id, a photo name, or any value derived from a `finance-local` or `private-local` record.
+
+**The task codebook** (closed): `T01` ... `T39` (the rows of part 1), a skill name when a registered skill exists, `finance`,
+`sensitive`, `unclassified`. The classifier `factory.task_code(row)` is deterministic and runs **on the box**: it reads the private
+summary and text **in memory**, and returns only a code. Order: (1) the sensitive detectors (a money amount, a `$` or digits with
+cents, an email, a phone number, a run of 8 or more digits, a link, an `@name`, a street-address pattern) and the finance words
+(receipt, invoice, expense, bill, paid, tax, bank, payroll, rent, total) return `finance` when a finance word is present, otherwise
+`sensitive`; (2) the keyword table of the public lexicon returns the single matching `T` code or skill name; (3) **anything else,
+two different matches, an empty row, an unknown reason, any exception, or a code not in the codebook returns `unclassified`.**
+Unknown means the most restrictive bucket, never a guess. `finance`, `sensitive` and `unclassified` rows are exported as a **count
+only** (never grouped further, with no age and no detail beyond the closed reason code), and a candidate whose skill `data_class`
+is not `site-public` or is not known is exported only as a count under its `data_class`.
+
+**The export guard.** `hass/skills/export_guard.py` is the only way `factory.py` (`digest`, `report`, `trace list --export`) writes
+output. It builds the text from the templates and the closed values, then runs a final check on the whole text: it refuses (exit
+code 2, writes nothing, logs only a code) if any sensitive detector fires, or if any word is outside the template vocabulary and
+the closed lists. The classifier and the guard are two independent layers; either alone must stop a leak.
+
+**Columns and paths.** `digest` and `report` select the day, `reason` and `state` for output and call the classifier on the text in
+memory; no output structure has a free-text field. The existing G-only `problems` and `weekly` replies (merged #523) are pinned by
+a card 2 test to carry no summary and no text; if one does, card 2 fixes it. The owner's own `backlog` command (his words back to
+him, in his chat) is unchanged and is not an export. `traces.jsonl` has closed fields only (2.3 step 5); its synthetic example
+sentences stay in the on-box file, are copied into a spec card only after the guard passes them, and are absent for any candidate
+that is not `site-public`. `review --local` has no output-file option and refuses when its standard output is not a terminal.
+
+**Tests (card 2), synthetic canaries only (no real owner text, ever).** Plant a made-up vendor ("Hartwell Supply Co"), `$84.12`,
+`mike.example@example.com`, `805-555-0142`, a 16-digit number, a link and a street address in: the supplied model summary; a row with
+**no** summary (the first-160-characters fallback); a summary over 160 characters; the text column; a trace's free fields; a
+correction note. Assert that no canary and no fragment of 4 or more characters of one appears in the digest, the report, the trace
+export, standard error or any log line; that a classification exception, an unknown reason and a code not in the codebook each land
+in `unclassified`; that finance and sensitive rows add to a count only; that a guard refusal exits 2 and leaves no file; that
+`review --local` refuses a pipe or a file; and that the digest's output has no string field that is not in the closed vocabulary.
+
 ---
 
 ## 5. The new skills
@@ -439,19 +624,26 @@ is involved (hass@ was declined: receipts arrive as photos in the owner chat); n
   `day-sane` (not in the future, not older than 400 days; else ask) · `twin` (same vendor, day and total within 90 days: "I already have
   this one", draft nothing) · `one-per-photo` · `no-card-numbers` (the stored note drops any run of 8 or more digits) ·
   `no-prices-to-site` (nothing here can reach any site op; `edits` lists none).
-* **Plan and edits.** No site op. One row in a new private table `ledger` (`id`, `day`, `vendor`, `total_cents`, `category`,
-  `note`, `paid`, `photo_sha`, `state` `active|void`, `created_at`) **inside the existing private `conversation.sqlite3`**, so the
-  state backup, restore drill and the 0700 state folder already cover it; the receipt photo stays in the private media root. A
-  separate file would be refused by the backup's closed layout list (`statebackup._scan` names an unknown entry as a problem).
-* **Preview and approval.** A plain line, no screenshot: "Costco Wholesale, Nov 8, $84.12, supplies. Reply yes to save it, or no
-  to cancel." (the vendor is an example; the sentence follows VOICE: no id, no codes beyond the one he types). Approval `owner-yes`
-  with the usual code, because a wrong amount in a ledger matters.
-* **Undo.** `receipt.void` (or `undo`): the row becomes `void` (kept, struck out of totals), never deleted. Residue: the photo
-  stays in the private store.
+* **Plan and edits.** No site op and no editor call. `Skill.plan` returns a typed **private action record** instead of ops
+  (`{action: "ledger.add", args: {day, vendor, total_cents, category, note, paid, photo_sha}}`, 5.1a): one row in a new private table
+  `ledger` (`id`, `day`, `vendor`, `total_cents`, `category`, `note`, `paid`, `photo_sha`, `draft_hash` UNIQUE, `state`
+  `active|void`, `voided_by`, `created_at`) **inside the existing private `conversation.sqlite3`**, so the state backup, restore drill
+  and the 0700 state folder already cover it; the receipt photo stays in the private media root. A separate file would be refused
+  by the backup's closed layout list (`statebackup._scan` names an unknown entry as a problem). Nothing about a ledger entry is ever
+  written to site content, generated files or Git.
+* **Preview and approval.** A plain line to Mike's own chat, no screenshot: "Costco Wholesale, Nov 8, $84.12, supplies. Reply yes
+  to save it, or no to cancel." (the vendor is an example; the sentence follows VOICE: no id, no code beyond the one he types).
+  Approval is `owner-yes`, **bound to the exact entry shown** by the private-action contract (5.1a): hash, sender, chat, expiry,
+  pause, one atomic save, recovery. The ordinary editor approval is not used, because it applies site ops and a ledger write is not
+  one.
+* **Undo.** `undo` (right after saving) or `void receipt <n>`: a second private action, `ledger.void`, also needing `yes` like a
+  site undo (5.1a): the row becomes `void` (kept, struck out of totals), never deleted. Residue: the photo stays in the private
+  store.
+
 * **`expenses.show`** (read-only): "expenses for October" replies the month's total and a total per category, and the newest 5
   entries, as text, to Mike's own chat. A CSV for the bookkeeper is an **off-box export**: not built, not allowed without a G
   decision; until then Mike can screenshot the reply.
-* **Reading the photo (card 9).** A local vision model call on the loopback router or the CPU model (the label reader's pattern,
+* **Reading the photo (card 10).** A local vision model call on the loopback router or the CPU model (the label reader's pattern,
   `label_reader.py`), with its own config key so the model is chosen on its own measured accuracy. Measured on **synthetic receipts
   only** (made up vendors and totals; no real receipt is read for the build): the gate to enable is the total exact on at least 90
   percent, the date exact on at least 85 percent, 0 saved without the owner's `yes`. A real-receipt trial is Mike's, on his phone,
@@ -468,6 +660,86 @@ is involved (hass@ was declined: receipts arrive as photos in the owner chat); n
   year" (older than the ledger: says so) 8 `(x)` "email this to my accountant" (sending is not possible; says so; logged) 9 `(x)` (a
   photo of the shop shelf sent with "receipt": the reader finds no total, asks) 10 `(x)` the same receipt twice (twin).
 * **Tier.** 1+2L (local vision only). **Zero cloud.**
+
+#### 5.1a The private-action contract (what the ledger needs from the framework; card 1 and card 4)
+
+**Why it is needed.** On main, `Skill.plan` returns registered **editor ops**, the lint limits a skill's edits to content and
+generated paths, and an owner `yes` in `Conversation` ends in `editor.apply(change_id, draft_hash)` (the approval path in
+`hass/conversation.py`), which writes the site. A ledger entry is none of that. Adding a `ledger.py` module would not say how a
+bound approval saves a private row, or what `undo` means for it. So this page defines a bounded **private action** next to the
+editor path, reusing its approval machinery rather than bypassing it, and gives it owners (part 6).
+
+**1. The model (card 1, SKILLS-MODEL-2).** A skill may declare `private_action = PrivateAction(action, args_schema, approval,
+undo)` instead of `edits`. The lint enforces: a skill whose `data_class` is not `site-public` has `edits=()`, no `assist` step,
+and (if it writes anything) exactly one `private_action` with closed argument kinds; a `site-public` skill has none. `plan` returns
+the validated action record; it never touches a database.
+
+**2. The draft row (card 4, HASS-PRIVACT-1).** The `drafts` table gains a `kind` column (`site` by default, `private`; added with the
+existing lazy `ALTER` pattern, so old databases open unchanged). A private draft uses the normal row and code, with these
+differences:
+
+* `change_id` is `pa-` plus 12 hex (no editor change exists); `ops_json` is `[]`;
+* `summary` is a **fixed neutral phrase** from the action kind ("a receipt to save", "a receipt to cancel"): never a vendor or an
+  amount, so `history`, `status`, `find`, the waiting lines, the problems log and the stage log show only the neutral phrase;
+* `draft_hash` is the SHA-256 of the canonical JSON of `{kind, action, args, sender, chat, base, expires_at}` (same `sha256:` form
+  and the same 4-character code derivation as a site draft);
+* `base` is the **target's state**: for `ledger.add` a hash of the twin key (vendor, day, total) so an identical entry approved
+  first makes this one stale (the reply is "I already have this one"); for `ledger.void` the target row id plus `active`. Other
+  receipts arriving in between do **not** make a draft stale;
+* the typed args live in `private_pending(change_id PRIMARY KEY, args_json, created_at)` in the same private database; the row is
+  deleted when the draft ends (applied, rejected, expired or failed) and in any case 24 hours after it was proposed. For an applied
+  add, the ledger row is the record.
+
+**3. Approval binding (card 4).** The existing yes/no path is reused **unchanged** up to the `approvals` row: the owner sender and
+chat check, the 4-character code, the approval TTL (`approvalTtlSeconds`), the rule that a yes sent before the draft existed does
+not count, the repeat check, and the **pause check** (a paused system saves nothing, replies in the existing words with the code, and
+the draft keeps its expiry). Differences: no live-site policy check (there is no site effect), and after the commit the message
+handler calls `private_actions.apply(change_id, draft_hash)` **instead of** `editor.apply`, chosen by `kind`. A private draft is
+never applied by any other path.
+
+**4. One atomic, idempotent save (card 4 and the action's handler, card 8).** `apply` runs in one `BEGIN IMMEDIATE` transaction on
+the conversation database:
+
+1. load the `approvals` row for the `change_id`; require its `draft_hash` equals the draft row's, its sender equals the configured
+   owner sender, its chat equals `ownerChat`, and `approved_at <= expires_at`;
+2. recompute the hash from `private_pending` plus the settings and require it equals `draft_hash` (a changed argument is refused as
+   tampering, nothing saved);
+3. re-check `base` (the twin key, or the target row's state); a changed base makes the result `stale` (no write; a plain reply);
+4. `INSERT INTO ledger ... ON CONFLICT(draft_hash) DO NOTHING`; zero rows inserted means `already-applied` (never a second row,
+   so a repeated `yes`, a replay or a retry is harmless);
+5. mark the draft `applied` and enqueue the reply into the outbox **in the same transaction**, so a crash leaves either nothing or
+   everything (the same rule as the site `_outcome`: nothing says it worked before it is stored).
+
+**5. Recovery (card 4).** `recover()` is extended for `kind = 'private'` drafts left `approved` after a crash: if a ledger row with
+that `draft_hash` exists the draft becomes `applied` and its reply is queued; if none exists, the draft becomes `failed`
+(`interrupted`) with the plain line "I couldn't finish saving that receipt, so nothing was saved. Send it again." Recovery never
+calls `apply` again (the existing rule for site drafts).
+
+**6. Void and undo (cards 4 and 8).** `undo` with no target proposes `ledger.void` for the most recent **applied or verified draft of
+either kind** in the owner chat (one timeline: after a receipt, `undo` is the receipt); `void receipt <n>` names a row. It is a
+private draft needing `yes <code>` with the same binding as above, exactly as a site undo is a draft needing a yes. Apply: `UPDATE
+ledger SET state='void', voided_by=<hash> WHERE id=? AND state='active'` in one transaction; zero rows with the row already `void`
+is `already-applied`, and voiding a void row is refused ("That one is already cancelled."). The original draft is marked `reverted`.
+Ledger rows are never deleted by any command; totals exclude `void` rows and `expenses.show` says how many were cancelled.
+
+**7. Privacy of what Hass says and stores (card 4 tests).** The pending-draft reply and the saved reply show the entry **only in
+Mike's own chat** (he must see the numbers to confirm them). Everywhere else the neutral phrase is used (item 2). A reply
+marked `private` has its outbox body replaced by the neutral phrase once it is sent, so finance values do not sit in the outbox
+after delivery. The correspondence log already blanks numbers; the stage log has ids only; the audit and the factory export (4.4)
+never see an entry. The tests plant a made-up vendor and amount and assert they are absent from the draft summary, `history`,
+`status`, `find`, the waiting lines, the problems log, the correspondence log, the stage log, the outbox after send, any report and
+every card file.
+
+**8. Test kit (card 4).** `hass/skills/testkit.py` (merged #518) gains a `private` case kind: a golden for the canonical args and
+hash, apply against an in-memory database, the void, a second apply (idempotent), a crash injected between approval and apply, a
+paused system, an expired draft, a wrong sender, a wrong chat, a changed argument, the TTL boundary, and the neutral-text pins above.
+The lint rule in item 1 is tested here too.
+
+**9. The order copy (5.2) uses the same contract with `approval: none`:** the action applies in the same transaction as the message
+that asked for it, keyed by the message's provider id, so a replay saves it once.
+
+**10. Enablement.** All of this ships with `ledger.enabled` false (G3). Until then `receipt.add` is absent from the registry, a
+receipt photo is answered as today, and no ledger table is created.
 
 ### 5.2 Supplier order drafts (T16): `order.draft`, `order.repeat`, `orders.show`
 
@@ -605,40 +877,45 @@ line as typed, dates), he says `yes`, the site changes. If he does not answer, n
 
 **Prerequisites that are not new cards** (existing cards or PRs, the operator's to merge or finish): **FW-2 #525 and FW-3 #526**
 (critical: no skill is reachable before them); review and merge **SPECIALS-1 #529, HIKES-1 #530, SHOP-1 #531**; **SOCIAL-1** and
-**ITEMADD-1 / PIC-1 / #504** from SKILLS-SPEC (unchanged, still unbuilt). `conversation.py` stays a hotspot (spec 4.4): the one
-card below that edits it is chained after FW-3 and is the **last** to edit it; later cards add commands as separate modules.
+**ITEMADD-1 / PIC-1 / #504** from SKILLS-SPEC (unchanged, still unbuilt). `conversation.py` stays a hotspot (spec 4.4): exactly two
+cards below edit it, **in series after FW-3**: card 3 (the command hook) and then card 4 (private drafts); every later card adds
+commands as separate modules and does not touch it.
 
 Builder tier (per `WORKER-GUIDE.md`): **R** routine and well specified, Sol Medium; **S** substantial or privacy-touching, Sol High,
 independent review; **Op** an operator action (a reviewed candidate file or a host step, never a builder card); **P** planning only.
 
 | # | Card | Files owned (C create, M modify) | Needs | Tier |
 |---|---|---|---|---|
-| 1 | **SKILLS-MODEL-2: `data_class` and `assist` fields plus lint** | M `hass/skills/model.py`, M `hass/skills/__init__.py` (lint), C `hass/tests/test_skills_data_class.py`, M `docs/hass/SKILLS.md` | FW-1 (merged) | **R** |
-| 2 | **HASS-FACTORY-1: backlog digest, weekly report, traces, runbook** | C `hass/skills/factory.py` (`report`, `digest`, `trace add\|list`), C `hass/tests/test_factory.py`, C `docs/hass/FACTORY.md` | FW-1 (backlog, merged), VOICE-1 (merged) | **R** |
-| 3 | **HASS-CMD-1: command registry hook** | M `hass/conversation.py` (**the one edit**: look up extra commands in `hass/commands/*.py` before the request path), C `hass/commands/__init__.py`, M `docs/hass/COMMANDS.md`, `docs/hass/LIMITS.md` | **FW-3 merged** | **S** (the state machine; every existing test stays green). If FW-3 hard-codes the one photo question, this card also makes it list the receipt option from the registry (5.1). |
-| 4 | **HASS-MANUAL-1: operator ops-draft ingest (the manual lane)** | C `hass/commands/manual.py`, C `hass/manual.py` (reads `<state>/manual/*.json`: a plain summary + an ops list; validates through the same registry, claims and editor path; shows Mike a normal draft), C `hass/tests/test_manual.py` | 3, FACTORY-1 | **S** |
-| 5 | **SKILLS-SOCIAL-2: new-item, back-in-stock, specials and closure captions** | M `hass/social_draft.py`, C `hass/skills/social_extra.py`, C fixtures `social_extra/`, C `hass/tests/test_social_extra.py` | SOCIAL-1 (owner of `social_draft.py`) | **R** |
-| 6 | **HASS-SAY-1: the prompt engine plus the specials ask** | C `hass/prompts.py` (rules table, once-a-day, quiet hours, bound send, `tick`), C `hass/commands/reminders.py` (`reminders on\|off\|list`), C `hass/skills/prompt_specials.py`, M `docs/hass/COMMANDS.md`, `docs/hass/LIMITS.md` (only these two pinned docs), C `hass/tests/test_prompts.py` | 3, SPECIALS-1, **G2** | **S** (a new outbound class; independent review) |
-| 7 | **SKILLS-LEDGER-1: ledger, `receipt.add` (typed), `receipt.void`, `expenses.show`** | C `hass/ledger.py` (table in `conversation.sqlite3`), C `hass/skills/receipts.py`, C `hass/commands/expenses.py`, C fixtures `receipts/`, C tests `test_ledger.py`, `test_skills_receipts.py`, C `docs/hass/skills/receipts.md` | 1, 3, **G3** | **S** (finance data; tests for no log, no prompt, no cloud brief, backup restore) |
-| 8 | **SKILLS-ORDERS-1: `order.draft`, `order.repeat`, `orders.show`** | C `hass/skills/orders.py`, C `hass/orders.py` (private table), C fixtures `orders/`, C tests, C `docs/hass/skills/orders.md` | 1, 3, **G6** | **R** |
-| 9 | **SKILLS-LEDGER-2: read a receipt photo locally** | C `hass/receipt_reader.py` (local vision, loopback only, own config key), C `hass/receipt_eval.py`, C `hass/tests/fixtures/receipts-synthetic/` (made-up receipts), C tests | 7 | **S** (vision accuracy gate; independent review; operator runs the live eval on the box) |
-| 10 | **AVO-CLOSURE-1 (site): the `closures` field, ops, slot, template** | M `hass/content_model.py` (after STOCK-2 owns it), C `hass/ops/closures.py`, C `hass/closures.py`, M `hass/templates/index.html`, M `hass/sitegen.py` (the slot hook, as #520), site tests and the pinned template hashes | **G4**, STOCK-2 | **S** (full CI tier) |
-| 11 | **SKILLS-CLOSURE-1: `shop.closure`** | C `hass/skills/closures.py`, C fixtures `closures/`, C `docs/hass/skills/closures.md` | 10, SHOP-1 | **R** |
-| 12 | **HASS-SAY-2: recap, holiday, shelf and receipts prompts** | C `hass/skills/prompt_recap.py`, `prompt_holiday.py`, `prompt_shelf.py`, `prompt_receipts.py`, C tests | 6, HIKES-1, 11 | **R** |
-| 13 | **HASS-PATTERN-1: learned rules (Tier 2a)** | C `hass/skills/patterns.py` (derive, store, match, retire, report), M `hass/skills/router.py` (one pre-pass hook; FW-2 owns it, so this card starts from its merged code), C `hass/tests/test_patterns.py` | FW-2, FW-3, 2 | **S** (privacy: no private text kept; independent review) |
-| 14 | **HASS-CLOUD-1: Tier 3 contract on the Hass side** | C `hass/cloud/{contract,spool,validate,caps,audit}.py`, M `hass/skills/model.py` (the `assist` field's use; after card 1), C `hass/tests/test_cloud_*.py` with a fake bridge | 1, 3, **G1** | **S** (privacy and export surface; independent review) |
-| 15 | **HASS-CLOUD-2: the bridge (operator-owned, outside the Hass runtime)** | a candidate script and timer for the operator, reviewed as a local-only candidate (hash map, live bases), a config naming lane→profile, the brief allowlist, `cap.json`, `bridge.alive` | 14, **G1**, the operator's choice of a profile | **Op** |
-| 16 | **SKILLS-CLOUD-3: wire `item.add` description and photo plan, measure** | M `hass/skills/item_add.py` (after ITEMADD-1 owns it), C fixtures, C `reports/hass/CLOUD-3.md` (a scratch run: p50 and p95 seconds, fallback rate, every model-written text shown to a person) | 14, 15, ITEMADD-1, PIC-1 | **S** |
-| 17 | **SKILLS-PRICE-1** | not scheduled | **G8**, POS-0 | n/a |
+| 1 | **SKILLS-MODEL-2: `data_class`, `assist` and `private_action` fields plus lint** (5.1a item 1) | M `hass/skills/model.py`, M `hass/skills/__init__.py` (lint), C `hass/tests/test_skills_data_class.py`, M `docs/hass/SKILLS.md` | FW-1 (merged) | **R** |
+| 2 | **HASS-FACTORY-1: export-safe backlog digest, weekly report, traces, runbook** (4.4) | C `hass/skills/factory.py` (`report`, `digest`, `trace add\|list`, `review --local`; `task_code`), C `hass/skills/export_guard.py`, C `hass/tests/test_factory.py`, C `hass/tests/test_export_guard.py` (the canary tests), C `docs/hass/FACTORY.md`; M `hass/tests/` only to pin that `problems`/`weekly` carry no summary | FW-1 (backlog, merged), VOICE-1 (merged) | **S** (an export surface; independent review) |
+| 3 | **HASS-CMD-1: command registry hook** | M `hass/conversation.py` (**first of two edits**: look up extra commands in `hass/commands/*.py` before the request path), C `hass/commands/__init__.py`, M `docs/hass/COMMANDS.md`, `docs/hass/LIMITS.md` | **FW-3 merged** | **S** (the state machine; every existing test stays green). If FW-3 hard-codes the one photo question, this card also makes it list the receipt option from the registry (5.1). |
+| 4 | **HASS-PRIVACT-1: private actions: hash-bound approval, atomic save, recovery, void** (5.1a) | M `hass/conversation.py` (**second and last edit**: `drafts.kind`, the dispatch after approval, `recover()`, `undo` selection, neutral summaries, outbox redaction), C `hass/private_actions.py` (the `apply`/`recover`/`void` machinery and handler registry), M `hass/skills/testkit.py` (the `private` case kind), C `hass/tests/test_private_actions.py`, M the pinned tests that count `drafts` columns or list `SCHEMA` (listed in the card's first comment), M `docs/hass/LIMITS.md` | 1, 3 | **S** (finance-adjacent approval path; a crash-injection test; independent review) |
+| 5 | **HASS-MANUAL-1: operator ops-draft ingest (the manual lane)** | C `hass/commands/manual.py`, C `hass/manual.py` (reads `<state>/manual/*.json`: a plain summary + an ops list; validates through the same registry, claims and editor path; shows Mike a normal draft), C `hass/tests/test_manual.py` | 3, 2 | **S** |
+| 6 | **SKILLS-SOCIAL-2: new-item, back-in-stock, specials and closure captions** | M `hass/social_draft.py`, C `hass/skills/social_extra.py`, C fixtures `social_extra/`, C `hass/tests/test_social_extra.py` | SOCIAL-1 (owner of `social_draft.py`) | **R** |
+| 7 | **HASS-SAY-1: the prompt engine plus the specials ask** | C `hass/prompts.py` (rules table, once-a-day, quiet hours, bound send, `tick`), C `hass/commands/reminders.py` (`reminders on\|off\|list`), C `hass/skills/prompt_specials.py`, M `docs/hass/COMMANDS.md`, `docs/hass/LIMITS.md` (only these two pinned docs), C `hass/tests/test_prompts.py` | 3, SPECIALS-1; enabling **G2** | **S** (a new outbound class; independent review) |
+| 8 | **SKILLS-LEDGER-1: ledger, `receipt.add` (typed), `receipt.void`, `expenses.show`** | C `hass/ledger.py` (the `ledger` table in `conversation.sqlite3` and the `ledger.add`/`ledger.void` handlers registered with card 4), C `hass/skills/receipts.py`, C `hass/commands/expenses.py`, C fixtures `receipts/`, C tests `test_ledger.py`, `test_skills_receipts.py`, C `docs/hass/skills/receipts.md` | 1, 3, 4; enabling **G3** | **S** (finance data; tests for no log, no prompt, no cloud brief, backup restore, `ledger.enabled` false by default) |
+| 9 | **SKILLS-ORDERS-1: `order.draft`, `order.repeat`, `orders.show`** | C `hass/skills/orders.py`, C `hass/orders.py` (private table, saved through card 4 with `approval: none`), C fixtures `orders/`, C tests, C `docs/hass/skills/orders.md` | 1, 3, 4; shape follows **G6** | **R** |
+| 10 | **SKILLS-LEDGER-2: read a receipt photo locally** | C `hass/receipt_reader.py` (local vision, loopback only, own config key), C `hass/receipt_eval.py`, C `hass/tests/fixtures/receipts-synthetic/` (made-up receipts), C tests | 8; enabling **G3** | **S** (vision accuracy gate; independent review; operator runs the live eval on the box) |
+| 11 | **AVO-CLOSURE-1 (site): the `closures` field, ops, slot, template** | M `hass/content_model.py` (after STOCK-2 owns it), C `hass/ops/closures.py`, C `hass/closures.py`, M `hass/templates/index.html`, M `hass/sitegen.py` (the slot hook, as #520), site tests and the pinned template hashes | **G4**, STOCK-2 | **S** (full CI tier) |
+| 12 | **SKILLS-CLOSURE-1: `shop.closure`** | C `hass/skills/closures.py`, C fixtures `closures/`, C `docs/hass/skills/closures.md` | 11, SHOP-1 | **R** |
+| 13 | **HASS-SAY-2: recap, holiday, shelf and receipts prompts** | C `hass/skills/prompt_recap.py`, `prompt_holiday.py`, `prompt_shelf.py`, `prompt_receipts.py`, C tests | 7, HIKES-1, 12; enabling **G2** | **R** |
+| 14 | **HASS-PATTERN-1: learned rules (Tier 2a)** | C `hass/skills/patterns.py` (derive, store, match, retire, report), M `hass/skills/router.py` (one pre-pass hook; FW-2 owns it, so this card starts from its merged code), C `hass/tests/test_patterns.py` | FW-2, FW-3, 2; automatic activation **G7** | **S** (privacy: no private text kept; independent review) |
+| 15 | **HASS-CLOUD-1: Tier 3 contract on the Hass side** | C `hass/cloud/{contract,spool,validate,caps,audit}.py` (`validate.py` implements layers 0, A and B of 3.3 with every valid example and invalid control as a fixture; `caps.py` only reads `cap.json`), M `hass/skills/model.py` (the `assist` field's use; after card 1), C `hass/tests/test_cloud_*.py` with a fake bridge | 1, 3; enabling **G1 and G9** | **S** (privacy and export surface; independent review) |
+| 16 | **HASS-CLOUD-2: the bridge (operator-owned, outside the Hass runtime)** | a candidate script and timer for the operator, reviewed as a local-only candidate (hash map, live bases) with a `--self-test` covering the cap tests of 3.5 item 10: a config naming lane to profile and `reserve_usd`, `dailyCapUsd` (default 0), the brief allowlist, the spend ledger `spend.jsonl`, `cap.json`, `bridge.alive` | 15; enabling **G1 and G9**, the operator's choice of a profile | **Op** |
+| 17 | **SKILLS-CLOUD-3: wire `item.add` description and photo plan, measure** | M `hass/skills/item_add.py` (after ITEMADD-1 owns it), C fixtures, C `reports/hass/CLOUD-3.md` (a scratch run: p50 and p95 seconds, fallback rate, settled cost against reservation, every model-written text shown to a person) | 15, 16, ITEMADD-1, PIC-1; enabling **G1 and G9** | **S** |
+| 18 | **SKILLS-PRICE-1** | not scheduled | **G8**, POS-0 | n/a |
 
-**Waves for the operator.** W0: merge FW-2 and FW-3, ask G1-G8. W1 (parallel): 1, 2, 5. W2: 3, then 4. W3: 6, 7, 8 (7 and 8 after G3 and G6). W4: 9, 10, then 11. W5: 12, 13. W6: 14, 15 (the bridge is installed only after G1), then 16 after ITEMADD-1.
-Cards 14 to 16 are last on purpose: ITEMADD-1 ships a deterministic template description first, and **Tier 3 is built only if the
+**Waves for the operator.** W0: merge FW-2 and FW-3, ask G1-G9 (nothing in W1-W5 waits for an answer to be built; the answers gate
+enabling, see the top of this page). W1 (parallel): 1, 2, 6. W2: 3, then 4, then 5. W3: 7, 8, 9 (8 after 4; each ships off until its
+answer). W4: 10, 11, then 12. W5: 13, 14. W6: 15, 16 (the bridge is installed only after G1 and G9), then 17 after ITEMADD-1.
+Cards 15 to 17 are last on purpose: ITEMADD-1 ships a deterministic template description first, and **Tier 3 is built only if the
 corrected-description rate in the first 20 real adds shows the template is not enough** (the gate is a measured rate, not a guess).
 
-**Which files only one card owns** (hotspots, extends spec 4.4): `hass/conversation.py` FW-3 then card 3 only; `hass/social_draft.py`
-SOCIAL-1 then card 5; `hass/content_model.py` and `hass/morning_report.py` STOCK-2 then card 10 (content_model only); `docs/hass/COMMANDS.md`
-and `LIMITS.md` FW-3, card 3, then card 6 (each strictly after the last merges); `hass/skills/router.py` FW-2 then card 13;
-`hass/skills/model.py` FW-1 then card 1 then card 14.
+**Which files only one card owns** (hotspots, extends spec 4.4): `hass/conversation.py` FW-3, then card 3, then card 4 (nothing
+after); `hass/social_draft.py` SOCIAL-1 then card 6; `hass/content_model.py` and `hass/morning_report.py` STOCK-2 then card 11
+(content_model only); `docs/hass/COMMANDS.md` and `LIMITS.md` FW-3, card 3, card 4 (LIMITS only), then card 7 (each strictly after
+the last merges); `hass/skills/router.py` FW-2 then card 14; `hass/skills/model.py` FW-1 then card 1 then card 15;
+`hass/skills/testkit.py` (#518, merged) then card 4 only.
 
 ---
 

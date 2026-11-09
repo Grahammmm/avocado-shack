@@ -1,0 +1,176 @@
+"""ITEMSTD-1: summarise pictures-raw.json for the 170 active products; rank conformity; make a contact sheet.
+
+Run: python3 analyze_pictures.py REPO RAW_JSON OUT_SUMMARY_JSON CONTACT_JPG
+"""
+import json
+import math
+import statistics
+import sys
+from collections import Counter
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+
+sys.path.insert(0, str(Path(__file__).parent))
+from measure_pictures import dist  # noqa: E402
+
+KEYS = {  # metric -> getter ; used for the distribution table and the conformity score
+    "bg_r": lambda r: r["bg_rgb"][0], "bg_g": lambda r: r["bg_rgb"][1], "bg_b": lambda r: r["bg_rgb"][2],
+    "bg_luma": lambda r: r["bg_luma"], "bg_spread": lambda r: r["bg_spread"], "frame_clean": lambda r: r["frame_clean"],
+    "corner_luma_range": lambda r: r["corner_luma_range"],
+    "bytes": lambda r: r["bytes"], "bits_per_pixel": lambda r: r["bits_per_pixel"],
+    "fill_w": lambda r: r["subject"]["fill_w"], "fill_h": lambda r: r["subject"]["fill_h"], "fill_max": lambda r: r["subject"]["fill_max"],
+    "margin_left": lambda r: r["subject"]["margin_left"], "margin_right": lambda r: r["subject"]["margin_right"],
+    "margin_top": lambda r: r["subject"]["margin_top"], "margin_bottom": lambda r: r["subject"]["margin_bottom"],
+    "center_x": lambda r: r["subject"]["center_x"], "center_y": lambda r: r["subject"]["center_y"],
+    "area_share": lambda r: r["subject"]["area_share"], "shadow_depth": lambda r: r.get("shadow_depth"),
+    "subject_luma": lambda r: r.get("subject_luma"), "subject_sat": lambda r: r.get("subject_sat"),
+}
+# metrics that decide "how typical is this picture": (metric, weight)
+SCORE = [("bg_dist", 1.0), ("bg_spread", 0.7), ("frame_clean", 0.7), ("fill_max", 1.0), ("center_x", 0.8), ("center_y", 0.8),
+         ("margin_bottom", 0.8), ("bytes_log", 0.5), ("shadow_depth", 0.6)]
+
+
+def mad(v):
+    m = statistics.median(v)
+    return statistics.median(abs(x - m) for x in v) or 1e-6
+
+
+def main():
+    repo, raw, out_json, contact = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4])
+    rows = json.loads(raw.read_text())
+    products = {p["id"]: p for p in json.loads((repo / "hass/content/products.json").read_text())["products"]}
+    for r in rows:
+        r["products"] = [{"id": i, "name": products[i]["name"], "status": products[i]["status"]} for i in r["used_by"]]
+    active = [r for r in rows if any(p["status"] == "active" for p in r["products"])]
+    other = [r for r in rows if r not in active]
+    out = {"n_files": len(rows), "n_active_pictures": len(active),
+           "not_used_by_an_active_product": [{"path": r["path"], "used_by": r["used_by"]} for r in other]}
+    out["formats"] = dict(Counter(r["format"] for r in active))
+    out["modes"] = dict(Counter(r["mode"] for r in active))
+    out["sizes"] = dict(Counter("%dx%d" % (r["width"], r["height"]) for r in active))
+    out["riff_chunk_sets"] = dict(Counter(",".join(r["chunks"]) for r in active))
+    out["with_exif"] = sum(r["has_exif"] for r in active)
+    out["with_icc"] = sum(r["has_icc"] for r in active)
+    out["with_alpha"] = sum(r["has_alpha"] for r in active)
+    out["animated"] = sum(r["animated"] for r in active)
+    out["no_subject_found"] = [r["path"] for r in active if not r["subject"]]
+    out["touches_edge"] = [r["path"] for r in active if r["subject"] and r["subject"]["touches_edge"]]
+    good = [r for r in active if r["subject"]]
+    out["distributions"] = {k: dist([g(r) for r in good]) for k, g in KEYS.items()}
+    # most common background colour (rounded to 4 levels) and median colour
+    out["bg_median_rgb"] = [int(statistics.median(r["bg_rgb"][c] for r in good)) for c in range(3)]
+    out["bg_median_hex"] = "#%02x%02x%02x" % tuple(out["bg_median_rgb"])
+    mb = out["bg_median_rgb"]
+    for r in good:
+        r["bg_dist"] = round(math.dist(r["bg_rgb"], mb), 2)
+        r["bytes_log"] = math.log(r["bytes"])
+    out["distributions"]["bg_dist_from_median"] = dist([r["bg_dist"] for r in good])
+    out["bg_within"] = {str(t): sum(1 for r in good if r["bg_dist"] <= t) for t in (3, 6, 10, 15)}
+    # shadow presence (threshold 1.0 level darker under the subject)
+    sh = [r["shadow_depth"] for r in good if r.get("shadow_depth") is not None]
+    out["shadow"] = {"measured": len(sh), "present_ge_1_level": sum(1 for v in sh if v >= 1.0), "present_ge_2_levels": sum(1 for v in sh if v >= 2.0),
+                     "none_lt_1_level": sum(1 for v in sh if v < 1.0), "not_measurable": len(good) - len(sh)}
+    out["bytes_total_active"] = sum(r["bytes"] for r in active)
+    # filename pattern and id match
+    pat_ok = 0
+    mism = []
+    for r in active:
+        for p in r["products"]:
+            if r["path"] == "assets/products/%s.webp" % p["id"]:
+                pat_ok += 1
+            else:
+                mism.append((p["id"], r["path"]))
+    out["naming"] = {"id_equals_file_stem": pat_ok, "mismatch": mism}
+    shared = [(r["path"], r["used_by"]) for r in rows if len(r["used_by"]) > 1]
+    out["files_shared_by_several_products"] = shared
+    # exact and near-duplicate pictures among active
+    byhash = {}
+    for r in active:
+        byhash.setdefault(r["sha256"], []).append(r["path"])
+    out["identical_pictures"] = [v for v in byhash.values() if len(v) > 1]
+    near = []
+    thumbs = {}
+    for r in good:
+        thumbs[r["path"]] = Image.open(repo / "storefront-mockup" / r["path"]).convert("RGB").resize((32, 32), Image.LANCZOS).tobytes()
+    for i, a in enumerate(good):
+        for b in good[i + 1:]:
+            ta, tb = thumbs[a["path"]], thumbs[b["path"]]
+            d = sum(abs(x - y) for x, y in zip(ta, tb)) / len(ta)
+            if d < 6.0:
+                near.append({"a": a["path"], "b": b["path"], "mean_abs_diff_32px": round(d, 2),
+                             "names": [a["products"][0]["name"], b["products"][0]["name"]]})
+    near.sort(key=lambda x: x["mean_abs_diff_32px"])
+    out["near_identical_pictures"] = near[:40]
+    out["near_identical_pictures_count"] = len(near)
+    # robust conformity score
+    cols = {m: [] for m, _ in SCORE}
+    for r in good:
+        vals = {"bg_dist": r["bg_dist"], "bg_spread": r["bg_spread"], "frame_clean": r["frame_clean"], "fill_max": r["subject"]["fill_max"],
+                "center_x": r["subject"]["center_x"], "center_y": r["subject"]["center_y"],
+                "margin_bottom": r["subject"]["margin_bottom"], "bytes_log": r["bytes_log"], "shadow_depth": r.get("shadow_depth")}
+        r["_vals"] = vals
+        for m in cols:
+            if vals[m] is not None:
+                cols[m].append(vals[m])
+    center = {m: statistics.median(v) for m, v in cols.items()}
+    scale = {m: mad(v) * 1.4826 for m, v in cols.items()}
+    for r in good:
+        z = {}
+        for m, wgt in SCORE:
+            v = r["_vals"][m]
+            if v is None:
+                z[m] = 0.0
+                continue
+            zz = abs(v - center[m]) / max(scale[m], 1e-6)
+            z[m] = round(min(zz, 6.0) * wgt, 3)
+        r["deviation"] = round(sum(x * x for x in z.values()) ** .5, 3)
+        r["why"] = sorted(z, key=lambda k: -z[k])[:2]
+        r["z"] = z
+    ranked = sorted(good, key=lambda r: r["deviation"])
+
+    def brief(r):
+        return {"path": r["path"], "product": r["products"][0]["name"], "id": r["products"][0]["id"], "deviation": r["deviation"],
+                "bg": r["bg_hex"], "fill_max": r["subject"]["fill_max"], "center": [r["subject"]["center_x"], r["subject"]["center_y"]],
+                "margin_bottom": r["subject"]["margin_bottom"], "bytes": r["bytes"], "frame_clean": r["frame_clean"],
+                "shadow": r.get("shadow_depth"), "main_reasons": r["why"]}
+    out["score_center"] = {m: round(center[m], 4) for m in center}
+    out["score_scale_robust_sigma"] = {m: round(scale[m], 4) for m in scale}
+    out["best10"] = [brief(r) for r in ranked[:10]]
+    out["worst10"] = [brief(r) for r in ranked[-10:][::-1]]
+    out["deviation_distribution"] = dist([r["deviation"] for r in good])
+    # hard outliers on single metrics (beyond the 2.5 robust sigma)
+    outl = {}
+    for m, _ in SCORE:
+        flagged = []
+        for r in good:
+            v = r["_vals"][m]
+            if v is not None and abs(v - center[m]) > 2.5 * max(scale[m], 1e-6):
+                flagged.append(r["products"][0]["id"])
+        outl[m] = {"count": len(flagged), "ids": flagged[:12]}
+    out["outliers_beyond_2_5_sigma"] = outl
+    # per-picture compact table for the audit
+    out["pictures"] = {r["products"][0]["id"]: {"path": r["path"], "deviation": r["deviation"], "bg": r["bg_hex"], "bg_dist": r["bg_dist"],
+                                                  "fill_max": r["subject"]["fill_max"], "margin_bottom": r["subject"]["margin_bottom"],
+                                                  "center_x": r["subject"]["center_x"], "center_y": r["subject"]["center_y"],
+                                                  "frame_clean": r["frame_clean"], "bytes": r["bytes"], "shadow": r.get("shadow_depth"),
+                                                  "touches_edge": r["subject"]["touches_edge"], "why": r["why"]} for r in good}
+    out_json.write_text(json.dumps(out, indent=1))
+    # contact sheet: best10 on the top two rows, worst10 below
+    sel = ranked[:10] + ranked[-10:][::-1]
+    tw = 200
+    sheet = Image.new("RGB", (5 * tw, 4 * (tw + 28) + 24), "white")
+    d = ImageDraw.Draw(sheet)
+    for i, r in enumerate(sel):
+        row, col = divmod(i, 5)
+        im = Image.open(repo / "storefront-mockup" / r["path"]).convert("RGB").resize((tw, tw), Image.LANCZOS)
+        y = row * (tw + 28) + (24 if row >= 2 else 0)
+        sheet.paste(im, (col * tw, y + 14))
+        d.text((col * tw + 3, y + 2), ("BEST " if i < 10 else "WORST ") + r["path"].split("/")[-1].replace("photo-product-", "").replace(".webp", "") + " d=%.1f" % r["deviation"], fill="black")
+        d.text((col * tw + 3, y + tw + 15), r["products"][0]["name"][:30], fill="black")
+    sheet.save(contact, quality=82)
+    print("ok", len(active), "active pictures;", len(good), "with subject")
+
+
+if __name__ == "__main__":
+    main()
