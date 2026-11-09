@@ -34,7 +34,7 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
   for Graham. He can still send a different description before `yes`.
 * **Maker story.** A maker already on the site is reused. A new maker takes Mike's own words, plus short sentences from the
   maker's **own** website when he gives its address (`hass/maker_site.py`: https only, the site's `robots.txt` obeyed, one
-  request per host every 2 seconds, no accounts, keys, cookies or proxy, same-site redirects only, at most 600 KB read, no
+  request per site every 2 seconds, no accounts, keys, cookies or proxy, same-site redirects only (each hop checked like the first request), at most 600 KB read, no
   long passages copied). With no words and no address Hass asks once: "What should we say about <Maker>? A sentence is
   enough." and invents nothing; "skip" keeps only the one line about the town. The address and the day it was read are kept
   privately with the draft (`maker-sources.jsonl`) and shown to Mike; the maker's website field stays protected and is not

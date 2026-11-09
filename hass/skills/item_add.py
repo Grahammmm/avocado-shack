@@ -98,6 +98,7 @@ ASK_STORY = "What should we say about {maker}? A sentence is enough."
 SKIP_STORY = re.compile(r"\b(?:skip(?:\s+it|\s+the\s+story)?|no\s+story|nothing\s+to\s+(?:say|add)|leave\s+it\s+(?:out|off|blank)|just\s+the\s+town)\b"
                         r"|^\s*(?:no|none|nope|nothing|never\s*mind)[\s.!]*$", re.IGNORECASE)
 SITE_NOTE = "I read {maker}'s own website ({url}) on {day} for the story. Change any word you like before you say yes."
+SITE_SKIPPED = "I couldn't use {maker}'s website, so the story is {what}."
 LIVE_CLAIM = ("I can't put {what} on the website from chat, so nothing changed. Send it again without that and I'll add the "
               "product.")  # the backlog line that follows says the message is written down for Graham
 MANY_ITEMS = "I can add one product at a time. Which one do you want first?"
@@ -190,9 +191,11 @@ def _live_claims(ctx, *texts) -> None:
         raise Refusal(LIVE_CLAIM.format(what=what), "refuse", "policy")
 
 
-def _site_story(name, url, said, ctx):
+def _site_story(name, url, said, ctx, answered=False):
     """({"page", "story"} for the maker's own website, or None when he gave no address). A page that cannot be read or has
-    nothing usable asks him ONE plain question, never a made-up story. Pure: the read happens behind ``ctx.maker_page``."""
+    nothing usable asks him ONE plain question, never a made-up story. Pure: the read happens behind ``ctx.maker_page``.
+    ``answered``: he has already given his own story words or said to skip it, so the website is optional: a page that
+    cannot be used is left out (None) and his answer is used, instead of asking the same question again."""
     address = _clean(url)
     if not address:
         return None
@@ -203,9 +206,13 @@ def _site_story(name, url, said, ctx):
             raise maker_site.PageError("unreachable")
         page = reader(address)
     except maker_site.PageError as exc:
+        if answered:
+            return None
         raise Refusal(f"{exc.reply} {ask}", "question") from exc
     story = maker_site.draft_story(name, page, said=said)
     if story is None:
+        if answered:
+            return None
         raise Refusal(f"{maker_site.CODES['unreadable']} {ask}", "question")
     return {"page": page, "story": story}
 
@@ -586,9 +593,10 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
         # its address. With neither, one plain question; "skip" keeps only the D5 line. The address itself is not kept on the
         # maker (the website-link field is protected and is never published); it is the story's recorded source.
         mine = _clean(slots.get("story"))
-        found = _site_story(choice["name"], slots.get("maker_url"), mine, ctx)
+        skipped = len(_texts(ctx)) > 1 and bool(SKIP_STORY.search(_texts(ctx)[-1]))
+        found = _site_story(choice["name"], slots.get("maker_url"), mine, ctx, answered=bool(mine) or skipped)
         story_in = " ".join(part for part in (mine, " ".join(found["story"]["sentences"]) if found else "") if part)
-        if not story_in and not (len(_texts(ctx)) > 1 and SKIP_STORY.search(_texts(ctx)[-1])):
+        if not story_in and not skipped:
             raise Refusal(ASK_STORY.format(maker=choice["name"]), "question")
         try:
             made = makers.describe_add({"name": choice["name"], "place": place, "story": story_in or None, "url": None},
@@ -598,6 +606,8 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
         if found:
             sources = (maker_site.record(found["page"], found["story"]),)
             say.append(SITE_NOTE.format(maker=_q(choice["name"]), url=found["page"]["url"], day=found["page"]["retrieved"]))
+        elif _clean(slots.get("maker_url")):  # the website could not be used and his answer (or skip) stands in for it
+            say.append(SITE_SKIPPED.format(maker=_q(choice["name"]), what="your words" if mine else "just the town"))
         ops += made.ops
         key, brand = made.ops[0]["args"]["key"], choice["name"]
         set_lines += list(made.set_lines)

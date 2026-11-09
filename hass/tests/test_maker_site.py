@@ -174,35 +174,113 @@ class TheAddress(SiteTestCase):
 
 
 class Redirects(SiteTestCase):
-    def follow(self, old, new):
-        handler = ms._SameSite()
-        request = urllib.request.Request(old, headers={"User-Agent": ms.USER_AGENT})
-        return handler.redirect_request(request, io.BytesIO(b""), 302, "Found", {}, new)
+    WWW = "https://www.harborlane.example/about"
+    WWW_ROBOTS = "https://www.harborlane.example/robots.txt"
+
+    def go(self, pages):
+        get = Recorded(pages)
+        return get, self.fetch(get, cache=False)
 
     def test_a_redirect_to_another_site_or_a_weaker_address_is_refused(self):
         for new in ("https://elsewhere.example/about", "https://harborlane.example.evil.example/", "http://harborlane.example/about",
                     "https://user@harborlane.example/about", "https://harborlane.example:8443/about", "ftp://harborlane.example/x",
-                    "https://localhost/", "//elsewhere.example/about"):
-            with self.subTest(new=new), self.assertRaises(urllib.error.HTTPError):
-                self.follow(ADDRESS, new)
+                    "https://localhost/", "//elsewhere.example/about", "https://127.0.0.1/"):
+            with self.subTest(new=new), self.assertRaises(ms.PageError) as caught:
+                ms._hop(ADDRESS, new)
+            self.assertEqual(caught.exception.code, "unreachable")
+            get = Recorded({ROBOTS: (404, "", b""), ADDRESS: (302, "", b"", new)})
+            with self.subTest(read=new), self.assertRaises(ms.PageError) as caught:
+                self.fetch(get, cache=False)
+            self.assertEqual((caught.exception.code, get.urls), ("unreachable", [ROBOTS, ADDRESS]))  # the other address is never asked
 
     def test_a_redirect_inside_the_same_site_is_followed(self):
-        for new in ("https://harborlane.example/our-story", "https://www.harborlane.example/about"):  # urllib joins a relative one first
-            with self.subTest(new=new):
-                self.assertTrue(self.follow(ADDRESS, new).full_url.startswith("https://"))
-        self.assertEqual(self.follow("https://www.harborlane.example/about", "https://harborlane.example/about").full_url,
-                         "https://harborlane.example/about")
+        self.assertEqual(ms._hop(ADDRESS, "https://harborlane.example/our-story"), "https://harborlane.example/our-story")
+        self.assertEqual(ms._hop(ADDRESS, "/our-story#top"), "https://harborlane.example/our-story")
+        self.assertEqual(ms._hop(ADDRESS, self.WWW), self.WWW)
+        self.assertEqual(ms._hop(self.WWW, ADDRESS), ADDRESS)
 
-    def test_the_real_read_turns_a_refused_redirect_into_an_unreachable_page_and_uses_no_proxy_or_cookies(self):
+    def test_a_followed_redirect_is_checked_against_the_robots_file_of_where_it_lands(self):
+        rules = (200, "text/plain", b"User-agent: *\nDisallow: /private\n")
+        get = Recorded({ROBOTS: rules, ADDRESS: (301, "", b"", "/private"), "https://harborlane.example/private": (200, HTML, HARBOR)})
+        with self.assertRaises(ms.PageError) as caught:
+            self.fetch(get, cache=False)
+        self.assertEqual((caught.exception.code, get.urls), ("refused", [ROBOTS, ADDRESS]))  # /private is never requested
+
+    def test_a_redirect_to_an_allowed_page_is_read_and_each_request_waits_its_gap(self):
+        get, page = self.go({ROBOTS: (404, "", b""), ADDRESS: (302, "", b"", "/our-story"), "https://harborlane.example/our-story": (200, HTML, HARBOR)})
+        self.assertEqual(page["url"], ADDRESS)
+        self.assertEqual(get.urls, [ROBOTS, ADDRESS, "https://harborlane.example/our-story"])
+        self.assertEqual(self.clock.slept, [ms.MIN_GAP] * 2)  # robots, the first answer and the hop are each a request
+
+    def test_a_hop_between_the_bare_name_and_www_reads_the_robots_file_of_the_new_host(self):
+        get, _page = self.go({ROBOTS: (404, "", b""), ADDRESS: (301, "", b"", self.WWW), self.WWW_ROBOTS: (404, "", b""), self.WWW: (200, HTML, HARBOR)})
+        self.assertEqual(get.urls, [ROBOTS, ADDRESS, self.WWW_ROBOTS, self.WWW])
+        refused = Recorded({ROBOTS: (404, "", b""), ADDRESS: (301, "", b"", self.WWW), self.WWW_ROBOTS: (200, "text/plain", b"User-agent: *\nDisallow: /\n")})
+        with self.assertRaises(ms.PageError) as caught:
+            self.fetch(refused, cache=False)
+        self.assertEqual((caught.exception.code, refused.urls), ("refused", [ROBOTS, ADDRESS, self.WWW_ROBOTS]))
+
+    def test_a_robots_file_may_redirect_inside_the_site_but_not_off_it(self):
+        get, _page = self.go({ROBOTS: (301, "", b"", self.WWW_ROBOTS), self.WWW_ROBOTS: (404, "", b""), ADDRESS: (200, HTML, HARBOR)})
+        self.assertEqual(get.urls, [ROBOTS, self.WWW_ROBOTS, ADDRESS])
+        away = Recorded({ROBOTS: (302, "", b"", "https://elsewhere.example/robots.txt")})
+        with self.assertRaises(ms.PageError):
+            self.fetch(away, cache=False)
+        self.assertEqual(away.urls, [ROBOTS])
+
+    def test_redirects_have_a_cap_and_a_redirect_without_a_place_is_unreachable(self):
+        loop = {ROBOTS: (404, "", b"")} | {f"https://harborlane.example/{n}": (302, "", b"", f"/{n + 1}") for n in range(10)} | {ADDRESS: (302, "", b"", "/1")}
+        get = Recorded(loop)
+        with self.assertRaises(ms.PageError) as caught:
+            self.fetch(get, cache=False)
+        self.assertEqual(caught.exception.code, "unreachable")
+        self.assertEqual(len(get.urls) - 1, ms.MAX_REDIRECTS + 1)  # robots.txt, the page and MAX_REDIRECTS hops, then it stops
+        with self.assertRaises(ms.PageError):
+            self.fetch(Recorded({ROBOTS: (404, "", b""), ADDRESS: (302, "", b"")}), cache=False)
+
+    def test_a_hop_to_a_host_that_is_not_public_is_never_opened(self):
+        """The real read: the first host is public, the www name it redirects to resolves inside, so only the first is asked."""
+        answers = {"harborlane.example": "93.184.216.34", "www.harborlane.example": "10.0.0.5"}
+        opened = []
+
+        def real(url, headers, timeout):
+            opened.append(url)
+            return (301, "", b"", self.WWW) if url == ADDRESS else (404, "", b"", "")
+
+        with mock.patch.object(ms, "_http_get", real), mock.patch.object(
+                ms.socket, "getaddrinfo", side_effect=lambda host, port, **kw: [(2, 1, 6, "", (answers[host], 443))]):
+            with self.assertRaises(ms.PageError) as caught:
+                ms.fetch(ADDRESS, sleep=self.clock.sleep, clock=self.clock, cache=False)
+        self.assertEqual((caught.exception.code, opened), ("unreachable", [ROBOTS, ADDRESS]))
+
+    def test_the_real_read_follows_no_redirect_itself_and_uses_no_proxy_or_cookies(self):
         class Opener:
             def open(self, request, timeout=None):
-                raise urllib.error.HTTPError(request.full_url, 302, "redirect off the site", {}, None)
+                raise urllib.error.HTTPError(request.full_url, 302, "Found", {"Location": "https://harborlane.example/next"}, None)
 
         seen = []
         with mock.patch.object(urllib.request, "build_opener", side_effect=lambda *handlers: seen.extend(handlers) or Opener()):
-            self.assertEqual(REAL_GET(ADDRESS, {}, 5), (302, "", b""))
-        self.assertEqual([type(h) for h in seen], [urllib.request.ProxyHandler, ms._SameSite])  # no cookie or auth handler
+            self.assertEqual(REAL_GET(ADDRESS, {}, 5), (302, "", b"", "https://harborlane.example/next"))
+        self.assertEqual([type(h) for h in seen], [urllib.request.ProxyHandler, ms._PinnedHandler, ms._NoRedirect])  # no cookie or auth handler
         self.assertEqual(seen[0].proxies, {})
+        request = urllib.request.Request(ADDRESS)
+        self.assertIsNone(ms._NoRedirect().redirect_request(request, io.BytesIO(b""), 302, "Found", {}, "https://harborlane.example/next"))
+
+    def test_the_real_connection_goes_only_to_an_address_it_just_checked(self):
+        for resolved, ok in (("93.184.216.34", True), ("10.0.0.5", False), ("127.0.0.1", False)):
+            with self.subTest(resolved=resolved):
+                conn = ms._PinnedHTTPS("harborlane.example", timeout=5)
+                with mock.patch.object(ms.socket, "getaddrinfo", return_value=[(2, 1, 6, "", (resolved, 443))]), \
+                        mock.patch.object(ms.socket, "create_connection") as connect, \
+                        mock.patch.object(ms.ssl, "create_default_context") as tls:
+                    if ok:
+                        conn.connect()
+                        connect.assert_called_once_with((resolved, 443), 5)  # the checked address, not the name again
+                        tls.return_value.wrap_socket.assert_called_once_with(connect.return_value, server_hostname="harborlane.example")
+                    else:
+                        with self.assertRaises(OSError):
+                            conn.connect()
+                        connect.assert_not_called()
 
 
 class SizeCap(SiteTestCase):
@@ -224,8 +302,8 @@ class SizeCap(SiteTestCase):
                 return Response(b"<p>" + b"x" * (3 * ms.MAX_BYTES))
 
         with mock.patch.object(urllib.request, "build_opener", return_value=Opener()):
-            status, kind, body = REAL_GET(ADDRESS, {}, 5)
-        self.assertEqual((status, kind, asked), (200, HTML, [ms.MAX_BYTES]))
+            status, kind, body, where = REAL_GET(ADDRESS, {}, 5)
+        self.assertEqual((status, kind, where, asked), (200, HTML, "", [ms.MAX_BYTES]))
         self.assertEqual(len(body), ms.MAX_BYTES)
 
     def test_text_after_the_cap_is_never_read(self):

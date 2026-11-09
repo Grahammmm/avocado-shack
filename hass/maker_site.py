@@ -1,7 +1,10 @@
 """HASS-LIVE-ADD-2: read a maker's OWN public website once, politely, and draft a short maker story from it.
 
 Only used when Mike gives the maker's web address while adding a new item. One plain HTTPS request for the page (and one for
-the site's robots.txt), no accounts, no keys, no cookies, no proxy, one request per host every ``MIN_GAP`` seconds. The page's
+the site's robots.txt), no accounts, no keys, no cookies, no proxy, one request per site every ``MIN_GAP`` seconds. A redirect
+is never followed by urllib: ``fetch`` reads the answer and follows it itself, same site only (www. or not), at most
+``MAX_REDIRECTS`` times, and every hop gets the same checks as the first request (public address, robots.txt, the gap).
+The page's
 text is never kept: only the few short sentences the story uses, the address and the retrieval day (``record``).
 
 What the story may say (the rules, each tested in hass/tests/test_maker_site.py):
@@ -20,9 +23,11 @@ This module does the network read; the plan (hass/skills/item_add.py) stays pure
 from __future__ import annotations
 
 import html as html_lib
+import http.client
 import ipaddress
 import re
 import socket
+import ssl
 import threading
 import time
 import urllib.error
@@ -38,6 +43,7 @@ USER_AGENT = "AvocadoShackHass/1.0 (+https://theavocadoman.com; reads a maker's 
 TIMEOUT = 10  # seconds per request
 MAX_BYTES = 600_000  # the page is cut here; the text read is only ever its first part
 MAX_REDIRECTS = 3
+REDIRECTS = frozenset({301, 302, 303, 307, 308})
 MIN_GAP = 2.0  # seconds between two requests to the same host (polite rate limit)
 CACHE_SECONDS = 1800  # the same address inside one open request is read once
 MIN_LEN, MAX_LEN, MAX_SENTENCES, MAX_CHARS = 40, 190, 2, 330
@@ -90,68 +96,127 @@ def check_address(url) -> str:
     return parts._replace(fragment="").geturl()
 
 
-def _public(host: str) -> bool:
+def _addresses(host: str) -> list:
+    """The addresses ``host`` resolves to, or [] unless every one of them is a public (global) address."""
     try:
-        found = {ipaddress.ip_address(info[4][0]) for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)}
+        found = [ipaddress.ip_address(info[4][0]) for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)]
     except (OSError, ValueError):
-        return False
-    return bool(found) and all(ip.is_global for ip in found)
+        return []
+    return found if found and all(ip.is_global for ip in found) else []
 
 
-class _SameSite(urllib.request.HTTPRedirectHandler):
-    """Follow a redirect only to https on the same site (www. or not), at most MAX_REDIRECTS times."""
+def _public(host: str) -> bool:
+    return bool(_addresses(host))
+
+
+class _PinnedHTTPS(http.client.HTTPSConnection):
+    """https that connects only to an address that was just checked to be public: the name is resolved once, here, so a
+    name that answers differently the second time (DNS rebinding) cannot lead the read inside. TLS still checks the name."""
+
+    def connect(self):
+        addresses = _addresses(self.host)
+        if not addresses:
+            raise OSError("not a public address")
+        last = OSError("no address")
+        for ip in addresses:
+            try:
+                sock = socket.create_connection((str(ip), self.port or 443), self.timeout)
+            except OSError as exc:
+                last = exc
+                continue
+            self.sock = ssl.create_default_context().wrap_socket(sock, server_hostname=self.host)
+            return
+        raise last
+
+
+class _PinnedHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_PinnedHTTPS, req)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect inside urllib: ``fetch`` reads the 3xx answer and decides, hop by hop (``_hop``)."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        old, new = urlsplit(req.full_url), urlsplit(urljoin(req.full_url, newurl))
-        same = (new.hostname or "").removeprefix("www.") == (old.hostname or "").removeprefix("www.")
-        if new.scheme != "https" or not same or new.username or new.port not in (None, 443):
-            raise urllib.error.HTTPError(newurl, code, "redirect off the site", headers, fp)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        return None
 
 
 def _http_get(url: str, headers: dict, timeout: float):
-    """(status, content type, body bytes cut at MAX_BYTES). No proxy, no cookies, same-site https redirects only."""
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _SameSite())
+    """(status, content type, body bytes cut at MAX_BYTES, Location of a redirect or ""). One request, no proxy, no cookies,
+    public addresses only, and no redirect followed: that is ``fetch``'s decision, one checked hop at a time."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _PinnedHandler(), _NoRedirect())
     try:
         with opener.open(urllib.request.Request(url, headers=headers), timeout=timeout) as resp:
-            return resp.status, resp.headers.get("Content-Type", ""), resp.read(MAX_BYTES)
+            return resp.status, resp.headers.get("Content-Type", ""), resp.read(MAX_BYTES), ""
     except urllib.error.HTTPError as exc:
-        return exc.code, "", b""
-    except (urllib.error.URLError, OSError, ValueError):
-        return 0, "", b""
+        return exc.code, "", b"", (exc.headers.get("Location", "") if exc.headers and exc.code in REDIRECTS else "")
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
+        return 0, "", b"", ""
 
 
-def _allowed(url: str, get, sleep, clock) -> bool:
+def _site(host) -> str:
+    return (host or "").lower().removeprefix("www.")
+
+
+def _hop(url: str, location: str) -> str:
+    """Where a redirect from ``url`` may go: https on the same site (www. or not), no login or odd port, else PageError."""
+    new = urljoin(url, location)
+    if _site(urlsplit(new).hostname) != _site(urlsplit(url).hostname):
+        raise PageError("unreachable")
+    try:
+        return check_address(new)
+    except PageError as exc:
+        raise PageError("unreachable") from exc
+
+
+def _read(url: str, accept: str, get, live: bool, sleep, clock, rules: dict, *, robots: bool):
+    """(status, content type, body) of ``url`` after at most MAX_REDIRECTS same-site redirects. EVERY request, the first and
+    each hop, is held to the same rules: a public address (``live``), the site's robots.txt (for pages; ``robots``) and the
+    polite gap. An answer that cannot be followed safely is PageError("unreachable")."""
+    for hop in range(MAX_REDIRECTS + 1):
+        parts = urlsplit(url)
+        if live and not _public(parts.hostname or ""):
+            raise PageError("unreachable")
+        if robots and not _allowed(url, get, live, sleep, clock, rules):
+            raise PageError("refused")
+        _wait(_site(parts.hostname), sleep, clock)
+        status, kind, body, *where = get(url, {"User-Agent": USER_AGENT, "Accept": accept}, TIMEOUT)
+        if status not in REDIRECTS:
+            return status, kind, body
+        if not (where and where[0]) or hop == MAX_REDIRECTS:
+            raise PageError("unreachable")
+        url = _hop(url, where[0])
+    raise PageError("unreachable")  # not reached: the loop returns or raises
+
+
+def _allowed(url: str, get, live: bool, sleep, clock, rules: dict) -> bool:
     parts = urlsplit(url)
-    robots = f"https://{parts.netloc}/robots.txt"
-    _wait(parts.netloc, sleep, clock)
-    status, _kind, body = get(robots, {"User-Agent": USER_AGENT, "Accept": "text/plain"}, TIMEOUT)
-    if status in (401, 403):
-        return False
-    if status != 200:  # none, or unreadable: the usual reading is that nothing is forbidden
-        return True
-    parser = urllib.robotparser.RobotFileParser()
-    parser.parse(body.decode("utf-8", "replace").splitlines())
-    return parser.can_fetch(USER_AGENT, url)
+    if parts.netloc not in rules:  # one robots.txt per host in one read
+        status, _kind, body = _read(f"https://{parts.netloc}/robots.txt", "text/plain", get, live, sleep, clock, rules, robots=False)
+        if status in (401, 403):
+            rules[parts.netloc] = False
+        elif status != 200:  # none, or unreadable: the usual reading is that nothing is forbidden
+            rules[parts.netloc] = True
+        else:
+            parser = urllib.robotparser.RobotFileParser()
+            parser.parse(body.decode("utf-8", "replace").splitlines())
+            rules[parts.netloc] = parser
+    rule = rules[parts.netloc]
+    return rule if isinstance(rule, bool) else rule.can_fetch(USER_AGENT, url)
 
 
 def fetch(url, *, get=None, sleep=time.sleep, clock=time.monotonic, today=None, cache=True) -> dict:
     """Read one page: {"url", "retrieved": ISO day, "blocks": [text, ...]}, or raise PageError. ``get(url, headers, timeout)``
-    returns (status, content type, bytes); tests pass recorded responses, so no test touches the network."""
+    returns (status, content type, bytes[, redirect Location]); tests pass recorded responses, so no test touches the network."""
     url = check_address(url)
-    host = urlsplit(url).hostname or ""
     now = clock()
     cached = _CACHE.get(url) if cache else None
     if cached and now - cached[0] < CACHE_SECONDS:
         return cached[1]
-    if get is None:
-        if not _public(host):
-            raise PageError("unreachable")
+    live = get is None
+    if live:
         get = _http_get
-    if not _allowed(url, get, sleep, clock):
-        raise PageError("refused")
-    _wait(urlsplit(url).netloc, sleep, clock)
-    status, kind, body = get(url, {"User-Agent": USER_AGENT, "Accept": "text/html"}, TIMEOUT)
+    status, kind, body = _read(url, "text/html", get, live, sleep, clock, {}, robots=True)
     if status != 200 or not body:
         raise PageError("unreachable")
     if "html" not in kind.lower() and kind:

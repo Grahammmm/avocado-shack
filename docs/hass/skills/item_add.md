@@ -82,8 +82,12 @@ touches the network).
   the D5 line. Nothing is invented.
 * **The polite read:** https only, a public host (no IP address, localhost, user name or port), the site's `robots.txt` obeyed
   (a disallow, 401 or 403 means the page is never requested: "That website asks programs not to read it, so I won't."), one
-  request per host every 2 seconds, same-site redirects only, no cookies, no proxy, at most 600 KB. Failures are plain words
-  and then the same one question.
+  request per site every 2 seconds, no cookies, no proxy, at most 600 KB. A redirect is followed by the reader itself, never by
+  the HTTP library: same site only (with or without `www.`), at most 3, and every hop is held to the same rules as the first
+  request (a public address, checked again when the connection is made; the `robots.txt` of the host it lands on; the 2-second
+  gap). Failures are plain words and then the same one question, **unless he has already answered it**: once he has given his
+  own words or said "skip", a website that cannot be read is left out, he is told so, and his answer (or just the town line)
+  is used; the same question is not asked twice.
 * **The story** is built from short page sentences that carry no claim (no origin, organic, health, award, price, contact or
   trail wording, no year), "We" and "Our" become the maker's name, at most 2 page sentences (40 to 190 characters each, 330
   together), never a long passage; they are added to his own words. It is machine-valid,
@@ -136,15 +140,16 @@ bad photo warned before the yes, a bad description asked again); it is skipped o
 
 ## Cases (`item.add.jsonl`)
 
-28 rows: 22 conversation rows through the real Conversation and Editor and 6 plan rows. The first 20 are the ten spec sentences
+30 rows: 24 conversation rows through the real Conversation and Editor and 6 plan rows. The first 20 are the ten spec sentences
 (clean, misspelled, vague "add this", a photo with no words, twin, price and size, unknown maker, one question at a time, two
 items on one photo, organic said), a photo with the name as its caption, same farm as last time, a hidden maker, and today's
-check already recorded. The 8 `live2-*` rows (HASS-LIVE-ADD-2) are: a known maker with the real house render, a new maker with a
-recorded web page, a new maker with no words and no address (asked, nothing invented), a page that cannot be read (asked), a
+check already recorded. The 10 `live2-*` rows (HASS-LIVE-ADD-2) are: a known maker with the real house render, a new maker with a
+recorded web page, a new maker with no words and no address (asked, nothing invented), a page that cannot be read (asked), the same
+page answered with his own words and with "skip" (not asked again, his words or just the town are used), a
 photo the render cannot cut out (retake sentence, nothing drafted), a claim in his description (rewritten, "Left off"), and
-organic and origin words in the name (refused with the plain reason). 12 rows end in an approved draft that is undone. They use
+organic and origin words in the name (refused with the plain reason). 14 rows end in an approved draft that is undone. They use
 the synthetic photos of #504 (`reports/hass/newitem-1/synthetic/`) and recorded pages (`hass/tests/fixtures/maker_site/`).
-More tests: `hass/tests/test_maker_site.py` (30: robots, address rules, redirects, size cap, story rules, rate gap, record) and
+More tests: `hass/tests/test_maker_site.py` (37: robots, address rules, redirects hop by hop, size cap, story rules, rate gap, record) and
 `hass/tests/test_live_add_photo_undo.py` (9: live `product.set_photo`, one undo hides the product and the new maker).
 
 ```
