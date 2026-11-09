@@ -50,7 +50,9 @@ want me to bring it back instead?"; a held twin is refused).
 * **One photo, one product:** when his words ("add the lemon curd and the plum jam", a name that lists two products, `&`, `+`, or
   "both" beside an "and" in the name) put two products on the one photo, the skill itself asks "One photo can go on one product.
   Which one is this photo for?", whatever the interpreter returned. A single name with an "and" in it ("Salt and vinegar chips") is
-  one product.
+  one product. His answer ends the question: a later message of his that names the one product the plan is for ("The lemon curd
+  only, please") lets the plan go on, while an earlier two-product message is still kept, so a plan whose product he has not
+  picked, or a later message that lists two again, asks again.
 * **The house description is enforced, not only reported:** a description (his own, or the drafted one) with a digit or price, a
   hype word, `!` or `?`, a length outside the shop's measured 59 to 167 characters or a sentence count outside 2 to 3 is not
   drafted; he is asked: "That description won't match the others on the site: ... Could you send a different one?" A claim word

@@ -226,6 +226,25 @@ class OnePhotoOneProduct(unittest.TestCase):
     def test_a_missing_name_still_asks_which_one_when_he_named_two(self):
         self.assertEqual(refusal({"photo": SHA}, "add the lemon curd and the plum jam").reply, ia.ONE_PHOTO)
 
+    def test_he_picks_one_and_the_same_plan_then_drafts_it_two_turn_regression(self):
+        first, pick = "add the lemon curd and the plum jam, both in stock", "The lemon curd only, please"
+        slots = {**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}
+        self.assertEqual(refusal(slots, first).reply, ia.ONE_PHOTO)  # turn 1: refused
+        done = ia.describe_add(slots, ctx(first, pick))  # turn 2: his pick is in, the first message is still in the transcript
+        self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+        self.assertEqual(done.ops[0]["args"]["name"], "Lemon curd")
+
+    def test_a_pick_that_is_not_the_planned_product_or_lists_two_again_still_asks(self):
+        first = "add the lemon curd and the plum jam, both in stock"
+        slots = {**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}
+        for later in ("The plum jam only, please", "yes, both", "the lemon curd and the plum jam", "in stock"):
+            with self.subTest(later=later):
+                self.assertEqual(refusal(slots, first, later).reply, ia.ONE_PHOTO)
+
+    def test_a_pick_before_the_two_products_does_not_clear_them(self):
+        slots = {**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}
+        self.assertEqual(refusal(slots, "the lemon curd only", "add the lemon curd and the plum jam, both in stock").reply, ia.ONE_PHOTO)
+
 
 class HouseDescriptionIsEnforced(unittest.TestCase):
     """Rule house-description: the hard checks refuse or ask, they do not only warn (finding 2)."""

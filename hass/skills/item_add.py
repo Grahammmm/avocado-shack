@@ -415,14 +415,34 @@ def _next_id(ctx, content):
 
 
 # -- one photo, one product -------------------------------------------------------------------------------------------
+def _two_in_turn(name, turn) -> bool:
+    """True when this one text of his (with the name the model gave) puts two products on the photo."""
+    if name and re.search(r"\band\b", name, re.IGNORECASE) and BOTH_WORD.search(turn):
+        return True
+    return bool(TWO_IN_MESSAGE.search(turn))
+
+
 def several_products(raw_name, message) -> bool:
-    """True when his words (or the name the model gave) put two products on the one photo."""
+    """True when his words (or the name the model gave) put two products on the one photo and he has not yet said which.
+
+    ``message`` is his texts so far, a list (a single string is one text). The question this raises is answered by a later
+    text of his that names the one product the plan is for (``The lemon curd only, please``) and does not list two again;
+    the earlier text is kept, so a plan whose product he never picked still asks."""
+    turns = [message] if isinstance(message, str) else [t for t in (message or []) if isinstance(t, str)]
     name = _clean(raw_name)
     if name and TWO_IN_NAME.search(name):
         return True
-    if name and re.search(r"\band\b", name, re.IGNORECASE) and BOTH_WORD.search(message or ""):
+    asked = [i for i, turn in enumerate(turns) if _two_in_turn(name, turn)]
+    if not asked:
+        return False
+    if name and re.search(r"\band\b", name, re.IGNORECASE):  # the model still has two products in the one name
         return True
-    return bool(TWO_IN_MESSAGE.search(message or ""))
+    named = re.compile(rf"(?<!\w){re.escape(name.lower())}(?!\w)") if name else None
+    for turn in turns[asked[-1] + 1:]:
+        if named and named.search(turn.lower()) and not _two_in_turn(name, turn) and not BOTH_WORD.search(turn) \
+                and not TWO_IN_NAME.search(turn):
+            return False
+    return True
 
 
 # -- the description: the house hard checks (reports/hass/SKILLS-SPEC.md 3.1, rule house-description) ------------------
@@ -460,7 +480,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if not isinstance(slots, dict):
         raise Refusal(ASK["name"], "question")
     content, message = _content(ctx), _message(ctx)
-    if several_products(slots.get("name"), message):  # one photo is one product, whatever the model returned
+    if several_products(slots.get("name"), _texts(ctx)):  # one photo is one product, whatever the model returned
         raise Refusal(ONE_PHOTO, "question")
     slots, filled = _filled(slots, ctx)
 

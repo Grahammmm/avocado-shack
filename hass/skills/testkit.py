@@ -476,7 +476,9 @@ def run_case_row(row, skills, skill=None, selftest=False):
     if seed is not None and not (isinstance(seed, dict) and all(k in ("products", "makers", "community", "store") and isinstance(v, dict) for k, v in seed.items())):
         res.fail("bad-row", "seed must be {products|makers|community|store: {top-level key: value}}"); return res
     try: scratch = Scratch(mapping, skills, row.get("fault"), seed, setup, row.get("photos") or (), row.get("house_render") is True)
-    except (SetupError, ValueError) as exc: res.fail("bad-row", exc); return res
+    except SetupError as exc: res.fail("bad-row", exc); return res
+    except ValueError as exc:  # a row whose photos cannot be stored is a bad row with its own words; a refused seed has its own line
+        res.fail("bad-row", exc if seed is None else f"the seed could not be applied: {type(exc).__name__}: {str(exc)[:200]}"); return res
     except Exception as exc:  # noqa: BLE001 - a seed the content rules refuse is a bad row, not a crash
         res.fail("bad-row", f"the seed could not be applied: {type(exc).__name__}: {str(exc)[:200]}"); return res
     try: _drive(row, expect, scratch, skills, skill, names, res)
