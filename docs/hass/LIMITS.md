@@ -18,9 +18,15 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 - In live mode, only these changes go from chat to the website (HASS-LIVE-PLAN-1): hide or restore a product, edit a
   product's description or category (not its name), stock words, specials (no price), hikes with sign-up off (add, edit, cancel), a maker's
-  about text, and undo. Anything else (new items, product names, pictures, brands, producers, hiding or restoring a maker, maker places or links, club details, trail
-  facts, route ideas, sample hikes, prices, phone, address, shop hours or notice, the home page photo) is refused in plain
-  words and saved for Graham to do by hand.
+  about text, **a new product (HASS-LIVE-ADD-1, see the next item)**, and undo. Anything else (product names, pictures on a product that
+  is already there, a brand or producer of a product that is already there, hiding or restoring a maker, the place or link of a maker that is
+  already there, club details, trail facts, route ideas, sample hikes, prices, phone, address, shop hours or notice, the home page photo) is
+  refused in plain words and saved for Graham to do by hand.
+- **A new product goes live from chat (HASS-LIVE-ADD-1, G 2026-11-09), under these rules.** It comes with its own picture (a new
+  product cannot be added without one; a picture on a product that is already there stays private). Its brand, maker line, maker name
+  and town must be in your own words in this request: if one is not, Hass asks and drafts nothing, so nothing is ever filled in from a
+  guess. A new maker goes live only together with the new product that names it, with its name and its town; a maker's web link is
+  never put live from chat, and neither is a maker on its own. Every sentence rule below, the 10-record limit and undo still apply.
 - Sentences containing origin or organic claims, health claims, awards or endorsements, trail facts, prices or
   contact details cannot be added, removed, substituted or negated. Other sentences can change; undo is allowed.
 - A live change can touch at most **10** <!-- live_policy.MAX_RECORDS --> records.

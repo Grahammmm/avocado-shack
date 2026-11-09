@@ -52,16 +52,18 @@ class Declaration(unittest.TestCase):
         self.assertEqual(lint_plan_output(ia.ITEM_ADD, golden, ops), [])
 
     def test_live_class_matches_the_live_boundary(self):
-        """private-only: brand, displayBrand and producerKey are protected, so live_policy stops a live release (D4)."""
+        """chat-live (HASS-LIVE-ADD-1): a new product with its brand and maker is in the live table, so live_policy lets this plan through
+        (the brand fields are guarded inside product.add; the owner-words rule is the conversation's, see test_live_add)."""
         scratch = testkit.Scratch({}, {"item.add": ia.ITEM_ADD}, photos=["reports/hass/newitem-1/synthetic/jar-white-sheet.jpg"])
         try:
             plan = ia.plan_add({"name": "Cal Poly honey", "maker": "Cal Poly", "availability": "yes", "photo": SHA}, scratch._ctx())
             out = scratch.editor.prepare(plan)
             self.assertEqual(out["result"], "ok", out)
-            self.assertTrue(live_policy.check(out["draft"]))
+            self.assertEqual(live_policy.check(out["draft"]), [])
+            self.assertEqual(live_policy.unsaid(out["draft"], "Cal Poly honey"), [])
         finally:
             scratch.close()
-        self.assertEqual(ia.ITEM_ADD.live_class, "private-only")
+        self.assertEqual(ia.ITEM_ADD.live_class, "chat-live")
 
     def test_every_owner_sentence_passes_the_voice_rules(self):
         fixed = list(ia.ASK.values()) + [ia.ONE_PHOTO, ia.NO_LAST_FARM, ia.STORE_LINE, ia.NO_BYTES, ia.RETAKE_BUSY,
