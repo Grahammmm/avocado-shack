@@ -581,6 +581,9 @@ class Failures(NoNetwork):
         answers = {"search not a list": {"oops": 1}, "hit not an object": [7], "name not text": [dict(hit, name=5)],
                    "type not text": [dict(hit, type=["path"])], "id missing": [{k: v for k, v in hit.items() if k != "osm_id"}],
                    "id not a number": [dict(hit, osm_id="1")]}
+        for field in ("name", "display_name", "category", "type", "osm_type"):  # empty or falsey values are not text either
+            for label, value in (("empty list", []), ("empty object", {}), ("zero", 0), ("false", False)):
+                answers["%s is an %s" % (field, label)] = [dict(hit, **{field: value})]
         for label, search in answers.items():
             with self.subTest(label):
                 class Bad(Synthetic):

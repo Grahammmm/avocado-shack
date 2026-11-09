@@ -794,7 +794,7 @@ def _california(tokens, transport):
     if not isinstance(r.body, list) or not all(isinstance(h, dict) for h in r.body):
         raise _bad("nominatim body")
     for h in r.body:  # the fields read below must be text, or the answer is unreadable
-        if any(not isinstance(h.get(k) or "", str) for k in ("name", "display_name", "category", "type", "osm_type")):
+        if any(h.get(k) is not None and not isinstance(h.get(k), str) for k in ("name", "display_name", "category", "type", "osm_type")):
             raise _bad("nominatim hit")
     hits = [h for h in r.body if name_score(tokens, h.get("name") or (h.get("display_name") or "").split(",")[0]) >= MATCH_MIN]
     trails = [h for h in hits if h.get("category") in ("highway", "route") and h.get("type") in PATH_TYPES]  # never a street
