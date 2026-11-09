@@ -775,7 +775,8 @@ class Dispatcher:
         """Make ``first`` (an incomplete call, its slots already checked) the open request, keep ``rest`` queued, ask its question."""
         conv = self.conv
         skill = self.registry.get(first["skill"])
-        slot = next((s for s in skill.slots if s.name == first.get("slot")), None) or next_missing(skill, first["slots"])
+        slot = (next((s for s in skill.slots if s.name == first["slot"]), None)
+                if "slot" in first else next_missing(skill, first["slots"]))
         question = (question_for(slot, first.get("problem"), first.get("ask"), skill=skill, slots=first["slots"],
                                  ctx=ctx if ctx is not None else (self._ctx(now, texts) if skill_hook(skill, "question") else None))
                     if slot else first.get("problem"))
