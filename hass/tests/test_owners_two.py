@@ -7,12 +7,15 @@ reaches the other owner's work); a second owner's request while a draft or a rel
 nothing; open requests, pause, the daily limit are as documented. Single-owner behaviour is covered by the existing conversation tests.
 Run: python3 -B -m unittest hass.tests.test_owners_two -v
 """
+import datetime as _dt
 import json
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 from hass import conversation as conv
-from hass import relay
+from hass import host, relay
 from hass.ops import load_registry
 from hass.tests import fixture_ops
 from hass.tests.test_conversation import ConversationTestCase, GROUP, STRANGER, _ops
@@ -230,6 +233,28 @@ class ReplyTests(Base):
         alone.send(MCHAT, "m", ["a.png"])
         self.assertEqual(store.rows[-1], (MCHAT, "m", 1))
         with self.assertRaises(relay.RelayRefused): alone.send(GCHAT, "x")
+
+    def test_worker_keeps_ownerChat_as_the_picture_main_chat_when_ownerChats_is_listed_in_another_order(self):
+        # the first relay chat is the main one: the configured ownerChat must win over list order, whichever way ownerChats is listed.
+        # The Mac forwarder carries pictures to every owner chat, so both chats get their pictures
+        class Store:
+            def __init__(self): self.rows = []
+            def add(self, chat, text, pictures, now, shots=()): self.rows.append((chat, text, pictures)); return len(self.rows)
+            def unacked(self, chat): return 0
+        for main, listed in ((GCHAT, [MCHAT, GCHAT]), (MCHAT, [GCHAT, MCHAT]), (MCHAT, [MCHAT, GCHAT]), (GCHAT, [GCHAT, MCHAT])):
+            with self.subTest(main=main, listed=listed):
+                settings = load({**TWO, "ownerChat": main, "ownerChats": listed})
+                self.assertEqual(settings["ownerChat"], main)
+                self.conv.settings = settings
+                store = Store()
+                with mock.patch.object(host.editor_mod, "content_revision", return_value="rev"):
+                    worker = host.Worker(self.conv, SimpleNamespace(handle=lambda *a, **k: None), store, "wt", lambda: None, lambda: _dt.datetime(2026, 1, 1))
+                other = GCHAT if main == MCHAT else MCHAT
+                self.assertEqual(worker.sender.owner_chat, main)
+                self.assertEqual(set(worker.sender.owner_chats), {MCHAT, GCHAT})
+                worker.sender.send(main, "m", ["a.png"])
+                worker.sender.send(other, "o", ["a.png"])
+                self.assertEqual(store.rows, [(main, "m", 1), (other, "o", 1)])  # each owner chat gets its picture
 
     def test_relay_ignores_a_gchat_that_is_an_owner_chat(self):
         sender = relay.RelaySender(None, (MCHAT, GCHAT), lambda: 1, None, GCHAT)

@@ -1,5 +1,7 @@
 """AV-CI-SHARD-1: the hass/tests CI planner (hass/tests/ci_shards.py): stable shards, the union proof, the
 changed-files -> test-modules map with its FULL fallbacks, and the aggregate verdict."""
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -143,6 +145,75 @@ class GraphTest(unittest.TestCase):
 def record(key, modules, tests, ok=True):
     return {"shard": key, "modules": modules, "tests_run": tests, "ok": ok, "failures": 0 if ok else 1,
             "errors": 0, "skipped": 0, "seconds": 1.0}
+
+
+class WeightReaderTest(unittest.TestCase):
+    """load_weights over real temporary JSON files: a defect means {} plus ONE fixed warning, never an exception."""
+    WARNING = (f"::warning::shard weights unavailable (seconds must map module names to ints >= 1); "
+               f"every module weighs {cs.DEFAULT_WEIGHT}s\n")
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def read(self, raw, name="weights.json"):
+        """(result, stdout) of cs.load_weights on a file holding `raw` (text); raw None = absent file."""
+        path = self.dir / name
+        if raw is not None:
+            path.write_text(raw, encoding="utf-8")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            result = cs.load_weights(path)
+        return result, out.getvalue()
+
+    def test_non_mapping_seconds_warns_and_falls_back(self):
+        for seconds in ("[]", "[1, 2]", "null", "3", '"slow"', "true", "false"):
+            with self.subTest(seconds=seconds):
+                raw = '{"seconds": %s}' % seconds
+                path = self.dir / "weights.json"
+                path.write_text(raw, encoding="utf-8")
+                before = (path.read_bytes(), path.stat().st_mode)
+                result, out = self.read(raw)
+                self.assertEqual(result, {})
+                self.assertEqual(out, self.WARNING)
+                self.assertEqual((path.read_bytes(), path.stat().st_mode), before)
+
+    def test_valid_weight_maps_are_unchanged(self):
+        high, low = cs.DEFAULT_WEIGHT + 40, 1
+        for data in ({}, {"test_a": high}, {"test_z": low, "test_a": high, "test_m": cs.DEFAULT_WEIGHT},
+                     {"test_a": high, "test_z": low, "test_m": cs.DEFAULT_WEIGHT}):
+            with self.subTest(data=data):
+                result, out = self.read(json.dumps({"seconds": data}))
+                self.assertEqual(result, data)
+                self.assertEqual(out, "")
+
+    def test_existing_invalid_weights_keep_fallback(self):
+        cases = {"absent": None, "malformed": "{not json", "root-null": "null", "root-list": "[]",
+                 "missing-seconds": "{}", "zero": '{"seconds": {"test_a": 0}}',
+                 "negative": '{"seconds": {"test_a": -2}}', "bool": '{"seconds": {"test_a": true}}',
+                 "string": '{"seconds": {"test_a": "9"}}'}
+        for label, raw in cases.items():
+            with self.subTest(case=label):
+                result, out = self.read(raw, name=f"{label}.json")
+                self.assertEqual(result, {})
+                self.assertEqual(out.count("::warning::shard weights unavailable"), 1)
+                self.assertEqual(out.count("\n"), 1)
+
+    def test_default_weight_fallback_plan_covers_every_module_once(self):
+        modules = ["test_d", "test_b", "test_a", "test_c", "test_e"]
+        weights, _ = self.read('{"seconds": []}')
+        self.assertEqual(weights, {})
+        plan = cs.make_plan("push", "base", 2, weights, modules)
+        self.assertEqual(plan["tier"], "full")
+        self.assertEqual(plan["modules"], len(modules))
+        ok, lines = cs.union_proof(sorted(modules), plan["shards"])
+        self.assertTrue(ok, lines)
+        self.assertIn("IDENTICAL", lines[0])
+        # equal default weights: heaviest-first ties break by name onto the lightest shard (lower index first)
+        self.assertEqual(plan["shards"], [["test_a", "test_c", "test_e"], ["test_b", "test_d"]])
+        again = cs.make_plan("push", "base", 2, weights, list(reversed(modules)))
+        self.assertEqual(again["shards"], plan["shards"])
 
 
 class VerifyTest(unittest.TestCase):

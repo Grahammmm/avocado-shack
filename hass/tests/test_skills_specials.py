@@ -289,6 +289,35 @@ class RuleTests(unittest.TestCase):
         # words before 'on special' that are not his name for the special are kept, so the deal cannot be picked out: ask
         self.assertIn("exactly as you type it", rule("2 for $5", "put the lemmons on special, 2 for $5", "Lemons")[0])
 
+    def test_deal_leading_request_verb_is_not_scaffolding(self):
+        def rule(deal, text, title="Honey"):
+            return self.rule("specials-deal-as-typed", {"title": title, "deal": deal}, texts=[text])
+
+        make = "new special: Make a friend happy with free samples, until Friday"
+        for text, whole, dropped in (
+                (make, "Make a friend happy with free samples", "a friend happy with free samples"),
+                ("put honey on special, Put two jars in your bag for $5, until Friday", "Put two jars in your bag for $5",
+                 "two jars in your bag for $5"),
+                ("change the honey special to Put two jars in your bag for $5", "Put two jars in your bag for $5",
+                 "two jars in your bag for $5"),
+                ("Put two jars in your bag for $5 till Friday", "Put two jars in your bag for $5", "two jars in your bag for $5")):
+            self.assertIsNone(rule(whole, text), text)  # his whole words, verb included
+            self.assertEqual(rule(dropped, text), (sp.NOT_AS_TYPED, "other"), text)  # the model's shortened deal is asked about
+        self.assertEqual(sp.deal_readings(make, {"title": "Honey"}), ["Make a friend happy with free samples"] * 2)
+        # a real request lead-in is still cut: only the verb inside it goes
+        self.assertIsNone(rule("2 for $5", "put honey on special, 2 for $5, until Friday"))
+        self.assertIsNone(rule("2 for $5", "please change the honey special to 2 for $5"))
+
+    def test_standalone_retyped_deal_keeps_verb(self):
+        slots = {"title": "Honey", "deal": "Put two jars in your bag for $5"}
+        first = "put honey on special, two jars in your bag for $5, until Friday"
+        retype = "Put two jars in your bag for $5"
+        self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=[first, retype]))  # his retyped answer settles it
+        self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=[retype]))
+        self.assertEqual(sp.deals_typed(retype, {"title": "Honey"}), [retype])
+        self.assertEqual(self.rule("specials-deal-as-typed", dict(slots, deal="two jars in your bag for $5"), texts=[retype]),
+                         (sp.NOT_AS_TYPED, "other"))
+
     def test_a_spelled_out_amount_in_a_title_is_a_price_too(self):
         for title in ("Honey five dollars", "Honey twenty-five cents", "Honey twenty five bucks", "Eggs a buck", "Eggs one hundred dollars",
                       "Eggs 5 euros", "Eggs €5", "Eggs £3", "Eggs three DOLLARS", "Eggs ten bucks each"):
@@ -531,6 +560,26 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(refusal(sp.SPECIALS_EDIT, {"special": "honey", "deal": "half price"}, edit), sp.NOT_AS_TYPED)
             self.assertEqual(sp.SPECIALS_ADD.plan({"title": "Honey", "deal": whole, "end": "2026-11-13"}, add)[0]["args"]["deal"], whole)
             self.assertEqual(sp.SPECIALS_EDIT.plan({"special": "honey", "deal": whole}, edit)[0]["args"], {"id": "avocado-honey", "deal": whole})
+
+    def test_add_and_edit_keep_deal_verb_after_request_prefix(self):
+        honey = special("honey", "Honey", deal="2 for $5")
+        for add_text, edit_text, whole, dropped in (
+                ("new special: Make a friend happy with free samples, until Friday",
+                 "change the honey special to Make a friend happy with free samples",
+                 "Make a friend happy with free samples", "a friend happy with free samples"),
+                ("put honey on special, Put two jars in your bag for $5, until Friday",
+                 "change the honey special to Put two jars in your bag for $5",
+                 "Put two jars in your bag for $5", "two jars in your bag for $5"),
+                ("put honey on special, Put two jars in your bag for $5, until Friday",
+                 "Put two jars in your bag for $5",  # the same deal retyped alone
+                 "Put two jars in your bag for $5", "two jars in your bag for $5")):
+            add, edit = ctx(texts=[add_text]), ctx(honey, texts=[edit_text])
+            op = sp.SPECIALS_ADD.plan({"title": "Honey", "deal": whole, "end": "2026-11-13"}, add)[0]
+            self.assertEqual(op["args"]["deal"], whole, add_text)
+            op = sp.SPECIALS_EDIT.plan({"special": "honey", "deal": whole}, edit)[0]
+            self.assertEqual(op["args"], {"id": "honey", "deal": whole}, edit_text)
+            self.assertEqual(refusal(sp.SPECIALS_ADD, {"title": "Honey", "deal": dropped, "end": "2026-11-13"}, add), sp.NOT_AS_TYPED, add_text)
+            self.assertEqual(refusal(sp.SPECIALS_EDIT, {"special": "honey", "deal": dropped}, edit), sp.NOT_AS_TYPED, edit_text)
 
     def test_edit_sends_only_what_changes(self):
         c = ctx(special("avocado-honey", "Avocado honey", deal="2 for $5", product="photo-product-041", picture=True))
@@ -937,6 +986,24 @@ class GroundedEndToEndTests(unittest.TestCase):
                 disposition, replies, saved, drafts = self.go(text, skill, slots_for(short), seed_for())
                 self.assertNotEqual(disposition, "proposed", (skill, text))
                 self.assertEqual((saved, drafts), (None, []), skill)  # no draft, nothing saved
+                self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
+
+    def test_add_and_edit_keep_imperative_deal_exactly(self):
+        for add_text, edit_text, whole, dropped in (
+                ("put honey on special, Put two jars in your bag for $5, until Friday",
+                 "change the honey special to Put two jars in your bag for $5", "Put two jars in your bag for $5", "two jars in your bag for $5"),
+                ("new special: Make a friend happy with free samples, until Friday",
+                 "change the honey special to Make a friend happy with free samples",
+                 "Make a friend happy with free samples", "a friend happy with free samples")):
+            for skill, text, slots_for, seed in (
+                    (ADD, add_text, lambda d: self.add_slots("Honey", d), None),
+                    (EDIT, edit_text, lambda d: {"special": "honey", "deal": d}, self.edit_seed)):
+                disposition, _replies, saved, _drafts = self.go(text, skill, slots_for(whole), seed and seed())
+                self.assertEqual(disposition, "proposed", (skill, text))
+                self.assertEqual([x["deal"] for x in saved], [whole], (skill, text))  # byte-identical, read back from the store
+                disposition, replies, saved, drafts = self.go(text, skill, slots_for(dropped), seed and seed())
+                self.assertNotEqual(disposition, "proposed", (skill, text))
+                self.assertEqual((saved, drafts), (None, []), (skill, text))  # no draft, nothing saved
                 self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
 
     def test_add_refuses_a_spelled_out_price_in_the_title_and_keeps_a_plain_one(self):

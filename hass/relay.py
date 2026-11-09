@@ -96,7 +96,8 @@ SHAPES = {  # body op -> [(keys, validator of the whole body)]; "picture" is a r
 
 
 def _body_ok(body) -> bool:
-    shapes = SHAPES.get(body.get("op")) if type(body) is dict else None
+    if type(body) is not dict or type(body.get("op")) is not str: return False
+    shapes = SHAPES.get(body["op"])
     return shapes is not None and any(set(body) == keys and check(body) for keys, check in shapes)
 
 
