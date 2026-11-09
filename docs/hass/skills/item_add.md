@@ -25,8 +25,9 @@ gate, the live boundary, the preview and the approval are the existing ones; the
 | picture caption | `image_alt` | `derive:alt_text`: the name, plus "in a jar" only when he said jar | never asked unless the draft cannot be made |
 | in stock or not | `availability` | his words only ("got in" = yes, "only a few" = limited, "sold out" = no) | "Is it in stock right now?" |
 | the photo | `photo` (attachment) | the sha256 of the stored original | "Send a photo of it." |
+| story of a new maker | `story`, `maker_url` | his words, plus short sentences from the maker's own web page when he gives its address (`maker_url`); "skip" keeps only the D5 line | "What should we say about <Maker>? A sentence is enough." (asked once, only for a new maker with neither words nor an address; a page that cannot be read or has nothing usable: the reason, then the same question) |
 
-Optional, never asked: `story` and `maker_url` for a new maker, `display_brand`.
+Optional, never asked: `display_brand`.
 
 A product his name and maker already have on the site (a twin) is named **before** anything else is asked:
 "Rigatoni pasta is already on the site. Do you want to change it instead?" (a hidden twin: "... is on the site but hidden. Do you
@@ -34,7 +35,8 @@ want me to bring it back instead?"; a held twin is refused).
 
 ## The draft
 
-* New maker: `maker.add` (with no story, the D5 one line "<Maker> is based in <place>.") and the line "<Maker> is new on the site,
+* New maker: `maker.add` (with no story, the D5 one line "<Maker> is based in <place>."; with his words and/or the maker's page, that
+  story, see "The maker's story" below) and the line "<Maker> is new on the site,
   so I'm adding them too." A maker already on the site: "<Maker> is already on the site, so I'm using them." A hidden maker is
   never used: "<Maker> is hidden. Do you want me to bring them back first?"
 * `product.add{name, brand, category, description, producerKey, photo, imageAlt}`; an unknown maker gets the house words
@@ -44,9 +46,9 @@ want me to bring it back instead?"; a held twin is refused).
   today as the day you checked the shelves." Already recorded today: `product.set_availability{id, available}`, no extra line.
 * **D9:** a price or size is never written: "Left off: the price ($9) and the size (8oz), because the website shows no prices or
   sizes." A name that is still a number after that is asked again.
-* Claims (organic, local, origins) pass only when he said them; the claims gate in the editor checks the draft again and the
-  live policy still stops a live release of a new product (brand, displayBrand and producerKey are protected: live class
-  `private-only`, D4).
+* Claims (organic, local, origins) pass only when he said them; the claims gate in the editor checks the draft again. Whether
+  `product.add` and `maker.add` may go live is the live policy's table (`hass/live_policy.py`, HASS-LIVE-ADD-1); this skill
+  does not change those rows, it only makes sure its own draft passes them (see "The live gate").
 * **One photo, one product:** when his words ("add the lemon curd and the plum jam", a name that lists two products, `&`, `+`, or
   "both" beside an "and" in the name) put two products on the one photo, the skill itself asks "One photo can go on one product.
   Which one is this photo for?", whatever the interpreter returned. A single name with an "and" in it ("Salt and vinegar chips") is
@@ -59,11 +61,52 @@ want me to bring it back instead?"; a held twin is refused).
   he did not say is left to the claims gate, which asks him about it.
 * **Preview:** the proposal screenshot is of the new product card (its picture and neighbours), also when a new maker is added
   with it (`preview.proposal_record`); the maker record comes first in the change only because the product needs it.
-* **D6, the picture:** with the house render on (`houseRender`, SKILLS-PIC-1), a photo the render cannot make house-style gets a
+* **D6, the picture (HASS-LIVE-ADD-2):** `product.set_photo` is a live operation (`id`, `photo`, `imageAlt` only). With the house render on (`houseRender`, SKILLS-PIC-1), a photo the render cannot make house-style gets a
   kind retake line ("I couldn't separate the product from the background ... A new photo on a plain surface ... If this one is
   fine, just reply yes."); a small one: "This photo is small ...". With the render off (today), the photo goes on as sent and a photo
   that misses the house look gets "I'll use the photo as you took it, so it may look different from the other pictures ...". The
-  advice is read-only (`hass/house_style.py`, `hass/newitem_render.py`); Mike may say yes knowingly.
+  advice is read-only (`hass/house_style.py`, `hass/newitem_render.py`); Mike may say yes knowingly. A photo the render refuses
+  when the editor installs it (`photos.install` returns a `Retake`, a photo too big to open, ...) now reaches Mike in its own
+  plain sentence ("Could you take it again on a plain surface ...", `conversation._plain`), not the generic "I couldn't make
+  that change". Nothing is drafted and nothing is written. The host needs `houseRender: true` and the Pillow 12.0.0 python
+  (`docs/hass/PILLOW-HOST.md`); `reports/hass/live-add-2/` is the rehearsal with the real render.
+
+## The maker's story (HASS-LIVE-ADD-2 C)
+
+Code: `hass/maker_site.py`, called through `ctx.maker_page` (the dispatcher's reader; the test kit gives recorded pages, so no test
+touches the network).
+
+* **A maker already on the site is reused**, with its story as it is.
+* **A new maker:** his words (`story`) and the short sentences taken from the maker's own page when he gave its address. With
+  neither, ONE question ("What should we say about <Maker>? A sentence is enough."); "skip", "no story" and the like keep only
+  the D5 line. Nothing is invented.
+* **The polite read:** https only, a public host (no IP address, localhost, user name or port), the site's `robots.txt` obeyed
+  (a disallow, 401 or 403 means the page is never requested: "That website asks programs not to read it, so I won't."), one
+  request per host every 2 seconds, same-site redirects only, no cookies, no proxy, at most 600 KB. Failures are plain words
+  and then the same one question.
+* **The story** is built from short page sentences that carry no claim (no origin, organic, health, award, price, contact or
+  trail wording, no year), "We" and "Our" become the maker's name, at most 2 page sentences (40 to 190 characters each, 330
+  together), never a long passage; they are added to his own words. It is machine-valid,
+  **not accepted**: the draft says "I read <Maker>'s own website (<address>) on <day> for the story. Change any word you like
+  before you say yes."
+* **Source record:** the address, the day and the source sentences are kept privately with the draft (`maker-sources.jsonl`).
+  The address is not put on the maker: the website-link field is protected and is not published.
+* **Known limit:** a page sentence starting "We" or "Our" is credited to whatever maker name he gave; he reads the story and the
+  address before his yes.
+
+## The live gate (HASS-LIVE-ADD-2 B)
+
+With `liveSite` on, `ctx.live` is true and the skill judges the live gate itself, so a claim is dealt with in plain words
+before the draft rather than caught later:
+
+* a claim (`live_policy.PLAIN_KINDS`: where it comes from or organic, a health claim or an award, trail details, a price,
+  contact details) in the **name, the maker's story or the picture caption** is refused: "I can't put <what> on the website
+  from chat, so nothing changed. Send it again without that and I'll add the product." The refusal is a `policy` backlog row for
+  Graham;
+* a claim in **his own description** (or in the drafted one) is rewritten to the house draft without it, and the reply lists
+  "Left off: your wording of the description, because it says ...". He can still send a different description before yes;
+* the draft is one op list (`maker.add`, `product.add`, `product.set_photo` by way of the photo, the shelf check), all with
+  arguments the live table allows.
 
 ## Undo
 
@@ -93,11 +136,16 @@ bad photo warned before the yes, a bad description asked again); it is skipped o
 
 ## Cases (`item.add.jsonl`)
 
-13 conversation rows through the real Conversation and Editor and 6 plan rows: the ten spec sentences (clean, misspelled,
-vague "add this", a photo with no words, twin, price and size, unknown maker, one question at a time, two items on one photo,
-organic said), a photo with the name as its caption, same farm as last time, a hidden maker, and today's check already
-recorded; 8 rows end in an approved draft that is undone. They use the synthetic photos of #504
-(`reports/hass/newitem-1/synthetic/`).
+28 rows: 22 conversation rows through the real Conversation and Editor and 6 plan rows. The first 20 are the ten spec sentences
+(clean, misspelled, vague "add this", a photo with no words, twin, price and size, unknown maker, one question at a time, two
+items on one photo, organic said), a photo with the name as its caption, same farm as last time, a hidden maker, and today's
+check already recorded. The 8 `live2-*` rows (HASS-LIVE-ADD-2) are: a known maker with the real house render, a new maker with a
+recorded web page, a new maker with no words and no address (asked, nothing invented), a page that cannot be read (asked), a
+photo the render cannot cut out (retake sentence, nothing drafted), a claim in his description (rewritten, "Left off"), and
+organic and origin words in the name (refused with the plain reason). 12 rows end in an approved draft that is undone. They use
+the synthetic photos of #504 (`reports/hass/newitem-1/synthetic/`) and recorded pages (`hass/tests/fixtures/maker_site/`).
+More tests: `hass/tests/test_maker_site.py` (30: robots, address rules, redirects, size cap, story rules, rate gap, record) and
+`hass/tests/test_live_add_photo_undo.py` (9: live `product.set_photo`, one undo hides the product and the new maker).
 
 ```
 python3 hass/skills/testkit.py run hass/tests/fixtures/skills/item_add/item.add.jsonl
