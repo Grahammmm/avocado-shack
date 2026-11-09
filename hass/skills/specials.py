@@ -159,10 +159,12 @@ def rule_price_in_deal_only(slots, texts, ctx):
 
 
 # The deal as typed is one whole run of his clauses, never a piece found inside it. A text is cut into clauses at his
-# separators (commas, colons, brackets, a full stop, a dash); each clause loses its request words at the front ('put',
-# 'change the honey special to', 'on special', 'special:', 'this week only') and the end date at the back ('until
-# Friday'). What is left, from the first clause with words in it to the last, is the run. The special's own name may
-# stand in that run as his label ('Strawberries 2 for $5', 'jam: 2 for $5', '2 for $5 on the jam') or as words of the deal
+# separators (commas, colons, brackets, a full stop, a dash); each clause loses its request words at the front, only as a
+# lead-in from the clause start made of a request verb, small words and the special's own words ('put', 'put the honey
+# on special', 'change the honey special to', 'special:', 'this week only'; never his deal words before a later 'on
+# sale'), and the end date at the back ('until Friday'). What is left, from the first clause with words in it to the
+# last, is the run. The special's own name may stand in that run as his label ('Strawberries 2 for $5', 'jam: 2 for
+# $5', '2 for $5 on the jam') or as words of the deal
 # ('Free samples with any purchase'), so each text is read twice: (1) with the name kept: this is always his deal, as it
 # loses nothing he typed; (2) with the name also cut off as a label: this is his deal too when the name was not in
 # front of it, or when what is left starts like a deal by itself (a figure, a price, a count or an offer word: '2 for
@@ -206,15 +208,22 @@ def _special_names(slots, ctx):
     return sorted(out, key=len, reverse=True)
 
 
-def _cutters(names):
-    """(front patterns, back patterns) for one special's names."""
+def _cutters(names, cut_name=True):
+    """(front patterns, back patterns) for one special's names. The request words come off the front only as a lead-in
+    anchored at the clause start: a request verb, small words ('the', 'new') and the special's own words, then 'on
+    special' / 'on sale' / 'special to' ('put the avocado honey on special', 'change the honey special to'). Any other
+    word before them ('2 for $5 with any purchase on sale at half price') is his, so nothing is cut and he is asked.
+    With ``cut_name`` the name itself also comes off the front and 'on the jam' off the back (reading 2)."""
+    words = sorted({w for n in names for w in n.casefold().split()}, key=len, reverse=True)
+    lead = (r"(?:" + _VERBS + r"\s+)?(?:(?:the|our|my|this|that|these|those|new|a|an|some"
+            + "".join("|" + re.escape(w) for w in words) + r")\s+)*")
     name = r"(?:(?:the|our|my|this|that|new)\s+)*(?:" + "|".join(r"\s+".join(map(re.escape, n.split())) for n in names) + r")\b" if names else None
-    fronts = [re.compile(r".*\bon\s+(?:special|sale)\b(?:\s+" + _JOIN + r"\b)?", re.I | re.S),
-              re.compile(r".*\b" + _SPECIAL_WORD + r"(?:\s+" + _JOIN + r"\b|\s*$)", re.I | re.S),
+    fronts = [re.compile(lead + r"on\s+(?:special|sale)\b(?:\s+" + _JOIN + r"\b)?", re.I),
+              re.compile(lead + _SPECIAL_WORD + r"(?:\s+" + _JOIN + r"\b|\s*$)", re.I),
               re.compile(_VERBS + r"\b", re.I), re.compile(r"(?:" + _WHEN + r")\b", re.I)]
-    if name:
+    if name and cut_name:
         fronts.append(re.compile(name + r"(?:\s+" + _JOIN + r"\b)?", re.I))
-    backs = [_DATE_TAIL] + ([re.compile(r"\s+(?:on|for)\s+" + name + r"$", re.I)] if name else [])
+    backs = [_DATE_TAIL] + ([re.compile(r"\s+(?:on|for)\s+" + name + r"$", re.I)] if name and cut_name else [])
     return fronts, backs
 
 
@@ -278,9 +287,9 @@ _DEAL_START = re.compile(r"[$£€¥¢\d]|(?:" + _NUMBER_WORDS.replace("a|an|", 
 def deal_readings(text, slots=None, ctx=None) -> list:
     """The deals one text can hold, at most two: the run with the special's name kept, and the run with the name cut off
     as a label when that is a deal by itself (see the note above ``_SEPARATOR``). Empty when the text has two runs."""
-    text = str(text)
-    kept = _runs(text, _cutters([]))
-    cut = _runs(text, _cutters(_special_names(slots or {}, ctx)))
+    text, names = str(text), _special_names(slots or {}, ctx)
+    kept = _runs(text, _cutters(names, cut_name=False))
+    cut = _runs(text, _cutters(names))
     out = [text[a:b] for a, b in kept] if len(kept) == 1 else []
     if len(cut) == 1:
         a, b = cut[0]

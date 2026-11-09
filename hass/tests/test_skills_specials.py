@@ -146,8 +146,9 @@ class RuleTests(unittest.TestCase):
 
     def test_the_deal_is_shown_exactly_as_typed(self):
         slots = {"deal": "2 for 5 dollars"}
-        self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=["put the honey on special, 2 for 5 dollars, till Friday"]))
-        self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=["put the honey on special, 2  for   5 dollars"]))  # spacing only
+        honey = {"title": "Honey", **slots}  # the words before 'on special' are cut only when they are the special's own
+        self.assertIsNone(self.rule("specials-deal-as-typed", honey, texts=["put the honey on special, 2 for 5 dollars, till Friday"]))
+        self.assertIsNone(self.rule("specials-deal-as-typed", honey, texts=["put the honey on special, 2  for   5 dollars"]))  # spacing only
         self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=["special on honey", "2 for 5 dollars"]))  # said in a later text
         for reworded in ("2 for $5", "2 For 5 Dollars", "two for 5 dollars", "2 for 5 dollars!"):
             self.assertIn("exactly as you type it", self.rule("specials-deal-as-typed", {"deal": reworded}, texts=["honey 2 for 5 dollars"])[0], reworded)
@@ -242,6 +243,26 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(sp.deal_readings("Strawberries 2 for $5 till Friday", {"title": "Strawberries"}), ["Strawberries 2 for $5", "2 for $5"])
         self.assertIsNone(rule("Free samples", "with any purchase", "with any purchase"))  # his retyped answer settles it
         self.assertIsNone(rule("Samples", "free with any purchase", "Samples free with any purchase, till Friday"))  # an offer word starts a deal
+
+    def test_only_a_lead_in_from_the_clause_start_is_cut_never_deal_words_before_a_later_on_sale(self):
+        def rule(deal, text, title="Honey"):
+            return self.rule("specials-deal-as-typed", {"title": title, "deal": deal}, texts=[text])
+
+        for text, whole in (("put honey on special, 2 for $5 with any purchase on sale at half price, until Friday",
+                             "2 for $5 with any purchase on sale at half price"),
+                            ("change the honey special to 2 for $5 with any purchase on sale at half price",
+                             "2 for $5 with any purchase on sale at half price"),
+                            ("put honey on special, buy one get one free when on sale at half price, until Friday",
+                             "buy one get one free when on sale at half price"),
+                            ("2 for $5 with any purchase is the special deal for honey", "2 for $5 with any purchase is the special deal for honey")):
+            self.assertEqual(rule("half price", text), (sp.NOT_AS_TYPED, "other"), text)  # the words before 'on sale' are his
+            self.assertIsNone(rule(whole, text), text)
+        self.assertIn("exactly as you type it", rule("for honey", "2 for $5 with any purchase is the special deal for honey")[0])
+        # a lead-in of a request verb, small words and the special's own words is still cut
+        self.assertIsNone(rule("2 for 5 dollars", "put the avocado honey on special this week, 2 for 5 dollars", "Stepladder avocado blossom honey"))
+        self.assertIsNone(rule("3 for $10", "change the avocado honey special to 3 for $10", "Avocado honey"))
+        # words before 'on special' that are not his name for the special are kept, so the deal cannot be picked out: ask
+        self.assertIn("exactly as you type it", rule("2 for $5", "put the lemmons on special, 2 for $5", "Lemons")[0])
 
     def test_a_spelled_out_amount_in_a_title_is_a_price_too(self):
         for title in ("Honey five dollars", "Honey twenty-five cents", "Honey twenty five bucks", "Eggs a buck", "Eggs one hundred dollars",
@@ -465,6 +486,19 @@ class PlanTests(unittest.TestCase):
                 self.assertEqual(op["args"]["deal"], deal, text)
                 op = sp.SPECIALS_EDIT.plan({"special": "strawberries", "deal": deal}, ctx(strawberries, texts=[text]))[0]
                 self.assertEqual(op["args"], {"id": "strawberries", "deal": deal}, text)
+
+    def test_add_and_edit_never_save_the_part_after_a_later_on_sale(self):
+        honey = special("avocado-honey", "Avocado honey", deal="2 for $9")
+        for add_text, edit_text, whole in (
+                ("put honey on special, 2 for $5 with any purchase on sale at half price, until Friday",
+                 "change the honey special to 2 for $5 with any purchase on sale at half price", "2 for $5 with any purchase on sale at half price"),
+                ("put honey on special, buy one get one free when on sale at half price, until Friday",
+                 "change the honey special to buy one get one free when on sale at half price", "buy one get one free when on sale at half price")):
+            add, edit = ctx(texts=[add_text]), ctx(honey, texts=[edit_text])
+            self.assertEqual(refusal(sp.SPECIALS_ADD, {"title": "Honey", "deal": "half price", "end": "2026-11-13"}, add), sp.NOT_AS_TYPED)
+            self.assertEqual(refusal(sp.SPECIALS_EDIT, {"special": "honey", "deal": "half price"}, edit), sp.NOT_AS_TYPED)
+            self.assertEqual(sp.SPECIALS_ADD.plan({"title": "Honey", "deal": whole, "end": "2026-11-13"}, add)[0]["args"]["deal"], whole)
+            self.assertEqual(sp.SPECIALS_EDIT.plan({"special": "honey", "deal": whole}, edit)[0]["args"], {"id": "avocado-honey", "deal": whole})
 
     def test_edit_sends_only_what_changes(self):
         c = ctx(special("avocado-honey", "Avocado honey", deal="2 for $5", product="photo-product-041", picture=True))
@@ -840,6 +874,19 @@ class GroundedEndToEndTests(unittest.TestCase):
             self.assertNotEqual(disposition, "proposed", skill)
             self.assertEqual((saved, drafts), (None, []), skill)  # no draft, nothing saved
             self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
+
+    def test_add_and_edit_refuse_the_part_after_a_later_on_sale_and_keep_the_whole_deal(self):
+        for whole in ("2 for $5 with any purchase on sale at half price", "buy one get one free when on sale at half price"):
+            for skill, text, slots_for, seed in (
+                    (ADD, "put honey on special, " + whole + ", until Friday", lambda d: self.add_slots("Honey", d), None),
+                    (EDIT, "change the honey special to " + whole, lambda d: {"special": "honey", "deal": d}, self.edit_seed)):
+                disposition, replies, saved, drafts = self.go(text, skill, slots_for("half price"), seed and seed())
+                self.assertNotEqual(disposition, "proposed", (skill, whole))
+                self.assertEqual((saved, drafts), (None, []), (skill, whole))  # no draft, nothing saved
+                self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
+                disposition, _replies, saved, _drafts = self.go(text, skill, slots_for(whole), seed and seed())
+                self.assertEqual(disposition, "proposed", (skill, whole))
+                self.assertEqual([x["deal"] for x in saved], [whole], skill)  # the whole deal, read back from the store
 
     def test_add_and_edit_keep_a_deal_that_starts_with_the_special_s_name_and_refuse_it_shortened(self):
         text = "new special: Free samples with any purchase, until Friday"
