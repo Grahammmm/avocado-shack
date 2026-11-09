@@ -1,0 +1,24 @@
+checkout repo ops loaded: 39 sample product id: photo-product-001
+S1  product.add: new product, brand, new maker, photo          LIVE-POLICY: ALLOWED
+S1a product.add: same, on an existing maker                    LIVE-POLICY: ALLOWED
+S1b maker.add alone (no new product names it)                  LIVE-POLICY: REFUSED ['not live: maker.add without a new product']
+S1b2 maker.add with a web link                                 LIVE-POLICY: REFUSED ['not live: maker.add.url', 'protected field: makers.url']
+S1b3 maker.edit: place of an existing maker                    LIVE-POLICY: REFUSED ['not live: maker.edit.place', 'protected field: makers.place']
+S1b4 maker.edit: link of an existing maker                     LIVE-POLICY: REFUSED ['not live: maker.edit.url', 'protected field: makers.url']
+S1b5 maker.hide                                                LIVE-POLICY: REFUSED ['not live: maker.hide']
+S1e product.edit: brand of an existing product                 LIVE-POLICY: REFUSED ['not live: product.edit.brand', 'protected field: products.brand']
+S1e2 product.edit: producer of an existing product             LIVE-POLICY: REFUSED ['not live: product.edit.producerKey', 'protected field: products.producerKey']
+S1f product.add: description says organic / grown in           LIVE-POLICY: REFUSED ['protected sentences: origin/organic']
+S1g product.add: description has price words                   LIVE-POLICY: REFUSED ['protected sentences: prices']
+S1h product.add: brand not in the owner's words                LIVE-POLICY: REFUSED ["ASKED FIRST: not in the owner's words: ['Test Orchard', 'Paso Robles']"]
+S1i product.add: with an existing picture file (image)         LIVE-POLICY: REFUSED ['not live: product.add.image']
+S3  store.confirm_selection (sold out, shelf check)            LIVE-POLICY: ALLOWED
+S4  specials.add                                               LIVE-POLICY: ALLOWED
+S5  hike.create (meeting point trailhead gate)                 LIVE-POLICY: ALLOWED
+S6  store.set_notice                                           LIVE-POLICY: REFUSED ['not live: store.set_notice']
+S8  store.set_phone (must be refused)                          LIVE-POLICY: REFUSED ['protected operation: store.set_phone']
+S1c product.set_photo on an EXISTING product (real op)         LIVE-POLICY: REFUSED ['not live: product.set_photo']
+S1c2 product.set_photo, record shape (picture words only)      LIVE-POLICY: REFUSED ['not live: product.set_photo']
+S1d same, but the picture words claim organic/farm             LIVE-POLICY: REFUSED ['not live: product.set_photo', 'protected sentences: origin/organic']
+S9  undo of the new product (always passes)                    LIVE-POLICY: ALLOWED
+ROWS OUT OF LINE: none

@@ -69,7 +69,8 @@ class GeneratorTests(unittest.TestCase):
     def test_check_mode_passes_on_checkout(self):
         code, out = _quiet(sitegen.main, ["--check"])
         self.assertEqual(code, 0, out)
-        self.assertIn("170 active products, 26 makers", out)
+        content = load_and_validate()  # HASS-LIVE-ADD-1: a live add or hide changes the counts; they come from the content, not a constant
+        self.assertIn(f"{len(content.active_products())} active products, {len(content.makers)} makers", out)
 
     def test_out_mode_renders_into_temp_dir_without_touching_checkout(self):
         before = {rel: _sha(REPO_ROOT / rel) for rel in GENERATED}
@@ -96,12 +97,13 @@ class GeneratorTests(unittest.TestCase):
 
     def test_hidden_and_held_products_are_not_emitted(self):
         content = load_and_validate()
+        active_before = len(content.active_products())  # HASS-LIVE-ADD-1: derived, not 169 + 1 (a live add or hide changes it)
         content.products[0]["status"] = "hidden"
         hidden_id = content.products[0]["id"]
         catalog = sitegen.render(content)[sitegen.SITE_PREFIX + "catalog-products.js"].decode("utf-8")
         records = json.loads(catalog.split("\n", 1)[0][len("const catalog="):].rstrip(";"))
         ids = {r["id"] for r in records}
-        self.assertEqual(len(records), 169)
+        self.assertEqual(len(records), active_before - 1)
         self.assertNotIn(hidden_id, ids)
         self.assertNotIn("photo-product-040", ids)
         self.assertNotIn("photo-product-133", ids)
@@ -155,7 +157,7 @@ class ValidationTests(unittest.TestCase):
             "bad status": (product(0, status="deleted"), "status must be"),
             "hold on active product": (product(0, hold={"reason": "x", "source": "https://example.org/"}),
                                        "only allowed on held"),
-            "held without hold record": (lambda c: c.products[-1].pop("hold"), ".hold: must be an object"),
+            "held without hold record": (lambda c: next(p for p in c.products if p.get("status") == "held").pop("hold"), ".hold: must be an object"),
             "http maker url": (lambda c: c.makers["Etto"].update(url="http://ettopastificio.com/"), "https://"),
             "extra maker field": (lambda c: c.makers["Etto"].update(organic=True), "unknown field 'organic'"),
             "store markup": (lambda c: c.store.update(hours=["9am<script>"]), "forbidden text '<'"),
@@ -259,7 +261,7 @@ class MigrationCheckTests(unittest.TestCase):
         self.assertEqual(report["baselineListings"], 170)
         self.assertEqual(report["baselineListingsPreserved"], 170)
         self.assertEqual(report["baselineMakers"], 26)
-        self.assertEqual(report["makers"], 26)
+        self.assertGreaterEqual(report["makers"], report["baselineMakers"])  # HASS-LIVE-ADD-1: a live add may add a maker
         self.assertEqual(report["sourceLinksPreserved"], report["baselineSourceLinks"])
         self.assertEqual(report["heldProducts"], 2)
         self.assertEqual(report["heldExcluded"], ["photo-product-040", "photo-product-133"])
