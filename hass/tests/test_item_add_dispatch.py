@@ -189,6 +189,33 @@ class RealDispatcher(unittest.TestCase):
         self.assertIn("If this one is fine, just reply yes.", text)
         self.assertEqual(chat.commits(), 0)
 
+    def test_item_add_in_a_calls_reply_shows_the_same_notes_before_the_yes(self):
+        """A one-entry ``calls`` reply is drafted like a single skill: shelf-check line, maker explanation (D5), no price."""
+        chat = self.open(JAR)
+        text = "new honey from Bee Happy Farm in Atascadero, California, in stock"
+        chat.script(text, {"calls": [{"skill": "item.add", "slots": {
+            "name": "Honey", "maker": "Bee Happy Farm", "place": "Atascadero, California", "availability": "yes"}}], "revises": None})
+        disposition, replies = chat.say(text, JAR)
+        self.assertEqual(disposition, "proposed")
+        lines = [ln.strip() for ln in "\n".join(replies).split("\n")]
+        self.assertIn("This also records today as the day you checked the shelves.", lines)  # D2, its own line
+        self.assertIn("Bee Happy Farm is new on the site, so I'm adding them too.", lines)
+        self.assertTrue(any("Bee Happy Farm is based in Atascadero, California." in ln for ln in lines))  # D5
+        self.assertTrue(any(ln.startswith("Reply yes to save it") for ln in lines))
+        self.assertEqual(chat.commits(), 0)
+
+    def test_item_add_in_a_calls_reply_warns_about_a_photo_that_cannot_be_made_house_style(self):
+        chat = self.open(TILTED)
+        text = "new hot sauce from Cal Poly, in stock"
+        chat.script(text, {"calls": [{"skill": "item.add", "slots": {
+            "name": "Hot sauce", "maker": "Cal Poly", "shelf": "pantry", "availability": "yes"}}], "revises": None})
+        disposition, replies = chat.say(text, TILTED)
+        self.assertEqual(disposition, "proposed")
+        said = "\n".join(replies)
+        self.assertLess(said.index("I'll use the photo as you took it"), said.index("Reply yes to save it"))  # D6, before his yes
+        self.assertIn("This also records today as the day you checked the shelves.", said)  # D2 in the same reply
+        self.assertEqual(chat.commits(), 0)
+
     def test_a_description_the_site_cannot_show_is_asked_again_and_the_request_is_kept(self):
         chat = self.open(JAR)
         (disposition, replies), = self.say_all(chat, [

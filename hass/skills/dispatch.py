@@ -678,6 +678,7 @@ class Dispatcher:
             return self._ask_which(msg, now, req, asked, attachments)
         ctx = self._ctx(now, texts)
         ops, defaults, left, waiting = [], [], [], []
+        hooked = {"say": [], "set": [], "warn": []}  # each completed call's own notes, shown before his yes (as for one skill)
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
             if skill is None or skill.approval == "none" or skill.name == "backlog.log":
@@ -704,6 +705,9 @@ class Dispatcher:
             ops += planned if isinstance(planned, list) else []
             defaults += shown
             left += filled.left_off
+            if isinstance(planned, list) and planned:
+                for key, lines in self._skill_notes(skill, slots, now, texts).items():
+                    hooked[key] += lines
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
             return "question"
@@ -712,8 +716,14 @@ class Dispatcher:
                 conv._reply(PLAN_FAILED)
                 return "not-drafted"
             return self._queue_only(msg, now, req, waiting[0], waiting[1:], texts, attachments, ctx)
+        note = list(dict.fromkeys(hooked["say"]))
+        if defaults:
+            note.append("I set: " + "; ".join(defaults) + ".")
+        else:
+            note += list(dict.fromkeys(hooked["set"]))
+        note += list(dict.fromkeys(hooked["warn"]))
         disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
-                                  prefix=("I set: " + "; ".join(defaults) + ".\n") if defaults else "", legacy=False)
+                                  prefix=("\n".join(note) + "\n") if note else "", legacy=False)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if waiting:  # the shelf-check question holds the open request: the incomplete calls wait on it, not lost
