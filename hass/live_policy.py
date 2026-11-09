@@ -140,16 +140,29 @@ def _denied(words) -> bool:
     return any(w in DENIAL_WORDS or w.endswith("n't") for w in words)
 
 
+AUXILIARIES = frozenset({"is", "are", "was", "were", "am", "be", "been", "do", "does", "did", "has", "have", "had", "will", "would",
+                         "can", "could", "should"})
+
+
+def _denied_after(words) -> bool:
+    """The words right after a mention deny it when its verb is negated or called wrong: "X is not the maker", "X isn't it",
+    "X didn't make it", "X is wrong", "X never made it"."""
+    if not words: return False
+    if words[0] in ("never", "wrongly") or words[0].endswith("n't"): return True
+    return len(words) > 1 and words[0] in AUXILIARIES and _denied(words[1:2])
+
+
 def _owner_said(phrase, lines: str) -> bool:
     """True when the owner's own words (folded, one line per text of the request) name the phrase and the LAST mention is not
     denied. A mention is denied by a negator or a correction word ("not", "never", "wrong", "instead", n't ...) anywhere before it
     in its clause (clauses end at . ! ? ; : , a newline or "but"), however many words away: "not made by the people at X" denies
-    X. A later denial or correction beats an earlier affirmative mention; a later plain mention beats an earlier denial. Pure."""
+    X; and by a negated or wrong verb straight after it: "X is not the maker", "X didn't make it". A later denial or correction
+    beats an earlier affirmative mention; a later plain mention beats an earlier denial. Pure."""
     if not (isinstance(phrase, str) and phrase.strip()): return False
     rx, last = claims._pattern(phrase), None
     for clause in _BREAK.split(lines):
         for m in rx.finditer(clause):
-            last = not _denied(clause[:m.start()].split())
+            last = not (_denied(clause[:m.start()].split()) or _denied_after(clause[m.end():].split()))
     return bool(last)
 
 
