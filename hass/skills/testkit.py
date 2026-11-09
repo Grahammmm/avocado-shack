@@ -247,10 +247,67 @@ class SetupError(ValueError):
     """A row's `setup` ops were refused or did not apply."""
 
 
+_OPEN = []  # the Scratches not yet closed, oldest first; the newest one's clock is the shop's day while any is open
+
+
+class _ShopClock(datetime):
+    """MAIN-RED-AVO-1: hass.content_model's ``datetime`` while a Scratch is open, so every wall-clock shop day
+    (``shop_today()`` with no instant: sitegen's page date, the preview targets, the content checks) is the kit's day.
+    The rows are written for START's day; without this the real date leaked in after it and broke every dated row."""
+
+    @classmethod
+    def now(cls, tz=None):
+        if not _OPEN: return datetime.now(tz)
+        now = _OPEN[-1].now
+        return now.astimezone(tz) if tz is not None else now.astimezone().replace(tzinfo=None)
+
+
+def _hold_day(scratch):
+    from hass import content_model
+    if not _OPEN: content_model.datetime = _ShopClock
+    _OPEN.append(scratch)
+
+
+def _release_day(scratch):
+    from hass import content_model
+    if scratch in _OPEN: _OPEN.remove(scratch)
+    if not _OPEN and content_model.datetime is _ShopClock: content_model.datetime = datetime
+
+
+def _clocked_editor(scratch):
+    """The production conversation Editor with the kit's clock: the dates an op writes (available_on, addedOn,
+    selection_checked_on, ...) are the kit's day, the same day the skills see as ``ctx.today`` (MAIN-RED-AVO-1)."""
+    from hass import conversation, editor as editor_mod
+
+    class KitEditor(conversation.Editor):
+        def prepare(self, ops):
+            return editor_mod.prepare({"ops": ops}, state=self.state, registry=self.registry, now=scratch.now)
+
+        def apply(self, change_id, draft_hash):
+            return editor_mod.apply(change_id, draft_hash, state=self.state, registry=self.registry, now=scratch.now)
+
+        def recover(self):
+            return editor_mod.recover(state=self.state, now=scratch.now)
+
+        def render_draft(self, change_id):
+            return editor_mod.render_draft(change_id, state=self.state, registry=self.registry, now=scratch.now)
+    return KitEditor
+
+
 class Scratch:
-    """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry."""
+    """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry.
+    The kit's clock (START, one minute on per message) is the shop's clock for everything the row drives: the
+    Conversation, the skills' ``ctx.today``, the Editor and the wall-clock shop day. Always ``close()`` a Scratch."""
 
     def __init__(self, mapping, skills, fault=None, seed=None, setup=None, photos=(), house_render=False):
+        self.now = START
+        _hold_day(self)
+        try: self._open(mapping, skills, fault, seed, setup, photos, house_render)
+        except BaseException:
+            _release_day(self)
+            raise
+
+    def _open(self, mapping, skills, fault, seed, setup, photos, house_render):
         from hass import conversation, editor, media
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo  # the H02 throwaway repo the demo transcript uses
@@ -266,12 +323,12 @@ class Scratch:
             self._real_assets()
         cfg = json.loads((self.repo.state / "config.json").read_text("utf-8"))
         editor._write_json(self.repo.state / "config.json", {**cfg, "settings": settings})
-        self.wt, self.now, self.n, self.out = self.repo.wt, START, 0, FixtureAdapter()
+        self.wt, self.n, self.out = self.repo.wt, 0, FixtureAdapter()
         if seed: self._seed_or_clean(seed)
         self.interp = SkillInterpreter(mapping, skills, self._ctx)
         self.previewer = RecordingPreviewer(skip_after=1 if fault == "skip-later-preview" else None)
         self.turn_previews = []  # the preview requests each message caused, in message order
-        self.editor = _fault_editor(conversation.Editor, self, str(self.repo.state), fault)
+        self.editor = _fault_editor(_clocked_editor(self), self, str(self.repo.state), fault)
         if setup:
             try: self._setup(setup)
             except Exception:  # noqa: BLE001 - nothing else owns the throwaway repo yet
@@ -363,6 +420,7 @@ class Scratch:
     def close(self):
         try: self.conv.db.close()
         finally:
+            _release_day(self)
             self.repo.cleanup()
             if self.media_root:
                 import shutil
