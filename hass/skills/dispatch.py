@@ -363,7 +363,7 @@ class Dispatcher:
         return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now)
 
     def _owner(self):
-        return self.conv.settings["ownerChat"]
+        return self.conv._chat()  # the answering chat, so each owner has their own open request (HASS-LIVE-PLAN-1)
 
     def photo_skills(self):
         return [s for s in self.registry.active() if any(sl.kind == "attachment" and sl.from_attachment for sl in s.slots)]
