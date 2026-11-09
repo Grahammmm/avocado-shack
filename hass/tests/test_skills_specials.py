@@ -771,7 +771,7 @@ class EndToEndTests(unittest.TestCase):
     rows = testkit.load_rows(E2E)
 
     def run_row(self, row):
-        today = shop_today()
+        today = shop_today(testkit.START)  # the kit's day: the kit runs every row on its own clock (MAIN-RED-AVO-1)
         seed = _dated(row.get("seed"), today)
         row = _dated({k: v for k, v in row.items() if k != "seed"}, today)
         by_name = {s.name: s for s in skills.load_skills().skills.values()}
