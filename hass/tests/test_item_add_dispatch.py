@@ -66,9 +66,7 @@ class Chat:
     def close(self):
         self._patch.stop()
         self.conv.db.close()
-        self.kit.repo.cleanup()
-        import shutil
-        shutil.rmtree(self.kit.media_root, ignore_errors=True)
+        self.kit.close()  # the kit's own Conversation db (already closed), its repo, media root and shop day
 
     def script(self, text, reply):
         self.interp.mapping[text] = reply
