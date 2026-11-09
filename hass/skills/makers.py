@@ -537,7 +537,7 @@ SKILLS = (
             Trigger("restore Fair Hills and its products"),
             Trigger("we carry Etto again"),
         ),
-        slots=(Slot("maker", "maker_ref", required=True, ask="Which maker?"),),
+        slots=(Slot("maker", "text", required=True, ask="Which maker?"),),
         rules=("maker-hidden",),
         plan=plan_restore,
         edits=((_MAKERS, "makers[key].hidden"),) + _GEN,

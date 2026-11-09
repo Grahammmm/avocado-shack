@@ -17,6 +17,7 @@ from hass.content_model import REPO_ROOT, TEXT_LIMITS, load_and_validate
 from hass.ops import load_registry
 from hass.skills import makers as m
 from hass.skills import testkit
+from hass.tests.test_skill_dispatch import SkillCase, registry_of
 
 CONTENT = load_and_validate(REPO_ROOT / "hass" / "content", REPO_ROOT / "storefront-mockup")
 BY_NAME = {s.name: s for s in m.SKILLS}
@@ -315,7 +316,11 @@ class HideAMaker(unittest.TestCase):
         self.assertEqual(m.plan_hide({"maker": "Etto"}, SimpleNamespace(today="2026-11-08")), [{"op": "maker.hide", "args": {"key": "Etto"}}])
 
 
-class RestoreAMaker(unittest.TestCase):
+class RestoreAMaker(SkillCase):
+    """The first five tests call the plan directly; the real_dispatch ones go through the production maker.restore
+    declaration, the real slot resolver, Conversation and Editor (the shared kit's Scratch skips the slot resolver)."""
+    SKILLS = (BY_NAME["maker.restore"],)
+
     def test_a_hidden_maker_comes_back_and_their_products_stay_hidden(self):
         content = with_hidden("Etto")
         out = m.describe_restore({"maker": "etto"}, ctx(content))
@@ -357,6 +362,86 @@ class RestoreAMaker(unittest.TestCase):
             self.assertEqual(back, [], "undo brings the maker back to hidden exactly as before")
         finally:
             scratch.close()
+
+    # -- the production dispatcher: the slot kind decides whether the hidden-aware handler is ever reached ----------
+    def _hide(self, *keys):
+        for key in keys:
+            draft = self.editor.prepare([{"op": "maker.hide", "args": {"key": key, "withProducts": True}}])["draft"]
+            self.assertEqual(self.editor.apply(draft["change_id"], draft["draft_hash"])["result"], "applied")
+        self.base = self.count()
+
+    def _asks(self, skill, slots, text="restore request"):
+        self.script(text, {"skill": skill, "slots": slots})
+        disposition = self.say(text)
+        return disposition, self.replies()
+
+    def _read(self, name):
+        return (self.repo.wt / "hass" / "content" / name).read_text("utf-8")
+
+    def test_real_dispatch_restores_hidden_maker_by_key_or_name(self):
+        self._hide("Etto")
+        for said in ("Etto", "etto", "Ett"):
+            with self.subTest(said=said):
+                disposition, out = self._asks("maker.restore", {"maker": said}, f"bring back {said}")
+                self.assertEqual(disposition, "proposed", out)
+                self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.restore", "args": {"key": "Etto"}}])
+                self.nothing_written()
+        self.assertEqual(self.registry.skills["maker.restore"].slots[0].kind, "text")
+
+    def test_real_dispatch_restore_approval_and_undo_preserve_products(self):
+        self._hide("Etto")
+        before_products, before_head = self._read("products.json"), self.repo.head()
+        held = [p["id"] for p in json.loads(before_products)["products"] if p.get("status") == "held"]
+        self.assertTrue(held, "the real held products are the held-product control")
+        self.assertEqual(self._asks("maker.restore", {"maker": "Etto"})[0], "proposed")
+        draft = self.drafts()[-1]
+        self.assertEqual(live_policy.check(self.editor.prepare(json.loads(draft["ops_json"]))["draft"]), ["not live: maker.restore"], "restoring a maker stays private")
+        self.nothing_written()
+        self.assertEqual(self.say(f"yes {draft['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+        _files, diff = testkit.tree_diff(self.repo.wt, before_head)
+        self.assertEqual([(e["file"], e["path"], e.get("before"), e.get("after")) for e in diff], [("hass/content/makers.json", "makers.Etto.hidden", True, None)])
+        self.assertEqual(self._read("products.json"), before_products, "no product comes back with the maker: hidden stay hidden, held stay held")
+        self.say("undo")
+        self.say(f"yes {self.drafts()[-1]['code']}")
+        self.assertEqual(testkit.tree_diff(self.repo.wt, before_head)[1], [], "undo hides the maker again exactly as before")
+
+    def test_real_dispatch_restore_refusals_are_not_visibility_loops(self):
+        self._hide("Cal Poly", "Cayucos")
+        cases = (("visible", {"maker": "Stepladder"}, "refused", "Stepladder is already on the site."),
+                 ("unknown", {"maker": "Acme"}, "question", "I don't know a maker called Acme. Who is it?"),
+                 ("blank", {"maker": "  "}, "question", None), ("malformed", {"maker": ["Cal Poly"]}, "question", None),
+                 ("ambiguous", {"maker": "ca"}, "question", "Which maker do you mean: Cal Poly or Cayucos?"))
+        for label, slots, expected, reply in cases:
+            with self.subTest(label):
+                disposition, out = self._asks("maker.restore", slots, f"restore {label}")
+                self.assertEqual(disposition, expected, out)
+                self.assertEqual(len(out), 1)
+                if reply: self.assertEqual(out[0], reply)
+                self.assertNotIn("back first", out[0])
+                self.assertEqual(self.drafts(), [])
+                self.nothing_written()
+        disposition, out = self._asks("maker.restore", {"maker": "Cayucos"}, "bring back Cayucos")  # the complete corrected request
+        self.assertEqual(disposition, "proposed", out)
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.restore", "args": {"key": "Cayucos"}}])
+        self.nothing_written()
+
+    def test_restore_declaration_does_not_relax_other_maker_slots(self):
+        self.assertEqual([BY_NAME[n].slots[0].kind for n in ("maker.restore", "maker.edit", "maker.hide")], ["text", "maker_ref", "maker_ref"])
+        self._hide("Etto")
+        for skill, slots in (("maker.edit", {"maker": "Etto", "story": "Etto makes pasta."}), ("maker.hide", {"maker": "Etto"})):
+            with self.subTest(skill):
+                self.registry = registry_of(BY_NAME[skill])
+                self.conv = self.open()
+                disposition, out = self._asks(skill, slots, f"{skill} Etto")
+                self.assertEqual((disposition, out), ("refused", ["Etto is hidden. Do you want me to bring them back first?"]))
+                self.assertEqual(self.drafts(), [])
+                self.nothing_written()
+        self.registry = registry_of(BY_NAME["maker.edit"])  # ordinary maker_ref resolution of a visible maker is unchanged
+        self.conv = self.open()
+        disposition, out = self._asks("maker.edit", {"maker": "Stepladder", "name": "Stepladder Farm"}, "rename Stepladder to Stepladder Farm")
+        self.assertEqual(disposition, "proposed", out)
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"])[0]["args"]["key"], "Stepladder")
 
 
 class PlainWords(unittest.TestCase):
