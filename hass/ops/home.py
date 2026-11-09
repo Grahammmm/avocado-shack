@@ -71,7 +71,7 @@ def _set_story(content, args, ctx):
 
 def _set_home_image(content, args, ctx):
     """The one hero image: a stored photo's metadata-free web copy, installed as product.set_photo does."""
-    target = photos.install(ctx, args["photo"], args["imageAlt"])
+    target = photos.install(ctx, args["photo"], args["imageAlt"], style=False)  # SKILLS-PIC-1: the wide hero keeps the owner's pixels (D6)
     if isinstance(target, Refused):
         return target
     home = {"image": target, "imageAlt": args["imageAlt"]}
