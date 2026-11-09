@@ -29,7 +29,12 @@ URL = 'https://theavocadoman.com'
 PACIFIC = ZoneInfo('America/Los_Angeles')
 LOG = logging.getLogger('hass.release')
 BOOK_REASON = 'the website record needs G to check it'
-PATTERNS = dict(email=live_policy.EMAIL, phone=live_policy.PHONE)
+# The publish screen's email shape (stricter than live_policy.EMAIL, which checks typed owner text): a local part of 2 or more
+# characters that begins and ends with a letter or digit, a domain whose labels begin and end with one, a final label of 2 or
+# more letters, and no letter or digit touching either end. Random image bytes such as 'w@J.Wa' and '.@0y.Ty' do not fit.
+SCREEN_EMAIL = re.compile(r'(?<![A-Za-z0-9])[A-Za-z0-9][A-Za-z0-9._%+-]*[A-Za-z0-9]'
+                          r'@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?![A-Za-z0-9])')
+PATTERNS = dict(email=SCREEN_EMAIL, phone=live_policy.PHONE)
 PATTERNS.update({name: re.compile(rx) for name, rx in {
     'pem': r'-----BEGIN', 'aws': r'AKIA[0-9A-Z]{16}', 'github': r'gh[pousr]_[A-Za-z0-9]{20,}',
     'key': r'sk-[A-Za-z0-9]{20,}', 'slack': r'xox[abp]-[A-Za-z0-9-]+', 'home': r'/home/[^\s"\x27]+',
@@ -62,18 +67,33 @@ def reserved_address(value):
         or domain.rpartition('.')[2] in RESERVED_TLDS
 
 
-def pattern_hits(name, rx, text):
+# In a binary file (a NUL byte in the first 8 KB, or one of these extensions) an email counts only with a local part of 3 or
+# more characters and one of these real top-level domains, so chance byte runs in an image cannot block a release while an
+# address written into image metadata or a PDF is still caught.
+BINARY_EXTENSIONS = ('jpg', 'jpeg', 'png', 'webp', 'gif', 'ico', 'woff', 'woff2', 'pdf', 'zip')
+BINARY_TLDS = ('com', 'org', 'net', 'edu', 'gov', 'mil', 'io', 'us', 'co', 'uk', 'ca', 'info', 'biz', 'me', 'app', 'dev', 'ai')
+
+
+def is_binary(text, path=''):
+    return '\0' in text[:8192] or os.path.splitext(path)[1][1:].lower() in BINARY_EXTENSIONS
+
+
+def pattern_hits(name, rx, text, path=''):
     hits = {m.group() for m in rx.finditer(text)}
-    return {h for h in hits if not reserved_address(h)} if name == 'email' else hits
+    if name != 'email': return hits
+    binary = is_binary(text, path)
+    return {h for h in hits if not reserved_address(h) and (not binary or (
+        len(h.partition('@')[0]) >= 3 and h.rpartition('.')[2].lower() in BINARY_TLDS))}
 
 
 def privacy(files, baseline, message, forbidden=()):
-    """Compare values per path, never counts. Binary files are scanned too. Reserved example addresses are not personal."""
+    """Compare values per path, never counts. Binary files are scanned too, with the stricter binary email rule above.
+    Reserved example addresses are not personal."""
     found = set()
     for path, data in {**{p: b for p, b in files.items() if baseline.get(p) != b}, '<commit>': message.encode()}.items():
         text, old = data.decode('latin1'), baseline.get(path, b'').decode('latin1') if path != '<commit>' else ''
         for name, rx in PATTERNS.items():
-            if pattern_hits(name, rx, text) - pattern_hits(name, rx, old): found.add(name)
+            if pattern_hits(name, rx, text, path) - pattern_hits(name, rx, old, path): found.add(name)
     # Owner identity is prohibited even in an unchanged, grandfathered file.
     for value in forbidden:
         if value and any(value.encode() in data for data in [*files.values(), message.encode()]): found.add('owner')
