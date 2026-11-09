@@ -305,26 +305,87 @@ class Piece:
     score: float = 0.0
 
 
+def _bad(detail: str):
+    return TransportError("bad", detail)
+
+
+def _number(value, what: str) -> float:
+    """A finite JSON number (never a bool or a string), or the answer is unreadable."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise _bad(what)
+    return value
+
+
+def _elements(body) -> list:
+    """The ``elements`` list of an Overpass answer; anything else is an answer we cannot read."""
+    if not isinstance(body, dict) or not isinstance(body.get("elements"), list):
+        raise _bad("overpass body")
+    return body["elements"]
+
+
+def _geometry(raw, what: str) -> list:
+    """[(lat, lon)] from an Overpass ``geometry`` list. A missing list is empty; a hole or a non-number is unreadable
+    (dropping a point would quietly shorten the route)."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise _bad(what)
+    out = []
+    for g in raw:
+        if not isinstance(g, dict):
+            raise _bad(what)
+        out.append((_number(g.get("lat"), what), _number(g.get("lon"), what)))
+    return out
+
+
+def _element_id(el) -> int | str:
+    ident = el.get("id")
+    if isinstance(ident, bool) or not (isinstance(ident, int) or (isinstance(ident, str) and ident.isdigit())):
+        raise _bad("element id")
+    return ident
+
+
 def _pieces(elements, tokens):
+    """Trail pieces and summit points from Overpass elements. A structure that is not what Overpass sends raises
+    ``TransportError("bad")`` (the documented unreadable-answer reply) instead of an arbitrary Python error."""
+    if not isinstance(elements, list):
+        raise _bad("elements")
     pieces, summits = [], []
     for el in elements:
-        tags = el.get("tags") or {}
+        if not isinstance(el, dict):
+            raise _bad("element")
+        tags = el.get("tags")
+        if tags is None:
+            tags = {}
+        if not isinstance(tags, dict):
+            raise _bad("tags")
         name = tags.get("name") or ""
+        if not isinstance(name, str):
+            raise _bad("name")
         score = name_score(tokens, name)
         if score < MATCH_MIN:
             continue
         if el.get("type") == "node":
             if "lat" in el and "lon" in el:
-                summits.append((_vertex((el["lat"], el["lon"])), name))
+                summits.append((_vertex((_number(el["lat"], "node point"), _number(el["lon"], "node point"))), name))
         elif el.get("type") == "way":
-            coords = [(g["lat"], g["lon"]) for g in el.get("geometry") or []]
+            coords = _geometry(el.get("geometry"), "way geometry")
             if len(coords) >= 2:
-                pieces.append(Piece(f"way/{el['id']}", name, tags, coords, score))
+                pieces.append(Piece(f"way/{_element_id(el)}", name, tags, coords, score))
         elif el.get("type") == "relation":
-            for member in el.get("members") or []:
-                coords = [(g["lat"], g["lon"]) for g in member.get("geometry") or []]
-                if member.get("type") == "way" and len(coords) >= 2:
-                    pieces.append(Piece(f"relation/{el['id']}", name, tags, coords, score))
+            members = el.get("members")
+            if members is None:
+                members = []
+            if not isinstance(members, list):
+                raise _bad("relation members")
+            for member in members:
+                if not isinstance(member, dict):
+                    raise _bad("relation member")
+                if member.get("type") != "way":
+                    continue
+                coords = _geometry(member.get("geometry"), "member geometry")
+                if len(coords) >= 2:
+                    pieces.append(Piece(f"relation/{_element_id(el)}", name, tags, coords, score))
     return pieces, summits
 
 
@@ -518,7 +579,7 @@ def elevations_from(body, count):
     try:
         samples = sorted(body["samples"], key=lambda s: int(s["locationId"]))
         values = [float(s["value"]) for s in samples]
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return None
     return values if len(values) == count and all(math.isfinite(v) for v in values) else None
 
@@ -619,10 +680,11 @@ def _place_from(body) -> str:
     return ""
 
 
-def _finish(transport, group_pieces, bridges, summits, tokens, stage, today):
-    """One candidate: route, place and climb, every number from the retrieved records."""
+def _finish(transport, group_pieces, bridges, summits, tokens, stage, today, geometry=()):
+    """One candidate: route, place and climb, every number from the retrieved records. ``geometry``: the (retrieved, stale)
+    of each answer the names and lines came from, so a saved copy of the map is never passed off as fresh."""
     route = analyse(group_pieces, bridges, summits)
-    used, retrieved, stale = [], [], False
+    used, retrieved, stale = [], [d for d, _old in geometry], any(old for _d, old in geometry)
     path = route.path or [group_pieces[0].coords[0]]
     centre = _centre(path)
     place = ""
@@ -703,16 +765,18 @@ def lookup(name: str, transport, *, today: date | None = None, max_offer: int = 
         return LookupResult("known", known_reply(idea), idea_id=idea["id"])
     try:
         found = transport.get("overpass", {"query": overpass_query(tokens)})
-        pieces, summits = _pieces((found.body or {}).get("elements", []) if isinstance(found.body, dict) else [], tokens)
-        stage, stale = "slo", found.stale
+        pieces, summits = _pieces(_elements(found.body), tokens)
+        stage, stale, geometry = "slo", found.stale, [(found.retrieved, found.stale)]
         if not pieces:
-            pieces, summits_ca, places, stale = _california(tokens, transport)
-            stage, summits = "california", summits + summits_ca
+            pieces, summits_ca, places, geometry_ca = _california(tokens, transport)
+            stage, stale = "california", any(old for _d, old in geometry_ca)
+            geometry = geometry_ca + (geometry if summits else [])  # the county answer counts only if its summit point is used
+            summits = summits + summits_ca
             if not pieces:
                 return LookupResult("place_only" if places else "none", (PLACE_ONLY if places else NO_MATCH).format(name=voice.quote(clean_public(name, 60))))
         groups = _rank(build_groups(pieces), summits)
         offered = groups[:max_offer]
-        candidates = tuple(_finish(transport, gp, br, summits, tokens, stage, today) for gp, br in offered)
+        candidates = tuple(_finish(transport, gp, br, summits, tokens, stage, today, geometry) for gp, br in offered)
     except TransportError as exc:
         return _unavailable(exc.kind)
     stale = stale or any(c.stale for c in candidates)
@@ -724,19 +788,27 @@ def lookup(name: str, transport, *, today: date | None = None, max_offer: int = 
 
 
 def _california(tokens, transport):
-    """Second stage: Nominatim over California, then the geometry of the trails it names."""
+    """Second stage: Nominatim over California, then the geometry of the trails it names. Returns the pieces, summits,
+    places and the (retrieved, stale) of every answer the trails came from."""
     r = transport.get("nominatim_search", nominatim_search_request(" ".join(tokens)))
-    hits = [h for h in (r.body if isinstance(r.body, list) else []) if isinstance(h, dict)
-            and name_score(tokens, h.get("name") or (h.get("display_name") or "").split(",")[0]) >= MATCH_MIN]
+    if not isinstance(r.body, list) or not all(isinstance(h, dict) for h in r.body):
+        raise _bad("nominatim body")
+    for h in r.body:  # the fields read below must be text, or the answer is unreadable
+        if any(not isinstance(h.get(k) or "", str) for k in ("name", "display_name", "category", "type", "osm_type")):
+            raise _bad("nominatim hit")
+    hits = [h for h in r.body if name_score(tokens, h.get("name") or (h.get("display_name") or "").split(",")[0]) >= MATCH_MIN]
     trails = [h for h in hits if h.get("category") in ("highway", "route") and h.get("type") in PATH_TYPES]  # never a street
+    for h in trails:
+        if isinstance(h.get("osm_id"), bool) or not isinstance(h.get("osm_id"), int):
+            raise _bad("nominatim id")
     ways = {h["osm_id"] for h in trails if h.get("osm_type") == "way"}
     relations = {h["osm_id"] for h in trails if h.get("osm_type") == "relation"}
     places = [h for h in hits if h.get("category") in ("natural", "place", "leisure", "boundary", "tourism")]
     if not (ways or relations):
-        return [], [], places, r.stale
+        return [], [], places, [(r.retrieved, r.stale)]
     g = transport.get("overpass", {"query": overpass_ids_query(ways, relations)})
-    pieces, _s = _pieces((g.body or {}).get("elements", []) if isinstance(g.body, dict) else [], tokens)
-    return pieces, [], places, r.stale or g.stale
+    pieces, _s = _pieces(_elements(g.body), tokens)
+    return pieces, [], places, [(r.retrieved, r.stale), (g.retrieved, g.stale)]
 
 
 # -- words for Mike ------------------------------------------------------------------------------------------------------
@@ -798,8 +870,8 @@ def proposal(c: Candidate) -> str:
 
 
 def not_sure(c: Candidate) -> str:
-    return (f"I found {voice.quote(c.name)}{_where(c)}, but {c.unsure}, so I'm not sure how far it is or what shape it is. "
-            "I won't guess. Do you know the distance, or have a link to a trail guide?")
+    return (f"I found {voice.quote(c.name)}{_where(c)}, but {c.unsure}, so I'm not sure how far it is or what shape it is."
+            f"{_closure(c)}{_stale(c)} I won't guess. Do you know the distance, or have a link to a trail guide?")
 
 
 def _line(n: int, c: Candidate) -> str:
@@ -808,12 +880,32 @@ def _line(n: int, c: Candidate) -> str:
     return f"{n}. {voice.quote(c.name)}{_where(c)}, and I'm not sure of its distance"
 
 
+def _line_notes(n: int, c: Candidate) -> str:
+    """The park-check warning for one offered trail, tied to its number."""
+    if not c.notes:
+        return ""
+    return f" For {n}, the map notes say {voice.quote(c.notes[0])}. Please check with the park before we plan anything."
+
+
+def _stale_many(cands) -> str:
+    """One saved-copy sentence for the offered trails that rest on an old answer (dated by the oldest of them)."""
+    old = [(i, c) for i, c in enumerate(cands, 1) if c.stale]
+    if not old:
+        return ""
+    day = _day(min(c.retrieved for _i, c in old))
+    nums = [str(i) for i, _c in old]
+    joined = nums[0] if len(nums) == 1 else ", ".join(nums[:-1]) + " and " + nums[-1]
+    which = "These are" if len(old) == len(cands) else f"For {joined}, this is"
+    return f" {which} from a saved copy from {day}, and I couldn't check it again today."
+
+
 def choices(cands, total: int) -> str:
     n = len(cands)
     more = f" There are more than {n} that fit; tell me more of the name if none is right." if total > n else ""
     pick = "Reply 1 or 2" if n == 2 else f"Reply {', '.join(str(i) for i in range(1, n))} or {n}"
     lines = " ".join(_line(i, c) for i, c in enumerate(cands, 1))
-    return f"I found {n} that fit. Which one do you mean? {lines}. {pick}, or no if it isn't one of these.{more}"
+    notes = "".join(_line_notes(i, c) for i, c in enumerate(cands, 1)) + _stale_many(cands)
+    return f"I found {n} that fit. Which one do you mean? {lines}.{notes} {pick}, or no if it isn't one of these.{more}"
 
 
 # -- into the existing Hass path ----------------------------------------------------------------------------------------

@@ -435,6 +435,179 @@ class Failures(NoNetwork):
         self.assertTrue(c.sure)  # the numbers stay; the warning travels with them
         self.assertEqual(voice.check(result.reply), [])
 
+    # -- RETURN t_82842040: provenance of the map lines, warnings on every reply path, unreadable structures ----------
+
+    def _edited(self, slug, edit):
+        """A FixtureTransport over a copy of one recording after ``edit(data)``."""
+        data = json.loads((FIX / f"{slug}.json").read_text("utf-8"))
+        edit(data)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / f"{slug}.json"
+        path.write_text(json.dumps(data), "utf-8")
+        return hl.FixtureTransport(path)
+
+    @staticmethod
+    def _ways(data):
+        for key, rec in data["responses"].items():
+            if key.startswith("overpass"):
+                yield from (el for el in rec["body"].get("elements") or [] if el["type"] == "way")
+
+    def test_a_stale_map_line_with_fresh_place_and_climb_is_still_dated_and_said_to_be_old(self):
+        old = date(2026, 9, 1)
+
+        class StaleLines:
+            def __init__(self, inner):
+                self.inner = inner
+
+            def get(self, service, request):
+                r = self.inner.get(service, request)
+                return hl.Response(r.body, old, stale=True) if service == "overpass" else r
+
+        result = hl.lookup("Bishop Peak", StaleLines(fixture("bishop_peak")), today=TODAY)
+        c = result.candidates[0]
+        self.assertEqual((result.status, result.stale, c.stale, c.retrieved), ("one", True, True, old))
+        self.assertEqual(c.record["retrieved"], "2026-09-01")
+        self.assertIn("This is from a saved copy from Sep 1, and I couldn't check it again today.", said(result))
+        self.assertEqual(hl.route_add_args(c)["sourceName"], f"{hl.SOURCE_NAME}, retrieved Sep 1, 2026")  # not a fresh November date
+
+    def test_a_fresh_map_line_with_a_stale_place_is_dated_by_the_oldest_answer(self):
+        class StalePlace:
+            def __init__(self, inner):
+                self.inner = inner
+
+            def get(self, service, request):
+                r = self.inner.get(service, request)
+                return hl.Response(r.body, date(2026, 8, 20), stale=True) if service == "nominatim_reverse" else r
+
+        c = hl.lookup("Bishop Peak", StalePlace(fixture("bishop_peak")), today=TODAY).candidates[0]
+        self.assertEqual((c.stale, c.retrieved), (True, date(2026, 8, 20)))
+
+    def test_california_geometry_provenance_reaches_the_candidate(self):
+        old = date(2026, 9, 1)
+
+        class California(Synthetic):
+            def get(self, service, request):
+                if service == "overpass" and "way(id:" in request["query"]:
+                    return hl.Response({"elements": self.elements}, old, stale=True)
+                if service == "overpass":
+                    return hl.Response({"elements": []}, TODAY)
+                if service == "nominatim_search":
+                    return hl.Response([{"name": "Creek Walk", "category": "highway", "type": "path", "osm_type": "way", "osm_id": 1}], TODAY)
+                return super().get(service, request)
+
+        result = hl.lookup("Creek Walk", California([way(1, "Creek Walk", straight())]), today=TODAY)
+        c = result.candidates[0]
+        self.assertEqual((c.stage, c.stale, c.retrieved, result.stale), ("california", True, old, True))
+        self.assertIn("This is from a saved copy from Sep 1", said(result))
+
+    def test_a_closure_is_repeated_when_the_answer_is_not_sure(self):
+        stale = hl.lookup("Point Buchon", Stale(fixture("point_buchon"), date(2026, 9, 1)), today=TODAY)
+        self.assertEqual(stale.status, "unsure")
+        self.assertIn("This is from a saved copy from Sep 1, and I couldn't check it again today.", said(stale))
+        def edit(data):
+            for el in self._ways(data):
+                el["tags"]["note"] = "Trail closed for storm repair"
+        result = hl.lookup("Point Buchon", self._edited("point_buchon", edit), today=TODAY)
+        self.assertEqual(result.status, "unsure")
+        self.assertIn("The map notes say Trail closed for storm repair. Please check with the park before we plan anything.", said(result))
+        self.assertIn("I won't guess", said(result))
+        self.assertEqual(voice.check(result.reply), [])
+
+    def test_a_closure_is_repeated_next_to_the_trail_it_belongs_to_when_there_are_several(self):
+        def edit(data):
+            for el in self._ways(data):
+                if el["id"] == next(self._ways(data))["id"]:
+                    el["tags"]["access"] = "no"
+        result = hl.lookup("Bluff Trail", self._edited("bluff_trail", edit), today=TODAY)
+        self.assertEqual(result.status, "several")
+        flagged = [i for i, c in enumerate(result.candidates, 1) if c.notes]
+        self.assertTrue(flagged)
+        text = said(result)
+        for i in flagged:
+            self.assertIn(f"For {i}, the map notes say access is marked no. Please check with the park before we plan anything.", text)
+        self.assertEqual(text.count("Please check with the park"), len(flagged))  # only the trails that carry a note
+        self.assertTrue(text.endswith("Reply 1, 2 or 3, or no if it isn't one of these."))
+        self.assertEqual(voice.check(result.reply), [])
+
+    def test_a_saved_copy_is_said_once_for_the_trails_it_applies_to_when_there_are_several(self):
+        result = hl.lookup("Bluff Trail", Stale(fixture("bluff_trail"), date(2026, 9, 1)), today=TODAY)
+        text = said(result)
+        self.assertIn("These are from a saved copy from Sep 1, and I couldn't check it again today.", text)
+        self.assertEqual(text.count("saved copy"), 1)
+        self.assertTrue(text.endswith("Reply 1, 2 or 3, or no if it isn't one of these."))
+
+        class OnlyTheSecond:  # a stale place answer for one trail only
+            def __init__(self, inner):
+                self.inner, self.n = inner, 0
+
+            def get(self, service, request):
+                r = self.inner.get(service, request)
+                if service == "nominatim_reverse":
+                    self.n += 1
+                    if self.n == 2:
+                        return hl.Response(r.body, date(2026, 8, 20), stale=True)
+                return r
+
+        text = said(hl.lookup("Bluff Trail", OnlyTheSecond(fixture("bluff_trail")), today=TODAY))
+        self.assertIn("For 2, this is from a saved copy from Aug 20, and I couldn't check it again today.", text)
+
+    def test_an_answer_with_a_wrong_structure_is_the_unreadable_reply_not_a_crash(self):
+        way_ok = way(1, "Creek Walk", straight())
+        hole = dict(way_ok, geometry=[{"lat": 35.3, "lon": -120.7}, None])
+        no_lon = dict(way_ok, geometry=[{"lat": 35.3, "lon": -120.7}, {"lat": 35.31}])
+        text_lat = dict(way_ok, geometry=[{"lat": "35.3", "lon": -120.7}, {"lat": 35.31, "lon": -120.7}])
+        no_id = {k: v for k, v in way_ok.items() if k != "id"}
+        relation = {"type": "relation", "id": 5, "tags": {"name": "Creek Walk"}, "members": [{"type": "way", "geometry": "oops"}]}
+        bodies = {"elements null": {"elements": None}, "elements object": {"elements": {}}, "no elements": {}, "list body": [],
+                  "text body": "<html>", "null body": None, "element not an object": {"elements": [None]},
+                  "tags not an object": {"elements": [dict(way_ok, tags=["name"])]}, "geometry hole": {"elements": [hole]},
+                  "point without lon": {"elements": [no_lon]}, "text coordinate": {"elements": [text_lat]},
+                  "geometry not a list": {"elements": [dict(way_ok, geometry="oops")]}, "no id": {"elements": [no_id]},
+                  "relation member geometry": {"elements": [relation]}, "members not a list": {"elements": [dict(relation, members=7)]},
+                  "node without number": {"elements": [{"type": "node", "id": 9, "lat": "x", "lon": 1, "tags": {"name": "Creek Walk"}}]}}
+        for label, body in bodies.items():
+            with self.subTest(label):
+                class Bad(Synthetic):
+                    def get(self, service, request):
+                        return hl.Response(body, TODAY) if service == "overpass" else super().get(service, request)
+                result = hl.lookup("Creek Walk", Bad([]), today=TODAY)
+                self.assertEqual((result.status, result.failure, result.candidates), ("unavailable", "bad", ()))
+                self.assertTrue(said(result).startswith("The map gave me an answer I can't read"))
+                self.assertIn("Nothing was changed.", said(result))
+
+    def test_a_wrong_structure_in_the_california_search_is_the_unreadable_reply_too(self):
+        hit = {"name": "Creek Walk", "category": "highway", "type": "path", "osm_type": "way", "osm_id": 1}
+        answers = {"search not a list": {"oops": 1}, "hit not an object": [7], "name not text": [dict(hit, name=5)],
+                   "type not text": [dict(hit, type=["path"])], "id missing": [{k: v for k, v in hit.items() if k != "osm_id"}],
+                   "id not a number": [dict(hit, osm_id="1")]}
+        for label, search in answers.items():
+            with self.subTest(label):
+                class Bad(Synthetic):
+                    def get(self, service, request):
+                        if service == "overpass":
+                            return hl.Response({"elements": []}, TODAY)
+                        return hl.Response(search, TODAY) if service == "nominatim_search" else super().get(service, request)
+                result = hl.lookup("Creek Walk", Bad([]), today=TODAY)
+                self.assertEqual((result.status, result.failure), ("unavailable", "bad"))
+
+    def test_the_geometry_answer_of_the_california_stage_is_checked_too(self):
+        class Bad(Synthetic):
+            def get(self, service, request):
+                if service == "overpass" and "way(id:" in request["query"]:
+                    return hl.Response({"elements": None}, TODAY)
+                if service == "overpass":
+                    return hl.Response({"elements": []}, TODAY)
+                if service == "nominatim_search":
+                    return hl.Response([{"name": "Creek Walk", "category": "highway", "type": "path", "osm_type": "way", "osm_id": 1}], TODAY)
+                return super().get(service, request)
+
+        result = hl.lookup("Creek Walk", Bad([]), today=TODAY)
+        self.assertEqual((result.status, result.failure), ("unavailable", "bad"))
+
+    def test_an_elevation_answer_that_cannot_be_read_is_no_climb_figure_not_a_crash(self):
+        self.assertIsNone(hl.elevations_from({"samples": [{"locationId": float("inf"), "value": "5"}]}, 1))
+
 
 # -- the polite client: cache, spacing, limits, log -------------------------------------------------------------------------------------
 
