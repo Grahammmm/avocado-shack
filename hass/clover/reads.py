@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from hass.clover.mapper import format_quantity, suggest, norm_name
+from hass.clover.mapper import format_quantity, norm_name, suggest
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 FRESH = timedelta(minutes=20)
