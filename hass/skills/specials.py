@@ -472,6 +472,13 @@ def resolve_special(ctx, query):
     exact = [sp for sp in stored if sp.get("id") == text]
     if exact:
         return "one", exact[0], ""
+    # A title is stored plain text, not an instruction: 'All Purpose Flour' names a special even though 'all' is a bulk word.
+    # So an exact (whitespace/case-folded) title of a running or coming special is tried before bulk and generic words.
+    literal = [sp for sp in live if _folded(text) and _folded(sp.get("title", "")) == _folded(text)]
+    if len(literal) == 1:
+        return "one", literal[0], ""
+    if literal:
+        return "several", None, ask(literal)
     words = _words(text)
     if any(w in _ALL for w in words):
         pool = live
