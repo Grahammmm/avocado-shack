@@ -229,6 +229,59 @@ class DeliveryTests(ForwarderCase):
         self.assertEqual((self.sender.calls, self.acks), ([], []))
 
 
+class StatusFieldTests(ForwarderCase):
+    """RF0753-6: oldest_pending_s, head_tries and rejected_streak in Spool.status()."""
+    def keys(self):
+        st = self.spool.status()
+        return st["oldest_pending_s"], st["head_tries"], st["rejected_streak"]
+
+    def test_status_empty_spool_has_zero_age_tries_streak(self):
+        self.assertEqual(self.keys(), (0, 0, 0))
+
+    def test_status_reports_oldest_pending_age_with_injected_clock(self):
+        # Inserted newest first: the head is chosen by created_at, not insertion order.
+        for pid, created, tries in (("late", 200, 7), ("early", 100, 2)):
+            self.spool.db.execute("INSERT INTO inbound VALUES (?,?,'pending',?,0,?,NULL)", (pid, "{}", tries, created))
+        self.spool.db.execute("INSERT INTO inbound VALUES ('old-done','{}','done',9,0,50,60)")
+        self.spool.clock = lambda: 400
+        self.assertEqual(self.keys(), (300, 2, 0))
+
+    def test_clock_behind_created_at_never_negative(self):
+        self.spool.db.execute("INSERT INTO inbound VALUES ('p','{}','pending',1,0,500,NULL)")
+        self.spool.clock = lambda: 400
+        self.assertEqual(self.keys(), (0, 1, 0))
+
+    def test_rejected_streak_counts_and_resets(self):
+        self.enqueue()
+        self.result = "rejected"
+        for n in (1, 2, 3):
+            self.f.deliver()
+            self.assertEqual(self.spool.status()["rejected_streak"], n)
+            self.now += 61
+        self.offline = True
+        self.f.deliver()  # transport error: streak unchanged, tries still counted
+        self.assertEqual(self.keys(), (183, 4, 3))
+        self.offline = False
+        self.now += 400
+        self.result = "queued"
+        self.f.deliver()
+        self.assertEqual(self.keys(), (0, 0, 0))
+
+    def test_old_spool_without_meta_row_upgrades(self):
+        old = self.root / "old"
+        old.mkdir(mode=0o700)
+        db = fwd.sqlite3.connect(old / "spool.sqlite3")
+        db.executescript("CREATE TABLE meta(name TEXT PRIMARY KEY,value REAL);")
+        db.executemany("INSERT INTO meta VALUES (?,?)", [("start_ms", 5), ("last_seen_ms", 6), ("outage_since", 7), ("outage_notified", 0), ("last_rejected", 8), ("fast_until", 0)])
+        db.commit()
+        db.close()
+        (old / "spool.sqlite3").chmod(0o600)
+        spool = fwd.Spool(old, NOW)
+        self.addCleanup(spool.db.close)
+        st = spool.status()
+        self.assertEqual((st["rejected_streak"], st["last_rejected"], spool.get("start_ms"), spool.get("outage_since")), (0, 8, 5, 7))
+
+
 class GChatTests(ForwarderCase):
     """HASS-VOICE-1: an optional second chat, G's own, carries the `problems` answers: text only, one chat, never Mike's."""
     G_CHAT = "iMessage;-;g@example.invalid"

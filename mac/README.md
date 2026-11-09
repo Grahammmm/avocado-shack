@@ -20,7 +20,9 @@ these files. Webhook URL: loopback `/bb/<token>`; never publish it.
 The webhook stores only an event type and guid until REST refetch. Normalization
 and owner-chat filtering happen before storing text or posting. Pending messages
 retry forever in FIFO order, with fresh envelope nonces; completed payloads are
-erased. A rejected envelope remains pending and appears in `last_rejected`.
+erased. A rejected envelope remains pending and appears in `last_rejected`;
+`status` also reports `oldest_pending_s` (age of the oldest pending message), `head_tries` and
+`rejected_streak` (consecutive `rejected` answers since the last accepted one).
 Replies use the sealed relay and persistent sent ids to avoid resending after a
 lost ack. A crash between a BlueBubbles send and its sent-id commit can still
 repeat that send; the external API and SQLite cannot form one transaction.
