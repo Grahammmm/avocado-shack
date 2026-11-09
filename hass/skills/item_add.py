@@ -81,7 +81,6 @@ ASK = {"name": "What is it called?", "form": "Is it packaged or fresh?", "maker"
 ONE_PHOTO = "One photo can go on one product. Which one is this photo for?"
 NO_LAST_FARM = "I don't have a farm from last time. Who made or grew it?"
 STORE_LINE = "This also records today as the day you checked the shelves."
-_ADDRESS = re.compile(r"\b[\w-]+(?:\.[\w-]+)+\S*")  # a web address in his words is the story's source, not a claim
 NO_BYTES = "I couldn't read that photo safely, so nothing changed. Could you send it again as a screenshot?"
 RETAKE_BUSY = ("I couldn't separate the product from the background, so the picture won't look like the others. "
                "A new photo on a plain surface, like a white sheet or a bare counter, would look better. "
@@ -538,7 +537,6 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if several_products(slots.get("name"), _texts(ctx)):  # one photo is one product, whatever the model returned
         raise Refusal(ONE_PHOTO, "question")
     slots, filled = _filled(slots, ctx)
-    _live_claims(ctx, _ADDRESS.sub(" ", message))  # live: a claim in his words is refused in plain words
 
     # 1. name: his words, no price or size
     raw_name = _clean(slots.get("name"))
@@ -550,6 +548,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if any(c.isdigit() for c in name):
         raise Refusal("The name can't have numbers or sizes in it. What is it called?", "question")
     name = _text(name, "name", "name")
+    _live_claims(ctx, name, slots.get("story"), slots.get("image_alt"))  # live: a claim in a public word is refused, never drafted
     price, size = _price_size(raw_name, message)
 
     # 2. what it is: packaged or fresh
@@ -621,10 +620,17 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
 
     # 5. the description: drafted in the shop's voice, or his own words
     description = _clean(slots.get("description"))
+    if description and "description" not in filled and _live(ctx) and (kinds := _claim_kinds(description)):
+        # live: his own description says something the website cannot carry from chat; it is rewritten without it, and he is told
+        slots = dict(slots, description=house_description({**slots, "description": None}, ctx))
+        description = _clean(slots.get("description"))
+        filled.append("description")
+        left.append("your wording of the description, because it says "
+                    + _join([live_policy.PLAIN_KINDS.get(k, "a claim I can't check") for k in kinds], "or")
+                    + ", which I can't put on the website from chat")
     if not description:
         raise Refusal(question("description", slots, ctx), "question")
     description = _text(description, "description", "description")
-    _live_claims(ctx, description)  # (the drafted one was already rewritten without any claim)
     if (why := description_problems(description, message)):
         raise description_refusal(why)
     if "description" in filled:
