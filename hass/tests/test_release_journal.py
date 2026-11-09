@@ -24,6 +24,11 @@ def entry(seq=1, state='intent', before=A, after=B):
     return j
 
 
+def big_entry(seq, n, *args, **kw):
+    """entry() with a change_id decoupled from seq, so huge seq values still pass the change_id format check."""
+    return {**entry(seq, *args, **kw), 'change_id': f'chg-{n:012x}'}
+
+
 class JournalTests(unittest.TestCase):
     def test_restart_table(self):
         rows = [
@@ -61,6 +66,50 @@ class JournalTests(unittest.TestCase):
             j = entry(); j[key] = value; invalid.append((anchor(), [j]))
         for a, js in invalid:
             with self.subTest(a=a, js=js), self.assertRaises(r.BooksError): r.derive(a, js)
+
+    def test_sparse_huge_sequence_is_books_error_without_span_allocation(self):
+        for seq in (2, 10**30):
+            with self.subTest(seq=seq), self.assertRaises(r.BooksError) as ctx: r.derive(anchor(), [big_entry(seq, 1)])
+            self.assertEqual(str(ctx.exception), 'release-books')
+
+    def test_books_load_rejects_sparse_sequence_from_private_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books = r.Books(tmp)
+            r.atomic(Path(tmp) / 'publish.json', anchor())
+            books.write(big_entry(10**30, 1))
+            files = [Path(tmp) / 'publish.json', *sorted(books.directory.iterdir())]
+            before = [(p.read_bytes(), p.stat().st_mode) for p in files]
+            with self.assertRaises(r.BooksError) as ctx: books.load()
+            self.assertEqual(str(ctx.exception), 'release-books')
+            self.assertEqual(before, [(p.read_bytes(), p.stat().st_mode) for p in files])
+
+    def test_contiguous_tail_after_huge_anchor_is_valid(self):
+        big = 10**30
+        a = {**anchor(), 'anchor_seq': big}
+        for tail in ([], [big_entry(big + 1, 1)], [big_entry(big + 2, 2), big_entry(big + 1, 1)]):
+            with self.subTest(n=len(tail)):
+                got = r.derive(a, tail)
+                self.assertEqual(got['last_site_commit'], A)
+                self.assertEqual(got['last_build_today'], '2026-11-06')
+                self.assertEqual(got['pushes'], [])
+        landed = [big_entry(big + 2, 2, 'live', B, C), big_entry(big + 1, 1, 'live', A, B)]
+        got = r.derive(a, landed)
+        self.assertEqual(got['last_site_commit'], C)
+        self.assertEqual([p['change_id'] for p in got['pushes']], [j['change_id'] for j in landed])
+
+    def test_sequence_gap_and_duplicate_boundaries_stay_closed(self):
+        a = {**anchor(), 'anchor_seq': 5}
+        for name, js in (('first gap', [entry(7)]), ('interior gap', [entry(6), entry(8)]),
+                         ('tail gap beyond pre-anchor', [entry(3), entry(7)]),
+                         ('duplicate', [entry(6), entry(6)]),
+                         ('duplicate at anchor', [entry(5), entry(5)])):
+            with self.subTest(name), self.assertRaises(r.BooksError): r.derive(a, js)
+        self.assertEqual(r.derive(a, [entry(7), entry(3), entry(6)])['last_site_commit'], A)
+        self.assertEqual(r.derive(a, [entry(3)])['last_site_commit'], A)
+        js = [entry(7), entry(6)]
+        snap = json.dumps([a, js])
+        r.derive(a, js)
+        self.assertEqual(snap, json.dumps([a, js]))
 
     def test_private_atomic_write_and_failure_prevents_next_state(self):
         with tempfile.TemporaryDirectory() as tmp:
