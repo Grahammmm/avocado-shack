@@ -28,25 +28,41 @@ class CardParser(HTMLParser):
         self.tags = []
         self.attrs = []
         self.small = []
-        self._in_small = False
+        self.titles = []  # <h2> text per card
+        self.notes = []  # first plain <p> text per card (the recorded observation)
+        self._in = None
+        self._ps = 0
 
     def handle_starttag(self, tag, attrs):
         if tag == 'article':
             self.articles += 1
+            self._ps = 0
         if self.articles:
             self.tags.append(tag)
             self.attrs.append((tag, dict(attrs), [k for k, _ in attrs]))
         if tag == 'small':
-            self._in_small = True
+            self._in = 'small'
             self.small.append('')
+        elif tag == 'h2':
+            self._in = 'h2'
+            self.titles.append('')
+        elif tag == 'p' and self.articles:
+            self._ps += 1
+            if self._ps == 1:
+                self._in = 'p'
+                self.notes.append('')
 
     def handle_endtag(self, tag):
-        if tag == 'small':
-            self._in_small = False
+        if tag in ('small', 'h2', 'p'):
+            self._in = None
 
     def handle_data(self, data):
-        if self._in_small:
+        if self._in == 'small':
             self.small[-1] += data
+        elif self._in == 'h2':
+            self.titles[-1] += data
+        elif self._in == 'p':
+            self.notes[-1] += data
 
 
 def photo_row(name, **extra):
@@ -61,21 +77,48 @@ def photo_row(name, **extra):
     return row
 
 
-def render(rows):
-    """Run a copy of the script on a synthetic manifest; return (parser, manifest_before, manifest_after, proc)."""
+def run_copy(rows, preexisting_review=None):
+    """Run a copy of the script on a synthetic manifest (list or raw text).
+
+    Returns (proc, manifest_bytes_before, manifest_bytes_after, review_text_or_None).
+    """
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         script = work / 'build_review.py'
         shutil.copyfile(SCRIPT, script)
-        (work / 'manifest.json').write_text(json.dumps(rows))
+        before = (rows if isinstance(rows, str) else json.dumps(rows)).encode()
+        (work / 'manifest.json').write_bytes(before)
+        if preexisting_review is not None:
+            (work / 'review.html').write_text(preexisting_review)
         proc = subprocess.run([sys.executable, '-B', str(script)], cwd=tmp, timeout=60,
                               capture_output=True, text=True)
-        if proc.returncode != 0:
-            raise AssertionError('script failed: ' + proc.stderr)
-        parser = CardParser()
-        parser.feed((work / 'review.html').read_text(encoding='utf-8'))
-        after = json.loads((work / 'manifest.json').read_text())
+        review = work / 'review.html'
+        return (proc, before, (work / 'manifest.json').read_bytes(),
+                review.read_text(encoding='utf-8') if review.exists() else None)
+
+
+def render(rows):
+    """Run a copy of the script on a synthetic manifest; return (parser, manifest_after, proc)."""
+    parser, after, proc, _ = render_full(rows)
     return parser, after, proc
+
+
+def render_full(rows):
+    proc, _, after, review = run_copy(rows)
+    if proc.returncode != 0:
+        raise AssertionError('script failed: ' + proc.stderr)
+    parser = CardParser()
+    parser.feed(review)
+    return parser, json.loads(after), proc, review
+
+
+UNKNOWN_CATEGORY = 'Photo awaiting review'
+UNKNOWN_NOTE = 'Product identity and details need owner review.'
+
+
+def reviewed(name, **extra):
+    return photo_row(name, observed_category='Category of ' + name,
+                     visual_observation='Note about ' + name, **extra)
 
 
 class BuildReviewTests(unittest.TestCase):
@@ -104,7 +147,7 @@ class BuildReviewTests(unittest.TestCase):
         self.assertNotIn('script', parser.tags)
         self.assertEqual(parser.tags.count('small'), 1)
         alt = [a for t, a, _ in parser.attrs if t == 'img'][0]['alt']
-        self.assertEqual(alt, 'Preserves shelf')
+        self.assertEqual(alt, UNKNOWN_CATEGORY)
 
     def test_reserved_url_characters_round_trip(self):
         name = 'a b#c?d%e+f&g.jpg'
@@ -151,6 +194,94 @@ class BuildReviewTests(unittest.TestCase):
         self.assertEqual(after[0]['shipping_eligibility'], 'unverified')
         self.assertIs(after[0]['stock_count_inferred'], False)
         self.assertEqual(parser.tags.count('img'), 1)
+
+    def test_reordering_preserves_observations_on_each_photo(self):
+        a = reviewed('A.jpg')
+        b = reviewed('B.jpg')
+        for rows in ([a, b], [b, a], [b], [a]):
+            parser, after, _ = render(copy.deepcopy(rows))
+            self.assertEqual(parser.small, [r['photo'].rsplit('/', 1)[1] for r in rows])
+            self.assertEqual(parser.titles, [r['observed_category'] for r in rows])
+            self.assertEqual(parser.notes, [r['visual_observation'] for r in rows])
+            for got, want in zip(after, rows):
+                self.assertEqual(got['observed_category'], want['observed_category'])
+                self.assertEqual(got['visual_observation'], want['visual_observation'])
+
+    def test_every_photo_is_rendered_beyond_old_table_length(self):
+        for count in (0, 1, 33, 34):
+            rows, dups = [], 0
+            for i in range(count):
+                rows.append(reviewed('item-%02d.jpg' % i))
+                if i % 17 == 5:  # duplicate-only rows interleaved
+                    dups += 1
+                    rows.append({'source_file': '/synthetic/d%d.heic' % i, 'sha256': 'cd' * 32,
+                                 'duplicate_of': '/synthetic/source/item-%02d.heic' % i})
+            parser, after, proc, review = render_full(copy.deepcopy(rows))
+            names = ['item-%02d.jpg' % i for i in range(count)]
+            self.assertEqual(parser.articles, count)
+            self.assertEqual(parser.small, names)
+            self.assertEqual(parser.titles, ['Category of ' + n for n in names])
+            self.assertEqual(len(after), len(rows))
+            self.assertIn('%d unique photos \u00b7 %d exact duplicates linked.' % (count, dups), review)
+            self.assertEqual(proc.stdout.split(' ', 1)[0], str(count))
+            self.assertIn('%d photo observations saved;' % count, proc.stdout)
+
+    def test_unknown_photo_never_borrows_known_observation(self):
+        rows = [reviewed('known.jpg'),
+                photo_row('missing.jpg'),
+                photo_row('empty.jpg', observed_category='', visual_observation=''),
+                photo_row('half.jpg', observed_category='Only category'),
+                reviewed('last.jpg')]
+        parser, after, _ = render(copy.deepcopy(rows))
+        self.assertEqual(parser.titles, ['Category of known.jpg', UNKNOWN_CATEGORY, UNKNOWN_CATEGORY,
+                                         'Only category', 'Category of last.jpg'])
+        self.assertEqual(parser.notes, ['Note about known.jpg', UNKNOWN_NOTE, UNKNOWN_NOTE,
+                                        UNKNOWN_NOTE, 'Note about last.jpg'])
+        self.assertEqual([r['observed_category'] for r in after], parser.titles)
+        self.assertEqual([r['visual_observation'] for r in after], parser.notes)
+
+    def test_recorded_observation_markup_is_escaped(self):
+        cat = '<img src=x onerror=alert(1)>&amp;"q\''
+        note = '</p><script>alert(2)</script><a href="javascript:x">y</a>'
+        parser, after, _ = render([photo_row('esc.jpg', observed_category=cat, visual_observation=note)])
+        self.assertEqual(parser.titles, [cat])
+        self.assertEqual(parser.notes, [note])
+        self.assertEqual(sorted(parser.tags), sorted(['article', 'a', 'img', 'div', 'small', 'h2', 'p', 'p']))
+        img = [a for t, a, _ in parser.attrs if t == 'img'][0]
+        self.assertEqual(img['alt'], cat)
+        self.assertEqual([k for t, _, k in parser.attrs if t == 'img'][0], ['loading', 'src', 'alt'])
+        self.assertEqual(after[0]['observed_category'], cat)
+        self.assertEqual(after[0]['visual_observation'], note)
+
+    def test_nonstring_observation_refused_before_output_writes(self):
+        sentinel = 'PREEXISTING REVIEW SENTINEL'
+        for field in ('observed_category', 'visual_observation'):
+            for bad in (None, ['x'], 7, True):
+                for bad_first in (True, False):
+                    good = reviewed('good.jpg')
+                    broken = reviewed('bad.jpg')
+                    broken[field] = bad
+                    rows = [broken, good] if bad_first else [good, broken]
+                    proc, before, after, review = run_copy(rows, preexisting_review=sentinel)
+                    label = '%s=%r first=%s' % (field, bad, bad_first)
+                    self.assertNotEqual(proc.returncode, 0, label)
+                    self.assertIn(field, proc.stderr, label)
+                    self.assertEqual(proc.stdout, '', label)
+                    self.assertEqual(after, before, label)
+                    self.assertEqual(review, sentinel, label)
+
+    def test_checked_in_manifest_observations_and_counts_are_preserved(self):
+        recorded = json.loads((SCRIPT.parent / 'manifest.json').read_text())
+        parser, after, proc, review = render_full(recorded)
+        photos = [r for r in recorded if 'photo' in r]
+        self.assertEqual(parser.articles, len(photos))
+        self.assertEqual(len(photos), 33)
+        self.assertEqual(parser.titles, [r['observed_category'] for r in photos])
+        self.assertEqual(parser.notes, [r['visual_observation'] for r in photos])
+        self.assertEqual([r.get('observed_category') for r in after if 'photo' in r], parser.titles)
+        self.assertEqual(len([r for r in after if 'duplicate_of' in r and 'photo' not in r]), 3)
+        self.assertIn('33 unique photos \u00b7 3 exact duplicates linked.', review)
+        self.assertEqual(proc.stdout, '33 photo observations saved; review page created; no price or stock invented.\n')
 
 
 if __name__ == '__main__':

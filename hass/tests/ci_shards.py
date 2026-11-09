@@ -90,7 +90,8 @@ def load_weights(path=WEIGHTS):
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         seconds = data["seconds"]
-        if not all(isinstance(k, str) and type(v) is int and v >= 1 for k, v in seconds.items()):
+        if not isinstance(seconds, dict) or not all(
+                isinstance(k, str) and type(v) is int and v >= 1 for k, v in seconds.items()):
             raise ValueError("seconds must map module names to ints >= 1")
         return seconds
     except (OSError, ValueError, KeyError, TypeError) as error:
