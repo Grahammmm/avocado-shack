@@ -109,6 +109,23 @@ class AtomicIntakeTests(ReceiverTestCase):
         nonces, rows = self.durable()
         self.assertEqual((len(nonces), len(rows)), (1, 1))
 
+    def test_intake_inside_open_outer_transaction_is_refused_before_any_acceptance(self):
+        stages = []
+        self.rx.stage = lambda name, provider_id, **extra: stages.append(name)
+        raw = self.seal(event("new-message"))
+        with self.assertRaisesRegex(RuntimeError, "outer rollback"):
+            with self.inbox._tx():  # an outer transaction that has not committed (and then rolls back)
+                with self.assertRaisesRegex(RuntimeError, "own transaction"): self.accept(raw)
+                with self.assertRaisesRegex(RuntimeError, "own transaction"):
+                    self.rx.receive(raw, secret=SECRET, now=NOW)
+                self.assertEqual(stages, [])  # no receiver-accepted log, no queued answer
+                self.assertEqual(self.inbox.db.execute("SELECT COUNT(*) FROM nonces").fetchone()[0], 0)  # nothing written
+                self.assertTrue(self.inbox.db.in_transaction)  # the caller's transaction is untouched
+                raise RuntimeError("outer rollback")
+        self.assertEqual(self.durable(), ([], []))
+        self.assertEqual(self.accept(raw)["result"], "queued")  # the same envelope is still acceptable afterwards
+        self.assertEqual(stages, ["receiver-accepted"])
+
     def inbound_msg(self):
         env = json.loads(self.seal(event("new-message")))
         return inbox_mod.Inbound(**env["body"])

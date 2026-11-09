@@ -97,6 +97,9 @@ class Receiver:
 
     def _intake(self, raw, secret, now):
         """Size, strict JSON, unseal, enqueue -> (result for a refusal or repeat, None) or (None, the queued message)."""
+        if self.inbox.db.in_transaction:  # RF0824-10: acceptance is reported/logged only after OUR outermost COMMIT
+            raise RuntimeError("receiver intake needs its own transaction: the inbox is already inside one, so a "
+                               "'queued' answer could outlive a rollback")
         if isinstance(raw, (str, bytes, bytearray)):
             size = len(raw.encode("utf-8", "surrogatepass")) if isinstance(raw, str) else len(raw)
             if size > MAX_ENVELOPE_BYTES: return _result("rejected", REJECTED["size"]), None
