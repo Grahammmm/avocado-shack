@@ -130,6 +130,29 @@ def _town(place):
     return place.split(",")[0].strip() if isinstance(place, str) else None
 
 
+DENIAL_WORDS = frozenset(claims.NEGATORS) | {
+    "none", "neither", "wrong", "mistake", "mistaken", "incorrect", "ignore", "forget", "scrap", "except", "unlike", "instead",
+    "rather", "than"}
+_BREAK = re.compile(r"[.!?;:\n,]|\bbut\b")
+
+
+def _denied(words) -> bool:
+    return any(w in DENIAL_WORDS or w.endswith("n't") for w in words)
+
+
+def _owner_said(phrase, lines: str) -> bool:
+    """True when the owner's own words (folded, one line per text of the request) name the phrase and the LAST mention is not
+    denied. A mention is denied by a negator or a correction word ("not", "never", "wrong", "instead", n't ...) anywhere before it
+    in its clause (clauses end at . ! ? ; : , a newline or "but"), however many words away: "not made by the people at X" denies
+    X. A later denial or correction beats an earlier affirmative mention; a later plain mention beats an earlier denial. Pure."""
+    if not (isinstance(phrase, str) and phrase.strip()): return False
+    rx, last = claims._pattern(phrase), None
+    for clause in _BREAK.split(lines):
+        for m in rx.finditer(clause):
+            last = not _denied(clause[:m.start()].split())
+    return bool(last)
+
+
 def unsaid(draft, owner_text) -> list[str]:
     """HASS-LIVE-ADD-1: the brand, the maker line, the maker's name and the town that a NEW product or maker in the draft carries
     but the owner's own texts of this request do not hold (whole phrase, case and accents ignored, a denied mention does not
@@ -150,7 +173,7 @@ def unsaid(draft, owner_text) -> list[str]:
             elif record.get("collection") == "makers" and "maker.add" in names:
                 values = [after.get("name"), _town(after.get("place"))]
             else: continue
-            found += [v for v in values if isinstance(v, str) and v.strip() and not claims._said(v, lines)]
+            found += [v for v in values if isinstance(v, str) and v.strip() and not _owner_said(v, lines)]
         return list(dict.fromkeys(found))
     except Exception:  # an unreadable draft is refused by check(); this helper only ever asks
         return []

@@ -39,6 +39,8 @@ KEY = "test-orchard"
 PLACE = "Paso Robles, California"
 ALT = "A jar of quince jam on a plain counter"
 SAID = "New quince jam from Test Orchard in Paso Robles, goes on the pantry shelf"
+DENIED = "New quince jam, not made by the people at Test Orchard in Paso Robles."
+CORRECTED = "New quince jam from Test Orchard in Paso Robles. Correction: it is not from Test Orchard."
 
 
 def op(opname, /, **args): return {"op": opname, "args": args}
@@ -249,9 +251,35 @@ class TheBrandMustBeInHisWords(LiveAddBase):
 
     def test_a_denied_mention_does_not_count_and_a_new_word_next_to_it_does_not_either(self):
         draft = self.draft(*self.new_product())
-        self.assertEqual(policy.unsaid(draft, "Not from Test Orchard in Paso Robles"), ["Test Orchard"])
+        self.assertEqual(policy.unsaid(draft, "Not from Test Orchard in Paso Robles"), ["Test Orchard", "Paso Robles"])  # the denial runs to the end of its clause
         self.assertEqual(policy.unsaid(draft, "Test Orchards in Paso Robles"), ["Test Orchard"])  # whole words only
         self.assertEqual(policy.unsaid(draft, "TEST  ORCHARD, in paso robles."), [])  # case and spacing are ignored
+
+    def test_the_owner_denying_the_brand_or_town_is_not_the_owner_saying_it(self):
+        draft = self.draft(*self.new_product())
+        for text in ("New quince jam, not made by the people at Test Orchard in Paso Robles.",  # the negator is far from the name
+                     "New quince jam from Test Orchard in Paso Robles. Correction: it is not from Test Orchard.",  # a later correction
+                     "New quince jam from Test Orchard in Paso Robles\nit isn't made by Test Orchard, sorry",
+                     "from Test Orchard in Paso Robles. Wrong, ignore Test Orchard",
+                     "New quince jam from Test Orchard, never made in Paso Robles"):
+            with self.subTest(text=text):
+                self.assertNotEqual(policy.unsaid(draft, text), [], text)
+        self.assertEqual(policy.unsaid(draft, "New quince jam, not made by the people at Test Orchard in Paso Robles."),
+                         ["Test Orchard", "Paso Robles"])  # the denial runs to the end of its clause, so the town is asked too
+
+    def test_a_later_plain_mention_and_a_denial_of_something_else_still_count(self):
+        draft = self.draft(*self.new_product())
+        for text in ("not from Test Orchard\nsorry, it is from Test Orchard in Paso Robles",  # the owner corrects himself back
+                     "Not Acme, it is from Test Orchard in Paso Robles",
+                     "No sugar added, from Test Orchard in Paso Robles",
+                     "not an old recipe but from Test Orchard in Paso Robles"):
+            with self.subTest(text=text):
+                self.assertEqual(policy.unsaid(draft, text), [], text)
+
+    def test_the_texts_of_one_request_are_not_run_together(self):
+        draft = self.draft(*self.new_product())
+        self.assertEqual(policy.unsaid(draft, "from Test Orchard in Paso Robles\nnot from Test Orchard"), ["Test Orchard"])
+        self.assertEqual(policy.unsaid(draft, "not\nfrom Test Orchard in Paso Robles"), [])  # a negator ends with its own text
 
     def test_the_house_words_for_an_unknown_maker_need_no_owner_words_and_nothing_else_is_asked(self):
         args = {k: v for k, v in product_op(self.sha)["args"].items() if k != "producerKey"} | {"brand": "Producer not identified"}
@@ -279,6 +307,7 @@ class InChat(LiveAddBase):
         near = [op("maker.add", key=KEY, name="Test Orchard Farm", place=PLACE, story="Test Orchard Farm is based in Paso Robles, California."),
                 product_op(self.sha, brand="Test Orchard Farm")]
         self.interp = conv.FixtureInterpreter({
+            DENIED: {"ops": ops, "revises": None}, CORRECTED: {"ops": ops, "revises": None},
             SAID: {"ops": ops, "revises": None},
             "New quince jam from Test Orchard, goes on the pantry shelf": {"ops": ops, "revises": None},
             "new quince jam please": {"ops": invented, "revises": None},
@@ -306,7 +335,7 @@ class InChat(LiveAddBase):
         self.assertEqual(len(self.drafts()), 1)
 
     def test_a_brand_or_town_he_did_not_say_is_asked_and_nothing_is_drafted(self):
-        for text in ("new quince jam please", "New quince jam from Test Orchard, goes on the pantry shelf", "New quince jam from Test Orchard in Paso Robles"):
+        for text in ("new quince jam please", "New quince jam from Test Orchard, goes on the pantry shelf", "New quince jam from Test Orchard in Paso Robles", DENIED, CORRECTED):
             with self.subTest(text=text):
                 self.assertEqual(self.say(text), "claim-question")
                 [reply] = self.replies()

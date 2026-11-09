@@ -1238,7 +1238,7 @@ class Conversation:
         draft = out.get("draft") if out["result"] == "ok" else None
         revised = self._by_code(ask["revises"], ("proposed", "needs-details")) if isinstance(ask["revises"], str) else None
         if draft is None or claims.unstated(draft, " ".join(ask["texts"]), self._makers(), self._routes(), self._sources()) or (
-                self.settings.get("liveSite") and live_policy.unsaid(draft, " ".join(ask["texts"]))):  # HASS-LIVE-ADD-1
+                self.settings.get("liveSite") and live_policy.unsaid(draft, "\n".join(ask["texts"]))):  # HASS-LIVE-ADD-1
             self._reply(SHELF_FAILED)
             return "not-drafted"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"]) if self._mine(r)]
@@ -1397,7 +1397,7 @@ class Conversation:
         if hits := claims.unstated(draft, " ".join([*earlier, msg.text]), self._makers(), self._routes(), self._sources()):  # NB-AV-05: an unstated claim asks, never drafts; HASS-HIKE-FLOW-1: the owner's earlier texts of this request count as stated
             self._reply(claims.question(hits))  # no row; a waiting draft named by revises is left as it was
             return "claim-question"
-        if self.settings.get("liveSite") and (said := live_policy.unsaid(draft, " ".join([*earlier, msg.text]))):
+        if self.settings.get("liveSite") and (said := live_policy.unsaid(draft, "\n".join([*earlier, msg.text]))):
             self._reply(live_policy.unsaid_question(said))  # HASS-LIVE-ADD-1: a new product's brand, maker and town only in his words
             return "claim-question"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", draft["change_id"]) if self._mine(r)]
