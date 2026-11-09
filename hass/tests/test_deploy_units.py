@@ -40,6 +40,18 @@ class UnitTest(unittest.TestCase):
             self.assertEqual(cp["Install"]["WantedBy"], "default.target")
             self.assertIn(f"host.py {sub} --host %h/.local/state/hass/host/host.json", cp["Service"]["ExecStart"])
 
+    def test_receiver_and_worker_have_a_start_limit_in_unit_section(self):
+        for svc in ("hass-receiver", "hass-worker"):
+            cp = parse(f"{svc}.service")
+            self.assertEqual((int(cp["Unit"]["StartLimitIntervalSec"]), int(cp["Unit"]["StartLimitBurst"])), (300, 5), svc)
+            self.assertNotIn("StartLimitIntervalSec", cp["Service"], svc)
+            self.assertNotIn("StartLimitBurst", cp["Service"], svc)
+
+    def test_timers_and_oneshots_unchanged(self):
+        for svc in ("hass-health", "hass-backup"):
+            text = (DIR / f"{svc}.service").read_text("utf-8")
+            self.assertNotIn("StartLimit", text, svc)
+
     def test_health_command_and_timers(self):
         exec_ = parse("hass-health.service")["Service"]["ExecStart"]
         for want in ("--alert-log %h/agent-work/modes/ALERTS.log", "--host-dir %h/.local/state/hass/host",

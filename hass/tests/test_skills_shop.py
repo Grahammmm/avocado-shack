@@ -28,7 +28,9 @@ H0 = ["Monday–Friday 9am–6pm", "Saturday 9am–5pm · Closed Sunday"]
 SHA = "a" * 64
 GOLDEN = {
     "shop.hours": [{"hours": ["Monday–Thursday 9am–6pm", "Friday 9am–7pm", "Saturday 9am–5pm · Closed Sunday"]}],
-    "shop.notice": [{"text": "Closed Thursday", "until": "2026-11-12"}, {"clear": True}],
+    # A golden plan runs with no context, so the skill reads the real clock: the notice's last day is relative to it
+    # (a fixed day, 2026-11-12, would turn this red once the real date passes it; MAIN-RED-AVO-1).
+    "shop.notice": [{"text": "Closed Thursday", "until": (shop_today() + timedelta(days=4)).isoformat()}, {"clear": True}],
     "shop.contact": [{"phone": "805 555 0100"}, {"clear": True}, {"street_address": "1023 Example Street", "town": "Morro Bay"}],
     "page.home": [{"headline": ["Fresh from the coast.", "Picked this week."], "intro": "Come by for lunch."}, {"reset": "intro"}],
     "page.about": [{"story": "A market with a person behind it."}, {"reset": True}],
