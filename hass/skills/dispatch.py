@@ -431,8 +431,9 @@ class Dispatcher:
             best, near = found[0], len(found) > 1 and found[0][1] - found[1][1] <= NEAR_TIE * found[0][1]
             if any(p not in names for p in picks):
                 offered = list(dict.fromkeys([*picks, best[0]]))[:3]
-            elif len(picks) == 1 and near:  # the leading pair is ambiguous, whichever one was picked
-                offered = list(dict.fromkeys([picks[0], found[0][0], found[1][0]]))[:2]
+            elif near and not {found[0][0], found[1][0]} <= set(picks):
+                leaders = [found[0][0], found[1][0]]
+                offered = list(dict.fromkeys([picks[0], *leaders])) if len(picks) == 1 and picks[0] in leaders else leaders
             elif len(picks) == 1 and picks[0] != best[0] and best[1] - dict(found)[picks[0]] <= NEAR_TIE * best[1]:
                 offered = [picks[0], best[0]]
             else:
