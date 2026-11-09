@@ -18,8 +18,8 @@ nowhere on the site. Nothing is ever deleted: "remove" means hide.
 |---|---|---|---|
 | `maker.add` | "add a maker: Bee Happy Farm in Atascadero, they keep bees on the hill, beehappyfarm.com" | `maker.add` | private-only |
 | `maker.edit` | "update Etto's story: they started in a small kitchen", "rename Linn's to Linn's Preserves" | `maker.edit` | private-only |
-| `maker.hide` | "we stopped carrying Etto" (asks about their products) | `maker.hide`, with their products if he says yes | chat-live |
-| `maker.restore` | "Etto is back" | `maker.restore` | chat-live |
+| `maker.hide` | "we stopped carrying Etto" (asks about their products) | `maker.hide`, with their products if he says yes | private-only |
+| `maker.restore` | "Etto is back" | `maker.restore` | private-only |
 
 Slots (snake_case; the plan turns them into the op's own argument names):
 

@@ -57,6 +57,19 @@ def _readable(record) -> bool:
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
 
 
+def proposal_record(records: list) -> dict:
+    """The record the proposal screenshot is of: the first one, except that a new product added together with a new maker
+    (the maker record comes first, the product needs it) is shown as its own card, with the picture and neighbours, not
+    as the maker. Anything else keeps its first record."""
+    first = records[0]
+    if isinstance(first, dict) and first.get("collection") == "makers" and first.get("before") is None:
+        for record in records[1:]:
+            if record.get("collection") == "products" and record.get("before") is None \
+                    and (record.get("after") or {}).get("status") == "active":
+                return record
+    return first
+
+
 def target_for(record: dict, today=None, *, store=None) -> dict:
     """The screenshot target for a touched record (the after value decides what the checks expect).
     AV1222-02: with ``store`` an active product also expects sitegen's own availability word (str or None) and a

@@ -5,7 +5,8 @@ later edits to other records are kept. The store is one record, but undo is fiel
 that change wrote (hours, streetAddress, town, intro, headline, story, homeImage, notice, phone, selection_checked_on)
 are set back and checked, so later edits to other store fields are kept; a later differing value in one of those
 fields is a conflict. A field's value (a notice with its dates, the hours list) is one indivisible unit. A record the change created is hidden/cancelled, never deleted, except an added
-route idea (no hidden state), which is removed. The A2 writer
+route idea (no hidden state), which is removed. An added product is hidden without the stock word and day the change
+gave it (SKILLS-ITEMADD-1: a new item and today's shelf check undo together). The A2 writer
 sets ``revertedBy`` on the original change record once the revert is committed.
 An undo of an undo is refused, so the original keeps ``revertedBy``; to bring a change back, ask for it again.
 An undo that cancels a hike, moves its start or turns its RSVPs off carries the forward op's guest warning, never a
@@ -200,6 +201,9 @@ def _revert(content, args, ctx):
         elif collection in UNDO_ADDITION:
             field, hidden = UNDO_ADDITION[collection]
             value = {**(current or {}), field: hidden}
+            if collection == "products":  # its stock word and day came with this change: they go with it, so the
+                value.pop("available", None)  # day never outlives the shelf-check day the same undo sets back
+                value.pop("available_on", None)
         elif collection == "routeIdeas":  # an added route idea is removed (hide is a separate op)
             hike = next((e for e in content.community["events"] if e.get("trailId") == key), None)
             if hike is not None:  # any status: the validator checks every hike's trailId

@@ -251,7 +251,7 @@ class DurabilityTests(ConversationTestCase):
         self.assertEqual((self.repo.state / "conversation.sqlite3").stat().st_mode & 0o777, 0o600)
         with sqlite3.connect(self.repo.state / "conversation.sqlite3") as db:
             self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")},
-                             {"messages", "drafts", "approvals", "outbox"})
+                             {"messages", "message_chats", "drafts", "approvals", "outbox"})  # HASS-LIVE-PLAN-1: message_chats
 
 
 class ConfigAndCliTests(ConversationTestCase):

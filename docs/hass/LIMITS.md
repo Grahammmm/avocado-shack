@@ -16,8 +16,11 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 ## Waiting changes
 
-- In live mode, chat cannot change product brands or producers, maker places or links, club details, trail facts,
-  route ideas, sample hikes, or the store phone or address. G can do those by hand.
+- In live mode, only these changes go from chat to the website (HASS-LIVE-PLAN-1): hide or restore a product, edit a
+  product's description or category (not its name), stock words, specials (no price), hikes with sign-up off (add, edit, cancel), a maker's
+  about text, and undo. Anything else (new items, product names, pictures, brands, producers, hiding or restoring a maker, maker places or links, club details, trail
+  facts, route ideas, sample hikes, prices, phone, address, shop hours or notice, the home page photo) is refused in plain
+  words and saved for Graham to do by hand.
 - Sentences containing origin or organic claims, health claims, awards or endorsements, trail facts, prices or
   contact details cannot be added, removed, substituted or negated. Other sentences can change; undo is allowed.
 - A live change can touch at most **10** <!-- live_policy.MAX_RECORDS --> records.
@@ -64,6 +67,13 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Notice: at most **160 characters** <!-- content_model.MAX_NOTICE -->; its last day can be today or up to **60** <!-- content_model.MAX_NOTICE_DAYS --> days ahead.
 - Home photo: JPEG or PNG, up to **20 MB** <!-- media.MAX_BYTES -->.
 - The home photo needs a real description of at least three letters; a file name like IMG_1234 is refused.
+
+## Open requests
+
+- When Hass asks you a question about a request, it keeps what you said (private, on the shop computer) so your short answer is read together with it. It waits **30** <!-- skills.openreq.TTL_MINUTES --> minutes after your last message, and never more than **120** <!-- skills.openreq.MAX_MINUTES --> minutes from your first one. After that, send the request again.
+- Each message kept for a request is at most **4000 characters** <!-- skills.openreq.MAX_OWNER_TEXT -->, and all of them together at most **8000 characters** <!-- skills.openreq.MAX_TOTAL_TEXT -->. Once a request is finished or dropped, Hass erases those words after **24** <!-- skills.openreq.RETENTION_HOURS --> hours.
+- Only you can start, answer or end a request. `no` or `cancel` drops it. If Hass still cannot tell what you mean after **3** <!-- skills.openreq.MAX_UNRESOLVED --> questions about the same thing, it stops, says so, and writes the request down.
+- `backlog` shows the last **10** <!-- skills.backlog.LIST_MAX --> things Hass could not do yet. Each is kept for **90** <!-- skills.backlog.RETENTION_DAYS --> days, or until you take it off with `forget backlog.<n>`.
 
 ## Undoing a store change
 

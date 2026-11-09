@@ -67,3 +67,15 @@ owner text, identifiers of owner chats, credentials, or subprocess output.
 Emergency rollback is G-only, outside this worker, followed by writer
 reconciliation and attended resolve/adopt as appropriate. Neither retry nor
 unblock bypasses an exact baseline or authorizes a new content/privacy policy.
+
+## Live from chat (HASS-LIVE-PLAN-1)
+
+Design, the live table and the test plan: `reports/hass/LIVE-PLAN-1.md`. The steps only G and Michael can do:
+`reports/hass/LIVE-STEPS-G-MICHAEL.md`.
+
+- `hass/live_policy.py` `LIVE` is the allow-list of operations (and argument names) that may go live from chat; `PRIVATE` says
+  why the others cannot. A refused change is kept as one `policy` row in the private backlog.
+- `gIsOwner: true` (with `gSenders` and `gChat`) makes G's own chat a second owner chat, text only. Each owner's yes, no,
+  undo and open request belong to that owner's chat.
+- `python3 hass/host.py mode hold|private|live --host host.json` rewrites `approvals` (then restart `hass-worker`).
+- `python3 hass/publish_live.py revert-last --host host.json` puts back the newest live change that was not undone.
