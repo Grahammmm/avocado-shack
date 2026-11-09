@@ -4,6 +4,7 @@ check() is pure: an op, argument name or value type the registry does not allow,
 waiting, becomes one owner question naming the field. An enum value that is not one of the op's choices is asked about
 in site words (shelf, availability) before the editor (AV0222-02). Other value checks (real dates, makers, files) stay in the editor.
 Names shown to the owner contain only visible characters (no controls, zero-width, direction or line-separator marks).
+SKILLS-FW-2 adds check_skill for the skill reply shapes (see below).
 The same change listed twice (same op, equal args in any key order, spacing ignored) becomes one question naming the first repeated
 pair; it is checked after the shape check and before op/field checks, so a repeated unknown op is reported as a repeat.
 """
@@ -108,3 +109,73 @@ def check(result: dict, registry, pending_codes) -> dict:
     if "ops" not in result: return result
     problem = _problem(result, registry, set(pending_codes))
     return result if problem is None else {"question": problem}
+
+
+# -- SKILLS-FW-2: a skill reply ({"skill", "slots"}, {"calls"}, {"skill": "none"}) ---------------------------------------
+SKILL_KEYS = {"skill", "slots", "revises"}
+REF_KINDS = ("product_ref", "maker_ref", "hike_ref", "route_ref", "shelf")  # one name, or several in one message
+SKILL_TEXT_KINDS = STRING_KINDS + REF_KINDS + ("availability", "day", "clock", "attachment")
+
+
+def is_skill_reply(result) -> bool:
+    return isinstance(result, dict) and ("skill" in result or "calls" in result)
+
+
+def _slot_ok(kind: str, value) -> bool:
+    if kind in REF_KINDS and isinstance(value, list): return bool(value) and all(isinstance(v, str) for v in value)
+    if kind in SKILL_TEXT_KINDS: return isinstance(value, str)
+    return _kind_ok(kind, value)
+
+
+def _skill_problem(call, skills):
+    """One owner question for a skill call that is malformed, or None. ``skills`` has ``get(name)`` (a Registry)."""
+    if not (isinstance(call, dict) and set(call) <= SKILL_KEYS and isinstance(call.get("skill"), str)
+            and isinstance(call.get("slots", {}), dict)):
+        return f"I could not read that message as a change. {AGAIN}"
+    skill = skills.get(call["skill"])
+    if skill is None:
+        return None  # an unknown name is not a question: skill_check turns it into the catch-all
+    schema = {s.name: s for s in skill.slots}
+    for name, value in call.get("slots", {}).items():
+        slot = schema.get(name)
+        if slot is None or not _slot_ok(slot.kind, value):
+            return f"I could not read the details for {_clean(skill.label)}. {AGAIN}"
+        reply = _forbidden_reply(slot.kind, value)
+        if reply: return reply
+    return None
+
+
+def check_skill(result: dict, skills, pending_codes=()) -> dict:
+    """SKILLS-FW-2: ``result`` unchanged when a skill reply is well formed; a malformed one (wrong shape, a slot name or
+    value type the skill does not have, too many calls, the same call twice, a ``revises`` code not waiting, a price) becomes
+    {"question": text}. A skill name that does not exist becomes {"skill": "none", "unknown": True}: the router writes
+    it to the backlog and never guesses. Replies that are not skill replies pass through untouched."""
+    if not is_skill_reply(result): return result
+    if "skill" in result and "calls" in result:
+        return {"question": f"I could not read that message as one change. {AGAIN}"}
+    code = result.get("revises")
+    if code is not None and (not isinstance(code, str) or code not in set(pending_codes)):
+        return {"question": f"I could not find draft {_clean(code)} waiting; reply with the change again."}
+    if result.get("skill") == "none":
+        summary = result.get("summary")
+        return {"skill": "none", "summary": summary if isinstance(summary, str) else ""}
+    calls = result["calls"] if "calls" in result else [result]
+    if not isinstance(calls, list) or not calls:
+        return {"question": "I did not find a change in that message. What would you like to change?"}
+    if len(calls) > MAX_OPS:
+        return {"question": (f"That is {len(calls)} changes in one message; I can take at most {MAX_OPS} at a time. "
+                             "Please send them in smaller groups.")}
+    seen = {}
+    for i, call in enumerate(calls, 1):
+        if "calls" in result and isinstance(call, dict) and "revises" in call:  # the code lives on the envelope, never per call
+            return {"question": f"I could not read that message as a change. {AGAIN}"}
+        problem = _skill_problem(call, skills)
+        if problem: return {"question": problem}
+        try: key = (call["skill"], json.dumps({k: _spaced(v) for k, v in call.get("slots", {}).items()}, sort_keys=True, ensure_ascii=False))
+        except (TypeError, ValueError, RecursionError): continue
+        if key in seen:
+            return {"question": f"Changes {seen[key]} and {i} in that message are the same. Did you mean to change something else? {AGAIN}"}
+        seen[key] = i
+    if any(skills.get(c["skill"]) is None for c in calls):
+        return {"skill": "none", "summary": "", "unknown": True}
+    return result

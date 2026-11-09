@@ -18,6 +18,7 @@ import re
 from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
 from hass.interpret_check import PRICE_REPLY
 from hass.sitegen import phone_text
+from hass.skills.prompt import skills_section
 
 MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
 MAX_HIKES, MAX_ROUTES, MAX_HIKE_DETAILS = 60, 60, 12
@@ -253,14 +254,18 @@ def _home_text_lines(store) -> list:
     return rows
 
 
-def build(registry, content) -> str:
+def build(registry, content, skills=None, candidates=()) -> str:
     """The system prompt for ``registry`` (name -> Op) and ``content`` (.products, .makers, .community, .store).
+
+    SKILLS-FW-2: with active ``skills`` (a hass.skills Registry or iterable) a generated Skills section is appended last,
+    in full for the router's ``candidates``; with none the output is byte-identical to a build without skills.
 
     AV2152-06: over the byte cap, whole product descriptions become <omitted> oldest first until the prompt fits."""
     community = getattr(content, "community", None) or {}
     community = community if isinstance(community, dict) else {}
     makers = content.makers if isinstance(content.makers, dict) else {}
     products = _dicts(content.products)
+    skills_block = skills_section(skills, candidates) if skills is not None else ""
 
     def assemble(omitted) -> str:
         sections = [
@@ -277,6 +282,8 @@ def build(registry, content) -> str:
             + ("\nsamples | hidden" if (community.get("club") or {}).get("showSamples") is False else ""),
             "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),
         ]
+        if skills_block:
+            sections.append(skills_block.rstrip("\n"))
         return "\n\n".join(sections) + "\n"
 
     omitted, prompt = set(), assemble(frozenset())
