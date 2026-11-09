@@ -696,12 +696,13 @@ class Dispatcher:
             for sl in skill.slots:
                 if sl.kind == "attachment" and sl.from_attachment and attachments and not slots.get(sl.name):
                     slots[sl.name] = attachments[-1]
+            given = slots  # keep owner-given values across questions, as in _advance
             slots, shown = apply_defaults(skill, slots, ctx)
             missing = None if filled.problem else next_missing(skill, slots)
             if filled.problem or filled.refused or missing is not None or any(
                     RULES.get(r, lambda *a: None)(slots, texts, ctx) for r in skill.rules):
-                waiting.append({"skill": skill.name, "slots": slots, "problem": filled.problem, "ask": filled.ask,
-                                "slot": filled.problem_slot})
+                waiting.append({"skill": skill.name, "slots": given, "problem": filled.problem, "ask": filled.ask,
+                                "slot": filled.problem_slot or (missing.name if missing is not None else None)})
                 continue
             try:
                 planned = skill.plan(dict(slots), ctx)
@@ -709,7 +710,7 @@ class Dispatcher:
                 said = getattr(exc, "reply", None)
                 said = said.strip() if isinstance(said, str) and said.strip() else None
                 if said and getattr(exc, "kind", None) == "question":
-                    waiting.append({"skill": skill.name, "slots": slots, "ask": None, "slot": None, "problem": said})
+                    waiting.append({"skill": skill.name, "slots": given, "ask": None, "slot": None, "problem": said})
                 else:  # this ask is refused (or failed); the owner's other asks are not
                     reason = getattr(exc, "backlog", None)
                     stopped.append((said, reason if reason in BACKLOG_REASONS else None))
