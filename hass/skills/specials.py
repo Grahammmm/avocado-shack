@@ -164,14 +164,16 @@ def rule_price_in_deal_only(slots, texts, ctx):
 # on special', 'change the honey special to', 'special:', 'this week only'; never his deal words before a later 'on
 # sale'), and the end date at the back ('until Friday'). What is left, from the first clause with words in it to the
 # last, is the run. The special's own name may stand in that run as his label ('Strawberries 2 for $5', 'jam: 2 for
-# $5', '2 for $5 on the jam') or as words of the deal
-# ('Free samples with any purchase'), so each text is read twice: (1) with the name kept: this is always his deal, as it
-# loses nothing he typed; (2) with the name also cut off as a label: this is his deal too when the name was not in
-# front of it, or when what is left starts like a deal by itself (a figure, a price, a count or an offer word: '2 for
-# $5', 'buy one get one free', 'half price'), because the page shows the name as the title right above the deal. A rest
-# that does not start like a deal ('with any purchase', 'any purchase' after 'for') leans on the name, so cutting the
-# name would shorten the deal: only reading (1) counts. The model's deal must equal a reading (runs of spaces folded)
-# of a text that has one run in it; anything else, two deals or none, asks him to retype it. Never a shortened deal.
+# $5', '2 for $5 on the jam') or as words of the deal ('Free samples with any purchase'), so each text is read twice:
+# (1) with the name kept: this is always his deal, as it loses nothing he typed; (2) with the name also cut off as a
+# label: this is his deal too only when his text itself shows the name is a label: the name was not in front of it
+# ('put the honey on special, 2 for $5'), he named it as what the special is on ('special on figs, buy one get one'),
+# he set the name off with a colon, a dash or a new line ('jam: buy one get one free'), or a price figure follows the
+# name straight away, the price-board form ('Strawberries 2 for $5'); the page shows the name as the title right above
+# the deal. Any other word after the name, an offer word too ('Kids get one free with any purchase', 'Free samples with
+# any purchase'), may make the name the subject of his sentence, so only reading (1) counts. The model's deal must
+# equal a reading (runs of spaces folded) of a text that has one run in it; anything else, two deals or none, a
+# shortened deal included, asks him to retype it.
 _SEPARATOR = re.compile(r"(?<!\d),|,(?!\d)|[;:\n()\[\]\"\u201c\u201d\u2014\u2013!?|]|\s-+\s|\.(?!\d)")
 _WHEN = (r"(?:this|next|the)\s+(?:week(?:end)?|month)(?:'?s)?(?:\s+only)?|today(?:\s+only)?|tonight|all\s+(?:week(?:end)?|month)"
          r"|for\s+(?:the|this)\s+(?:week(?:end)?|month)|(?:only\s+)?this\s+week(?:end)?")
@@ -279,21 +281,31 @@ def deals_typed(text, slots=None, ctx=None) -> list:
     return [text[a:b] for a, b in _runs(text, _cutters(_special_names(slots or {}, ctx)))]
 
 
-# What a deal line can start with when it stands by itself under the special's name: a price sign, a figure, a count
-# ('two for 5 dollars', 'a dozen' is not one: 'a' and 'an' start too much) or an offer word.
-_DEAL_START = re.compile(r"[$£€¥¢\d]|(?:" + _NUMBER_WORDS.replace("a|an|", "") + r"|buy|get|free|half|save|bogo|extra|double)\b", re.I)
+# How his text shows the name in front of a deal is a label (reading 2 above): he named it as what the special is on
+# ('special on figs, buy one get one'), his own mark stands between them, or a price figure comes straight after the
+# name. Other words never do: 'Kids get one free', 'Seniors save more' keep the name in the deal.
+_INTRO = re.compile(r"\b" + _SPECIAL_WORD + r"\s+(?:on|for|of)\s+(?:(?:the|our|my|this|that|these|those|new|some)\s+)*$", re.I)
+_LABEL_MARK = re.compile(r"[:\n\u2014\u2013]|\s-+\s")
+_PRICE_FIGURE = re.compile(r"[$£€¥¢\d]")
+
+
+def _a_label(text, name_at, deal_at) -> bool:
+    """Whether his text shows the name at ``name_at``, cut off in front of the deal at ``deal_at``, is a label."""
+    clause = max([m.end() for m in _SEPARATOR.finditer(text, 0, name_at)], default=0)
+    return bool(_INTRO.search(text, clause, name_at) or _LABEL_MARK.search(text, name_at, deal_at) or _PRICE_FIGURE.match(text, deal_at))
 
 
 def deal_readings(text, slots=None, ctx=None) -> list:
     """The deals one text can hold, at most two: the run with the special's name kept, and the run with the name cut off
-    as a label when that is a deal by itself (see the note above ``_SEPARATOR``). Empty when the text has two runs."""
+    when the text shows the name is a label (see the note above ``_SEPARATOR``). Empty when the text has two runs."""
     text, names = str(text), _special_names(slots or {}, ctx)
     kept = _runs(text, _cutters(names, cut_name=False))
     cut = _runs(text, _cutters(names))
     out = [text[a:b] for a, b in kept] if len(kept) == 1 else []
     if len(cut) == 1:
         a, b = cut[0]
-        if a in {k for k, _ in kept} or _DEAL_START.match(text, a):  # nothing of the name was in front, or it stands alone
+        front = max((k for k, _ in kept if k <= a), default=a)  # where his kept words start: the name, when it is in front
+        if a == front or _a_label(text, front, a):
             out.append(text[a:b])
     return out
 
