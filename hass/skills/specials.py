@@ -158,12 +158,18 @@ def rule_price_in_deal_only(slots, texts, ctx):
     return None
 
 
-# The deal as typed is one whole clause of his text, never a piece found inside it. A text is cut into clauses at his
-# separators (commas, colons, brackets, a full stop, a dash); in each clause the words about the special come off the
-# front ('put honey on special', 'change the honey special to', the special's own name) and the end date comes off the
-# back ('until Friday', 'this week only', 'on the jam'). What is left, from the first clause with words in it to the last
-# one, is the deal he typed. The model's deal must be equal to it (runs of spaces folded, nothing else), or he is asked.
-# A text with two deals in it, or no clear deal, is asked about too: when in doubt, ask; never save a shortened deal.
+# The deal as typed is one whole run of his clauses, never a piece found inside it. A text is cut into clauses at his
+# separators (commas, colons, brackets, a full stop, a dash); each clause loses its request words at the front ('put',
+# 'change the honey special to', 'on special', 'special:', 'this week only') and the end date at the back ('until
+# Friday'). What is left, from the first clause with words in it to the last, is the run. The special's own name may
+# stand in that run as his label ('Strawberries 2 for $5', 'jam: 2 for $5', '2 for $5 on the jam') or as words of the deal
+# ('Free samples with any purchase'), so each text is read twice: (1) with the name kept: this is always his deal, as it
+# loses nothing he typed; (2) with the name also cut off as a label: this is his deal too when the name was not in
+# front of it, or when what is left starts like a deal by itself (a figure, a price, a count or an offer word: '2 for
+# $5', 'buy one get one free', 'half price'), because the page shows the name as the title right above the deal. A rest
+# that does not start like a deal ('with any purchase', 'any purchase' after 'for') leans on the name, so cutting the
+# name would shorten the deal: only reading (1) counts. The model's deal must equal a reading (runs of spaces folded)
+# of a text that has one run in it; anything else, two deals or none, asks him to retype it. Never a shortened deal.
 _SEPARATOR = re.compile(r"(?<!\d),|,(?!\d)|[;:\n()\[\]\"\u201c\u201d\u2014\u2013!?|]|\s-+\s|\.(?!\d)")
 _WHEN = (r"(?:this|next|the)\s+(?:week(?:end)?|month)(?:'?s)?(?:\s+only)?|today(?:\s+only)?|tonight|all\s+(?:week(?:end)?|month)"
          r"|for\s+(?:the|this)\s+(?:week(?:end)?|month)|(?:only\s+)?this\s+week(?:end)?")
@@ -239,11 +245,10 @@ def _trim(text, lo, hi):
     return lo, hi
 
 
-def deals_typed(text, slots=None, ctx=None) -> list:
-    """Each deal he typed in one text, as it stands in the text: the clauses left with words in them, run together.
-    A clause with nothing left (only the special's words or the end date) ends a deal."""
-    cutters = _cutters(_special_names(slots or {}, ctx))
-    text, deals, start, end, cut = str(text), [], None, None, 0
+def _runs(text: str, cutters) -> list:
+    """(start, end) of each run in one text: the clauses left with words in them, run together. A clause with nothing
+    left (only request words, the special's name when it is cut, or the end date) ends a run."""
+    runs, start, end, cut = [], None, None, 0
     for sep in list(_SEPARATOR.finditer(text)) + [None]:
         stop = sep.start() if sep else len(text)
         lo, hi = _clause_core(text[cut:stop], cutters)
@@ -251,12 +256,37 @@ def deals_typed(text, slots=None, ctx=None) -> list:
             start = cut + lo if start is None else start
             end = cut + hi
         elif start is not None:
-            deals.append(text[start:end])
+            runs.append((start, end))
             start = None
         cut = sep.end() if sep else len(text)
     if start is not None:
-        deals.append(text[start:end])
-    return deals
+        runs.append((start, end))
+    return runs
+
+
+def deals_typed(text, slots=None, ctx=None) -> list:
+    """Each run he typed in one text with the special's name cut off as a label (reading 2 of the rule below)."""
+    text = str(text)
+    return [text[a:b] for a, b in _runs(text, _cutters(_special_names(slots or {}, ctx)))]
+
+
+# What a deal line can start with when it stands by itself under the special's name: a price sign, a figure, a count
+# ('two for 5 dollars', 'a dozen' is not one: 'a' and 'an' start too much) or an offer word.
+_DEAL_START = re.compile(r"[$£€¥¢\d]|(?:" + _NUMBER_WORDS.replace("a|an|", "") + r"|buy|get|free|half|save|bogo|extra|double)\b", re.I)
+
+
+def deal_readings(text, slots=None, ctx=None) -> list:
+    """The deals one text can hold, at most two: the run with the special's name kept, and the run with the name cut off
+    as a label when that is a deal by itself (see the note above ``_SEPARATOR``). Empty when the text has two runs."""
+    text = str(text)
+    kept = _runs(text, _cutters([]))
+    cut = _runs(text, _cutters(_special_names(slots or {}, ctx)))
+    out = [text[a:b] for a, b in kept] if len(kept) == 1 else []
+    if len(cut) == 1:
+        a, b = cut[0]
+        if a in {k for k, _ in kept} or _DEAL_START.match(text, a):  # nothing of the name was in front, or it stands alone
+            out.append(text[a:b])
+    return out
 
 
 def _spaced(text) -> str:
@@ -268,8 +298,7 @@ def rule_deal_as_typed(slots, texts, ctx):
     if not texts or not isinstance(deal, str) or not deal.strip():
         return None
     for text in texts:
-        found = deals_typed(text, slots, ctx)
-        if len(found) == 1 and _spaced(found[0]) == _spaced(deal):  # one deal in the text, and it is the whole of it
+        if _spaced(deal) in {_spaced(found) for found in deal_readings(text, slots, ctx)}:  # one of his readings, whole
             return None
     return NOT_AS_TYPED, "other"
 
