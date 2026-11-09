@@ -17,8 +17,8 @@ S4  specials.add                                               LIVE-POLICY: ALLO
 S5  hike.create (meeting point trailhead gate)                 LIVE-POLICY: ALLOWED
 S6  store.set_notice                                           LIVE-POLICY: REFUSED ['not live: store.set_notice']
 S8  store.set_phone (must be refused)                          LIVE-POLICY: REFUSED ['protected operation: store.set_phone']
-S1c product.set_photo on an EXISTING product (real op)         LIVE-POLICY: REFUSED ['not live: product.set_photo']
-S1c2 product.set_photo, record shape (picture words only)      LIVE-POLICY: REFUSED ['not live: product.set_photo']
-S1d same, but the picture words claim organic/farm             LIVE-POLICY: REFUSED ['not live: product.set_photo', 'protected sentences: origin/organic']
+S1c product.set_photo on an EXISTING product (real op)         LIVE-POLICY: ALLOWED
+S1c2 product.set_photo, record shape (picture words only)      LIVE-POLICY: ALLOWED
+S1d same, but the picture words claim organic/farm             LIVE-POLICY: REFUSED ['protected sentences: origin/organic']
 S9  undo of the new product (always passes)                    LIVE-POLICY: ALLOWED
 ROWS OUT OF LINE: none
