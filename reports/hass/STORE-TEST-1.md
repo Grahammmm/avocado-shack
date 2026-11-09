@@ -7,14 +7,21 @@ G chose "go fully live": Mike adds things to the real theavocadoman.com by text 
 
 ## 0. Read this first
 
+> **UPDATE 2026-11-09 (card t_9e6bce5b, HASS-LIVE-ADD-1): G decided that a new product may go live from chat. The table below now shows
+> that row as allowed under rules, and Appendix A's rehearsal is `reports/hass/rehearse_live_policy.py` (output
+> `reports/hass/rehearse_live_policy.out`: "add a new product" now ALLOWED, every still-private row REFUSED). The rest of this section
+> is the 2026-11-08 text, kept as written, and its "NO-GO" statements about a new product are superseded by that decision (G's
+> live-scope confirmation, P-0b and the other pre-flight items still apply).**
+
 ### A. The headline request is NOT possible live today: a brand-new product from chat is refused by the live boundary
 
 G's wish was "an item added to the real website in real time by text and photo". The live content policy (`hass/live_policy.py`, line 21: protected `products.brand`, `products.displayBrand`, `products.producerKey`, `makers.place`, `makers.url`) refuses any live change that adds or changes a product's brand or a maker's place. Every new product has a brand, so a new product from chat cannot go on the real site; the draft says so instead of offering `yes`. **Checked** with the real op registry and the real policy in a scratch writer (Appendix A), at `main` (56c9070) and at the running runtime commit (0a8114c), same result:
 
 | What Mike asks | Live policy result |
 | --- | --- |
-| add a new product (with its brand) | **REFUSED**: `protected field: products.brand` (and `displayBrand`) |
-| add a new maker with a place or web link | **REFUSED**: `protected field: makers.place`, `makers.url` |
+| add a new product (with its brand) | **ALLOWED since HASS-LIVE-ADD-1 (G 2026-11-09)**, under these rules: the brand, display brand, maker and town are in Mike's own words of that request (else Hass asks and drafts nothing); it comes with its own picture; every sentence gate (origin/organic, health/awards, trail facts, prices, contact), the 10-record limit and sign-up-off stay; undo always passes. *Written 2026-11-08 it was **REFUSED**: `protected field: products.brand` (and `displayBrand`).* |
+| add a new maker with a place or web link | **ALLOWED only as part of a new product, with its name and town** (HASS-LIVE-ADD-1); the web link is still **REFUSED** (`protected field: makers.url`), a maker on its own is refused, and an existing maker's place or link is still refused |
+| change the brand or producer of a product that already exists | **REFUSED** (unchanged): `protected field: products.brand` |
 | put a photo on a product that **already exists** | allowed (only `image` and the picture words change) |
 | ... but the picture words say "organic" or "farm" | **REFUSED**: `protected sentences: origin/organic` |
 | mark sold out (shelf check), weekly special, hike, notice | allowed |
@@ -162,7 +169,7 @@ Who: the **operator** runs these on AgentOrange unless a line says **G (Mac)** o
 | # | Check | Command | Expected | Night | Morning |
 | --- | --- | --- | --- | --- | --- |
 | P-0 | Script rehearsed on a scratch copy (no live, no phone) | the same method as HASS-E2E-HIKE-1: scratch writer + scratch state + synthetic owner, real code at R, real GPU interpreter; send the messages of steps 0 to 8, with a photo for 1L | each step ends as section 1 says; replies pass `voice.check`; no code path says "live" before it is | yes | - |
-| P-0b | **Live-policy rehearsal at R: the script's changes pass, the new product is refused** | in the scratch checkout of R from P-10: `python3 -B ~/agent-work/hass-store-test/rehearse_live_policy.py ~/agent-work/hass-store-test-R` (script in Appendix A; scratch writer and state in a temp folder, no network, no live files) | the nine lines of Appendix A's expected output exactly: S1 and S1b REFUSED, S3 S4 S5 S6 ALLOWED, S8 REFUSED, S1c ALLOWED, S1d REFUSED. Any `PREPARE-` line, or S1c not ALLOWED, = **NO-GO for the live photo step**; any change in S1 = tell G (the boundary moved: the new-item decision in section 0 must be redone). Dates in the script are Monday's; edit them to rehearse on another day | yes | - |
+| P-0b | **Live-policy rehearsal at R: the script's changes pass, the new product is refused** | in the scratch checkout of R from P-10: `python3 -B ~/agent-work/hass-store-test/rehearse_live_policy.py ~/agent-work/hass-store-test-R` (script: `reports/hass/rehearse_live_policy.py` in the checkout; the version in Appendix A is the 2026-11-08 original; scratch writer and state in a temp folder, no network, no live files) | the lines of `reports/hass/rehearse_live_policy.out` exactly (HASS-LIVE-ADD-1: S1 and S1a, the new product, ALLOWED; S1b to S1b5, S1e to S1i, S6, S8, S1c to S1d REFUSED; S3 S4 S5 and the undo S9 ALLOWED; last line `ROWS OUT OF LINE: none`; the script exits 1 otherwise). The older nine-line output of the first version of this script is kept in Appendix A for history. Any `PREPARE-` line, or S1c not ALLOWED, = **NO-GO for the live photo step**; any change in S1 = tell G (the boundary moved: the new-item decision in section 0 must be redone). Dates in the script are Monday's; edit them to rehearse on another day | yes | - |
 | P-1 | Runtime version | `git -C ~/.local/share/hass/runtime rev-parse HEAD` and `git -C ~/.local/share/hass/runtime status --porcelain` | HEAD equals `runtimeCommit` in `host.json` and the agreed R; second command prints nothing | yes | yes |
 | P-2 | R contains what the script needs | `git -C ~/.local/share/hass/runtime merge-base --is-ancestor <merge commit of the PR> HEAD` for each PR we rely on | exit 0 for each (no output); anything missing is written on the card and the script step is shortened | yes | - |
 | P-3 | Host config valid | `python3 -B ~/.local/share/hass/runtime/hass/host.py check --host ~/.local/state/hass/host/host.json` | one JSON line `ok`; exit 0 | yes | yes |
@@ -383,6 +390,8 @@ Expected `{"reachable":2}`. Then G texts `problems` from G's own phone and sees 
 13. **The photo path (1L) is policy-allowed but not run end to end live** until P-18b. The picture words (`imageAlt`) are checked by the same claims filter as other text.
 
 ## Appendix A. Live-policy rehearsal script (P-0b) and its output
+
+**Update 2026-11-09 (HASS-LIVE-ADD-1):** the maintained script is `reports/hass/rehearse_live_policy.py`, with its output in `reports/hass/rehearse_live_policy.out`. A new product is now ALLOWED (S1, S1a); the still-private rows are REFUSED (maker alone, maker link, existing maker place/link, hide, brand or producer of an existing product, organic/price words, brand not in the owner's words, the `image` argument, notice, phone, set_photo). Below is the original (2026-11-08) script and output, kept for history; in it `S1`, `S1b` read REFUSED because the policy then refused every new product.
 
 Read-only and scratch-only: it builds a temporary writer repository and state with the checkout's own test helper, runs the checkout's real op registry and its real `live_policy.check`, and prints one line per case. It touches no live file, no network, no Mac. Save as `~/agent-work/hass-store-test/rehearse_live_policy.py`; run `python3 -B ~/agent-work/hass-store-test/rehearse_live_policy.py <scratch checkout of R>`.
 
