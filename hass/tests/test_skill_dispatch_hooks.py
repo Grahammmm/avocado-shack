@@ -17,7 +17,7 @@ from hass import voice
 from hass.skills import dispatch
 from hass.skills.model import Slot
 from hass.tests.test_conversation import SETTINGS
-from hass.tests.test_skill_dispatch import HIKE_ADD, LIVE1, MILL, SkillCase, registry_of, skill_reply, toy
+from hass.tests.test_skill_dispatch import DESCRIBE, HIKE_ADD, LIVE1, MILL, SkillCase, registry_of, skill_reply, toy
 
 OPEN = "add a hike Saturday, Mill Creek trailhead, easy"  # no time
 SEEN = {}
@@ -164,6 +164,80 @@ class NotesHook(HookCase):
         self.script(LIVE1, skill_reply("hike.add", **MILL))
         draft, _ = self.propose(LIVE1)
         self.assertEqual(draft["state"], "proposed")
+
+
+class CallsHooks(HookCase):
+    """RETURN items 1 and 2: several asks in one message get the same notes and refusals as one ask."""
+    SKILLS = (HOOKED, DESCRIBE)
+    TEXT = LIVE1 + " and change the bread"
+
+    def calls(self, title):
+        self.script(self.TEXT, {"calls": [{"skill": "hike.add", "slots": {**MILL, "title": title}},
+                                          {"skill": "item.describe", "slots": {"product": "bread"}}], "revises": None})
+
+    def test_a_complete_call_keeps_its_say_set_and_warn_lines_beside_the_combined_proposal(self):
+        self.calls("Mill Creek hike")
+        self.assertEqual(self.say(self.TEXT), "proposed")
+        proposal, asked = self.replies()
+        lines = proposal.split("\n")
+        self.assertEqual(lines[:3], ["The meeting place is saved.", "I set: the hike to easy.", "The photo is small."])
+        self.assertLess(proposal.index("The photo is small."), proposal.lower().index("yes"))
+        self.assertEqual(voice.check(proposal, long_ok=True), [])
+        self.assertEqual(SEEN["notes"][0], "hike.add")
+        self.assertTrue(asked.startswith("Which one do you mean:"), asked)  # the other ask is still asked next
+        self.assertEqual(self.live()["skill"], "item.describe")
+        self.nothing_written()
+
+    def test_a_refused_call_is_said_and_closed_while_the_other_asks_go_on(self):
+        self.calls("R")
+        self.assertEqual(self.say(self.TEXT), "question")
+        said, asked = self.replies()
+        self.assertEqual(said, "That hike is cancelled, so nothing changed.")
+        self.assertTrue(asked.startswith("Which one do you mean:"), asked)  # not NOT_SURE: the other ask is the open request
+        live = self.live()
+        self.assertEqual((live["skill"], live["asked_slot"], live["calls"]), ("item.describe", "product", []))
+        self.assertEqual([d for d in self.drafts() if d["state"] == "proposed"], [])
+        self.nothing_written()
+
+    def test_a_refused_call_beside_a_complete_one_is_said_before_the_proposal_of_the_other(self):
+        self.script(self.TEXT, {"calls": [{"skill": "hike.add", "slots": {**MILL, "title": "R"}},
+                                          {"skill": "hike.add", "slots": MILL}], "revises": None})
+        self.assertEqual(self.say(self.TEXT), "proposed")
+        said, proposal = self.replies()
+        self.assertEqual(said, "That hike is cancelled, so nothing changed.")
+        self.assertIn("The photo is small.", proposal)
+        self.assertIn("Mill Creek hike", proposal)
+        self.assertEqual(len([d for d in self.drafts() if d["state"] == "proposed"]), 1)
+        self.nothing_written()
+
+    def test_only_refused_calls_are_said_and_close_the_request(self):
+        self.script(self.TEXT, {"calls": [{"skill": "hike.add", "slots": {**MILL, "title": "R"}},
+                                          {"skill": "hike.add", "slots": {**MILL, "title": "B"}}], "revises": None})
+        self.assertEqual(self.say(self.TEXT), "backlog")
+        said, backlog = self.replies()
+        self.assertEqual(said, "That hike is cancelled, so nothing changed.")
+        self.assertTrue(backlog.startswith("The website shows no prices."), backlog)
+        self.assertIn("I wrote it down as request #", backlog)
+        self.assertIsNone(self.live())
+        self.nothing_written()
+
+    def test_a_refusal_alone_in_a_calls_reply_closes_the_request(self):
+        self.script(self.TEXT, {"calls": [{"skill": "hike.add", "slots": {**MILL, "title": "R"}}], "revises": None})
+        self.assertEqual(self.say(self.TEXT), "refused")
+        self.assertEqual(self.replies(), ["That hike is cancelled, so nothing changed."])
+        self.assertIsNone(self.live())
+
+    def test_a_call_that_fails_without_a_sentence_is_the_generic_failure(self):
+        self.script(self.TEXT, {"calls": [{"skill": "hike.add", "slots": {**MILL, "title": "X"}}], "revises": None})
+        self.assertEqual(self.say(self.TEXT), "not-drafted")
+        self.assertEqual(self.replies(), [dispatch.PLAN_FAILED])
+        self.assertIsNone(self.live())
+
+    def test_a_question_from_a_plan_is_still_the_one_asked_for_that_call(self):
+        self.script(self.TEXT, {"calls": [{"skill": "hike.add", "slots": {**MILL, "title": "Q"}}], "revises": None})
+        self.assertEqual(self.say(self.TEXT), "question")
+        self.assertEqual(self.replies(), ["Which hike do you mean: Mill Creek or Fiscalini?"])
+        self.assertEqual(self.live()["skill"], "hike.add")
 
 
 class PlanContext(HookCase):

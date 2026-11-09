@@ -619,20 +619,29 @@ class Dispatcher:
                                           if isinstance(line, str) and line.strip()))
         return out
 
+    @staticmethod
+    def _note_lines(parts, left_off=()) -> list:
+        """The lines shown beside a proposal. ``parts`` is one ``(skill notes, defaults it picked)`` per call drafted: what the skills
+        said, then one ``I set:`` line (the defaults, or else the skill's own set lines), what was left off, then the warnings."""
+        say = [line for hooked, _ in parts for line in hooked["say"]]
+        defaults = [d for _, shown in parts for d in shown]
+        sets = [line for hooked, shown in parts if not shown for line in hooked["set"]]
+        warn = [line for hooked, _ in parts for line in hooked["warn"]]
+        note = list(dict.fromkeys(say))
+        if defaults:
+            note.append("I set: " + "; ".join(defaults) + ".")
+        note += list(dict.fromkeys(sets))
+        if left_off:
+            note.append("Left off (you didn't say it): " + ", ".join(n.replace("_", " ") for n in left_off) + ".")
+        note += list(dict.fromkeys(warn))
+        return note
+
     def _draft(self, msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, left_off, queued=()):
         """Hand the plan to the conversation's ordinary draft path (editor.prepare, claims over the JOINED texts, proposal)."""
         conv, owner = self.conv, self._owner()
         earlier = _earlier(texts, msg)
-        note = []
         hooked = self._skill_notes(skill, slots, now, texts)  # the skill's own lines: what it said and did, and what to know before yes
-        note += hooked["say"]
-        if defaults:
-            note.append("I set: " + "; ".join(defaults) + ".")
-        else:
-            note += hooked["set"]
-        if left_off:
-            note.append("Left off (you didn't say it): " + ", ".join(n.replace("_", " ") for n in left_off) + ".")
-        note += hooked["warn"]
+        note = self._note_lines([(hooked, defaults)], left_off)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
@@ -677,8 +686,7 @@ class Dispatcher:
         if asked:
             return self._ask_which(msg, now, req, asked, attachments)
         ctx = self._ctx(now, texts)
-        ops, defaults, left, waiting = [], [], [], []
-        hooked = {"say": [], "set": [], "warn": []}  # each completed call's own notes, shown before his yes (as for one skill)
+        ops, left, waiting, parts, stopped = [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
             if skill is None or skill.approval == "none" or skill.name == "backlog.log":
@@ -697,33 +705,36 @@ class Dispatcher:
                 continue
             try:
                 planned = skill.plan(dict(slots), ctx)
-            except Exception as exc:  # noqa: BLE001 - a skill's own sentence is the one question asked for this call
+            except Exception as exc:  # noqa: BLE001 - as for one skill (_plan_stopped): a question is the one asked for this call, a refusal is said
                 said = getattr(exc, "reply", None)
-                waiting.append({"skill": skill.name, "slots": slots, "ask": None, "slot": None,
-                                "problem": said.strip() if isinstance(said, str) and said.strip() and getattr(exc, "kind", None) == "question" else None})
+                said = said.strip() if isinstance(said, str) and said.strip() else None
+                if said and getattr(exc, "kind", None) == "question":
+                    waiting.append({"skill": skill.name, "slots": slots, "ask": None, "slot": None, "problem": said})
+                else:  # this ask is refused (or failed); the owner's other asks are not
+                    reason = getattr(exc, "backlog", None)
+                    stopped.append((said, reason if reason in BACKLOG_REASONS else None))
                 continue
             ops += planned if isinstance(planned, list) else []
-            defaults += shown
+            parts.append((self._skill_notes(skill, slots, now, texts), shown))  # what each complete call said, set and warns of
             left += filled.left_off
-            if isinstance(planned, list) and planned:
-                for key, lines in self._skill_notes(skill, slots, now, texts).items():
-                    hooked[key] += lines
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
             return "question"
+        refused = self._say_refusals(stopped, texts, msg)
         if not ops:
-            if not waiting:
+            if waiting:  # the refused asks are said above; the owner's other asks go on, one question at a time
+                return self._queue_only(msg, now, req, waiting[0], waiting[1:], texts, attachments, ctx)
+            if req is not None:
+                conv.requests.mark(req["request_id"], "closed", now)
+            else:
+                conv.requests.close_live(owner, now, "closed")
+            if refused is None:
                 conv._reply(PLAN_FAILED)
                 return "not-drafted"
-            return self._queue_only(msg, now, req, waiting[0], waiting[1:], texts, attachments, ctx)
-        note = list(dict.fromkeys(hooked["say"]))
-        if defaults:
-            note.append("I set: " + "; ".join(defaults) + ".")
-        else:
-            note += list(dict.fromkeys(hooked["set"]))
-        note += list(dict.fromkeys(hooked["warn"]))
+            return refused
+        note = self._note_lines(parts)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
-                                  prefix=("\n".join(note) + "\n") if note else "", legacy=False)
+                                  prefix="\n".join(note) + "\n" if note else "", legacy=False)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if waiting:  # the shelf-check question holds the open request: the incomplete calls wait on it, not lost
@@ -738,6 +749,26 @@ class Dispatcher:
         # the complete calls are drafted; the first incomplete one is asked next, one question at a time
         self._queue_only(msg, now, req, first, rest, texts, attachments, ctx)
         return disposition
+
+    def _say_refusals(self, stopped, texts, msg):
+        """The asks of one message whose plan refused: each sentence is said as for one skill (a backlog reason also writes the ask
+        down); an error with no sentence of the skill's own is the generic failure. Returns ``backlog`` or ``refused``, or None
+        when nothing stopped."""
+        if not stopped:
+            return None
+        from hass.skills.backlog import Backlog
+        outcome = "not-drafted"
+        for said, reason in stopped:
+            if said is None:
+                self.conv._reply(PLAN_FAILED)
+                continue
+            if reason:
+                n = Backlog(self.conv.db, self.conv._now).record(reason, "", "\n".join(texts) if texts else msg.text)
+                said, outcome = said + " " + NO_SKILL_SAID.format(n=n), "backlog"
+            elif outcome != "backlog":
+                outcome = "refused"
+            self.conv._reply(said)
+        return outcome
 
     def _queue_only(self, msg, now, req, first, rest, texts, attachments, ctx):
         """Make ``first`` (an incomplete call, its slots already checked) the open request, keep ``rest`` queued, ask its question."""
