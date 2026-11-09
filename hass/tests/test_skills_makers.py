@@ -93,11 +93,11 @@ class Declaration(unittest.TestCase):
             add = m.plan_add({"name": "Bee Happy Farm", "place": "Atascadero, California", "story": "Bees on the hill."}, ctx())
             self.assertTrue(blocked(add))
             self.assertTrue(blocked(m.plan_edit({"maker": "Etto", "place": "Templeton, California"}, ctx())))
-            self.assertFalse(blocked(m.plan_hide({"maker": "Etto", "with_products": True}, ctx())))
+            self.assertTrue(blocked(m.plan_hide({"maker": "Etto", "with_products": True}, ctx())))  # G: only the about text is live
         finally:
             scratch.close()
         self.assertEqual({s.name: s.live_class for s in m.SKILLS},
-                         {"maker.add": "private-only", "maker.edit": "private-only", "maker.hide": "chat-live", "maker.restore": "chat-live"})
+                         {"maker.add": "private-only", "maker.edit": "private-only", "maker.hide": "private-only", "maker.restore": "private-only"})
 
     def test_triggers_are_the_spec_sentences_and_unique_across_the_four(self):
         texts = [t.text.lower() for s in m.SKILLS for t in s.triggers]
@@ -342,7 +342,7 @@ class RestoreAMaker(unittest.TestCase):
             self.assertEqual(scratch.editor.apply(hide["change_id"], hide["draft_hash"])["result"], "applied")
             base = scratch.head()
             restore = scratch.editor.prepare(m.plan_restore({"maker": "Etto"}, scratch._ctx()))
-            self.assertEqual(live_policy.check(restore["draft"]), [], "restoring a maker is allowed from the chat when live")
+            self.assertEqual(live_policy.check(restore["draft"]), ["not live: maker.restore"], "restoring a maker stays private (G 2026-11-08: only the about text is live)")
             disposition, out = scratch.say("Etto is back")
             self.assertEqual(disposition, "proposed", out)
             self.assertEqual(testkit.plain_words_problems("\n".join(out)), [])

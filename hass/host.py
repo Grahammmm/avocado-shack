@@ -6,6 +6,8 @@
                editor's single-writer path; every reply goes to the relay store for the Mac to pull.
   start-point  --at ISO: records the inbox start point once.
   check        validates host.json, the key file and the runtime identity; opens no socket.
+  mode         MODE: HASS-LIVE-PLAN-1, the one-line switch: rewrites `approvals` (hold | private | live) in host.json, keeping it 0600,
+               and refuses (changing nothing) if the result would not load. Then `systemctl --user restart hass-worker`.
 Exit 0 ok, 2 config / secret / start point / runtime refused (one JSON line, field names only), 1 any other error.
 Nothing prints message text, a sender, a chat id, a URL, a secret or a path.
 """
@@ -352,6 +354,8 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
         editor = LiveEditor(cfg["state"], cfg["release"], cfg["hostDir"], clock=clock)
     conv = conversation.Conversation(cfg["state"], editor or conversation.Editor(cfg["state"]), build(), clock,
                                      previewer=preview.Previewer(worktree) if cfg["previewer"] else None)
+    if cfg["approvals"] != "live":  # HASS-LIVE-PLAN-1: back in private mode the chat behaves privately even with liveSite still set
+        conv.settings.pop("liveSite", None)
     if cfg["approvals"] == "live":
         conv.editor.conv = conv
         conv.editor.reconcile()
@@ -377,7 +381,25 @@ def _stopper():
     return stop
 
 
+def set_mode(path, mode) -> dict:
+    """Rewrite host.json `approvals` atomically (same folder, 0600, replaced in one step). The new file must load, so a switch to
+    `live` without its release block, liveSite or pictures is refused and the old file stays."""
+    raw = _private_json(path)
+    target = Path(path)
+    tmp = target.with_name(target.name + ".mode.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh: json.dump({**raw, "approvals": mode}, fh, indent=2, sort_keys=True)
+        load_host(tmp)
+        os.replace(tmp, target)
+    except BaseException:
+        with contextlib.suppress(OSError): os.unlink(tmp)
+        raise
+    return {"result": "ok", "approvals": mode, "next": "systemctl --user restart hass-worker"}
+
+
 def _run(args, root, clock):
+    if args.cmd == "mode": return set_mode(args.host, args.value)  # no runtime or start point needed: the safe switch must always work
     if args.cmd == "start-point":
         cfg = load_host(args.host)
         _worktree(cfg)
@@ -402,8 +424,9 @@ def _run(args, root, clock):
 def main(argv=None, *, root=ROOT, clock=_now) -> int:
     ap = argparse.ArgumentParser(prog="hass/host.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("serve", "work", "check", "start-point"):
+    for name in ("serve", "work", "check", "start-point", "mode"):
         p = sub.add_parser(name)
+        if name == "mode": p.add_argument("value", choices=("hold", "private", "live"))
         p.add_argument("--host", required=True)
         if name == "start-point": p.add_argument("--at", required=True)
     args = ap.parse_args(argv)

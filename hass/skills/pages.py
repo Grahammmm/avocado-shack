@@ -288,7 +288,7 @@ PAGE_HOME = Skill(
            Slot("reset", "enum", False)),
     rules=tuple(HOME_CHECKS), plan=plan_home,
     edits=((STORE_FILE, "headline"), (STORE_FILE, "intro"), (_INDEX, "the headline and the intro")),
-    side_effects=("none",), preview="home", approval="owner-yes", live_class="chat-live",
+    side_effects=("none",), preview="home", approval="owner-yes", live_class="private-only",
     undo=Undo("revert", "Putting the shipped words back writes those words into the store file, so the page looks the same as "
                         "before the first change; undoing the earlier change is the exact way back."),
     refuse=(("the headline asks for a price or a deal", "A price or a deal can't go in there, so nothing changed."),
@@ -315,7 +315,7 @@ PAGE_ABOUT = Skill(
            Slot("reset", "bool", False)),
     rules=tuple(ABOUT_CHECKS), plan=plan_about,
     edits=((STORE_FILE, "story"), (_INDEX, "the “Come on in” paragraph")),
-    side_effects=("none",), preview="home", approval="owner-yes", live_class="chat-live",
+    side_effects=("none",), preview="home", approval="owner-yes", live_class="private-only",
     undo=Undo("revert", "Putting the shipped story back writes that story into the store file, so the page looks the same as "
                         "before the first change; undoing the earlier change is the exact way back."),
     refuse=(("the story is more than one paragraph", ONE_PARAGRAPH), ("the story is over 400 characters", ABOUT_MAXED),
@@ -341,7 +341,7 @@ PAGE_PHOTO = Skill(
     rules=tuple(PHOTO_CHECKS), plan=plan_photo,
     edits=((STORE_FILE, "homeImage"), ("storefront-mockup/assets/products/photo-<sha16>.<jpg|png>", "the new photo file"),
            (_INDEX, "the picture at the top of the page")),
-    side_effects=("none",), preview="home", approval="owner-yes", live_class="chat-live",
+    side_effects=("none",), preview="home", approval="owner-yes", live_class="private-only",
     undo=Undo("revert", "The photo file stays in the site folder with nothing pointing at it; the page shows the shop's own photo again."),
     refuse=(("the description is a file or camera name", ALT_REPLY), ("there is no photo of his to put back", NO_OWN_PHOTO),
             ("the photo is sideways (a rotation tag)", media.REPLIES["needs-rotation"])),

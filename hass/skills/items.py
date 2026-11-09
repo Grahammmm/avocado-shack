@@ -476,7 +476,7 @@ ITEM_EDIT = Skill(
            ("hass/content/products.json", "products[id].displayBrand"),
            ("hass/content/products.json", "products[id].imageAlt"), *_GENERATED),
     side_effects=("none",), preview="product:the product", approval="owner-yes",
-    live_class="private-only",  # a maker, brand or maker line change is a protected field; name, description and shelf alone are chat-live
+    live_class="private-only",  # a maker, brand or maker line change is a protected field; description and shelf alone are chat-live; a name is private
     undo=Undo("revert", "none"),
     refuse=(("a price is in the message", PRICE_REPLY),
             ("nothing is asked to change", "What should change on that product?"),

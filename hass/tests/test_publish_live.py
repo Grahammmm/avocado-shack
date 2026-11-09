@@ -24,6 +24,7 @@ class Crash(BaseException): pass
 
 class ReleaseCase(unittest.TestCase):
     def setUp(self):
+        fixture_ops.allow_live(self)
         self.repo = WriterRepo()
         self.addCleanup(self.repo.cleanup)
         self.tmp = tempfile.TemporaryDirectory(prefix='hass-release-')
@@ -357,6 +358,10 @@ class ReleaseCase(unittest.TestCase):
         preview = self.live.operate('baseline')
         self.assertEqual(preview['result'], 'preview')
         self.assertEqual(self.push_calls, 0)
+        shown = Path(preview['preview_dir'])  # the exact pages the baseline would publish, for G to look at
+        self.assertEqual(preview['writer_head'], self.repo.head())
+        self.assertEqual((shown / 'style.css').read_bytes(), b'new safe css')
+        self.assertEqual((shown / 'index.html').read_bytes(), self.live.build(self.repo.head(), self.live.day(), 'x', 'p')['index.html'])
         self.assertEqual(self.live.operate('baseline', confirm='wrong')['result'], 'preview')
         def stop_build(*a, **kw):
             result = {**build(*a, **kw), 'style.css': b'new safe css'}

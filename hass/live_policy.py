@@ -1,4 +1,10 @@
-"""HASS-LIVEPOL-1: pure live-content boundary; no interpreter or I/O."""
+"""HASS-LIVEPOL-1: pure live-content boundary; no interpreter or I/O.
+
+HASS-LIVE-PLAN-1 (G, 2026-11-08): the boundary is now an allow-list. Only the operations in LIVE may go straight from the
+owner's `yes <code>` to the website, each with the argument names it may carry; everything else is refused with a plain
+message and kept as a private proposal for Graham (conversation writes the backlog row). The content gates below
+(protected fields, protected sentences, 10 records, sign-up off) still apply on top of the table. Undo always passes.
+"""
 import json
 import re
 from collections import Counter
@@ -22,6 +28,34 @@ FIELDS = {"products": {"brand", "displayBrand", "producerKey"}, "makers": {"plac
           "events": {"distance", "difficulty", "duration", "accessNote", "meetingAddress", "trailId"}}
 OPS = {"hike.samples", "store.set_phone", "store.clear_phone", "store.set_address"}
 UNREADABLE = ["the change could not be read"]
+
+# One row per operation that may go live from chat. Value: the argument names it may carry (None = any argument; the field and
+# sentence gates still judge what the change does). Adding a row here is the one-line way to let a new kind of change go live.
+LIVE = {
+    "product.hide": {"id"}, "product.restore": {"id"},
+    "product.edit": {"id", "description", "category"},                        # never name, brand, producer, picture
+    "product.set_availability": {"id", "available"}, "product.clear_availability": {"id"},
+    "store.confirm_selection": None,                                         # the shelf-check day that goes with a stock word
+    "specials.add": None, "specials.edit": None, "specials.remove": None, "specials.clear_expired": None,
+    "hike.create": None, "hike.update": None, "hike.cancel": None,           # sign-up off only (see _signup)
+    "maker.edit": {"key", "story"},                                          # the maker's about text only
+    "history.revert": None,
+}
+# Why an operation stays private. Plain words, finishing "it ..."; an operation in neither table gets the general line.
+PRIVATE = {
+    "product.add": "adds an item with its brand and maker",
+    "product.set_photo": "changes a picture",
+    "maker.add": "adds a maker with a place and links",
+    "maker.hide": "takes a maker off the website", "maker.restore": "brings a maker back onto the website",
+    "hike.repeat": "copies a hike", "hike.complete": "records how a hike went", "hike.recap": "records how a hike went",
+    "hike.samples": "changes the sample hikes",
+    "store.set_phone": "is contact details", "store.clear_phone": "is contact details", "store.set_address": "is contact details",
+    "store.set_hours": "changes the shop hours", "store.set_notice": "changes the shop notice", "store.clear_notice": "changes the shop notice",
+    "store.set_headline": "changes the home page words", "store.set_intro": "changes the home page words",
+    "store.set_story": "changes the home page words",
+    "store.set_home_image": "changes the home page photo", "store.clear_home_image": "changes the home page photo",
+    "route.add": "is trail details", "route.edit": "is trail details", "route.hide": "is trail details", "route.restore": "is trail details",
+}
 
 
 def sentences(value):
@@ -77,9 +111,18 @@ def check(draft) -> list[str]:
         if len(records) > MAX_RECORDS: reasons.add(f"more than {MAX_RECORDS} records")
         for name in names:
             if name.startswith("route.") or name in OPS: reasons.add(f"protected operation: {name}")
+            elif name not in LIVE: reasons.add(f"not live: {name}")
+        for call in ops:
+            allowed = LIVE.get(call["op"])
+            args = call.get("args")
+            if allowed is not None and isinstance(args, dict):
+                reasons.update(f"not live: {call['op']}.{arg}" for arg in sorted(set(args) - allowed))
+            elif allowed is not None and args is not None: return UNREADABLE.copy()
         for record in records:
             collection, before, after = record["collection"], record["before"], record["after"]
             if not isinstance(collection, str): return UNREADABLE.copy()
+            if collection == "events" and any(isinstance(v, dict) and v.get("rsvpEnabled") is True for v in (before, after)):
+                reasons.add("sign-up is on")
             for field, b, a in _changes(before, after):
                 if collection == "club" or field in FIELDS.get(collection, set()):
                     reasons.add(f"protected field: {collection}.{field}")
@@ -97,6 +140,11 @@ PLAIN_KINDS = {"origin/organic": "where the food comes from or whether it is org
 
 
 def _plain_reason(reason: str) -> str:
+    if reason == "sign-up is on": return "people have a way to sign up for that hike, so Graham should look first"
+    if reason.startswith("not live: "):
+        name = reason[len("not live: "):]
+        if name.rpartition(".")[0] in LIVE: return "it changes more than the part I can change from chat"  # op.argument
+        return "it " + PRIVATE.get(name, "is a kind of change I can't put on the website from chat yet")
     if reason.startswith("protected sentences: "): return "it touches " + PLAIN_KINDS.get(reason.split(": ", 1)[1], "a claim I can't check")
     if reason.startswith("protected operation"): return "it is a kind of change only Graham can make"
     if reason.startswith("protected field"): return "it changes something only Graham can change"
@@ -104,6 +152,9 @@ def _plain_reason(reason: str) -> str:
     return "I couldn't read the change"
 
 
+SAVED_FOR_GRAHAM = "I've saved it for Graham to look at, and he can do it by hand."
+
+
 def refusal(reasons):
     why = "; ".join(dict.fromkeys(_plain_reason(r) for r in reasons)) or "I couldn't check it"
-    return f"I can't put this on the website from chat: {why}. Nothing will be published. Graham can do it by hand."
+    return f"I can't put this on the website from chat: {why}. Nothing will be published. {SAVED_FOR_GRAHAM}"

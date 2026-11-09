@@ -76,8 +76,8 @@ replaces the **whole** text, so a partial change ("add a line to ...") arrives a
 Plan: one `product.edit` with only the fields that really change. Edits: `products[id].name`, `.description`,
 `.category`, `.brand`, `.producerKey`, `.displayBrand`, `.imageAlt` and the generated product list.
 Preview: the product, with the old text shown in full. Live class: `private-only` for the skill as a whole, because a maker, brand or
-maker line is a protected field; a name, description or shelf change on its own is `chat-live` (both are tested against the real
-live policy).
+maker line is a protected field; a description or shelf change on its own is `chat-live`, a name change is not (G's list, HASS-LIVE-PLAN-1; all are tested against the
+real live policy).
 
 Rules:
 

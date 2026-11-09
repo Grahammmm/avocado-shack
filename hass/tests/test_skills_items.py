@@ -401,9 +401,11 @@ class LiveClass(unittest.TestCase):
         self.assertEqual(SKILLS[HIDE].live_class, SKILLS[RESTORE].live_class)
         self.assertEqual(SKILLS[HIDE].live_class, "chat-live")
 
-    def test_edit_is_chat_live_for_name_description_shelf_and_private_only_for_a_maker(self):
+    def test_edit_is_chat_live_for_description_shelf_and_private_only_for_a_name_or_a_maker(self):
         ctx = ctx_for(load_and_validate(self.repo.wt / "hass" / "content", self.repo.wt / "storefront-mockup"))
-        for slots in ({"name": "Hass avocados"}, {"description": "Creamy flesh and a little lime."}, {"category": "dairy"}):
+        reasons, _ = self.reasons(it.plan_edit({"item": "photo-product-032", "name": "Hass avocados"}, ctx))
+        self.assertEqual(reasons, ["not live: product.edit.name"])  # G's list is description and category only
+        for slots in ({"description": "Creamy flesh and a little lime."}, {"category": "dairy"}):
             reasons, _ = self.reasons(it.plan_edit({"item": "photo-product-032", **slots}, ctx))
             self.assertEqual(reasons, [], slots)
         for slots in ({"maker": "Etto"}, {"display_brand": "Somewhere nice"}, {"clear": ["clearProducer"]}):

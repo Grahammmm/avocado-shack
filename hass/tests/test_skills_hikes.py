@@ -69,7 +69,7 @@ class Declaration(unittest.TestCase):
         by = self.skills
         self.assertEqual({n: s.live_class for n, s in by.items()},
                          {"hike.add": "private-only", "hike.edit": "private-only", "hike.reschedule": "chat-live",
-                          "hike.cancel": "chat-live", "hike.repeat": "private-only", "hike.recap": "chat-live"})
+                          "hike.cancel": "chat-live", "hike.repeat": "private-only", "hike.recap": "private-only"})
         for skill in by.values():
             self.assertEqual((skill.approval, skill.preview, skill.undo.mode, skill.version), ("owner-yes", "hike", "revert", 1))
             self.assertTrue(all(f in ("hass/content/community.json", "storefront-mockup/community.json") for f, _ in skill.edits))
@@ -567,7 +567,7 @@ class AtTheEditor(HikeTestCase):
 
     def test_the_live_class_each_skill_declares_is_what_the_live_policy_says(self):
         repo = self.repo()
-        self.make(repo, difficulty="easy")
+        self.make(repo, difficulty="easy", signup=False)  # HASS-LIVE-PLAN-1: a hike with sign-up on is not live
         def live(plan, slots):
             drafted = repo.prepare(_req(*self.ops(plan, slots, repo)))
             self.assertEqual(drafted["result"], "ok", drafted)
@@ -576,7 +576,7 @@ class AtTheEditor(HikeTestCase):
         self.assertEqual(live(hikes.plan_reschedule, {"hike": HIKE_ID, "clock": "10:30"}), [])
         self.assertEqual(live(hikes.plan_cancel, {"hike": HIKE_ID, "note": "rain"}), [])
         repo.now = datetime(2026, 12, 6, 12, 0, tzinfo=PST)
-        self.assertEqual(live(hikes.plan_recap, {"hike": HIKE_ID, "recap": "great morning"}), [])
+        self.assertTrue(live(hikes.plan_recap, {"hike": HIKE_ID, "recap": "great morning"}))  # HASS-LIVE-PLAN-1: how a hike went is private
         repo.now = datetime(2026, 10, 30, 12, 0, tzinfo=PST)
         # private-only skills carry trail facts: difficulty, distance, the route link
         for plan, slots in ((hikes.plan_edit, {"hike": HIKE_ID, "difficulty": "moderate"}),

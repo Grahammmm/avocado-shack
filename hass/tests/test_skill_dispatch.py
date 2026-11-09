@@ -865,3 +865,35 @@ class RetainedFactTests(SkillCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TwoOwnerSkillTests(SkillCase):
+    """HASS-LIVE-PLAN-1: with gIsOwner, each owner has their own open request in skills mode."""
+    G, GCHAT = "g@example.invalid", "chat-fixture-g"
+
+    def setUp(self):
+        super().setUp()
+        self.conv.db.close()
+        self.set_settings({**SETTINGS, "skills": {"mode": "both"}, "gSenders": [self.G], "gChat": self.GCHAT, "gIsOwner": True})
+        self.conv = self.open()
+        self.addCleanup(lambda: self.conv.db.close())
+
+    def test_independent_questions_and_short_answers_stay_with_their_own_owner(self):
+        mike_open = OPEN1
+        g_open = "add a hike Sunday, Mill Creek trailhead, easy"
+        self.script(mike_open, skill_reply("hike.add", **{k: v for k, v in MILL.items() if k != "time"}))
+        self.script(g_open, skill_reply("hike.add", **{**{k: v for k, v in MILL.items() if k != "time"}, "title": "G hike", "day": "2026-11-08"}))
+        self.assertEqual(self.say(mike_open), "question")
+        self.assertEqual(self.say(g_open, chat=self.GCHAT, sender=self.G), "question")
+        self.assertEqual(self.conv.requests.get(CHAT, self.now)["texts"], [mike_open])  # G's question did not overwrite Mike's
+        self.assertEqual(self.conv.requests.get(self.GCHAT, self.now)["texts"], [g_open])
+        self.now += timedelta(minutes=1)
+        self.say("9am", chat=self.GCHAT, sender=self.G)  # G's short answer fills G's request only
+        mike = self.conv.requests.get(CHAT, self.now)
+        self.assertEqual((mike["skill"], mike["asked_slot"]), ("hike.add", "time"))
+        drafts = [d for d in self.drafts()]
+        self.assertEqual([d["chat"] for d in drafts], [self.GCHAT])
+        self.assertEqual(json.loads(drafts[0]["ops_json"])[0]["args"]["time"], "09:00")
+        self.say("8am")  # Mike's short answer then drafts Mike's own
+        self.assertEqual(sorted(d["chat"] for d in self.drafts()), sorted([CHAT, self.GCHAT]))
+        self.assertEqual(self.commits(), 0)

@@ -39,7 +39,7 @@ class ReportWaitingTests(StoreMixin, ConversationTestCase):
         return tail.splitlines()
 
     def dump(self):
-        skip = {"messages", "outbox"}  # the message log and the reply queue grow by design
+        skip = {"messages", "message_chats", "outbox"}  # the message log and the reply queue grow by design
         return {t: [tuple(r) for r in self.conv.db.execute(f"SELECT * FROM {t}")] for t in sorted(self.tables() - skip)}
 
     def test_report_lists_the_waiting_draft_and_photo_count_as_status_does(self):

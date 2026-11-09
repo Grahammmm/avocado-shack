@@ -10,12 +10,12 @@ story on the home page; a maker's story belongs to the makers skills.
 
 | Skill | What Mike says | What changes | Live class |
 |---|---|---|---|
-| `shop.hours` | "we're open till 7 on fridays now" | the opening hours | chat-live |
-| `shop.notice` | "put a notice up: closed Thursday" | the one dated notice at the top of the home page | chat-live |
+| `shop.hours` | "we're open till 7 on fridays now" | the opening hours | **private-only** |
+| `shop.notice` | "put a notice up: closed Thursday" | the one dated notice at the top of the home page | **private-only** |
 | `shop.contact` | "our new number is 805 555 0100" | the phone number, the street, the town | **private-only** |
-| `page.home` | "change the headline to ..." | the two-line headline, the intro line | chat-live |
-| `page.about` | "change the about text to ..." | the "Come on in" story | chat-live |
-| `page.photo` | a photo and "use this for the home page" | the photo at the top of the home page | chat-live |
+| `page.home` | "change the headline to ..." | the two-line headline, the intro line | **private-only** |
+| `page.about` | "change the about text to ..." | the "Come on in" story | **private-only** |
+| `page.photo` | a photo and "use this for the home page" | the photo at the top of the home page | **private-only** |
 
 All six draft first and wait for `yes <code>`. Undo is `undo` (a `history.revert` draft that needs its own yes). None of
 them releases to the live site. A skill only plans the typed ops that already exist (`store.set_hours`,

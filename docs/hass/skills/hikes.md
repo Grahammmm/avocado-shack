@@ -69,7 +69,7 @@ Every skill drafts `history.revert` through `undo`; it needs its own `yes <code>
 
 ### Live boundary (`live_policy`, unchanged)
 
-`hike.reschedule`, `hike.cancel` and `hike.recap` are `chat-live`. `hike.add`, `hike.edit` and `hike.repeat` are `private-only`
+`hike.reschedule` and `hike.cancel` are `chat-live` while sign-up is off (HASS-LIVE-PLAN-1: a hike with sign-up on stays private). `hike.add`, `hike.edit`, `hike.repeat` and `hike.recap` are `private-only`
 because they can carry difficulty, distance, duration, an access note or a route link, which `live_policy` protects. A test
 checks both classes against `live_policy.check` on real drafts.
 

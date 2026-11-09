@@ -682,7 +682,7 @@ RECAP = Skill(
     rules=("hike-recap-state", "no-price"),
     plan=plan_recap,
     edits=((_COMMUNITY, "events[id].status"), (_COMMUNITY, "events[id].recap"), *_SITE),
-    side_effects=("none",), preview="hike", approval="owner-yes", live_class="chat-live",
+    side_effects=("none",), preview="hike", approval="owner-yes", live_class="private-only",
     undo=Undo("revert", "A hike that has already started stays done: undo refuses to reopen it, and a new recap corrects the words."),
     refuse=(("the hike has not happened yet", "That hike hasn't happened yet, so there is nothing to recap."),
             ("the hike was cancelled", "That hike was cancelled, so there is no recap to write.")),

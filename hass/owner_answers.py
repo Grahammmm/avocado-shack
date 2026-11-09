@@ -43,12 +43,34 @@ NOT_LIVE = "It's saved, but not on the website yet. Copying it there is a separa
 LIVE_SHOWN = "Your change is on the website now."
 LIVE_PICTURE = "The picture is Hass's own view of the published page."
 LIVE_NO_PICTURE = "No picture this time."
+LIVE_TAKEN_BACK = "Graham took your last change off the website. The website is back as it was before that change."
 LIVE_NOT_PUBLISHED = "That change is saved on my side but did not go on the website: {reason}. The website is unchanged. Graham has been told."
 LIVE_REASONS = {"the release was interrupted": "it was interrupted"}  # the only reason text the release books write today
 
 
 def live_reason(reason) -> str:
     return LIVE_REASONS.get(reason, "something went wrong while copying it")
+# HASS-LIVE-PLAN-1: why the release engine would not even start (publish_live.refuse reasons), in the owner's words. The website is
+# unchanged in every case. A reason with no entry here gets the generic "couldn't save" line, never the raw text.
+LIVE_REFUSED = (
+    ("another change is going live", "Another change is going on the website right now. Please send this again in a few minutes."),
+    ("live changes are stopped", "Changes to the website are paused right now. Graham will say when they are back."),
+    ("not settled yet", "The last change is still being checked, so I can't send another one yet. Graham has been told."),
+    ("limit of", "I've reached today's limit for website changes. Please send it again tomorrow."),
+    ("someone else changed the website", "The website was changed by someone else, so I'm holding off. Graham has been told."),
+    ("differ", "The website and my copy don't match, so I'm holding off. Graham has been told."),
+    ("needs g to check", "Graham needs to check something before I can change the website. He has been told."),
+    ("already has a release record", "That change was already sent."),
+    ("draft no longer matches", "That change was out of date. Please ask me again."),
+)
+
+
+def live_refused(reason) -> str | None:
+    """The owner's-words reply for a release refused before it started, or None for a reason we have no words for."""
+    text = str(reason or "")
+    return next((f"{words} Nothing changed on the website." for key, words in LIVE_REFUSED if key in text), None)
+
+
 LIVE_UNKNOWN = "I sent that change to the website, but I can't tell whether it arrived. It may or may not show. Graham has been told, and no other change will go on the website until this is sorted."
 LIVE_UNCONFIRMED = "I sent that change to the website, but I can't see it there yet. Graham has been told."
 UNCHANGED = "The website is as it was before"
