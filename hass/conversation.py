@@ -1648,7 +1648,7 @@ class Conversation:
     def _history_line(self, r) -> str:
         """One `history` line. HASS-OWNERS-2: with several owners it says whose change it was (`Mike's change`, `Your change`)."""
         words = f"{q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
-        return f"- {self._whose(r['chat'])} {words}" if self._shared else f"- {words}"
+        return f"- {self._whose(r['chat'])}, {words}" if self._shared else f"- {words}"
 
     def _history_search(self, query: str) -> str:
         """AV2152-02: up to ten newest owner-approved changes whose summary holds every word; read-only."""

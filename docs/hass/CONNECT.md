@@ -34,6 +34,16 @@ Full G-only setup, live gates and stop commands: [MAC_RUNBOOK.md](MAC_RUNBOOK.md
 6. Set the owner allowlist in the private state dir's `config.json` `settings`: `ownerSenders` (the owner's
    address), `ownerChat` (the one-to-one chat id, `iMessage;-;<address>`) and `approvalTtlSeconds`; record the
    inbox start point when the inbox is first opened, so older messages stay history.
+   **A second owner (HASS-OWNERS-2).** To let two people be owners, each in their own one-to-one chat: put both
+   addresses in `ownerSenders`, list both chats in `ownerChats` (`["iMessage;-;<first address>", "iMessage;-;<second
+   address>"]`), and keep `ownerChat` as the first one (or leave it out: the first chat in `ownerChats` is then the main
+   one). Every chat must be a one-to-one chat with one of the `ownerSenders` addresses, no chat may be listed twice, and
+   G's separate `gChat` may not be one of them. To say whose change it was, add optional first names:
+   `"ownerNames": {"iMessage;-;<first address>": "Mike", "iMessage;-;<second address>": "G"}` (letters only; no name
+   means \"the owner\"). Without `ownerChats` nothing changes: one owner, one chat, exactly as before. Run
+   `python3 hass/host.py check` and `python3 hass/health.py` after the edit, then restart the worker. The Mac forwarder
+   carries only one owner chat (`ownerChat`) plus the text-only `gChat`; give the second owner's chat to the forwarder as its
+   `gChat` for now, and the second owner will get text, not pictures (see LIMITS.md, "Several owners").
 7. Run, as services, the forwarder on the Mac (HASS-FWD-1: BlueBubbles webhook -> `normalize` -> `seal` -> post to the
    receiver) and the receiver host, `python3 hass/host.py serve|work --host <host.json>` (HASS-RCV-1): `serve` stores sealed
    posts, `work` drains them and queues replies for the Mac to pull. The forwarder is not in this repository yet. First run

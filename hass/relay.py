@@ -219,15 +219,19 @@ class RelaySender:
         one. `picture_chats`: the owner chats the Mac can send pictures to (default: the main one only; the Mac forwarder carries
         pictures to its own ownerChat). A picture for any other owner chat is dropped here and its text goes on alone."""
         chats = tuple(owner_chat) if isinstance(owner_chat, (tuple, list)) else (owner_chat,)
-        self.store, self.owner_chat, self.owner_chats, self.clock, self.shots_dir = store, chats[0], chats, clock, shots_dir
+        self.store, self.owner_chat, self.other_owner_chats, self.clock, self.shots_dir = store, chats[0], chats[1:], clock, shots_dir
         self.picture_chats = chats[:1] if picture_chats is None else tuple(picture_chats)
         self.g_chat = g_chat if isinstance(g_chat, str) and g_chat and g_chat not in chats else None  # G's one chat, text only
+
+    @property
+    def owner_chats(self) -> tuple:
+        return (self.owner_chat, *self.other_owner_chats)
 
     def send(self, chat, text, attachments=()):
         """Stores the reply for the Mac to pull; returns the relay id (HASS-FAST-1: the stage log joins reply to message by it)."""
         if self.g_chat is not None and chat == self.g_chat and (attachments or self.store.unacked(chat) >= G_PENDING_MAX):
             raise RelayRefused("reply refused")  # G's chat: text only, and never more than G_PENDING_MAX waiting for the Mac
-        if chat in self.owner_chats and chat not in self.picture_chats: attachments = ()  # HASS-OWNERS-2: this owner's chat is text only on the Mac for now
+        if chat in self.other_owner_chats and chat not in self.picture_chats: attachments = ()  # HASS-OWNERS-2: this owner's chat is text only on the Mac for now
         if (chat not in self.owner_chats and chat != self.g_chat) or len(text) > MAX_TEXT or len(attachments) > 10 or bridge.SURROGATE_RE.search(text):
             raise RelayRefused("reply refused")
         shots = []

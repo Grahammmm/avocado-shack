@@ -321,13 +321,13 @@ class UndoAndHistoryTests(Base):
         [(chat, reply, _p)] = self.sent()
         self.assertEqual(chat, GCHAT)
         lines = reply.splitlines()[1:]
-        self.assertTrue(lines[0].startswith("- Your change "), lines)
-        self.assertTrue(lines[1].startswith("- Mike's change "), lines)
+        self.assertTrue(lines[0].startswith("- Your change, "), lines)
+        self.assertTrue(lines[1].startswith("- Mike's change, "), lines)
         self.assertEqual(self.mike("history"), "history")
         lines = self.sent()[0][1].splitlines()[1:]
-        self.assertTrue(lines[0].startswith("- G's change ") and lines[1].startswith("- Your change "), lines)
+        self.assertTrue(lines[0].startswith("- G's change, ") and lines[1].startswith("- Your change, "), lines)
         self.assertEqual(self.mike("history hours"), "history")
-        self.assertTrue(self.sent()[0][1].splitlines()[1].startswith("- Your change "))
+        self.assertTrue(self.sent()[0][1].splitlines()[1].startswith("- Your change, "))
 
     def test_the_default_name_is_the_owner(self):
         self.set_settings({k: v for k, v in TWO.items() if k != "ownerNames"})
