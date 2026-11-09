@@ -203,6 +203,27 @@ class RealDispatcher(unittest.TestCase):
         self.assertEqual(chat.drafts(), [])
         self.assertEqual(chat.commits(), 0)
 
+    def test_two_products_on_one_photo_ask_which_and_his_answer_goes_on_to_one_proposal(self):
+        chat = self.open(JAR)
+        first = "add the lemon curd and the plum jam, both from Cal Poly and in stock"
+        (d1, r1), (d2, r2) = self.say_all(chat, [
+            (first, reply(name="Lemon curd", maker="Cal Poly", shelf="pantry", availability="yes")),
+            ("The lemon curd", reply(name="Lemon curd")),
+        ], JAR)
+        self.assertEqual((d1, r1), ("question", [ia.ONE_PHOTO]))  # the first, ambiguous message still asks and never picks
+        self.assertEqual(chat.commits(), 0)
+        self.assertEqual(d2, "proposed")  # his answer settles it: no repeat of the question
+        text = "\n".join(r2)
+        self.assertIn("A new product: Lemon curd", text)
+        self.assertNotIn("Plum jam", text)  # no second product
+        self.assertNotIn(ia.ONE_PHOTO, text)
+        self.assertIn("Reply yes to save it", text)  # the normal approval, still his
+        self.assertEqual(chat.commits(), 0)  # nothing is written before his own yes
+        self.assertEqual([r["kind"] for r in chat.kit.previewer.requests][-1], "product")
+        drafts = chat.drafts()
+        self.assertEqual(len(drafts), 1)  # one change, one product
+        self.assertEqual(json.dumps(drafts[0]).count("Plum jam"), 0)
+
     def test_a_photo_alone_asks_what_it_is_for_instead_of_guessing(self):
         chat = self.open(JAR)
         (disposition, replies), = self.say_all(chat, [("", None)], JAR)
