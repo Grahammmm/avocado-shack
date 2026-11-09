@@ -19,6 +19,7 @@ from hass.ops import load_registry
 from hass.skills import load_skills, pages, shop, skill_lint, testkit
 from hass.skills.backlog import REASONS
 from hass.tests.test_set_photo import FIXTURES, PhotoRepo, _req
+from hass.tests import test_skill_dispatch as dispatch_fixture
 
 MINE = ("shop.hours", "shop.notice", "shop.contact", "page.home", "page.about", "page.photo")
 CHECKS = {"shop.hours": shop.HOURS_CHECKS, "shop.notice": shop.NOTICE_CHECKS, "shop.contact": shop.CONTACT_CHECKS,
@@ -114,6 +115,71 @@ class HoursRules(unittest.TestCase):
         self.assertEqual(shop.parse_segment("Closed Mon, Tue & Wed"), ({0, 1, 2}, "closed"))
         self.assertIsNone(shop.parse_segment("Come in for lunch"))
         self.assertIsNone(shop.parse_segment("Friday"))
+
+    def test_comma_separated_conflicting_hours_ask(self):
+        question = "I see two different hours for Monday. Which one do you want?"
+        for separator in (", ", "; ", " · "):
+            for other in ("Monday 10am–4pm", "Closed Monday"):
+                hours = ["Monday 9am–6pm" + separator + other]
+                for ctx in (None, ctx_for(store={"hours": H0}, texts=["change Monday hours"])):
+                    with self.subTest(hours=hours, context=ctx is not None):
+                        stop = shop.check_hours_conflict({"hours": hours}, [], ctx)
+                        self.assertIsNotNone(stop)
+                        self.assertEqual((stop.kind, stop.reply), ("question", question))
+                        with self.assertRaises(shop.SkillStop) as caught:
+                            shop.plan_hours({"hours": hours}, ctx)
+                        self.assertEqual((caught.exception.kind, caught.exception.reply), ("question", question))
+        # Repeating the same statement is not a disagreement.
+        self.assertIsNone(shop.check_hours_conflict({"hours": ["Mon 9–5, Mon 9–5"]}, [], None))
+
+    def test_commas_in_day_lists_are_not_statement_boundaries(self):
+        rows = (
+            ("Mon, Tue & Wed 9am–5pm", {0: ["9am–5pm"], 1: ["9am–5pm"], 2: ["9am–5pm"]}, []),
+            ("Closed Mon, Tue & Wed", {0: ["closed"], 1: ["closed"], 2: ["closed"]}, []),
+            ("Fri–Mon 9–5, Tue & Wed 10–4, Closed Thu", {0: ["9–5"], 1: ["10–4"], 2: ["10–4"],
+                                                       3: ["closed"], 4: ["9–5"], 5: ["9–5"], 6: ["9–5"]}, []),
+            ("Weekdays 9–5, Weekends 10–4", {d: ["9–5" if d < 5 else "10–4"] for d in range(7)}, []),
+            ("Daily 9–5, Closed Monday", {d: ["9–5", "closed"] if d == 0 else ["9–5"] for d in range(7)}, []),
+            ("Open late, call ahead", {}, ["Open late, call ahead"]),
+            ("Mon 9–5, call ahead", {0: ["9–5, call ahead"]}, []),
+            ("Mon, Tue", {}, ["Mon, Tue"]),
+        )
+        for line, expected, opaque in rows:
+            with self.subTest(line=line):
+                lines = ["", line]
+                self.assertEqual(shop.hours_by_day(lines), (expected, opaque))
+                self.assertEqual(lines, ["", line])
+                self.assertTrue(all(n == 1 for n, _piece, _parsed in shop.segments_of(lines)))
+        hours = ["Mon, Tue & Wed 9–5, Thu–Fri 10–4, Closed Sat & Sun"]
+        self.assertEqual(shop.plan_hours({"hours": hours}, None), [{"op": "store.set_hours", "args": {"hours": hours}}])
+
+    def test_comma_schedule_preserves_unnamed_days(self):
+        saved = ["Mon–Fri 9–6", "Sat 9–5, Closed Sun"]
+        good = ["Mon–Thu 9–6, Fri 9–7", "Sat 9–5, Closed Sun"]
+        said = ["Friday till 7"]
+        self.assertIsNone(self.untouched(good, said, {"hours": saved}))
+        for old in (saved, ["Mon–Fri 9–6", "Sat 9–5 · Closed Sun"]):
+            for weekend, question in (("Sat 9–6, Closed Sun", "Do you want Saturday to stay 9–5?"),
+                                      ("Closed Sun", "Do you want Saturday to stay 9–5?"),
+                                      ("Sat 9–5, Sun 10–4", "Do you want Sunday to stay closed?"),
+                                      ("Sat 9–5", "Do you want Sunday to stay closed?")):
+                with self.subTest(old=old, weekend=weekend):
+                    ctx = ctx_for(store={"hours": old}, texts=said)
+                    with self.assertRaises(shop.SkillStop) as caught:
+                        shop.plan_hours({"hours": [good[0], weekend]}, ctx)
+                    self.assertEqual((caught.exception.kind, caught.exception.reply), ("question", question))
+        # A retained dated/opaque piece remains retained when its neighbouring schedule changes.
+        old = ["Mon 9–5, Tue closed November 12", "Call ahead, please"]
+        ctx = ctx_for(store={"hours": old}, texts=["Monday 10–4"])
+        hours = ["Mon 10–4, Tue closed November 12", old[1]]
+        self.assertTrue(shop.plan_hours({"hours": hours}, ctx))
+        for hours in (["Mon 10–4, Tue closed November 13", old[1]], ["Mon 10–4, Tue closed November 12"]):
+            with self.subTest(hours=hours):
+                with self.assertRaises(shop.SkillStop) as caught:
+                    shop.plan_hours({"hours": hours}, ctx)
+                self.assertEqual(caught.exception.kind, "question")
+        self.assertEqual(shop.check_hours_holiday({"hours": ["Mon 9–5, Tue closed November 12"]}, [], None).reply,
+                         shop.HOLIDAY_REPLY)
 
     def test_day_names_in_plain_words(self):
         self.assertEqual(shop.day_names({5}), "Saturday")
@@ -241,6 +307,26 @@ class HoursRules(unittest.TestCase):
         ops = shop.plan_hours({"hours": ["Monday–Thursday 9am–6pm", "Friday 9am–7pm", H0[1]]},
                               ctx_for(store={"hours": H0}, texts=["fridays till 7"]))
         self.assertEqual([o["op"] for o in ops], ["store.set_hours"])
+
+
+class RealDispatcherHours(dispatch_fixture.SkillCase):
+    SKILLS = (shop.SHOP_HOURS,)
+
+    def test_comma_conflict_never_becomes_a_draft(self):
+        text = "Monday 9am–6pm, Monday 10am–4pm"
+        hours = [text, "Tuesday–Friday 9am–6pm", H0[1]]
+        self.script(text, dispatch_fixture.skill_reply("shop.hours", hours=hours))
+        self.assertEqual(self.say(text), "question")
+        self.assertEqual(self.replies(), ["I see two different hours for Monday. Which one do you want?"])
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM drafts").fetchone()[0], 0)
+        self.nothing_written()
+        corrected = "Monday 10am–4pm, Tuesday–Friday 9am–6pm, Saturday 9am–5pm, Closed Sunday"
+        hours = ["Monday 10am–4pm", "Tuesday–Friday 9am–6pm", H0[1]]
+        self.script(corrected, dispatch_fixture.skill_reply("shop.hours", hours=hours))
+        draft, _reply = self.propose(corrected)
+        self.assertEqual(draft["state"], "proposed")
+        self.assertEqual(json.loads(draft["ops_json"]), [{"op": "store.set_hours", "args": {"hours": hours}}])
+        self.nothing_written()
 
 
 class ContactRules(unittest.TestCase):
