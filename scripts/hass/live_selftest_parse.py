@@ -5,13 +5,13 @@
 
 health: the last non-empty line must be one JSON object with a boolean `ok`, a `problems` list of objects that each
 carry a string `check`, and ok == (no problems). Prints the sorted, unique check ids on one line (empty line if none).
-inbox: one JSON object with integer `pending` and `done` >= 0 and `oldest_pending_minutes` a number or null. Prints
+inbox: one JSON object with integer `pending` and `done` >= 0 and `oldest_pending_minutes` a finite number or null. Prints
 `pending oldest done` (oldest as `null` when there is none).
 Exit 0 valid, 3 missing or invalid report (prints the reason only: never the report itself), 2 bad usage.
 Counts and check ids only: problem details, messages and paths are never printed.
 """
 
-import json, re, sys  # noqa: E401
+import json, math, re, sys  # noqa: E401
 
 CHECK_ID = re.compile(r"^[a-z][a-z0-9-]{0,63}$")
 
@@ -58,7 +58,12 @@ def inbox(text):
     obj = _last_object(text)
     pending, done = _count(obj, "pending"), _count(obj, "done")
     oldest = obj.get("oldest_pending_minutes")
-    if oldest is not None and (isinstance(oldest, bool) or not isinstance(oldest, (int, float)) or oldest < 0):
+    if oldest is not None and (
+        isinstance(oldest, bool)
+        or not isinstance(oldest, (int, float))
+        or (isinstance(oldest, float) and not math.isfinite(oldest))
+        or oldest < 0
+    ):
         raise ValueError("oldest_pending_minutes not a number or null")
     return f"{pending} {'null' if oldest is None else int(oldest)} {done}"
 

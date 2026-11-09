@@ -38,7 +38,9 @@ elif script.endswith("health.py"):
         sys.exit(1)
     good('{{"ok": true, "problems": [], "info": {{}}, "fingerprint": "f"}}', "health")
 elif script.endswith("inbox.py"):
-    good('{{"pending": 0, "done": 3, "history": 3, "oldest_pending_minutes": null}}', "inbox")
+    age = os.environ.get("PROBE_INBOX_AGE", "null")  # a raw JSON literal, e.g. 1e309
+    note = os.environ.get("PROBE_INBOX_NOTE", "")
+    good('{{"pending": 0, "done": 3, "history": 3, "oldest_pending_minutes": ' + age + ', "note": "' + note + '"}}', "inbox")
 elif script.endswith("live_selftest_parse.py") and bad == "parse-" + sys.argv[3]:
     sys.stdin.read()
     good("" if sys.argv[3] == "health" else "0 null 3", bad)
@@ -135,6 +137,32 @@ class LiveSelftestScript(unittest.TestCase):
         self.assertEqual((r.returncode, r.stdout.strip()), (2, '{"result": "error", "error": "--ids: unknown case id"}'))
 
 
+class InboxReportParserTests(unittest.TestCase):
+    """scripts/hass/live_selftest_parse.py inbox, run as a subprocess on stdin JSON (the real parser, no services)."""
+
+    BOUNDED = "invalid inbox report: oldest_pending_minutes not a number or null\n"
+
+    def parse(self, age):
+        text = '{"pending": 1, "done": 3, "oldest_pending_minutes": %s}\n' % age
+        r = subprocess.run([sys.executable, "-B", str(SCRIPTS / "live_selftest_parse.py"), "inbox"], input=text,
+                           capture_output=True, text=True, timeout=60, cwd=ROOT)
+        return r.returncode, r.stdout, r.stderr
+
+    def test_inbox_parser_refuses_nonfinite_age(self):
+        for age in ("1e309", "Infinity", "NaN", "-Infinity", "-1e309"):
+            with self.subTest(age=age):
+                self.assertEqual(self.parse(age), (3, self.BOUNDED, ""))
+
+    def test_inbox_parser_preserves_finite_and_null(self):
+        big = "9" * 400  # an integer far beyond float range stays valid and exact
+        for age, shown in (("0", "0"), ("2.5", "2"), ("null", "null"), ("7", "7"), (big, big)):
+            with self.subTest(age=age[:12]):
+                self.assertEqual(self.parse(age), (0, f"1 {shown} 3\n", ""))
+        for age in ("true", "-1", "-0.5", '"5"'):
+            with self.subTest(age=age):
+                self.assertEqual(self.parse(age), (3, self.BOUNDED, ""))
+
+
 class LiveModeAcquisitionFailures(unittest.TestCase):
     """The live checks, isolated: fakes on PATH, a temp state root with a fresh backup, a temp growth file."""
 
@@ -171,6 +199,18 @@ class LiveModeAcquisitionFailures(unittest.TestCase):
         self.assertRegex(lines["growth"], r"^PASS growth state \d+ KB, free \d+ MB, hass journal 0 lines/24h$")
         self.assertRegex(self.growth.read_text(), r"^\d+ \d+ \d+ 0\n$")
         self.assertRegex(r.stdout, r"pass=11 warn=0 fail=0 skip=1\n$")
+
+    def test_nonfinite_inbox_measurement_fails_without_report_leak(self):
+        marker = "PRIVATE-MARKER-7f3a"
+        for age in ("1e309", "Infinity", "NaN"):
+            with self.subTest(age=age):
+                r, lines = self.run_live(PROBE_INBOX_AGE=age, PROBE_INBOX_NOTE=marker)
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertEqual(lines["inbox"], "FAIL inbox invalid report (parser exit 3): "
+                                 "invalid inbox report: oldest_pending_minutes not a number or null")
+                self.assertIn("failed:inbox", r.stdout)
+                for leak in (marker, "Traceback", "OverflowError", age, "oldest_pending_minutes\":"):
+                    self.assertNotIn(leak, r.stdout + r.stderr)
 
     def test_backup_age_only_health_is_a_warning(self):
         r, lines = self.run_live(PROBE_HEALTH="backup-age", PROBE_JOURNAL="lines")
