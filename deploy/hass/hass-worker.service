@@ -1,6 +1,8 @@
 [Unit]
 Description=Hass worker: drains the inbox and queues replies (HASS-RCV-1)
 After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
