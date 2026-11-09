@@ -311,7 +311,8 @@ def _said_limits(said):
     people") or after a limit word that is itself followed by a guest noun or nothing ("max 12", "up to 20 people"), in
     an affirmative clause. A date, a clock time, a year, a quantity of something else ("only 2 liters of water", "at
     most 2 apples") or a rejected number ("not 12 spots, 20 spots") never counts; the latest instruction wins, so
-    "12 spots" then "actually make it 20 spots" leaves only 20, and a later "no limit" leaves none."""
+    "12 spots" then "actually make it 20 spots" leaves only 20, and a later "no limit" leaves none. Two different counts
+    in the latest instruction ("15 spots or 20 spots") are both kept: the result has several values, which is unresolved."""
     effective = set()
     for clause in _clauses(said):
         if _NO_LIMIT.search(clause):
@@ -329,7 +330,7 @@ def _said_limits(said):
                 if pat is _LIMIT_AFTER or _LIMIT_TAIL.match(text[m.end():]):
                     hits.append((m.start(), int(m.group(1))))
         if hits:
-            effective = {max(hits)[1]}
+            effective = {value for _, value in hits}  # alternatives stay alternatives: no first, last, min or max is picked
     return effective
 
 
@@ -375,7 +376,7 @@ def rule_no_invention(slots, texts, ctx):
     if cap is not None or no_limit:
         if state is False:
             return R_SIGNUP_UNCLEAR, "other"
-        if cap is not None and (no_limit or cap not in limits):
+        if cap is not None and (no_limit or limits != {cap}):  # alternatives ("15 spots or 20 spots") support neither: one unequivocal count only
             return R_SPOTS_NOT_SAID, "other"
         if no_limit and cap is None and not _said_unlimited(said):  # latest word wins: a withdrawn or negated "no limit" is not said
             return R_SPOTS_NOT_SAID, "other"

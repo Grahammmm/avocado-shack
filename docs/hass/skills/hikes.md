@@ -37,6 +37,10 @@ the ops and the content.
   while the slots say off, an edit that turns sign-up off with no word about it, a limit together with "no limit", or "no
   limit" without his words for it, all get one plain question ("I'm not sure if you want guests to be able to sign up. Should
   they?" or "You didn't say how many can come ...") and nothing is drafted.
+* **Alternatives are not an answer; a later correction is.** "15 spots or 20 spots" is two counts, so neither is written
+  (not the first, the last, the smaller or the larger): the same plain question is asked, for an add and an edit alike, whichever
+  count the model picked. A later instruction replaces it ("15 spots or 20 spots. Actually make it 20 spots" drafts 20), and a later
+  pair of alternatives cancels an earlier single count. The same count said twice ("20 spots, max 20") is still one count.
 * Difficulty, distance, duration, bring, the access note and the description are written exactly as he gave them (case and
   spelling kept) and never filled in. A trail fact he did not say is asked about by the claims check, not written.
 * A place that is not a route idea is plain meeting-point text. `trailId` is set only when he names a route idea. A new hike is
