@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
-from hass import media, statebackup
+from hass import editor, media, statebackup
 from hass.tests.test_media import AT, JPEG, PNG
 from hass.tests.test_editor import git
 from hass.tests.test_statebackup import STAMP, BackupTestCase
@@ -101,19 +101,21 @@ class ManifestReadTests(BackupTestCase):
         self.assertEqual(statebackup.MANIFEST_MAX, 8 * 1024 * 1024)
         self.assert_invalid(backup, good)
 
-    def test_the_config_cap_is_64_kib(self):
+    def test_the_config_cap_matches_editor_one_mib(self):
         backup = self.make()
         cfg = json.loads((backup / statebackup.CONFIG).read_bytes())
         data = json.dumps(cfg).encode("utf-8")
-        self.rehash(backup, statebackup.CONFIG, data + b" " * (statebackup.SMALL_MAX - len(data)))
+        self.rehash(backup, statebackup.CONFIG, data + b" " * (editor.MAX_CONFIG - len(data)))
         self.assertEqual(self.cli("verify", backup)[1][0]["result"], "ok")
-        self.rehash(backup, statebackup.CONFIG, data + b" " * (statebackup.SMALL_MAX + 1 - len(data)))
-        self.assertEqual(statebackup.SMALL_MAX, 64 * 1024)
+        self.rehash(backup, statebackup.CONFIG, data + b" " * (editor.MAX_CONFIG + 1 - len(data)))
+        self.assertEqual(editor.MAX_CONFIG, 1024 * 1024)
         problem = {"result": "corrupt", "problems": ["config: not a JSON object with a worktree"]}
         self.assertEqual(self.cli("verify", backup), (1, [problem]))
+        names = sorted(os.listdir(self.tmp))
         self.assertEqual(self.cli("restore", backup, "--into", self.tmp / "restored", "--worktree", self.drill_wt),
                          (1, [problem]))
         self.assertFalse(os.path.lexists(self.tmp / "restored"))
+        self.assertEqual(sorted(os.listdir(self.tmp)), names)  # no staging output either
 
     def test_a_too_deep_or_too_big_sidecar_is_a_sidecar_mismatch(self):
         root = self.tmp / "media"
