@@ -98,8 +98,8 @@ ASK_STORY = "What should we say about {maker}? A sentence is enough."
 SKIP_STORY = re.compile(r"\b(?:skip(?:\s+it|\s+the\s+story)?|no\s+story|nothing\s+to\s+(?:say|add)|leave\s+it\s+(?:out|off|blank)|just\s+the\s+town)\b"
                         r"|^\s*(?:no|none|nope|nothing|never\s*mind)[\s.!]*$", re.IGNORECASE)
 SITE_NOTE = "I read {maker}'s own website ({url}) on {day} for the story. Change any word you like before you say yes."
-LIVE_CLAIM = ("I can't put {what} on the website from chat, so nothing was drafted. Send it again without that and I'll add the "
-              "product. I've saved your message for Graham.")
+LIVE_CLAIM = ("I can't put {what} on the website from chat, so nothing changed. Send it again without that and I'll add the "
+              "product.")  # the backlog line that follows says the message is written down for Graham
 MANY_ITEMS = "I can add one product at a time. Which one do you want first?"
 # One photo is one product (rule one-photo): he names two products in one message, or the name slot lists two. A determiner
 # before each product ("the lemon curd and the plum jam") or a list sign (& +) is what tells two products from one name such
@@ -666,7 +666,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     # 9. the inventory word and today's shelf check (D2): the check goes in the same change, on its own line
     new_id = _next_id(ctx, content)
     if new_id is None:
-        raise Refusal("I can't tell which product number comes next, so nothing was drafted. You can ask Graham.")
+        raise Refusal("I can't tell which product number comes next, so nothing changed. You can ask Graham.")
     if _selection_checked_today(ctx, content):
         ops.append({"op": "product.set_availability", "args": {"id": new_id, "available": word}})
     else:

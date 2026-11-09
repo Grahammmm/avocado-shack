@@ -557,6 +557,15 @@ def _reason(out: dict) -> str:
     return out.get("reason") or "; ".join(out.get("problems") or []) or out.get("question") or str(out.get("result"))
 
 
+def _photo_sentence(technical):
+    """The sentence the house picture step wrote for Mike (hass.ops.photos: retake asks, a photo it cannot open, the picture it
+    cannot make), when ``technical`` is exactly one of them; None for any other reason."""
+    from hass.ops import photos  # lazy: the picture step is only read when a photo refused
+    text = str(technical or "").strip()
+    known = {*photos.RETAKE.values(), *photos.RENDER_REPLY.values(), photos.MAKE_FAILED, photos.ALREADY_RAW}
+    return text if text in known else None
+
+
 def _is_undo(row) -> bool:
     """AV0022-07 (H06): the draft's ops are a non-empty list of only history.revert calls; unparsable is not an undo."""
     try: ops = json.loads(row["ops_json"])
@@ -811,6 +820,10 @@ class Conversation:
 
     def _plain(self, technical, doing="make that change") -> str:
         """The refusal text in everyday words; a reason we have no words for gets the generic line. Always logged."""
+        said = _photo_sentence(technical)  # the picture's own plain sentence (retake, too big, ...) is already for Mike: said as it is
+        if said:
+            self._problem("could-not-do", "photo-retake")
+            return said
         sentence, code = voice.explain(technical)
         self._problem("could-not-do", code)
         return sentence if code != "unmapped" else f"I couldn't {doing}, so nothing changed. Could you say it another way?"
