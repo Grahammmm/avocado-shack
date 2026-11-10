@@ -41,6 +41,7 @@ Owner wording follows docs/hass/VOICE.md. Skill page: docs/hass/skills/item_add.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import types
 from datetime import date
@@ -97,7 +98,23 @@ PICTURE_OK = "The picture is tidied up to match the other pictures on the site."
 ASK_STORY = "What should we say about {maker}? A sentence is enough."
 SKIP_STORY = re.compile(r"\b(?:skip(?:\s+it|\s+the\s+story)?|no\s+story|nothing\s+to\s+(?:say|add)|leave\s+it\s+(?:out|off|blank)|just\s+the\s+town)\b"
                         r"|^\s*(?:no|none|nope|nothing|never\s*mind)[\s.!]*$", re.IGNORECASE)
-SITE_NOTE = "I read {maker}'s own website ({url}) on {day} for the story. Change any word you like before you say yes."
+# HASS-SEC-3 (H2): what a maker's own website says is never published by itself. It is offered here, in the preview, labelled
+# with where and when it was read, and goes on the website only with his yes to this exact draft (the same yes-code flow).
+SITE_SAYS = ("The maker's own site says: {summary} (source: {url}, read on {day}). "
+             "These words go on the website as their story only if you say yes to this change.")
+
+
+def site_says(summary, url, retrieved) -> str:
+    """The preview line for a story written from the maker's website: the exact words, the address and the day it was read
+    (the words and the address are marked as quoted, so the voice rules do not judge an address's slashes)."""
+    try:
+        day = date.fromisoformat(retrieved)
+        when = f"{day:%b} {day.day}, {day.year}"
+    except (TypeError, ValueError):
+        when = "a day I can't read"
+    return SITE_SAYS.format(summary=_q(summary), url=_q(url), day=when)
+
+
 SITE_SKIPPED = "I couldn't use {maker}'s website, so the story is {what}."
 LIVE_CLAIM = ("I can't put {what} on the website from chat, so nothing changed. Send it again without that and I'll add the "
               "product.")  # the backlog line that follows says the message is written down for Graham
@@ -191,11 +208,12 @@ def _live_claims(ctx, *texts) -> None:
         raise Refusal(LIVE_CLAIM.format(what=what), "refuse", "policy")
 
 
-def _site_story(name, url, said, ctx, answered=False):
+def _site_story(name, url, said, ctx, answered=False, town=""):
     """({"page", "story"} for the maker's own website, or None when he gave no address). A page that cannot be read or has
-    nothing usable asks him ONE plain question, never a made-up story. Pure: the read happens behind ``ctx.maker_page``.
-    ``answered``: he has already given his own story words or said to skip it, so the website is optional: a page that
-    cannot be used is left out (None) and his answer is used, instead of asking the same question again."""
+    nothing usable asks him ONE plain question, never a made-up story. Pure: the read happened BEFORE the conversation's write
+    transaction and only its result is behind ``ctx.maker_page`` (HASS-SEC-3 M2). ``answered``: he has already given his own
+    story words or said to skip it, so the website is optional: a page that cannot be used is left out (None) and his answer
+    is used, instead of asking the same question again. ``town`` is the town he confirmed (the only place the story may name)."""
     address = _clean(url)
     if not address:
         return None
@@ -208,8 +226,9 @@ def _site_story(name, url, said, ctx, answered=False):
     except maker_site.PageError as exc:
         if answered:
             return None
-        raise Refusal(f"{exc.reply} {ask}", "question") from exc
-    story = maker_site.draft_story(name, page, said=said)
+        # a site that could not be read (or not in time) is the one plain line, which already asks for his sentence
+        raise Refusal(exc.reply if exc.code == "unreachable" else f"{exc.reply} {ask}", "question") from exc
+    story = maker_site.draft_story(name, page, said=said, town=town, today=_today(ctx))
     if story is None:
         if answered:
             return None
@@ -589,13 +608,17 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
         place = _clean(slots.get("place"))
         if not place or place == NOT_NEEDED:
             raise Refusal(question("place", slots, ctx), "question")
-        # the maker's story (HASS-LIVE-ADD-2 C): his own words, plus short sentences from the maker's OWN website when he gave
-        # its address. With neither, one plain question; "skip" keeps only the D5 line. The address itself is not kept on the
-        # maker (the website-link field is protected and is never published); it is the story's recorded source.
+        # the maker's story (HASS-LIVE-ADD-2 C, HASS-SEC-3 H2): his own words, plus a short story written from a few facts on
+        # the maker's OWN website when he gave its address (maker_site.draft_story: what they make, since when, the town he
+        # confirmed; never a page sentence). It is labelled in the preview with its address and day, and goes live only with
+        # his yes to this draft. With neither, one plain question; "skip" keeps only the D5 line. The address itself is not
+        # kept on the maker (the website-link field is protected and is never published); it is the story's recorded source.
         mine = _clean(slots.get("story"))
         skipped = len(_texts(ctx)) > 1 and bool(SKIP_STORY.search(_texts(ctx)[-1]))
-        found = _site_story(choice["name"], slots.get("maker_url"), mine, ctx, answered=bool(mine) or skipped)
-        story_in = " ".join(part for part in (mine, " ".join(found["story"]["sentences"]) if found else "") if part)
+        found = _site_story(choice["name"], slots.get("maker_url"), mine, ctx, answered=bool(mine) or skipped,
+                            town=place.split(",")[0].strip())
+        summary = " ".join(found["story"]["sentences"]) if found else ""
+        story_in = " ".join(part for part in (mine, summary) if part)
         if not story_in and not skipped:
             raise Refusal(ASK_STORY.format(maker=choice["name"]), "question")
         try:
@@ -603,9 +626,9 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
                                        types.SimpleNamespace(content=content, owner_text=message or None))
         except makers.Refusal as exc:
             raise Refusal(exc.reply, exc.kind) from exc
-        if found:
+        if found and summary in made.ops[0]["args"].get("story", ""):  # the label is shown exactly when the text is in the draft
             sources = (maker_site.record(found["page"], found["story"]),)
-            say.append(SITE_NOTE.format(maker=_q(choice["name"]), url=found["page"]["url"], day=found["page"]["retrieved"]))
+            say.append(site_says(summary, found["page"]["url"], found["page"]["retrieved"]))
         elif _clean(slots.get("maker_url")):  # the website could not be used and his answer (or skip) stands in for it
             say.append(SITE_SKIPPED.format(maker=_q(choice["name"]), what="your words" if mine else "just the town"))
         ops += made.ops
@@ -691,7 +714,36 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
 
 
 def plan_add(slots: dict, ctx=None) -> list:
-    return describe_add(slots, ctx).ops
+    key = _drafted_key(slots)
+    done = describe_add(slots, ctx)
+    _remember(ctx, key, done)
+    return done.ops
+
+
+# HASS-SEC-3 (L3): the Outcome of the drafting call itself, kept on the ctx the dispatcher drafts with, so the lines shown
+# beside the draft (``notes``) and the private source record (``sources``) describe the very read the draft was written from.
+def _drafted_key(slots) -> str:
+    try:
+        return json.dumps(slots, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return repr(slots)
+
+
+def _remember(ctx, key, done) -> None:
+    if ctx is None:
+        return
+    kept = getattr(ctx, "drafted", None)
+    if not isinstance(kept, dict):
+        try:
+            ctx.drafted = kept = {}
+        except AttributeError:
+            return
+    kept[key] = done
+
+
+def _drafted(ctx, slots):
+    kept = getattr(ctx, "drafted", None)
+    return kept.get(_drafted_key(slots)) if isinstance(kept, dict) else None
 
 
 # -- the picture advice (read-only: nothing is written, nothing is committed) ----------------------------------------------
@@ -759,19 +811,22 @@ SET_PHRASES = {"item.add": set_phrases}
 
 def sources(name, slots, ctx) -> list:
     """Where the drafted maker story was read ([maker_site.record, ...]); the dispatcher keeps them privately with the draft.
+    HASS-SEC-3 (L3): only ever the drafting call's own record (kept by ``plan_add`` on the ctx it drafted with); the plan is
+    never run again for it, so the page is never read a second time and the record cannot describe a different read.
     Never raises."""
-    try:
-        return list(describe_add(dict(slots), ctx).sources)
-    except Refusal:
-        return []
+    done = _drafted(ctx, slots)
+    return list(done.sources) if done is not None else []
 
 
 def notes(name, slots, ctx) -> dict:
-    """The lines a proposal shows beside the draft, as the test kit (and the dispatcher, once it asks) plays them."""
-    try:
-        done = describe_add(dict(slots), ctx)
-    except Refusal:
-        return {}
+    """The lines a proposal shows beside the draft, as the test kit (and the dispatcher, once it asks) plays them. With the
+    drafting ctx (HASS-SEC-3 L3) they are the drafting call's own lines, so the label he reads is the text the draft carries."""
+    done = _drafted(ctx, slots)
+    if done is None:
+        try:
+            done = describe_add(dict(slots), ctx)
+        except Refusal:
+            return {}
     say = list(done.say) + [w for w in done.warn if w in (PICTURE_OK,)]
     warn = [f"Left off: {line}." for line in done.left_off] + [w for w in done.warn if w != PICTURE_OK]
     return {"say": say, "set": [f"I set: {line}." for line in done.set_lines], "warn": warn}

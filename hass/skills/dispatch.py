@@ -409,7 +409,9 @@ class Dispatcher:
         settings = getattr(self.conv, "settings", None) or {}
         from hass import maker_site
         today = shop_today(now)
-        read = getattr(self.conv, "maker_page", None) or maker_site.reader(today=today)  # a test hands the conversation a recorded reader
+        # HASS-SEC-3 (M2): a maker's website was read BEFORE the write transaction (Conversation._read_sites); here, inside it,
+        # the plan only sees that result and never the network
+        read = maker_site.prefetched(getattr(self.conv, "_pages", None))
         return Ctx(content, today, self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
                    house_render=settings.get("houseRender") is True, live=bool(settings.get("liveSite")), maker_page=read)
 
@@ -573,7 +575,7 @@ class Dispatcher:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
             return "question"
         return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off,
-                           queued=req["calls"] if req else ())
+                           queued=req["calls"] if req else (), ctx=ctx)
 
     def _plan_stopped(self, msg, now, req, skill, given, texts, attachments, exc, revises):
         """A plan raised. A skill's own refusal (``exc.reply`` is a sentence for the owner, ``exc.kind`` is ``question`` when one
@@ -626,15 +628,16 @@ class Dispatcher:
         conv._reply(question)
         return "question"
 
-    def _skill_notes(self, skill, slots, now, texts) -> dict:
+    def _skill_notes(self, skill, slots, now, texts, ctx=None) -> dict:
         """``notes(skill name, slots, ctx)`` of the skill's module -> ``{say, set, warn}`` lines shown beside the draft (before the
-        owner's yes). Missing, failing or malformed: no lines (the draft is then shown as before). Each line once, plain strings only."""
+        owner's yes). Missing, failing or malformed: no lines (the draft is then shown as before). Each line once, plain strings only.
+        ``ctx`` is the context the plan drafted with (HASS-SEC-3 L3), so the lines describe that very plan."""
         out = {"say": [], "set": [], "warn": []}
         hook = skill_hook(skill, "notes")
         if hook is None:
             return out
         try:
-            got = hook(skill.name, dict(slots), self._ctx(now, texts))
+            got = hook(skill.name, dict(slots), ctx if ctx is not None else self._ctx(now, texts))
         except Exception:  # noqa: BLE001 - a note is advice, never a reason to lose the draft
             return out
         for key in out:
@@ -660,17 +663,17 @@ class Dispatcher:
         note += list(dict.fromkeys(warn))
         return note
 
-    def _draft(self, msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, left_off, queued=()):
+    def _draft(self, msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, left_off, queued=(), ctx=None):
         """Hand the plan to the conversation's ordinary draft path (editor.prepare, claims over the JOINED texts, proposal)."""
         conv, owner = self.conv, self._owner()
         earlier = _earlier(texts, msg)
-        hooked = self._skill_notes(skill, slots, now, texts)  # the skill's own lines: what it said and did, and what to know before yes
+        hooked = self._skill_notes(skill, slots, now, texts, ctx)  # the skill's own lines: what it said and did, and what to know before yes
         note = self._note_lines([(hooked, defaults)], left_off)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
         if disposition == "proposed":
-            self._keep_sources(skill, slots, now, texts, code)
+            self._keep_sources(skill, slots, now, texts, code, ctx)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if queued:  # the shelf-check question now holds the open request: the queued asks wait on it, not lost
@@ -693,14 +696,15 @@ class Dispatcher:
                 return self._next_queued(msg, now, None, queued, texts, attachments, disposition)
         return disposition
 
-    def _keep_sources(self, skill, slots, now, texts, code) -> None:
+    def _keep_sources(self, skill, slots, now, texts, code, ctx=None) -> None:
         """HASS-LIVE-ADD-2: where a drafted maker story was read (address, day, the page sentences it came from), one private line
-        per draft in ``maker-sources.jsonl`` in the state folder. A hook of the skill's module; best effort, never a reason to lose the draft."""
+        per draft in ``maker-sources.jsonl`` in the state folder. A hook of the skill's module; best effort, never a reason to lose the draft.
+        HASS-SEC-3 (L3): ``ctx`` is the context the plan drafted with; the hook reads that plan's own record, never a new read."""
         hook = skill_hook(skill, "sources")
         if hook is None:
             return
         try:
-            rows = hook(skill.name, dict(slots), self._ctx(now, texts))
+            rows = hook(skill.name, dict(slots), ctx if ctx is not None else self._ctx(now, texts))
             if rows:
                 maker_site_log(self.conv.sdir, code, rows, now)
         except Exception:  # noqa: BLE001
@@ -725,7 +729,7 @@ class Dispatcher:
         if asked:
             return self._ask_which(msg, now, req, asked, attachments)
         ctx = self._ctx(now, texts)
-        ops, left, waiting, parts, stopped = [], [], [], [], []
+        ops, left, waiting, parts, stopped, planned_calls = [], [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
             if skill is None or skill.approval == "none" or skill.name == "backlog.log":
@@ -755,7 +759,8 @@ class Dispatcher:
                     stopped.append((said, reason if reason in BACKLOG_REASONS else None))
                 continue
             ops += planned if isinstance(planned, list) else []
-            parts.append((self._skill_notes(skill, slots, now, texts), shown))  # what each complete call said, set and warns of
+            parts.append((self._skill_notes(skill, slots, now, texts, ctx), shown))  # what each complete call said, set and warns of
+            planned_calls.append((skill, slots))
             left += filled.left_off
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
@@ -775,6 +780,9 @@ class Dispatcher:
         note = self._note_lines(parts)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
                                   prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        if disposition == "proposed":  # HASS-SEC-3 (L3): each drafted call's own source record, as for one skill
+            for called, called_slots in planned_calls:
+                self._keep_sources(called, called_slots, now, texts, conv._last_draft_code, ctx)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if waiting:  # the shelf-check question holds the open request: the incomplete calls wait on it, not lost

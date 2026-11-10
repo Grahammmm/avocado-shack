@@ -32,12 +32,17 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
   price, contact, trail facts) is never written. His own wording that carries one is replaced by the house draft and the
   reply says "Left off: ...". A claim in the name, the story or the picture caption is refused in plain words and written down
   for Graham. He can still send a different description before `yes`.
-* **Maker story.** A maker already on the site is reused. A new maker takes Mike's own words, plus short sentences from the
-  maker's **own** website when he gives its address (`hass/maker_site.py`: https only, the site's `robots.txt` obeyed, one
-  request per site every 2 seconds, no accounts, keys, cookies or proxy, same-site redirects only (each hop checked like the first request), at most 600 KB read, no
-  long passages copied). With no words and no address Hass asks once: "What should we say about <Maker>? A sentence is
-  enough." and invents nothing; "skip" keeps only the one line about the town. The address and the day it was read are kept
-  privately with the draft (`maker-sources.jsonl`) and shown to Mike; the maker's website field stays protected and is not
+* **Maker story.** A maker already on the site is reused. A new maker takes Mike's own words, plus a short story written by
+  code from a few facts on the maker's **own** website when he gives its address (`hass/maker_site.py`: https only, a plain
+  public name, the site's `robots.txt` obeyed, one request per site every 2 seconds, no accounts, keys, cookies or proxy,
+  same-site redirects only (each hop checked like the first request), the whole read at most 8 seconds, 640 KB and 6
+  requests, and done before the conversation's write transaction). No page sentence is copied: only what they make, since
+  which year, and the town Mike confirmed, never a claim, contact, price, third party or instruction. Mike sees it as "The
+  maker's own site says: ... (source: <address>, read on <day>)" and it goes live only with his `yes <code>` to that draft
+  (HASS-SEC-3). A site that cannot be read, or not in time, gets "I could not read their site; tell me about them in a
+  sentence." With no words and no address Hass asks once: "What should we say about <Maker>? A sentence is enough." and
+  invents nothing; "skip" keeps only the one line about the town. The address, the day and the page sentences the facts came
+  from are kept privately with the draft (`maker-sources.jsonl`); the maker's website field stays protected and is not
   published.
 * **One change.** The existing multi-op draft carries it all, so it uses one daily live-change slot and one undo hides the
   product and the new maker together. The picture file stays in the site folder, unused.
@@ -45,7 +50,8 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
 ## Honest limits
 
 * The render needs a plain background. A shelf photo gets a retake request, not a picture.
-* The maker story is short sentences taken from the page, not model prose; Mike reads it before he says yes.
+* The maker story from a website is at most two short sentences written by code from facts on the page, not model prose and
+  never a page sentence; Mike reads it, with its address and day, before he says yes.
 * The label text in the photo only helps with the name and brand question; it does not feed the description.
 * **Host setting (operator):** `houseRender: true` in the Hass writer settings and the services on the Pillow 12.0.0 venv
   python. Until then a photo goes on as sent, and Hass says so before the yes.

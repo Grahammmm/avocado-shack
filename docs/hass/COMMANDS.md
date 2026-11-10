@@ -86,9 +86,9 @@ the shop's voice from your words, never with a price, a size, where it comes fro
 of yours that carries one is replaced and listed under "Left off". Such a claim in the name, the maker's story or the picture
 caption is refused in plain words and written down for Graham. A maker already on the site is reused. For a new maker Hass asks
 "What should we say about <Maker>? A sentence is enough." and uses your words; if you send the maker's own web address it also
-reads short sentences from that page (the site's robots file is obeyed, one polite request, nothing copied at length), and the
-draft says which address and which day. Send `skip` to keep only the line about their town. The maker's web address is never
-published. One photo is one product, and the new item uses one of the day's live-change slots.
+writes one or two short sentences from facts on that page (what they make, since when; the site's robots file obeyed, no
+sentence copied), shown with the address and day; they go live only with your yes. Send `skip` to keep only the town line.
+The maker's web address is never published. One photo is one product, and the new item uses one of the day's live-change slots.
 
 Two kinds of whole message are not change requests and never reach the interpreter or the daily count: only thanks or
 a greeting (`thanks`, `thank you`, `great, thanks`, `hi`, `hello`, `good morning`, any case, with a final `.`, `!` or

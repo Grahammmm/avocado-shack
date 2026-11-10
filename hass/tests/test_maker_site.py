@@ -231,7 +231,7 @@ class Redirects(SiteTestCase):
     def test_redirects_have_a_cap_and_a_redirect_without_a_place_is_unreachable(self):
         loop = {ROBOTS: (404, "", b"")} | {f"https://harborlane.example/{n}": (302, "", b"", f"/{n + 1}") for n in range(10)} | {ADDRESS: (302, "", b"", "/1")}
         get = Recorded(loop)
-        with self.assertRaises(ms.PageError) as caught:
+        with mock.patch.object(ms, "DEADLINE", 60.0), self.assertRaises(ms.PageError) as caught:  # the hop cap, not the deadline
             self.fetch(get, cache=False)
         self.assertEqual(caught.exception.code, "unreachable")
         self.assertEqual(len(get.urls) - 1, ms.MAX_REDIRECTS + 1)  # robots.txt, the page and MAX_REDIRECTS hops, then it stops
@@ -243,7 +243,7 @@ class Redirects(SiteTestCase):
         answers = {"harborlane.example": "93.184.216.34", "www.harborlane.example": "10.0.0.5"}
         opened = []
 
-        def real(url, headers, timeout):
+        def real(url, headers, timeout, **_limits):  # the read's budget and byte cap (HASS-SEC-3) are passed along too
             opened.append(url)
             return (301, "", b"", self.WWW) if url == ADDRESS else (404, "", b"", "")
 
@@ -371,24 +371,26 @@ class RateLimit(SiteTestCase):
 
 
 class TheStory(unittest.TestCase):
+    """HASS-SEC-3 (H2) changed the rule: the story is written from facts on the page (hass/tests/test_maker_site_sec3.py has
+    the full set); no page sentence is ever used as it stands. The old sentence rules below all still leave a sentence out."""
+
     def blocks(self, markup):
         return {"url": ADDRESS, "retrieved": "2026-11-09", "blocks": ms.extract(markup.decode() if isinstance(markup, bytes) else markup)}
 
     def test_the_harbor_lane_page_gives_two_short_claim_free_house_sentences(self):
         page = self.blocks(HARBOR)
-        story = ms.draft_story("Harbor Lane", page)
-        self.assertEqual(story["sentences"], [
-            "Harbor Lane makes small-batch fruit jam and relish in a shared kitchen in Morro Bay.",
-            "Harbor Lane cooks every batch in small pots, a few jars at a time."])
+        story = ms.draft_story("Harbor Lane", page, town="Morro Bay", today=DAY)
+        self.assertEqual(story["sentences"], ["Harbor Lane makes small-batch fruit jam and relish.", "Harbor Lane started in 2019."])
         self.assertEqual(story["from"], ["Harbor Lane makes small-batch fruit jam and relish in a shared kitchen in Morro Bay.",
-                                         "We cook every batch in small pots, a few jars at a time."])
+                                         "We started Harbor Lane in 2019 with one pot and a stack of family recipes."])
         text = " ".join(story["sentences"])
         self.assertLessEqual(len(story["sentences"]), ms.MAX_SENTENCES)
         self.assertLessEqual(len(text), ms.MAX_CHARS)
-        for left_out in ("2019", "organic", "best", "award", "555", "@", "ship", "Every jar", "local growers", "!", "?"):
+        # 2019 is now said on purpose (since when they make it); everything else stays out
+        for left_out in ("organic", "best", "award", "555", "@", "ship", "Every jar", "local growers", "!", "?", "shared kitchen"):
             self.assertNotIn(left_out, text)
         self.assertEqual(live_policy._protected(text)[1], set())  # the live gate finds no claim in it
-        for source in story["from"]:  # every sentence is traceable: it is on the page
+        for source in story["from"]:  # every fact is traceable: its sentence is on the page
             self.assertIn(source, " ".join(page["blocks"]))
 
     def test_a_page_with_only_claims_and_first_person_talk_gives_no_story(self):
@@ -404,24 +406,24 @@ class TheStory(unittest.TestCase):
 
     def test_words_mike_already_said_are_not_said_twice(self):
         page = self.blocks(HARBOR)
-        said = "Harbor Lane makes small-batch fruit jam and relish in a shared kitchen in Morro Bay."
-        story = ms.draft_story("Harbor Lane", page, said=said)
-        self.assertEqual(story["sentences"], ["Harbor Lane cooks every batch in small pots, a few jars at a time."])
+        said = "Harbor Lane makes small-batch fruit jam and relish."
+        story = ms.draft_story("Harbor Lane", page, said=said, town="Morro Bay", today=DAY)
+        self.assertEqual(story["sentences"], ["Harbor Lane started in 2019."])
 
     def test_the_story_is_cut_at_two_sentences(self):
-        page = {"blocks": ["Harbor Lane makes jam in a shared kitchen in Morro Bay.", "Harbor Lane sells relish at the Saturday market.",
-                           "Harbor Lane fills each jar by hand in small batches."]}
-        story = ms.draft_story("Harbor Lane", page)
+        page = {"blocks": ["Harbor Lane makes jam in a shared kitchen in Morro Bay.", "Harbor Lane was founded in 2015 by a cook.",
+                           "Harbor Lane cooks in a shared kitchen in Morro Bay."]}
+        story = ms.draft_story("Harbor Lane", page, town="Morro Bay", today=DAY)
         self.assertEqual(len(story["sentences"]), ms.MAX_SENTENCES)
-        self.assertEqual(story["sentences"], page["blocks"][:2])
+        self.assertEqual(story["sentences"], ["Harbor Lane makes jam.", "Harbor Lane started in 2015."])
 
     def test_a_sentence_is_used_only_when_it_passes_every_rule(self):
         name = "Harbor Lane"
         good = "Harbor Lane makes small-batch fruit jam in a shared kitchen."
-        self.assertEqual(ms.usable(good, name), good)
-        self.assertEqual(ms.usable("We make small-batch fruit jam in a shared kitchen.", name), "They make small-batch fruit jam in a shared kitchen.")
-        self.assertEqual(ms.usable("Our recipes come from the family cookbook.", name), "Their recipes come from the family cookbook.")
-        self.assertEqual(ms.usable("Harbor Lane\u2019s jars are filled by hand every week.", name), "Harbor Lane's jars are filled by hand every week.")
+        self.assertEqual(ms.source_ok(good, name), good)
+        self.assertEqual(ms.source_ok("Harbor Lane\u2019s jars are filled by hand every week.", name), "Harbor Lane's jars are filled by hand every week.")
+        self.assertEqual(ms.draft_story(name, {"blocks": ["We make small-batch fruit jam in a shared kitchen."]})["sentences"],
+                         ["Harbor Lane makes small-batch fruit jam."])
         rules = {
             "too short": "Harbor Lane makes jam.",
             "too long": "Harbor Lane makes jam and relish and pickles " + "and more " * 25 + "today.",
@@ -445,11 +447,13 @@ class TheStory(unittest.TestCase):
         }
         for label, sentence in rules.items():
             with self.subTest(rule=label):
-                self.assertIsNone(ms.usable(sentence, name), sentence)
+                self.assertIsNone(ms.draft_story(name, {"blocks": [sentence]}, town="Morro Bay", today=DAY), sentence)
+                if label != "we plus the name":  # a fine sentence, but it gives none of the three facts
+                    self.assertIsNone(ms.source_ok(sentence, name, "Morro Bay"), sentence)
 
     def test_the_provenance_record_keeps_the_address_the_day_and_the_source_sentences(self):
         page = {**self.blocks(HARBOR), "url": ADDRESS, "retrieved": "2026-11-09"}
-        story = ms.draft_story("Harbor Lane", page)
+        story = ms.draft_story("Harbor Lane", page, town="Morro Bay", today=DAY)
         record = ms.record(page, story)
         self.assertEqual(record, {"source": ADDRESS, "retrieved": "2026-11-09", "from": story["from"],
                                   "story": " ".join(story["sentences"])})

@@ -76,32 +76,47 @@ want me to bring it back instead?"; a held twin is refused).
   that change". Nothing is drafted and nothing is written. The host needs `houseRender: true` and the Pillow 12.0.0 python
   (`docs/hass/PILLOW-HOST.md`); `reports/hass/live-add-2/` is the rehearsal with the real render.
 
-## The maker's story (HASS-LIVE-ADD-2 C)
+## The maker's story (HASS-LIVE-ADD-2 C, HASS-SEC-3)
 
-Code: `hass/maker_site.py`, called through `ctx.maker_page` (the dispatcher's reader; the test kit gives recorded pages, so no test
-touches the network).
+Code: `hass/maker_site.py`. The conversation reads the page BEFORE it opens its write transaction (`Conversation._read_sites` ->
+`maker_site.prefetch`); the plan only sees that result through `ctx.maker_page` (`maker_site.prefetched`) and never touches the
+network (the test kit gives recorded pages, so no test touches the network).
 
 * **A maker already on the site is reused**, with its story as it is.
-* **A new maker:** his words (`story`) and the short sentences taken from the maker's own page when he gave its address. With
+* **A new maker:** his words (`story`) and a short story written from the maker's own page when he gave its address. With
   neither, ONE question ("What should we say about <Maker>? A sentence is enough."); "skip", "no story" and the like keep only
   the D5 line. Nothing is invented.
-* **The polite read:** https only, a public host (no IP address, localhost, user name or port), the site's `robots.txt` obeyed
+* **The polite read:** https only, a plain public name (no IP address in any spelling, no `[...]`, no trailing dot, no
+  localhost or other local name, ASCII only, a real top-level name, no user name or port), the site's `robots.txt` obeyed
   (a disallow, 401 or 403 means the page is never requested: "That website asks programs not to read it, so I won't."), one
-  request per site every 2 seconds, no cookies, no proxy, at most 600 KB. A redirect is followed by the reader itself, never by
-  the HTTP library: same site only (with or without `www.`), at most 3, and every hop is held to the same rules as the first
-  request (a public address, checked again when the connection is made; the `robots.txt` of the host it lands on; the 2-second
-  gap). Failures are plain words and then the same one question, **unless he has already answered it**: once he has given his
-  own words or said "skip", a website that cannot be read is left out, he is told so, and his answer (or just the town line)
-  is used; the same question is not asked twice.
-* **The story** is built from short page sentences that carry no claim (no origin, organic, health, award, price, contact or
-  trail wording, no year), "We" and "Our" become the maker's name, at most 2 page sentences (40 to 190 characters each, 330
-  together), never a long passage; they are added to his own words. It is machine-valid,
-  **not accepted**: the draft says "I read <Maker>'s own website (<address>) on <day> for the story. Change any word you like
-  before you say yes."
-* **Source record:** the address, the day and the source sentences are kept privately with the draft (`maker-sources.jsonl`).
-  The address is not put on the maker: the website-link field is protected and is not published.
-* **Known limit:** a page sentence starting "We" or "Our" is credited to whatever maker name he gave; he reads the story and the
-  address before his yes.
+  request per site every 2 seconds, no cookies, no proxy. A redirect is followed by the reader itself, never by the HTTP
+  library: same site only (with or without `www.`), at most 3, and every hop is held to the same rules as the first request
+  (a public address, resolved and checked again when each connection is made, so a name that changes its answer cannot lead
+  inside; IPv4-mapped, NAT64, 6to4, Teredo and IPv4-compatible addresses do not count as public; the `robots.txt` of the host it
+  lands on; the 2-second gap).
+* **Limits of the whole read (SEC-3 M2):** at most 8 seconds for everything (robots.txt, every hop, the gaps and the page; a
+  gap is never waited past it, the name lookup gets only the time left, the body is read in 16 KB pieces and a watchdog shuts
+  the connection at the deadline), at most 640 KB in all (600 KB for a page, 64 KB for a robots.txt) and at most 6 requests.
+  A site that cannot be read, or not in time, is the plain line "I could not read their site; tell me about them in a
+  sentence." (a robots refusal or a bad address keep their own sentence, then the same question), **unless he has already
+  answered it**: once he has given his own words or said "skip", a website that cannot be read is left out, he is told so, and
+  his answer (or just the town line) is used; the same question is not asked twice.
+* **The story (SEC-3 H2):** no page sentence is ever used as it stands. Code takes at most three facts from page sentences that
+  pass every rule and writes the story from them, in the house voice, at most 2 sentences: what they make ("<Maker> makes
+  small-batch fruit jam and relish."), since which year ("<Maker> started in 2019.") or, without a year, the town **only when it
+  is the town he confirmed** ("<Maker> is based in Morro Bay."). A page sentence is left out whole when it has a number (a year
+  is fine), `!`, `?`, `;`, a quotation, a link or an e-mail, a hype word, anything the live gate calls a claim, a claim,
+  contact, price, third-party or instruction word (organic, award, trusted, call, order, price, Hass, publish, ...), a
+  capitalised name that is not the maker or the confirmed town (a shop, a store, another place), first-person talk past a
+  leading We / Our, or a character that is not plain ASCII. The words he would publish are shown in the preview as **"The maker's
+  own site says: <the story> (source: <address>, read on <day>). These words go on the website as their story only if you say
+  yes to this change."** and go live only with his `yes <code>` to that exact draft; the draft's hash binds the text.
+* **Source record:** the address, the day, the page sentences the facts came from and the story are kept privately with the
+  draft (`maker-sources.jsonl`), taken from the drafting call itself (SEC-3 L3): the plan is never run again for it, so the record
+  is always the read the draft was written from. The address is not put on the maker: the website-link field is protected and
+  is not published.
+* **Known limit:** a page "We make ..." is credited to whatever maker name he gave; he reads the story and the address before
+  his yes.
 
 ## The live gate (HASS-LIVE-ADD-2 B)
 
@@ -154,7 +169,10 @@ page answered with his own words and with "skip" (not asked again, his words or 
 photo the render cannot cut out (retake sentence, nothing drafted), a claim in his description (rewritten, "Left off"), and
 organic and origin words in the name (refused with the plain reason). 14 rows end in an approved draft that is undone. They use
 the synthetic photos of #504 (`reports/hass/newitem-1/synthetic/`) and recorded pages (`hass/tests/fixtures/maker_site/`).
-More tests: `hass/tests/test_maker_site.py` (37: robots, address rules, redirects hop by hop, size cap, story rules, rate gap, record) and
+More tests: `hass/tests/test_maker_site.py` (37: robots, address rules, redirects hop by hop, size cap, story rules, rate gap, record),
+`hass/tests/test_maker_site_sec3.py` (28: the SEC-1 findings H2, L2, M2, L1, L3: facts not sentences, the labelled preview and
+the yes, the whole-read deadline, bytes and requests, the read before the transaction, the address forms, the drafting call's
+record) and
 `hass/tests/test_live_add_photo_undo.py` (9: live `product.set_photo`, one undo hides the product and the new maker).
 
 ```

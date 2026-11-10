@@ -968,13 +968,36 @@ class Conversation:
         self._asker = sender_key(msg.sender)
         self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)
         try: return self._handle_message(msg, last_try, apply)
-        finally: self._answering, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, False
+        finally:
+            self._answering, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, False
+            self._pages = {}
+
+    _pages: dict = {}  # HASS-SEC-3 (M2): the maker websites read for the message being handled, BEFORE its write transaction
+
+    def _read_sites(self, msg) -> dict:
+        """HASS-SEC-3 (M2): a maker's web address the owner typed (in this text or earlier in his open request) is read HERE,
+        before BEGIN IMMEDIATE, the whole read within maker_site.DEADLINE; inside the transaction the item.add plan only sees
+        this result (Dispatcher._ctx), so a slow site never holds the write lock and never hangs the reply. Only for the
+        owner's own new text with skills on; anything that goes wrong is the plain "could not read their site" reply later."""
+        if self.dispatch is None or msg.from_me or msg.kind != "new" or not self._is_owner(msg): return {}
+        text = (msg.text or "").replace("\ufffc", "")
+        if not text.strip() or len(text) > MAX_OWNER_TEXT: return {}
+        from hass import maker_site  # lazy: only a text that names a website needs it
+        try:
+            if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return {}
+            req = self.requests.get(msg.chat, self._now())
+            texts = [*(req["texts"] if req else []), text]
+        except (sqlite3.Error, KeyError, TypeError):
+            texts = [text]
+        if not maker_site.addresses_in(texts): return {}
+        return maker_site.prefetch(texts, today=shop_today(self._now()))
 
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
         apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
         row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
         self._label_job = None
+        self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         try:
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
