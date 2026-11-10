@@ -10,7 +10,7 @@ gave it (SKILLS-ITEMADD-1: a new item and today's shelf check undo together). Th
 sets ``revertedBy`` on the original change record once the revert is committed.
 An undo of an undo is refused, so the original keeps ``revertedBy``; to bring a change back, ask for it again.
 An undo that cancels a hike, moves its start or turns its RSVPs off carries the forward op's guest warning, never a
-refusal, and only when the undo is drafted.
+refusal, and only when the undo is drafted; so does one that changes its meeting place, meet time or route.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 
 from hass.ops import COLLECTIONS, Arg, Op, Refused, Touched
 from hass.ops.catalog import _maker_problem, _restore_image_problem
-from hass.ops.hikes import _guest_warning, _move_warning, _seats
+from hass.ops.hikes import _guest_warning, _meeting_warning, _move_warning, _seats
 
 # What "undo an addition" means per collection: hide or cancel, never delete.
 UNDO_ADDITION = {"products": ("status", "hidden"), "events": ("status", "cancelled"), "makers": ("hidden", True)}
@@ -127,9 +127,12 @@ def _event_warning(ctx, current, before):
     if before is None or before.get("status") == "cancelled" or (current.get("rsvpEnabled")
                                                                     and not before.get("rsvpEnabled")):
         return lambda: _guest_warning(ctx, current)  # cancels the hike or turns RSVPs off: one warning
-    if (current.get("rsvpEnabled") and before.get("status") == "scheduled"  # as hike.update: no RSVPs, no move warning
-            and before.get("startsAt") != current.get("startsAt")):
-        return lambda: _move_warning(ctx, current, before["startsAt"])
+    if current.get("rsvpEnabled") and before.get("status") == "scheduled":  # as hike.update: no RSVPs, no warning
+        def warn():  # the move warning, then the meeting place, meet time and route ones (AV2137-02)
+            if before.get("startsAt") != current.get("startsAt"):
+                _move_warning(ctx, current, before["startsAt"])
+            _meeting_warning(ctx, current, before)
+        return warn
     return None
 
 
