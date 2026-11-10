@@ -19,6 +19,7 @@ from pathlib import Path
 
 from hass import conversation, corrlog, interpret_check, live_policy, margins, media, morning_report, owner_answers, voice
 from hass.content_model import REPO_ROOT
+from hass.skills import reports
 from hass.tests.test_conversation import CHAT, OWNER, ConversationTestCase, _ops
 from hass.tests.test_editor import DESC, HOURS, NEW_HOURS
 from hass.tests.test_hike_ops import HIKE, HIKE_ID
@@ -37,7 +38,7 @@ OWNER_FACING = {
                         "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
     "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render"], "interpret_check.py": "all",
-    "label_reader.py": ["question", "_maker_line", "_product_line"],
+    "label_reader.py": ["question", "_maker_line", "_product_line"], "skills/reports.py": "all",  # AV1109-08: the shelf skill's sentences
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
     "conversation.py": ["HELP_TEXT", "LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "HISTORY_USAGE", "FIND_USAGE", "POST_USAGE", "HIKE_USAGE",
@@ -172,7 +173,8 @@ class EveryTemplate(unittest.TestCase):
                  *[sentence for _rx, _code, sentence in voice.REASONS], owner_answers.UNDER_WAY, owner_answers.UNKNOWN_STATE,
                  owner_answers.NOT_LIVE, owner_answers.LIVE_SHOWN, owner_answers.LIVE_UNKNOWN, owner_answers.LIVE_UNCONFIRMED,
                  owner_answers.LIVE_NOT_PUBLISHED.format(reason=owner_answers.live_reason("the release was interrupted")),
-                 owner_answers.live_reason("something odd")]
+                 owner_answers.live_reason("something odd"), reports.NO_PUSH, reports.UNREADABLE, reports.NOT_ON_REPORT,
+                 reports.COUNTS_LEAD + q("Cal Poly eggs") + ": not confirmed"]
         bad = [(t[:80], voice.check(t, long_ok=True)) for t in texts if voice.check(t, long_ok=True)]
         self.assertEqual(bad, [])
 
