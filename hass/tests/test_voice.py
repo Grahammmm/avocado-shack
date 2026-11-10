@@ -447,5 +447,20 @@ class OperationQuestions(H06TestCase):
         self.assertEqual(self.fallbacks(), [])
 
 
+class MeetingWarningVoice(unittest.TestCase):
+    """AV2137-02: each meeting-detail guest warning says what changes and how many signed up, in plain words."""
+
+    def test_new_warning_voice_mapping(self):
+        for group in ("meeting place", "meet time", "route"):
+            for n, guests in ((1, "1 guest has"), (3, "3 guests have")):
+                technical = (f"{HIKE_ID}: the {group} changes; {n} confirmed guest{'s are' if n != 1 else ' is'} "
+                             "not told automatically")
+                plain = voice.explain_warning(technical)
+                self.assertEqual(plain, f"The {group} changes. {guests} signed up, and nobody is told automatically.")
+                self.assertEqual(voice.check(plain), [])
+        self.assertEqual(voice.explain_warning(f"{HIKE_ID} guest count unavailable; check RSVPs before approving"),
+                         "I can't see how many guests have signed up. Please check before you say yes.")
+
+
 if __name__ == "__main__":
     unittest.main()
