@@ -37,6 +37,8 @@ class FormError(ValueError):
 def email_address(value):
     if not isinstance(value, str): raise FormError('Please enter a valid email address.')
     value = value.strip().lower()
+    # Refuse (never strip) ASCII controls; the \s below misses NUL, ESC, DEL and others.
+    if any(ord(c)<0x20 or ord(c)==0x7f for c in value): raise FormError('Please enter a valid email address.')
     if len(value)>254 or not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
         raise FormError('Please enter a valid email address.')
     return value

@@ -96,11 +96,20 @@ def maker_ref(content, query, aliases=None) -> Resolved:
                     reply=f"Which maker do you mean: {_names_line(names)}?")
 
 
+def _has_run(words, needle) -> bool:
+    n = len(needle)
+    return any(words[i:i + n] == needle for i in range(len(words) - n + 1))
+
+
 def _titled(records, query, label):
-    needle = " ".join(nl_prep.tokens(query))
+    """Records whose title holds the query's normalized words as a contiguous run of whole words.
+
+    Whole words only (RF0834-10): 'ridge' must not pick 'Bridge Walk' just because one spelling sits inside the other.
+    """
+    needle = nl_prep.tokens(query)
     if not needle:
         return Resolved("none", reply=f"Which {label} do you mean?")
-    hits = [r for r in records if needle in " ".join(nl_prep.tokens(str(r.get("title", ""))))]
+    hits = [r for r in records if _has_run(nl_prep.tokens(str(r.get("title", ""))), needle)]
     if len(hits) == 1:
         return Resolved("one", value=hits[0]["id"])
     if not hits:
