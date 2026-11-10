@@ -88,7 +88,8 @@ def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     if any(_TAG_RE.search(text) for text in free): return refuse("free text has a hashtag or account name")
     lines = [name, description]
     if maker: lines.append(f"From {maker['name']} in {maker['place']}.")
-    tags = ["#AvocadoShack", *([CATEGORY_TAGS[product["category"]]] if product.get("category") in CATEGORY_TAGS else [])]
+    category = product.get("category")  # only a text member of CATEGORY_TAGS adds a tag; a list or object is as unknown as null
+    tags = ["#AvocadoShack", *([CATEGORY_TAGS[category]] if isinstance(category, str) and category in CATEGORY_TAGS else [])]
     caption = "\n".join(lines) + "\n\n" + " ".join(tags)
     if len(caption) > MAX_CAPTION: return refuse("caption too long")
     alt = product.get("imageAlt")
