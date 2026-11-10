@@ -5,7 +5,7 @@
 // a plain sentence instead of a parser error.
 //   node storefront-mockup/static-site-qa.cjs DIR      (DIR outside the repo; QA_OUT_DIR as for the other checks)
 const {out}=require('./qa-env.cjs').qaEnv({preview:false});
-const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert/strict');
+const fs=require('fs'),path=require('path'),http=require('http'),util=require('util'),assert=require('assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const refuse=m=>{process.stderr.write('static-site QA refused: '+m+'\n');process.exit(2)};
 const root=process.argv[2]&&fs.realpathSync(process.argv[2]);
@@ -201,6 +201,43 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(await p.locator(form).getAttribute('aria-disabled'),'true');
    assert.equal(hits,1,route+': one GET /api/community');assert.equal(posts,0,route+': nothing posted');await p.close();
   }
+  // RF0854-12: the shared dialog (Privacy and the RSVP form) closes only for a real backdrop click, Close or Escape; a click on its own padding/border keeps it open.
+  // Points are measured at click time and checked with elementFromPoint and the dialog's rectangle, so no test passes by hitting a child or the backdrop by mistake.
+  const box=(p,where)=>p.locator('#dialog').evaluate((d,where)=>{const r=d.getBoundingClientRect(),y=where==='corner'?r.top+3:r.top+r.height/2;
+   const x=where==='backdrop'?r.left/2:r.left+3,hit=document.elementFromPoint(x,y);return {x,y,hitDialog:hit===d,inside:x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom}},where);
+  const isOpen=p=>p.locator('#dialog').evaluate(d=>d.open);
+  const clickPadding=async(p,where,why)=>{const pt=await box(p,where);assert.ok(pt.hitDialog&&pt.inside,why+': '+where+' point is the dialog itself, inside its box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),true,why+': '+where+' padding click closed the dialog')};
+  const clickBackdrop=async(p,why)=>{const pt=await box(p,'backdrop');assert.ok(pt.hitDialog&&!pt.inside,why+': backdrop point is outside the box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),false,why+': backdrop click left the dialog open')};
+  const rsvpApi={acceptsSubmissions:true,routeIdeas:[],events:[{id:'rf0854-walk',title:'Synthetic dialog walk',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles',meetingPoint:'Synthetic trailhead',rsvpOpen:true,rsvpEnabled:true,remaining:6,confirmedGuests:0}]};
+  for(const [width,other] of [[390,1440],[1440,390]]){const ctx=await browser.newContext({viewport:{width,height:900}}),p=await ctx.newPage(),errs=[];let posts=0;
+   p.on('pageerror',e=>errs.push(e.message));p.on('request',r=>{if(r.method()!=='GET'||r.postData())posts++});
+   try{await p.clock.setFixedTime(new Date('2026-11-09T08:30:00Z'));await p.route('**/api/community',r=>r.fulfill(json(rsvpApi)));
+    // privacy_inside_padding_and_border_stays_open (also after a viewport resize)
+    await p.goto(base+'/');const privacy=p.getByRole('button',{name:'Privacy',exact:true});await privacy.click();
+    const before=await p.locator('#dialog').evaluate(d=>({text:d.innerText,label:d.getAttribute('aria-labelledby')}));
+    await clickPadding(p,'corner','privacy '+width);await clickPadding(p,'side','privacy '+width);
+    await p.setViewportSize({width:other,height:700});await clickPadding(p,'corner','privacy resized '+width+'→'+other);await p.setViewportSize({width,height:900});
+    assert.deepEqual(await p.locator('#dialog').evaluate(d=>({text:d.innerText,label:d.getAttribute('aria-labelledby')})),before,'privacy '+width+': content unchanged');
+    assert.equal(await p.locator('#dialog-title').innerText(),'Your privacy matters.');
+    // child_close_and_escape_keep_existing_behavior
+    await p.locator('#dialog-content p').first().click();assert.equal(await isOpen(p),true,'privacy '+width+': paragraph click');
+    await p.keyboard.press('Escape');assert.equal(await isOpen(p),false,'privacy '+width+': Escape');assert.equal(await privacy.evaluate(b=>b===document.activeElement),true,'privacy '+width+': focus back after Escape');
+    await privacy.click();await p.getByRole('button',{name:'Close details'}).click();assert.equal(await isOpen(p),false,'privacy '+width+': Close');assert.equal(await privacy.evaluate(b=>b===document.activeElement),true,'privacy '+width+': focus back after Close');
+    // backdrop_click_still_closes
+    await privacy.click();await clickBackdrop(p,'privacy '+width);
+    // rsvp_inside_padding_preserves_open_form: the real RSVP renderer, synthetic data, filled but never submitted
+    await p.goto(base+'/hike/');const rsvp=p.locator('[data-rsvp="rf0854-walk"]');await rsvp.click();
+    await p.locator('#rsvp-name').fill('Synthetic Visitor');await p.locator('#rsvp-email').fill('synthetic@example.invalid');await p.locator('#rsvp-party').selectOption('2');
+    const values=()=>p.locator('#hike-rsvp').evaluate(f=>[f.elements.name.value,f.elements.email.value,f.elements.partySize.value]);
+    await clickPadding(p,'corner','rsvp '+width);await clickPadding(p,'side','rsvp '+width);
+    assert.ok(util.isDeepStrictEqual(await values(),['Synthetic Visitor','synthetic@example.invalid','2']),'rsvp '+width+': typed values kept');
+    await p.locator('#rsvp-name').click();assert.equal(await isOpen(p),true,'rsvp '+width+': input click');
+    await p.keyboard.press('Escape');assert.equal(await isOpen(p),false,'rsvp '+width+': Escape');
+    await rsvp.click();await p.getByRole('button',{name:'Close details'}).click();assert.equal(await isOpen(p),false,'rsvp '+width+': Close');
+    await rsvp.click();await clickBackdrop(p,'rsvp '+width);
+    assert.equal(posts,0,'rsvp '+width+': nothing posted');assert.deepEqual(await p.evaluate(()=>[localStorage.length,sessionStorage.length]),[0,0],'rsvp '+width+': nothing stored');assert.deepEqual(errs,[],'dialog '+width+': page errors');
+   }finally{await ctx.close()}}
+  result.dialogPaddingKeepsOpen=true;
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,noticesGone:true,defaultView:"packaged",catalog:170,errors});
   fs.writeFileSync(path.join(out,'static-site-QA.json'),JSON.stringify(result,null,1));
