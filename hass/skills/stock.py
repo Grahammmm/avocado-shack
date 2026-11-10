@@ -50,9 +50,10 @@ NONE_NAMED = "Which products should I clear?"
 class Refusal(ValueError):
     """A plan that refuses carries the fixed owner reply (the test kit and the dispatcher read ``.reply``)."""
 
-    def __init__(self, reply):
+    def __init__(self, reply, kind="refuse"):
         super().__init__(reply)
         self.reply = reply
+        self.kind = kind
 
 
 def _content(ctx):
@@ -128,7 +129,7 @@ def _set_plan(slots, ctx) -> list:
     for item in items:  # the same product twice with the same word is one change; two words is a question
         pid, word = item["product"], item["availability"]
         if chosen.setdefault(pid, word) != word:
-            raise Refusal(TWICE.format(name=_name(ctx, pid)))
+            raise Refusal(TWICE.format(name=_name(ctx, pid)), kind="question")
     if len(chosen) > MAX_ITEMS:
         raise Refusal(TOO_MANY.format(count=len(chosen)))
     today = _today(ctx)
