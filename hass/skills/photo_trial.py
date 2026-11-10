@@ -42,6 +42,9 @@ UNREADABLE, CANNOT_RENDER = "unreadable-photo", "cannot-render"
 UNREADABLE_SAY = "I couldn't read this photo. Send it again as a JPEG or PNG."
 
 
+FOLDER_UNREADABLE = "The photo folder cannot be read (no permission, or a file system error). Nothing was read."
+
+
 class TrialError(Exception):
     """A usage, path, sink or setup refusal. ``str(exc)`` is a fixed, safe sentence (no path, no exception text)."""
 
@@ -55,6 +58,13 @@ def checked_directory(arg: str) -> Path:
     """DIR as a symlink-free absolute path, or TrialError. Every component is checked on the way down."""
     if not arg:
         raise TrialError("Give the folder of photos to try.")
+    try:
+        return _walk_directory(arg)
+    except OSError:  # permission, loop or I/O error: say so without the path the system error carries
+        raise TrialError(FOLDER_UNREADABLE) from None
+
+
+def _walk_directory(arg: str) -> Path:
     raw = Path(arg)
     cur = Path(raw.anchor) if raw.is_absolute() else Path(os.getcwd())  # the working directory is already a real path
     for part in raw.parts[1:] if raw.is_absolute() else raw.parts:
@@ -78,14 +88,17 @@ def checked_directory(arg: str) -> Path:
 def candidates(directory: Path) -> list:
     """Sorted (name, path) of the JPEG/PNG regular files directly in DIR. Refuses link candidates before any read."""
     found = []
-    with os.scandir(directory) as entries:
-        for entry in entries:
-            if os.path.splitext(entry.name)[1].lower() not in SUFFIXES:
-                continue
-            if entry.is_symlink():
-                raise TrialError("A photo in the folder is a symbolic link. Nothing was read.")
-            if entry.is_file(follow_symlinks=False):
-                found.append((entry.name, Path(entry.path)))
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if os.path.splitext(entry.name)[1].lower() not in SUFFIXES:
+                    continue
+                if entry.is_symlink():
+                    raise TrialError("A photo in the folder is a symbolic link. Nothing was read.")
+                if entry.is_file(follow_symlinks=False):
+                    found.append((entry.name, Path(entry.path)))
+    except OSError:  # unreadable folder: a fixed refusal, never the system error that names the path
+        raise TrialError(FOLDER_UNREADABLE) from None
     found.sort(key=lambda item: item[0])
     if not found:
         raise TrialError("There is no JPEG or PNG photo in that folder.")

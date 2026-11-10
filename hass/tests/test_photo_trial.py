@@ -51,8 +51,8 @@ def _tree(root):
                   for p in Path(root).rglob("*"))
 
 
-def _cli(folder, *extra):
-    done = subprocess.run([sys.executable, str(SCRIPT), str(folder), *extra], capture_output=True, text=True, cwd=str(folder.parent))
+def _cli(folder, *extra, cwd=None):
+    done = subprocess.run([sys.executable, str(SCRIPT), str(folder), *extra], capture_output=True, text=True, cwd=str(cwd or folder.parent))
     return done.returncode, done.stdout, done.stderr
 
 
@@ -160,6 +160,44 @@ class Folders(unittest.TestCase):
             self.assertFalse(read.called or assess.called)
             self.assertIn("symbolic link", err)
             link.unlink()
+
+    def _assert_path_free_refusal(self, code, out, err, *private):
+        self.assertEqual((code, out), (2, ""))
+        self.assertEqual(err, f"photo_trial: {photo_trial.FOLDER_UNREADABLE}\n")
+        self.assertNotIn("Traceback", err)
+        for word in private:
+            self.assertNotIn(word, err)
+
+    def test_unreadable_folder_is_a_path_free_refusal(self):
+        private = _tmp(self) / "private-secret-name"
+        private.mkdir()
+        (private / "a.jpg").write_bytes(_PHOTOS["jar-white-sheet.jpg"])
+        private.chmod(0)
+        self.addCleanup(private.chmod, 0o700)
+        if os.access(private, os.R_OK):
+            self.skipTest("this user can read a mode-0 folder (root)")
+        self._assert_path_free_refusal(*_cli(private), "private-secret-name")
+        self._assert_path_free_refusal(*_run([str(private)]), "private-secret-name")
+
+    def test_folder_behind_unsearchable_parent_is_a_path_free_refusal(self):
+        parent = _tmp(self) / "locked-parent-name"
+        (parent / "photos").mkdir(parents=True)
+        parent.chmod(0)
+        self.addCleanup(parent.chmod, 0o700)
+        if os.access(parent, os.X_OK):
+            self.skipTest("this user can search a mode-0 folder (root)")
+        self._assert_path_free_refusal(*_cli(parent / "photos", cwd=parent.parent), "locked-parent-name")
+        self._assert_path_free_refusal(*_run([str(parent / "photos")]), "locked-parent-name")
+
+    def test_filesystem_errors_during_checks_and_listing_are_refused_without_the_error_text(self):
+        folder = _folder(self, {"a.jpg": _PHOTOS["jar-white-sheet.jpg"]})
+        boom = PermissionError(13, "Permission denied", str(folder))
+        with mock.patch.object(photo_trial.os, "scandir", side_effect=boom):
+            self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
+        with mock.patch.object(photo_trial.Path, "exists", side_effect=boom):
+            self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
+        with mock.patch.object(photo_trial.Path, "is_symlink", side_effect=OSError(5, "I/O error", str(folder))):
+            self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
 
     def test_flat_sorted_case_insensitive_candidates(self):
         folder = _tmp(self) / "photos"
