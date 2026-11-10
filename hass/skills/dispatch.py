@@ -71,6 +71,7 @@ RULES: dict = {}
 DERIVERS: dict = {}
 SET_PHRASES: dict = {}
 READ_ONLY: dict = {}
+READ_ONLY_LONG: set = set()  # read-only skills whose answer may run long (a full caption to copy); every other check still applies
 
 
 def _no_price(slots, texts, ctx):
@@ -806,7 +807,7 @@ class Dispatcher:
             return self._backlog(msg, now, req, "", "other", texts=texts)
         if req:
             self.conv.requests.mark(req["request_id"], "closed", now)
-        self.conv._reply(fn(slots, ctx))
+        self.conv._reply(fn(slots, ctx), long_ok=skill.name in READ_ONLY_LONG)
         return "answer"
 
     def _backlog(self, msg, now, req, summary, reason, reply=None, texts=None):
