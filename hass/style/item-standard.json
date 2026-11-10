@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "about": "The item standard as data (docs/hass/ITEM-STANDARD.md sections 1 and 3), read once by hass/itemstd.py. Fields, the asking order and the question wording only; picture numbers stay in house-style.json.",
+  "codes": ["name", "shelf", "producer", "producer_town", "own_photo", "description", "story", "website"],
+  "product_fields": {
+    "required": ["name", "shelf", "producer", "producer_town", "description"],
+    "upgrade": ["own_photo"]
+  },
+  "maker_fields": {
+    "required": ["name", "producer_town", "story"],
+    "optional": ["website"]
+  },
+  "ask_order": ["name", "shelf", "producer", "producer_town"],
+  "maker_ask_order": ["producer_town"],
+  "shelves": ["fruit", "vegetables", "dairy", "eggs", "meat", "pantry", "drinks", "bread", "flowers"],
+  "fresh_shelves": ["fruit", "vegetables", "flowers"],
+  "packaged_ids": ["photo-product-018"],
+  "unknown_producer_labels": ["Producer not identified", "From the market"],
+  "own_brand_labels": ["Avocado Shack"],
+  "own_photo_pattern": "assets/products/photo-[0-9a-f]{16}\\.(jpg|png)",
+  "display_limits": {"name_max": 80, "description_max": 600},
+  "region": {
+    "names": ["central coast", "northern california", "southern california", "central california", "bay area",
+              "san francisco bay area", "east bay", "north bay", "south bay", "inland empire", "central valley",
+              "san joaquin valley", "sacramento valley", "salinas valley", "coachella valley", "imperial valley",
+              "napa valley", "sonoma valley", "santa ynez valley", "wine country", "gold country", "sierra foothills",
+              "high desert", "low desert", "pacific northwest", "west coast", "midwest", "new england"],
+    "prefixes": ["near ", "around ", "outside ", "north of ", "south of ", "east of ", "west of "],
+    "suffixes": [" county", " region", " area"]
+  },
+  "questions": {
+    "name": "What is it called?",
+    "shelf": "Which shelf should it go on?",
+    "producer_fresh": "Who grew the {item} this week?",
+    "producer_packaged": "Who makes the {item}?",
+    "producer_town": "Which town is {maker} in?",
+    "producer_town_no_label": "Which town are they in?"
+  }
+}
