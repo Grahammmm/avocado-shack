@@ -1688,10 +1688,19 @@ class Conversation:
                 self._reply("The website changed while that was waiting, and now I can't make this change. Nothing changed. "
                             + self._plain(_reason(again)))
         else:
-            self._move(row, "failed", reason=_reason(out))
+            refused = self.settings.get("liveSite") and answers.live_refused(out.get("reason"))  # HASS-LIVE-PLAN-1: the real reason, in words
+            # A failed draft is never approved again (yes only targets `proposed`), so recovery is a fresh proposal with
+            # its own code, written up from the same change; the owner's next yes (and code, when needed) approves that one.
+            again = None if refused else self.editor.prepare(json.loads(row["ops_json"]))
+            new = self._propose(again["draft"], row["sender"], now) if again and again["result"] == "ok" else None
+            self._move(row, "failed", reason=_reason(out), **({"replaced_by": new["code"]} if new else {}))
             self._problem("error", "save-failed")
-            self._reply((self.settings.get("liveSite") and answers.live_refused(out.get("reason")))  # HASS-LIVE-PLAN-1: the real reason, in words
-                        or "I couldn't save that change, so nothing changed. Please reply yes again in a minute.")
+            if refused: self._reply(refused)
+            elif new:
+                self._proposal_reply(new, again["draft"], "I couldn't save that change, so nothing changed. "
+                                                          "I've written it up again so you can try once more:\n")
+            else:
+                self._reply("I couldn't save that change, so nothing changed. Please send me the request again in a minute.")
 
     def recover(self) -> list:
         """Settle drafts left `approved` by a crash from the editor's change record, then verify (once) any applied

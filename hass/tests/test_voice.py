@@ -277,7 +277,7 @@ class Honesty(ConversationTestCase):
     def test_a_reply_that_is_not_done_never_claims_done(self):
         self.assertFalse(voice.claims_live(owner_answers.NOT_LIVE), owner_answers.NOT_LIVE)  # saved is true; on the website is not
         for text in ("It's waiting for your yes. Nothing has changed yet.", owner_answers.UNDER_WAY,
-                     "I couldn't save that change, so nothing changed. Please reply yes again in a minute.",
+                     "I couldn't save that change, so nothing changed. Please send me the request again in a minute.",
                      "Reply yes to save it, or no to cancel.", "I haven't changed anything yet. To go ahead, reply yes a1b2.",
                      "Changes are paused, so I haven't saved that.", "Nothing changed. Tell me what you'd like to change."):
             self.assertFalse(voice.claims_success(text), text)
@@ -309,14 +309,33 @@ class Honesty(ConversationTestCase):
         self.assertIn("I couldn't save that change", reply)
         self.assertIn("nothing changed", reply)
         self.assertFalse(voice.claims_success(reply), reply)
-        self.assertEqual(self.drafts()[-1]["state"], "failed")
+        self.assertNotIn("yes again", reply)  # a failed draft cannot be approved again; the reply must not say so
+        failed, fresh = self.drafts()[-2:]
+        self.assertEqual((failed["state"], fresh["state"]), ("failed", "proposed"))  # recovery is a fresh proposal
+        self.assertEqual(failed["replaced_by"], fresh["code"])
+        self.assertIn(f"yes {fresh['code']}", reply)  # named by its own code, so a code-required chat can approve it
+        self.assertEqual(self.say(f"yes {fresh['code']}"), "approved")  # and that yes (a repeat of a failed draft needs its code) works
+        self.assertEqual(self.drafts()[-1]["state"], "applied")
+
+    def test_a_failed_save_that_cannot_be_rewritten_asks_for_the_request_again(self):
+        self.assertEqual(self.say("hours"), "proposed")
+        self.replies()
+        self.editor.apply = lambda *a, **k: {"result": "failed", "reason": "disk exploded"}
+        self.editor.prepare = lambda *a, **k: {"result": "refused", "reason": "nope"}
+        self.say("yes")
+        [reply] = self.replies()
+        self.assertIn("nothing changed", reply)
+        self.assertIn("send me the request again", reply)
+        self.assertNotIn("yes again", reply)
+        self.assertEqual([d["state"] for d in self.drafts()], ["failed"])
 
     def test_unknown_skill_says_i_cant_do_that_yet(self):
         self.interp.mapping["magic"] = {"ops": [{"op": "product.teleport", "args": {}}], "revises": None}
         self.say("magic")
         [reply] = self.replies()
         self.assertTrue(reply.startswith("I can't do that"), reply)
-        self.assertIn("ask Graham", reply)
+        self.assertNotIn("ask Graham", reply)  # HASS-CHAT-1: the owners are Graham and Mike; the one next step is named instead
+        self.assertIn("Say help", reply)
         self.assertIn("could-not-do", [r["kind"] for r in self.conv.log.rows()])
 
     def test_missing_fact_says_i_dont_know(self):

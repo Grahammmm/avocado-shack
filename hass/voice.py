@@ -149,6 +149,7 @@ def claims_live(text) -> bool:
     """True when the message says the change is on the website now. 'Saved, but not on the website yet' and 'I'm not sure it's on
     the website' do not count."""
     stripped = _NEGATED.sub(" ", plain(str(text)))
+    stripped = re.sub(r"\bdone by hand\b", " ", stripped, flags=re.I)  # "a separate step, done by hand" says it is NOT on the website
     stripped = re.sub(r"\b(?:reply|say|send|tell me|ask)\b[^.!?\n]*", " ", stripped, flags=re.I)
     return bool(_LIVE.search(stripped))
 
