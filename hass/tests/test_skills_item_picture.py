@@ -279,6 +279,19 @@ class RejectedTarget(unittest.TestCase):
         self.assertFalse(self.asks("the lemons not the plums"))  # a bare 'not' before another name still picks the lemons
         self.assertFalse(self.asks("the plums aren't it but the lemons"))  # a negation after another name leaves the lemons picked
 
+    def test_an_adverb_between_the_verb_and_not_still_rejects_the_product(self):
+        # RF2315-10 return: "definitely" between the copula and "not" must not hide the rejection
+        for answer in ("the lemons are definitely not the one", "the lemons are really not what I meant", "the lemons is certainly not it",
+                       "the lemons were just never it", "the lemons are so not the one", "the lemons aren't definitely the one",
+                       "it's the lemons, the lemons are definitely not it"):
+            with self.subTest(answer=answer):
+                self.assertTrue(self.asks(answer))
+        self.assertTrue(self.asks("the lemons", "the lemons are definitely not the one"))  # a no can follow a yes
+        self.assertFalse(self.asks("the lemons are definitely not the one", "the lemons please"))  # and a yes a no
+        self.assertFalse(self.asks("the plums are definitely not it but the lemons"))  # another name's rejection leaves the lemons picked
+        self.assertFalse(self.asks("the lemons are what I want not the plums"))  # a negation that is not about the verb after the name
+        self.assertFalse(self.asks("the lemons definitely, not the plums"))
+
     def test_latest_answer_can_correct_or_reject_choice(self):
         self.assertFalse(self.asks("not the lemons", "sorry, the lemons"))
         self.assertTrue(self.asks("the lemons", "actually not the lemons"))

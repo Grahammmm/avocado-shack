@@ -218,26 +218,34 @@ _REJECT_FRAME = re.compile(r"\b(?:anything|everything|anyone|everyone)\s+but\b|\
 _CLAUSE = re.compile(r"[,.;:!?\n]+|\s+(?:but|though|however)\s+", re.IGNORECASE)
 
 
+_ADVERBS = frozenset({"just", "also", "really", "simply", "quite", "so", "even", "still", "very", "surely", "clearly", "certainly"})
+
+
 def _picks(turn, want):
     """True when his text affirmatively picks the product (its words, not negated); False when it only rejects it ('not the
     lemons', 'anything but lemons', 'the plums instead of the lemons'); None when it does not mention it. Each clause (bounded
     by a comma, a stop or 'but') is read on its own, so 'not the plums, the lemons' picks it and 'the plums, not the lemons'
     does not. Within a clause a negation covers the words after it, and a negated verb after the name ('the lemons aren't the
-    one', 'the lemons are not it') rejects it; the last mention in the text decides."""
+    one', 'the lemons are not it', 'the lemons are definitely not the one') rejects it, an adverb between the verb and the
+    'not' ('definitely', 'really', any '-ly' word) not hiding the verb; the last mention in the text decides."""
     if not want:
         return None
     text = _REJECT_FRAME.sub("not", (turn or "").replace("\u2019", "'"))
     verdict = None
     for clause in _CLAUSE.split(text):
-        negated, named, prior = False, False, ""
+        negated, named, verb = False, False, False  # verb: the last word was a verb, maybe followed by adverbs
         for token in re.findall(r"[a-z0-9']+", clause.casefold()):
             if token in _NEGATORS or token.endswith("n't"):
                 negated = True
-                if named and (token.endswith("n't") or prior in _COPULAS or prior.endswith(("'s", "'re", "'m"))):
+                if named and (token.endswith("n't") or verb):
                     verdict = False  # 'the lemons aren't the one': a negated verb after the name rejects it
+                verb = False
             elif _words(token) & want:
-                verdict, named = not negated, True
-            prior = token
+                verdict, named, verb = not negated, True, False
+            elif token in _COPULAS or token.endswith(("'s", "'re", "'m")):
+                verb = True
+            elif not (verb and (token in _ADVERBS or (token.endswith("ly") and len(token) > 4))):
+                verb = False
     return verdict
 
 
