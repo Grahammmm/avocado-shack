@@ -45,6 +45,10 @@ PRICE_TEXT = re.compile(
     + rf"|\b{_NUM}\s+(?:a|the)\s+(?:pound|lb|dozen|ounce|oz)\b",  # '5 a pound'
     re.IGNORECASE)
 FOREVER = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?|erase|wipe)\b", re.IGNORECASE)
+DELETE_WORD = re.compile(r"\b(?:delet(?:e|ing)|erase|wipe)\b")
+PERMANENT_WORD = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?)\b")
+NEGATED_DELETE = re.compile(r"\b(?:do not|does not|never|not|no|without)\b[^.]*\b(?:delet(?:e|ing)|erase|wipe)\b")
+HIDE_INSTEAD = re.compile(r"\bjust hide\b|\bhide\b[^.]*\binstead\b|\binstead\b[^.]*\bhide\b")
 FIELD_WORDS = {"name": "name", "description": "description", "displayBrand": "maker line", "imageAlt": "picture caption"}
 SLOT_OF = {"displayBrand": "display_brand", "imageAlt": "image_alt"}  # slot names are lower case; the op arguments keep their camel case
 
@@ -138,10 +142,32 @@ def rule_whole_shelf(ids):
     _too_many(ids, "I hide")
 
 
-def rule_no_permanent_delete(slots):
+def owner_asks_permanent_delete(texts, content=None) -> bool:
+    """True when this request's owner texts, oldest first, end on an explicit permanent-deletion instruction: a deletion word
+    and a 'forever' word in one clause. A negated one, or a later 'just hide it instead', withdraws it."""
+    names = [n.casefold() for p in getattr(content, "products", None) or [] if isinstance(n := p.get("name"), str)
+             and PERMANENT_WORD.search(n.casefold())]
+    asked = False
+    for text in texts or ():
+        if not isinstance(text, str):
+            continue
+        text = text.casefold().replace("\u2019", "'").replace("n't", " not")
+        for name in names:
+            text = text.replace(name, " ")
+        for clause in re.split(r"[.;!?\n]|,|\bbut\b|\band then\b", " ".join(text.split())):
+            if NEGATED_DELETE.search(clause) or HIDE_INSTEAD.search(clause):
+                asked = False
+            elif DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause):
+                asked = True
+    return asked
+
+
+def rule_no_permanent_delete(slots, ctx=None):
     """no-permanent-delete: 'delete it for good' is answered with the hide explanation and a backlog row."""
     reason = slots.get("reason")
     if isinstance(reason, str) and FOREVER.search(reason):
+        raise Refusal(NOT_DELETED, backlog="policy")
+    if owner_asks_permanent_delete(getattr(ctx, "texts", None), _content(ctx)):
         raise Refusal(NOT_DELETED, backlog="policy")
 
 
@@ -165,7 +191,7 @@ def rule_already_hidden(content, ids):
 
 def plan_hide(slots, ctx) -> list:
     _only(slots, ("items", "reason"))
-    rule_no_permanent_delete(slots)
+    rule_no_permanent_delete(slots, ctx)
     ids = _items(slots, NO_ITEMS_HIDE)
     rule_whole_shelf(ids)
     if (content := _content(ctx)) is not None:
