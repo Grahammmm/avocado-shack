@@ -74,7 +74,8 @@ SELFTEST_ONLY = {"fault", "must_fail"}
 EXPECT_KEYS = {"skills", "dispositions", "reply_contains", "reply_not_contains", "expected", "undo", "picture"}
 PICTURE_KEYS = {"kind", "type", "size", "house"}
 EXPECTED_KEYS = {"schema_version", "diff", "files", "assets", "residue"}
-FAULTS = ("write-on-prepare", "undo-leaves", "leak-stage")  # self-test only: a path that writes unasked / an undo that leaves a trace / a stage line that carries the owner's words
+FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "leak-stage")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a stage line that carries the owner's words
+EDITOR_FAULTS = FAULTS[:4]  # the testkit's own editor faults, reused unchanged
 ID_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
 FIXTURE_PATH_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,200}\.(?:jpg|jpeg|png)")
 SHA_RE = re.compile(r"[0-9a-f]{64}")
@@ -295,7 +296,7 @@ class Session:
             self.out = FixtureAdapter()
             if row.get("seed"): testkit.Scratch._seed(self, copy.deepcopy(row["seed"]))
             self.previewer = testkit.RecordingPreviewer()
-            self.editor = testkit._fault_editor(testkit._clocked_editor(self), self, str(self.repo.state), row.get("fault") if row.get("fault") in ("write-on-prepare", "undo-leaves") else None)
+            self.editor = testkit._fault_editor(testkit._clocked_editor(self), self, str(self.repo.state), row.get("fault") if row.get("fault") in EDITOR_FAULTS else None)
             if row.get("setup"): testkit.Scratch._setup(self, copy.deepcopy(row["setup"]))
             self.interp = RecordedInterpreter(row["replies"])
             self.photos = FixturePhotos() if row.get("photos") else None
@@ -661,10 +662,11 @@ def _approve_and_check(row, sess, registry, res, expected, observe, base, texts,
     if observe: res.recorded = {"schema_version": SCHEMA_VERSION, "diff": _norm_entries(diff), "files": files, "assets": assets, "residue": residue or {"content": [], "assets": {}}}
 
 
-def _same_entries(actual, wanted):
-    """Pinned residue entries against the actual leftover: the same file and path set, every pinned before / after equal."""
-    if len(actual) != len(wanted): return False
-    return all(any(a["file"] == w["file"] and a["path"] == w["path"] and _subset(w, a) for a in actual) for w in wanted)
+def residue_matches(leftover, left_assets, want):
+    """The leftover after undo against the residue the row pins: the same content entries (file, path and every pinned before / after)
+    and exactly the same picture files and hashes. There is no whole-file exemption."""
+    if len(leftover) != len(want["content"]) or left_assets != want["assets"]: return False
+    return all(any(a["file"] == w.get("file") and a["path"] == w.get("path") and _subset(w, a) for a in leftover) for w in want["content"])
 
 
 def _undo(sess, registry, res, expected, observe, base, after, chosen, duplicate):
@@ -698,7 +700,7 @@ def _undo(sess, registry, res, expected, observe, base, after, chosen, duplicate
     pinned_residue = bool(want and (want["content"] or want["assets"]))
     if problems: res.fail("undo-not-identical")
     if chosen and not declares and (residue or pinned_residue): res.fail("residue-undeclared")  # the skill's Undo sentence says nothing stays
-    elif want is not None and not (_same_entries(leftover, want["content"]) and want["assets"] == left_assets): res.fail("undo-not-identical")
+    elif want is not None and not residue_matches(leftover, left_assets, want): res.fail("undo-not-identical")
     res.facts["undo"] = "residue" if residue else "identical"
     return {"content": leftover, "assets": left_assets}
 
