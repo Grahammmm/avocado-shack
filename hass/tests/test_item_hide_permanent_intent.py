@@ -82,6 +82,29 @@ class PermanentIntent(unittest.TestCase):
             self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for(text)), ok, text)
         self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for("delete the cashews forever", "never delete the cashews")), ok)
 
+    def test_a_withdrawal_that_names_another_product_clears_nothing_even_with_a_quantifier(self):
+        for text in ("delete the cashews forever, never delete all the plums", "delete the cashews forever, never delete those plums",
+                     "delete the cashews forever, never delete that plum", "delete the cashews forever, just hide all the plums instead",
+                     "delete the cashews forever but never delete all the plums", "delete it forever, never delete all the plums"):
+            self.refuses({"items": [ID]}, ctx_for(text))
+        ok = [{"op": "product.hide", "args": {"id": ID}}]
+        for text in ("just hide it", "delete it forever, never delete them", "delete it forever, never delete that",
+                     "delete the cashews forever, never delete the cashews", "delete the cashews forever, never delete anything"):
+            self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for(text)), ok, text)
+
+    def test_unsplit_affirmative_and_unrelated_prohibition_in_one_sentence_refuses(self):
+        for text in ("delete the cashews forever and never delete the plums", "never delete the plums and delete the cashews forever",
+                     "delete the cashews forever \u2014 never delete the plums", "delete the cashews forever: never delete the plums",
+                     "delete the cashews forever - don't delete the plums", "delete the cashews forever and just hide the plums instead",
+                     "delete the cashews forever / never delete the plums"):
+            self.refuses({"items": [ID]}, ctx_for(text))
+        for text in ("delete the cashews and the walnuts forever", "delete the cashews forever and the walnuts forever"):
+            self.refuses({"items": [ID]}, ctx_for(text))
+        ok = [{"op": "product.hide", "args": {"id": ID}}]
+        for text in ("delete the cashews forever and never delete the cashews", "delete the cashews forever \u2014 never delete the cashews",
+                     "delete the cashews forever: just hide it"):
+            self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for(text)), ok, text)
+
     def test_real_dispatch_refuses_logs_policy_and_never_prepares_hide(self):
         r = row("perm-1", ["delete the cashews forever"], "refuse")  # the model omits its optional reason
         res = run_case_row(r, SKILLS, HIDE)

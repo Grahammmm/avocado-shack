@@ -50,7 +50,11 @@ PERMANENT_WORD = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?)\b
 NEGATED_DELETE = re.compile(r"\b(?:do not|does not|never|not|no|without)\b[^.]*\b(?:delet(?:e|ing)|erase|wipe)\b")
 HIDE_INSTEAD = re.compile(r"\bjust hide\b|\bhide\b[^.]*\binstead\b|\binstead\b[^.]*\bhide\b")
 REJECTS_HIDE = re.compile(r"\b(?:not|rather than|instead of)\s+(?:to\s+)?(?:just\s+)?hid(?:e|ing)\b")
-REFERS_BACK = re.compile(r"\b(?:it|them|that|this|those|these|everything|all|one|ones)\b")  # points at what was just asked for
+REFERS_BACK = re.compile(r"\b(?:it|them|that|this|those|these|everything|anything|all|one|ones)\b")  # points at what was just asked for
+_DELETING = r"(?:delet(?:e|ing)|erase|wipe)"
+CLAUSE_SPLIT = re.compile(  # marks, commas, dashes, colons, ' / ', 'but', and an 'and' that starts a new instruction
+    r"[.;!?\n,:\u2014\u2013]|\s/\s|\s-+\s|--+|\bbut\b|\band then\b|"
+    rf"\band\b(?=\s+(?:(?:do not|does not|never|not|no|without)\b[^.]*\b{_DELETING}\b|just hide\b|{_DELETING}\b))")
 NOT_A_THING = frozenset(  # clause words that name no product: verbs, negations, fillers and the 'forever' words
     "a an and the my our your please pls actually just instead of to for on in at me us i you do does did not no never without "
     "dont don't yes yeah ok okay now then also still really delete deleting deletes erase erasing wipe wiping hide hiding hid "
@@ -169,15 +173,15 @@ def owner_asks_permanent_delete(texts, content=None) -> bool:
         text = text.casefold().replace("\u2019", "'").replace("n't", " not")
         for name in names:
             text = text.replace(name, " ")
-        for clause in re.split(r"[.;!?\n]|,|\bbut\b|\band then\b", " ".join(text.split())):
+        for clause in CLAUSE_SPLIT.split(" ".join(text.split())):
             wants = bool(DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause))
             if REJECTS_HIDE.search(clause):  # "..., not just hide it" rejects hiding; it never withdraws a deletion request
                 if wants:
                     asked.append(_things(clause))
             elif NEGATED_DELETE.search(clause) or HIDE_INSTEAD.search(clause):
                 things = _things(clause)
-                if not things or REFERS_BACK.search(clause):
-                    asked = []  # 'don't', 'just hide it instead': about the request just made
+                if not things:
+                    asked = []  # 'don't', 'just hide it instead', 'never delete them': names no product, so it is about the request just made
                 else:  # it names products: it withdraws only the instructions about those products
                     kept = [a if not a else a - things for a in asked]  # 'it' requests stay; the rest lose only the products named
                     asked = [a for a, was in zip(kept, asked) if a or not was]
