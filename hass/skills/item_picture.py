@@ -38,6 +38,7 @@ ONE_AT_A_TIME = "Send the photos one at a time. Which product is this photo for?
 ONE_PLACE = "One photo can go in one place. Is this photo for the home page, or for a product?"
 UNKNOWN = "I don't know a product called that. Which product is this photo for?"
 NO_PHOTO = "I can't find that photo. Send the new photo."
+NO_CATALOG = "I couldn't check that product just now, so nothing is changed. Try again in a moment."
 ALT_ASK = ("The picture caption should say what the photo shows, like \u201cMeyer lemons in a wooden crate\u201d. "
            "What should it say?")
 ALT_LONG = f"That caption is longer than the website has room for ({MAX_ALT} characters). Could you make it shorter?"
@@ -50,10 +51,18 @@ _PRODUCTS = "hass/content/products.json"
 _PICTURE = ("storefront-mockup/assets/products/photo-<sha16>.<ext>", "file")
 _GEN = (("storefront-mockup/catalog-products.js", "products"),)  # the home page does not list product pictures
 
-# one photo, one product: "photos for the lemons and the plums" names two products; "the salt and vinegar chips" is one name
+# one photo, one product: "photos for the lemons and the plums" and "photos for lemons and plums" name two products;
+# "the salt and vinegar chips" is one name. A list is told from a name by the product the model picked: a name has words of
+# the picked product on BOTH sides of its "and"; two products have the picked one on at most one side.
 _DET = r"(?:the|a|an|some|my|our|these|those|their)"
-_NOUN = r"[\w'\u2019-]+(?:\s+[\w'\u2019-]+){0,3}?"
-TWO_PRODUCTS = re.compile(rf"\b(?:for|of|on|to)\s+{_DET}\s+{_NOUN}\s+(?:and|&|\+|plus)\s+(?:also\s+)?{_DET}\s+\w", re.IGNORECASE)
+_WORD = r"[\w'\u2019-]+"
+_AND = r"\s*,?\s*(?:\band\b|&|\+|\bplus\b)\s+(?:also\s+)?"
+CONJUNCTION = re.compile(_AND, re.IGNORECASE)
+PLACE = re.compile(r"\b(?:for|of|on|to)\s+", re.IGNORECASE)
+SHORT_REPLY = re.compile(rf"(?:[\s,&+]*{_WORD}){{1,8}}[\s.!]*")  # a reply that is only a short phrase: "lemons and plums please"
+# a word after "and" that carries on the sentence instead of naming a second product
+_NOT_A_PRODUCT = frozenset({"it", "its", "it's", "i", "i'm", "i'll", "we", "they", "this", "that", "there", "then", "now", "please",
+                            "thanks", "thank", "thx", "ok", "okay", "yes", "no"})
 BOTH = re.compile(r"\b(?:both|each\s+of\s+them|two\s+(?:of\s+them|products|items|things))\b", re.IGNORECASE)
 HOME_PAGE = re.compile(r"\bhome\s*-?\s*page\b|\bfront\s+page\b|\bmain\s+(?:picture|photo)\b", re.IGNORECASE)
 _SMALL_WORDS = frozenset({"the", "and", "for", "with", "from", "this", "that", "one", "photo", "picture", "pic", "new"})
@@ -110,21 +119,56 @@ def installed_names(sha) -> tuple:
 
 
 # -- one photo, one place ---------------------------------------------------------------------------------------------
-def _crowded(turn) -> str | None:
+def _is_list(left, right, name) -> bool:
+    """True when the two sides of an 'and' are two products; False when they are one product's name (salt and vinegar chips)."""
+    right = re.sub(rf"^{_DET}\s+", "", right.strip().casefold().replace("\u2019", "'"))
+    if not right or right.split()[0] in _NOT_A_PRODUCT:
+        return False
+    want = _words(name)
+    left_hit = _words(left) & want
+    right_hit = (_words(right) & want) - left_hit
+    return not (left_hit and right_hit)
+
+
+def _lists_two(turn, name) -> bool:
+    """True when the text puts two products on the one photo: an 'and' (or &, +, plus) between two names after 'for/of/on/to',
+    or a reply that is only such a list. Every 'and' is read on its own, so 'cookies and cream chocolate and lemons' lists two."""
+    text = turn.strip()
+    short = SHORT_REPLY.fullmatch(text) is not None
+    for found in CONJUNCTION.finditer(text):
+        before, after = text[:found.start()], text[found.end():]
+        place = None
+        for place in PLACE.finditer(before):  # the last 'for/of/on/to' before this 'and'
+            pass
+        if place is not None:
+            left = before[place.end():]
+        elif short:
+            left = before
+        else:
+            continue
+        left = re.split(r"\s*,?\s*(?:\band\b|&|\+|\bplus\b)\s+", left)[-1]  # only the words next to this 'and'
+        left = " ".join(re.sub(rf"^{_DET}\s+", "", left.strip(), flags=re.IGNORECASE).split()[-4:])
+        right = " ".join(re.split(r"[,.;:!?]|\s" + _AND, after)[0].split()[:3])
+        if left and _is_list(left, right, name):
+            return True
+    return False
+
+
+def _crowded(turn, name="") -> str | None:
     """The question one text of his raises about where the photo goes, or None."""
     if HOME_PAGE.search(turn):
         return ONE_PLACE
-    if TWO_PRODUCTS.search(turn) or BOTH.search(turn):
+    if _lists_two(turn, name) or BOTH.search(turn):
         return ONE_AT_A_TIME
     return None
 
 
 def one_place(texts, name="") -> str | None:
     """The question to ask when his texts put the one photo on two products or on the home page and a product; None when it
-    is one place. A later text of his that names the one product (and asks nothing new) answers it; the earlier text is kept,
-    so a request whose product he never picked still asks."""
+    is one place. A later text of his that names the one product (and asks nothing new, so not another list) answers it; the
+    earlier text is kept, so a request whose product he never picked still asks."""
     turns = [t for t in texts if isinstance(t, str)]
-    asked = [(i, q) for i, t in enumerate(turns) if (q := _crowded(t))]
+    asked = [(i, q) for i, t in enumerate(turns) if (q := _crowded(t, name))]
     if not asked:
         return None
     last, question = asked[-1]
@@ -171,13 +215,14 @@ def describe(slots, ctx=None) -> tuple:
         raise Refusal(question, "question")
     if not pid:
         raise Refusal(ASK_ITEM, "question")
-    if content is not None:  # rule hidden-or-held-refused, checked again here whatever the resolver said
-        if product is None:
-            raise Refusal(UNKNOWN, "question")
-        if product.get("status") == "held":
-            raise Refusal(f"I can't change {_q(product['name'])} right now. It is on hold until someone has looked at it.")
-        if product.get("status") != "active":
-            raise Refusal(f"{_q(product['name'])} is hidden. Bring it back first, then I can change its picture.")
+    if content is None:  # no product list to check the product against: fail closed, never plan without the direct recheck
+        raise Refusal(NO_CATALOG)
+    if product is None:  # rule hidden-or-held-refused, checked again here whatever the resolver said
+        raise Refusal(UNKNOWN, "question")
+    if product.get("status") == "held":
+        raise Refusal(f"I can't change {_q(product['name'])} right now. It is on hold until someone has looked at it.")
+    if product.get("status") != "active":
+        raise Refusal(f"{_q(product['name'])} is hidden. Bring it back first, then I can change its picture.")
     sha = slots.get("photo")
     if not (isinstance(sha, str) and media.SHA_RE.fullmatch(sha)):
         raise Refusal(ASK_PHOTO, "question")

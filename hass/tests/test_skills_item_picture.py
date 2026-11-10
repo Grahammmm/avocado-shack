@@ -55,7 +55,7 @@ class Declaration(unittest.TestCase):
         ops = load_registry()
         self.assertEqual(skill_lint(registry, ops), [])  # the whole registry: no trigger in two skills
         self.assertEqual(skill_lint([ip.ITEM_PICTURE], ops, repo_root=REPO_ROOT), [])  # declaration and the case-file minima
-        plan = ip.plan_picture({"item": LEMONS, "photo": SHA[JAR], "image_alt": "Lemons in a bowl"}, None)
+        plan = ip.plan_picture({"item": LEMONS, "photo": SHA[JAR], "image_alt": "Lemons in a bowl"}, ctx())
         self.assertEqual(lint_plan_output(ip.ITEM_PICTURE, plan, ops), [])
         self.assertEqual(plan, [{"op": "product.set_photo", "args": {"id": LEMONS, "photo": SHA[JAR], "imageAlt": "Lemons in a bowl"}}])
         self.assertIs(ip.picture_review, item_add.picture_review)  # AV1109-10 handover: the exact advice item.picture shows
@@ -63,7 +63,7 @@ class Declaration(unittest.TestCase):
         self.assertNotIn("item.picture", dispatch.RULES)  # no import-time rule registration: the guards are in the plan
 
     def test_every_owner_sentence_passes_the_voice_rules(self):
-        fixed = [ip.ASK_ITEM, ip.ASK_PHOTO, ip.ONE_AT_A_TIME, ip.ONE_PLACE, ip.UNKNOWN, ip.NO_PHOTO, ip.ALT_ASK, ip.ALT_LONG,
+        fixed = [ip.ASK_ITEM, ip.ASK_PHOTO, ip.ONE_AT_A_TIME, ip.ONE_PLACE, ip.UNKNOWN, ip.NO_PHOTO, ip.NO_CATALOG, ip.ALT_ASK, ip.ALT_LONG,
                  ip.NOT_CHECKED, ip.OLD_STAYS, ip.ITEM_PICTURE.undo.residue]
         fixed += [reply.replace("<Product>", "Lemons") for _why, reply in ip.ITEM_PICTURE.refuse]
         fixed += [refusal({"item": HELD, "photo": SHA[JAR]}).reply]
@@ -99,6 +99,39 @@ class Plan(unittest.TestCase):
                          "Guacamole is hidden. Bring it back first, then I can change its picture.")
         self.assertEqual(refusal({"item": "photo-product-999", "photo": SHA[JAR]}).reply, ip.UNKNOWN)
         self.assertEqual(hidden.products, with_product(GUAC, status="hidden").products)  # nothing restored or unheld
+
+    def test_missing_content_fails_closed_never_plans(self):
+        full = {"item": LEMONS, "photo": SHA[JAR], "image_alt": "Lemons in a bowl"}
+        for bad in (None, SimpleNamespace(), SimpleNamespace(content=None, texts=[])):
+            with self.subTest(ctx=bad):
+                with self.assertRaises(ip.Refusal) as caught:
+                    ip.plan_picture(full, bad)
+                self.assertEqual(caught.exception.reply, ip.NO_CATALOG)
+                self.assertEqual(caught.exception.kind, "refuse")
+                self.assertEqual(ip.set_phrases({"item": LEMONS, "photo": SHA[JAR]}, bad), [])
+                self.assertEqual(ip.notes("item.picture", full, bad), {})
+
+    def test_lists_without_determiners_ask_and_a_list_is_not_an_answer(self):
+        slots = {"item": LEMONS, "photo": SHA[JAR]}
+        for text in ("photos for lemons and plums", "photo of lemons & plums", "new photos for lemons, plums and limes",
+                     "pictures for the lemons and plums", "photos for lemons plus the plums", "photos for lemons, and plums"):
+            with self.subTest(text=text):
+                self.assertEqual(refusal(slots, text).reply, ip.ONE_AT_A_TIME)
+        for answer in ("lemons and plums please", "the lemons and the plums", "lemons & plums", "lemons, plums and limes"):
+            with self.subTest(answer=answer):  # a list after the question is not the one product he was asked for
+                self.assertEqual(refusal(slots, "photos for the lemons and the plums", answer).reply, ip.ONE_AT_A_TIME)
+        ip.plan_picture(slots, ctx("photos for lemons and plums", "the lemons please"))  # one product settles it
+        ip.plan_picture(slots, ctx("photos for lemons and plums", "lemons"))
+
+    def test_one_product_whose_name_has_and_is_not_a_list(self):
+        chips, cream = "photo-product-018", next(p["id"] for p in CONTENT.products if p["name"] == "Cookies and Cream chocolate")
+        ip.plan_picture({"item": chips, "photo": SHA[JAR]}, ctx("photo for sea salt and tortilla chips"))
+        ip.plan_picture({"item": cream, "photo": SHA[JAR]}, ctx("new photo for cookies and cream chocolate"))
+        ip.plan_picture({"item": cream, "photo": SHA[JAR]}, ctx("photo for the cookies and cream chocolate please", "cookies and cream"))
+        ip.plan_picture({"item": LEMONS, "photo": SHA[JAR]}, ctx("new photo for the lemons and thanks"))
+        self.assertEqual(refusal({"item": cream, "photo": SHA[JAR]}, "photos for cookies and cream chocolate and lemons").reply,
+                         ip.ONE_AT_A_TIME)  # the name is one product; the second "and" adds another
+        self.assertEqual(refusal({"item": cream, "photo": SHA[JAR]}, "photos for cookies and lemons").reply, ip.ONE_AT_A_TIME)
 
     def test_multi_product_or_home_target_asks_then_single_answer_continues(self):
         slots = {"item": LEMONS, "photo": SHA[JAR]}

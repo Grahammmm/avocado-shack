@@ -39,7 +39,11 @@ that suffix, even if an old caption had it.
 * `one-photo-one-product`: "photos for the lemons and the plums" asks "Send the photos one at a time. Which product is this
   photo for?". "use this for the home page and the lemons" asks "One photo can go in one place. Is this photo for the home
   page, or for a product?". Nothing is drafted until he names one product; his answer ("the lemons") goes on to one draft.
-  A single product whose name has "and" in it (Salt and vinegar chips) is one product.
+  A single product whose name has "and" in it (Salt and vinegar chips) is one product. The list is found with or without
+  "the" ("photos for lemons and plums" asks too), and a reply that is itself a list ("lemons and plums please") is not
+  the one product he was asked for, so it asks again.
+* No product list to check against (the plan is handed no content): nothing is drafted. The plan refuses with "I couldn't
+  check that product just now, so nothing is changed. Try again in a moment." rather than skip the hidden/held recheck.
 * `alt-says-what-it-shows`: above.
 * `house-picture`: the advice beside the draft, the same advice item.add gives (`picture_review` is item.add's own function):
   * with the `houseRender` setting off (today's default), a photo that does not look like the other pictures gets "I'll use the
