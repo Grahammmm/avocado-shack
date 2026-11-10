@@ -377,15 +377,18 @@ def notes(name, slots, ctx) -> dict:
         if (reason := _text(slots, "reason")):  # listed in the reply only; it is never written to the product
             out["say"].append(f"You told me why: {voice.quote(' '.join(reason.split())[:120])}. I haven't saved that on the product.")
     elif name == "item.edit":
-        content = _content(ctx)
-        maker = slots.get("maker")
-        if maker and not _text(slots, "display_brand"):
-            shown = content.makers.get(maker, {}).get("name", maker) if content is not None else maker
-            out["set"].append(f"I set: the maker line on the card to {voice.quote(shown)}.")
-        if "clearProducer" in (slots.get("clear") or []) and not _text(slots, "display_brand"):
-            out["set"].append(f"I set: the maker line on the card to {UNKNOWN_SHOWN}.")
-        if (description := _text(slots, "description")):
-            out["warn"] += advisory(description)
+        try:  # notes follow the plan the owner will be asked about: what the plan dropped as unchanged is not mentioned
+            [op] = plan_edit(slots, ctx)
+        except Refusal:
+            return out  # no draft is proposed, so there is nothing to say beside it
+        args = op["args"]
+        if "displayBrand" in args and not _text(slots, "display_brand"):  # a default, not the owner's own label
+            if args.get("clearProducer"):
+                out["set"].append(f"I set: the maker line on the card to {args['displayBrand']}.")
+            elif slots.get("maker"):
+                out["set"].append(f"I set: the maker line on the card to {voice.quote(args['displayBrand'])}.")
+        if "description" in args:
+            out["warn"] += advisory(args["description"])
     return out
 
 
