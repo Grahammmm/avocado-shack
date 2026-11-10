@@ -7,9 +7,13 @@ apply, undo) on a throwaway repo, with the one planned seam (photos._web_bytes -
 import hashlib
 import io
 import json
+import os
 import struct
+import tempfile
 import unittest
 import zlib
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest import mock
 
 from hass import claims, house_style as hs, media, newitem, newitem_render
@@ -260,6 +264,94 @@ class DraftTests(unittest.TestCase):
         product = r["ops"][0]["args"]
         self.assertEqual((product["brand"], "producerKey" in product), ("Producer not identified", False))
         self.assertEqual(hs.description_metrics(r["description"]["text"])["sentences"], 2)
+
+
+class PreviewMainTests(unittest.TestCase):
+    """Offline aggregation only: capture results are fixtures, not browser evidence."""
+
+    def run_preview(self, failures=()):
+        from hass import newitem_preview as preview, newitem_synthetic as synthetic
+        names = list(preview.CASES)
+        summary = {}
+        lines = []
+        for name in names:
+            result = {"draft_status": "draft", "draft_reply": "Honey — ready", "message": name, "question_asked": None}
+            for side in ("before", "after"):
+                ok = (name, side) not in failures
+                error = None if ok else f"{name}/{side}: synthetic capture failure"
+                result[side] = {"ok": ok, "error": error, "checks": {"card": ok, "width": 390},
+                                "phone": None, "desktop": None, "description": "Honey — café.",
+                                "name": name, "brand": "Test maker", "shelf": "pantry", "availability": None}
+                lines.append(f"{name} {side} " + ("ok" if ok else f"NOT OK: {error}"))
+            summary[name] = result
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "preview"
+            with (mock.patch.dict(os.environ, {"PLAYWRIGHT_MODULE": "offline-fixture"}),
+                  mock.patch.object(preview, "OUT", out),
+                  mock.patch.object(preview, "load_content", return_value=CONTENT),
+                  mock.patch.object(preview.hs, "load_spec", return_value=SPEC),
+                  mock.patch.object(synthetic, "cases", return_value=[(name, {"case": name}) for name in names]),
+                  mock.patch.object(synthetic, "make_photo", return_value=PHOTO) as make_photo,
+                  mock.patch.object(preview, "capture_case", side_effect=list(summary.values())) as capture,
+                  mock.patch.object(preview, "squeeze") as squeeze,
+                  redirect_stdout(stdout), redirect_stderr(stderr)):
+                status = preview.main()
+            capture.assert_has_calls([
+                mock.call(name, *preview.CASES[name], PHOTO, CONTENT, SPEC, mock.ANY) for name in names])
+            self.assertEqual(capture.call_count, 3)
+            self.assertEqual(make_photo.call_args_list, [mock.call(case=name) for name in names])
+            squeeze.assert_not_called()  # no screenshot is claimed by these fixtures
+            self.assertEqual(stdout.getvalue(), "\n".join(lines) + "\n")
+            self.assertEqual(stderr.getvalue(), "")
+            raw = (out / "preview.json").read_bytes()
+            self.assertEqual(json.loads(raw), summary)
+            self.assertEqual(raw, (json.dumps(summary, indent=1, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"))
+            self.assertEqual([p.name for p in out.iterdir()], ["preview.json"])
+        return status
+
+    def test_preview_main_before_failure_is_failure(self):
+        from hass import newitem_preview as preview
+        names = list(preview.CASES)
+        for failed in ((names[0],), (names[-1],), tuple(names)):
+            with self.subTest(failed=failed):
+                self.assertEqual(self.run_preview({(name, "before") for name in failed}), 1)
+
+    def test_preview_main_after_or_both_failure_is_failure(self):
+        from hass import newitem_preview as preview
+        first = next(iter(preview.CASES))
+        for sides in (("after",), ("before", "after")):
+            with self.subTest(sides=sides):
+                self.assertEqual(self.run_preview({(first, side) for side in sides}), 1)
+
+    def test_preview_main_all_sides_pass(self):
+        self.assertEqual(self.run_preview(), 0)
+
+    def test_preview_main_failure_keeps_complete_summary(self):
+        from hass import newitem_preview as preview
+        # Distinct errors/checks on different sides must all survive an early failure.
+        names = list(preview.CASES)
+        self.assertEqual(self.run_preview({(names[0], "before"), (names[-1], "after")}), 1)
+
+    def test_preview_main_missing_playwright_is_usage(self):
+        from hass import newitem_preview as preview, newitem_synthetic as synthetic
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "preview"
+            with (mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(preview, "OUT", out),
+                  mock.patch.object(preview, "load_content") as load,
+                  mock.patch.object(preview.hs, "load_spec") as spec,
+                  mock.patch.object(synthetic, "cases") as cases,
+                  mock.patch.object(synthetic, "make_photo") as photo,
+                  mock.patch.object(preview, "capture_case") as capture,
+                  mock.patch.object(Path, "mkdir") as mkdir,
+                  redirect_stdout(stdout), redirect_stderr(stderr)):
+                self.assertEqual(preview.main(), 2)
+            for dependency in (load, spec, cases, photo, capture, mkdir):
+                dependency.assert_not_called()
+            self.assertFalse(out.exists())
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "set PLAYWRIGHT_MODULE to the playwright folder (and CHROMIUM_PATH if needed)\n")
 
 
 class GroundingTests(unittest.TestCase):
