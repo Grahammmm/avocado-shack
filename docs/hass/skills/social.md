@@ -1,9 +1,9 @@
-# Social caption skills (social.item, social.hike, social.maker)
+# Social caption skills (social.item, social.hike, social.maker, social.recap)
 
-SKILLS-SOCIAL-1 part 1 (SKILLS-SPEC 3.27, 3.28). Code: `hass/skills/social.py`. Tests: `hass/tests/test_skills_social.py`.
+SKILLS-SOCIAL-1 (SKILLS-SPEC 3.27 to 3.29). Code: `hass/skills/social.py`. Tests: `hass/tests/test_skills_social.py`, `hass/tests/test_social_recap.py`.
 Case rows: `hass/tests/fixtures/skills/social/`.
 
-Hass writes a caption the owner can copy and post himself. **Hass posts nothing.** These three skills are read-only:
+Hass writes a caption the owner can copy and post himself. **Hass posts nothing.** These four skills are read-only:
 approval `none`, edits none, no draft, no `yes <code>`, nothing posted, sent, saved or scheduled, and no file is attached.
 
 | Skill | Ask it like | The caption comes from |
@@ -11,6 +11,24 @@ approval `none`, edits none, no draft, no `yes <code>`, nothing posted, sent, sa
 | `social.item` | "write a post for the honey", "caption for the plum jam", "post about the avocado" | `social_draft.build` (the same text as `post <id>`) |
 | `social.hike` | "write a post for the Bluff Walk", "caption to announce Saturday's hike" | `social_draft.build_hike` (the same text as `post hike <id>`) |
 | `social.maker` | "write a meet the maker post for Linn's" | `social_draft.build_maker` (the same text as `python3 hass/social_draft.py --maker KEY`) |
+| `social.recap` | "write a post about how the Bluff Walk went", "caption from my hike recap" | `social_draft.build_recap` (`python3 hass/social_draft.py --recap EVENT_ID`) |
+
+## social.recap: a caption from the saved recap
+
+The caption is the title, the Pacific date (weekday, month, day and year; no time) and the recap the owner already saved for a
+**completed** hike, word for word, then `#AvocadoShack #NorthCoastHikingClub`. Nothing else is added: no people count, route,
+meeting point, thank-you or tag.
+
+- A hike that is not completed (scheduled, cancelled, a merely past date) or has no recap: "That hike has no recap yet. Say how it went first."
+  With no completed hike recap at all, Hass says so before asking which hike.
+- A recap too long for 2200 characters is cut after its last `.`, `!` or `?` (followed by a space, a line break or the end) that
+  fits: never mid-sentence, never an ellipsis. A very long single sentence is refused as too long.
+- A `#` or `@` followed by a letter, digit or `_` anywhere in the title or the recap (also in the part that would be cut) is
+  refused; nothing is stripped. Hass never makes up a tag or account.
+- "say 40 people came" when the saved recap does not already say it: "Add that to the hike recap first, then ask me for the
+  caption." A count already written in that hike's recap is just the unchanged caption; a mileage or date never counts.
+  "tag the partners" or a typed `@name` / `#tag`: Hass adds no tags of its own and says so. Post, send or schedule: as above.
+- `python3 hass/social_draft.py --recap EVENT_ID` prints the same caption as JSON (exit 1 with a reason on a refusal).
 
 ## What the owner sees
 
@@ -48,4 +66,3 @@ the same message are not split up: Hass asks for the change in its own message a
 - `post <id>` and `post hike <id>` (typed commands, `hass/conversation.py`): unchanged. `post <id>` still attaches the product photo and
   its alt line; the skills reply text only.
 - `python3 hass/social_draft.py …` (the command line): unchanged; prints the same captions as JSON.
-- The later `social.recap` skill (AV1109-07) reuses this module's replies and registration; it is not part of this one.
