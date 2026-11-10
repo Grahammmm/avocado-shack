@@ -132,7 +132,7 @@ class RealDrafts(unittest.TestCase):
         for record in draft["records"]:
             if record["collection"] == "events": record["before"] = {**(record["after"] or {}), "rsvpEnabled": True}
         self.assertEqual(policy.check(draft), ["sign-up is on"])
-        self.assertIn("sign up", policy.refusal(["sign-up is on"]))
+        self.assertIn("sign-up", policy.refusal(["sign-up is on"]))
 
     def test_claims_still_block_inside_the_table(self):
         for text in ("Organic and grown in Paso Robles.", "Award-winning and good for your heart."):

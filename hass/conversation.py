@@ -664,6 +664,7 @@ def _shown(field, v, cut=True) -> str:
     return voice.value_words(v, field)
 
 
+UNREADABLE_TIME = voice.natural_iso("soon")  # the words voice gives a time it cannot read
 EVENT_ORDER = ("title", "startsAt", "meetingPoint", "trailId", "description", "difficulty", "distance", "duration", "bring",
                "accessNote", "rsvpEnabled", "capacity")  # HASS-CHAT-1: a new hike reads name, when, where first
 
@@ -674,7 +675,8 @@ def _shown_in(r: dict, k, v, routes=None, cut=True) -> str:
         route = (routes or {}).get(v)
         return route["title"] if isinstance(route, dict) and isinstance(route.get("title"), str) and route["title"].strip() else "a saved route"
     shown = _shown(k, v, cut)
-    return shown + " (Pacific time)" if r.get("collection") == "events" and k == "startsAt" and _when(k, v) else shown
+    return shown + " (Pacific time)" if r.get("collection") == "events" and k == "startsAt" and _when(k, v) and \
+        isinstance(v, str) and _when(k, v) != UNREADABLE_TIME else shown
 
 
 def _added(r: dict, routes=None) -> list:  # AV1737-06 (H05/H06): an added record's visible fields, one per line (at most 40)

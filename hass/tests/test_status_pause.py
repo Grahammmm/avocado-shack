@@ -200,6 +200,8 @@ class StatusTests(StoreMixin, H06TestCase):
         failed = self.apply("hours")
         self.assertEqual((failed["state"], failed["reason"]), ("failed", "simulated apply failure"))  # kept in the store
         self.assertEqual(self.status()[-1], f"Last change: {failed['summary']}. I couldn't save that, and the website is unchanged. Please send the change again.")
+        self.assertEqual(self.say("no"), "rejected")  # the failed save was written up again as a fresh proposal; drop it
+        self.sent()
         self.previewer, self.editor = FailingPreviewer(), conversation.Editor(self.repo.state, self.editor.registry)
         self.conv = self.open()
         applied = self.apply("desc")

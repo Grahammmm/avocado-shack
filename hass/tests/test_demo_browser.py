@@ -88,7 +88,8 @@ class DemoBrowserTests(unittest.TestCase):
         repo = self.site()
         rows = self.run_chain(repo, MISSING_PLAYWRIGHT)
         texts = [r["text"] for r in rows]
-        self.assertIn("\nI couldn't make a picture of how it will look.", texts[0])  # draft reply: no preview, no PNG
+        self.assertTrue(texts[0].startswith(conversation.PREVIEW_FAILED_HEAD), texts[0])  # HASS-CHAT-1: said first, then tried again
+        self.assertIn(conversation.PREVIEW_RETRY_LINE, texts[0])  # draft reply: no preview, no PNG
         edit, undo = self.drafts(repo)
         for i in (1, 4):  # both saved replies say the check did not pass
             self.assertTrue(texts[i].startswith("I saved it, but the preview check didn't pass: "), texts[i])
