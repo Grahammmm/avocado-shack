@@ -56,6 +56,11 @@ class PermanentIntent(unittest.TestCase):
                      "hide the Forever Cashews"):
             self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for(text)), [{"op": "product.hide", "args": {"id": ID}}], text)
 
+    def test_deletion_that_rejects_hiding_still_refuses(self):
+        for text in ("delete it forever, not just hide it", "Don't just hide it \u2014 delete it forever",
+                     "delete it forever rather than just hide it"):
+            self.refuses({"items": [ID]}, ctx_for(text))
+
     def test_request_latest_explicit_instruction_wins(self):
         ok = [{"op": "product.hide", "args": {"id": ID}}]
         self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for("delete it forever", "actually just hide it instead")), ok)

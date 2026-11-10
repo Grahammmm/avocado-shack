@@ -49,6 +49,7 @@ DELETE_WORD = re.compile(r"\b(?:delet(?:e|ing)|erase|wipe)\b")
 PERMANENT_WORD = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?)\b")
 NEGATED_DELETE = re.compile(r"\b(?:do not|does not|never|not|no|without)\b[^.]*\b(?:delet(?:e|ing)|erase|wipe)\b")
 HIDE_INSTEAD = re.compile(r"\bjust hide\b|\bhide\b[^.]*\binstead\b|\binstead\b[^.]*\bhide\b")
+REJECTS_HIDE = re.compile(r"\b(?:not|rather than|instead of)\s+(?:to\s+)?(?:just\s+)?hid(?:e|ing)\b")
 FIELD_WORDS = {"name": "name", "description": "description", "displayBrand": "maker line", "imageAlt": "picture caption"}
 SLOT_OF = {"displayBrand": "display_brand", "imageAlt": "image_alt"}  # slot names are lower case; the op arguments keep their camel case
 
@@ -155,7 +156,9 @@ def owner_asks_permanent_delete(texts, content=None) -> bool:
         for name in names:
             text = text.replace(name, " ")
         for clause in re.split(r"[.;!?\n]|,|\bbut\b|\band then\b", " ".join(text.split())):
-            if NEGATED_DELETE.search(clause) or HIDE_INSTEAD.search(clause):
+            if REJECTS_HIDE.search(clause):  # "..., not just hide it" rejects hiding; it never withdraws a deletion request
+                asked = asked or bool(DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause))
+            elif NEGATED_DELETE.search(clause) or HIDE_INSTEAD.search(clause):
                 asked = False
             elif DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause):
                 asked = True
