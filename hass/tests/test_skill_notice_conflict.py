@@ -7,12 +7,15 @@ import copy
 import json
 import types
 import unittest
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
 from hass import editor
 from hass.skills import dispatch, shop
 from hass.skills.shop import SkillStop
+from hass.tests.test_editor import git
+from hass.tests.test_skill_dispatch import HIKE_ADD, LIVE1, MILL, SkillCase, skill_reply
 
 ASK = "Do you want the notice changed, or taken down? I can only do one."
 CLEAR_OP = [{"op": "store.clear_notice", "args": {}}]
@@ -82,6 +85,89 @@ class ValidatedConflict(unittest.TestCase):
         self.assertEqual(shop.SHOP_NOTICE.plan(slots, ctx), SET_OP)
         slots, ctx = self.validated({"clear": True})
         self.assertEqual(shop.SHOP_NOTICE.plan(slots, ctx), CLEAR_OP)
+
+
+SAY = "take down the notice, and say we are closed Friday until Nov 15"
+CLEAR_SAY = "take down the notice"
+SLOTS = {"clear": True, "text": "Closed Friday", "until": "2026-11-15"}
+
+
+class DispatchConflict(SkillCase):
+    """The real Conversation and Dispatcher: the conflict is a question, never a draft, and the owner's explicit choice continues it."""
+
+    SKILLS = (shop.SHOP_NOTICE, HIKE_ADD)
+
+    def put_notice(self):
+        path = self.repo.wt / "hass" / "content" / "store.json"
+        data = json.loads(path.read_text("utf-8"))
+        data["notice"] = {"text": "Old notice", "until": "2026-11-12"}
+        path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
+        git(self.repo.wt, "commit", "-qam", "notice up")
+        self.base = self.count()
+
+    def spy(self):
+        prepare = mock.patch.object(self.editor, "prepare", wraps=self.editor.prepare)
+        apply = mock.patch.object(self.editor, "apply", wraps=self.editor.apply)
+        self.addCleanup(prepare.stop)
+        self.addCleanup(apply.stop)
+        return prepare.start(), apply.start()
+
+    def reply_for(self, shape, slots, text=SAY):
+        self.script(text, {"calls": [{"skill": "shop.notice", "slots": slots}], "revises": None} if shape == "calls" else skill_reply("shop.notice", **slots))
+
+    def test_production_dispatch_conflict_never_prepares_a_draft(self):
+        for shape in ("single", "calls"):
+            for present in (False, True):
+                with self.subTest(shape=shape, present=present):
+                    self.setUp()
+                    if present:
+                        self.put_notice()
+                    prepare, apply = self.spy()
+                    self.reply_for(shape, SLOTS)
+                    self.assertEqual(self.say(SAY), "question")
+                    self.assertEqual(self.replies(), [ASK])
+                    prepare.assert_not_called()
+                    apply.assert_not_called()
+                    self.assertEqual(self.drafts(), [])
+                    self.nothing_written()
+                    req = self.live()
+                    self.assertEqual((req["skill"], req["question"], req["asked_slot"]), ("shop.notice", ASK, None))
+                    self.assertEqual({k: req["slots"][k] for k in SLOTS}, SLOTS)
+
+    def test_a_pending_draft_for_another_request_is_preserved(self):
+        self.script(LIVE1, skill_reply("hike.add", **MILL))
+        draft, _ = self.propose(LIVE1)
+        before = [dict(d) for d in self.drafts()]
+        self.reply_for("single", SLOTS)
+        self.now += timedelta(minutes=1)
+        self.assertEqual(self.say(SAY), "question")
+        self.assertEqual(self.replies(), [ASK])
+        self.assertEqual(self.drafts(), before)
+        self.assertEqual(self.drafts()[-1]["state"], "proposed")
+        self.nothing_written()
+
+    def test_explicit_set_choice_continues_and_clear_only_remains_supported(self):
+        for shape in ("single", "calls"):
+            with self.subTest(shape=shape):
+                self.setUp()
+                self.put_notice()
+                self.reply_for(shape, SLOTS)
+                self.assertEqual(self.say(SAY), "question")
+                self.replies()
+                self.assertEqual(self.live()["question"], ASK)
+                self.now += timedelta(minutes=1)
+                choice = "change it, don't take it down"
+                self.reply_for(shape, {"clear": False, "text": "Closed Friday", "until": "2026-11-15"}, choice)
+                self.assertEqual(self.say(choice), "proposed")
+                ops = json.loads(self.drafts()[-1]["ops_json"])
+                self.assertEqual(ops, [{"op": "store.set_notice", "args": {"text": "Closed Friday", "until": "2026-11-15"}}])
+                self.nothing_written()
+        self.setUp()
+        self.put_notice()
+        self.reply_for("single", {"clear": True}, CLEAR_SAY)
+        self.assertEqual(self.say(CLEAR_SAY), "proposed")
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), CLEAR_OP)
+        self.nothing_written()
 
 
 class VersionMigration(unittest.TestCase):
