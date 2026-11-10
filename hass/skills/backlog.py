@@ -94,8 +94,21 @@ class Backlog:
 
     def purge(self, days=RETENTION_DAYS) -> int:
         """Remove rows received more than ``days`` days ago (D7). Returns how many."""
-        cutoff = (self.clock() - timedelta(days=days)).isoformat()
-        return self.db.execute("DELETE FROM backlog WHERE received_at < ?", (cutoff,)).rowcount
+        now = self.clock()
+        if not isinstance(now, datetime) or now.utcoffset() is None:
+            raise ValueError("backlog clock must be timezone-aware")
+        cutoff = now.astimezone(timezone.utc) - timedelta(days=days)  # elapsed days, not local calendar days
+        removed = 0
+        for row_id, stamp in self.db.execute("SELECT id, received_at FROM backlog").fetchall():
+            # A stored stamp that does not parse, or has no offset, has unknown age: keep it rather than guess a zone.
+            try:
+                at = datetime.fromisoformat(stamp)
+            except (TypeError, ValueError):
+                continue
+            if at.utcoffset() is None or at.astimezone(timezone.utc) >= cutoff:
+                continue
+            removed += self.db.execute("DELETE FROM backlog WHERE id = ? AND received_at = ?", (row_id, stamp)).rowcount
+        return removed
 
     def owner_list(self) -> str:
         """The 'backlog' command reply: the last ten, each as 'number. day - what was asked'. No stored text."""
