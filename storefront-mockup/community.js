@@ -4,7 +4,8 @@ const dateLabel=e=>new Date(e.startsAt).toLocaleString('en-US',{timeZone:e.timez
 const pacificDay=d=>new Date(d).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});
 const upcoming=e=>e.status==='scheduled'&&(new Date(e.startsAt)>new Date()||pacificDay(e.startsAt)===pacificDay(Date.now()));
 const showCancelled=e=>e.status==='cancelled'&&pacificDay(e.startsAt)>=pacificDay(Date.now());
-const hikeDate=e=>new Date(e.startsAt)<=new Date()?`Today — started ${new Date(e.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})}`:dateLabel(e);
+// RF0834-14: only a scheduled hike says it started; a cancelled one keeps its planned date/time (dateLabel) before, at and after its start.
+const hikeDate=e=>e.status==='scheduled'&&new Date(e.startsAt)<=new Date()?`Today — started ${new Date(e.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})}`:dateLabel(e);
 const trailById=id=>(club.routeIdeas||[]).find(t=>t.id===id);
 // AV0207-03: route ideas that have trail-explorer data (assets/trails/point-buchon.json); the explorer's element ids allow one per page.
 const EXPLORER_TRAILS=new Set(['idea-point-buchon']);
