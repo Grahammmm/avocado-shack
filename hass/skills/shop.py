@@ -171,12 +171,12 @@ def parse_segment(segment):
 
 
 def schedule_pieces(line):
-    """Split separators and independent comma schedules, not commas joining days or ordinary prose."""
+    """Split separators and independent comma or "and" schedules, not those joining days or ordinary prose."""
     out = []
     for piece in re.split(r"\s*[·;]\s*", line):
         piece = piece.strip()
-        for comma in re.finditer(",", piece):
-            left, right = piece[:comma.start()].strip(), piece[comma.end():].strip()
+        for cut in re.finditer(r",|\band\b", piece, re.I):
+            left, right = piece[:cut.start()].strip(), piece[cut.end():].strip()
             if parse_segment(left) is not None and parse_segment(right) is not None:
                 out.append(left)
                 out.extend(schedule_pieces(right))
