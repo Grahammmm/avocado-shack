@@ -32,7 +32,9 @@ function qaEnv({preview=true}={}){
  }
  let out=process.env.QA_OUT_DIR;
  if(out){out=canon(out);if(!outside(out))refuse('QA_OUT_DIR must be outside the repository')}
- else{out=fs.mkdtempSync(path.join(os.tmpdir(),'avoshack-qa-'));process.stderr.write('QA_OUT_DIR='+out+'\n')}
+ else{  // check the temp base itself before creating anything in it
+  const tmp=canon(os.tmpdir());if(!outside(tmp))refuse('QA_OUT_DIR must be outside the repository');
+  out=fs.mkdtempSync(path.join(tmp,'avoshack-qa-'));process.stderr.write('QA_OUT_DIR='+out+'\n')}
  return {out,base};
 }
 module.exports={qaEnv};
