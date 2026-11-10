@@ -313,4 +313,15 @@ def value_words(value, field=None) -> str:
     if isinstance(value, list) and all(isinstance(v, str) for v in value): return "; ".join(value)
     if isinstance(value, (int, float)): return str(value)
     if isinstance(value, str): return value
+    if isinstance(value, dict) and set(value) == {"text", "until"} and isinstance(value["text"], str) and value["text"].strip():
+        return _notice_words(value)  # HASS-QA-1: the notice draft showed "more than I can show here"
     return "more than I can show here"
+
+
+def _notice_words(notice) -> str:
+    """A shop notice {text, until} as the owner reads it: its words, then its last day in plain words."""
+    try:
+        day = datetime.strptime(str(notice["until"]), "%Y-%m-%d")
+    except ValueError:
+        return notice["text"].strip()
+    return f"{notice['text'].strip()} (until {day.strftime('%B')} {day.day})"
