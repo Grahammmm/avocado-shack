@@ -183,6 +183,14 @@ The host checks below run with `--host-dir` (the HASS-SVC-1 health timer). They 
 - **Means:** a release journal is `unconfirmed` or `unknown` (detail: count): pushed, but the live site was not seen to match.
 - **Check first:** the live site by eye. **Stop and ask:** always (a G card).
 
+### `clover-token`
+- **Means:** host.json has a `clover` block (HASS-CLOVER-2) and its token file is not usable, judged by lstat only: `missing`, `unreadable`, `not-regular`, `owner`, `mode`, `folder` or `size`.
+- **Next step:** `python3 -B hass/host.py check --host HOST_JSON` shows the same word. Fix the file's or folder's mode or owner only. **Stop and ask:** never open, copy or print the token; G replaces it.
+
+### `clover-sync`
+- **Means:** the private till cache has had no good pull for over 2 hours (`last:` names the last result word: `unreachable`, `refused-key`, `rate-limited`, `token`, `clover-error`), or the cache is not private.
+- **Next step:** `python3 -B hass/clover/cli.py status --host HOST_JSON`, then `systemctl --user status hass-clover-sync.timer`. `refused-key` means Clover refused the key: tell G, do not retry. The chat already tells Mike it can't reach the till.
+
 ### `host-config`
 - **Means:** `host.json` is refused (mode, type, closed keys) or the secret file's lstat breaks D5: `missing`, `type`, `owner`, `mode` or `size`.
 - **Next step:** `python3 hass/host.py check --host HOST_JSON` names the fields. **Stop and ask:** never copy or print the secret; G fixes it.
