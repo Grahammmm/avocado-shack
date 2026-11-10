@@ -472,5 +472,238 @@ class RealRouter(ShelfCase):
         self.untouched()
 
 
+
+# -- AV1109-09 site answers --------------------------------------------------------------------------------------
+SITE_CASES = REPO_ROOT / reports.ANSWER_SITE.cases
+STORY = "We grow café fruit—slowly, with care."
+
+
+def site_content():
+    c = content([dict(prod("eggs", "limited"), producerKey="sunny")], events=[dict(hike("Cass Hill", "2026-11-03"), meetingPoint="North gate")])
+    c.store["hours"] = ["Monday–Friday 9am–6pm", "Saturday 9am–5pm · Closed Sunday"]
+    c.makers = {"sunny": {"name": "Sunny Farm", "place": "Cambria", "story": STORY}}
+    return c
+
+
+def site_ctx(c=None, **kw):
+    from hass.tests.test_conversation import T0
+    return types.SimpleNamespace(content=c if c is not None else site_content(), today=TODAY, now=T0,
+                                 aliases=kw.pop("aliases", {}), texts=kw.pop("texts", []), guest_counts_db=kw.pop("guest_counts_db", None), **kw)
+
+
+def site(kind, c=None, **slots):
+    return PLAIN(reports.site_reply({"kind": kind, **slots}, site_ctx(c)))
+
+
+class SiteSources(unittest.TestCase):
+    def test_site_metadata_closed_kind_and_registry(self):
+        skill = load_skills().get("answer.site")
+        self.assertEqual(skill, reports.ANSWER_SITE)
+        self.assertEqual(skill.plan({}, object()), [])
+        self.assertEqual((skill.edits, skill.side_effects, skill.approval, skill.undo), ((), ("none",), "none", Undo("none", "none")))
+        self.assertEqual([s.name for s in skill.slots], ["kind", "subject", "day"])
+        self.assertEqual(lint_cases(skill, REPO_ROOT), [])
+        self.assertEqual([p for p in skill_lint(load_skills(), load_registry(), repo_root=REPO_ROOT,
+                         golden={"answer.site": [{}]}) if p.startswith("answer.site:")], [])
+        for kind in reports.KINDS:
+            slots = {"kind":kind}
+            if kind in reports.SUBJECTS:
+                slots["subject"] = {"product":"eggs", "maker":"Sunny Farm", "hike":"Cass Hill"}[reports.SUBJECTS[kind]]
+            self.assertIsNone(reports.site_guard(slots, [], site_ctx()), slots)
+        for slots in ({"kind":"invented"}, {"kind":[]}, {"kind":"product","subject":"eggs","day":"today"},
+                      {"kind":"hours","subject":"eggs"}, {"kind":"hours","day":4}, {"kind":"product"}):
+            self.assertIsNotNone(reports.site_guard(slots, [], site_ctx()), slots)
+            self.assertTrue(reports.site_reply(slots, site_ctx()))
+        self.assertEqual(reports.site_reply(None, site_ctx()), reports.SITE_ASK)
+
+    def test_hours_day_today_and_literal_fallback(self):
+        self.assertEqual(site("hours"), "The site says: Monday–Friday 9am–6pm")
+        self.assertEqual(site("hours",day="saturday"), "The site says: Saturday 9am–5pm")
+        self.assertEqual(site("hours",day="sunday"), "The site says: Closed Sunday")
+        c=site_content()
+        for line in ("Mon-Fri 8–4", "Mon—Fri 8–4", "Daily call first", "Every day 10 to 2"):
+            c.store["hours"]=[line]
+            self.assertEqual(site("hours",c), "The site says: "+line)
+        for lines in (["Call first"], ["Daily 9–5", "Monday 10–4"], ["Daily 9–5", "Holidays vary"]):
+            c.store["hours"]=lines
+            reply=site("hours",c)
+            self.assertTrue(reply.startswith("I can't tell which hours apply"))
+            for line in lines: self.assertIn(line,reply)
+        c.store["hours"]=[]
+        self.assertEqual(site("hours",c),reports.NO_HOURS)
+        from datetime import datetime
+        ctx=site_ctx(); ctx.now=datetime.fromisoformat("2026-11-03T07:30:00+00:00")
+        ctx.today=ctx.now.astimezone(reports.PACIFIC).date()
+        self.assertEqual(reports.site_reply({"kind":"hours"},ctx),reports.site_reply({"kind":"hours"},site_ctx()))
+
+    def test_next_and_count_share_real_upcoming_filter(self):
+        c=site_content(); good=c.community["events"][0]
+        c.community["routeIdeas"]=[dict(good,title="Idea")]
+        excluded=[dict(good,id="cancelled",status="cancelled"),dict(good,id="completed",status="completed"),
+                  dict(good,id="passed",startsAt="2026-11-01T08:00:00-08:00"),dict(good,id="now",startsAt=site_ctx().now.isoformat()),
+                  dict(good,id="naive",startsAt="2026-11-03T08:00:00"),dict(good,id="bad",startsAt="bad"),dict(good,id="sample",sample=True)]
+        c.community["events"]=[*excluded,dict(good,id="z",title="Later tie"),dict(good,id="a"),
+                               dict(good,id="later",startsAt="2026-11-03T18:00:00+00:00")]
+        self.assertEqual(site("hike_count",c),"Upcoming hikes on the site: 3.")
+        self.assertIn("Cass Hill, tuesday, november 3 at 8 am. Meet at North gate.",site("next_hike",c))
+        c.community["events"][len(excluded)+1].pop("meetingPoint")
+        self.assertIn("can't see all the details",site("next_hike",c))
+        c.community["events"]=excluded
+        self.assertEqual(site("next_hike",c),reports.NO_HIKE)
+        self.assertEqual(site("hike_count",c),"Upcoming hikes on the site: 0.")
+
+    def test_product_and_linked_maker_are_record_local(self):
+        c=site_content()
+        ctx=site_ctx(c,aliases={"hens":("product","eggs")})
+        self.assertIn("eggs: limited",PLAIN(reports.site_reply({"kind":"product","subject":"hens"},ctx)))
+        self.assertEqual(site("product_maker",c,subject="eggs"),"Made by Sunny Farm in Cambria.")
+        for link in (None,"absent"):
+            c.products[0]["producerKey"]=link
+            self.assertEqual(site("product_maker",c,subject="eggs"),reports.NO_MAKER)
+        c.products[0]["producerKey"]="sunny"; c.makers["sunny"]["hidden"]=True
+        self.assertEqual(site("product_maker",c,subject="eggs"),reports.NO_MAKER)
+        c.makers["sunny"].pop("hidden"); c.makers["sunny"].pop("place")
+        self.assertIn("can't see where",site("product_maker",c,subject="eggs"))
+        c.products[0]["available_on"]="2026-10-01"
+        self.assertIn("not confirmed",site("product",c,subject="eggs"))
+        c.store["selection_checked_on"]="2026-10-01"
+        self.assertIn("more than a week ago",site("product",c,subject="eggs"))
+        for status in ("hidden","held"):
+            c.products[0]["status"]=status
+            self.assertIsNotNone(reports.site_guard({"kind":"product","subject":"eggs"},[],site_ctx(c)))
+        c.products=[prod("eggs",pid="a"),prod("eggs",pid="b")]
+        self.assertIn("Which one",site("product",c,subject="eggs"))
+        self.assertIn("don't know a product",site("product",c,subject="unknown"))
+
+    def test_maker_story_verbatim_strict_voice(self):
+        c=site_content(); story="café—“fruit”! " + "a"*586
+        c.makers["sunny"]["story"]=story
+        reply=reports.site_reply({"kind":"maker_story","subject":"Sunny Farm"},site_ctx(c))
+        self.assertEqual(PLAIN(reply),story)
+        self.assertEqual(voice.check(reply,long_ok=True),[])
+        c.makers["sunny"]["story"]=""
+        self.assertEqual(site("maker_story",c,subject="Sunny Farm"),reports.NO_STORY)
+
+    def test_signups_confirmed_or_unavailable(self):
+        import sqlite3
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        slots={"kind":"hike_signups","subject":"Cass Hill"}
+        with TemporaryDirectory() as tmp:
+            path=Path(tmp)/"guests.sqlite3"
+            self.assertIn("unavailable",reports.site_reply(slots,site_ctx(guest_counts_db=path)))
+            self.assertFalse(path.exists())
+            db=sqlite3.connect(path); db.execute("CREATE TABLE rsvps (event_id, party_size)"); db.commit()
+            def reply(): return PLAIN(reports.site_reply(slots,site_ctx(guest_counts_db=path)))
+            self.assertEqual(reply(),"Confirmed sign-ups for Cass Hill: 0.")
+            db.executemany("INSERT INTO rsvps VALUES (?,?)",[("cass-hill",2),("cass-hill",3),("other",None)]); db.commit()
+            before=path.read_bytes()
+            self.assertEqual(reply(),"Confirmed sign-ups for Cass Hill: 5.")
+            self.assertEqual(path.read_bytes(),before)
+            for bad in (None,0,-1,"two"):
+                db.execute("INSERT INTO rsvps VALUES (?,?)",("cass-hill",bad)); db.commit()
+                self.assertIn("unavailable",reply())
+                db.execute("DELETE FROM rsvps WHERE rowid=(SELECT MAX(rowid) FROM rsvps)"); db.commit()
+            db.execute("DROP TABLE rsvps"); db.commit(); db.close()
+            self.assertIn("unavailable",reply())
+        from hass.ops import hikes
+        self.assertNotRegex(hikes.GUEST_QUERY.lower(),r"email|name")
+        with mock.patch.object(hikes,"guest_counts_checked",side_effect=sqlite3.OperationalError("denied")):
+            self.assertIn("unavailable",reports.site_reply(slots,site_ctx(guest_counts_db="synthetic")))
+
+
+class SiteDispatch(ShelfCase):
+    def setUp(self):
+        super().setUp()
+        self.registry=base.registry_of(reports.ANSWER_SITE)
+        self.conv=self.open()
+        c=site_content()
+        self.edit("products.json",lambda d:d.update(products=c.products))
+        self.edit("store.json",lambda d:d.update(c.store))
+        self.edit("makers.json",lambda d:d.update(makers=c.makers))
+        self.edit("community.json",lambda d:d.update(c.community))
+        self.baseline=snapshot_of(self)
+
+    def ask_site(self,text,slots):
+        self.interp.mapping[text]=base.skill_reply("answer.site",**slots)
+        return self.say(text),self.replies()
+
+    def test_model_answer_slot_ignored_real_dispatch_and_all_case_rows(self):
+        rows=load_rows(SITE_CASES)
+        self.assertGreaterEqual(len(rows),12)
+        for row in rows:
+            with self.subTest(row=row["id"]):
+                self.setUp()
+                meta=json.loads(row["note"])
+                status,[reply]=self.ask_site(row["texts"][0],meta["slots"])
+                self.assertEqual(status,"backlog" if meta["backlog"] else "answer")
+                expected=row["replies"][0]["unsupported"]
+                if meta["backlog"]:
+                    self.assertTrue(reply.startswith(expected),reply)
+                    self.assertIn("request #1",reply)
+                    self.baseline["tables"]["backlog"]=1
+                else: self.assertEqual(reply,expected)
+                self.assertNotIn("FAKE ANSWER",reply)
+                self.assertEqual(voice.check(reply),[])
+                if row.get("undo"):
+                    self.assertEqual(self.say("undo"),"no-target")
+                    self.assertEqual(self.replies(),["There's nothing to undo."])
+                self.untouched()
+
+    def test_story_delivery_and_only_story_gets_long_flag(self):
+        story="A"*600
+        self.edit("makers.json",lambda d:d["makers"]["sunny"].update(story=story))
+        with mock.patch.object(self.conv,"_reply",wraps=self.conv._reply) as send:
+            self.assertEqual(self.ask_site("tell me Sunny Farm story",{"kind":"maker_story","subject":"Sunny Farm"}),('answer',[story]))
+            self.assertEqual(send.call_args.kwargs,{"long_ok":True})
+        with mock.patch.object(self.conv,"_reply",wraps=self.conv._reply) as send:
+            self.ask_site("when do we close",{"kind":"hours"})
+            self.assertEqual(send.call_args.kwargs,{"long_ok":False})
+
+    def test_model_guest_prose_ignored_and_trusted_setting_only(self):
+        import sqlite3
+        path=self.repo.state/"synthetic-guests.sqlite3"
+        db=sqlite3.connect(path); db.execute("CREATE TABLE rsvps (event_id, party_size)")
+        db.executemany("INSERT INTO rsvps VALUES (?,?)",[("cass-hill",2),("cass-hill",4)]); db.commit(); db.close()
+        before=path.read_bytes()
+        self.set_settings({**SETTINGS,"skills":{"mode":"both"},"guestCountsDb":str(path)})
+        self.conv=self.open()
+        status,[reply]=self.ask_site("how many signed up for Cass Hill",{"kind":"hike_signups","subject":"Cass Hill","answer":"900 guests", "guestCountsDb":"not-trusted"})
+        self.assertEqual((status,reply),("answer","Confirmed sign-ups for Cass Hill: 6."))
+        self.assertEqual(path.read_bytes(),before)
+        self.assertNotIn(str(path),reply)
+        self.untouched()
+
+    def test_unknown_subject_and_incorrect_combinations_backlog_once(self):
+        for slots in ({"kind":"product","subject":"unknown"},{"kind":"hours","subject":"eggs"},
+                      {"kind":"product","subject":"eggs","day":"today"}):
+            self.setUp()
+            self.assertEqual(self.ask_site("answer my site question",slots)[0],"backlog")
+            self.baseline["tables"]["backlog"]=1
+            self.untouched()
+
+    def test_missing_kind_one_question_cancelled_and_expired_requests(self):
+        self.assertEqual(self.ask_site("answer my site question",{})[0],"question")
+        self.interp.mapping["never mind"] = {"cancel": True}
+        self.assertEqual(self.say("never mind"),"cancelled")
+        self.replies()
+        self.assertEqual(self.ask_site("answer my site question again",{})[0],"question")
+        self.now+=timedelta(hours=25)
+        self.assertEqual(self.ask_site("what are the opening hours now",{"kind":"hours"})[0],"answer")
+        self.assertEqual(self.drafts(),[])
+
+    def test_duplicate_and_top_level_prose_are_not_relayed(self):
+        self.interp.mapping["what time do we close"] = base.skill_reply("answer.site",kind="hours")
+        self.assertEqual(self.say("what time do we close",pid="once"),"answer"); self.replies()
+        self.assertEqual(self.say("what time do we close",pid="once"),"duplicate")
+        self.assertEqual(self.replies(),[])
+        raw={"skill":"answer.site","slots":{"kind":"hours"},"answer":"FAKE ANSWER"}
+        self.assertIsNone(dispatch.checked(raw))
+        self.interp.mapping["tell me hours please"]=raw
+        self.say("tell me hours please")
+        self.assertNotIn("FAKE ANSWER"," ".join(self.replies()))
+        self.untouched()
+
+
 if __name__ == "__main__":
     unittest.main()

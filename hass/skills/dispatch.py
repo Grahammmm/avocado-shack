@@ -85,9 +85,10 @@ RULES.setdefault("no-price", _no_price)
 class Ctx:
     """What a skill's ``plan`` and rules may read: the saved content (read-only), today (Pacific), aliases, the owner's texts."""
 
-    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, site_dir=None):
+    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, site_dir=None, *, guest_counts_db=None):
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
+        self.guest_counts_db = guest_counts_db
         self.site_dir = site_dir  # the writer's storefront-mockup folder (the same checkout the content was read from), or None
 
 
@@ -399,7 +400,7 @@ class Dispatcher:
         content = load_content(writer / "hass" / "content")
         settings = getattr(self.conv, "settings", None) or {}
         return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
-                   house_render=settings.get("houseRender") is True, site_dir=writer / "storefront-mockup")
+                   house_render=settings.get("houseRender") is True, site_dir=writer / "storefront-mockup", guest_counts_db=settings.get("guestCountsDb"))
 
     def _owner(self):
         return self.conv._chat()  # the answering chat, so each owner has their own open request (HASS-LIVE-PLAN-1)
@@ -872,7 +873,7 @@ class Dispatcher:
         queued = req["calls"] if req else []
         if req:
             self.conv.requests.mark(req["request_id"], "closed", now)
-        self.conv._reply(fn(slots, ctx), long_ok=skill.name in READ_ONLY_LONG)
+        self.conv._reply(fn(slots, ctx), long_ok=skill.name in READ_ONLY_LONG or (skill.name == "answer.site" and slots.get("kind") == "maker_story"))
         if queued:  # the owner's other caption asks of the same message go on, one question at a time
             return self._next_queued(msg, now, None, queued, texts, req["attachments"], "answer")
         return "answer"

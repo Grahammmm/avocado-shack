@@ -72,3 +72,34 @@ no-op `undo` as a `turns` row). The kit (`test_skills_cases`) plays the recorded
 every row through the real Dispatcher and Conversation (skills mode both, a scripted skill-reply stand-in for the model, writer
 content edited per row) and compares the delivered text byte for byte. Like `specials.show`, the lint's "undo row" count cannot be met
 by a kit row. Run: `python3 -B -m unittest hass.tests.test_skills_reports hass.tests.test_skills_cases hass.tests.test_voice`.
+
+
+## Site answers (AV1109-09, SKILLS-SPEC 3.31)
+
+`answer.site` is another read-only skill. The model supplies only `kind`, optional `subject` and optional `day`;
+code writes the answer. Undeclared answer/text/summary slots are discarded, never sent. The closed kinds are:
+
+| Kind | Source and answer |
+|---|---|
+| `hours` | Saved `store.hours`, for the supplied day or Pacific today. Original matching clause, not invented opening/closing times. Unclear or conflicting clauses show the stored lines with an honest caveat. |
+| `next_hike` | Next real scheduled event strictly after now, ordered by aware instant then id: title, Pacific day/time and its own meeting point. Missing details say so. |
+| `hike_count` | Count of that same valid upcoming set, explicitly called upcoming hikes. No samples, past, cancelled or completed events or route ideas. |
+| `product` | Existing product resolver (including nicknames), saved active product and its own last-check shelf word, with the shelf report's stale/missing/future caveats. This does not verify a live installation. |
+| `product_maker` | Only that product's `producerKey` linked to a visible maker: saved name and place. Missing maker/place is stated honestly. |
+| `maker_story` | Existing maker resolver, then saved story verbatim, not a summary. Only this kind gets a per-call long-answer exception; all strict voice rules remain. |
+| `hike_signups` | Existing real-hike resolver, then confirmed party-size sum from trusted `guestCountsDb`, opened read-only by `guest_counts_checked`. No participant names/emails are selected. |
+
+A readable RSVP table with no rows for the hike confirms **0**. Missing setting, unreadable path/table, or a malformed
+party size for that hike means **unavailable**, never a guess. Bad rows for another hike do not spoil a confirmed count.
+No creation, repair, migration, participant listing, network access or cached estimate is involved.
+
+Examples: “what time do we close Saturday”, “who makes eggs and where”, “tell me Sunny Farm story”,
+“when and where is our next hike”, “how many signed up for Cass Hill”. Names are resolved by the existing product,
+maker and hike resolvers. Unknown kinds/subjects or incorrect slot combinations use the existing catch-all and one backlog
+row; missing kind asks one question. Resolver questions on this catch-all path do not establish a continuation.
+Sales, prices and numeric stock-count questions are refused with one backlog row and no edits, even if the model labels
+them as hours. The separate `report.shelf` count behavior is unchanged. Read-only plans return no ops and need no approval.
+
+The versioned `answer.site.jsonl` cases are replayed through real Conversation + Dispatcher in `test_skills_reports`,
+including poisoned model prose, refusal bookkeeping, strict voice delivery, a no-op undo and confirmed/unavailable totals.
+All content and RSVP fixtures are synthetic and outside canonical stores.
