@@ -326,11 +326,12 @@ def pick_candidate(text: str, ask: dict):
     ids, names = ask.get("ids") or [], ask.get("names") or []
     if not ids or len(ids) != len(names):
         return None
-    words = re.findall(r"[a-z0-9]+", (text or "").lower())
-    for w in words:
-        n = int(w) if w.isdigit() else ORDINALS.get(w)
-        if n is not None and not len(words) > 4:
-            return ids[n - 1] if 1 <= n <= len(ids) else None
+    choice = re.fullmatch(r"\s*(?:the\s+)?([0-9]+|" + "|".join(ORDINALS) +
+                          r")(?:\s+one)?(?:\s+please)?[.!?,;:]*\s*", (text or "").lower())
+    if choice:
+        word = choice.group(1)
+        n = int(word) if word.isdigit() else ORDINALS[word]
+        return ids[n - 1] if 1 <= n <= len(ids) else None
     wanted = _tokens(text)
     if not wanted:
         return None
