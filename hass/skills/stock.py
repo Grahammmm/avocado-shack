@@ -203,7 +203,7 @@ STOCK_SET = Skill(
         Trigger("we're low on stuff", "vague"),
         Trigger("everything is sold out"),
     ),
-    slots=(Slot("items", "text_list", True, ask="Which products, and in, low or out?"),),
+    slots=(Slot("items", "stock_items", True, ask="Which products, and in, low or out?"),),
     rules=("shelf-check-today", "not-already-true", "whole-shelf-max-6", "held-or-hidden-refused", "no-price"),
     plan=_set_plan, edits=_WORD_EDITS + ((_STORE, "selection_checked_on"),) + _GENERATED,
     side_effects=("inventory-word", "shelf-check-day"), preview=_PRODUCT_PREVIEW, approval="owner-yes",

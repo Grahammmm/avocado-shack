@@ -189,6 +189,12 @@ def _value_problem(slot, value):
     elif k == "text_list":
         if not (isinstance(value, list) and value and all(text_ok(v) for v in value)) or len(set(value)) != len(value):
             return "that list has an empty or repeated line"
+    elif k == "stock_items":  # RF0814-12: shape only; repeats, the six-product cap and every stock rule stay in the plan
+        if not (isinstance(value, list) and value and all(
+                isinstance(v, dict) and set(v) == {"product", "availability"}
+                and isinstance(v["product"], str) and content_model.ID_RE.fullmatch(v["product"])
+                and isinstance(v["availability"], str) and v["availability"] in content_model.AVAILABILITY for v in value)):
+            return "each one needs a product and in stock, low or sold out"
     elif k == "id":
         if not (isinstance(value, str) and content_model.ID_RE.fullmatch(value)):
             return "that is not a name I can use"
