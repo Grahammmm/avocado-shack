@@ -12,7 +12,7 @@ attribute of it is optional (without it the plan leaves to the editor's own chec
     ctx.content       the loaded ``Content`` (read-only): resolve a maker by name, refuse a twin, say "it already says
                       that", name the products a hide would take with it.
     ctx.owner_text    the owner's joined texts of the open request: a story sentence that carries a claim he did not
-                      say (``claims.unstated``, negation aware).
+                      say is left off (``claims.unstated``, negation aware).
     ctx.texts         the owner's messages of the open request, latest last: only the latest can say "I don't know the
                       town" (rule town-state; ``ctx.owner_text`` stands in only when there are no texts).
     ctx.source_urls   website links recorded when the site was migrated; those cannot be removed or replaced (default:
