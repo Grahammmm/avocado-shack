@@ -419,6 +419,19 @@ class EditNotesFollowThePlan(unittest.TestCase):
         content = self.content_with(self.PESTO, displayBrand=it.UNKNOWN_SHOWN)  # already the fallback line: only the relation changes
         self.assertEqual(self.notes({**clear, "category": "dairy"}, content)["set"], [])
 
+    def test_clear_producer_on_unlinked_product_still_discloses_a_changed_default(self):
+        content = self.content_with(self.PESTO, producerKey=None, displayBrand="Grandma's pesto")  # no maker link left to clear
+        clear = {"item": self.PESTO, "clear": ["clearProducer"]}
+        [op] = it.plan_edit(clear, ctx_for(content))
+        self.assertNotIn("clearProducer", op["args"])  # the plan dropped the already-true relation
+        self.assertEqual(op["args"]["displayBrand"], it.UNKNOWN_SHOWN)  # but the custom line is still replaced
+        [line] = self.notes(clear, content)["set"]
+        self.assertEqual(voice.plain(line), "I set: the maker line on the card to From the market.")
+        with_shelf = self.notes({**clear, "category": "dairy"}, content)["set"]
+        self.assertEqual([voice.plain(x) for x in with_shelf], ["I set: the maker line on the card to From the market."])
+        owner_line = self.notes({**clear, "display_brand": "Home made"}, content)["set"]  # the owner's own label: no default note
+        self.assertEqual(owner_line, [])
+
     def test_unchanged_description_does_not_warn(self):
         saved = "Great stuff!"  # short, no full stop, an exclamation mark: every advisory would fire
         content = self.content_with(self.PESTO, description=saved)

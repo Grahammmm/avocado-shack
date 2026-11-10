@@ -383,7 +383,9 @@ def notes(name, slots, ctx) -> dict:
             return out  # no draft is proposed, so there is nothing to say beside it
         args = op["args"]
         if "displayBrand" in args and not _text(slots, "display_brand"):  # a default, not the owner's own label
-            if args.get("clearProducer"):
+            # the default's source is the owner's original request: rule_not_already_true drops clearProducer from a product
+            # that has no maker link, yet the fallback line can still replace a custom label
+            if "clearProducer" in (slots.get("clear") or []):
                 out["set"].append(f"I set: the maker line on the card to {args['displayBrand']}.")
             elif slots.get("maker"):
                 out["set"].append(f"I set: the maker line on the card to {voice.quote(args['displayBrand'])}.")
