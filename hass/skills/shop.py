@@ -393,7 +393,7 @@ def check_notice_dates(slots, texts, ctx):
         return SkillStop(UNTIL_ASK, "question")
     if until < today:
         return SkillStop(NOTICE_PAST, "question")
-    if until > today + timedelta(days=MAX_NOTICE_DAYS):
+    if (until - today).days > MAX_NOTICE_DAYS:
         return SkillStop(NOTICE_LONG)
     return None
 
