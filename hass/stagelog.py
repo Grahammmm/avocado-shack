@@ -48,7 +48,8 @@ def read(path) -> list:
     except OSError: return out
     for raw in text.splitlines():
         try: row = json.loads(raw)
-        except ValueError: continue
+        # Excessive nesting is malformed diagnostic input too; skip only this line.
+        except (ValueError, RecursionError): continue
         if type(row) is dict and type(row.get("t")) in (int, float) and type(row.get("stage")) is str and type(row.get("id")) is str:
             out.append(row)
     return out
