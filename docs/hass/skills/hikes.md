@@ -26,7 +26,7 @@ the ops and the content.
 
 * **Sign-up is off** unless the owner said otherwise (decision D8). The proposal carries the line `I set: sign-up off.`
   (see "The `I set:` line" below). A guest limit is written only with sign-up on and only if he gave the number. "Sign-up on" with
-  no number and no "no limit" is left to the editor, which asks "how many can come, or is there no limit?" (HASS-E2E-HIKE-1 found
+  no number and no "no limit" gets six spots by code (see "Six spots" below). (HASS-E2E-HIKE-1 found
   the model adding `rsvpEnabled: true` and `capacity: 10`, and `capacity: 1`.)
 * **His words decide the direction, not their presence** (rule `hike-no-invention`, add and edit alike). Sign-up on needs his
   latest sign-up instruction to be on: "sign-up off", "no sign-up", "without rsvps", "don't let people sign up" never turn it on
@@ -47,6 +47,24 @@ the ops and the content.
   never forced onto a trail (HASS-HIKE-FLOW-1).
 * The title is his if he gave one; otherwise "<place> hike" from the route idea or the meeting place, with a trailing
   "trailhead", "gate", "parking lot" and the like dropped. A place with no name of its own ("the gate") gets a question instead.
+
+### Six spots (AV1109-11; G 2026-11-08 "available spots (max 6)")
+
+* **Default.** When sign-up is explicitly turned on (add, or an edit with sign-up on) and he gave no number and no "no limit",
+  the plan writes `capacity: 6` by code, AFTER the rules ran. Only then: a six the model wrote that he did not say is still
+  refused by `hike-no-invention` ("You didn't say how many can come ..."), and the model never writes a capacity. A number he said
+  but the model left out, alternatives ("4 spots or 6 spots") or a "no limit" the model left out get no six: the editor's question
+  stays. An edit that does not mention sign-up leaves the stored limit alone; an edit that turns sign-up on gets six even if the
+  hike had another limit. Sign-up stays OFF by default (decision 3 is open).
+* **Ceiling.** Rule `hike-capacity-ceiling` (after `hike-no-invention`): a limit above 6 that the plan would write gets "The most
+  I can set is 6." and nothing is drafted; it is never clamped. A number he gave from 1 to 6 wins. Decision 2 (the real maximum)
+  is open, so 6 is the ceiling for now. "No limit" still works and writes no capacity. Zero, negative and non-number values
+  are not read as missing. The editor's never-below-confirmed-guests refusal is unchanged and still applies to a default six.
+* **What he is told.** The default is disclosed once: `I set: 6 spots.` (from `notes` when no other default is on the line, else
+  as `6 spots` in the one `I set:` line, e.g. `I set: the title “Mill Creek hike”; 6 spots.`; sign-up off stays `I set: sign-up
+  off.`). Any draft of a hike with sign-up on and a limit N also carries, through the skill `notes` hook, exactly
+  `Page will say: Limited to N people · availability unconfirmed; ask at the Shack`, with the hike's own N (an explicit 4 says 4; an
+  edit that leaves the stored limit alone says that limit). Nothing says how many places are left. Off or unlimited gets no note.
 
 ### Refusals and questions (one plain reply, nothing drafted)
 

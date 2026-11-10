@@ -66,14 +66,15 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  // AV0207-01: owner-set logistics in a fixed order, escaped, in the card and the RSVP dialog; an unset field shows nothing.
  const byTitle=t=>p.locator('.hike-event').filter({has:p.locator('h2',{hasText:t})}),same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
  const facts=l=>l.evaluate(n=>[...n.querySelectorAll('.hike-facts dt')].map(d=>d.textContent+'='+d.nextElementSibling.textContent));
+ const RICH=['Meet=QA full meeting point','Meet at=8:45 am','Address=QA Road 1, Los Osos · Directions','Start=9:00 am','Back=Around 12:30 pm','Bring along=Water and a snack'];
  const FULL=['Meet=QA full meeting point','Meet at=8:45 am','Address=QA Road 1, Los Osos · Directions','Start=9:00 am','Back=Around 12:30 pm','Distance=4 miles','Pace / terrain=Easy','Time on trail=3 hours','Bring along=Water and a snack'];
  await shown({});
  const full=byTitle('QA all logistics'),bare=byTitle('QA no logistics'),dir=full.locator('.hike-facts a');
- check(same(await facts(full),FULL),'Full hike rows wrong: '+JSON.stringify(await facts(full)));
+ check(same(await facts(full),RICH),'Full hike rows wrong: '+JSON.stringify(await facts(full)));
  check(await full.locator('.hike-facts + p.hike-access').count()===1&&(await full.locator('.hike-access').innerText()).trim()==='QA access: no pets.','Access note missing after the facts');
  check(await dir.count()===1&&await dir.getAttribute('href')==='https://www.google.com/maps/search/?api=1&query=QA%20Road%201%2C%20Los%20Osos'&&await dir.getAttribute('target')==='_blank'&&await dir.getAttribute('rel')==='noopener'&&await dir.getAttribute('class')==='text-link'&&(await dir.innerText()).trim()==='Directions','Directions link wrong');
  const bareText=await bare.innerText();
- check(same(await facts(bare),['Meet=QA meeting point','Distance=2 miles','Pace / terrain=Flat','Time on trail=1 hour'])&&await bare.locator('.hike-access').count()===0&&!/Address|Directions|Bring along|Meet at|undefined|null/.test(bareText),'Hike without logistics gained rows: '+bareText);
+ check(same(await facts(bare),['Meet=QA meeting point','Bring along=The usual: water, sturdy shoes, a layer and a snack.'])&&await bare.locator('.hike-access').count()===0&&!/Address|Directions|undefined|null/.test(bareText),'Hike without logistics gained rows: '+bareText);
  await full.locator('[data-rsvp]').click();await p.locator('#rsvp-name').waitFor();
  const dlg=p.locator('#dialog-content');
  check(same(await facts(dlg),FULL)&&await dlg.locator('.hike-facts + p.hike-access').count()===1&&(await dlg.locator('.hike-access').innerText()).trim()==='QA access: no pets.','RSVP dialog lacks the logistics: '+JSON.stringify(await facts(dlg)));
@@ -81,10 +82,10 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  const addr='QA 1 & 2 <b>Main</b> "St" #5';
  await shown({bring:'   ',meetTime:'',returnTime:null,walkTime:7,accessNote:' \n ',meetingAddress:addr});
  const qd=qaHike().locator('.hike-facts a'),qhref=await qd.getAttribute('href')||'';
- check(same(await facts(qaHike()),['Meet=QA meeting point',`Address=${addr} · Directions`,'Distance=3 miles','Pace / terrain=Gentle pace','Time on trail=2 hours'])&&await qaHike().locator('.hike-facts b').count()===0&&await qaHike().locator('.hike-access').count()===0,'Blank fields shown or address not escaped: '+JSON.stringify(await facts(qaHike())));
+ check(same(await facts(qaHike()),['Meet=QA meeting point',`Address=${addr} · Directions`,'Bring along=The usual: water, sturdy shoes, a layer and a snack.'])&&await qaHike().locator('.hike-facts b').count()===0&&await qaHike().locator('.hike-access').count()===0,'Blank fields shown or address not escaped: '+JSON.stringify(await facts(qaHike())));
  check(qhref.startsWith('https://www.google.com/maps/search/?api=1&query=')&&new URL(qhref).searchParams.get('query')===addr&&new URL(qhref).hash==='','Directions query does not decode to the address: '+qhref);
  await shown({status:'cancelled'},'qa-full');
- check(await full.locator('.label').innerText()==='CANCELLED'&&same(await facts(full),FULL)&&await full.locator('.hike-access').count()===1&&await full.locator('[data-rsvp]').count()===0,'Cancelled hike lost its rows or kept RSVP');
+ check(await full.locator('.label').innerText()==='CANCELLED'&&same(await facts(full),RICH)&&await full.locator('.hike-access').count()===1&&await full.locator('[data-rsvp]').count()===0,'Cancelled hike lost its rows or kept RSVP');
  await p.unroute(api);
  check(!errors.length,'Page errors while overriding places: '+JSON.stringify(errors));
  // AV2022-12: a real hike naming a route idea shows its title and trail link (display only). Fixture payload only.
@@ -98,7 +99,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  let link=line('QA trail fixture').locator('a');
  check(await line('QA trail fixture').count()===1&&await said('QA trail fixture')==='Route: QA Route One · QA Parks ↗','Linked route line wrong: '+await said('QA trail fixture'));
  check(await link.getAttribute('href')==='https://example.org/qa-trail'&&await link.getAttribute('target')==='_blank'&&await link.getAttribute('rel')==='noopener'&&await link.getAttribute('class')==='text-link','Route link attributes wrong');
- check(await card('QA trail fixture').locator('.hike-facts + .hike-route').count()===1,'Route line not right after the hike facts');
+ check(await card('QA trail fixture').locator('.trail-plan .hike-route').count()===1,'Route line not right after the hike facts');
  check(await line('QA uncapped event').count()===0,'Hike without trailId gained a route line');
  check(await line('QA limited places').count()===0,'Unknown trailId produced a route line');
  check(await said('QA js route')==='Route: QA Script Route'&&await line('QA js route').locator('a').count()===0,'Non-https javascript: route was linked');
@@ -219,7 +220,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
   await pg.clock.setFixedTime(now);await pg.goto(process.env.COMMUNITY_TEST_URL+'/hike');
   await pg.locator('#upcoming-hikes :is(.hike-event,.hike-empty,.trail-invitation)').first().waitFor();
   const r=await pg.evaluate(()=>({up:document.querySelector('#upcoming-hikes').innerText,past:document.querySelector('#past-hikes').innerText,dates:Object.fromEntries([...document.querySelectorAll('.hike-event')].map(a=>[a.querySelector('h2').textContent,a.querySelector('.hike-date').textContent])),
-   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,ics:a.querySelectorAll('.hike-ics').length,guests:(a.querySelector('[data-confirmed-guests]')||{}).textContent??null,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes :is(.hike-empty,.trail-invitation)')}));
+   cards:[...document.querySelectorAll('.hike-event')].map(a=>({cls:a.className,label:a.querySelector('.label').textContent,title:a.querySelector('h2').textContent,rsvp:a.querySelectorAll('[data-rsvp]').length,ics:a.querySelectorAll('.hike-ics').length,guests:(a.querySelector('[data-confirmed-guests]')||{}).textContent??null,text:a.innerText})),empty:!!document.querySelector('#upcoming-hikes .hike-empty,#upcoming-hikes .trail-invitation:not(.hike-event)')}));
   check(!errs.length,'Page errors at '+new Date(now).toISOString()+': '+JSON.stringify(errs));await c.close();return r;
  };
  const after=start+Math.min(18e5,(pacificAt(nextDay)-start)/2),cancelled={...hike,id:'qa-cancelled',title:'QA cancelled fixture',status:'cancelled'};
@@ -242,8 +243,8 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  v=await view(start-6e4,'America/Los_Angeles',[tomorrow,early]);
  const titles=v.cards.map(c=>c.title),s=v.cards.find(c=>c.title==='QA uncapped event'),c=cx(v);
  check(titles[0]==='Cancelled: QA early cancelled'&&titles.at(-1)==='Cancelled: QA cancelled fixture'&&titles.includes('QA uncapped event'),'Scheduled and cancelled not listed by start: '+JSON.stringify(titles));
- check(c.cls==='hike-event hike-cancelled'&&c.label==='CANCELLED'&&c.text.includes(sentence)&&c.rsvp===0&&!/RSVPs open|places? available|spots? left|Limited to \d+ people|availability unconfirmed|Full\. Ask|This hike is full|RSVP details|To join, ask|THE NEXT HIKE/.test(c.text),'Tomorrow’s cancelled hike card wrong: '+c.text);
- check(s.rsvp===1&&s.cls==='hike-event'&&s.label==='COMING UP'&&!s.text.includes(sentence),'Scheduled hike lost its RSVP or was marked cancelled: '+s.text);
+ check(c.cls==='hike-event hike-cancelled trail-invitation'&&c.label==='CANCELLED'&&c.text.includes(sentence)&&c.rsvp===0&&!/RSVPs open|places? available|spots? left|Limited to \d+ people|availability unconfirmed|Full\. Ask|This hike is full|RSVP details|To join, ask|THE NEXT HIKE/.test(c.text),'Tomorrow’s cancelled hike card wrong: '+c.text);
+ check(s.rsvp===1&&s.cls==='hike-event trail-invitation'&&s.label==='COMING UP'&&!s.text.includes(sentence),'Scheduled hike lost its RSVP or was marked cancelled: '+s.text);
 check(v.cards.filter(c=>c.label==='THE NEXT HIKE').length===1&&v.cards.find(c=>c.label==='THE NEXT HIKE').title==='QA trail fixture','Exactly the first scheduled card should be THE NEXT HIKE: '+JSON.stringify(v.cards.map(c=>c.label+'|'+c.title)));
  v=await view(pacificAt(nextDay+6e4),'America/Los_Angeles',[cancelled]);
  check(!v.up.includes('QA cancelled fixture'),'Cancelled hike still listed after midnight Pacific at the end of its day');
@@ -334,7 +335,7 @@ for(const stat of [false,true])for(const tz of ['America/Los_Angeles','Asia/Toky
   // cancelledDateNeverStartedAtBoundary / scheduledStartedDateUnchanged / cancelledDateVisibleUntilPacificMidnight (still listed)
   for(const [name,now] of [['start-1ms',nine-1],['exact start',nine],['start+1ms',nine+1],['later that day',nine+3*36e5],['Pacific midnight-1ms',midnight-1]]){
    const q=await view(now,tz,pair,none,stat),x=q.cards.find(c=>c.title===X),s=q.cards.find(c=>c.title===S),w=m+name+': ';
-   check(x&&x.cls==='hike-event hike-cancelled'&&x.label===CX&&q.dates[X]===PLANNED,w+'cancelled date is not the planned date: '+JSON.stringify(q.dates));
+   check(x&&x.cls==='hike-event hike-cancelled trail-invitation'&&x.label===CX&&q.dates[X]===PLANNED,w+'cancelled date is not the planned date: '+JSON.stringify(q.dates));
    check(!/started/i.test(x.text)&&x.text.includes(sentence)&&x.text.includes(NOTE)&&x.rsvp===0&&!x.ics&&!OLD.test(x.text),w+'cancelled card wrong: '+x.text);
    check(!q.past.includes('QA cancelled nine')&&!q.past.includes(S),w+'hike moved to past hikes: '+q.past);
    if(now<nine)check(s&&s.label===NEXT&&q.dates[S]===PLANNED&&!s.text.includes(STARTED),w+'scheduled hike before its start wrong: '+JSON.stringify(s));
@@ -408,6 +409,7 @@ for(const width of [390,1440]){n=await nextLine(e=>[mk('n-w','QA a long hike tit
  n=await nextLine(()=>[nine],390,[three],{now:NOW});check(n.hidden&&n.links===0&&n.text===''&&!n.staticAsked&&n.posts===0&&!n.sampleAsked,'Started-only live calendar fell back to a static future decoy: '+JSON.stringify(n));
  n=await nextLine(()=>[],390,[three],{now:NOW});check(n.hidden&&n.links===0&&!n.staticAsked,'Empty live calendar fell back to static under a fixed clock: '+JSON.stringify(n));
  n=await nextLine('500',390,null,{now:NOW});hiddenLine(n,'API 500 and static 404 under a fixed clock')}
+ await require('./invitation-qa.cjs')(b,base,false);
  const result={guestCountUpdatedAfterRSVP:true,demoGuestCountUnchanged:true,checkedAt:new Date().toISOString(),rsvpForm:true,newsletterForm:true,hikingUpdates:true,pastHikes:true,confirmedEventTakesPrecedence:true,realCalendarEmpty:true,demoPosts:posts.length,demoBrowserStorage:false,demoValidation:true,demoSuccessFocus:true,layouts,errors};
  fs.writeFileSync(out+'/community-ui-QA.json',JSON.stringify(result,null,2));
  console.log('Community UI passed');await b.close();
