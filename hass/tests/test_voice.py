@@ -36,7 +36,7 @@ OWNER_FACING = {
                         "_record_lines", "proposal_text", "_summary", "_plain", "_asked_again", "_late", "_delayed", "_handle_message",
                         "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
-    "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render"], "interpret_check.py": "all",
+    "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render", "restock_text"], "interpret_check.py": "all",
     "label_reader.py": ["question", "_maker_line", "_product_line"],
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
