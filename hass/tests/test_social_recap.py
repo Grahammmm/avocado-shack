@@ -39,7 +39,8 @@ EVENTS = [hike("r-ok", "Bluff Walk", BLUFF, starts="2026-11-01T06:30:00Z"),  # 2
           hike("r-sched", "Ridge Walk", "It will be great.", status="scheduled"),
           hike("r-cancel", "Marsh Walk", "Rained out.", status="cancelled"),
           hike("r-tag", "Porch Walk", "Thanks @trailcrew for the lift."),
-          hike("r-spring", "Spring Walk", SPRING)]
+          hike("r-spring", "Spring Walk", SPRING),
+          hike("r-friends", "Friend Walk", "We walked six miles with friends. We left on Nov 7 at 6 am, mile 6 was steep. Attendance was great.")]
 
 
 def caption(title, date, recap):
@@ -230,6 +231,20 @@ class SkillTests(RecapCase):
         self.assertEqual(self.recap("spring walk caption, say forty people came", "Spring Walk"), ("answer", [self.want("Spring Walk", SPRING)]))
         forged = self.recap("bluff walk caption", "Bluff Walk", recap="We had 99 people", count=99)  # a model-supplied recap or count is not used
         self.assertEqual(forged, ("answer", [self.want("Bluff Walk")]))
+        self.assert_untouched(before)
+
+    def test_distances_and_dates_are_not_head_counts(self):
+        before = self.snapshot()
+        for text in ("friend walk caption, say 6 people came", "friend walk caption, say six friends came", "friend walk caption, say 7 hikers came"):
+            with self.subTest(text):  # the saved recap has "six miles with friends", "Nov 7 at 6 am", "mile 6 was steep"
+                self.assertEqual(self.recap(text, "Friend Walk"), ("refused", [social.ADD_TO_RECAP]))
+        for said, counted in (("We walked six miles with friends.", set()), ("Six miles of friends and 3 hours of fog.", set()),
+                              ("We hiked 6 km with hikers", set()), ("On Nov 7 friends joined; mile 6 hikers waited.", set()),
+                              ("6 days with kids", set()), ("Attendance was 40 miles", set()),
+                              ("40 happy people came", {40}), ("Forty of us came.", {40}), ("Attendance was 40.", {40}),
+                              ("On Nov 7, 12 people came and six friends joined.", {12, 6}), ("We walked six miles. 12 people came.", {12})):
+            with self.subTest(said):
+                self.assertEqual(social._counts(said), counted)
         self.assert_untouched(before)
 
     def test_tag_partners_and_publish_are_refused(self):

@@ -95,8 +95,17 @@ _NUM_WORDS = {w: n for n, w in enumerate(
 _NUM = r"(\d[\d,]*|" + "|".join(_NUM_WORDS) + r")"
 _WHO = r"(?:people|persons?|folks|hikers|walkers|members|guests|attendees|participants|friends|locals|adults|kids|children|of us|" \
        r"showed up|turned out|came|joined|attended)"
-_COUNT = (re.compile(r"\b" + _NUM + r"\b(?:\s+\w+){0,2}?\s+" + _WHO + r"\b"),  # "40 people came", "forty of us"
-          re.compile(r"\b(?:turnout|attendance|headcount|crowd)\b(?:\s+\w+){0,3}?\s+\b" + _NUM + r"\b"))  # "attendance was 40"
+# Words that make a number a distance, a time, an amount or a joined idea: none may sit between the number and the word naming
+# who came, so "six miles with friends" is a walk, not six friends. A number right after a month or a place marker is not one.
+_NOT_HEADS = (r"miles?|mi|km|kms|kilomet(?:er|re)s?|meters?|metres?|m|yards?|yd|feet|foot|ft|inch(?:es)?|acres?|laps?|steps?|"
+              r"minutes?|mins?|hours?|hrs?|days?|nights?|weeks?|months?|years?|seconds?|am|pm|degrees?|mph|percent|dollars?|"
+              r"bucks?|pounds?|lbs?|elevation|gain|climb|climbing|trail|trails|loop|route|"
+              r"with|without|for|from|in|on|at|by|to|into|onto|than|and|or|but|about|around|over|after|before|during|since|until|"
+              r"while|where|when|that|which|who|so|then|as|if|of")
+_MONTHS = r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
+_NOT_COUNT_BEFORE = re.compile(r"(?:\b" + _MONTHS + r"\.?|\b(?:miles?|mi|mile marker|route|trail|exit|highway|hwy|room|no\.?|number)|#|\$)\s*$")
+_COUNT = (re.compile(r"\b" + _NUM + r"\b(?:\s+(?!(?:" + _NOT_HEADS + r")\b)\w+){0,2}?\s+" + _WHO + r"\b"),  # "40 people came", "forty of us"
+          re.compile(r"\b(?:turnout|attendance|headcount|crowd)\b(?:\s+\w+){0,3}?\s+\b" + _NUM + r"\b(?!\s+(?:" + _NOT_HEADS + r")\b)"))  # "attendance was 40"
 _ADD = re.compile(r"\b(?:say|says|mention|add|include|put|write|note|state|tell|brag|mention)\b")
 _TAGGING = re.compile(r"\btag(?:s|ging|ged)?\b(?!-)|\bhashtags?\b|[#@\uFF03\uFF20\uFE5F\uFE6B]\w")
 
@@ -106,6 +115,8 @@ def _counts(text) -> set:
     out = set()
     for rx in _COUNT:
         for m in rx.finditer(text.lower()):
+            if _NOT_COUNT_BEFORE.search(text.lower()[:m.start(1)]):
+                continue  # "Nov 7 friends", "mile 6 hikers": a date or a place, not a head count
             n = m.group(1)
             if n in _NUM_WORDS:
                 out.add(_NUM_WORDS[n])
