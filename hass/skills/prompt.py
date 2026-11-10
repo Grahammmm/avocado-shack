@@ -40,7 +40,8 @@ def _slot_text(slot) -> str:
     req = "required" if slot.required is True else "optional" if slot.required is False else f"required {slot.required.replace(':', ' ')}"
     default = f", default {slot.default}" if slot.default is not None else ""
     shape = STOCK_ITEMS_SHAPE if slot.kind == "stock_items" else ""
-    return f"{slot.name}: {slot.kind}, {req}{default}{shape}"
+    hint = f" - {slot.hint}" if getattr(slot, "hint", "") else ""
+    return f"{slot.name}: {slot.kind}, {req}{default}{shape}{hint}"
 
 
 def _detail(skill, examples, summary=True) -> str:

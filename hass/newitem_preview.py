@@ -133,7 +133,7 @@ def main() -> int:
             print(name, side, "ok" if run["ok"] else "NOT OK: " + str(run["error"]))
     # the committed JSON never holds the machine's paths or a time; only names, checks and the draft's words
     (OUT / "preview.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False, sort_keys=True) + "\n", "utf-8")
-    return 0 if all(summary[n]["after"]["ok"] for n in summary) else 1
+    return 0 if all(summary[n][side]["ok"] for n in summary for side in ("before", "after")) else 1
 
 
 if __name__ == "__main__":

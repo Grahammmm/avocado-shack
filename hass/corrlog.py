@@ -130,7 +130,10 @@ class CorrLog:
         try:
             for path in self.dir.iterdir():
                 m = re.fullmatch(r"(\d{4}-\d{2}-\d{2})\.jsonl", path.name)
-                if m and path.is_file() and not path.is_symlink() and datetime.strptime(m[1], "%Y-%m-%d").date() < cutoff:
+                if not (m and path.is_file() and not path.is_symlink()): continue
+                try: day = datetime.strptime(m[1], "%Y-%m-%d").date()
+                except ValueError: continue  # named like a day but not a real date (2026-02-30): not ours, left untouched
+                if day < cutoff:
                     path.unlink()
                     removed += 1
         except OSError:
