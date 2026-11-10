@@ -117,7 +117,7 @@ class RealDrafts(unittest.TestCase):
         self.assertEqual(reasons, ["not live: product.set_restock"])
         text = policy.refusal(reasons)
         self.assertIn("a kind of change I can't put on the website from chat yet", text)
-        self.assertIn("I've saved it for Graham", text)
+        self.assertIn("I've kept it on the list of changes to make by hand", text)
         self.assertEqual(voice.check(text), [])
 
     def test_private_only_never_goes_live(self):
