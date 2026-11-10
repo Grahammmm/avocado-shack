@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from hass import conversation
 from hass.skills import openreq
@@ -122,6 +123,117 @@ class RetentionTests(StoreCase):
         rid = self.put(T0)
         self.store.mark(rid, "closed", T0)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM open_requests").fetchone()[0], 0)
+
+    # -- RF1915-13: closed-request age is the instant closed_at names, whatever its UTC offset spelling ------------------
+    CUTOFF = T0 - timedelta(hours=openreq.RETENTION_HOURS)  # 2026-11-07T17:00:00Z
+    PROBES = {  # name: (closed_at as stored, still there after sweep(T0))
+        "expired_positive_offset": ("2026-11-07T18:00:00+02:00", False),  # 16:00Z, an hour past the cutoff
+        "fresh_negative_offset": ("2026-11-07T11:00:00-07:00", True),  # 18:00Z
+        "equal_negative_offset": ("2026-11-07T10:00:00-07:00", True),  # exactly 17:00Z
+        "expired_utc_control": ("2026-11-07T16:00:00+00:00", False),
+        "fresh_utc_control": ("2026-11-07T18:00:00+00:00", True),
+    }
+
+    def closed(self, tag, stamp, state="closed", owner=None, **kw):
+        """A real closed row for ``tag`` (its owner), whose closed_at is then set to the stored ``stamp``."""
+        rid = self.put(T0, owner=owner or tag, skill="s", **kw)
+        self.store.mark(rid, state, T0)
+        self.db.execute("UPDATE open_requests SET closed_at = ? WHERE request_id = ?", (stamp, rid))
+        return rid
+
+    def owners(self):
+        return sorted(r[0] for r in self.db.execute("SELECT owner FROM open_requests"))
+
+    def snapshot(self):
+        return [tuple(r) for r in self.db.execute("SELECT * FROM open_requests ORDER BY request_id")]
+
+    def test_closed_retention_uses_instants_for_mixed_offsets(self):
+        for state in openreq.CLOSED:
+            for name, (stamp, _) in self.PROBES.items():
+                self.closed(f"{state}/{name}", stamp, state)
+            self.store.sweep(T0)
+            want = sorted(f"{state}/{n}" for n, (_, kept) in self.PROBES.items() if kept)
+            self.assertEqual([o for o in self.owners() if o.startswith(state + "/")], want, state)
+            self.db.execute("DELETE FROM open_requests")
+
+    def test_closed_retention_microsecond_cutoff(self):
+        one = timedelta(microseconds=1)
+        spellings = (lambda t: t.isoformat(), lambda t: t.astimezone(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                     lambda t: t.astimezone(timezone(timedelta(hours=-7))).isoformat(), lambda t: t.isoformat().replace("+00:00", "Z"))
+        for at, kept in ((self.CUTOFF - one, False), (self.CUTOFF, True), (self.CUTOFF + one, True)):
+            for n, spell in enumerate(spellings):
+                self.closed(f"m{n}", spell(at))
+            self.store.sweep(T0)
+            self.assertEqual(self.owners(), [f"m{n}" for n in range(len(spellings))] if kept else [], at.isoformat())
+            self.db.execute("DELETE FROM open_requests")
+
+    def test_closed_retention_uses_elapsed_hours_across_dst(self):
+        pacific = ZoneInfo("America/Los_Angeles")
+        one = timedelta(microseconds=1)
+        for closed_at, edge_utc in ((datetime(2027, 3, 13, 12, 0, tzinfo=pacific), datetime(2027, 3, 14, 20, 0, tzinfo=timezone.utc)),
+                                    (datetime(2026, 10, 31, 12, 0, tzinfo=pacific), datetime(2026, 11, 1, 19, 0, tzinfo=timezone.utc))):
+            self.assertEqual(closed_at.astimezone(timezone.utc) + timedelta(hours=24), edge_utc)  # the independent expectation
+            for now_utc, kept in ((edge_utc - one, True), (edge_utc, True), (edge_utc + one, False)):
+                rid = self.put(T0, skill="s")
+                self.store.mark(rid, "closed", closed_at)
+                self.store.sweep(now_utc.astimezone(pacific))
+                self.assertEqual(self.db.execute("SELECT COUNT(*) FROM open_requests").fetchone()[0], int(kept), (closed_at, now_utc))
+                self.db.execute("DELETE FROM open_requests")
+
+    def test_closed_retention_preserves_legacy_rows_and_unknown_age(self):
+        held = {"junk": "garbage", "naive": "2026-11-01T00:00:00", "empty": "", "bytes": b"2026-11-01T00:00:00+00:00", "date": "2026-11-01"}
+        for tag, stamp in held.items():
+            self.closed(tag, stamp)
+        self.closed("null", None)
+        self.closed("old_offset", "2026-11-07T18:00:00+02:00", "cancelled")  # an existing offset-stamped row is aged, not rewritten
+        self.closed("old_z", "2026-11-01T00:00:00Z", "superseded")
+        self.closed("young_offset", "2026-11-07T11:00:00-07:00", "expired")
+        before = {r["owner"]: tuple(r) for r in self.db.execute("SELECT * FROM open_requests")}
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            self.store.sweep(T0)
+        self.assertEqual((out.getvalue(), err.getvalue()), ("", ""))
+        after = {r["owner"]: tuple(r) for r in self.db.execute("SELECT * FROM open_requests")}
+        self.assertEqual(sorted(after), sorted([*held, "null", "young_offset"]))
+        self.assertTrue(all(after[o] == before[o] for o in after), "a retained row changed")
+
+    def test_closed_retention_does_not_touch_live_or_other_data(self):
+        self.db.execute("CREATE TABLE sentinel(k TEXT)")
+        self.db.execute("INSERT INTO sentinel VALUES ('x')")
+        self.put(T0 + timedelta(hours=30), owner="live_open", skill="s")
+        self.put(T0 + timedelta(hours=30), owner="live_drafted", skill="s", state="drafted")
+        self.put(T0 + timedelta(hours=30), owner="live_legacy")
+        self.closed("old_a", "2026-11-07T18:00:00+02:00", owner=OWNER_ID)
+        self.closed("old_b", "2026-11-07T16:00:00+00:00", owner=OTHER_ID, state="cancelled")
+        live = self.snapshot()[:3]
+        self.store.sweep(T0 + timedelta(hours=30))
+        self.assertEqual(self.owners(), ["live_drafted", "live_legacy", "live_open"])
+        self.assertEqual([tuple(r) for r in self.db.execute("SELECT * FROM open_requests ORDER BY request_id")], live)
+        self.assertEqual([tuple(r) for r in self.db.execute("SELECT * FROM sentinel")], [("x",)])
+
+    def test_sweep_rejects_naive_clock_before_mutation(self):
+        self.put(T0, owner="live", skill="s")
+        self.closed("old", "2026-11-01T00:00:00+00:00")
+        self.db.execute("CREATE TABLE sentinel(k TEXT)")
+        before = self.snapshot()
+        for bad in (datetime(2026, 11, 9, 20, 0), None, "2026-11-09T20:00:00+00:00"):
+            with self.assertRaisesRegex(ValueError, "retention requires an aware clock"):
+                self.store.sweep(bad)
+            self.assertEqual(self.snapshot(), before)  # the live row was not expired, the old row not erased
+        self.db.execute("BEGIN")
+        self.store.sweep(T0 + timedelta(hours=30))
+        self.assertEqual(self.owners(), ["live"])  # old erased; live expired (kept for 24 hours)
+        self.db.execute("ROLLBACK")
+        self.assertEqual(self.snapshot(), before)  # the caller's transaction owns the commit
+        self.store.sweep(T0 + timedelta(hours=30))
+        once = self.snapshot()
+        self.store.sweep(T0 + timedelta(hours=30))
+        self.assertEqual(self.snapshot(), once)
+        with tempfile.TemporaryDirectory() as tmp:  # no table yet: still lazy, nothing created, even for a naive clock
+            db = sqlite3.connect(Path(tmp) / "n.sqlite3", isolation_level=None)
+            lazy = openreq.OpenRequests(db)
+            lazy.sweep(datetime(2026, 11, 9))
+            self.assertFalse(lazy.exists())
+            db.close()
 
     def test_owner_text_is_capped_per_text_and_in_total(self):
         long = "x" * (openreq.MAX_OWNER_TEXT + 500)

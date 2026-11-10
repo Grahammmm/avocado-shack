@@ -1,0 +1,20 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "Hass avocados",
+      "before": "Hass avocado",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-001].name"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "storefront-mockup/catalog-products.js"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

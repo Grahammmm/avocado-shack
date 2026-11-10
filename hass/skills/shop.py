@@ -290,6 +290,9 @@ def check_hours_untouched(slots, texts, ctx):
         first = lost[0]
         same = [d for d in lost if _same(old[0][d], old[0][first])]
         return SkillStop(f"Do you want {day_names(same)} to stay {_stay_phrase(old[0][first][0])}?", "question")
+    for d in range(7):
+        if d in new[0] and d not in old[0] and d not in named:
+            return SkillStop(f"You didn't name {DAY_NAMES[d]}. Should I add hours for it?", "question")
     return None
 
 
@@ -396,7 +399,7 @@ def check_notice_dates(slots, texts, ctx):
         return SkillStop(UNTIL_ASK, "question")
     if until < today:
         return SkillStop(NOTICE_PAST, "question")
-    if until > today + timedelta(days=MAX_NOTICE_DAYS):
+    if (until - today).days > MAX_NOTICE_DAYS:
         return SkillStop(NOTICE_LONG)
     return None
 

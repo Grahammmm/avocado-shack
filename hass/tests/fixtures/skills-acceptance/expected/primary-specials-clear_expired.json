@@ -1,0 +1,25 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "before": {
+        "deal": "2 for 3 dollars",
+        "end": "2026-11-05",
+        "id": "old-lemons",
+        "order": 0,
+        "start": "2026-11-01",
+        "title": "Lemons"
+      },
+      "file": "hass/content/store.json",
+      "path": "specials[old-lemons]"
+    }
+  ],
+  "files": [
+    "hass/content/store.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

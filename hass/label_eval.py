@@ -85,7 +85,9 @@ def _read_photo(folder_fd, name) -> bytes:
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= MAX_PHOTO: raise EvalError("a photo is not a usable regular file")
-        with os.fdopen(fd, "rb", closefd=False) as fh: return fh.read(MAX_PHOTO + 1)
+        with os.fdopen(fd, "rb", closefd=False) as fh: image = fh.read(MAX_PHOTO + 1)
+        if not 0 < len(image) <= MAX_PHOTO: raise EvalError("a photo is not a usable regular file")  # changed after fstat
+        return image
     finally:
         os.close(fd)
 

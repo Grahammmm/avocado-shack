@@ -94,8 +94,8 @@ def candidates(text, hints=None, open_request=None, attachment=None, skills=()) 
     said = {c for c in (lex.canon(t) for t in set(_tokens(text))) if c}
     hints = hints if isinstance(hints, dict) else {}
     folded = nl_prep.fold(text)
-    hike = bool(hints.get("hikes")) or bool(nl_prep.HIKE_WORD_RE.search(folded))
-    stock = bool(hints.get("products")) or bool(AVAILABILITY_TOKENS & {nl_prep.stem(t) for t in nl_prep.TOKEN_RE.findall(folded)})
+    hike = bool(hints.get("hikes")) or bool(hints.get("dates")) or bool(nl_prep.HIKE_WORD_RE.search(folded))
+    stock = bool(hints.get("products")) or bool(hints.get("shelves")) or bool(AVAILABILITY_TOKENS & {nl_prep.stem(t) for t in nl_prep.TOKEN_RE.findall(folded)})
     open_skill = open_request.get("skill") if isinstance(open_request, dict) else None
     scored = []
     for skill in items:

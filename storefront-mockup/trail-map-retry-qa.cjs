@@ -5,14 +5,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const fs=require('fs'),http=require('http'),path=require('path'),assert=require('assert/strict');
 const dir=process.argv[2]&&path.resolve(process.argv[2]);
 if(!dir||!fs.existsSync(path.join(dir,'trail-explorer.js'))){console.error('usage: node trail-map-retry-qa.cjs <published-dir>');process.exit(2)}
-const types={'.js':'text/javascript; charset=utf-8','.css':'text/css','.webp':'image/webp','.json':'application/json'};
+const {createTrailFixtureHandler}=require('./trail-map-fixture-server.cjs');
 const FIXTURE='<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/trail-explorer.css"><div id="host" data-trail-explorer></div><script src="/trail-explorer.js"></script>';
-const server=http.createServer((req,res)=>{
- const u=new URL(req.url,'http://x').pathname,file=path.join(dir,path.normalize(u));
- if(u==='/fixture'){res.setHeader('content-type','text/html');return res.end(FIXTURE)}
- if(!file.startsWith(dir+path.sep)||!fs.existsSync(file)||fs.statSync(file).isDirectory()){res.statusCode=404;return res.end('no')}
- res.setHeader('content-type',types[path.extname(file)]||'application/octet-stream');res.end(fs.readFileSync(file));
-});
+// Serves /fixture from memory and only regular files that resolve inside dir (RF1345-13).
+const server=http.createServer(createTrailFixtureHandler(dir,FIXTURE));
 // Minimal valid synthetic route (not real geography).
 const profile=[0,1,2,3].map(i=>({distanceMeters:i*100,elevationMeters:10+i,lon:-120.8+i*.001,lat:35.2+i*.001}));
 const DATA={distanceMeters:300,oneWayMeters:150,gainMeters:30,lossMeters:30,maxElevationMeters:13,bounds3857:[-13448000,4227000,-13447000,4228000],coordinates:profile.map(p=>[p.lon,p.lat]),profile};

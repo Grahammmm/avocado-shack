@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from hass import media, statebackup
+from hass.tests.test_editor import git
 from hass.tests.test_media import AT, JPEG
 from hass.tests.test_statebackup import SCRIPT, STAMP, BackupTestCase, tree
 from hass.tests.test_statebackup_list import stamps
@@ -17,6 +18,14 @@ LATER = STAMP + timedelta(hours=1)
 LISTS = ("added", "removed", "changed")
 
 class DiffTests(BackupTestCase):
+    def setUp(self):
+        super().setUp()
+        # These cases compare raw bundle hashes as well as state files. Parallel
+        # delta compression can encode the same HEAD differently on each backup.
+        # Keep only this synthetic repo deterministic; production diff still
+        # reports every changed byte and production Git settings are untouched.
+        git(self.repo.wt, "config", "pack.threads", "1")
+
     def cli(self, *args):  # (exit code, parsed line, raw stdout)
         run = subprocess.run([sys.executable, str(SCRIPT), "diff", *map(str, args)], capture_output=True, text=True)
         if run.returncode != 2: self.assertEqual(run.stderr, "")
