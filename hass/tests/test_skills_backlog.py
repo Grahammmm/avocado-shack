@@ -194,6 +194,17 @@ class BacklogTests(unittest.TestCase):
         self.assertNotIn("CANARY", str(ctx.exception))
         self.assertEqual(self._ids(), keep)
 
+    def test_purge_survives_range_edge_stamps_and_continues(self):
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
+        low = self._seed("0001-01-01T00:00:00+02:00")   # UTC instant is before year 1: expired, must not raise
+        mid = self._seed("2026-08-11T11:00:00+00:00")   # expired, after the edge row
+        high = self._seed("9999-12-31T23:59:59.999999-02:00")  # UTC instant is past year 9999: fresh, must not raise
+        fresh = self._seed("2026-11-09T11:00:00+00:00")
+        self.assertEqual(self.store.purge(), 2)
+        self.assertEqual(self._ids(), [high, fresh])
+        self.assertNotIn(low, self._ids())
+        self.assertNotIn(mid, self._ids())
+
     def test_purge_cli_count_matches_offset_aware_deletions(self):
         self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
         self._seed("2026-08-11T13:00:00+02:00")

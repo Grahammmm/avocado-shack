@@ -105,7 +105,9 @@ class Backlog:
                 at = datetime.fromisoformat(stamp)
             except (TypeError, ValueError):
                 continue
-            if at.utcoffset() is None or at.astimezone(timezone.utc) >= cutoff:
+            # Compare the aware instants directly: converting to UTC first would overflow for a valid stamp at the
+            # datetime range edge (0001-01-01T00:00:00+02:00) and abort the whole purge.
+            if at.utcoffset() is None or at >= cutoff:
                 continue
             removed += self.db.execute("DELETE FROM backlog WHERE id = ? AND received_at = ?", (row_id, stamp)).rowcount
         return removed
