@@ -238,6 +238,9 @@ WARNINGS = (  # (regex on the technical warning, builder of the plain sentence)
         f"{m[1]} {'guest has' if m[1] == '1' else 'guests have'} signed up, and nobody is told automatically.")),
     (r"moves to .*; (\d+) confirmed guests? (?:is|are) not told", lambda m: (
         f"{m[1]} {'guest has' if m[1] == '1' else 'guests have'} signed up for the old time, and nobody is told automatically.")),
+    (r": the (meeting place|meet time|route) changes; (\d+) confirmed guests? (?:is|are) not told", lambda m: (
+        f"The {m[1]} changes. {m[2]} {'guest has' if m[2] == '1' else 'guests have'} signed up, "
+        "and nobody is told automatically.")),
     (r"adds organic badge", lambda m: "This adds the Organic badge."),
     (r"removes organic badge", lambda m: "This takes off the Organic badge."),
     (r"changes the .based in. line on (\d+)", lambda m: f"This changes the 'Based in' line on {m[1]} product card{'s' if m[1] != '1' else ''}."),
