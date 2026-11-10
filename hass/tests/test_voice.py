@@ -39,6 +39,7 @@ OWNER_FACING = {
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
     "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render"], "interpret_check.py": "all",
     "label_reader.py": ["question", "_maker_line", "_product_line"], "skills/reports.py": "all",  # AV1109-08: the shelf skill's sentences
+    "skills/social.py": ["item_reply", "hike_reply", "maker_reply", "preflight", "refusal"],
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
     "conversation.py": ["HELP_TEXT", "LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "HISTORY_USAGE", "FIND_USAGE", "POST_USAGE", "HIKE_USAGE",
@@ -46,6 +47,9 @@ MODULE_CONSTANTS = {  # names of module-level owner text
                         "NOT_READ_REPLY", "PHOTO_QUESTION", "FETCH_FAILED", "DAILY_LIMIT", "TOO_LONG", "NOTHING", "SOCIAL_REPLY",
                         "UNREADABLE", "HELD_REPLY", "CANT_READ", "HOSTILE_REPLY", "STATUS_PLAIN"],
     "media.py": ["REPLIES"],
+    "skills/social.py": ["COPY_HEAD", "PRODUCT_PHOTO", "NO_PHOTO", "NO_POSTING", "CANT_READ", "CANT_SEE_PHOTO", "NO_STORY", "ITEM_REFUSALS",
+                         "HIKE_REFUSALS", "MAKER_REFUSALS", "SHARED_REFUSALS", "RESOLVER_REFUSALS"],
+    "skills/dispatch.py": ["MIXED"],
 }
 SQLISH = re.compile(r"^\s*(?:SELECT|INSERT|UPDATE|CREATE|DELETE|ALTER|PRAGMA|BEGIN|AND|ORDER|WHERE|\"|\)|\]|'|\([\'\"])|\bIS (?:NOT )?NULL\b|\b(?:state|change_id|row_id|ops_json|"
                     r"draft_hash)\b\s*(?:=|IN\b)|ORDER BY")
