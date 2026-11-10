@@ -7,15 +7,17 @@ check day, a hidden product) are driven here on the same scratch shop with the r
 Run: python3 -B -m unittest hass.tests.test_skills_stock -v
 """
 
+import copy
 import json
 import types
 import unittest
+from datetime import timedelta
 from pathlib import Path
 
 from hass import live_policy, voice
 from hass.content_model import REPO_ROOT
 from hass.ops import KINDS as OP_KINDS, load_registry
-from hass.skills import kinds, load_skills, model, skill_lint, stock, testkit
+from hass.skills import kinds, load_skills, model, openreq, skill_lint, stock, testkit
 from hass.skills.model import lint_cases
 from hass.tests.test_conversation import CHAT
 from hass.tests.test_editor import git
@@ -111,6 +113,35 @@ class Declarations(unittest.TestCase):
 
 
 class PlanRules(unittest.TestCase):
+    def test_set_conflicting_words_carries_question_kind_only(self):
+        ctx = _ctx([_product()])
+        slots = {"items": _items((EGGS, "no"), (EGGS, "limited"), (HASS, "yes"))}
+        before = copy.deepcopy((slots, vars(ctx.content)))
+        with self.assertRaises(stock.Refusal) as caught:
+            stock.STOCK_SET.plan(slots, ctx)
+        self.assertEqual(caught.exception.reply, stock.TWICE.format(name="Cal Poly eggs"))
+        self.assertEqual(getattr(caught.exception, "kind", None), "question")
+        self.assertIsInstance(caught.exception, ValueError)
+        self.assertEqual((slots, vars(ctx.content)), before)
+        self.assertEqual(stock.Refusal("unchanged").kind, "refuse")
+        controls = [
+            (stock.STOCK_SET, {"items": _items((EGGS, "no"))}, _ctx([_product(status=status)]))
+            for status in ("held", "hidden")]
+        controls += [
+            (stock.STOCK_SET, {"items": _items(*((pid, "no") for pid in (*SIX, LEMONS)))}, ctx),
+            (stock.STOCK_SET, {"items": _items((EGGS, "no"))},
+             _ctx([_product(available="no", available_on="2026-11-08")])),
+            (stock.STOCK_CLEAR, {"items": [EGGS]}, ctx),
+            (stock.STOCK_CHECKED, {"in": [EGGS, EGGS]}, ctx),
+            (stock.STOCK_CHECKED, {"in": [EGGS], "out": [EGGS]}, ctx)]
+        for skill, args, context in controls:
+            with self.subTest(skill=skill.name, args=args, context=context):
+                before = copy.deepcopy((args, vars(context.content)))
+                with self.assertRaises(stock.Refusal) as caught:
+                    skill.plan(args, context)
+                self.assertEqual(caught.exception.kind, "refuse")
+                self.assertEqual((args, vars(context.content)), before)
+
     def test_a_word_already_set_today_says_so(self):
         ctx = _ctx([_product(available="no", available_on="2026-11-08")], {"selection_checked_on": "2026-11-08"})
         reply = _refusal(stock.STOCK_SET, {"items": [{"product": EGGS, "availability": "no"}]}, ctx)
@@ -318,6 +349,123 @@ class RealDispatcherStock(SkillCase):
     def ops(self):
         return [(o["op"], o["args"]) for o in json.loads(self.drafts()[-1]["ops_json"])]
 
+    def conflict(self, text="eggs are out and low, avocados are in", *, calls=False, pid=None):
+        items = _items((EGGS, "no"), (EGGS, "limited"), (HASS, "yes"))
+        call = {"skill": "stock.set", "slots": {"items": items}}
+        self.script(text, {"calls": [call]} if calls else call)
+        self.assertEqual(self.say(text, **({"pid": pid} if pid else {})), "question")
+        req = self.live()
+        self.assertIsNotNone(req)  # the clarification must retain its entire request
+        self.assertEqual((req["skill"], req["slots"], req["texts"], req["asked_slot"], req["question"]),
+                         ("stock.set", {"items": items}, [text], None, stock.TWICE.format(name="Cal Poly eggs")))
+        self.assertEqual(self.replies(), [req["question"]])
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+        return req
+
+    def test_real_set_conflict_keeps_request_and_model_snapshot(self):
+        self.checked_today()
+        req = self.conflict()
+        self.conv = self.open()  # prove persisted context, not just in-memory state
+        corrected = _items((EGGS, "limited"), (HASS, "yes"))
+        self.assertEqual(self.set_items("low", corrected)[0], "proposed")
+        text, recent = self.asked[-1]
+        self.assertEqual((text, recent), ("low", {"skill": "stock.set", "slots": req["slots"],
+                                              "question": req["question"], "earlier": req["texts"]}))
+        self.assertEqual(self.live()["request_id"], req["request_id"])
+        self.assertEqual(self.live()["slots"], {"items": corrected})
+        self.assertEqual(self.ops(), [("product.set_availability", {"id": EGGS, "available": "limited"}),
+                                     ("product.set_availability", {"id": HASS, "available": "yes"})])
+        self.nothing_written()
+
+    def test_real_set_conflict_one_call_envelope(self):
+        self.checked_today()
+        req = self.conflict(calls=True)
+        corrected = _items((EGGS, "limited"), (HASS, "yes"))
+        self.assertEqual(self.set_items("low", corrected)[0], "proposed")
+        self.assertEqual(self.live()["request_id"], req["request_id"])
+        self.assertEqual(self.ops(), [("product.set_availability", {"id": i["product"], "available": i["availability"]})
+                                     for i in corrected])
+        self.nothing_written()
+
+    def test_set_conflict_keeps_queued_call_context(self):
+        self.checked_today()
+        req = self.conflict()
+        queued = [{"skill": "stock.clear", "slots": {"items": [LEMONS]}}]
+        # Existing queued context survives another unresolved plan and a conversation restart.
+        self.conv.requests.put(CHAT, req["provider_id"], self.now, request_id=req["request_id"],
+                               skill=req["skill"], slots=req["slots"], texts=req["texts"],
+                               question=req["question"], calls=queued, asks=req["asks"])
+        self.conv.db.commit()
+        self.conv = self.open()
+        self.assertEqual(self.tell("still unsure", {"skill": "stock.set", "slots": {}})[0], "question")
+        self.assertEqual(self.live()["request_id"], req["request_id"])
+        self.assertEqual(self.live()["slots"], req["slots"])
+        self.assertEqual(self.live()["calls"], queued)
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_set_conflict_correction_preserves_shelf_confirmation(self):
+        original = git(self.repo.wt, "rev-parse", "HEAD")
+        self.conflict()
+        disposition, reply = self.set_items("low", _items((EGGS, "limited"), (HASS, "yes")))
+        self.assertEqual(disposition, "question")
+        self.assertIn(SHELF_Q, reply)
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+        self.assertEqual(self.say("yes"), "proposed")
+        self.assertEqual(self.ops(), [("store.confirm_selection", {}),
+                                     ("product.set_availability", {"id": EGGS, "available": "limited"}),
+                                     ("product.set_availability", {"id": HASS, "available": "yes"})])
+        self.nothing_written()
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+        self.assertEqual(self.say("undo"), "proposed")
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(testkit.tree_diff(self.repo.wt, original)[1], [])
+
+    def test_set_conflict_unresolved_and_cancel(self):
+        self.checked_today()
+        req = self.conflict()
+        for number in range(2, openreq.MAX_UNRESOLVED + 1):
+            disposition, reply = self.tell(f"still unsure {number}", {"skill": "stock.set", "slots": req["slots"]})
+            self.assertEqual((disposition, reply), ("question", req["question"]))
+            self.assertEqual((self.live()["request_id"], self.live()["slots"], self.live()["asks"]),
+                             (req["request_id"], req["slots"], number))
+        self.assertEqual(self.tell("still unsure again", {"skill": "stock.set", "slots": req["slots"]})[0], "backlog")
+        self.assertIsNone(self.live())
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+        self.conflict("eggs are both out and low, avocados in")
+        self.assertEqual(self.tell("never mind", {"cancel": True})[0], "cancelled")
+        self.assertIsNone(self.live())
+        self.assertEqual(self.set_items("low", [])[0], "question")
+        self.assertEqual(self.live()["slots"], {})
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_set_conflict_empty_slots_and_bare_approval_do_not_choose(self):
+        self.checked_today()
+        req = self.conflict()
+        self.assertEqual(self.tell("low", {"skill": "stock.set", "slots": {}}), ("question", req["question"]))
+        self.assertEqual(self.live()["slots"], req["slots"])
+        self.say("yes")
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_set_conflict_duplicate_and_expired_request_do_not_continue(self):
+        self.checked_today()
+        req = self.conflict(pid="conflict-message")
+        self.assertEqual(self.say(req["texts"][0], pid="conflict-message"), "duplicate")
+        self.assertEqual(self.live(), req)
+        self.now += timedelta(minutes=openreq.TTL_MINUTES + 1)
+        self.assertEqual(self.tell("low", {"skill": "stock.set", "slots": {}})[0], "question")
+        self.assertNotEqual(self.live()["request_id"], req["request_id"])
+        self.assertEqual(self.live()["slots"], {})
+        self.assertIsNone(self.asked[-1][1])
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
     def test_structured_items_reach_shelf_check_and_direct_draft(self):
         disposition, reply = self.set_items("eggs are out", _items((EGGS, "no")))
         self.assertEqual(disposition, "question")
@@ -385,6 +533,7 @@ class RealDispatcherStock(SkillCase):
                 self.assertNotEqual(disposition, "proposed")
                 self.assertEqual(reply, words)
                 self.assertEqual(self.drafts(), [])
+                self.conv.requests.close_live(CHAT, self.now)  # independent stock-rule cases, not continuation attempts
         self.nothing_written()
         disposition, reply = self.set_items("eggs are out, eggs are out", _items((EGGS, "no"), (EGGS, "no")))
         self.assertEqual(disposition, "proposed", reply)  # the same word twice is one change
