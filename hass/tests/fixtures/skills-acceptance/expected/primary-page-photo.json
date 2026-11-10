@@ -1,0 +1,27 @@
+{
+  "assets": {
+    "storefront-mockup/assets/products/photo-fab096f8b428800a.jpg": "61ad775614a7d7ca4f357a9f574281515190fcef65d191733d8b6ffab6a392c8"
+  },
+  "diff": [
+    {
+      "after": {
+        "image": "assets/products/photo-fab096f8b428800a.jpg",
+        "imageAlt": "The front of the shop"
+      },
+      "file": "hass/content/store.json",
+      "path": "homeImage"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/assets/products/photo-fab096f8b428800a.jpg",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {
+      "storefront-mockup/assets/products/photo-fab096f8b428800a.jpg": "61ad775614a7d7ca4f357a9f574281515190fcef65d191733d8b6ffab6a392c8"
+    },
+    "content": []
+  },
+  "schema_version": 1
+}

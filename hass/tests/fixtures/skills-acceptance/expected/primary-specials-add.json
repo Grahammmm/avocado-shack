@@ -1,0 +1,28 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": [
+        {
+          "deal": "2 for 5 dollars",
+          "end": "2026-11-13",
+          "id": "avocado-honey",
+          "order": 0,
+          "start": "2026-11-08",
+          "title": "Avocado honey"
+        }
+      ],
+      "file": "hass/content/store.json",
+      "path": "specials"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}
