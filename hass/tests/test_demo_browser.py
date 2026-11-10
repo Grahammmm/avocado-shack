@@ -14,6 +14,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from hass import conversation
 from hass.content_model import REPO_ROOT
 from hass.tests import test_demo_transcript as demo
 from hass.tests.test_editor import git
