@@ -168,6 +168,8 @@ PROTECTED = tuple((kind, claims._pattern(term)) for kind, terms in (
 FIELDS = {"products": {"brand", "displayBrand", "producerKey"}, "makers": {"place", "url"},
           "events": {"distance", "difficulty", "duration", "accessNote", "meetingAddress", "trailId"}}
 OPS = {"hike.samples", "store.set_phone", "store.clear_phone", "store.set_address"}
+# (protected operation, the store field it writes): see check(), which does not screen that value again as a sentence.
+STORE_OWNED = (("store.set_phone", "phone"), ("store.clear_phone", "phone"), ("store.set_address", "streetAddress"))
 UNREADABLE = ["the change could not be read"]
 
 # One row per operation that may go live from chat. Value: the argument names it may carry (None = any argument; the field and
@@ -423,6 +425,10 @@ def check(draft) -> list[str]:
             elif allowed is not None and args is not None: return UNREADABLE.copy()
         if not undo: reasons.update(_lone_makers(ops))
         names_seen = _names(records)
+        # A store field whose own operation is already a protected operation is refused for that reason alone; its value (the phone
+        # digits, the street address) is not screened again as a sentence. Only the field that operation writes is skipped, and
+        # only while that operation is in the draft: an undo or any other operation touching the field is still screened.
+        owned = {("store", field) for name, field in STORE_OWNED if name in names and not undo}
         for record in records:
             collection, before, after = record["collection"], record["before"], record["after"]
             if not isinstance(collection, str): return UNREADABLE.copy()
@@ -431,6 +437,7 @@ def check(draft) -> list[str]:
             for field, b, a in _changes(before, after):
                 if collection == "club" or (field in FIELDS.get(collection, set()) and not _created_here(collection, field, before, names)):
                     reasons.add(f"protected field: {collection}.{field}")
+                if (collection, field) in owned: continue
                 for old, new in _text_changes(b, a):
                     bp, bk = _protected(old, collection, names_seen)
                     ap, ak = _protected(new, collection, names_seen)

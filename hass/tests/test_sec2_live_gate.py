@@ -205,5 +205,32 @@ class L4HedgedWordsTests(unittest.TestCase):
                 self.assertEqual(policy.unsaid(self.DRAFT, said), [])
 
 
+class StoreContactOwnedByItsOperationTests(unittest.TestCase):
+    """The phone and the street address are refused for their protected operation; only those two fields skip the sentence screen."""
+    PHONE = "8055550123"
+
+    def draft(self, op, **after):
+        return {"ops": [{"op": op, "args": {}}], "records": [{"collection": "store", "key": "store", "before": {}, "after": after}]}
+
+    def test_the_phone_value_is_not_screened_again_beside_its_own_protected_operation(self):
+        self.assertEqual(policy.check(self.draft("store.set_phone", phone=self.PHONE)), ["protected operation: store.set_phone"])
+        self.assertEqual(policy.check(self.draft("store.set_address", streetAddress="1023 Example Street")),
+                         ["protected operation: store.set_address"])
+
+    def test_a_phone_number_in_any_other_store_field_is_still_a_contact_sentence(self):
+        for field in ("intro", "headline", "story", "town", "notice"):
+            with self.subTest(field=field):
+                self.assertIn("protected sentences: contact", policy.check(self.draft("store.set_phone", **{field: f"Call {self.PHONE}"})))
+
+    def test_the_other_operations_field_is_not_skipped(self):
+        self.assertIn("protected sentences: contact", policy.check(self.draft("store.set_address", phone=self.PHONE)))
+
+    def test_without_the_protected_operation_the_phone_value_is_a_contact_sentence(self):
+        self.assertIn("protected sentences: contact", policy.check(self.draft("store.confirm_selection", phone=self.PHONE)))
+        undo = {"ops": [{"op": "history.revert", "args": {"changeId": "chg-000000000001"}}],
+                "records": [{"collection": "store", "key": "store", "before": {}, "after": {"phone": self.PHONE}}]}
+        self.assertIn("protected sentences: contact", policy.check(undo))
+
+
 if __name__ == "__main__":
     unittest.main()
