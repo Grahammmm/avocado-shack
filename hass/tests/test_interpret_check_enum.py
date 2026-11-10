@@ -82,7 +82,7 @@ class EnumCheckTests(unittest.TestCase):
         self.assertEqual(ask([bad, call("product.set_availability", id="p1", available="maybe")]),
                          {"question": SHELVES.format("snacks")})
         self.assertIn("are the same", ask([bad, bad])["question"])
-        self.assertIn("I can't do that kind of change yet.", ask([call("product.edit", id="p1", colour="x"), bad])["question"])
+        self.assertIn("I can't do that kind of change from chat yet,", ask([call("product.edit", id="p1", colour="x"), bad])["question"])
         self.assertIn("I can't find that change", ask([call("product.edit", id="p1", name="Hass")], revises="beef")["question"])
         self.assertEqual(ask([bad], revises="beef"), {"question": SHELVES.format("snacks")})  # fields before revises
         self.assertEqual(ask([bad, call("history.revert", change="chg-000000000000")])["question"],

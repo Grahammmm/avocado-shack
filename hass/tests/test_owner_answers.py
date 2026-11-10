@@ -22,8 +22,8 @@ INTERNAL = re.compile(r"chg-|sha256|[0-9a-f]{7,}|/|worktree|commit|revision|inde
 STOPPED = "Changes are stopped. I won't save anything new until you say 'resume changes'."
 STAYS = "Changes already on the website stay there."
 NOT_COPIED = ("It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. "
-              "If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it "
-              "to the website again, which puts every page in place.")
+              "If copying it started and stopped partway, some pages may already show it. Copying it to the website "
+              "again, by hand, puts every page in place.")
 NOT_LIVE = "It's saved, but not on the website yet. Copying it there is a separate step, done by hand."
 
 
@@ -123,7 +123,7 @@ class DidItWorkTests(unittest.TestCase):
             with self.subTest(reason=change["reason"]):
                 got = answers.did_it_work(change, None, NOW)
                 self.assertTrue(got.startswith("It's saved, but I'm not sure it's on the website. "), got)
-                self.assertIn("some pages may already show it. Please ask Graham to copy it to the website again", got)
+                self.assertIn("some pages may already show it. Copying it to the website again, by hand,", got)
                 for word in ("Nothing is broken", "unchanged", "as it was"):
                     self.assertNotIn(word, got)
 

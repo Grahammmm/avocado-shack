@@ -365,9 +365,9 @@ class Scratch:
         _git(self.repo.wt, "add", "-A")
         _git(self.repo.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "real assets/products folder")
 
-    def _with_set_line(self, row, draft, prefix=""):
+    def _with_set_line(self, row, draft, prefix="", notes=()):  # HASS-CHAT-1: the conversation now passes the notes it chose
         line, self.interp.chosen = self.interp.set_line(), []  # once, and only for the message whose plan chose something
-        return self._proposal_reply(row, draft, line + prefix)
+        return self._proposal_reply(row, draft, line + prefix, notes)
 
     def _seed_or_clean(self, seed):
         try: self._seed(seed)

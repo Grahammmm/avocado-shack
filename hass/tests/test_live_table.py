@@ -49,7 +49,7 @@ class TableShape(unittest.TestCase):
             with self.subTest(op=name):
                 text = policy.refusal([f"not live: {name}"])
                 self.assertEqual(voice.check(text), [], text)
-                self.assertIn("I've saved it for Graham", text)
+                self.assertIn("I've kept it on the list of changes to make by hand", text)
                 self.assertNotIn("not live", text)
         for reasons in (["not live: product.edit.brand"], ["not live: made.up"], ["sign-up is on"], ["more than 10 records"]):
             self.assertEqual(voice.check(policy.refusal(reasons)), [])
@@ -100,7 +100,7 @@ class RealDrafts(unittest.TestCase):
         for name in ("maker.hide", "maker.restore"):
             self.assertIn(name, policy.PRIVATE)
             self.assertNotIn(name, policy.LIVE)
-            self.assertIn("I've saved it for Graham", policy.refusal([f"not live: {name}"]))
+            self.assertIn("I've kept it on the list of changes to make by hand", policy.refusal([f"not live: {name}"]))
         self.assertEqual(self.refused(op("maker.hide", key=self.maker_key(), withProducts=True)), ["not live: maker.hide"])
 
     def test_undo_always_passes(self):
@@ -165,7 +165,7 @@ class RefusedIsSavedPrivately(ConversationTestCase):
         self.assertEqual(self.say("organic"), "proposed")
         [reply] = self.replies()
         self.assertIn("I can't put this on the website from chat", reply)
-        self.assertIn("I've saved it for Graham to look at", reply)
+        self.assertIn("I've kept it on the list of changes to make by hand", reply)
         self.assertNotIn("Reply yes", reply)
         [row] = self.backlog()
         self.assertEqual((row["reason"], row["state"]), ("policy", "open"))
@@ -173,7 +173,7 @@ class RefusedIsSavedPrivately(ConversationTestCase):
         self.assertTrue(row["summary"].startswith(f"[{code}]"))
         self.assertIn("test.set_product_description", row["text"])
         self.assertEqual(self.say(f"yes {code}"), "no-target")  # a yes cannot get around it
-        self.assertIn("I've saved it for Graham", self.replies()[0])
+        self.assertIn("I've kept it on the list of changes to make by hand", self.replies()[0])
         self.assertEqual(len(self.backlog()), 1)  # once, not once per try
         self.assertEqual((self.editor.applies, self.commits()), (0, 0))
         self.assertEqual(self.conv.db.execute("SELECT count(*) FROM approvals").fetchone()[0], 0)
