@@ -82,7 +82,7 @@ class Declaration(unittest.TestCase):
                 self.assertIn(rule, hikes.RULES)
             for _why, reply in skill.refuse:
                 self.assertEqual(voice.check(reply), [], reply)
-        for const in ("R_PRICE", "R_PAST_DAY", "R_PAST_TIME", "R_FAR", "R_WHAT_MOVE", "R_SIGNUP_NOT_SAID", "R_SIGNUP_UNCLEAR", "R_SPOTS_NOT_SAID", "R_NO_RECAP_YET"):
+        for const in ("R_PRICE", "R_PAST_DAY", "R_PAST_TIME", "R_FAR", "R_WHAT_MOVE", "R_SIGNUP_NOT_SAID", "R_SIGNUP_UNCLEAR", "R_SPOTS_NOT_SAID", "R_CAP_MAX", "R_NO_RECAP_YET"):
             self.assertEqual(voice.check(getattr(hikes, const)), [], const)
 
     def test_slot_asks_are_one_short_question_and_the_ops_get_their_own_argument_names(self):
@@ -200,7 +200,7 @@ class Defaults(unittest.TestCase):
         slots = {"title": "Cass Hill hike", "day": "2026-12-12", "clock": "08:00", "meeting_point": "Cass Hill gate"}
         skills = {s.name: s for s in testkit.registry_skills()}
         seen = {}
-        for label, said, given in (("ordinary", text, slots), ("sign-up said", text + ", sign-up on, 15 spots", {**slots, "signup": True, "capacity": 15}),
+        for label, said, given in (("ordinary", text, slots), ("sign-up said", text + ", sign-up on, 5 spots", {**slots, "signup": True, "capacity": 5}),
                                    ("sign-up said off", text + ", sign-up off", {**slots, "signup": False})):
             sc = testkit.Scratch({said: {"skill": "hike.add", "slots": given}}, skills)
             try:
@@ -218,10 +218,10 @@ class Defaults(unittest.TestCase):
         base = {"title": "T", "day": "2026-11-14", "clock": "08:00", "meeting_point": "the gate"}
         self.assertNotIn("capacity", hikes.plan_add({**base, "capacity": 12}, ctx())[0]["args"])  # E2E-HIKE-1: never invented
         self.assertNotIn("noCapacityLimit", hikes.plan_add({**base, "no_limit": True}, ctx())[0]["args"])
-        on = hikes.plan_add({**base, "signup": True, "capacity": 12}, ctx())[0]["args"]
-        self.assertEqual((on["rsvpEnabled"], on["capacity"]), (True, 12))
+        on = hikes.plan_add({**base, "signup": True, "capacity": 4}, ctx())[0]["args"]
+        self.assertEqual((on["rsvpEnabled"], on["capacity"]), (True, 4))
         self.assertEqual(hikes.plan_add({**base, "signup": True}, ctx())[0]["args"],
-                         {"title": "T", "date": "2026-11-14", "time": "08:00", "meetingPoint": "the gate", "rsvpEnabled": True})  # the editor asks how many
+                         {"title": "T", "date": "2026-11-14", "time": "08:00", "meetingPoint": "the gate", "rsvpEnabled": True, "capacity": 6})  # AV1109-11: the six-spot default
 
     def test_facts_are_kept_exactly_as_written_and_never_filled_in(self):
         args = hikes.plan_add({"title": "T", "day": "2026-11-14", "clock": "08:00", "meeting_point": "the gate", "difficulty": "Easy-ish ",
@@ -287,9 +287,9 @@ class RealDispatcherDefaults(unittest.TestCase):
     def test_ambiguous_limit_never_becomes_a_draft(self):
         slots = {"title": "Harbor Walk", "day": "2026-12-12", "clock": "08:00", "meeting_point": "the gate", "signup": True}
         pine = {"title": "Pine hike", "day": "2026-12-19", "clock": "09:00", "meeting_point": "Pine gate"}
-        said = "Add Harbor Walk December 12 at 8am, meet at the gate, sign-up on, 15 spots or 20 spots"
+        said = "Add Harbor Walk December 12 at 8am, meet at the gate, sign-up on, 4 spots or 6 spots"
         approvals = lambda c: c.conv.db.execute("SELECT COUNT(*) FROM approvals").fetchone()[0]
-        for cap in (15, 20):
+        for cap in (4, 6):
             with self.subTest(envelope="single", cap=cap):
                 case = self.fresh_case()
                 case.script(said, {"skill": "hike.add", "slots": {**slots, "capacity": cap}})
@@ -309,21 +309,176 @@ class RealDispatcherDefaults(unittest.TestCase):
         for order in ((20, None), (None, 20)):
             with self.subTest(order=order):
                 case = self.fresh_case()
-                calls = [{"skill": "hike.add", "slots": {**slots, "capacity": 20} if which else pine} for which in (order[0], order[1])]
+                calls = [{"skill": "hike.add", "slots": {**slots, "capacity": 6} if which else pine} for which in (order[0], order[1])]
                 case.script(mixed, {"calls": calls})
                 self.assertEqual(case.say(mixed), "proposed")
                 ops = [op for d in case.drafts() for op in json.loads(d["ops_json"])]
                 self.assertEqual([op["args"]["title"] for op in ops], ["Pine hike"])
                 self.assertNotIn("capacity", ops[0]["args"])
                 case.nothing_written()
-        # exact-capacity control: a later explicit correction proposes capacity 20 and applies nothing before yes
+        # exact-capacity control: a later explicit correction proposes capacity 6 and applies nothing before yes
         case = self.fresh_case()
-        fixed = said + ". Actually make it 20 spots"
-        case.script(fixed, {"skill": "hike.add", "slots": {**slots, "capacity": 20}})
+        fixed = said + ". Actually make it 6 spots"
+        case.script(fixed, {"skill": "hike.add", "slots": {**slots, "capacity": 6}})
         self.assertEqual(case.say(fixed), "proposed")
         self.assertEqual(len(case.drafts()), 1)
-        self.assertEqual(json.loads(case.drafts()[0]["ops_json"])[0]["args"]["capacity"], 20)
+        self.assertEqual(json.loads(case.drafts()[0]["ops_json"])[0]["args"]["capacity"], 6)
         case.nothing_written()
+
+
+class SixSpotDefault(unittest.TestCase):
+    """AV1109-11: sign-up on with no number and no "no limit" is six spots, set by code after the no-invention rule; six is also the ceiling."""
+    ADD = {"title": "Cass Hill hike", "day": "2026-12-12", "clock": "08:00", "meeting_point": "Cass Hill gate"}
+    TEXT = "Add Cass Hill hike December 12 at 8am, meet at Cass Hill gate"
+    NOTE = "Page will say: Limited to {} people · availability unconfirmed; ask at the Shack"
+
+    def case(self):
+        from hass.tests.test_skill_dispatch import SkillCase, registry_of
+
+        case = SkillCase()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.registry = registry_of(hikes.ADD)
+        case.conv = case.open()
+        return case
+
+    def test_add_and_edit_default_six_after_guard(self):
+        said = ctx(CASS, texts=[self.TEXT + ", sign-up on"])
+        for plan, slots in ((hikes.plan_add, {**self.ADD, "signup": True}), (hikes.plan_edit, {"hike": CASS["id"], "signup": True})):
+            with self.subTest(plan.__name__):
+                before = (dict(slots), list(said.texts))
+                args = plan(slots, said)[0]["args"]
+                self.assertEqual((args["rsvpEnabled"], args["capacity"]), (True, 6))
+                self.assertEqual((slots, said.texts), before)  # the caller's slots and the owner's words are not touched
+                invented = {**slots, "capacity": 6}  # a six the model wrote and he did not say is still refused
+                with self.assertRaises(hikes.Refusal) as caught:
+                    plan(invented, said)
+                self.assertEqual(caught.exception.reply, hikes.R_SPOTS_NOT_SAID)
+
+    def test_default_capacity_is_not_a_fallback_for_unresolved_evidence(self):
+        for said in (self.TEXT + ", sign-up on, 4 spots or 6 spots", self.TEXT + ", sign-up on, 4 spots", self.TEXT + ", sign-up on, no limit",
+                     self.TEXT + ", no sign up"):
+            with self.subTest(said):
+                got = ctx(CASS, texts=[said])
+                self.assertIsNone(hikes.default_capacity({"signup": True}, got))
+        self.assertEqual(hikes.default_capacity({"signup": True}, ctx(CASS, texts=[self.TEXT + ", sign-up on, 5 miles, 2 liters of water"])), 6)
+        self.assertEqual(hikes.default_capacity({"signup": True}, ctx(CASS)), 6)  # his words unknown: explicit sign-up on is enough
+        for slots in ({"signup": False}, {}, {"signup": True, "capacity": 3}, {"signup": True, "no_limit": True}, {"signup": True, "capacity": 0},
+                      {"signup": True, "capacity": True}):
+            with self.subTest(slots):
+                self.assertIsNone(hikes.default_capacity(slots, ctx(CASS)))
+        # what he said but the model left out stays with the editor's question: the plan writes no capacity
+        args = hikes.plan_add({**self.ADD, "signup": True}, ctx(CASS, texts=[self.TEXT + ", sign-up on, 4 spots"]))[0]["args"]
+        self.assertNotIn("capacity", args)
+
+    def test_capacity_ceiling_after_evidence(self):
+        for cap, ok in ((1, True), (4, True), (6, True), (7, False), (1000, False)):
+            for plan, base in ((hikes.plan_add, {**self.ADD, "signup": True}), (hikes.plan_edit, {"hike": CASS["id"], "signup": True})):
+                with self.subTest(cap=cap, plan=plan.__name__):
+                    c = ctx(CASS, texts=[self.TEXT + f", sign-up on, {cap} spots"])
+                    if ok:
+                        self.assertEqual(plan({**base, "capacity": cap}, c)[0]["args"]["capacity"], cap)
+                    else:
+                        with self.assertRaises(hikes.Refusal) as caught:
+                            plan({**base, "capacity": cap}, c)
+                        self.assertEqual(caught.exception.reply, hikes.R_CAP_MAX)
+        self.assertEqual(hikes.R_CAP_MAX, "The most I can set is 6.")
+        # a seven the model wrote and he did not say keeps the no-invention reply
+        with self.assertRaises(hikes.Refusal) as caught:
+            hikes.plan_add({**self.ADD, "signup": True, "capacity": 7}, ctx(CASS, texts=[self.TEXT + ", sign-up on"]))
+        self.assertEqual(caught.exception.reply, hikes.R_SPOTS_NOT_SAID)
+        # an add with sign-up off discards a limit as before; an edit writes the limit it is given, so the ceiling applies there
+        self.assertNotIn("capacity", hikes.plan_add({**self.ADD, "capacity": 12}, ctx(CASS))[0]["args"])
+        with self.assertRaises(hikes.Refusal):
+            hikes.plan_edit({"hike": CASS["id"], "capacity": 9}, ctx(CASS))
+        # zero, negative and bool values are never read as "missing" and never become the default
+        for bad in (0, -2, True):
+            self.assertEqual(hikes.plan_edit({"hike": CASS["id"], "signup": True, "capacity": bad}, ctx(CASS))[0]["args"].get("capacity"), bad if bad is not True else None)
+
+    def test_edit_default_does_not_touch_unmentioned_capacity(self):
+        on = ev("hike-2026-11-22-pine", "Pine", "2026-11-22T09:00:00-08:00", rsvpEnabled=True, capacity=4)
+        c = ctx(on, texts=["Pine bring a hat"])
+        self.assertEqual(hikes.plan_edit({"hike": on["id"], "bring": "Hat"}, c)[0]["args"], {"id": on["id"], "bring": "Hat"})
+        self.assertEqual(hikes.plan_edit({"hike": on["id"], "signup": False}, ctx(on, texts=["turn off sign-up for Pine"]))[0]["args"],
+                         {"id": on["id"], "rsvpEnabled": False})
+        self.assertEqual(hikes.plan_edit({"hike": on["id"], "signup": True}, ctx(on, texts=["turn on sign-up for Pine"]))[0]["args"]["capacity"], 6)
+        self.assertEqual(hikes.plan_edit({"hike": on["id"], "signup": True, "no_limit": True}, ctx(on, texts=["sign-up on for Pine, no limit"]))[0]["args"],
+                         {"id": on["id"], "rsvpEnabled": True, "noCapacityLimit": True})
+
+    def test_the_notes_carry_the_default_and_the_limit_of_the_hike_itself(self):
+        off, on4 = ev("hike-off", "Off", "2026-11-22T09:00:00-08:00"), ev("hike-on", "On", "2026-11-22T09:00:00-08:00", rsvpEnabled=True, capacity=4)
+        unlimited = ev("hike-free", "Free", "2026-11-22T09:00:00-08:00", rsvpEnabled=True)
+        c = ctx(off, on4, unlimited)
+        note = self.NOTE
+        got = lambda name, slots: hikes.notes(name, slots, c)
+        self.assertEqual(got("hike.edit", {"hike": "hike-off", "signup": True}), {"say": [note.format(6)], "set": ["I set: 6 spots."], "warn": []})
+        self.assertEqual(got("hike.edit", {"hike": "hike-off", "signup": True, "capacity": 3}), {"say": [note.format(3)], "set": [], "warn": []})
+        self.assertEqual(got("hike.edit", {"hike": "hike-on", "bring": "Hat"})["say"], [note.format(4)])  # preserved existing limit
+        self.assertEqual(got("hike.edit", {"hike": "hike-on", "no_limit": True, "signup": True}), {"say": [], "set": [], "warn": []})
+        self.assertEqual(got("hike.edit", {"hike": "hike-on", "signup": False})["say"], [])
+        self.assertEqual(got("hike.edit", {"hike": "hike-off", "bring": "Hat"})["say"], [])
+        self.assertEqual(got("hike.edit", {"hike": "hike-free", "bring": "Hat"})["say"], [])
+        self.assertEqual(got("hike.add", {**self.ADD, "signup": True}), {"say": [note.format(6)], "set": ["I set: 6 spots."], "warn": []})
+        self.assertEqual(got("hike.add", {**self.ADD, "signup": True, "capacity": 2}), {"say": [note.format(2)], "set": [], "warn": []})
+        self.assertEqual(got("hike.add", {**self.ADD, "signup": True, "no_limit": True}), {"say": [], "set": [], "warn": []})
+        self.assertEqual(got("hike.add", {**self.ADD, "signup": False}), {"say": [], "set": [], "warn": []})
+        self.assertEqual(got("hike.cancel", {"hike": "hike-on"}), {"say": [], "set": [], "warn": []})
+        self.assertEqual(voice.check(note.format(6)), [])
+        self.assertTrue(all("left" not in line for name in ("hike.add", "hike.edit") for line in got(name, {**self.ADD, "hike": "hike-on", "signup": True})["say"]))
+        # add_set_phrases: six is added to the one I set line only when another default is already on it
+        phrases = hikes.SET_PHRASES["hike.add"]
+        self.assertEqual(phrases({**self.ADD, "signup": True}, c), [])
+        title = f"the title {voice.quote('Cass Hill hike')}"
+        self.assertEqual(phrases({"day": "2026-12-12", "meeting_point": "Cass Hill gate", "signup": True}, c), [title, "6 spots"])
+        self.assertEqual(hikes.set_line(phrases({"day": "2026-12-12", "meeting_point": "Cass Hill gate", "signup": True}, c)),
+                         f"I set: {title}; 6 spots.")
+        self.assertEqual(phrases({**self.ADD}, c), ["sign-up off"])  # D8 unchanged
+
+    def test_six_spot_note_once_in_the_real_dispatcher(self):
+        note = self.NOTE
+        for label, text, slots, want_set, want_note, no_set in (
+                ("title given", self.TEXT + ", sign-up on", {**self.ADD, "signup": True}, "I set: 6 spots.", note.format(6), False),
+                ("no title", "Add a hike December 12 at 8am, meet at Cass Hill gate, sign-up on",
+                 {k: v for k, v in {**self.ADD, "signup": True}.items() if k != "title"}, "6 spots.", note.format(6), False),
+                ("explicit four", self.TEXT + ", sign-up on, 4 spots", {**self.ADD, "signup": True, "capacity": 4}, None, note.format(4), True),
+                ("sign-up off", self.TEXT, dict(self.ADD), None, None, True),
+                ("no limit", self.TEXT + ", sign-up on, no limit", {**self.ADD, "signup": True, "no_limit": True}, None, None, True)):
+            for envelope in ("single", "calls"):
+                with self.subTest(label=label, envelope=envelope):
+                    case = self.case()
+                    call = {"skill": "hike.add", "slots": slots}
+                    case.script(text, call if envelope == "single" else {"calls": [call]})
+                    draft, reply = case.propose(text)
+                    lines = reply.splitlines()
+                    args = json.loads(draft["ops_json"])[0]["args"]
+                    if want_set:
+                        self.assertEqual(sum(want_set in line for line in lines), 1, reply)
+                        self.assertEqual(sum("6 spots" in line for line in lines), 1, reply)
+                    if want_note:
+                        self.assertEqual(lines.count(want_note), 1, reply)
+                    else:
+                        self.assertNotIn("Page will say", reply)
+                    if no_set:
+                        self.assertNotIn("6 spots", reply)
+                    self.assertNotIn("spots left", reply)
+                    self.assertEqual(args.get("capacity"), {"title given": 6, "no title": 6, "explicit four": 4}.get(label))
+                    case.nothing_written()
+        case = self.case()  # D8 unchanged: the legacy request still says only that sign-up is off
+        case.script(self.TEXT, {"skill": "hike.add", "slots": self.ADD})
+        self.assertIn("I set: sign-up off.", case.propose(self.TEXT)[1].splitlines())
+
+    def test_seven_spots_is_refused_by_the_real_dispatcher_and_nothing_is_drafted(self):
+        text = self.TEXT + ", sign-up on, 7 spots"
+        for envelope in ("single", "calls"):
+            with self.subTest(envelope):
+                case = self.case()
+                call = {"skill": "hike.add", "slots": {**self.ADD, "signup": True, "capacity": 7}}
+                case.script(text, call if envelope == "single" else {"calls": [call]})
+                self.assertNotEqual(case.say(text), "proposed")
+                if envelope == "single":
+                    self.assertIn(hikes.R_CAP_MAX, case.replies()[0])
+                self.assertEqual(case.drafts(), [])
+                case.nothing_written()
 
 
 class Rules(unittest.TestCase):
@@ -558,8 +713,8 @@ class Rules(unittest.TestCase):
     def test_add_and_edit_plans_refuse_ambiguous_capacity(self):
         add = {"title": "Cass Hill hike", "day": "2026-12-12", "clock": "08:00", "meeting_point": "Cass Hill gate", "signup": True}
         edit = {"hike": CASS["id"], "signup": True}
-        said = ["sign-up on, 15 spots or 20 spots"]
-        for cap in (15, 20):
+        said = ["sign-up on, 4 spots or 6 spots"]
+        for cap in (4, 6):
             for plan, base in ((hikes.plan_add, add), (hikes.plan_edit, edit)):
                 with self.subTest(plan=plan.__name__, cap=cap):
                     slots, c = {**base, "capacity": cap}, ctx(CASS, texts=said)
@@ -569,12 +724,12 @@ class Rules(unittest.TestCase):
                     self.assertEqual(caught.exception.reply, hikes.R_SPOTS_NOT_SAID)
                     self.assertEqual((slots, c.texts), before)
         # a complete single count keeps its exact typed op, after a correction too
-        for texts in (["sign-up on, 20 spots"], ["sign-up on, 15 spots or 20 spots", "actually make it 20 spots"]):
-            self.assertEqual(hikes.plan_add({**add, "capacity": 20}, ctx(CASS, texts=texts))[0]["args"],
+        for texts in (["sign-up on, 6 spots"], ["sign-up on, 4 spots or 6 spots", "actually make it 6 spots"]):
+            self.assertEqual(hikes.plan_add({**add, "capacity": 6}, ctx(CASS, texts=texts))[0]["args"],
                              {"title": "Cass Hill hike", "date": "2026-12-12", "time": "08:00", "meetingPoint": "Cass Hill gate",
-                              "rsvpEnabled": True, "capacity": 20})
-            self.assertEqual(hikes.plan_edit({**edit, "capacity": 20}, ctx(CASS, texts=texts))[0]["args"],
-                             {"id": CASS["id"], "rsvpEnabled": True, "capacity": 20})
+                              "rsvpEnabled": True, "capacity": 6})
+            self.assertEqual(hikes.plan_edit({**edit, "capacity": 6}, ctx(CASS, texts=texts))[0]["args"],
+                             {"id": CASS["id"], "rsvpEnabled": True, "capacity": 6})
 
     def test_the_latest_sign_up_instruction_wins(self):
         self.assertEqual(self.hit("hike-no-invention", {"signup": True}, texts=["sign up please", "actually no sign ups"])[0],
@@ -663,7 +818,7 @@ class AtTheEditor(HikeTestCase):
     """Plans handed to the real editor (the H04 throwaway repo, an injected clock, a real RSVP file of placeholder guests)."""
 
     def make(self, repo, **extra):
-        slots = {"title": "Test hike", "day": "2026-12-05", "clock": "09:00", "meeting_point": "Test trailhead lot", "signup": True, "capacity": 12, **extra}
+        slots = {"title": "Test hike", "day": "2026-12-05", "clock": "09:00", "meeting_point": "Test trailhead lot", "signup": True, "capacity": 5, **extra}
         ops = hikes.plan_add(slots, types.SimpleNamespace(today="2026-10-30", now=repo.now, texts=[]))
         repo.run(*[(o["op"], o["args"]) for o in ops])
 
@@ -675,7 +830,7 @@ class AtTheEditor(HikeTestCase):
         repo = self.repo()
         self.make(repo)
         event = repo.event()
-        self.assertEqual((event["rsvpEnabled"], event["capacity"], event["status"]), (True, 12, "scheduled"))
+        self.assertEqual((event["rsvpEnabled"], event["capacity"], event["status"]), (True, 5, "scheduled"))
 
     def test_a_move_and_a_cancel_warn_about_guests_and_still_draft(self):
         repo = self.repo()
@@ -701,6 +856,35 @@ class AtTheEditor(HikeTestCase):
         repo.use_db(str(repo.db.parent / "absent.sqlite3"))  # cannot be read: fail closed, never a smaller number
         self.assertEqual(repo.prepare(_req(*low))["result"], "refused")
 
+    def test_default_edit_respects_confirmed_guests(self):
+        for guests, result in ((5, "ok"), (6, "ok"), (7, "refused")):
+            with self.subTest(guests=guests):
+                repo = self.repo()
+                self.make(repo, signup=False)
+                repo.make_db([(HIKE_ID, 1)] * guests)
+                ops = self.ops(hikes.plan_edit, {"hike": HIKE_ID, "signup": True}, repo)
+                self.assertEqual(ops[0][1]["capacity"], 6)
+                drafted = repo.prepare(_req(*ops))
+                self.assertEqual(drafted["result"], result, drafted)
+                self.assertFalse(repo.event()["rsvpEnabled"])  # nothing is written before yes
+        repo = self.repo()
+        self.make(repo, signup=False)
+        repo.use_db(str(repo.db.parent / "absent.sqlite3"))  # guest count unreadable: refused, never a smaller or bigger number
+        self.assertEqual(repo.prepare(_req(*self.ops(hikes.plan_edit, {"hike": HIKE_ID, "signup": True}, repo)))["result"], "refused")
+        repo = self.repo()  # prepared at 5 guests, two more sign up before yes: the apply refuses and the stored hike stays
+        self.make(repo, signup=False)
+        repo.make_db([(HIKE_ID, 5)])
+        drafted = repo.prepare(_req(*self.ops(hikes.plan_edit, {"hike": HIKE_ID, "signup": True}, repo)))
+        self.assertEqual(drafted["result"], "ok", drafted)
+        import sqlite3
+        db = sqlite3.connect(repo.db)
+        db.execute("INSERT INTO rsvps(event_id,email,name,party_size,created_at) VALUES(?,?,?,?,?)",
+                   (HIKE_ID, "late@example.invalid", "Late Guest", 2, "2026-10-30T00:00:00Z"))
+        db.commit()
+        db.close()
+        self.assertNotEqual(repo.apply(drafted["draft"])["result"], "applied")
+        self.assertFalse(repo.event()["rsvpEnabled"])
+
     def test_a_hike_that_has_happened_is_completed_with_his_words_then_corrected(self):
         repo = self.repo()
         self.make(repo)
@@ -715,7 +899,7 @@ class AtTheEditor(HikeTestCase):
         self.make(repo, bring="Water")
         repo.run(*self.ops(hikes.plan_repeat, {"hike": HIKE_ID, "day": "2026-12-12", "clock": "08:00"}, repo))
         copy = repo.event("hike-2026-12-12-test-hike")
-        self.assertEqual((copy["bring"], copy["rsvpEnabled"], copy["capacity"], copy["status"]), ("Water", True, 12, "scheduled"))
+        self.assertEqual((copy["bring"], copy["rsvpEnabled"], copy["capacity"], copy["status"]), ("Water", True, 5, "scheduled"))
 
     def test_the_live_class_each_skill_declares_is_what_the_live_policy_says(self):
         repo = self.repo()
