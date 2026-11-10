@@ -63,7 +63,8 @@ R_SIGNUP_UNCLEAR = "I'm not sure if you want guests to be able to sign up. Shoul
 _SIGNUP_WORDS = re.compile(r"\b(sign ?-?ups?|signing up|rsvps?|register(?:ed|ing)?|reserv\w*|how many can|people can (?:join|come|sign))\b", re.I)
 # only words about SIGNING UP decide its direction: "limited parking", "no space for dogs" or "a seat cushion" say nothing about it;
 # a guest limit ("15 spots", "max 12") is read by _said_limits and counts as the owner asking for sign-up
-_PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:person|head|lb|pound|oz|ounce|kg|dozen)\b", re.I)
+# "per person"/"per head" is a price only right after a number ("12 per person"); "Bring water per person" is packing advice
+_PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:lb|pound|oz|ounce|kg|dozen)\b|\b\d+(?:\.\d+)?\s+per\s+(?:person|head)\b", re.I)
 _PLACE_TAIL = re.compile(r"(?:^|\s+)(?:trail ?head|gate|entrance|parking(?:\s+lot)?|lot|staging area|picnic area)\s*$", re.I)
 _PLACE_HEAD = re.compile(r"^(?:the|at|by)\s+", re.I)
 _TAG_RE = re.compile(r"[#@\uFF03\uFF20\uFE5F\uFE6B]\w")  # as social_draft: no hashtag or account in free text
