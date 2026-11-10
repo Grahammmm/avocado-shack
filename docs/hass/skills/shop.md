@@ -69,6 +69,11 @@ notice say?" and "Until what day?". Checks:
   request down as a price request. A notice can still say "drop off your crates" or "parking is behind the store".
 * `not-already-true`: the same words and the same last day.
 
+If one reply both takes the notice down and carries new words or a new last day, nothing is drafted and he is asked
+once: "Do you want the notice changed, or taken down? I can only do one." This comes before the "nothing to take
+down" refusal. An empty or blank text or day does not count as new words. He then answers with the new words (replace)
+or just "take it down" in a fresh request.
+
 Taking it down when none is up is refused. A second notice replaces the first. Edits: `store.json` `notice`; the home
 page. Undo restores the earlier notice or none. Residue: after the last day the notice also disappears by itself in the
 browser, with no change made.
