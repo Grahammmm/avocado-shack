@@ -195,17 +195,6 @@ The host checks below run with `--host-dir` (the HASS-SVC-1 health timer). They 
 - **Means:** `host.json` is refused (mode, type, closed keys) or the secret file's lstat breaks D5: `missing`, `type`, `owner`, `mode` or `size`.
 - **Next step:** `python3 hass/host.py check --host HOST_JSON` names the fields. **Stop and ask:** never copy or print the secret; G fixes it.
 
-### `clover-token`
-- **Means:** only with a `clover` block in `host.json` (HASS-CLOVER-2): the Clover read-token file fails the stat-only check, with one reason word: `missing`, `unreadable`, `not-regular`, `owner`, `mode` (not 600), `folder` (not private to the service user) or `size`. The file is never opened; no path and no token text is printed.
-- **Check first:** `python3 hass/host.py check --host HOST_JSON` and `python3 hass/clover/cli.py check` name the same word.
-- **Next step:** none in the repo. **Stop and ask:** always: G fixes the token file; never copy or print it (see `docs/hass/CLOVER.md`).
-
-### `clover-sync`
-- **Means:** only with a `clover` block: the private till cache's last good pull is over 2 h old (`no good pull for over 2 h (last: WORD)`, WORD one of `ok`, `token`, `refused-key`, `unreachable`, `rate-limited`, `clover-error`, `bad-data`, or `unknown`), or the cache is not private or unreadable. No cache yet is not a problem. Till answers say `(till count as of ...)` or that the till cannot be reached; the site and the rest of Hass are unaffected.
-- **Check first:** `python3 hass/clover/cli.py status`; `systemctl --user status hass-clover-sync.timer`.
-- **Next step:** `unreachable` and `rate-limited` clear when Clover answers again; re-run `python3 hass/clover/cli.py sync` once. `token` or `refused-key` means `clover-token` and G.
-- **Stop and ask:** the word is `token`, `refused-key`, `clover-error` or `bad-data`, or the cache is not private (attended; never edit or copy the cache by hand).
-
 ### `publishing-stopped`
 - **Means:** info: the STOP file (`~/.config/hass/STOP`) exists, so no change goes live. The chat still answers.
 
