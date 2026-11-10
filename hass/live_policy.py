@@ -248,24 +248,49 @@ def check(draft) -> list[str]:
 PLAIN_KINDS = {"origin/organic": "where the food comes from or whether it is organic", "health/awards/endorsements": "a health claim or an award",
                "trail facts": "trail details", "prices": "a price", "contact": "contact details"}
 
+# HASS-CHAT-1 (G, 2026-11-09): every refusal says what stops it in plain words and the one next step that works, and it never
+# sends the owner to "ask Graham" (the owners ARE Graham and Mike). The next steps are words only: what may go live is unchanged.
+RESEND = "Send it again without that part, and I can put the rest on the website."
+KEPT = "I've kept it on the list of changes to make by hand, so it isn't lost."
+TRAIL_FIELD_WORDS = {"distance": "how far it is", "difficulty": "how hard it is", "duration": "how long it takes",
+                     "accessNote": "the access note", "meetingAddress": "the street address"}
 
-def _plain_reason(reason: str) -> str:
-    if reason == "sign-up is on": return "people have a way to sign up for that hike, so Graham should look first"
+
+def _plain_reason(reason: str):
+    """(why, next step or None) for one reason of check(); next None means only a person can make that change."""
+    if reason == "sign-up is on":
+        return ("the website can't take sign-ups yet",
+                "I can post it with no sign-up button and the guest limit written on the page, so people ask you at the shop. Say "
+                "\u201cno sign-up\u201d and I'll redo it that way.")
     if reason.startswith("not live: "):
         name = reason[len("not live: "):]
-        if name == LONE_MAKER: return "it adds a maker on its own, without a new product"
-        if name.rpartition(".")[0] in LIVE: return "it changes more than the part I can change from chat"  # op.argument
-        return "it " + PRIVATE.get(name, "is a kind of change I can't put on the website from chat yet")
-    if reason.startswith("protected sentences: "): return "it touches " + PLAIN_KINDS.get(reason.split(": ", 1)[1], "a claim I can't check")
-    if reason.startswith("protected operation"): return "it is a kind of change only Graham can make"
-    if reason.startswith("protected field"): return "it changes something only Graham can change"
-    if reason.startswith("more than"): return "it changes too many things at once"
-    return "I couldn't read the change"
+        if name == LONE_MAKER: return "it adds a maker on its own, without a new product", "Tell me the new product from this maker, and I can add them together."
+        if name.rpartition(".")[0] in LIVE: return "it changes more than the part I can change from chat", "Send just the part you want changed, and I'll try again."
+        return "it " + PRIVATE.get(name, "is a kind of change I can't put on the website from chat yet"), None
+    if reason.startswith("protected sentences: "):
+        return "it mentions " + PLAIN_KINDS.get(reason.split(": ", 1)[1], "a claim I can't check") + ", and I can't check that from chat", RESEND
+    if reason.startswith("protected operation: "):
+        return "it " + PRIVATE.get(reason.split(": ", 1)[1], "is a kind of change I can't make from chat"), None
+    if reason.startswith("protected field: "):
+        collection, _, field = reason.split(": ", 1)[1].partition(".")
+        if collection == "events" and field == "trailId":
+            return "a link to a saved route can't go on the website from chat yet", "Say \u201cwithout the route\u201d and I'll post it without that link."
+        if collection == "events":
+            return TRAIL_FIELD_WORDS.get(field, "that trail detail") + " can't go on the website from chat yet", RESEND
+        if collection == "products": return "the brand or maker of a product that is already on the website can't be changed from chat", None
+        if collection == "makers": return "a maker's town or website link can't be changed from chat", None
+        return "the hike club settings can't be changed from chat", None
+    if reason.startswith("more than"): return "it changes too many things at once", "Send it as a few smaller changes, and I can put each one on the website."
+    return "I couldn't read the change", "Could you say it another way?"
 
 
-SAVED_FOR_GRAHAM = "I've saved it for Graham to look at, and he can do it by hand."
-
-
-def refusal(reasons):
-    why = "; ".join(dict.fromkeys(_plain_reason(r) for r in reasons)) or "I couldn't check it"
-    return f"I can't put this on the website from chat: {why}. Nothing will be published. {SAVED_FOR_GRAHAM}"
+def refusal(reasons, understood=None):
+    """The owner's reply when a change can't go live: (1) what was understood (``understood``, when the change is not listed
+    just above), (2) what stops it in plain words, (3) the one next step: the nearest change that CAN go live, or, when only a
+    person can make it, that it is kept on the by-hand list. Never "ask Graham"."""
+    plain = list(dict.fromkeys(_plain_reason(r) for r in reasons)) or [("I couldn't check it", "Could you say it another way?")]
+    why = "; and ".join(dict.fromkeys(w for w, _ in plain))
+    steps = list(dict.fromkeys(n for _, n in plain if n))
+    head = f"About {understood}: " if understood else ""
+    tail = " ".join(steps[:1]) + (" " if steps else "") + KEPT
+    return f"{head}I can't put this on the website from chat, because {why}. Nothing will be published. {tail}"
