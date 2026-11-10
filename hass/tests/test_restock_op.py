@@ -36,7 +36,8 @@ class SchemaTests(unittest.TestCase):
 
     def problems(self, value=None, *, status=None, key="restock_on"):
         content = copy.deepcopy(self.content)
-        product = next(p for p in content.products if p["status"] == (status or "active"))
+        product = next(p for p in content.products if p["status"] == ("held" if status == "held" else "active"))
+        product["status"] = product["status"] if status is None else status  # an active record hidden here
         product[key] = value
         try:
             validate(content, SITE_DIR)
@@ -48,9 +49,8 @@ class SchemaTests(unittest.TestCase):
         self.assertFalse(any("restock_on" in p for p in self.content.products))  # absent is the committed state
         validate(copy.deepcopy(self.content), SITE_DIR)
         for status in ("active", "hidden", "held"):
-            if any(p["status"] == status for p in self.content.products):
-                with self.subTest(status=status):
-                    self.assertEqual(self.problems("2026-11-20", status=status), "")
+            with self.subTest(status=status):
+                self.assertEqual(self.problems("2026-11-20", status=status), "")
         for day in ("2001-01-01", "2099-12-31", "2028-02-29"):  # persisted days are shape-checked only: past and far load
             with self.subTest(day=day):
                 self.assertEqual(self.problems(day), "")
