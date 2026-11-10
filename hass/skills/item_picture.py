@@ -160,10 +160,13 @@ def _is_comma_list(left, right, name, alt="") -> bool:
 
 
 def _joined_in(word, alt) -> bool:
-    """True when the caption itself joins this word to another name with 'and', '&', '+', 'plus' or a comma ('Lemons and
-    plums'): then it is a second product that happens to sit in the caption, not a place or a setting ('on a plain counter')."""
-    stem = re.escape(word.rstrip("s")) if len(word) > 3 else re.escape(word)
-    return re.search(rf"(?:\band\b|&|\+|\bplus\b|,)\s*(?:also\s+)?(?:{_DET}\s+)?{stem}", alt.casefold().replace("\u2019", "'")) is not None
+    """True when the caption itself joins this word to another name with 'and', '&', '+', 'plus' or a comma, on either side
+    of it and so in either order ('Lemons and plums', 'Plums and lemons'): then it is a second product that happens to sit
+    in the caption, not a place or a setting ('on a plain counter')."""
+    stem = re.escape(word.rstrip("s") if len(word) > 3 else word)
+    alt = alt.casefold().replace("\u2019", "'")
+    sep = r"(?:\band\b|&|\+|\bplus\b|,)"
+    return re.search(rf"{sep}\s*(?:also\s+)?(?:{_DET}\s+)?{stem}|{stem}[\w'-]*\s*{sep}", alt) is not None
 
 
 def _lists_two(turn, name, alt="") -> bool:
