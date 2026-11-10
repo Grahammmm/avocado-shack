@@ -12,7 +12,9 @@ attribute of it is optional (without it the plan leaves to the editor's own chec
     ctx.content       the loaded ``Content`` (read-only): resolve a maker by name, refuse a twin, say "it already says
                       that", name the products a hide would take with it.
     ctx.owner_text    the owner's joined texts of the open request: a story sentence that carries a claim he did not
-                      say is left off (``claims.unstated``, negation aware).
+                      say (``claims.unstated``, negation aware).
+    ctx.texts         the owner's messages of the open request, latest last: only the latest can say "I don't know the
+                      town" (rule town-state; ``ctx.owner_text`` stands in only when there are no texts).
     ctx.source_urls   website links recorded when the site was migrated; those cannot be removed or replaced (default:
                       the frozen baseline in hass/content/migration-baseline.json, read once at import).
 
@@ -28,7 +30,7 @@ import re
 import unicodedata
 from typing import NamedTuple
 
-from hass import claims, interpret_check
+from hass import claims, interpret_check, itemstd
 from hass.content_model import CONTENT_DIR, FORBIDDEN_TEXT, TEXT_LIMITS, _https
 from hass.ops import catalog
 from hass.skills.model import Skill, Slot, Trigger, Undo
@@ -117,6 +119,36 @@ def rule_public_url(value) -> str:
     if problems:
         raise Refusal("That doesn't look like a full website address. Could you send it like https://example.com?", "question")
     return candidate
+
+
+TOWN_QUESTION = "Which town are they in?"
+TOWN_MISSING = "Still missing: the town"
+# his own words, as the last sentence of his latest message: "I don't know the town" (straight or curly apostrophe)
+_UNKNOWN_TOWN = re.compile(r"(?:^|[.!?;,]\s*)i\s+don['\u2019]t\s+know\s+the\s+town\s*[.!]*$", re.IGNORECASE)
+
+
+def said_unknown_town(ctx) -> bool:
+    """True only when the owner's latest message (``ctx.texts[-1]``) ends with "I don't know the town". ``ctx.owner_text``
+    is read only when there are no texts at all (direct plan calls). No context, a slot or an older message: False."""
+    texts = getattr(ctx, "texts", None)
+    if texts is not None:
+        latest = texts[-1] if isinstance(texts, (list, tuple)) and texts else ""
+    else:
+        latest = getattr(ctx, "owner_text", None)
+    return isinstance(latest, str) and bool(_UNKNOWN_TOWN.search(latest.strip()))
+
+
+def rule_town_state(place: str, ctx=None) -> bool:
+    """town-state (ITEM-STANDARD section 5): a place the item-standard checker does not read as "Town, State" is not
+    drafted; the one question is "Which town are they in?". When the place is a region and his latest message says he
+    doesn't know the town, the region is kept as he gave it and True is returned (the draft says "Still missing: the
+    town"). The town he gives is used as given: nothing is looked up, corrected or completed."""
+    found = itemstd.check_maker({"name": "-", "place": place, "story": "-"})
+    if "producer_town" not in found["missing"]:
+        return False
+    if "place_is_a_region" in found["needs_a_look"] and said_unknown_town(ctx):
+        return True
+    raise Refusal(TOWN_QUESTION, "question")
 
 
 # -- the story: his sentences, a leading pronoun replaced by the maker's name -------------------------------------
@@ -291,6 +323,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
         story = _text(story_words(given, name), "story")
         if terms := _unsaid(content, owner_text, name, None, {"name": name, "place": place, "story": story}):
             story, left = "", (f"the part of the story that says {_join(terms, 'and')}, because you didn't say it",)
+    unknown_town = rule_town_state(place, ctx)  # after every text check: a price or a long text is said first
     if not story:  # rule story-note (D5)
         story = fallback_story(name, place)
         set_lines = (f"the about text to \u201c{story}\u201d, because you didn't give one",)
@@ -298,7 +331,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if url:
         args["url"] = url
     return Outcome([{"op": "maker.add", "args": args}], set_lines, left,
-                   ("They show on the site as soon as a product is put on their shelf.",))
+                   ("They show on the site as soon as a product is put on their shelf.",) + ((TOWN_MISSING,) if unknown_town else ()))
 
 
 def plan_add(slots: dict, ctx=None) -> list:
@@ -354,6 +387,7 @@ def describe_edit(slots: dict, ctx=None) -> Outcome:
             left.append(f"your new about text, because it says {_join(terms, 'and')} and you didn't")
         else:
             changes["story"] = story
+    unknown_town = "place" in changes and rule_town_state(changes["place"], ctx)  # only a place he gives now is checked
     notes: list = []
     if maker:  # not-already-true: say so for what is already there, and draft nothing for it
         for field in [f for f in changes if _clean(maker.get(f)) == changes[f]]:
@@ -368,12 +402,27 @@ def describe_edit(slots: dict, ctx=None) -> Outcome:
             raise Refusal(notes[-1] if notes and "nothing to take off" in notes[-1] else f"{shown} already says that. I haven't changed anything.")
         if clear or "url" in changes:
             rule_source_link(maker, ctx)
+    if unknown_town and "place" in changes:
+        notes.append(TOWN_MISSING)
     args = {"key": key, **changes, **({"clearUrl": True} if clear else {})}
     return Outcome([{"op": "maker.edit", "args": args}], (), tuple(left), tuple(notes))
 
 
 def plan_edit(slots: dict, ctx=None) -> list:
     return describe_edit(slots, ctx).ops
+
+
+def notes(skill_name: str, slots: dict, ctx=None) -> dict:
+    """The proposal-notes hook the dispatcher (and the shared kit) shows beside a draft. Only the town-state line: a
+    maker drafted with a region because he doesn't know the town gets "Still missing: the town"; nothing else."""
+    out = {"say": [], "set": [], "warn": []}
+    describe = {"maker.add": describe_add, "maker.edit": describe_edit}.get(skill_name)
+    try:
+        if describe is not None and TOWN_MISSING in describe(dict(slots or {}), ctx).notes:
+            out["say"].append(TOWN_MISSING)
+    except ValueError:  # a plan that stops has no draft to note
+        pass
+    return out
 
 
 # -- 3.18 maker.hide ----------------------------------------------------------------------------------------------
@@ -419,6 +468,7 @@ RULES = {  # every rule id a skill names maps to the function that enforces it (
     "maker-twin": rule_maker_twin, "no-price": rule_no_price, "public-url": rule_public_url, "story-note": fallback_story,
     "claims": _unsaid, "not-already-true": describe_edit, "source-link-kept": rule_source_link,
     "maker-visible": find_maker, "maker-hidden": find_maker, "with-products": describe_hide,
+    "town-state": rule_town_state,
 }
 # Enforced by the editor after the plan, not by the skill: the owner sees its own plain "Heads up" line.
 EDITOR_RULES = {"place-warning": "hass/ops/catalog.py maker.edit warns how many active product cards a new town relabels"}
@@ -446,7 +496,7 @@ SKILLS = (
             Slot("story", "text", required=False, default="derive:based_in_note", owner_words=True, limit=("maker", "story")),
             Slot("url", "url", required=False, owner_words=True),
         ),
-        rules=("maker-twin", "claims", "no-price", "public-url", "story-note"),
+        rules=("maker-twin", "claims", "no-price", "public-url", "story-note", "town-state"),
         plan=plan_add,
         edits=((_MAKERS, "makers[key]"),) + _GEN,
         side_effects=("maker-create",),
@@ -481,7 +531,7 @@ SKILLS = (
             Slot("clear_url", "bool", required=False),
         ),
         rules=("maker-visible", "not-already-true", "place-warning", "source-link-kept", "claims", "no-price", "public-url",
-               "maker-twin"),
+               "maker-twin", "town-state"),
         plan=plan_edit,
         edits=((_MAKERS, "makers[key]"),) + _GEN + _CARDS,
         side_effects=("none",),
