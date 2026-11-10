@@ -90,6 +90,9 @@ A model-written text is machine-valid here, never accepted: a person reads it in
 `"must_fail": "<code>"` (and optionally `"fault": "write-on-prepare" | "undo-leaves" | "undo-stale-generated" | "undo-dirty" | "skip-later-preview"`, a deliberately broken skill path)
 has to fail for exactly that code, and every other row has to pass. `must_fail` and `fault` are refused in any other file.
 
+Not covered yet (later cards): pictures (`photo` rows need the house render of SKILLS-PIC-1), the real dispatcher
+(SKILLS-FW-3; until then the kit turns skill replies into ops itself), and the live-model run (`ACC-1`).
+
 ## `qa1/`: owner regressions from the HASS-QA-1 battery
 
 `qa1/owner-battery.jsonl` is not one skill's file: each row replays an owner's own words from the HASS-QA-1 battery
@@ -98,6 +101,3 @@ runs by default (no `skill` in the replies, so the kit plays the recorded `ops`,
 fixed Sunday clock is the clock the battery was recorded on, so the rows pass on any calendar day. Hike, refusal-wording and
 preview-check conversations are HASS-CHAT-1's (`hass/tests/fixtures/chat/scenarios.json`) and are not repeated here; the
 full per-conversation ledger and its coverage map are in `reports/hass/QA-1.md` (agent-work).
-
-Not covered yet (later cards): pictures (`photo` rows need the house render of SKILLS-PIC-1), the real dispatcher
-(SKILLS-FW-3; until then the kit turns skill replies into ops itself), and the live-model run (`ACC-1`).
