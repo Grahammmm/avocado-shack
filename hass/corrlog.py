@@ -117,7 +117,7 @@ class CorrLog:
             for raw in text.splitlines():
                 try: row = json.loads(raw)
                 except ValueError: continue
-                if isinstance(row, dict) and row.get("kind") in KINDS and isinstance(row.get("at"), str):
+                if isinstance(row, dict) and isinstance(row.get("kind"), str) and row["kind"] in KINDS and isinstance(row.get("at"), str):
                     try: at = datetime.fromisoformat(row["at"])
                     except ValueError: continue
                     if at.tzinfo is not None and at >= cutoff: out.append(row)
