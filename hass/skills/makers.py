@@ -124,7 +124,8 @@ def rule_public_url(value) -> str:
 TOWN_QUESTION = "Which town are they in?"
 TOWN_MISSING = "Still missing: the town"
 # his own words, as the last sentence of his latest message: "I don't know the town" (straight or curly apostrophe)
-_UNKNOWN_TOWN = re.compile(r"(?:^|[.!?;,]\s*)i\s+don['\u2019]t\s+know\s+the\s+town\s*[.!]*$", re.IGNORECASE)
+# (alone, after any earlier punctuation, or straight after an unpunctuated request; a final ".", "!" or "?" is allowed)
+_UNKNOWN_TOWN = re.compile(r"(?<![\w'\u2019])i\s+don['\u2019]t\s+know\s+the\s+town\s*[.!?]*$", re.IGNORECASE)
 
 
 def said_unknown_town(ctx) -> bool:

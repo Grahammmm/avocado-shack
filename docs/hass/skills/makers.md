@@ -37,7 +37,7 @@ Slots (snake_case; the plan turns them into the op's own argument names):
 * The town he gives is used **as he typed it**, spelling included ("Paso Robels, Califronia" stays so). Only extra spaces are
   tidied. Nothing is looked up, corrected or completed, and no state is filled in from memory.
 * **"I don't know the town"**: when his latest message ends with that sentence (any case, straight or curly apostrophe, a final full
-  stop or "!" allowed, alone or after the request itself) and the place is a region, the draft keeps the region exactly as he gave
+  stop, "!" or "?" allowed, alone or after the request itself, punctuated or not) and the place is a region, the draft keeps the region exactly as he gave
   it and the proposal says **"Still missing: the town"** (the module's `notes` hook; nothing else from the plan's notes is shown).
   Only his latest message counts: not a slot the model fills, not his story, not an older message. The sentence itself is never
   saved as a place, and a bare town that is not a region is still asked about.

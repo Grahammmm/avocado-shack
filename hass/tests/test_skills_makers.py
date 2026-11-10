@@ -547,7 +547,10 @@ class TownState(unittest.TestCase):
 
     def test_unknown_keeps_region_and_says_still_missing(self):
         for latest in ("I don't know the town", "i don\u2019t know the town.", "I DON'T KNOW THE TOWN!",
-                       "add Synthetic Orchard in Central Coast. I don't know the town"):
+                       "add Synthetic Orchard in Central Coast. I don't know the town",
+                       "I don't know the town?", "I don't know the town?!", "I don\u2019t know the town...?",
+                       "add Synthetic Orchard in Central Coast I don't know the town",
+                       "add Synthetic Orchard in Central Coast I don't know the town?"):
             with self.subTest(latest=latest):
                 c = said("add Synthetic Orchard in Central Coast", latest)
                 out = m.describe_add(dict(ORCHARD), c)
@@ -572,6 +575,8 @@ class TownState(unittest.TestCase):
                 ("phrase in the story", {**ORCHARD, "story": "I don't know the town."}, said("add Synthetic Orchard in Central Coast")),
                 ("an older message", ORCHARD, said(decline, "add Synthetic Orchard in Central Coast")),
                 ("not his last words", ORCHARD, said("I don't know the town but it is near Paso")),
+                ("someone else's words", ORCHARD, said("Hawaii don't know the town")),
+                ("a question about it", ORCHARD, said("Do you know the town?")),
                 ("texts win over owner_text", ORCHARD, ctx(texts=["add it"], owner_text=decline)),
                 ("a bare town is not a region", {"name": "Synthetic Orchard", "place": "Templeton"}, said(decline))):
             with self.subTest(label):
