@@ -18,7 +18,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import voice  # noqa: E402
-from hass.content_model import CONTENT_DIR, DATE_RE, INVISIBLE_RE, TEXT_LIMITS, ContentError, checked_on, load_content, shop_today  # noqa: E402
+from hass.content_model import CONTENT_DIR, DATE_RE, INVISIBLE_RE, TEXT_LIMITS, ContentError, checked_on, iso_day, load_content, shop_today  # noqa: E402
 from hass.ops import hikes  # noqa: E402
 from hass.sitegen import STALE_AFTER_DAYS, _day_text  # noqa: E402
 
@@ -84,6 +84,36 @@ def _hike_text(h: dict, cut: int) -> str:
     return f"{date.fromisoformat(h['day']):%A} at {when}, {voice.quote(title)} ({seats})"
 
 
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")  # fixed English tables: never the host's locale
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def restock_day(day) -> str:
+    """AV1109-04: a restock day (ISO text or date) as 'Thu Nov 12'. A date-only value has no zone, so its weekday is its own."""
+    when = date.fromisoformat(day) if isinstance(day, str) else day
+    return f"{WEEKDAYS[when.weekday()]} {MONTHS[when.month - 1]} {when.day}"
+
+
+def restock_text(name, day) -> str:
+    """AV1109-04: the one wording of a restock line, in the report and in the note shown before the owner's yes."""
+    return f"{voice.quote(' '.join(str(name).split()))}: more expected {restock_day(day)}"
+
+
+def _restocks(content, today: date) -> list[dict]:
+    """AV1109-04: one entry per active product whose private restock day is today or later (past days are never shown). A
+    malformed day on an active product raises ValueError naming its position, like any record the report cannot read."""
+    found = []
+    for n, p in enumerate(content.products, 1):
+        if not isinstance(p, dict) or p.get("status") != "active" or "restock_on" not in p:
+            continue
+        day = iso_day(p["restock_on"])
+        if day is None:
+            raise ValueError(f"products.json product {n}: restock_on is not a real date")
+        if day >= today:
+            found.append({"id": str(p.get("id", "")), "name": " ".join(str(p.get("name", "")).split()), "day": day.isoformat()})
+    return sorted(found, key=lambda r: (r["day"], r["name"].casefold(), r["id"]))
+
+
 def facts(content, today: date, guests=None) -> dict:
     found = _hikes(content, today, guests)
     day = checked_on(content.store)
@@ -96,10 +126,12 @@ def facts(content, today: date, guests=None) -> dict:
             names[key].append(" ".join(str(p.get("name", "")).split()))
     future = day is not None and day > today  # a wrong clock or a hand-edited store: never a fresh check
     stale = day is not None and not future and (today - day).days > STALE_AFTER_DAYS
+    restocks = _restocks(content, today)
     return {"checked_on": day.isoformat() if day else None, "stale": stale, "future": future,
             "available": counts["yes"], "limited": counts["limited"], "sold_out": counts["no"],
             "not_confirmed": counts["none"], "limited_names": sorted(names["limited"], key=str.casefold),
-            "sold_out_names": sorted(names["no"], key=str.casefold)} | ({"hikes": found} if found else {})
+            "sold_out_names": sorted(names["no"], key=str.casefold)} | ({"hikes": found} if found else {}) \
+        | ({"restocks": restocks} if restocks else {})
 
 
 def check_line(f: dict, stale_tail=None) -> str:
@@ -129,7 +161,8 @@ def render(f: dict) -> str:
         lines.append("These come from your last shelf check, so they are not stock counts.")
         if len(voice.plain("\n".join(lines))) <= MAX_CHARS:
             break
-    return "\n".join(lines)
+    # AV1109-04: one line per product with a restock day, after the unchanged shelf block; complete, never cut or merged
+    return "\n".join(lines + [restock_text(r["name"], r["day"]) for r in f.get("restocks", [])])
 
 
 def main(argv=None, content_dir: Path = CONTENT_DIR, out=None) -> int:

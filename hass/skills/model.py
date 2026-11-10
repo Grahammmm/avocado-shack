@@ -222,8 +222,9 @@ def lint_skill(skill, ops_registry, coll_files=None) -> list:
             bad("edits", "a skill without approval declares no content edits")
     elif skill.live_class == "read-only":
         bad("live_class", "read-only needs approval 'none'")
-    if skill.approval == "owner-yes" and skill.preview == "none":
-        bad("preview", "'none' only for read-only skills")
+    publishes = any(isinstance(e, tuple) and e and str(e[0]).startswith("storefront-mockup/") for e in skill.edits or ())
+    if skill.approval == "owner-yes" and skill.preview == "none" and (skill.live_class != "private-only" or publishes):
+        bad("preview", "'none' only for read-only skills, or a private-only skill that edits no site file")  # AV1109-04: stock.restock
     if skill.approval == "owner-yes" and not skill.edits:
         bad("edits", "a skill that asks for approval declares what it edits")
     return out
