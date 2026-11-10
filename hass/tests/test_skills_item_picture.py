@@ -156,6 +156,13 @@ class Plan(unittest.TestCase):
             with self.subTest(alt=alt, path="follow-up"):
                 for answer in ("lemons, plums", "the lemons, the plums"):
                     self.assertEqual(refusal(slots, "photos for lemons and plums", answer).reply, ip.ONE_AT_A_TIME)
+        for alt in ("Lemons beside plums", "Plums", "Plums beside lemons", "Lemons, fresh plums", "Plums in a bowl"):
+            slots = {**both, "image_alt": alt}  # a caption with no separator must not excuse the second product either
+            with self.subTest(alt=alt, path="request"):
+                self.assertEqual(refusal(slots, "photos for lemons, plums").reply, ip.ONE_AT_A_TIME)
+            with self.subTest(alt=alt, path="follow-up"):
+                for answer in ("lemons, plums", "the lemons, the plums"):
+                    self.assertEqual(refusal(slots, "photos for lemons and plums", answer).reply, ip.ONE_AT_A_TIME)
         slots = {**both, "image_alt": "Lemons on a plain counter"}  # a setting in the caption is still no second product
         ip.plan_picture(slots, ctx("new picture for the lemons, plain counter"))
         ip.plan_picture(slots, ctx("photos for lemons and plums", "the lemons please"))

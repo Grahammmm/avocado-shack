@@ -67,6 +67,10 @@ _CAPTION_LEAD = frozenset({"in", "on", "at", "with", "without", "from", "by", "f
 # a reply that opens with one of these is an acknowledgement before the answer: "yes, the lemons"
 _REPLY_LEAD = frozenset({"sorry", "hi", "hello", "hey", "sure", "oh", "well", "so", "actually", "just", "right", "great", "good",
                          "cool", "yeah", "yep", "nope", "um", "uh", "hmm", "sorry,", "wait", "oops"})
+# the last word of a place or a setting in a photo caption: "the lemons, plain counter" (never a word that could name a product)
+_SETTING_NOUNS = frozenset({"counter", "countertop", "bench", "benchtop", "table", "tabletop", "shelf", "shelve", "window",
+                            "windowsill", "background", "backdrop", "wall", "floor", "surface", "desk", "sink", "kitchen",
+                            "garden", "light", "lighting", "fridge", "display"})
 PLACE = re.compile(r"\b(?:for|of|on|to)\s+", re.IGNORECASE)
 SHORT_REPLY = re.compile(rf"(?:[\s,&+]*{_WORD}){{1,8}}[\s.!]*")  # a reply that is only a short phrase: "lemons and plums please"
 # a word after "and" that carries on the sentence instead of naming a second product
@@ -154,19 +158,17 @@ def _is_comma_list(left, right, name, alt="") -> bool:
         return False
     if re.search(r"[\d_]", nxt):  # a size or a file name
         return False
-    if _words(right) and _words(right) <= _words(alt) and not _joined_in(nxt, alt):  # his caption, not a second product
+    if _is_setting(right, alt):  # his words for where he took it, as the model's caption has them: not a second product
         return False
     return _is_list(left, right, name)
 
 
-def _joined_in(word, alt) -> bool:
-    """True when the caption itself joins this word to another name with 'and', '&', '+', 'plus' or a comma, on either side
-    of it and so in either order ('Lemons and plums', 'Plums and lemons'): then it is a second product that happens to sit
-    in the caption, not a place or a setting ('on a plain counter')."""
-    stem = re.escape(word.rstrip("s") if len(word) > 3 else word)
-    alt = alt.casefold().replace("\u2019", "'")
-    sep = r"(?:\band\b|&|\+|\bplus\b|,)"
-    return re.search(rf"{sep}\s*(?:also\s+)?(?:{_DET}\s+)?{stem}|{stem}[\w'-]*\s*{sep}", alt) is not None
+def _is_setting(right, alt) -> bool:
+    """True when the bit after a comma is a place or a setting ('plain counter', 'wooden table') AND the model's caption
+    carries it. Only a place noun counts, so a second product ('plums') is a second product whatever the caption says or
+    however it orders or words its names; a setting the caption does not carry asks."""
+    words = re.findall(r"[a-z0-9']+", right.casefold())
+    return bool(words) and words[-1].rstrip("s") in _SETTING_NOUNS and _words(right) <= _words(alt)
 
 
 def _lists_two(turn, name, alt="") -> bool:
