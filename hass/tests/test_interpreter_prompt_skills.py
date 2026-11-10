@@ -1,11 +1,12 @@
 """SKILLS-FW-2: the Skills block of the interpreter prompt. Offline. The pinned snapshot is test_interpreter_prompt's."""
 
 import dataclasses
+import json
 import unittest
 
 from hass.interpreter_prompt import PROMPT_MAX_BYTES, build
-from hass.skills import model
-from hass.skills.prompt import CONTRACT, skills_section
+from hass.skills import dispatch, load_skills, model, stock
+from hass.skills.prompt import CONTRACT, STOCK_ITEMS_SHAPE, _slot_text, skills_section
 from hass.tests.test_interpreter_prompt import FIXTURE, TEST_REGISTRY, tiny_content
 
 
@@ -77,6 +78,24 @@ class SkillsBlockTests(unittest.TestCase):
         self.assertLessEqual(len(section.encode("utf-8")), model.MAX_PROMPT_BYTES)
         self.assertTrue("more skills" in section)
         self.assertTrue(section.startswith("Skills."))
+
+    def test_stock_items_shape_is_explained_without_changing_other_kinds(self):  # RF0814-12
+        reg = load_skills()
+        section = skills_section(reg, [("stock.set", 9.0), ("stock.checked", 5.0)])
+        self.assertEqual(section, skills_section(reg, [("stock.set", 9.0), ("stock.checked", 5.0)]))
+        self.assertLessEqual(len(section.encode("utf-8")), model.MAX_PROMPT_BYTES)
+        [line] = [ln for ln in section.splitlines() if ln.startswith("  slots: items: stock_items, required (")]
+        self.assertEqual(line, "  slots: items: stock_items, required" + STOCK_ITEMS_SHAPE)
+        for word in ("yes", "limited", "no"):
+            self.assertIn(f'"{word}"', line)
+        example = json.loads(line[line.index("e.g. ") + len("e.g. "):-1])
+        self.assertEqual(example, [{"product": "photo-product-001", "availability": "no"}])
+        self.assertIsNone(dispatch._value_problem(stock.STOCK_SET.slots[0], example))  # the example is what the check takes
+        self.assertIn("  slots: day: day, optional; in: text_list, optional; limited: text_list, optional; out: text_list, optional\n",
+                      section)
+        for slot in _skill("a.b").slots:
+            self.assertNotIn("(", _slot_text(slot))
+        self.assertEqual(_slot_text(model.Slot("items", "text_list", True)), "items: text_list, required")
 
 
 if __name__ == "__main__":
