@@ -18,6 +18,7 @@ from hass.tests.test_live_policy import edit
 NOW = datetime(2026, 11, 8, 18, 0, tzinfo=timezone.utc)
 SITE = "fixture.example.invalid"
 PRODUCT = "photo-product-001"
+PENDING_UNLISTED = {"product.set_restock"}  # in the registry, in neither table: refused like any unlisted op
 
 
 def op(opname, /, **args): return {"op": opname, "args": args}
@@ -27,7 +28,8 @@ class TableShape(unittest.TestCase):
     def test_every_real_operation_is_classified(self):
         """A new op fails this test until someone decides live or private for it (never silently live)."""
         names = set(load_registry())
-        self.assertEqual(names - set(policy.LIVE) - set(policy.PRIVATE), set())
+        # AV1109-03: product.set_restock is pending an operator listing decision; until then it is refused as unlisted.
+        self.assertEqual(names - set(policy.LIVE) - set(policy.PRIVATE), PENDING_UNLISTED)
         self.assertEqual(set(policy.LIVE) & set(policy.PRIVATE), set())
         self.assertEqual(set(policy.LIVE) - names, set())
         self.assertEqual(set(policy.PRIVATE) - names, set())
@@ -105,6 +107,18 @@ class RealDrafts(unittest.TestCase):
 
     def test_undo_always_passes(self):
         self.assertEqual(policy.check(edit("old", "new", op="history.revert")), [])
+
+    def test_restock_stays_unlisted_and_refused(self):
+        """AV1109-03: no table lists product.set_restock, so a real draft of it is refused in plain words."""
+        for name in PENDING_UNLISTED:
+            self.assertNotIn(name, policy.LIVE)
+            self.assertNotIn(name, policy.PRIVATE)
+        reasons = self.refused(op("product.set_restock", id=PRODUCT, restock_on="2026-11-20"))
+        self.assertEqual(reasons, ["not live: product.set_restock"])
+        text = policy.refusal(reasons)
+        self.assertIn("a kind of change I can't put on the website from chat yet", text)
+        self.assertIn("I've saved it for Graham", text)
+        self.assertEqual(voice.check(text), [])
 
     def test_private_only_never_goes_live(self):
         cases = {
