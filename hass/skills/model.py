@@ -17,7 +17,10 @@ from hass.ops import KINDS as OP_KINDS
 # Skill-level kinds are resolved by code (hass/skills/kinds.py) before the plan runs.
 SKILL_KINDS = ("product_ref", "maker_ref", "hike_ref", "route_ref", "shelf", "availability", "day", "clock",
                "attachment")
-SLOT_KINDS = OP_KINDS + SKILL_KINDS
+# Plain kinds the dispatcher checks for shape only (never resolved, never an op kind). stock_items: stock.set's list of
+# {"product": <id>, "availability": "yes"|"limited"|"no"} objects (RF0814-12).
+PLAIN_KINDS = ("stock_items",)
+SLOT_KINDS = OP_KINDS + SKILL_KINDS + PLAIN_KINDS
 
 SIDE_EFFECTS = ("picture-render", "inventory-word", "shelf-check-day", "maker-create", "restock-date",
                 "private-note", "backlog-row", "none")

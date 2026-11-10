@@ -2118,6 +2118,12 @@ Branch rb/rf0844-13. trail-explorer.js: the existing basemap image-error recover
 
 Checks: `node storefront-mockup/trail-map-retry-qa.cjs storefront-mockup` (local Chromium, loopback only) passed 20 checks on the builder's clone; the new Topo cases failed before the fix. Not deployed; no physical-device or Safari check.
 
+## RF0844-12: community email refuses ASCII controls — November 9, 2026
+
+Branch rb/rf0844-12. storefront-mockup/community-server.py: `email_address` now refuses any remaining U+0000–U+001F or U+007F after the existing strip/lower step with the existing 'Please enter a valid email address.' error (never stripped into a different address), so subscriptions no longer save and RSVPs no longer claim places for addresses with an embedded NUL, SOH, ESC or DEL. Order, 409 precedence, length/shape checks and consent merging are unchanged. New hass/tests/test_community_email_controls.py runs the real handler on a loopback port with a scratch config and database and compares full row snapshots.
+
+Checks: `python3 -B -m unittest hass.tests.test_community_email_controls -v` ran 5 tests, OK on the builder's clone (failed before the fix). Not deployed; no email is sent and no historical row is cleaned.
+
 ## RF0854-12: shared dialogs stay open for clicks inside their padding — November 9, 2026
 
 Branch rb/rf0854-12. script.js: the shared Privacy/RSVP `<dialog>` used to close on every click whose target was the dialog itself, and a click on its own padding or border has that target too. It now closes only when the pointer lies outside the dialog's rectangle, measured at click time; child clicks, the Close button and native Escape are unchanged. static-site-qa.cjs gains real mouse-coordinate checks at 390 and 1440 px (each point confirmed by elementFromPoint and the rectangle before the click): padding clicks keep Privacy open (also after a resize) and keep the real RSVP form open with its typed synthetic values, while a backdrop click, Close and Escape still close it and return focus; nothing is posted or stored.

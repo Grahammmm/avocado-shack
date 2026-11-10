@@ -53,8 +53,10 @@ the same change wrote goes back with it. A later change keeps the check day it w
 ## What the plans expect (interface assumptions for the dispatcher, SKILLS-FW-3)
 
 * `plan(slots, ctx)` gets slots already resolved by code: product ids (`photo-product-NNN`), the words `yes` / `limited` /
-  `no`, and an ISO Pacific day. List slots use the kind `text_list`; each `stock.set` item is
-  `{"product": <id>, "availability": <word>}`. Names and day words are resolved before the plan, as the spec says.
+  `no`, and an ISO Pacific day. Only `stock.set`'s `items` uses the structured kind `stock_items`: a non-empty list of
+  `{"product": <id>, "availability": <word>}` objects with exactly those two keys, which the dispatcher checks for shape
+  only (repeats, the six-product cap and every stock rule stay in the plan). The `stock.checked` and `stock.clear` lists
+  stay `text_list` (product ids). Names and day words are resolved before the plan, as the spec says.
 * `ctx.today` is the Pacific date as `YYYY-MM-DD`; `ctx.content` is the loaded content (`.products`, `.store`). Both are
   optional: with no `ctx` the plan skips the checks that need them and the editor repeats every one.
 * A refusal is `hass.skills.stock.Refusal`, a `ValueError` whose `.reply` is the fixed owner reply (the same shape the test
