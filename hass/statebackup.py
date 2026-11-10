@@ -448,9 +448,10 @@ def diff(old, new) -> dict:
     try: order = {"order": "reversed"} if datetime.fromisoformat(when[0]) > datetime.fromisoformat(when[1]) else {}
     except (TypeError, ValueError): order = {"order": "unknown"}  # missing, odd or naive-vs-aware createdAt
     stamp = [w if isinstance(w, str) else None for w in when]
-    commits = [d.get("contentCommit") for d in docs]
+    commits = [d.get("contentCommit") for d in docs]  # a bundle's pack bytes vary run to run; its commit is its content
+    def same(r): return r in b and (a[r] == b[r] or r == BUNDLE and None not in commits and len(set(commits)) == 1)
     return {"result": "ok", "added": rels(b, lambda r: r not in a), "removed": rels(a, lambda r: r not in b),
-            "changed": rels(a, lambda r: r in b and a[r] != b[r]), "same": sum(a[r] == b.get(r) for r in a),
+            "changed": rels(a, lambda r: r in b and not same(r)), "same": sum(map(same, a)),
             "media_added": originals(b, a), "media_removed": originals(a, b), "older": stamp[0], "newer": stamp[1],
             "worktree_changed": docs[0]["worktree"] != docs[1]["worktree"], **order,
             "content_commit_changed": None if None in commits else commits[0] != commits[1]}
