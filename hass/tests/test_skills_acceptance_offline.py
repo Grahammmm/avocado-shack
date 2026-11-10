@@ -422,7 +422,7 @@ class Pictures(Base):
             self.assertIn("picture carries metadata", self.check(pic, {"house": "off"}, house=False), name)
 
     def test_photo_row_goes_through_the_media_binding_and_the_house_render(self):
-        plain = {"id": "lemons-plain", "schema_version": 1, "tag": "photo", "skill": "item.picture", "skill_version": 1,
+        plain = {"id": "lemons-plain", "schema_version": 1, "tag": "photo", "skill": "item.picture", "skill_version": 2,
                  "texts": ["here is a better picture of the lemons"], "replies": [{"skill": "item.picture", "slots": {"item": "lemons"}}],
                  "photos": [{"turn": 0, "fixture": "photos/jar-white-sheet.jpg"}],
                  "expect": {"skills": ["item.picture"], "dispositions": ["proposed"], "expected": "lemons-plain.json", "undo": True,
