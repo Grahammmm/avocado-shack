@@ -152,7 +152,10 @@ class Plan(unittest.TestCase):
                      "photo for the Etto rigatoni, please", "photo for the Etto rigatoni, 500 g", "photo for the Etto rigatoni, I took it today"):
             with self.subTest(text=text):
                 ip.plan_picture(etto, ctx(text))
+        ip.plan_picture({"item": LEMONS, "photo": SHA[JAR], "image_alt": "Lemons on a plain counter"},
+                        ctx("new picture for the lemons, plain counter"))  # his words are in the caption the model took
         slots = {"item": LEMONS, "photo": SHA[JAR]}
+        self.assertEqual(refusal(slots, "new picture for the lemons, plain counter").reply, ip.ONE_AT_A_TIME)  # not in any caption
         for answer in ("the lemons, please", "no, the lemons", "ok, lemons", "lemons, definitely"):
             with self.subTest(answer=answer):
                 ip.plan_picture(slots, ctx("photos for the lemons and the plums", answer))

@@ -145,16 +145,19 @@ def _first(words) -> str:
     return words[0] if words else ""
 
 
-def _is_comma_list(left, right, name) -> bool:
+def _is_comma_list(left, right, name, alt="") -> bool:
     """A bare comma between two names ('lemons, plums') is a list; a comma before a caption or a reply word ('the Etto
-    rigatoni, in the box', 'the lemons, please', 'yes, the lemons') is not."""
+    rigatoni, in the box', 'the lemons, please', 'yes, the lemons', 'the bread, plain counter' when the model took 'plain
+    counter' into the caption, a file name) is not."""
     lead, nxt = _first(left), _first(right)
-    if not lead or lead in _NOT_A_PRODUCT or lead in _REPLY_LEAD or not nxt or nxt in _CAPTION_LEAD or nxt[0].isdigit():
+    if not lead or lead in _NOT_A_PRODUCT or lead in _REPLY_LEAD or not nxt or nxt in _CAPTION_LEAD:
+        return False
+    if re.search(r"[\d_]", nxt) or (_words(right) and _words(right) <= _words(alt)):  # a size, a file name, or his caption
         return False
     return _is_list(left, right, name)
 
 
-def _lists_two(turn, name) -> bool:
+def _lists_two(turn, name, alt="") -> bool:
     """True when the text puts two products on the one photo: an 'and' (or &, +, plus) or a bare comma between two names
     after 'for/of/on/to', or a reply that is only such a list. Every 'and' and comma is read on its own, so 'cookies and cream
     chocolate and lemons' lists two while 'the Etto rigatoni, in the box' is one product with a caption."""
@@ -178,26 +181,27 @@ def _lists_two(turn, name) -> bool:
         left = re.split(r"\s*,\s*|\s*,?\s*(?:\band\b|&|\+|\bplus\b)\s+", left)[-1]  # only the words next to this 'and' or comma
         left = " ".join(re.sub(rf"^{_DET}\s+", "", left.strip(), flags=re.IGNORECASE).split()[-4:])
         right = " ".join(re.split(r"[,.;:!?]|\s" + _AND, after)[0].split()[:3])
-        if left and (_is_comma_list if comma else _is_list)(left, right, name):
+        if left and (_is_comma_list(left, right, name, alt) if comma else _is_list(left, right, name)):
             return True
     return False
 
 
-def _crowded(turn, name="") -> str | None:
+def _crowded(turn, name="", alt="") -> str | None:
     """The question one text of his raises about where the photo goes, or None."""
     if HOME_PAGE.search(turn):
         return ONE_PLACE
-    if _lists_two(turn, name) or BOTH.search(turn):
+    if _lists_two(turn, name, alt) or BOTH.search(turn):
         return ONE_AT_A_TIME
     return None
 
 
-def one_place(texts, name="") -> str | None:
+def one_place(texts, name="", alt="") -> str | None:
     """The question to ask when his texts put the one photo on two products or on the home page and a product; None when it
     is one place. A later text of his that names the one product (and asks nothing new, so not another list) answers it; the
-    earlier text is kept, so a request whose product he never picked still asks."""
+    earlier text is kept, so a request whose product he never picked still asks. ``alt`` is the caption the model took from
+    his words: a comma-separated bit that is part of it ('the bread, plain counter') is a caption, not a second product."""
     turns = [t for t in texts if isinstance(t, str)]
-    asked = [(i, q) for i, t in enumerate(turns) if (q := _crowded(t, name))]
+    asked = [(i, q) for i, t in enumerate(turns) if (q := _crowded(t, name, alt))]
     if not asked:
         return None
     last, question = asked[-1]
@@ -240,7 +244,7 @@ def describe(slots, ctx=None) -> tuple:
     content, pid = _content(ctx), _clean(slots.get("item"))
     product = _product(content, pid)
     name = product.get("name", "") if product else pid
-    if (question := one_place(_texts(ctx), name)):  # whatever the model picked, one photo is one product
+    if (question := one_place(_texts(ctx), name, _clean(slots.get("image_alt")))):  # whatever the model picked, one photo is one product
         raise Refusal(question, "question")
     if not pid:
         raise Refusal(ASK_ITEM, "question")
