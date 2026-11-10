@@ -261,6 +261,7 @@ server.listen(0,'127.0.0.1',async()=>{
     await rsvp.click();await clickBackdrop(p,'rsvp '+width);
     assert.equal(posts,0,'rsvp '+width+': nothing posted');assert.deepEqual(await p.evaluate(()=>[localStorage.length,sessionStorage.length]),[0,0],'rsvp '+width+': nothing stored');assert.deepEqual(errs,[],'dialog '+width+': page errors');
    }finally{await ctx.close()}}
+  await require('./invitation-qa.cjs')(browser,base,true);
   result.dialogPaddingKeepsOpen=true;
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,noticesGone:true,defaultView:"packaged",catalog:170,errors});

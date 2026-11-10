@@ -28,7 +28,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE);
  await p.goto(process.env.URL+'/hike',{waitUntil:'networkidle'});
  await p.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));await p.waitForTimeout(800);
  const text=await p.evaluate(()=>document.body.innerText);
- console.log(JSON.stringify({invitation:await p.locator('.trail-invitation').count(),archive:/Sample archive/.test(text),
+ console.log(JSON.stringify({invitation:await p.locator('.trail-invitation #featured-hike-title').count(),archive:/Sample archive/.test(text),
    trail:trail.length,real:await p.locator('.hike-event h2',{hasText:'Real test hike'}).count()}));await b.close()})();
 """
 
