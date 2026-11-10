@@ -312,4 +312,7 @@ def value_words(value, field=None) -> str:
     if isinstance(value, list) and all(isinstance(v, str) for v in value): return "; ".join(value)
     if isinstance(value, (int, float)): return str(value)
     if isinstance(value, str): return value
+    if isinstance(value, dict) and value and all(isinstance(v, (str, int, float, bool)) or v is None for v in value.values()):
+        shown = [value_words(v, k) for k, v in value.items() if v not in (None, "", [])]  # HASS-QA-1: a notice is {text, ...}
+        if shown: return "; ".join(shown)
     return "more than I can show here"
