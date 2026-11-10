@@ -61,7 +61,7 @@ class HikeAnchorTest(unittest.TestCase):
     def test_card_id_and_ics_url_unchanged(self):
         out = self.run_page([hike("spring-1", title="Spring")])
         self.assertEqual(self.ids(out["up"], "article"), ["spring-1"])
-        self.assertIn('<article id="spring-1" class="hike-event">', out["up"])
+        self.assertIn('<article id="spring-1" class="hike-event trail-invitation"', out["up"])
         href = html.unescape(re.search(r'hike-ics" download="[^"]*" href="([^"]*)"', out["up"]).group(1))
         self.assertIn("URL:https://club.example/hike#spring-1\r\n", unquote(href.split(",", 1)[1]))
 
@@ -101,7 +101,7 @@ class HikeAnchorTest(unittest.TestCase):
         out = self.run_page([hike("cx", status="cancelled"), hike("done", "2026-10-01T09:00:00-07:00", status="completed")],
                             hash="#done")
         self.assertEqual(self.ids(out["up"], "article"), ["cx"])
-        self.assertIn('<article id="cx" class="hike-event hike-cancelled">', out["up"])
+        self.assertIn('<article id="cx" class="hike-event hike-cancelled trail-invitation"', out["up"])
         self.assertEqual(self.ids(out["past"], "article"), ["done"])
         self.assertEqual(out["log"]["scroll"], [["done", "start"]])
         # with no real hikes the sample invitation and archive are drawn without any anchor

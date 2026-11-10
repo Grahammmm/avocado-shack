@@ -35,7 +35,8 @@ SHELF_LABELS = {"fruit": "Fruit", "vegetables": "Vegetables", "dairy": "Dairy & 
 # preserves each record's order so output stays byte-identical).
 PRODUCT_PUBLIC_FIELDS = ("id", "name", "brand", "category", "image", "description", "producerKey", "displayBrand")
 PRODUCT_OPTIONAL_PUBLIC = ("imageAlt", "addedOn")  # public when present; never required (any status)
-PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on")  # owner-set word + its check day (SHOP-1)
+PRODUCT_INTERNAL_FIELDS = ("status", "hold", "available", "available_on",  # owner-set word + its check day (SHOP-1)
+                           "restock_on")  # AV1109-03: private day more is expected; never published
 PRODUCT_STATUSES = ("active", "hidden", "held")
 AVAILABILITY = ("yes", "limited", "no")
 SHOP_TZ = ZoneInfo("America/Los_Angeles")
@@ -285,6 +286,8 @@ def validate_products(problems, products, makers, site_dir: Path | None, checked
             problems.append(f"{where}.available_on: must be a real date YYYY-MM-DD, set only together with available")
         elif "available_on" in rec and (checked is None or iso_day(rec["available_on"]) > checked):
             problems.append(f"{where}.available_on: {rec['available_on']} is after store.selection_checked_on")
+        if "restock_on" in rec and iso_day(rec["restock_on"]) is None:  # AV1109-03: shape only; any past/far day loads
+            problems.append(f"{where}.restock_on: must be a real date YYYY-MM-DD")
         if status == "held":
             hold = rec.get("hold")
             if _closed_keys(problems, f"{where}.hold", hold, HOLD_FIELDS, ("reason", "source")):

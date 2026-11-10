@@ -37,11 +37,11 @@ async function mount(host){
   <details class="trail-map-notes"><summary>About this route &amp; map</summary><p>The line includes the walk from Coon Creek parking to the check-in station, then the main trail to the turnaround and back. The optional northern loop is not included. Our mapped route is about ${miles} miles; PG&amp;E describes the trail as 6.6 miles round trip.</p><p>Elevation is estimated from <a href="https://www.usgs.gov/3d-elevation-program" target="_blank" rel="noopener">USGS 3DEP terrain data</a>, sampled every 50 metres and lightly smoothed. It is not a GPS recording. Imagery is an aerial survey, not a live view. This is a route overview; check current access and follow trail signs.</p><p><a href="https://www.pge.com/assets/pge/images/about/point-buchon-trail-map.jpg" target="_blank" rel="noopener">Official trail map ↗</a><a href="https://www.pge.com/en/about/in-your-community/recreational-areas.html" target="_blank" rel="noopener">Access &amp; trail conditions ↗</a></p></details>`;
   host.replaceChildren(wrapper);
   const q=s=>wrapper.querySelector(s),stage=q('.trail-map-stage'),svg=q('.trail-map-canvas'),photo=q('.trail-basemap');
-  // AV1422-08 edge 5: a failed aerial image (the first layer) is a failed map load, same fallback and retry as a failed route file.
+  // AV1422-08 edge 5 (RF0844-13: Topo too): a failed aerial or Topo image is a failed map load, same fallback and retry as a failed route file.
   let failed=false;
   photo.addEventListener('error',()=>{
    const enlarged=!!(dialog&&dialog.contains(wrapper));
-   if(failed||!/aerial/.test(photo.getAttribute('href'))||!host.isConnected||!(enlarged||host.contains(wrapper)))return;
+   if(failed||!/point-buchon-(aerial|topo)\.webp$/.test(photo.getAttribute('href'))||!host.isConnected||!(enlarged||host.contains(wrapper)))return;
    failed=true;
    if(enlarged){const d=dialog;dialog=null;document.body.style.overflow=previousOverflow;d.close();d.remove();}
    delete host.dataset.mounted;host.innerHTML=UNAVAILABLE+'<p><button type="button" data-trail-retry>Try loading the map again</button></p>';host.dataset.ready='error';host.querySelector('[data-trail-retry]').addEventListener('click',e=>{if(host.isConnected&&host.contains(e.currentTarget))mount(host);});

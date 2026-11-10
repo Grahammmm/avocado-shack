@@ -59,8 +59,8 @@ When Hass could not reach the model or got no usable answer, it replies "I could
 - **Stop and ask:** before re-applying or editing the site by hand, or when the count rises on every change.
 
 ### `backup-age`
-- **Means:** with `--backups`: no complete `hass-state-*` backup within `--backup-hours`, no complete backup at all, or the backup dir is unreadable.
-- **Check first:** `ls -l BACKUPS`; `python3 hass/statebackup.py verify BACKUP` on the newest one.
+- **Means:** with `--backups`: no complete `hass-state-*` backup within `--backup-hours`, no complete backup at all, the backup dir is unreadable, or the newest complete backup's name is dated after this box's clock (`timestamp is in the future`; it is not verified and no older backup is used instead).
+- **Check first:** `ls -l BACKUPS`; `python3 hass/statebackup.py verify BACKUP` on the newest one. For a future timestamp, check this box's clock (`date -u`) against the newest backup name; do not rename, delete or touch any backup.
 - **Next step:** `python3 hass/statebackup.py create --state DIR --out BACKUPS` (OUT mode 0700). It reads state only; `busy` means retry later, `unsettled` means `recover` first (after `pause changes`).
 - **Stop and ask:** `create` answers `refused` (backups include `inbox.sqlite3`; a leftover `inbox.sqlite3-journal` is refused as an unknown entry) or `verify` answers `corrupt`, the disk is full, or a backup timer needs installing (attended).
 

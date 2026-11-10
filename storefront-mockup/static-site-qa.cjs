@@ -5,7 +5,7 @@
 // a plain sentence instead of a parser error.
 //   node storefront-mockup/static-site-qa.cjs DIR      (DIR outside the repo; QA_OUT_DIR as for the other checks)
 const {out}=require('./qa-env.cjs').qaEnv({preview:false});
-const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert/strict');
+const fs=require('fs'),path=require('path'),http=require('http'),util=require('util'),assert=require('assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const refuse=m=>{process.stderr.write('static-site QA refused: '+m+'\n');process.exit(2)};
 const root=process.argv[2]&&fs.realpathSync(process.argv[2]);
@@ -178,6 +178,30 @@ server.listen(0,'127.0.0.1',async()=>{
   for(const t of ['RSVP-off hike','no-flag hike']){assert.match(art(t).txt,SHARED,t);assert.doesNotMatch(art(t).txt,JOIN,t)}
   assert.ok(art('cancelled hike').x&&/CANCELLED/.test(art('cancelled hike').txt)&&/This hike is cancelled\./.test(art('cancelled hike').txt));assert.doesNotMatch(art('cancelled hike').txt,JOIN);assert.doesNotMatch(art('cancelled hike').txt,SHARED);
   assert.deepEqual(fx.errs,[]);assert.deepEqual(fx.sent,[],'the static hike list sent something');
+  // AV1109-12 (docs/hass/HIKE-PAGE.md 3.3.1): one test per row of the spots table on the published static site. It has no API and no counts file, so it can never trust a count: rows 1-3 are the pure helper; a limited hike here is row 4 whatever stray counts the JSON carries.
+  const SP_LIMITED=c=>'Limited to '+c+' people · availability unconfirmed; ask at the Shack',SP_FULL='Full. Ask at the Shack to go on the waitlist.';
+  const spSrc=fs.readFileSync(path.join(root,'community.js'),'utf8'),spots=new Function('esc',spSrc.slice(spSrc.indexOf('// SPOTS-BEGIN'),spSrc.indexOf('// SPOTS-END'))+';return {spotsState,spotsMarkup,spotsCount}')(t=>String(t));
+  const SS=(e,c)=>spots.spotsState({capacity:6,rsvpEnabled:true,rsvpOpen:true,...e},c).text;
+  // rows 1-3 (trusted count, capacity matches)
+  assert.equal(SS({},{capacity:6,remaining:2}),'2 spots left','row 1');assert.equal(SS({},{capacity:6,remaining:1}),'1 spot left','row 2');assert.equal(SS({},{capacity:6,remaining:0}),SP_FULL,'row 3');
+  // rows 4 and 5 (taken unknown; count made for another limit): the limit now in community.json, never a number left
+  for(const c of [null,undefined,{},{capacity:6,remaining:null},{capacity:6,remaining:'2'},{capacity:6,remaining:-1},{capacity:6,remaining:7},{capacity:6,remaining:1.5}])assert.equal(SS({},c),SP_LIMITED(6),'row 4: '+JSON.stringify(c));
+  assert.equal(SS({},{capacity:8,remaining:2}),SP_LIMITED(6),'row 5');assert.equal(SS({capacity:8},{capacity:6,remaining:0}),SP_LIMITED(8),'row 5 after a limit change');
+  // rows 6 and 7
+  assert.equal(SS({rsvpEnabled:false},{capacity:6,remaining:2}),'RSVP details will be shared when confirmed.','row 6');assert.equal(SS({capacity:null},{capacity:6,remaining:2}),'To join, ask at the Shack.','row 7');
+  assert.equal(spots.spotsCount({staticSite:true,capacity:6,remaining:2}),null,'static count ignored');
+  // the real static page: every hike with a limit says it and nothing more, whatever counts the JSON carries; nobody gets a button
+  const sp=await hikeAt('2026-11-09T08:30:00Z',{events:[ev('s-many','Synthetic row one',{rsvpEnabled:true,capacity:6,remaining:2,rsvpOpen:true,confirmedGuests:4}),ev('s-one','Synthetic row two',{rsvpEnabled:true,capacity:6,remaining:1,rsvpOpen:true}),
+   ev('s-full','Synthetic row three',{rsvpEnabled:true,capacity:6,remaining:0,rsvpOpen:true}),ev('s-null','Synthetic row four',{rsvpEnabled:true,capacity:6,remaining:null}),ev('s-nocount','Synthetic row four missing',{rsvpEnabled:true,capacity:6}),
+   ev('s-off','Synthetic row six',{rsvpEnabled:false,capacity:6,remaining:2,rsvpOpen:true}),ev('s-none','Synthetic row seven',{rsvpEnabled:true,remaining:2,rsvpOpen:true}),ev('s-x','Synthetic cancelled limited',{status:'cancelled',startsAt:'2026-11-09T12:00:00-08:00',rsvpEnabled:true,capacity:6,remaining:2})]});
+  const sa=t=>sp.arts.find(a=>a.t.endsWith(t)),SPOTS=/spots? left|places? available|This hike is full|Full\. Ask/;
+  assert.equal(sp.arts.length,8,'eight spots fixture hikes shown');
+  for(const t of ['row one','row two','row three','row four','row four missing']){assert.ok(sa(t).txt.includes(SP_LIMITED(6)),t+': limit stated');assert.doesNotMatch(sa(t).txt,SPOTS,t+': no spots-left claim');assert.doesNotMatch(sa(t).txt,/RSVP details will be shared|To join, ask at the Shack\./,t+': one spots line')}
+  assert.match(sa('row six').txt,/RSVP details will be shared when confirmed\./,'row 6 on the page');assert.doesNotMatch(sa('row six').txt,/Limited to|spots? left/,'row 6 has no spots line');
+  assert.match(sa('row seven').txt,/To join, ask at the Shack\./,'row 7 on the page');assert.doesNotMatch(sa('row seven').txt,/Limited to|spots? left/,'row 7 has no spots line');
+  for(const a of sp.arts)assert.equal(a.b,0,a.t+': no RSVP button on the static site');
+  assert.ok(sa('cancelled limited').x&&/This hike is cancelled\./.test(sa('cancelled limited').txt)&&!/Limited to|spots? left|To join|RSVP details/.test(sa('cancelled limited').txt),'a cancelled card is unchanged');
+  assert.deepEqual(sp.errs,[]);assert.deepEqual(sp.sent,[],'the static spots list sent something');
   for(const missing of MISSING){ // a missing path, at any depth, gets the shop's own 404 page with its stylesheet
    const res=await page.goto(base+missing);await page.waitForLoadState('networkidle');
    assert.equal(res.status(),404,missing+': status');assert.equal(await page.locator('h1').innerText(),'That page isn’t here.',missing+': heading');
@@ -201,6 +225,44 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(await p.locator(form).getAttribute('aria-disabled'),'true');
    assert.equal(hits,1,route+': one GET /api/community');assert.equal(posts,0,route+': nothing posted');await p.close();
   }
+  // RF0854-12: the shared dialog (Privacy and the RSVP form) closes only for a real backdrop click, Close or Escape; a click on its own padding/border keeps it open.
+  // Points are measured at click time and checked with elementFromPoint and the dialog's rectangle, so no test passes by hitting a child or the backdrop by mistake.
+  const box=(p,where)=>p.locator('#dialog').evaluate((d,where)=>{const r=d.getBoundingClientRect(),y=where==='corner'?r.top+3:r.top+r.height/2;
+   const x=where==='backdrop'?r.left/2:r.left+3,hit=document.elementFromPoint(x,y);return {x,y,hitDialog:hit===d,inside:x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom}},where);
+  const isOpen=p=>p.locator('#dialog').evaluate(d=>d.open);
+  const clickPadding=async(p,where,why)=>{const pt=await box(p,where);assert.ok(pt.hitDialog&&pt.inside,why+': '+where+' point is the dialog itself, inside its box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),true,why+': '+where+' padding click closed the dialog')};
+  const clickBackdrop=async(p,why)=>{const pt=await box(p,'backdrop');assert.ok(pt.hitDialog&&!pt.inside,why+': backdrop point is outside the box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),false,why+': backdrop click left the dialog open')};
+  const rsvpApi={acceptsSubmissions:true,routeIdeas:[],events:[{id:'rf0854-walk',title:'Synthetic dialog walk',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles',meetingPoint:'Synthetic trailhead',rsvpOpen:true,rsvpEnabled:true,remaining:6,confirmedGuests:0}]};
+  for(const [width,other] of [[390,1440],[1440,390]]){const ctx=await browser.newContext({viewport:{width,height:900}}),p=await ctx.newPage(),errs=[];let posts=0;
+   p.on('pageerror',e=>errs.push(e.message));p.on('request',r=>{if(r.method()!=='GET'||r.postData())posts++});
+   try{await p.clock.setFixedTime(new Date('2026-11-09T08:30:00Z'));await p.route('**/api/community',r=>r.fulfill(json(rsvpApi)));
+    // privacy_inside_padding_and_border_stays_open (also after a viewport resize)
+    await p.goto(base+'/');const privacy=p.getByRole('button',{name:'Privacy',exact:true});await privacy.click();
+    const before=await p.locator('#dialog').evaluate(d=>({text:d.innerText,label:d.getAttribute('aria-labelledby')}));
+    await clickPadding(p,'corner','privacy '+width);await clickPadding(p,'side','privacy '+width);
+    await p.setViewportSize({width:other,height:700});await clickPadding(p,'corner','privacy resized '+width+'→'+other);await p.setViewportSize({width,height:900});
+    assert.deepEqual(await p.locator('#dialog').evaluate(d=>({text:d.innerText,label:d.getAttribute('aria-labelledby')})),before,'privacy '+width+': content unchanged');
+    assert.equal(await p.locator('#dialog-title').innerText(),'Your privacy matters.');
+    // child_close_and_escape_keep_existing_behavior
+    await p.locator('#dialog-content p').first().click();assert.equal(await isOpen(p),true,'privacy '+width+': paragraph click');
+    await p.keyboard.press('Escape');assert.equal(await isOpen(p),false,'privacy '+width+': Escape');assert.equal(await privacy.evaluate(b=>b===document.activeElement),true,'privacy '+width+': focus back after Escape');
+    await privacy.click();await p.getByRole('button',{name:'Close details'}).click();assert.equal(await isOpen(p),false,'privacy '+width+': Close');assert.equal(await privacy.evaluate(b=>b===document.activeElement),true,'privacy '+width+': focus back after Close');
+    // backdrop_click_still_closes
+    await privacy.click();await clickBackdrop(p,'privacy '+width);
+    // rsvp_inside_padding_preserves_open_form: the real RSVP renderer, synthetic data, filled but never submitted
+    await p.goto(base+'/hike/');const rsvp=p.locator('[data-rsvp="rf0854-walk"]');await rsvp.click();
+    await p.locator('#rsvp-name').fill('Synthetic Visitor');await p.locator('#rsvp-email').fill('synthetic@example.invalid');await p.locator('#rsvp-party').selectOption('2');
+    const values=()=>p.locator('#hike-rsvp').evaluate(f=>[f.elements.name.value,f.elements.email.value,f.elements.partySize.value]);
+    await clickPadding(p,'corner','rsvp '+width);await clickPadding(p,'side','rsvp '+width);
+    assert.ok(util.isDeepStrictEqual(await values(),['Synthetic Visitor','synthetic@example.invalid','2']),'rsvp '+width+': typed values kept');
+    await p.locator('#rsvp-name').click();assert.equal(await isOpen(p),true,'rsvp '+width+': input click');
+    await p.keyboard.press('Escape');assert.equal(await isOpen(p),false,'rsvp '+width+': Escape');
+    await rsvp.click();await p.getByRole('button',{name:'Close details'}).click();assert.equal(await isOpen(p),false,'rsvp '+width+': Close');
+    await rsvp.click();await clickBackdrop(p,'rsvp '+width);
+    assert.equal(posts,0,'rsvp '+width+': nothing posted');assert.deepEqual(await p.evaluate(()=>[localStorage.length,sessionStorage.length]),[0,0],'rsvp '+width+': nothing stored');assert.deepEqual(errs,[],'dialog '+width+': page errors');
+   }finally{await ctx.close()}}
+  await require('./invitation-qa.cjs')(browser,base,true);
+  result.dialogPaddingKeepsOpen=true;
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,noticesGone:true,defaultView:"packaged",catalog:170,errors});
   fs.writeFileSync(path.join(out,'static-site-QA.json'),JSON.stringify(result,null,1));
