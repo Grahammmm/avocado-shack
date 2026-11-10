@@ -14,9 +14,12 @@ from pathlib import Path
 
 from hass import live_policy, voice
 from hass.content_model import REPO_ROOT
-from hass.ops import load_registry
-from hass.skills import load_skills, skill_lint, stock, testkit
+from hass.ops import KINDS as OP_KINDS, load_registry
+from hass.skills import kinds, load_skills, model, skill_lint, stock, testkit
 from hass.skills.model import lint_cases
+from hass.tests.test_conversation import CHAT
+from hass.tests.test_editor import git
+from hass.tests.test_skill_dispatch import SkillCase
 
 EGGS, HASS, LEMONS, HONEY = "photo-product-024", "photo-product-001", "photo-product-017", "photo-product-042"
 HELD = "photo-product-040"
@@ -97,6 +100,14 @@ class Declarations(unittest.TestCase):
             self.assertEqual({s.live_class for s in SKILLS.values()}, {"chat-live"})
         finally:
             sc.close()
+
+    def test_stock_items_is_a_plain_kind_only_stock_set_uses(self):  # RF0814-12
+        self.assertIn("stock_items", model.SLOT_KINDS)
+        for resolved_or_op in (model.SKILL_KINDS, tuple(kinds.RESOLVERS), OP_KINDS):
+            self.assertNotIn("stock_items", resolved_or_op)
+        self.assertEqual([(s.name, s.kind) for s in stock.STOCK_SET.slots], [("items", "stock_items")])
+        self.assertEqual([(s.name, s.kind) for s in stock.STOCK_CLEAR.slots], [("items", "text_list")])
+        self.assertEqual([s.kind for s in stock.STOCK_CHECKED.slots], ["day", "text_list", "text_list", "text_list"])
 
 
 class PlanRules(unittest.TestCase):
@@ -265,6 +276,127 @@ class Flow(unittest.TestCase):
         self.assertEqual(disposition, "unsupported")
         self.assertEqual(reply, "Lemons is hidden. Do you want me to bring it back first?")
         self.assertEqual(self.sc.head(), head)
+
+
+T0_DAY = "2026-11-02"  # SkillCase's injected clock: Monday 2026-11-02 09:00 PST
+SIX = (HASS, "photo-product-002", "photo-product-003", "photo-product-004", "photo-product-005", EGGS)
+BAD_SHAPE = "I can't use that for the items: each one needs a product and in stock, low or sold out."
+
+
+def _items(*pairs):
+    return [{"product": pid, "availability": word} for pid, word in pairs]
+
+
+class RealDispatcherStock(SkillCase):
+    """RF0814-12: the PRODUCTION stock.set through the real dispatcher's slot validation (not the kit's SkillInterpreter),
+    with the real Conversation and Editor on the H02 throwaway shop and SkillCase's injected clock. The model reply is the
+    documented list of {product, availability} objects; nothing is written before the owner's own `yes <code>`."""
+    SKILLS = (stock.STOCK_SET, stock.STOCK_CLEAR)
+
+    def edit(self, name, change):
+        path = self.repo.wt / "hass" / "content" / name
+        doc = json.loads(path.read_text("utf-8"))
+        change(doc)
+        path.write_text(json.dumps(doc), "utf-8")
+        git(self.repo.wt, "commit", "-qam", f"seed {name}")  # the writer worktree is clean at each draft
+        self.base = self.count()
+
+    def checked_today(self):
+        self.edit("store.json", lambda doc: doc.update(selection_checked_on=T0_DAY))
+
+    def seed(self, pid, **fields):
+        self.edit("products.json", lambda doc: next(p for p in doc["products"] if p["id"] == pid).update(fields))
+
+    def tell(self, text, reply):
+        self.script(text, reply)
+        disposition = self.say(text)
+        return disposition, "\n".join(self.replies())
+
+    def set_items(self, text, items):
+        return self.tell(text, {"skill": "stock.set", "slots": {"items": items}})
+
+    def ops(self):
+        return [(o["op"], o["args"]) for o in json.loads(self.drafts()[-1]["ops_json"])]
+
+    def test_structured_items_reach_shelf_check_and_direct_draft(self):
+        disposition, reply = self.set_items("eggs are out", _items((EGGS, "no")))
+        self.assertEqual(disposition, "question")
+        self.assertIn(SHELF_Q, reply)
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+        disposition = self.say("yes")
+        self.assertEqual(disposition, "proposed")
+        self.assertIn("also records that the shelf list was checked today", "\n".join(self.replies()))
+        self.assertEqual(self.ops(), [("store.confirm_selection", {}), ("product.set_availability", {"id": EGGS, "available": "no"})])
+        self.nothing_written()
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+        # today is now checked: the one-call envelope is a direct draft of the word alone
+        disposition, reply = self.tell("avocados are low", {"calls": [{"skill": "stock.set", "slots": {"items": _items((HASS, "limited"))}}]})
+        self.assertEqual(disposition, "proposed", reply)
+        self.assertNotIn("also records", reply)
+        self.assertEqual(self.ops(), [("product.set_availability", {"id": HASS, "available": "limited"})])
+        self.assertEqual(self.commits(), 1)
+
+    def test_a_check_seeded_today_makes_it_a_direct_draft(self):
+        self.checked_today()
+        disposition, reply = self.set_items("eggs are out", _items((EGGS, "no")))
+        self.assertEqual(disposition, "proposed", reply)
+        self.assertNotIn(SHELF_Q, reply)
+        self.assertEqual(self.ops(), [("product.set_availability", {"id": EGGS, "available": "no"})])
+        self.nothing_written()
+
+    def test_structured_items_invalid_shape_never_drafts(self):
+        self.checked_today()  # a correct reply would be a direct draft, so only the shape can stop these
+        good = {"product": EGGS, "availability": "no"}
+        bad = (7, "eggs are out", [], {"product": EGGS, "availability": "no"}, [EGGS], [EGGS, good], [[EGGS, "no"]],
+               [{"product": EGGS}], [{"availability": "no"}], [{**good, "count": 3}], [{"product": "Cal Poly eggs", "availability": "no"}],
+               [{"product": 24, "availability": "no"}], [{"product": [EGGS], "availability": "no"}],
+               [{"product": EGGS, "availability": "sold out"}], [{"product": EGGS, "availability": 0}],
+               [{"product": EGGS, "availability": ["no"]}], [{"product": EGGS, "availability": {"no": 1}}], [good, None])
+        for i, value in enumerate(bad):
+            with self.subTest(value=value):
+                disposition, reply = self.set_items(f"stock change number {i}", value)
+                self.assertEqual(disposition, "question", reply)
+                self.assertEqual(reply, BAD_SHAPE)
+                self.assertNotIn("Traceback", reply)
+                self.assertEqual(self.drafts(), [])
+                self.nothing_written()
+                self.conv.requests.close_live(CHAT, self.now)  # each bad reply is a fresh ask, not a third try at one
+        disposition, reply = self.set_items("stock change with nothing", None)  # null: the required slot is asked for
+        self.assertEqual((disposition, reply), ("question", "Which products, and in, low or out?"))
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_structured_items_keep_existing_stock_rules(self):
+        self.checked_today()
+        self.seed(LEMONS, status="hidden")
+        self.seed(HONEY, available="no", available_on=T0_DAY)
+        refusals = (
+            (_items((EGGS, "no"), (EGGS, "yes")), stock.TWICE.format(name="Cal Poly eggs")),
+            (_items(*((pid, "no") for pid in SIX), (LEMONS, "no")), stock.TOO_MANY.format(count=7)),
+            (_items((HELD, "no")), stock.HELD.format(name="Raw milk white cheddar")),
+            (_items((LEMONS, "no")), stock.HIDDEN.format(name="Lemons")),
+            # the editor's own already-so refusal: the dispatcher's ctx.today is a date, which the plan's ALREADY check skips
+            (_items((HONEY, "no")), "That's already how it is, so nothing changed."))
+        for i, (items, words) in enumerate(refusals):
+            with self.subTest(refusal=words):
+                disposition, reply = self.set_items(f"refused stock change {i}", items)
+                self.assertNotEqual(disposition, "proposed")
+                self.assertEqual(reply, words)
+                self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+        disposition, reply = self.set_items("eggs are out, eggs are out", _items((EGGS, "no"), (EGGS, "no")))
+        self.assertEqual(disposition, "proposed", reply)  # the same word twice is one change
+        self.assertEqual(self.ops(), [("product.set_availability", {"id": EGGS, "available": "no"})])
+        words = ("yes", "limited", "no", "limited", "yes", "limited")
+        disposition, reply = self.set_items("six changes", _items(*zip(SIX, words)))
+        self.assertEqual(disposition, "proposed", reply)
+        self.assertEqual(self.ops(), [("product.set_availability", {"id": pid, "available": w}) for pid, w in zip(SIX, words)])
+        self.nothing_written()
+        # an unrelated text_list slot still takes only lines of text, never these objects
+        disposition, reply = self.tell("clear the eggs", {"skill": "stock.clear", "slots": {"items": _items((EGGS, "no"))}})
+        self.assertEqual((disposition, reply), ("question", "I can't use that for the items: that list has an empty or repeated line."))
 
 
 if __name__ == "__main__":
