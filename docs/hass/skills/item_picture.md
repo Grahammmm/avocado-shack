@@ -43,7 +43,9 @@ that suffix, even if an old caption had it.
   "the" ("photos for lemons and plums" asks too), and a reply that is itself a list ("lemons and plums please") is not
   the one product he was asked for, so it asks again. A list can be commas alone ("photos for lemons, plums", and the reply
   "lemons, plums please"); a comma before a caption or a reply word ("photo for the Etto rigatoni, in the box", "the
-  lemons, please", "yes, the lemons") is still one product.
+  lemons, please", "yes, the lemons") is still one product. A second name is never excused because its words sit in the
+  caption the model wrote: with the caption "Lemons and plums", "photos for lemons, plums" still asks. Only a bit that the
+  caption does not join to the first name with "and", "&", "+", "plus" or a comma ("Lemons on a plain counter") is a setting.
 * No product list to check against (the plan is handed no content): nothing is drafted. The plan refuses with "I couldn't
   check that product just now, so nothing is changed. Try again in a moment." rather than skip the hidden/held recheck.
 * `alt-says-what-it-shows`: above.

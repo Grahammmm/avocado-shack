@@ -152,9 +152,18 @@ def _is_comma_list(left, right, name, alt="") -> bool:
     lead, nxt = _first(left), _first(right)
     if not lead or lead in _NOT_A_PRODUCT or lead in _REPLY_LEAD or not nxt or nxt in _CAPTION_LEAD:
         return False
-    if re.search(r"[\d_]", nxt) or (_words(right) and _words(right) <= _words(alt)):  # a size, a file name, or his caption
+    if re.search(r"[\d_]", nxt):  # a size or a file name
+        return False
+    if _words(right) and _words(right) <= _words(alt) and not _joined_in(nxt, alt):  # his caption, not a second product
         return False
     return _is_list(left, right, name)
+
+
+def _joined_in(word, alt) -> bool:
+    """True when the caption itself joins this word to another name with 'and', '&', '+', 'plus' or a comma ('Lemons and
+    plums'): then it is a second product that happens to sit in the caption, not a place or a setting ('on a plain counter')."""
+    stem = re.escape(word.rstrip("s")) if len(word) > 3 else re.escape(word)
+    return re.search(rf"(?:\band\b|&|\+|\bplus\b|,)\s*(?:also\s+)?(?:{_DET}\s+)?{stem}", alt.casefold().replace("\u2019", "'")) is not None
 
 
 def _lists_two(turn, name, alt="") -> bool:

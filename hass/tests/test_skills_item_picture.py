@@ -146,6 +146,19 @@ class Plan(unittest.TestCase):
         ip.plan_picture(slots, ctx("photos for lemons, plums", "the lemons please"))  # one product settles it
         ip.plan_picture(slots, ctx("photos for lemons and plums", "yes, the lemons"))
 
+    def test_a_caption_that_names_the_second_product_does_not_hide_it(self):
+        both = {"item": LEMONS, "photo": SHA[JAR], "image_alt": "Lemons and plums"}  # the model's caption holds both names
+        for alt in ("Lemons and plums", "Lemons, plums", "Lemons & plums", "Lemons plus the plums"):
+            slots = {**both, "image_alt": alt}
+            with self.subTest(alt=alt, path="request"):
+                self.assertEqual(refusal(slots, "photos for lemons, plums").reply, ip.ONE_AT_A_TIME)
+            with self.subTest(alt=alt, path="follow-up"):
+                for answer in ("lemons, plums", "the lemons, the plums"):
+                    self.assertEqual(refusal(slots, "photos for lemons and plums", answer).reply, ip.ONE_AT_A_TIME)
+        slots = {**both, "image_alt": "Lemons on a plain counter"}  # a setting in the caption is still no second product
+        ip.plan_picture(slots, ctx("new picture for the lemons, plain counter"))
+        ip.plan_picture(slots, ctx("photos for lemons and plums", "the lemons please"))
+
     def test_a_comma_before_a_caption_or_a_reply_word_is_one_product(self):
         etto = {"item": "photo-product-172", "photo": SHA[JAR], "image_alt": "Etto rigatoni in the box"}
         for text in ("photo for the Etto rigatoni, in the box", "photo for the Etto rigatoni, on the shelf",
