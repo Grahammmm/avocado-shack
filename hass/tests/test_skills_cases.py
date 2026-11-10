@@ -206,5 +206,53 @@ class Helpers(unittest.TestCase):
             self.assertEqual(run("run", str(Path(tmp) / "missing.jsonl"), "--skills", str(TOY)).returncode, 2)
 
 
+class PreviewNone(unittest.TestCase):
+    """AV1109-04: expect.preview {kind: none} is for a skill that declares preview none, and never hides a public file change."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.skills = {s.name: s for s in registry_skills()}
+
+    def preview(self, expect, requests, skill):
+        res = testkit.Result("r")
+        testkit._check_preview(expect, requests, skill, res)
+        return res
+
+    def test_a_skill_that_declares_none_needs_no_screenshot_and_records_none(self):
+        res = self.preview({"preview": {"kind": "none"}}, [], self.skills["stock.restock"])
+        self.assertEqual((res.problems, res.facts["preview"]), ([], "none"))
+        res = self.preview({"preview": {"kind": "none"}}, [{"kind": "product"}], self.skills["stock.restock"])  # a redundant capture is ignored
+        self.assertEqual(res.problems, [])
+
+    def test_a_skill_with_a_public_preview_cannot_use_it(self):
+        for name in ("stock.set", "item.picture", "hike.add"):
+            with self.subTest(skill=name):
+                self.assertEqual(self.preview({"preview": {"kind": "none"}}, [], self.skills[name]).codes, ["wrong-preview"])
+        self.assertEqual(self.preview({"preview": {"kind": "none"}}, [], None).codes, ["wrong-preview"])
+
+    def test_ordinary_preview_checks_are_unchanged(self):
+        stock = self.skills["stock.set"]
+        self.assertEqual(self.preview({"preview": {"kind": "product"}}, [], stock).codes, ["wrong-preview"])  # nothing requested
+        self.assertEqual(self.preview({"preview": {"kind": "product"}}, [{"kind": "store"}], stock).codes, ["wrong-preview", "wrong-preview"])
+        self.assertEqual(self.preview({"preview": {"kind": "product"}}, [{"kind": "product"}], stock).problems, [])
+        self.assertEqual(self.preview({"preview": {"kind": "none"}}, [{"kind": "none"}], self.skills["stock.restock"]).problems, [])
+
+    def test_a_public_file_in_the_diff_fails_a_preview_none_row(self):
+        diff = [{"file": "hass/content/products.json", "path": "products[x].restock_on", "after": "2026-11-12"}]
+        expect = {"diff": diff, "files": ["hass/content/products.json"], "preview": {"kind": "none"}}
+        res = testkit.Result("r")
+        testkit._check_diff(expect, ["hass/content/products.json"], diff, [self.skills["stock.restock"]], res)
+        self.assertEqual(res.problems, [])
+        for public in ("storefront-mockup/index.html", "storefront-mockup/catalog-products.js"):
+            with self.subTest(public=public):
+                res = testkit.Result("r")
+                testkit._check_diff({**expect, "files": ["hass/content/products.json", public]}, ["hass/content/products.json", public], diff, [], res)
+                self.assertEqual(res.codes, ["wrong-diff"])
+                self.assertIn("must not change a public file", res.problems[0][1])
+        res = testkit.Result("r")  # the same public change is fine for a row that expects an ordinary preview
+        testkit._check_diff({"diff": [], "files": ["storefront-mockup/index.html"], "preview": {"kind": "product"}}, ["storefront-mockup/index.html"], [], [], res)
+        self.assertEqual(res.problems, [])
+
+
 if __name__ == "__main__":
     unittest.main()
