@@ -61,14 +61,15 @@ def _report_local_parts(starts_at) -> tuple[str, str]:
 
 def _hikes(content, today: date, guests) -> list[dict]:
     """Scheduled hikes starting today or tomorrow (Pacific); confirmed is None unless the guests DB was read (AV1322-06).
-    Starts without a UTC offset are skipped."""
+    Starts without a UTC offset are skipped. On date.max there is no tomorrow: only today is listed."""
     events, found = content.community.get("events"), []
+    window = {today.isoformat()} | ({(today + timedelta(days=1)).isoformat()} if today < date.max else set())
     for e in events if isinstance(events, list) else ():
         try:
             day, clock = _report_local_parts(e["startsAt"]) if e.get("status") == "scheduled" else (None, None)
         except (KeyError, TypeError, ValueError, AttributeError, OverflowError):  # an unusable start is skipped
             continue
-        if day in (today.isoformat(), (today + timedelta(days=1)).isoformat()):
+        if day in window:
             cap, eid = (e.get("capacity") if type(e.get("capacity")) is int else None), str(e.get("id", ""))
             found.append({"id": eid, "title": " ".join(str(e.get("title", "")).split()), "day": day, "time": clock,
                           "confirmed": guests.get(eid, 0) if isinstance(guests, dict) else None, "capacity": cap})
