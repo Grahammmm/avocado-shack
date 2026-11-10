@@ -182,7 +182,9 @@ def create(state, out, now=None, media=None) -> dict:
         commit = _head(Path(cfg["worktree"]))  # inside the writer lock; read-only
         if commit:  # FAV-07: the content itself, made inside the same lock; read-only git
             doc["contentCommit"] = commit
-            _git_ro(cfg["worktree"], "bundle", "create", str(dest / BUNDLE), "HEAD")
+            # pack.threads=1: multi-threaded delta search packs the same HEAD differently from run to run, so two backups
+            # of one commit hashed differently and `diff` reported content.bundle as changed (main red, CI and local).
+            _git_ro(cfg["worktree"], "-c", "pack.threads=1", "bundle", "create", str(dest / BUNDLE), "HEAD")
             if not _bundle_holds(dest / BUNDLE, commit):
                 return {"result": "refused", "problems": ["content bundle does not hold contentCommit"]}
             os.chmod(dest / BUNDLE, 0o600)
