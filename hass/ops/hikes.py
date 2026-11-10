@@ -98,6 +98,34 @@ def _move_warning(ctx, event, starts_at):
                             f"{'are' if seats != 1 else 'is'} not told automatically")
 
 
+# AV2137-02: what guests were told, in warning order; the place is one group, so both its fields warn once.
+_DETAIL_GROUPS = ((("meetingPoint", "meetingAddress"), "the meeting place changes"),
+                  (("meetTime",), "the meet time changes"), (("trailId",), "the route changes"))
+
+
+def _detail_changes(current, target):
+    """Phrases of the groups whose fields differ (absent = None; text spacing ignored, a route id exact)."""
+    value = lambda event, f: event.get(f) if f == "trailId" else _spaced(event.get(f))
+    return [phrase for fields, phrase in _DETAIL_GROUPS if any(value(current, f) != value(target, f) for f in fields)]
+
+
+def _meeting_warning(ctx, current, target):
+    """Draft warnings (never a refusal) when where or when guests meet, or the route, changes on a scheduled hike
+    taking RSVPs before and after. The count is read only when a group changes; an unread count warns once."""
+    if not all(e.get("status") == "scheduled" and e.get("rsvpEnabled") for e in (current, target)):
+        return
+    if not (changed := _detail_changes(current, target)):
+        return
+    seats, eid = _seats(ctx, current["id"]), current["id"]
+    unread = f"{eid} guest count unavailable; check RSVPs before approving"
+    if isinstance(seats, Refused):
+        if unread not in ctx.warnings:  # the move warning may have said it already
+            ctx.warnings.append(unread)
+    elif seats > 0:
+        told = f"{seats} confirmed guest{'s' * (seats != 1)} {'are' if seats != 1 else 'is'} not told automatically"
+        ctx.warnings.extend(f"{eid}: {phrase}; {told}" for phrase in changed)
+
+
 def _name(event) -> str:
     """The hike in the owner's words: its title as he wrote it, never its id."""
     title = event.get("title") if isinstance(event, dict) else None
@@ -343,6 +371,7 @@ def _hike_update(content, args, ctx):
         event.pop("capacity", None)
     for name in clear:  # deleted, never set to ""; an absent field is no change
         event.pop(name, None)
+    _meeting_warning(ctx, before, event)  # AV2137-02; silent once RSVPs are off (that gave its one warning)
     return _touch(before, event)
 
 
