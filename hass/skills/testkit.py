@@ -691,7 +691,13 @@ def _as_list(v): return [] if v is None else v if isinstance(v, list) else [v]
 
 def _check_preview(expect, requests, skill, res):
     """`requests` are the preview requests the message that made the final draft caused: the preview of the draft
-    that is then approved, never an earlier one."""
+    that is then approved, never an earlier one. A row may say `preview: {"kind": "none"}` (AV1109-04) only for a skill that
+    declares preview none: nothing public changes, so no screenshot is required (a redundant capture is ignored) and
+    `_check_diff` proves no public file moved."""
+    if _wants_no_preview(expect):
+        if skill is None or getattr(skill, "preview", None) != "none": res.fail("wrong-preview", "the row expects no preview, but the skill does not declare preview none"); return
+        res.facts["preview"] = "none"
+        return
     if not requests: res.fail("wrong-preview", "no preview was requested for the final proposal"); return
     last = requests[-1]
     res.facts["preview"] = last.get("kind")
@@ -699,6 +705,10 @@ def _check_preview(expect, requests, skill, res):
     kind = str(getattr(skill, "preview", "") or "").split(":")[0]
     if skill is not None and kind in PREVIEW_KINDS and last.get("kind") not in PREVIEW_KINDS[kind]:
         res.fail("wrong-preview", f"the skill previews {kind!r} but the request is for {last.get('kind')!r}")
+
+
+def _wants_no_preview(expect):
+    return isinstance(expect.get("preview"), dict) and expect["preview"].get("kind") == "none"
 
 
 def _declared_picture(declared, file):
@@ -711,6 +721,9 @@ def _check_diff(expect, files, diff, chosen, res):
     want = sorted(expect["diff"], key=lambda e: (e["file"], e["path"]))
     if diff != want: res.fail("wrong-diff", f"diff {_fmt(diff)} != expected {_fmt(want)}")
     if files != sorted(expect["files"]): res.fail("wrong-diff", f"files {files} != expected {sorted(expect['files'])}")
+    if _wants_no_preview(expect):  # a solely-preview-none proposal changes no public (generated) file
+        public = [f for f in files if not (f.startswith("hass/content/") and f.endswith(".json"))]
+        if public: res.fail("wrong-diff", "a change with preview none must not change a public file: " + ", ".join(public))
     if chosen:
         from hass.editor import GENERATED_PATHS
         declared = [d for s in chosen for d in _declared_edits(s)]
