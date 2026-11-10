@@ -14,21 +14,46 @@ const check=(value,message)=>{if(!value)throw Error(message)};
   await p.route(api,async r=>{const res=await r.fetch(),j=await res.json();Object.assign(j.events.find(e=>e.id===id),fields);await r.fulfill({response:res,json:j})});
   await p.goto(process.env.COMMUNITY_TEST_URL+'/hike');await qaHike().waitFor();
   const buttons=qaHike().locator('[data-rsvp]');
-  return {text:await qaHike().innerText(),count:await buttons.count(),buttons};
+  return {text:await qaHike().innerText(),count:await buttons.count(),buttons,lines:await qaHike().locator('p.club-small').allInnerTexts()};
  };
- let h=await shown({remaining:0});
- check(h.text.includes('This hike is full.')&&!/places? available/.test(h.text)&&h.count===0,'Full hike offered an RSVP: '+h.text);
- check((await qaHike().locator('.hike-full').innerText()).trim()==='This hike is full.','Full hike notice missing its hook');
- check(await qaHike().getByRole('button').count()===0,'Full hike still shows a button');
+ // AV1109-12 (docs/hass/HIKE-PAGE.md 3.3.1): one test per row of the spots table. qa-hike has capacity 3; the live API gives capacity and remaining together.
+ const SP_FULL='Full. Ask at the Shack to go on the waitlist.',SP_LIMITED='Limited to 3 people · availability unconfirmed; ask at the Shack',SP_OFF='RSVP details will be shared when confirmed.',SP_JOIN='To join, ask at the Shack.';
+ const SP_ONLY=(h,line,why)=>check(h.lines.length===1&&h.lines[0]===line,why+': spots line wrong: '+JSON.stringify(h.lines));
+ const SP_NOSPOTS=(h,why)=>check(!/spots? left|places? available|RSVPs open|This hike is full/.test(h.text)&&!/\b\d+ spots?\b/.test(h.text),why+': claims spots: '+h.text);
+ // row 1: count known, capacity matches, N >= 2
+ let h=await shown({remaining:2});
+ SP_ONLY(h,'2 spots left','row 1');SP_NOSPOTS({text:h.text.replace('2 spots left','')},'row 1');
+ check(h.count===1&&await h.buttons.isEnabled()&&(await h.buttons.innerText()).trim()==='RSVP to this hike ↗','row 1 lost its enabled RSVP button');
+ // row 2: left = 1
  h=await shown({remaining:1});
- check(h.text.includes('1 place available')&&!h.text.includes('1 places')&&!h.text.includes('This hike is full'),'One place not singular: '+h.text);
- check(h.count===1&&await h.buttons.isEnabled()&&(await h.buttons.innerText()).trim()==='RSVP to this hike ↗','One place lost its enabled RSVP button');
- h=await shown({remaining:2});
- check(h.text.includes('2 places available')&&h.count===1&&await h.buttons.isEnabled(),'Two places wrong: '+h.text);
- h=await shown({remaining:null});
- check(h.text.includes('RSVPs open')&&!/places? available/.test(h.text)&&h.count===1&&await h.buttons.isEnabled(),'Uncapped hike wrong: '+h.text);
- h=await shown({rsvpOpen:false,remaining:0});
- check(h.text.includes('RSVP details will be shared when confirmed.')&&!h.text.includes('This hike is full')&&h.count===0,'Closed RSVP lost to full: '+h.text);
+ SP_ONLY(h,'1 spot left','row 2');check(!h.text.includes('1 spots')&&h.count===1&&await h.buttons.isEnabled(),'row 2: singular or button wrong: '+h.text);
+ // row 3: left = 0 is the only Full, with the waitlist line, its hook and no button
+ h=await shown({remaining:0});
+ SP_ONLY(h,SP_FULL,'row 3');check((await qaHike().locator('.hike-full').innerText()).trim()===SP_FULL,'row 3: Full line missing its hook');
+ check(h.count===0&&await qaHike().getByRole('button').count()===0&&!/spots? left/.test(h.text),'row 3: a full hike still offers an RSVP: '+h.text);
+ // rows 4 (taken unknown: null, missing, string, fraction, negative, over capacity): the limit only, never a number left, no RSVP path
+ for(const [name,fields] of [['null',{remaining:null}],['missing',{remaining:undefined}],['string',{remaining:'2'}],['fraction',{remaining:1.5}],['negative',{remaining:-1}],['over capacity',{remaining:4}]]){
+  h=await shown(fields);SP_ONLY(h,SP_LIMITED,'row 4 '+name);SP_NOSPOTS({text:h.text.replace(SP_LIMITED,'')},'row 4 '+name);
+  check(h.count===0&&!(await qaHike().locator('.hike-full').count()),'row 4 '+name+': unconfirmed count offered an RSVP or Full: '+h.text);
+ }
+ // row 5 (count made for another limit) is pure: see the helper harness below; the live API cannot send it.
+ // row 6: sign-up off, even with stale open and count flags
+ for(const fields of [{rsvpEnabled:false,rsvpOpen:true,remaining:2},{rsvpEnabled:false,rsvpOpen:true,remaining:0},{rsvpOpen:false,remaining:0}]){
+  h=await shown(fields);SP_ONLY(h,SP_OFF,'row 6 '+JSON.stringify(fields));SP_NOSPOTS(h,'row 6 '+JSON.stringify(fields));check(h.count===0&&!h.text.includes('Full'),'row 6: stale flags offered an RSVP: '+h.text);
+ }
+ // row 7: no limit keeps its join line, no spots claim, and the live form's existing button
+ h=await shown({capacity:null,remaining:null});
+ SP_ONLY(h,SP_JOIN,'row 7');SP_NOSPOTS({text:h.text.replace(SP_JOIN,'')},'row 7');check(h.count===1&&await h.buttons.isEnabled(),'row 7: uncapped live hike lost its RSVP button');
+ // the pure helper: capacity mismatch (row 5) and untrusted counts; count is only {capacity, remaining}
+ const spotsSrc=fs.readFileSync(require('path').join(__dirname,'community.js'),'utf8'),spots=new Function('esc',spotsSrc.slice(spotsSrc.indexOf('// SPOTS-BEGIN'),spotsSrc.indexOf('// SPOTS-END'))+';return {spotsState,spotsMarkup,spotsCount}')(t=>String(t));
+ const ev={capacity:6,rsvpEnabled:true,rsvpOpen:true},S=(e,c)=>spots.spotsState({...ev,...e},c).text,L6='Limited to 6 people · availability unconfirmed; ask at the Shack';
+ check(S({},{capacity:6,remaining:2})==='2 spots left'&&S({},{capacity:6,remaining:1})==='1 spot left'&&S({},{capacity:6,remaining:0})===SP_FULL,'Helper: matching counts wrong');
+ check(S({},{capacity:8,remaining:2})===L6&&S({},{capacity:8,remaining:0})===L6&&S({capacity:8},{capacity:6,remaining:2})==='Limited to 8 people · availability unconfirmed; ask at the Shack','Helper: a count made for another limit was trusted (row 5)');
+ for(const c of [null,undefined,{},{capacity:6},{remaining:2},{capacity:'6',remaining:2},{capacity:6,remaining:'2'},{capacity:6,remaining:null},{capacity:6,remaining:-1},{capacity:6,remaining:7},{capacity:6,remaining:1.5},{capacity:0,remaining:0}])check(S({},c)===L6,'Helper: untrusted count trusted: '+JSON.stringify(c));
+ check(S({capacity:2000},{capacity:2000,remaining:5})==='Limited to 2000 people · availability unconfirmed; ask at the Shack','Helper: capacity above 1000 trusted');
+ check(S({rsvpEnabled:false},{capacity:6,remaining:2})===SP_OFF&&S({rsvpEnabled:undefined},{capacity:6,remaining:2})===SP_OFF&&S({rsvpOpen:false},{capacity:6,remaining:0})===SP_OFF&&S({staticSite:true,rsvpOpen:false},null)===L6,'Helper: sign-up off or static wrong');
+ check(S({capacity:null},{capacity:6,remaining:2})===SP_JOIN&&S({capacity:undefined},null)===SP_JOIN&&S({capacity:0},null)===SP_JOIN,'Helper: no limit wrong');
+ check(spots.spotsCount({staticSite:true,capacity:6,remaining:2})===null&&spots.spotsMarkup(spots.spotsState({...ev},{capacity:6,remaining:0}))==='<p class="club-small hike-full">'+SP_FULL+'</p>'&&spots.spotsState({...ev},{capacity:6,remaining:0}).compact==='Full','Helper: static count not ignored or markup wrong');
  // AV1322-09: an upcoming scheduled hike carries one .ics link with escaped text; cancelled and completed hikes carry none.
  await shown({title:'QA trail fixture Hike; bring water, snacks\\ & hats',meetingPoint:'North lot\nGate 2'});
  const cal=qaHike().locator('a.hike-ics'),href=await cal.getAttribute('href')||'',ics=decodeURIComponent(href.slice(href.indexOf(',')+1)),flat=ics.replace(/\r\n /g,'');
@@ -217,7 +242,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  v=await view(start-6e4,'America/Los_Angeles',[tomorrow,early]);
  const titles=v.cards.map(c=>c.title),s=v.cards.find(c=>c.title==='QA uncapped event'),c=cx(v);
  check(titles[0]==='Cancelled: QA early cancelled'&&titles.at(-1)==='Cancelled: QA cancelled fixture'&&titles.includes('QA uncapped event'),'Scheduled and cancelled not listed by start: '+JSON.stringify(titles));
- check(c.cls==='hike-event hike-cancelled'&&c.label==='CANCELLED'&&c.text.includes(sentence)&&c.rsvp===0&&!/RSVPs open|places? available|This hike is full|RSVP details|THE NEXT HIKE/.test(c.text),'Tomorrow’s cancelled hike card wrong: '+c.text);
+ check(c.cls==='hike-event hike-cancelled'&&c.label==='CANCELLED'&&c.text.includes(sentence)&&c.rsvp===0&&!/RSVPs open|places? available|spots? left|Limited to \d+ people|availability unconfirmed|Full\. Ask|This hike is full|RSVP details|To join, ask|THE NEXT HIKE/.test(c.text),'Tomorrow’s cancelled hike card wrong: '+c.text);
  check(s.rsvp===1&&s.cls==='hike-event'&&s.label==='COMING UP'&&!s.text.includes(sentence),'Scheduled hike lost its RSVP or was marked cancelled: '+s.text);
 check(v.cards.filter(c=>c.label==='THE NEXT HIKE').length===1&&v.cards.find(c=>c.label==='THE NEXT HIKE').title==='QA trail fixture','Exactly the first scheduled card should be THE NEXT HIKE: '+JSON.stringify(v.cards.map(c=>c.label+'|'+c.title)));
  v=await view(pacificAt(nextDay+6e4),'America/Los_Angeles',[cancelled]);
@@ -229,7 +254,7 @@ check(v.cards.filter(c=>c.label==='THE NEXT HIKE').length===1&&v.cards.find(c=>c
  check(v.past.includes('QA past outing')&&!v.up.includes('QA past outing'),'Completed hike not only under past hikes');
 // AV1937-08: only the first scheduled card says THE NEXT HIKE; later scheduled cards say COMING UP; cancelled cards keep CANCELLED.
 {
-const ev=(id,ms,status='scheduled')=>({...hike,rsvpOpen:true,remaining:null,id,title:'AV '+id,status,startsAt:new Date(start+ms).toISOString().replace('.000Z','Z')}),none=()=>false,at=start-6e4,L=v=>v.cards.map(c=>c.label+'|'+c.title).join(' ; ');
+const ev=(id,ms,status='scheduled')=>({...hike,rsvpOpen:true,remaining:null,capacity:null,id,title:'AV '+id,status,startsAt:new Date(start+ms).toISOString().replace('.000Z','Z')}),none=()=>false,at=start-6e4,L=v=>v.cards.map(c=>c.label+'|'+c.title).join(' ; ');
 const NEXT='THE NEXT HIKE',SOON='COMING UP',CX='CANCELLED',ctl=c=>c.rsvp+(c.ics?'c':'');
 const cards=v=>v.cards;
 // test_unsorted_scheduled_labels
@@ -269,7 +294,7 @@ q=await view(at,'America/Los_Angeles',[ev('r',2e5)],none);
 check(L(q)===NEXT+'|AV r','Removed earliest left a stale winner: '+L(q));
 check(q.past===''||!q.past.includes('AV r'),'Upcoming hike listed in history');
 // AV1104-05: a hike under way is TODAY with closed RSVPs, in service and published-static modes alike.
-const STARTED='This hike has started, so RSVPs are closed.',OLD=/RSVP details|To join, ask|places? available|RSVPs open|This hike is full|THE NEXT HIKE|COMING UP/;
+const STARTED='This hike has started, so RSVPs are closed.',OLD=/RSVP details|To join, ask|places? available|RSVPs open|spots? left|Limited to \d+ people|availability unconfirmed|Full\. Ask|This hike is full|THE NEXT HIKE|COMING UP/;
 for(const stat of [false,true])for(const tz of ['America/Los_Angeles','Asia/Tokyo']){
  const m=(stat?'static ':'service ')+tz+': ';
  // startedTodayServiceAndStatic / startedBoundaryAndStaleOpenFlag

@@ -24,6 +24,9 @@ DAY, LATER = "2030-06-01", "2030-06-08"  # far ahead, so a scheduled hike still 
 AFTER = datetime(2030, 6, 9, 12, 0, tzinfo=timezone(timedelta(hours=-7)))
 BEFORE = datetime(2030, 5, 20, 12, 0, tzinfo=timezone(timedelta(hours=-7)))  # fixture clock when a hike is created
 COMMUNITY, RECAP = "storefront-mockup/community.json", "Windy but clear."
+SCRIPT, SERVER = "storefront-mockup/community.js", "storefront-mockup/community-server.py"
+COUNT_OLD = "{capacity:e.capacity,remaining:e.remaining}"  # community.js spotsCount: the adapter's one count
+SERVER_OLD = "e['remaining']=max(0,capacity-counts.get(e['id'],0)) if isinstance(capacity,int) and capacity>0 else None"
 ODD = 'Cass "Ridge" [loop]'
 EVENT_CHECKS = ("eventShown", "pastShown", "recapShown", "rsvpGone")
 
@@ -226,10 +229,10 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
 
     def test_places_lines(self):
         hid = self.create(self.r)
-        for args, want in (({"noCapacityLimit": True}, "RSVPs open"),
+        for args, want in (({"noCapacityLimit": True}, "To join, ask at the Shack."),
                            ({"rsvpEnabled": False}, "RSVP details will be shared when confirmed."),
-                           ({"rsvpEnabled": True, "capacity": 12}, "12 places available"),
-                           ({"capacity": 1}, "1 place available")):
+                           ({"rsvpEnabled": True, "capacity": 12}, "12 spots left"),
+                           ({"capacity": 1}, "1 spot left")):
             with self.subTest(args=args):
                 target = self.target(self.r, "hike.update", {"id": hid, **args})
                 result = self.capture(target)
@@ -318,7 +321,7 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
         mixed = self.target(self.r, "hike.update", {"id": second, "rsvpEnabled": True, "capacity": 5})
         self.assertIs(self.capture(mixed)["checks"]["dateShown"], True)  # the other twin has no button; this one does
 
-    def test_twin_titles_with_a_full_card(self):  # capacity 12, 12 synthetic confirmed guests: "This hike is full.", no button
+    def test_twin_titles_with_a_full_card(self):  # capacity 12, 12 synthetic confirmed guests: "Full. Ask at the Shack to go on the waitlist.", no button
         first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)
         target = self.target(self.r, "hike.update", {"id": second, "description": "Full twin."})
         original = preview.Previewer._copy_site
@@ -339,7 +342,59 @@ class HikeCaptureTests(HikeTargetMixin, HikeTestCase):
             self.assertIs(self.capture({**target, "id": first})["checks"]["dateShown"], False)  # the other twin
             self.assertIs(self.capture({**target, "meetingPoint": "Elsewhere"})["checks"]["meetShown"], False)
             self.assertIs(self.capture({**target, "rsvpEnabled": False})["checks"]["placesShown"], False)  # full is not "details later"
-        self.assertIs(self.capture(target)["checks"]["placesShown"], True)  # no guests: "12 places available" also matches
+        self.assertIs(self.capture(target)["checks"]["placesShown"], True)  # no guests: the API says 12 left, so "12 spots left" is the expected line
+
+    def seeded(self, event_id, *party_sizes):  # only the disposable preview database gets rows
+        original = preview.Previewer._copy_site
+
+        def seeded_copy(previewer, tmp, files, assets=None):
+            site = original(previewer, tmp, files, assets)
+            with sqlite3.connect(tmp / "fixture.sqlite3") as db:
+                db.execute(SCHEMA)
+                for i, size in enumerate(party_sizes):
+                    db.execute("INSERT INTO rsvps(event_id,email,name,party_size,created_at) VALUES(?,?,?,?,?)",
+                               (event_id, f"fixture{i}@example.invalid", "Synthetic fixture", size, "2030-05-20T00:00:00Z"))
+            return site
+
+        return mock.patch.object(preview.Previewer, "_copy_site", seeded_copy)
+
+    def source(self, rel, old, new):  # the tracked file with one exact replacement, as an overlay
+        text = (self.r.wt / rel).read_text()
+        self.assertEqual(text.count(old), 1, rel)
+        return {rel: text.replace(old, new).encode()}
+
+    def test_partial_count_must_be_the_exact_number_left(self):  # capacity 12, 5 seats taken: "7 spots left", nothing else
+        hid = self.create(self.r)
+        target = self.target(self.r, "hike.update", {"id": hid, "description": "Partial."})
+        with self.seeded(hid, 3, 2):
+            self.assertIs(self.capture(target)["checks"]["placesShown"], True)
+            self.assertIs(self.capture({**target, "capacity": 8})["checks"]["placesShown"], False)  # count made for another limit
+            wrong = self.capture(target, self.source(SCRIPT, COUNT_OLD, "{capacity:e.capacity,remaining:e.capacity}"))
+            self.assertIs(wrong["checks"]["placesShown"], False, wrong)  # page infers "12 spots left" from the limit
+            self.assertFalse(wrong["ok"])
+            self.assertIs(self.capture(target, self.source(SCRIPT, COUNT_OLD, "null"))["checks"]["placesShown"], False)  # page ignores a known count
+
+    def test_unknown_count_says_the_limit_only(self):  # API silent (remaining null): "Limited to 12 people · availability unconfirmed; ask at the Shack"
+        hid = self.create(self.r)
+        target = self.target(self.r, "hike.update", {"id": hid, "description": "Unknown."})
+        silent = self.source(SERVER, SERVER_OLD, "e['remaining']=None")
+        self.assertIs(self.capture(target, silent)["checks"]["placesShown"], True)
+        inferred = {**silent, **self.source(SCRIPT, COUNT_OLD, "{capacity:e.capacity,remaining:e.capacity}")}
+        self.assertIs(self.capture(target, inferred)["checks"]["placesShown"], False)  # never a number from the limit alone
+        self.assertIs(self.capture({**target, "capacity": 7}, silent)["checks"]["placesShown"], False)  # the page's limit is stale
+        self.assertIs(self.capture({**target, "rsvpEnabled": False}, silent)["checks"]["placesShown"], False)  # not "details later"
+
+    def test_twin_ids_read_their_own_count(self):  # same title, only the second hike has seats taken
+        first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)
+        one = self.target(self.r, "hike.update", {"id": first, "description": "First."})
+        two = self.target(self.r, "hike.update", {"id": second, "description": "Second."})
+        with self.seeded(second, 4, 3):
+            for target in (one, two):
+                result = self.capture(target)
+                self.assertEqual(self.scheduled(result), {"eventShown": True, "dateShown": True, "meetShown": True,
+                                                          "placesShown": True}, result)
+            swapped = self.capture({**one, "id": second})  # the first's date on the second's id
+            self.assertIs(swapped["checks"]["dateShown"], False)
 
     def test_twin_titles_use_the_id(self):
         first, second = self.create(self.r, "Twin", DAY), self.create(self.r, "Twin", LATER)

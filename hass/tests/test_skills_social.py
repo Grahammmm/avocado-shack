@@ -120,7 +120,7 @@ def rows(name):
 class DeclarationTests(unittest.TestCase):
     def test_three_registered_read_only_handlers(self):
         reg = skills.load_skills()
-        self.assertEqual([n for n in reg.skills if n.startswith("social.")], list(NAMES))
+        self.assertEqual([n for n in reg.skills if n.startswith("social.")], [*NAMES, "social.recap"])  # part 2 (test_social_recap.py)
         self.assertEqual(skills.skill_lint(reg, load_registry()), [])
         social._register()  # registering again changes nothing
         social._register()
