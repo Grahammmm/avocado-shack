@@ -119,7 +119,8 @@ def derive(anchor, journals):
         if anchor['anchor_build_today'] is not None: date.fromisoformat(anchor['anchor_build_today'])
         for j in journals: validate(j)
         seqs = sorted(j['seq'] for j in journals if j['seq'] > anchor['anchor_seq'])
-        if seqs and seqs != list(range(anchor['anchor_seq'] + 1, seqs[-1] + 1)): raise ValueError
+        # O(journal count): never materialise the numeric span of a sparse sequence
+        if any(s != anchor['anchor_seq'] + i for i, s in enumerate(seqs, 1)): raise ValueError
         if len({j['seq'] for j in journals}) != len(journals): raise ValueError
         head, today = anchor['anchor_site_commit'], anchor['anchor_build_today']
         pending = [j for j in journals if j['seq'] > anchor['anchor_seq'] and j['state'] in LANDED]
