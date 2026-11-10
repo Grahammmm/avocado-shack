@@ -95,13 +95,13 @@ def _when(iso, now) -> str:
     `at a time I can't read` (never read in the host's zone)."""
     try:
         at = datetime.fromisoformat(iso)
-    except (TypeError, ValueError):
+        if at.utcoffset() is None: return "at a time I can't read"
+        now = now if now.utcoffset() is not None else now.replace(tzinfo=timezone.utc)
+        if at > now.astimezone(timezone.utc) + FUTURE_SLACK:  # RF1300-20: in UTC, so a DST fall-back never widens the slack
+            return "at a time I can't read"  # never a check time that has not happened
+        return voice.natural(at, now)
+    except (TypeError, ValueError, OverflowError):
         return "at a time I can't read"
-    if at.utcoffset() is None: return "at a time I can't read"
-    now = now if now.utcoffset() is not None else now.replace(tzinfo=timezone.utc)
-    if at > now.astimezone(timezone.utc) + FUTURE_SLACK:  # RF1300-20: in UTC, so a DST fall-back never widens the slack
-        return "at a time I can't read"  # never a check time that has not happened
-    return voice.natural(at, now)
 
 
 def _summary(value) -> str:  # RF1300-19: one readable line of text, stripped, else "the change" (names in it are Mike's own words)

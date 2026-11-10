@@ -19,6 +19,7 @@ from pathlib import Path
 
 from hass import conversation, corrlog, interpret_check, live_policy, margins, media, morning_report, owner_answers, voice
 from hass.content_model import REPO_ROOT
+from hass.skills import reports
 from hass.tests.test_conversation import CHAT, OWNER, ConversationTestCase, _ops
 from hass.tests.test_editor import DESC, HOURS, NEW_HOURS
 from hass.tests.test_hike_ops import HIKE, HIKE_ID
@@ -36,8 +37,9 @@ OWNER_FACING = {
                         "_record_lines", "proposal_text", "_summary", "_plain", "_asked_again", "_late", "_delayed", "_handle_message",
                         "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
-    "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render"], "interpret_check.py": "all",
-    "label_reader.py": ["question", "_maker_line", "_product_line"],
+    "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render", "restock_text"], "interpret_check.py": "all",
+    "label_reader.py": ["question", "_maker_line", "_product_line"], "skills/reports.py": "all",  # AV1109-08: the shelf skill's sentences
+    "skills/social.py": ["item_reply", "hike_reply", "maker_reply", "recap_reply", "preflight", "refusal"],
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
     "conversation.py": ["HELP_TEXT", "LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "HISTORY_USAGE", "FIND_USAGE", "POST_USAGE", "HIKE_USAGE",
@@ -45,6 +47,10 @@ MODULE_CONSTANTS = {  # names of module-level owner text
                         "NOT_READ_REPLY", "PHOTO_QUESTION", "FETCH_FAILED", "DAILY_LIMIT", "TOO_LONG", "NOTHING", "SOCIAL_REPLY",
                         "UNREADABLE", "HELD_REPLY", "CANT_READ", "HOSTILE_REPLY", "STATUS_PLAIN"],
     "media.py": ["REPLIES"],
+    "skills/social.py": ["COPY_HEAD", "PRODUCT_PHOTO", "NO_PHOTO", "NO_POSTING", "CANT_READ", "CANT_SEE_PHOTO", "NO_STORY", "ITEM_REFUSALS",
+                         "HIKE_REFUSALS", "MAKER_REFUSALS", "SHARED_REFUSALS", "RESOLVER_REFUSALS", "RECAP_REFUSALS", "NO_RECAPS",
+                         "ADD_TO_RECAP", "NO_TAGGING"],
+    "skills/dispatch.py": ["MIXED"],
 }
 SQLISH = re.compile(r"^\s*(?:SELECT|INSERT|UPDATE|CREATE|DELETE|ALTER|PRAGMA|BEGIN|AND|ORDER|WHERE|\"|\)|\]|'|\([\'\"])|\bIS (?:NOT )?NULL\b|\b(?:state|change_id|row_id|ops_json|"
                     r"draft_hash)\b\s*(?:=|IN\b)|ORDER BY")
@@ -172,7 +178,9 @@ class EveryTemplate(unittest.TestCase):
                  *[sentence for _rx, _code, sentence in voice.REASONS], owner_answers.UNDER_WAY, owner_answers.UNKNOWN_STATE,
                  owner_answers.NOT_LIVE, owner_answers.LIVE_SHOWN, owner_answers.LIVE_UNKNOWN, owner_answers.LIVE_UNCONFIRMED,
                  owner_answers.LIVE_NOT_PUBLISHED.format(reason=owner_answers.live_reason("the release was interrupted")),
-                 owner_answers.live_reason("something odd")]
+                 owner_answers.live_reason("something odd"), reports.NO_PUSH, reports.UNREADABLE, reports.NOT_ON_REPORT,
+                 reports.COUNTS_LEAD + q("Cal Poly eggs") + ": not confirmed",
+                 reports.SITE_ASK, reports.SITE_UNREADABLE, reports.NO_MAKER, reports.NO_STORY, reports.NO_HOURS, reports.NO_HIKE]
         bad = [(t[:80], voice.check(t, long_ok=True)) for t in texts if voice.check(t, long_ok=True)]
         self.assertEqual(bad, [])
 

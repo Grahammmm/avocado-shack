@@ -1,6 +1,7 @@
 """FAV-02 tests: label_eval scores LabelReader replies offline; --live is exercised only with a fake transport."""
 
-import base64, contextlib, io, json, stat, tempfile, unittest  # noqa: E401
+import base64, contextlib, io, json, os, stat, tempfile, unittest  # noqa: E401
+from unittest import mock
 from pathlib import Path
 
 from hass import label_eval as ev
@@ -145,6 +146,64 @@ class LiveTests(Base):
                 code, stdout, err = self.live(out)
                 self.assertEqual((code, stdout, self.calls, out.exists()), (2, "", [], False))
                 self.assertTrue(err.startswith("a photo is"), err)
+
+    def changing_fstat(self, path, content):
+        """Real fstat result, returned after the file's contents were replaced (deterministic changed-after-fstat)."""
+        real = ev.os.fstat
+
+        def fake(fd):
+            info = real(fd)
+            path.write_bytes(content)
+            return info
+        return mock.patch.object(ev.os, "fstat", fake)
+
+    def read_photo(self, name):
+        fd = os.open(self.photos, os.O_RDONLY | os.O_DIRECTORY)
+        try: return ev._read_photo(fd, name)
+        finally: os.close(fd)
+
+    def test_read_photo_rechecks_empty_bytes_after_stat(self):
+        path = self.photos / "a.jpg"
+        path.write_bytes(b"abc")
+        with self.changing_fstat(path, b""), self.assertRaisesRegex(ev.EvalError, "a photo is not a usable regular file"):
+            self.read_photo("a.jpg")
+
+    def test_read_photo_rechecks_oversize_bytes_after_stat(self):
+        path = self.photos / "a.jpg"
+        path.write_bytes(b"abc")
+        with self.changing_fstat(path, b"x" * (ev.MAX_PHOTO + 1)), self.assertRaisesRegex(ev.EvalError, "a photo is not a usable regular file"):
+            self.read_photo("a.jpg")
+
+    def test_read_photo_actual_length_boundaries(self):
+        path = self.photos / "a.jpg"
+        for content in (b"x", b"y" * ev.MAX_PHOTO):
+            path.write_bytes(content)
+            self.assertEqual(self.read_photo("a.jpg"), content)
+        for content in (b"", b"z" * (ev.MAX_PHOTO + 1)):
+            path.write_bytes(content)
+            with self.assertRaises(ev.EvalError): self.read_photo("a.jpg")
+        path.write_bytes(b"abcdef")
+        with self.changing_fstat(path, b"ab"):
+            self.assertEqual(self.read_photo("a.jpg"), b"ab")  # shrinking to an allowed length is admitted
+
+    def test_live_changed_last_photo_sends_nothing_and_is_private(self):
+        out, last = self.tmp / "replies.jsonl", self.photos / self.cases[-1]["photo"]
+        for content in (b"", b"x" * (ev.MAX_PHOTO + 1)):
+            with self.subTest(size=len(content)), self.changing_fstat_for(last, content):
+                code, stdout, err = self.live(out)
+                self.assertEqual((code, stdout, err, self.calls), (2, "", "a photo is not a usable regular file", []))
+                self.assertNotIn(self.cases[-1]["photo"], err)
+                self.assertEqual(sorted(p.name for p in self.tmp.iterdir()), ["photos"])
+                last.write_bytes(b"\xff\xd8synthetic-9")
+
+    def changing_fstat_for(self, path, content):
+        real = ev.os.fstat
+
+        def fake(fd):
+            info = real(fd)
+            if os.path.samestat(info, path.stat()): path.write_bytes(content)
+            return info
+        return mock.patch.object(ev.os, "fstat", fake)
 
     def test_non_loopback_url_and_missing_flags_send_nothing(self):
         out = self.tmp / "replies.jsonl"

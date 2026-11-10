@@ -1,0 +1,51 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "yes",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-017].available"
+    },
+    {
+      "after": "2026-11-08",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-017].available_on"
+    },
+    {
+      "after": "no",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-056].available"
+    },
+    {
+      "after": "2026-11-08",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-056].available_on"
+    },
+    {
+      "after": "limited",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-076].available"
+    },
+    {
+      "after": "2026-11-08",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-076].available_on"
+    },
+    {
+      "after": "2026-11-08",
+      "file": "hass/content/store.json",
+      "path": "selection_checked_on"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "hass/content/store.json",
+    "storefront-mockup/catalog-products.js",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}
