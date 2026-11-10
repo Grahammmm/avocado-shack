@@ -128,7 +128,13 @@ def hike_ref(content, query) -> Resolved:
 
 def route_ref(content, query) -> Resolved:
     routes = [r for r in content.community.get("routeIdeas", []) if isinstance(r, dict) and "id" in r]
-    return _titled(routes, query, "trail")
+    found = _titled(routes, query, "trail")
+    if found.status != "one":
+        return found
+    route = next((r for r in routes if r["id"] == found.value), {})
+    if route.get("status") == "hidden":  # RF1925-12: a hidden trail is never a link target; ask to restore it first
+        return Resolved("hidden", reply=f"{route.get('title')} is hidden. Do you want me to bring it back first?")
+    return found
 
 
 def shelf(text) -> Resolved:
