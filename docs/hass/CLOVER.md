@@ -157,7 +157,8 @@ negative or over $1,000.00 is refused with a plain sentence), checks `pantry` is
 * **Journal and undo.** Before a call, the apply step writes an *intent* row (draft, before, after) to `<state>/clover/journal.sqlite3` (0600); after the call it reads the item back from Clover, compares, and settles
   the row `applied` or `failed`. A restart settles rows left `intent` by reading the item (the same idea as the editor's `recover`): it never applies twice. `undo` drafts the inverse (`build_undo`): old price,
   old count, old SKU, hidden flag back, or hide a created item. It **refuses to overwrite a newer value**: if the price, count or SKU changed again after the draft, Hass says so and asks what Mike wants.
-  A stock draft that changes the site word also journals the word the site showed before (`before`/`after` `site`); its undo puts that word back, and only while the site still shows the word the draft set.
+  A stock draft that changes the site word also journals the word the site showed before (`before`/`after` `site`); its undo puts that word back, and only while the site still shows the word the draft set. A product that had no word before gets
+  no word back (`product.clear_availability`), never an invented "Available today"; a journal that does not say what the site showed is refused with a plain reason.
   One honest limit: the first-ever count on an item that had none cannot be undone (that would be deleting the count record, which Hass never does); Hass says so and offers "set X to <number>".
 * **Stale check at apply:** the item is re-read live; if its `modifiedTime` or its stock's `modifiedTime` moved since the draft (a sale decrements stock on its own), the draft is stale, nothing is written, and Mike gets a fresh draft
   that needs its own yes. "Received 12" is computed from the till's current count and shown as both numbers ("Count: 12 -> 24"), and the live re-read makes that arithmetic race-safe.

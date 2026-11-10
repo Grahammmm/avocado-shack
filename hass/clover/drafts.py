@@ -185,18 +185,28 @@ def build_set_price(item, new_cents, config, *, writes_today=0):
                  second_confirmation=big, warnings=tuple(warnings))
 
 
+CLEAR = "clear"   # _site_restore's answer for "the product had no word before": the undo takes the word off (product.clear_availability)
+UNKNOWN_SITE = ("I can't tell what the website said before that change, so I can't undo it safely. Nothing was changed. "
+                "Tell me the count you want, and the website word if it needs one.")
+
+
 def _site_restore(entry, site_product):
-    """The site op that puts the site word back to what it was before `entry`, or None. The journal (`before`/`after` "site") names the
-    product and both words; the word is restored only while the product still shows the word that draft set, so a newer site change is never
-    overwritten. A product that had no word before is put back to `yes` (no word reads as available)."""
+    """What puts the site back EXACTLY as it was before `entry`: a word from SITE_WORDS, CLEAR when the product had no word (the undo takes
+    the word off; it never invents 'Available today'), or None for no site change. The journal (`before`/`after` "site") names the product
+    and both words; the site is restored only while the product still shows the word that draft set, so a newer site change is never
+    overwritten. A journal that does not say what the site showed raises DraftRefused: an undo that cannot restore it does not run."""
     mine = (entry.get("before") or {}).get("site"), (entry.get("after") or {}).get("site")
     if not all(isinstance(x, dict) for x in mine) or site_product is None or site_product.status != "active":
         return None
     prior, applied = mine
     if site_product.id != applied.get("id") or site_product.availability != applied.get("available"):
         return None
-    word = prior.get("available") or "yes"
-    return word if word in SITE_WORDS and word != site_product.availability else None
+    if "available" not in prior or (prior["available"] is not None and prior["available"] not in SITE_WORDS):
+        raise DraftRefused(UNKNOWN_SITE)
+    word = prior["available"]
+    if word == site_product.availability:
+        return None
+    return CLEAR if word is None else word
 
 
 def _stock_draft(item, after, config, *, headline, extra, site_product, undo_of=None, site_word=None):
@@ -211,7 +221,12 @@ def _stock_draft(item, after, config, *, headline, extra, site_product, undo_of=
     if item.hidden:
         warnings.append("this item is hidden on the till")
     site_ops, journal_before, journal_after = (), {"stock": None if before is None else format_quantity(before)}, {"stock": format_quantity(after)}
-    if word:
+    if word == CLEAR:   # only an undo gets here: the product had no word before, so the word comes off again
+        lines.append(f"  Website: takes the stock word off {site_product.name}, as it was before (same yes; the site shows a word, never a count)")
+        site_ops = ({"op": "product.clear_availability", "args": {"id": site_product.id}},)
+        journal_before["site"] = {"id": site_product.id, "available": site_product.availability}
+        journal_after["site"] = {"id": site_product.id, "available": None}
+    elif word:
         lines.append(f"  Website: marks {site_product.name} as {SITE_WORDS[word]} (same yes; the site shows a word, never a count)")
         site_ops = ({"op": "product.set_availability", "args": {"id": site_product.id, "available": word}},)
         # the journal keeps the word the site showed before, so an undo restores it instead of recomputing one

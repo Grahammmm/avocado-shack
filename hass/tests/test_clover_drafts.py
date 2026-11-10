@@ -333,6 +333,41 @@ class UndoTests(unittest.TestCase):
         plain = d.build_set_stock(oil, 0, CFG, site_product=product("p", "Oil", available="no"))      # site already said so: no site op, none to undo
         self.assertEqual(d.build_undo(self.journal(plain), after, CFG, site_product=product("p", "Oil", available="no")).site_ops, ())
 
+    def test_undo_round_trips_every_original_site_word_including_none(self):
+        """HASS-CLOVER-1 RETURN 2: undo puts back EXACTLY the word the site had, and a product that had no word gets no word back
+        (never an invented 'Available today'). The journal goes through JSON, as it does when it is stored."""
+        expect = {None: {"op": "product.clear_availability", "args": {"id": "p"}},
+                  "limited": {"op": "product.set_availability", "args": {"id": "p", "available": "limited"}},
+                  "yes": {"op": "product.set_availability", "args": {"id": "p", "available": "yes"}},
+                  "no": {"op": "product.set_availability", "args": {"id": "p", "available": "no"}}}
+        for prior, op in expect.items():
+            with self.subTest(prior=prior):
+                start = Decimal(0) if prior == "no" else Decimal(5)       # 'no' -> restock flips it to yes; the others -> sold out flips to no
+                oil = item(id="O", name="Oil", sku="S1", stock=start, stock_modified=1)
+                dr = d.build_set_stock(oil, 3 if prior == "no" else 0, CFG, site_product=product("p", "Oil", available=prior))
+                applied = dr.site_ops[0]["args"]["available"]
+                self.assertEqual(dr.before["site"], {"id": "p", "available": prior})
+                entry = json.loads(json.dumps(self.journal(dr)))
+                after = item(**{**oil.__dict__, "stock": Decimal(3 if prior == "no" else 0)})
+                undo = d.build_undo(entry, after, CFG, site_product=product("p", "Oil", available=applied))
+                self.assertEqual(undo.site_ops, (op,))
+                self.assertEqual((undo.before["site"], undo.after["site"]), ({"id": "p", "available": applied}, {"id": "p", "available": prior}))
+                if prior is None:
+                    self.assertNotIn("Available today", undo.render("u"))
+                    self.assertIn("takes the stock word off Oil", undo.render("u"))
+
+    def test_undo_refuses_when_the_journal_does_not_say_what_the_site_showed(self):
+        oil = item(id="O", name="Oil", sku="S1", stock=Decimal(5))
+        dr = d.build_set_stock(oil, 0, CFG, site_product=product("p", "Oil", available="yes"))
+        entry = self.journal(dr)
+        entry["before"] = {**entry["before"], "site": {"id": "p", "available": "maybe"}}
+        after = item(**{**oil.__dict__, "stock": Decimal(0)})
+        with self.assertRaisesRegex(d.DraftRefused, "can't tell what the website said"):
+            d.build_undo(entry, after, CFG, site_product=product("p", "Oil", available="no"))
+        del entry["before"]["site"]["available"]
+        with self.assertRaisesRegex(d.DraftRefused, "can't tell what the website said"):
+            d.build_undo(entry, after, CFG, site_product=product("p", "Oil", available="no"))
+
     def test_undo_a_count_that_started_the_count_is_not_possible_and_says_so(self):
         free = item(id="F", name="Plain", stock=None)
         dr = d.build_set_stock(free, 5, CFG)
