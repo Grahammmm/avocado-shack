@@ -2111,3 +2111,9 @@ Checks at PR head: `python3 -B -m unittest hass.tests.test_health_backup_content
 Limits: Info only, with no path or commit in the detail; older backups are ignored and ok, notify and exit status are unchanged.
 
 AVO-SPECIALS-1 (branch rb/avo-specials-1): weekly specials. Additive `store.specials` list (content_model.py), a "This week's specials" section at the top of the home/shop page rendered only for specials active on the Pacific date plus a small client-side date check (hass/specials.py), and the editor ops specials.add, specials.edit, specials.remove, specials.clear_expired (hass/ops/specials.py) with undo, preview target and the normal approval flow. No price field; the site shows no prices anywhere except inside an owner-written deal line. Tests: hass/tests/test_specials.py (browser tests need PLAYWRIGHT_MODULE). The Hass chat skill is the separate SKILLS-SPECIALS-1 card.
+
+## RF0844-13: trail map recovers from a failed Topo image — November 9, 2026
+
+Branch rb/rf0844-13. trail-explorer.js: the existing basemap image-error recovery (official-guide fallback, one `Try loading the map again` button, enlarged-dialog cleanup with exact overflow restore) now admits the Topo image as well as the aerial one; the old check ignored any error whose href was not aerial. Retry still starts from the aerial default. trail-map-retry-qa.cjs gains five cases (Topo 404, 404 while enlarged with a non-empty previous overflow, undecodable and aborted Topo image, detached/replaced wrapper ignored, supported layers and single-flight retries), each waiting for a real image error event at 390 and 1440 px.
+
+Checks: `node storefront-mockup/trail-map-retry-qa.cjs storefront-mockup` (local Chromium, loopback only) passed 20 checks on the builder's clone; the new Topo cases failed before the fix. Not deployed; no physical-device or Safari check.

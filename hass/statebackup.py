@@ -46,7 +46,7 @@ FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|content
 HEX_RE = re.compile(r"[0-9a-f]{64}")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 ATTENDED = "restoring onto the recorded writer worktree is an attended operation"
-MANIFEST_MAX, SMALL_MAX = 8 << 20, 64 << 10  # bytes: MANIFEST.json (~80 000 listed files); a sidecar or config.json
+MANIFEST_MAX, SMALL_MAX = 8 << 20, 64 << 10  # bytes: MANIFEST.json (~80 000 listed files); a media sidecar
 
 def _read(path: Path) -> bytes:
     """Bytes of a regular file; a symlink is never followed."""
@@ -234,7 +234,7 @@ def _intact(path: Path) -> bool:
         return False
 
 def _config_worktree(path: Path):  # the worktree a hashed config.json names, else None; never raises
-    try: cfg = json.loads(_read_small(path, SMALL_MAX).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
+    try: cfg = json.loads(_read_small(path, editor.MAX_CONFIG).decode("utf-8"))  # restore merges it as a dict, rewrites worktree
     except (OSError, ValueError, RecursionError): return None
     wt = cfg.get("worktree") if isinstance(cfg, dict) else None
     return wt if isinstance(wt, str) and wt != "" else None

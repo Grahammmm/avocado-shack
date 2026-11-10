@@ -72,7 +72,10 @@ attribute is optional:
 | `source_urls` | website links recorded at migration | the frozen baseline in `hass/content/migration-baseline.json`, read once at import |
 
 * The maker slot is the key or the name as he said it; the plan resolves it with `catalog.lookup` and says what is wrong in plain
-  words. `maker_ref` in `kinds.py` hides hidden makers from restore, so these skills resolve their own (`find_maker`).
+  words. `maker_ref` in `kinds.py` hides hidden makers from restore, so these skills resolve their own (`find_maker`). The
+  `maker.restore` slot is therefore declared as plain `text` (the dispatcher checks only that it is ordinary text) and its plan
+  passes the owner's words to its own hidden-aware `find_maker`; `maker.edit` and `maker.hide` keep `maker_ref`, which still
+  refuses a hidden maker.
 * A plan that must stop raises `makers.Refusal` (a `ValueError` with `.reply`, the fixed owner reply, and `.kind`, "question" or
   "refuse"). The shared kit already turns a plan that raises into an `unsupported` reply carrying `.reply`.
 * `describe_add / describe_edit / describe_hide / describe_restore` return `Outcome(ops, set_lines, left_off, notes)` for the proposal

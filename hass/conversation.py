@@ -353,6 +353,7 @@ def sender_key(value):
 
 
 MAX_CONFIG = 1024 * 1024  # RF1910-2 (H08/H20)
+MAX_OWNER_CHATS = 8  # HASS-OWNERS-2: the most owner chats one config may name
 
 
 def _config_bytes(sdir):
@@ -375,15 +376,39 @@ def load_settings(sdir, photos=False) -> dict:
     if not isinstance(settings, dict): raise ConfigError("config.json settings are missing")
     senders, chat, ttl = (settings.get(k) for k in ("ownerSenders", "ownerChat", "approvalTtlSeconds"))
     problems = []
+    chats_in = settings.get("ownerChats")  # HASS-OWNERS-2: optional list; with it, ownerChat (if also set) is one of its entries
     keys = [sender_key(s) for s in senders] if isinstance(senders, list) else []
     if not keys: problems.append("ownerSenders must be a non-empty list of sender addresses")
     problems += [f"ownerSenders entry {n} is not an email address or a +country phone number"  # value never echoed
                  for n, key in enumerate(keys, 1) if key is None]
-    if not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
+    if chats_in is not None: pass  # HASS-OWNERS-2: every entry is checked below, and ownerChat must be one of them
+    elif not isinstance(chat, str) or not chat.strip(): problems.append("ownerChat must be a chat id")
     elif ";+;" in chat:  # AVB-02 (H08): the owner channel is the owner's one-to-one chat, never a group; ids never echoed
         problems.append("ownerChat is a group chat; it must be the owner's one-to-one chat")
     elif (direct := re.fullmatch(r"[^;]+;-;([^;]+)", chat)) and sender_key(direct[1]) not in keys:
         problems.append("ownerChat is a one-to-one chat with an address that is not in ownerSenders")
+    chats, chat_keys, names, before = None, {}, {}, len(problems)
+    if chats_in is not None:  # HASS-OWNERS-2: several owners, each in their own one-to-one chat; ids and addresses never echoed
+        if not isinstance(chats_in, list) or not 1 <= len(chats_in) <= MAX_OWNER_CHATS:
+            problems.append(f"ownerChats must be a list of 1 to {MAX_OWNER_CHATS} chat ids")
+        else:
+            for n, c in enumerate(chats_in, 1):
+                direct = re.fullmatch(r"[^;]+;-;([^;]+)", c) if isinstance(c, str) else None
+                if not isinstance(c, str) or not c.strip(): problems.append(f"ownerChats entry {n} must be a chat id")
+                elif ";+;" in c: problems.append(f"ownerChats entry {n} is a group chat; it must be an owner's one-to-one chat")
+                elif not direct: problems.append(f"ownerChats entry {n} must be a one-to-one chat id like iMessage;-;<address>")
+                elif sender_key(direct[1]) not in keys: problems.append(f"ownerChats entry {n} is a one-to-one chat with an address that is not in ownerSenders")
+                else: chat_keys[c] = frozenset({sender_key(direct[1])})
+            strs = [c for c in chats_in if isinstance(c, str)]  # a {} or [] entry is already reported above and is never hashed
+            if len(set(strs)) != len(strs): problems.append("ownerChats has the same chat twice")
+            if chat is not None and chat not in chats_in: problems.append("ownerChat must be one of ownerChats")
+            if len(problems) == before: chats, chat = tuple(chats_in), chat or chats_in[0]  # no ownerChat: the first owner chat is the main one
+    n_in = settings.get("ownerNames")  # HASS-OWNERS-2: optional {chat id: short first name}, used only to say whose change it was
+    if n_in is not None:
+        if not isinstance(n_in, dict) or chats is None or any(k not in chats for k in n_in) or not all(
+                isinstance(v, str) and re.fullmatch(r"[^\W\d_][^\W\d_ '.-]{0,19}", v) for v in n_in.values()):
+            problems.append("ownerNames must map an ownerChats chat id to a short first name (letters only, up to 20)")
+        else: names = dict(n_in)
     if type(ttl) is not int or ttl < 60: problems.append("approvalTtlSeconds must be an integer >= 60")
     root = settings.get("mediaRoot")  # NB-AV-09: required only with a photo source
     if photos and (not isinstance(root, str) or not root.strip()): problems.append("mediaRoot must be set to use photos")
@@ -397,7 +422,7 @@ def load_settings(sdir, photos=False) -> dict:
     g_chat = settings.get("gChat")  # HASS-VOICE-1: G's own one-to-one chat; the only place `problems` and `weekly` are answered
     if g_keys and g_senders is not None:
         if not isinstance(g_chat, str) or not g_chat.strip(): problems.append("gChat must be set to G's own chat when gSenders is set")
-        elif g_chat == chat: problems.append("gChat must not be the owner chat")
+        elif g_chat == chat or chats is not None and g_chat in chats: problems.append("gChat must not be the owner chat")
         elif ";+;" in g_chat: problems.append("gChat is a group chat; it must be G's one-to-one chat")
         elif (direct := re.fullmatch(r"[^;]+;-;([^;]+)", g_chat)) and sender_key(direct[1]) not in g_keys:
             problems.append("gChat is a one-to-one chat with an address that is not in gSenders")
@@ -420,7 +445,8 @@ def load_settings(sdir, photos=False) -> dict:
             "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house,  # SKILLS-FW-3
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
             **({"gKeys": frozenset(g_keys), "gChat": g_chat, "gSenders": tuple(g_senders)} if g_keys and isinstance(g_chat, str) else {}),
-            **({"gOwner": True} if g_owner is True else {})}
+            **({"gOwner": True} if g_owner is True else {}),
+            **({"ownerChats": chats, "chatKeys": chat_keys, "ownerNames": names} if chats is not None else {})}  # HASS-OWNERS-2: only when set
 
 
 def parse_keyword(text: str):
@@ -795,9 +821,60 @@ class Conversation:
     def _chat(self) -> str:
         return self._to or self.settings["ownerChat"]
 
+    # -- HASS-OWNERS-2: several owners, each in their own one-to-one chat (settings ownerChats); none set = ownerChat alone, as before
+    @property
+    def _owner_chats(self) -> tuple:
+        return self.settings.get("ownerChats") or (self.settings["ownerChat"],)
+
+    @property
+    def _shared(self) -> bool:
+        """True with two or more ownerChats: one site, so a draft, the open release and `history` are shared and say whose they are."""
+        return len(self._owner_chats) > 1
+
+    def _who(self, chat) -> str:
+        """The short first name the config gives this owner chat (ownerNames), else `the owner`."""
+        return self.settings.get("ownerNames", {}).get(chat) or "the owner"
+
+    def _whose(self, chat, capital=True) -> str:
+        """`Your change` for the asking chat, else `Mike's change` (`The owner's change` when no name is set)."""
+        if chat == self._chat(): return "Your change" if capital else "your change"
+        who = self._who(chat)
+        return (who[0].upper() + who[1:] if capital else who) + "'s change"
+
+    def _visible(self, row) -> bool:
+        """With several owners a row shown as 'waiting for your yes' must be this chat's own; alone it is every row, as before."""
+        return not self._shared or self._mine(row)
+
+    def _writer_busy(self, now):
+        """HASS-OWNERS-2 (one site, one writer, one release at a time): with several owners, the other owner chat that holds the
+        writer (a draft waiting for a yes or for details, one being saved, or a release still open) as (chat, 'draft' | 'release'),
+        else None. Alone this is always None, so a single owner is answered exactly as before."""
+        if not self._shared: return None
+        mine = self._chat()
+        for r in self._drafts("state IN ('proposed', 'needs-details', 'approved')"):
+            if r["chat"] != mine and (r["state"] == "approved" or self._expiry(r) > now): return r["chat"], "draft"
+        release = getattr(self.editor, "open_release", None)  # a live editor names the chat whose release has not settled
+        other = release() if callable(release) else None
+        return (other, "release") if other is not None and other != mine else None
+
+    def _busy_reply(self, busy) -> str:
+        chat, kind = busy
+        who = self._who(chat)
+        who = who[0].upper() + who[1:]
+        self._reply(f"{who} has a change waiting, so I haven't started yours. Please ask me again once it's saved or cancelled." if kind == "draft"
+                    else f"{who}'s change is going on the website right now, so I haven't started yours. Please ask me again in a few minutes.")
+        return "writer-busy"
+
+    _asker = None  # HASS-OWNERS-2: the normalized sender key of the message handle() is running; None outside a message
+
     def _mine(self, row) -> bool:
-        """A draft belongs to the owner chat that made it: another owner's yes, no or undo never reaches it."""
-        return row["chat"] == self._chat()
+        """A draft belongs to the owner chat that made it: another owner's yes, no or undo never reaches it. With several owners a
+        draft that is still open (proposed, waiting for details, approved) is also bound to the sender who made it, so a draft kept
+        from before a second owner was added (one shared chat) is never approved or cancelled by the other person."""
+        if row["chat"] != self._chat(): return False
+        if self._shared and self._asker is not None and row["state"] in ("proposed", "needs-details", "approved"):
+            return sender_key(row["sender"]) == self._asker
+        return True
 
     @contextlib.contextmanager
     def _answer_to(self, chat):
@@ -810,7 +887,7 @@ class Conversation:
 
     def _reply(self, text, attachments=(), **flags):
         chat = self._chat()
-        if chat != self.settings["ownerChat"]: attachments = ()  # G's chat is text only (the Mac sends no pictures there)
+        if chat not in self._owner_chats: attachments = ()  # G's chat is text only (the Mac sends no pictures there); every owner chat gets pictures
         self._said = text
         self.outbox.add(chat, text, attachments, self._answering or None, **flags)
 
@@ -888,9 +965,10 @@ class Conversation:
     def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
         self._answering = msg.received_at
         self._to = msg.chat if self._is_owner(msg) else None
+        self._asker = sender_key(msg.sender)
         self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)
         try: return self._handle_message(msg, last_try, apply)
-        finally: self._answering, self._to, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, False
+        finally: self._answering, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, False
 
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
@@ -918,7 +996,7 @@ class Conversation:
     def _is_owner(self, msg) -> bool:
         """The owner chat with an owner sender, or (gIsOwner) G's own one-to-one chat with a G sender. Nobody else."""
         key, st = sender_key(msg.sender), self.settings
-        if msg.chat == st["ownerChat"]: return key in st["ownerKeys"]
+        if msg.chat in self._owner_chats: return key in st.get("chatKeys", {}).get(msg.chat, st["ownerKeys"])  # HASS-OWNERS-2: that chat's own owner
         return bool(st.get("gOwner")) and msg.chat == st.get("gChat") and key in st.get("gKeys", ())
 
     def _handle(self, msg, last_try=False):
@@ -1053,7 +1131,7 @@ class Conversation:
         """HASS-VOICE-1: `problems` (the last ten problem moments) and `weekly` (the week's three most common) from G's own number
         only (settings gSenders, never an owner sender). They read the correspondence log and nothing else; Mike never sees them."""
         if msg.from_me or msg.kind != "new" or msg.attachments > 0 or sender_key(msg.sender) not in self.settings.get("gKeys", ()): return None
-        if msg.chat != self.settings.get("gChat") or msg.chat == self.settings["ownerChat"]: return None  # only G's own chat; never Mike's
+        if msg.chat != self.settings.get("gChat") or msg.chat in self._owner_chats: return None  # only G's own chat; never an owner's
         word = msg.text.strip().lower().rstrip(".!")
         if word not in ("problems", "weekly"): return None
         text = corrlog.problems_text(self.log) if word == "problems" else corrlog.weekly_line(self.log)
@@ -1066,11 +1144,14 @@ class Conversation:
             return "\n".join(["Which one do you mean? Reply yes or no and its code."] + [
                 (q(f"yes {r['code']}") + ": " + q(r["summary"])) if r["state"] == "proposed" else "I'm waiting for details: " + r["summary"]
                 for r in targets])
+        if code and self._by_code(code) is None and self._shared and (other := [r for r in self._drafts("code = ?", code) if not self._mine(r)]):
+            who = "someone else" if other[-1]["chat"] == self._chat() else self._who(other[-1]["chat"])  # same chat, other sender: a draft kept from before a second owner
+            return f"That change belongs to {who}, so I can't save it or cancel it for you. Nothing changed."  # HASS-OWNERS-2: never its words
         if code and self._by_code(code) is None:  # AV2152-01 (H05/H17): a code that matches no draft; never guessed
             waiting = [r for r in self._drafts("state = 'proposed'") if self._mine(r)]
             return "\n".join(["I don't have a change with that code."] + (["These are waiting for you:"] + [
                 q(f"yes {r['code']}") + ": " + q(r["summary"]) for r in waiting] if waiting else []))
-        named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired]
+        named = [self._by_code(code)] if code else [self._row(r["row_id"]) for r in expired if self._visible(r)]
         return "\n".join(self._state_text(r) for r in named if r is not None) or NOTHING
 
     def _state_text(self, row) -> str:
@@ -1232,6 +1313,7 @@ class Conversation:
     def _shelf_answer(self, msg, now, verb, ask) -> str:
         """SKILLS-FW-3: the shelf-check answer (below), then the owner's other queued asks go on one at a time: the next one
         becomes the open request and its question is asked, whichever way the shelf-check change went."""
+        if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)  # HASS-OWNERS-2
         disposition = self._shelf_decide(msg, now, verb, ask)
         calls = ask.get("calls") or []
         if calls and self.skills_mode != dispatch_mod.DEFAULT_MODE:
@@ -1287,6 +1369,7 @@ class Conversation:
                          float(seconds) if isinstance(seconds, (int, float)) else None))
 
     def _request(self, msg, now) -> str:
+        if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)  # HASS-OWNERS-2: before any model call or count
         if len(msg.text) > MAX_OWNER_TEXT:  # AV1737-04: code points; never interpreted, drafted or counted
             self._reply(TOO_LONG)
             return "too-long"
@@ -1348,7 +1431,7 @@ class Conversation:
         reply: revises, the interpret check, the editor, the claims gate over the owner's JOINED texts, the proposal. The caller
         has already counted the model call, if there was one. Returns the disposition."""
         self._last_draft_code = None
-        pending = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+        pending = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now and self._visible(r)]  # HASS-OWNERS-2
         codes = {p["code"] for p in pending}
         named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
         cancelled_question = named is not None and named["state"] == "rejected" and named["reason"] == "owner" \
@@ -1427,6 +1510,7 @@ class Conversation:
 
     def _photo(self, msg, now, last_try=False) -> str:  # NB-AV-09: store one photo, then open (or name) its needs-details draft
         if msg.attachments != 1: return self._reply(media.REPLIES["many"]) or "attachment-many"
+        if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)  # HASS-OWNERS-2: nothing fetched or stored
         try: data = self.photos.fetch(msg.provider_id, 1)[0]  # NB-AV-11: an empty/short answer is a failure too
         except Exception:  # never applied or read without the photo: retry via the inbox, or one reply on the last try
             if not last_try: raise AttachmentPending("fetch") from None
@@ -1580,6 +1664,15 @@ class Conversation:
                               "AND screenshot IS NOT NULL ORDER BY row_id DESC LIMIT 1", (change_id,)).fetchone()
         return row[0] if row else None
 
+    def _visible_undo(self, r) -> bool:
+        """`undo` looks at this chat's own changes; with several owners at the whole site's (one site, one last change)."""
+        return self._shared or self._mine(r)
+
+    def _history_line(self, r) -> str:
+        """One `history` line. HASS-OWNERS-2: with several owners it says whose change it was (`Mike's change`, `Your change`)."""
+        words = f"{q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
+        return f"- {self._whose(r['chat'])}, {words}" if self._shared else f"- {words}"
+
     def _history_search(self, query: str) -> str:
         """AV2152-02: up to ten newest owner-approved changes whose summary holds every word; read-only."""
         words = catalog._fold(query).split() if 1 <= len(query) <= HISTORY_TEXT_MAX and query.isprintable() else []
@@ -1592,9 +1685,7 @@ class Conversation:
             folded = catalog._fold(r["summary"])
             if all(w in folded for w in words): found.append(r)
             if len(found) >= HISTORY_SEARCH_MAX: break
-        self._reply("\n".join(["These match:"] + [
-            f"- {q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
-            for r in found]) if found else f"I found no changes that match {q(query)}.", long_ok=True)
+        self._reply("\n".join(["These match:"] + [self._history_line(r) for r in found]) if found else f"I found no changes that match {q(query)}.", long_ok=True)
         return "history"
 
     def _command(self, msg, now, verb, code) -> str:
@@ -1616,22 +1707,28 @@ class Conversation:
             rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
                                    "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
             self._reply("\n".join(["Here's what we changed lately:"] + [  # SHOP-4: where it is now instead of the commit
-                f"- {q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
-                for r in rows]) if rows else "We haven't made any changes yet.", long_ok=True)
+                self._history_line(r) for r in rows]) if rows else "We haven't made any changes yet.", long_ok=True)
             return "history"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")  # AV0022-07: skip undos
-                if self._mine(r) and (code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code)]
+                if self._visible_undo(r) and (code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code)]
         # HASS-LIVE-PLAN-1: only the asking owner's own changes (by chat) can be taken back, with or without a code
         if not done:
             self._reply("I don't have a change with that code to undo." if code else "There's nothing to undo.")
             return "no-target"
-        out = self.editor.prepare([{"op": "history.revert", "args": {"changeId": done[-1]["change_id"]}}])
+        target = done[-1]
+        theirs = self._shared and not self._mine(target)  # HASS-OWNERS-2: the site's last change was another owner's
+        if theirs and code is None:  # a bare `undo` never reaches another owner's work: it says whose it is, and how to ask for it
+            self._reply(f"The last change on the website was {self._whose(target['chat'], False)}: {q(target['summary'])}. I haven't undone anything. "
+                        f"If you do want it undone, say {q('undo ' + target['code'])}.", long_ok=True)
+            return "undo-other"
+        if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)
+        out = self.editor.prepare([{"op": "history.revert", "args": {"changeId": target["change_id"]}}])
         if out["result"] != "ok":
             self._reply(self._plain(_reason(out), "undo that"))
             return "not-drafted"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", out["draft"]["change_id"]) if self._mine(r)]
         row = same[0] if same else self._propose(out["draft"], msg.sender, now)
-        self._proposal_reply(row, out["draft"], "To undo that, I'd change it back:\n")
+        self._proposal_reply(row, out["draft"], f"To undo {self._whose(target['chat'], False)}, I'd change it back:\n" if theirs else "To undo that, I'd change it back:\n")
         return "proposed"
 
     def _report(self, msg, now) -> str:
@@ -2197,7 +2294,7 @@ class Conversation:
                                         (msg.provider_id,)).fetchone()[0]
             except sqlite3.Error:
                 unread = 0
-        waiting = [r for r in self._drafts("state = 'proposed'") if self._expiry(r) > self._now()]
+        waiting = [r for r in self._drafts("state = 'proposed'") if self._expiry(r) > self._now() and self._visible(r)]
         return {"waiting": len(waiting) + unread, "applying": [r["code"] for r in self._drafts("state = 'approved'")]}
 
     def _control(self, msg, now, verb) -> str:
@@ -2215,7 +2312,7 @@ class Conversation:
             self._reply("Changes are already on.")
         else:  # resume never applies anything by itself
             self.db.execute("DELETE FROM control WHERE name = 'paused'")
-            codes = [r["code"] for r in self._drafts("state = 'proposed'")]
+            codes = [r["code"] for r in self._drafts("state = 'proposed'") if self._visible(r)]
             self._reply("Changes are back on." + ("\nWaiting for your yes:\n" + self._choices(codes) if len(codes) > 1 else
                                                     f"\nOne change is waiting. Reply {q('yes ' + codes[0])} to save it." if codes else ""), long_ok=True)
         return verb
@@ -2240,7 +2337,8 @@ class Conversation:
             "SELECT d.* FROM drafts d JOIN approvals a ON a.change_id = d.change_id WHERE d.state IN"
             " ('applied', 'verified', 'failed', 'reverted') ORDER BY a.id DESC, d.row_id DESC LIMIT 1").fetchone()
         if last:  # SHOP-4: did it work, in plain words (whether it is on the website now), never the commit
-            lines.append(f"Last change: {q(last['summary'])}. " + answers.did_it_work(dict(last), self._install(last), now))
+            whose = " (" + self._whose(last["chat"], False) + ")" if self._shared and not self._mine(last) else ""  # HASS-OWNERS-2
+            lines.append(f"Last change{whose}: {q(last['summary'])}. " + answers.did_it_work(dict(last), self._install(last), now))
         return "\n".join(lines + self._hike_lines(now))
 
     def _reader_failed_lines(self, now) -> list:
@@ -2262,9 +2360,12 @@ class Conversation:
 
     def _waiting_lines(self, now) -> list:
         """AV1102-11: one line per unexpired draft waiting for yes or for details; `status` and `report` share it."""
-        return [f"Waiting for your yes: {q(r['summary'])} (reply {q('yes ' + r['code'])})" if r["state"] == "proposed"
-                else "I'm waiting for details: " + r["summary"]
-                for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+        rows = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now]
+        lines = [f"Waiting for your yes: {q(r['summary'])} (reply {q('yes ' + r['code'])})" if r["state"] == "proposed"
+                 else "I'm waiting for details: " + r["summary"] for r in rows if self._visible(r)]
+        for chat in dict.fromkeys(r["chat"] for r in rows if not self._visible(r)):  # HASS-OWNERS-2: another owner's change: said, never shown
+            lines.append(f"{self._who(chat)[0].upper() + self._who(chat)[1:]} has a change waiting.")
+        return lines
 
     def _photo_lines(self, now) -> list:
         """NB-AV-12: waiting photo drafts (every op product.set_photo) and pending inbox messages with tries > 0.
@@ -2274,7 +2375,7 @@ class Conversation:
             except (TypeError, ValueError): return False
             return isinstance(ops, list) and bool(ops) and all(
                 isinstance(c, dict) and c.get("op") == "product.set_photo" for c in ops)
-        n = sum(self._expiry(r) > now and photo_only(r["ops_json"]) for r in self._drafts("state = 'needs-details'"))
+        n = sum(self._expiry(r) > now and photo_only(r["ops_json"]) for r in self._drafts("state = 'needs-details'") if self._visible(r))
         lines, path = [f"{'A photo is' if n == 1 else 'Some photos are'} waiting for details from you."] if n else [], self.sdir / "inbox.sqlite3"
         if not path.is_file(): return lines
         try:

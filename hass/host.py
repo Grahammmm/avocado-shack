@@ -278,12 +278,18 @@ class _Timed:
     def __getattr__(self, name): return getattr(self._inner, name)
 
 
+def owner_chat_order(settings) -> tuple:
+    """HASS-OWNERS-2: every owner chat, the configured main `ownerChat` first (it need not be first in `ownerChats`), then the others in
+    config order. Without `ownerChats` it is the one chat, as before."""
+    main = settings["ownerChat"]
+    return (main, *(c for c in settings.get("ownerChats", ()) if c != main))
+
+
 class Worker:
     def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None, stage=stagelog.off):
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
         self.stage, self.current = stage, ""  # HASS-FAST-1: `current` is the message being handled (stage log only)
-        self.sender = relay.RelaySender(store, conv.settings["ownerChat"], lambda: int(clock().timestamp()), shots_dir,
-                                         conv.settings.get("gChat"))
+        self.sender = relay.RelaySender(store, owner_chat_order(conv.settings), lambda: int(clock().timestamp()), shots_dir, conv.settings.get("gChat"))
         self.rev = editor_mod.content_revision(self.worktree)
         conv.interpreter = _Timed(conv.interpreter, self)
         raw_send = self.sender.send
