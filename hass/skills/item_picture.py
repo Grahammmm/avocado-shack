@@ -211,6 +211,8 @@ def _crowded(turn, name="", alt="") -> str | None:
 
 _NEGATORS = frozenset({"not", "no", "never", "nor", "neither", "except", "without", "isn't", "isnt", "wasn't", "wasnt", "don't",
                        "dont", "doesn't", "doesnt", "didn't", "didnt", "wouldn't", "wouldnt", "shouldn't", "shouldnt", "aren't", "arent"})
+_COPULAS = frozenset({"is", "are", "was", "were", "be", "been", "am", "do", "does", "did", "would", "should", "could", "will",
+                      "can", "shall", "has", "have", "had", "may", "might", "must"})
 _REJECT_FRAME = re.compile(r"\b(?:anything|everything|anyone|everyone)\s+but\b|\bother\s+than\b|\binstead\s+of\b|\brather\s+than\b",
                            re.IGNORECASE)
 _CLAUSE = re.compile(r"[,.;:!?\n]+|\s+(?:but|though|however)\s+", re.IGNORECASE)
@@ -220,18 +222,22 @@ def _picks(turn, want):
     """True when his text affirmatively picks the product (its words, not negated); False when it only rejects it ('not the
     lemons', 'anything but lemons', 'the plums instead of the lemons'); None when it does not mention it. Each clause (bounded
     by a comma, a stop or 'but') is read on its own, so 'not the plums, the lemons' picks it and 'the plums, not the lemons'
-    does not. Within a clause a negation covers the words after it; the last mention in the text decides."""
+    does not. Within a clause a negation covers the words after it, and a negated verb after the name ('the lemons aren't the
+    one', 'the lemons are not it') rejects it; the last mention in the text decides."""
     if not want:
         return None
     text = _REJECT_FRAME.sub("not", (turn or "").replace("\u2019", "'"))
     verdict = None
     for clause in _CLAUSE.split(text):
-        negated = False
+        negated, named, prior = False, False, ""
         for token in re.findall(r"[a-z0-9']+", clause.casefold()):
             if token in _NEGATORS or token.endswith("n't"):
                 negated = True
+                if named and (token.endswith("n't") or prior in _COPULAS or prior.endswith(("'s", "'re", "'m"))):
+                    verdict = False  # 'the lemons aren't the one': a negated verb after the name rejects it
             elif _words(token) & want:
-                verdict = not negated
+                verdict, named = not negated, True
+            prior = token
     return verdict
 
 

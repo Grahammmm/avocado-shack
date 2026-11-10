@@ -269,6 +269,16 @@ class RejectedTarget(unittest.TestCase):
         self.assertTrue(self.asks("not the lemons"))  # no guessing the plums from a rejected lemon
         self.assertTrue(self.asks("not the lemons, the plums"))
 
+    def test_negation_after_the_product_rejects_it(self):
+        for answer in ("the lemons aren't the one", "the lemons are not the one", "the lemons isn\u2019t right", "the lemons were never it",
+                       "it's the lemons, the lemons are not what I meant"):
+            with self.subTest(answer=answer):
+                self.assertTrue(self.asks(answer))
+        self.assertTrue(self.asks("the lemons", "the lemons aren't the one"))  # a no can follow a yes
+        self.assertFalse(self.asks("the lemons aren't the one", "the lemons please"))  # and a yes a no
+        self.assertFalse(self.asks("the lemons not the plums"))  # a bare 'not' before another name still picks the lemons
+        self.assertFalse(self.asks("the plums aren't it but the lemons"))  # a negation after another name leaves the lemons picked
+
     def test_latest_answer_can_correct_or_reject_choice(self):
         self.assertFalse(self.asks("not the lemons", "sorry, the lemons"))
         self.assertTrue(self.asks("the lemons", "actually not the lemons"))
