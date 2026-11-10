@@ -92,6 +92,23 @@ class VersionMigration(unittest.TestCase):
         self.assertTrue(rows)
         self.assertEqual({r["version"] for r in rows}, {2})
 
+    def test_no_other_skills_fixture_replies_as_notice(self):
+        # A row that replies as shop.notice is checked against SHOP_NOTICE's version (testkit stale-row), but a
+        # skill's own case file must keep that skill's version (lint_cases). So the one shop.hours row that
+        # replied as shop.notice ("refuse-holiday-is-notice") lives in shop.notice.jsonl at version 2.
+        self.assertIn("refuse-holiday-is-notice", {json.loads(x)["id"] for x in FIXTURE.read_text().splitlines() if x.strip()})
+        for path in sorted(FIXTURE.parent.glob("*.jsonl")):
+            if path == FIXTURE:
+                continue
+            for line in path.read_text().splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                with self.subTest(file=path.name, id=row.get("id")):
+                    named = [c.get("skill") for rep in row.get("replies", []) if isinstance(rep, dict)
+                             for c in (rep.get("calls") or [rep])]
+                    self.assertNotIn("shop.notice", named)
+
 
 if __name__ == "__main__":
     unittest.main()
