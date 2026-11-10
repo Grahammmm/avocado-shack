@@ -551,7 +551,7 @@ class PrimaryCorpus(Base):
         self.assertEqual(res.codes, ["wrong-diff"])
 
     def test_photo_rows_eight_unique_five_clean_three_warned(self):
-        photo_rows = [r for r in self.rows if r.get("photos")]
+        photo_rows = [r for r in self.rows if r.get("photos") and r["tag"] in ("primary", "photo")]  # AV1109-18: the forty rows' own photo turn is not one of the eight
         fixtures = sorted(Path(r["photos"][0]["fixture"]).name for r in photo_rows)
         self.assertEqual(sorted(PHOTO_SOURCES), fixtures)
         for name, clean in PHOTO_SOURCES.items():

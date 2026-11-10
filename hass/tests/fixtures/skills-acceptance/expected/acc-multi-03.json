@@ -1,0 +1,54 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": {
+        "name": "Bee Happy Farm",
+        "place": "Atascadero, California",
+        "story": "Bee Happy Farm keeps bees."
+      },
+      "file": "hass/content/makers.json",
+      "path": "makers.Bee Happy Farm"
+    },
+    {
+      "after": {
+        "name": "Oak Hill Orchard",
+        "place": "Templeton, California",
+        "story": "Oak Hill Orchard grows stone fruit."
+      },
+      "file": "hass/content/makers.json",
+      "path": "makers.Oak Hill Orchard"
+    }
+  ],
+  "files": [
+    "hass/content/makers.json",
+    "storefront-mockup/producers.js",
+    "storefront-mockup/producers.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": [
+      {
+        "after": {
+          "hidden": true,
+          "name": "Bee Happy Farm",
+          "place": "Atascadero, California",
+          "story": "Bee Happy Farm keeps bees."
+        },
+        "file": "hass/content/makers.json",
+        "path": "makers.Bee Happy Farm"
+      },
+      {
+        "after": {
+          "hidden": true,
+          "name": "Oak Hill Orchard",
+          "place": "Templeton, California",
+          "story": "Oak Hill Orchard grows stone fruit."
+        },
+        "file": "hass/content/makers.json",
+        "path": "makers.Oak Hill Orchard"
+      }
+    ]
+  },
+  "schema_version": 1
+}
