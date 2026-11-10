@@ -20,6 +20,7 @@ import unicodedata
 from collections import Counter
 
 from hass import claims
+from hass.tlds import TLDS
 
 MAX_RECORDS = 10
 COMMERCE_WORDS = re.compile(r"\$\s?\d|\bbasket\b|\bcheck ?out\b|\bcart\b|add to (?:bag|basket|cart)|weekly box|"
@@ -31,13 +32,23 @@ PHONE_STRICT = re.compile(r"(?<!\d)\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}(?!\d)")
 # HASS-SEC-2 (H1, M3): every common way to write a phone number: the strict shape; 10 bare digits, a +1 or 1 in front, a
 # bracketed area code, any of space, dash, slash between the groups (a dot only in the strict shape, so a decimal such as a map
 # coordinate 120.8740879 is not a phone); and an international + number of 8 to 15 digits. Never inside a word or a longer number.
+# A separator between the groups of digits: one space, dash or slash, or a dash or slash with spaces around it (805 / 555 / 1234).
+_PHONE_SEP = r"(?:[ \t]*[\-/][ \t]*|[ \t]?)"
 PHONE = re.compile(
     PHONE_STRICT.pattern
-    + r"|(?<![\w+.,\-])(?:\+\s?1[ \t.\-]?|1[ \t.\-]?)?(?:\(\d{3}\)[ \t.\-]?|\d{3}[ \t\-/]?)\d{3}[ \t\-]?\d{4}(?![\w]|[.,]\d)"
+    + r"|(?<![\w+.,\-])(?:\+\s?1[ \t.\-]?|1[ \t.\-]?)?(?:\(\d{3}\)(?:[ \t]*[.\-/][ \t]*|[ \t]?)|\d{3}" + _PHONE_SEP + r")\d{3}"
+    + _PHONE_SEP + r"\d{4}(?![\w]|[.,]\d)"
     + r"|(?<![\w+])\+\s?\d(?:[ \t.\-()]?\d){7,14}(?![\w]|[.,]\d)")
-_TLDS = r"(?:com|net|org|edu|gov|io|co|us|info|biz|me|app|dev|shop|store|farm|ca|uk|ai|online|site|xyz|live|page|link|website)"
-URL = re.compile(r"(?:https?://|www\.)\S+|(?<![\w@.\-])[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?(?:\.[a-z0-9\-]+)*\." + _TLDS + r"(?![\w\-])",
-                 re.I)
+# HASS-SEC-2 (RETURN t_439e2607, finding 2): a bare web address is any name.ending whose ending is a registered top-level domain
+# (hass.tlds, the whole IANA list), not a short list: harborlane.photography is contact details like harborlane.com. The short
+# list stays as the one-letter-name guard below: "e.g." and "i.e." are not addresses, but "t.co" and "x.com" are.
+_COMMON_TLDS = frozenset({"com", "net", "org", "edu", "gov", "io", "co", "us", "info", "biz", "me", "app", "dev", "shop", "store",
+                          "farm", "ca", "uk", "ai", "online", "site", "xyz", "live", "page", "link", "website"})
+_TLDS = r"(?:" + "|".join(sorted(TLDS, key=lambda t: (-len(t), t))) + r")"
+_COMMON = r"(?:" + "|".join(sorted(_COMMON_TLDS, key=lambda t: (-len(t), t))) + r")"
+URL = re.compile(r"(?:https?://|www\.)\S+"
+                 r"|(?<![\w@.\-])[a-z0-9][a-z0-9\-]*[a-z0-9](?:\.[a-z0-9\-]+)*\." + _TLDS + r"(?![\w\-])"   # a name of 2+ characters
+                 r"|(?<![\w@.\-])[a-z0-9](?:\.[a-z0-9\-]+)*\." + _COMMON + r"(?![\w\-])", re.I)            # a 1-character name: common endings only
 _AT, _DOT = r"\s*[\[(]?\s*(?:@|\bat\b)\s*[\])]?\s*", r"\s*[\[(]?\s*(?:\.|\bdot\b)\s*[\])]?\s*"
 SPELLED_ADDRESS = re.compile(r"\b[\w.+\-]+" + _AT + r"[\w\-]+(?:" + _DOT + r"[\w\-]+)*?" + _DOT + _TLDS + r"\b", re.I)
 SPELLED_HOST = re.compile(r"\b[\w\-]+\s*[\[(]?\s*\bdot\b\s*[\])]?\s*" + _TLDS + r"\b", re.I)
@@ -243,13 +254,16 @@ def _protected(value, collection=None, names=()):
     found, kinds = Counter(), set()
     for shown, sentence in _pieces(value):
         hits = {kind for kind, rx in PROTECTED if rx.search(sentence)}
+        # RETURN t_439e2607, finding 3: a name may hide only the farm-noun shape of the origin class ("Test Orchard", "Harbor Lane
+        # Farm"), nothing else: a claim in a name ("Won first place at the county fair") is judged like the same words anywhere.
         wide = sentence
         for rx in names: wide = rx.sub(" ", wide)
-        hits |= {kind for kind, rxs in PARAPHRASES.items() if any(rx.search(wide) for rx in rxs)}
-        if collection in TRAIL_COLLECTIONS and any(rx.search(wide) for rx in TRAIL_PARAPHRASES): hits.add("trail facts")
+        hits |= {kind for kind, rxs in PARAPHRASES.items()
+                 if any(rx.search(wide if rx is NAME_EXEMPT else sentence) for rx in rxs)}
+        if collection in TRAIL_COLLECTIONS and any(rx.search(sentence) for rx in TRAIL_PARAPHRASES): hits.add("trail facts")
         if _spelled_number(sentence): hits.add("contact")
         mixed = _mixed_script(shown)
-        if mixed or _superlative(wide): hits.add(UNCHECKED)
+        if mixed or _superlative(sentence): hits.add(UNCHECKED)
         if hits:
             found[sentence + ("\0mixed" if mixed else "")] += 1
             kinds.update(hits)
@@ -257,13 +271,26 @@ def _protected(value, collection=None, names=()):
 
 
 NAME_FIELDS = ("name", "brand", "displayBrand", "producerKey")
+# RETURN t_439e2607, finding 3: the one shape a name may hide is the farm noun of the origin class (a maker called "Test Orchard"
+# or "Harbor Lane Farm" is not an origin claim). A name hides it only when it is a plain name: 2 to 4 words, a word besides the
+# farm noun, no function word (so not a phrase such as "Made on our farm"), and nothing else in it a claim of any class.
+NAME_EXEMPT = PARAPHRASES["origin/organic"][2]
+_NAME_STOP = frozenset({"a", "an", "the", "our", "my", "your", "their", "his", "her", "we", "i", "is", "are", "was", "were", "be", "on",
+                        "in", "at", "by", "from", "to", "with", "for", "and", "or", "not", "no", "it", "this", "that", "has", "have"})
+
+
+def _plain_name(skeleton: str) -> bool:
+    words = re.findall(r"[a-z0-9]+(?:'[a-z]+)?", skeleton)
+    rest = NAME_EXEMPT.sub(" ", skeleton)
+    return (2 <= len(words) <= 4 and NAME_EXEMPT.search(skeleton) is not None and bool(re.search(r"[a-z0-9]", rest))
+            and not _NAME_STOP & set(words) and not _protected(rest)[1])
 
 
 def _names(records) -> tuple:
-    """Patterns for the product, brand and maker names the draft's records carry (before or after), longest first."""
-    names = {v for r in records if isinstance(r, dict) for side in (r.get("before"), r.get("after")) if isinstance(side, dict)
-             for v in (side.get(f) for f in NAME_FIELDS) if isinstance(v, str) and claims.skeleton(v)}
-    return tuple(claims._pattern(claims.skeleton(n)) for n in sorted(names, key=len, reverse=True))
+    """Patterns for the plain product, brand and maker names the draft's records carry (before or after), longest first."""
+    names = {claims.skeleton(v) for r in records if isinstance(r, dict) for side in (r.get("before"), r.get("after"))
+             if isinstance(side, dict) for v in (side.get(f) for f in NAME_FIELDS) if isinstance(v, str)}
+    return tuple(claims._pattern(n) for n in sorted(names, key=len, reverse=True) if n and _plain_name(n))
 
 
 def _changes(before, after):

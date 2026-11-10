@@ -232,5 +232,95 @@ class StoreContactOwnedByItsOperationTests(unittest.TestCase):
         self.assertIn("protected sentences: contact", policy.check(undo))
 
 
+class RETURN597PhoneDomainNameTests(unittest.TestCase):
+    """Review RETURN t_439e2607 on PR 597 (findings 1 to 3): slash-separated phones, bare web addresses of any registered ending,
+    and a claim hiding as a product, brand or maker name."""
+    SLOTS = staticmethod(lambda text: {"description": policy.check(edit_draft(text)),
+                                       "imageAlt": policy.check(maker_draft("Harbor Lane is based in Ventura.", alt=text)),
+                                       "maker story": policy.check(maker_draft(text)), "hike title": policy.check(hike_draft(text))})
+
+    def refused(self, text, kind):
+        for slot, reasons in self.SLOTS(text).items():
+            with self.subTest(text=text, slot=slot):
+                self.assertIn(f"protected sentences: {kind}", reasons)
+
+    def test_1_slash_separated_phone_numbers_are_contact_in_both_gates(self):
+        from hass import publish_live as pub
+        for number in ("805/555/1234", "805 / 555 / 1234", "(805)/555/1234", "(805) 555/1234", "805-555/1234", "805/555-1234",
+                       "805 555/1234", "+1 805/555/1234", "1/805/555/1234", "805 - 555 - 1234"):
+            text = f"Call {number}."
+            self.refused(text, "contact")
+            for path in ("index.html", "data/shop.json"):
+                with self.subTest(gate="publish screen", number=number, path=path):
+                    self.assertEqual(pub.privacy({path: text.encode()}, {}, ""), ["phone"])
+        with self.subTest(case="the original reported text"):
+            self.assertEqual(policy.check(edit_draft("Call 805/555/1234")), ["protected sentences: contact"])
+
+    def test_1_dates_fractions_and_prices_are_not_slash_phones(self):
+        from hass import publish_live as pub
+        for text in ("Open 11/09/2026.", "Mile 2.5 is the view point.", "Open 9-5 / Sat 10-4.", "Batch 2026-11-09.", "Packed 11/10, 6/8 oz.",
+                     "Reply 1/2 or 3/4."):
+            with self.subTest(text=text):
+                self.assertEqual(policy.check(hike_draft(text)), [])
+                self.assertEqual(pub.privacy({"index.html": text.encode()}, {}, ""), [])
+
+    def test_2_a_bare_web_address_with_any_registered_ending_is_contact(self):
+        for host in ("harborlane.photography", "harborlane.pizza", "harborlane.coffee/menu", "shop.harborlane.bike", "HarborLane.Photography",
+                     "harbor-lane.farm", "harborlane.xn--p1ai", "harborlane.museum", "t.co/abc", "x.com", "harborlane.\u0440hotography"):
+            self.refused(f"See {host} for details", "contact")
+        for spelled in ("mike at harborlane dot photography", "Find them at harborlane dot pizza", "mike [at] harborlane [dot] bike"):
+            self.refused(f"Email {spelled}.", "contact")
+        self.assertEqual(policy.check(edit_draft("See harborlane.photography for details")), ["protected sentences: contact"])
+
+    def test_2_the_ending_list_is_the_whole_iana_list(self):
+        from hass.tlds import TLDS
+        self.assertGreater(len(TLDS), 1400)
+        self.assertTrue({"com", "photography", "pizza", "xn--p1ai", "museum", "zip"} <= TLDS)
+        self.assertTrue(all(t == t.lower() and t.isascii() for t in TLDS))
+
+    def test_2_abbreviations_and_ordinary_dotted_words_are_not_addresses(self):
+        for text in ("Sweet, e.g. warm on toast.", "Tart, i.e. bright.", "Open 9 a.m. to 5 p.m.", "Ready by 10am.", "Mr. Lee and Mrs. Lee.",
+                     "Version 2.5 of the jam.", "Back on the shelf Saturday.", "St. Louis style, U.S. made.", "A.B. and C.D. Smith."):
+            with self.subTest(text=text): self.assertEqual(policy.check(hike_draft(text)), [])
+
+    def new_product_draft(self, name="Lemon curd", brand="Harbor Lane", maker="Harbor Lane", display=None):
+        product = {"id": "p99", "name": name, "brand": brand, "displayBrand": display or brand, "producerKey": "harbor-lane",
+                   "description": "A bright lemon curd.", "imageAlt": "A jar of lemon curd"}
+        return {"ops": [{"op": "product.add", "args": {"name": name, "brand": brand, "producerKey": "harbor-lane", "photo": "x",
+                                                       "description": "A bright lemon curd.", "imageAlt": "A jar of lemon curd",
+                                                       **({"displayBrand": display} if display else {})}},
+                        {"op": "maker.add", "args": {"key": "harbor-lane", "name": maker, "place": "Ventura, CA",
+                                                     "story": f"{maker} is based in Ventura."}}],
+                "records": [{"collection": "products", "key": "p99", "before": None, "after": product},
+                            {"collection": "makers", "key": "harbor-lane", "before": None,
+                             "after": {"name": maker, "place": "Ventura, CA", "story": f"{maker} is based in Ventura."}}]}
+
+    def test_3_a_claim_cannot_hide_as_a_product_brand_or_maker_name(self):
+        claims_as_names = {"award": ("Won first place at the county fair", "health/awards/endorsements"),
+                           "endorsement": ("Trusted by Whole Foods", "health/awards/endorsements"),
+                           "origin": ("Grown on the family ranch in Fillmore", "origin/organic"),
+                           "origin phrase ending in a farm noun": ("Made on our farm", "origin/organic"),
+                           "health": ("Good for your heart", "health/awards/endorsements"),
+                           "superlative": ("The creamiest curd around", "unchecked claims"),
+                           "price": ("Five bucks a jar", "prices")}
+        for label, (claim, kind) in claims_as_names.items():
+            for slot, draft in {"product name": self.new_product_draft(name=claim), "brand": self.new_product_draft(brand=claim),
+                                "display brand": self.new_product_draft(display=claim), "maker name": self.new_product_draft(maker=claim)}.items():
+                with self.subTest(claim=label, slot=slot):
+                    self.assertIn(f"protected sentences: {kind}", policy.check(draft))
+        with self.subTest(case="the same words in a description"):
+            self.assertIn("protected sentences: health/awards/endorsements", policy.check(edit_draft("Won first place at the county fair.")))
+
+    def test_3_a_name_that_only_holds_a_farm_noun_still_goes_live(self):
+        for maker in ("Test Orchard", "Harbor Lane Farm", "Sunny Acres Ranch", "Smith Family Orchards"):
+            with self.subTest(maker=maker):
+                self.assertEqual(policy.check(self.new_product_draft(brand=maker, maker=maker)), [])
+        for bare in ("Orchard", "Farm"):  # a name of only a farm noun is not a name that hides anything
+            with self.subTest(bare=bare): self.assertTrue(policy.check(self.new_product_draft(brand=bare, maker=bare)))
+        with self.subTest(case="a farm noun beside the name's own words is still refused when it stands alone"):
+            self.assertIn("protected sentences: origin/organic",
+                          policy.check(edit_draft("Our farm makes this jam.")))
+
+
 if __name__ == "__main__":
     unittest.main()
