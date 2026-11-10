@@ -1,7 +1,7 @@
 // AV2152-12: tests for the contrast helpers and the committed audit's contracts. No browser is launched here.
 //   node --test storefront-mockup/site-contrast.test.cjs
 'use strict';
-const test = require('node:test'), assert = require('node:assert/strict'), fs = require('fs'), os = require('os'), path = require('path'), cp = require('child_process');
+const test = require('node:test'), assert = require('node:assert/strict'), fs = require('fs'), os = require('os'), path = require('path'), cp = require('child_process'), util = require('util');
 const h = require('./site-contrast-qa.cjs');
 const repo = path.resolve(__dirname, '..'), report = fs.readFileSync(path.join(repo, 'reports/site-contrast-2026-11.md'), 'utf8');
 const rgb = s => [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16));
@@ -61,6 +61,77 @@ test('nearest_color_is_feasible_and_minimal', () => {
   const none = h.recommend([128, 128, 128], [BLACK, WHITE], 7);
   assert.equal(none.ok, false);
   assert.deepEqual([none.darkest, none.lightest], ['#000000', '#ffffff']);
+});
+
+// RF1345-12: a recommendation must pass against every measured backing, not only the lightest and darkest.
+const GREY = [128, 128, 128], SILVER = [192, 192, 192];
+const passesAll = (color, bgs, thr) => bgs.every(bg => h.contrastRatio(rgb(color), bg) >= thr);
+
+test('three_backings_without_a_solution_do_not_throw', () => {
+  const none = h.recommend(GREY, [BLACK, GREY, WHITE], 3);
+  assert.equal(none.ok, false, 'no foreground passes black, grey and white at 3:1');
+  assert.deepEqual([none.darkest, none.lightest], ['#000000', '#ffffff']);
+  const ctl = h.recommend(GREY, [BLACK, WHITE], 3);
+  assert.equal(ctl.ok, true);
+  assert.equal(ctl.color, '#808080', 'two-extreme control unchanged');
+  assert.ok(Math.abs(ctl.worst - 3.9494396480491156) < 1e-12);
+});
+
+test('assessment_keeps_intermediate_backing_constraints', () => {
+  const a = h.assess({ fg: [...GREY, 1], opacity: 1, layers: [], size: 24, weight: '400', pixels: [WHITE, GREY, BLACK, GREY] });
+  assert.deepEqual(a.bgs, ['#000000', '#808080', '#ffffff'], 'every distinct backing kept, darkest first');
+  assert.deepEqual(a.bgRange, ['#000000', '#ffffff'], 'display range stays the two extremes');
+  assert.equal(a.bgCount, 4, 'original sample count');
+  assert.equal(a.ratio, 1);
+  assert.equal(a.status, 'fail');
+  const b = h.assess({ fg: [...GREY, 1], opacity: 1, layers: [], size: 24, weight: '400', pixels: [GREY, BLACK, WHITE] });
+  assert.deepEqual(b.bgs, a.bgs, 'order of samples does not matter');
+});
+
+test('assess_then_summarize_cannot_recommend_a_one_to_one_colour', () => {
+  const a = h.assess({ fg: [...GREY, 1], opacity: 1, layers: [], size: 24, weight: '400', pixels: [BLACK, GREY, WHITE] });
+  const sum = h.summarize([{ ...a, gsel: 'p.fixture', sel: 'p.fixture', state: 'fixture', vp: '390', interaction: 'default', size: 24, weight: '400', kind: 'text', text: 'Fixture' }]);
+  assert.equal(sum.failures.length, 1);
+  assert.equal(sum.failures[0].recBackings, 3);
+  assert.equal(sum.failures[0].rec.ok, false, 'no-solution, not a 1:1 suggestion against the middle grey');
+});
+
+test('feasible_three_backing_search_matches_exhaustive', () => {
+  const bgs = [BLACK, SILVER, WHITE];
+  const rec = h.recommend(GREY, bgs, 3);
+  assert.equal(rec.ok, true);
+  assert.equal(rec.color, '#76637c');
+  assert.ok(passesAll(rec.color, bgs, 3), 'passes every backing');
+  assert.equal(rec.worst, Math.min(...bgs.map(bg => h.contrastRatio(rgb(rec.color), bg))));
+  assert.deepEqual(h.nearestExhaustive(GREY, bgs, 3), rgb(rec.color), 'matches the exhaustive reference (three backings)');
+});
+
+test('full_background_cache_identity_is_order_independent', () => {
+  const fg = [129, 128, 128]; // not used by other tests, so the cache starts cold for this key
+  const two = h.recommend(fg, [BLACK, WHITE], 3);
+  assert.equal(two.ok, true);
+  const three = h.recommend(fg, [BLACK, SILVER, WHITE], 3);
+  assert.ok(three.ok && three.color !== two.color, 'equal extremes, different interior: separate answers');
+  assert.ok(passesAll(three.color, [BLACK, SILVER, WHITE], 3));
+  const shuffled = h.recommend(fg, [WHITE, SILVER, BLACK, SILVER, WHITE], 3);
+  assert.ok(util.isDeepStrictEqual(shuffled, three), 'shuffled and duplicated backings give the same result');
+  assert.equal(h.recommend(fg, [WHITE, BLACK], 3).color, two.color, 'two-backing answer not contaminated');
+  assert.equal(h.recommend(fg, [BLACK, GREY, WHITE], 3).ok, false, 'a different interior is not served from the cache');
+});
+
+test('passing_occurrences_also_constrain_a_failing_selector', () => {
+  const base = { gsel: 'p.mixed', sel: 'p.mixed', state: 's', vp: '390', interaction: 'default', size: 24, weight: '400', kind: 'text', text: 'x' };
+  const fail = { ...base, ...h.assess({ fg: [160, 160, 160, 1], opacity: 1, layers: [], size: 24, weight: '400' }) };
+  const pass = { ...base, ...h.assess({ fg: [118, 99, 124, 1], opacity: 1, layers: [], size: 24, weight: '400', pixels: [BLACK, SILVER, WHITE] }) };
+  assert.equal(fail.status, 'fail');
+  assert.equal(pass.status, 'pass');
+  const sum = h.summarize([fail, pass]);
+  assert.equal(sum.failures.length, 1);
+  const f = sum.failures[0];
+  assert.equal(f.recBackings, 3, 'union of white, black and silver');
+  assert.ok(f.rec.ok && passesAll(f.rec.color, [BLACK, SILVER, WHITE], 3), 'suggestion passes the passing occurrence\'s silver backing too');
+  assert.ok(util.isDeepStrictEqual(f.rec, h.recommend([160, 160, 160], [BLACK, SILVER, WHITE], 3)));
+  assert.equal(h.recommend([0, 0, 0], [WHITE], 4.5).color, '#000000', 'already-passing control');
 });
 
 test('status_is_not_site_conformance', () => {
