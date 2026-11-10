@@ -177,6 +177,10 @@ def schedule_pieces(line):
         piece = piece.strip()
         for cut in re.finditer(r",|\band\b", piece, re.I):
             left, right = piece[:cut.start()].strip(), piece[cut.end():].strip()
+            # "Closed Mon and Fri, Fri 9–5": a right side whose first comma part is only days is the end of the left
+            # day list, so the "and" is not the boundary; the comma after it is
+            if cut.group(0) != "," and "," in right and parse_segment(right.split(",", 1)[0]) is None:
+                continue
             if parse_segment(left) is not None and parse_segment(right) is not None:
                 out.append(left)
                 out.extend(schedule_pieces(right))
