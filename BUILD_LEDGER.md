@@ -2164,3 +2164,7 @@ Branch rb/rf1635-7. hass/skills/backlog.py: Backlog.purge() compared received_at
 Checks: `python3 -B -m unittest hass.tests.test_skills_backlog` on the builder clone (new offset, microsecond, DST, legacy-row, unknown-age and CLI tests). Not deployed; no live state touched; old backups are not erased.
 
 Review fix (same branch): stored stamps are now compared to the cutoff as aware instants without converting them to UTC, so valid range-edge stamps such as `0001-01-01T00:00:00+02:00` or `9999-12-31T23:59:59.999999-02:00` no longer raise OverflowError and abort the purge; later expired rows are still deleted. New test `test_purge_survives_range_edge_stamps_and_continues`.
+
+Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it actually read (0 < length <= MAX_PHOTO) and raises the existing fixed refusal when a file shrank to empty or grew past the cap after fstat; live() still checks every photo before any transport call and writes nothing on refusal. A file shrinking to a nonempty allowed length is still admitted; no snapshot guarantee. Valid input and output are byte-identical.
+
+Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.
