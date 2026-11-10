@@ -183,6 +183,31 @@ class Oracles(Base):
         self.assertFalse(A.residue_matches(leftover + [{"file": "hass/content/store.json", "path": "extra"}], {}, {"content": [{"file": "hass/content/store.json", "path": "town"}], "assets": {}}))  # an extra key
         self.assertFalse(A.residue_matches(leftover, {}, {"content": [{"file": "hass/content/store.json", "path": "town", "after": "other"}], "assets": {}}))
 
+    def test_residue_is_compared_one_to_one(self):
+        a = {"file": "hass/content/store.json", "path": "town", "before": "A", "after": "B"}
+        b = {"file": "hass/content/store.json", "path": "tagline", "before": "C", "after": "D"}
+        pin = lambda *entries: {"content": [dict(e) for e in entries], "assets": {}}  # noqa: E731
+        self.assertTrue(A.residue_matches([a, b], {}, pin(a, b)))
+        self.assertFalse(A.residue_matches([a, b], {}, pin(a, a)))  # two pins on a: the unpinned leftover b is not accepted
+        self.assertFalse(A.residue_matches([a, b], {}, pin(a)))
+        self.assertFalse(A.residue_matches([a], {}, pin(a, b)))  # a pin with no leftover
+        self.assertFalse(A.residue_matches([a], {}, pin(a, a)))  # the same pin twice for one leftover
+        self.assertFalse(A.residue_matches([a, dict(a)], {}, pin(a, a)))  # a repeated leftover key is never matched
+        self.assertFalse(A.residue_matches([a, a], {}, pin(a)))
+        self.assertFalse(A.residue_matches([a, b], {}, pin(a, {"file": a["file"], "path": "other"})))
+
+    def test_expected_file_with_a_repeated_residue_key_is_refused(self):
+        root = self.root([], expected={"dup": "good-draft-undo"})
+        path = root / "expected" / "dup.json"
+        data = json.loads(path.read_text("utf-8"))
+        entry = {"file": "hass/content/store.json", "path": "town"}
+        data["residue"]["content"] = [entry, dict(entry, after="x")]
+        path.write_text(json.dumps(data), "utf-8")
+        with self.assertRaises(A.InputError): A.load_expected(root, {"id": "dup"})
+        data["residue"]["content"] = [entry]
+        path.write_text(json.dumps(data), "utf-8")
+        self.assertEqual(A.load_expected(root, {"id": "dup"})["residue"]["content"], [entry])
+
     def test_parsed_json_key_order_ignored_but_stale_generated_bytes_fail(self):
         shuffled = json.loads((SELFTEST_DIR / "expected" / "good-draft-undo.json").read_text("utf-8"))
         reordered = {k: shuffled[k] for k in reversed(list(shuffled))}
@@ -360,14 +385,41 @@ class Pictures(Base):
         self.assertIn("picture name is not photo-<sha16> of a photo that was sent", self.check(self.picture("other.jpg", (8, 8)), {"house": "off"}))
         self.assertIn("picture type does not match its name", self.check(self.picture("photo-0123456789abcdef.png", (8, 8), "JPEG"), {"house": "off"}))
 
+    @staticmethod
+    def exif(tags, order="II", nxt=0):
+        """A JPEG APP1 Exif segment whose IFD0 holds the given tag numbers (zero values)."""
+        end = "little" if order == "II" else "big"
+        ifd = len(tags).to_bytes(2, end) + b"".join(t.to_bytes(2, end) + (3).to_bytes(2, end) + (1).to_bytes(4, end) + bytes(4) for t in tags) + nxt.to_bytes(4, end)
+        body = b"Exif\0\0" + order.encode() + (42).to_bytes(2, end) + (8).to_bytes(4, end) + ifd
+        return b"\xff\xe1" + (len(body) + 2).to_bytes(2, "big") + body
+
     def test_metadata_and_location_in_a_picture_fail(self):
-        exif = b"\xff\xe1" + (len(b"Exif\0\0II*\0") + 2).to_bytes(2, "big") + b"Exif\0\0II*\0"
-        tagged = self.picture("photo-0123456789abcdef.jpg", (800, 800), extra=exif)
+        tagged = self.picture("photo-0123456789abcdef.jpg", (800, 800), extra=self.exif([0x0112]))
         self.assertIn("picture carries metadata", self.check(tagged, {"house": "off"}, house=True))  # the house render carries none
         self.assertEqual(self.check(tagged, {"house": "off"}, house=False), [])  # a plain web copy may keep its orientation tag
+        big = self.picture("photo-0123456789abcdef.jpg", (800, 800), extra=self.exif([0x0112], order="MM"))
+        self.assertEqual(self.check(big, {"house": "off"}, house=False), [])
         gps = b"\xff\xe1" + (len(b"Exif\0\0GPS") + 2).to_bytes(2, "big") + b"Exif\0\0GPS"
         located = self.picture("photo-0123456789abcdef.jpg", (800, 800), extra=gps)
         self.assertIn("picture carries location data", self.check(located, {"house": "off"}, house=False))
+
+    def test_numeric_exif_gps_tag_is_location_data(self):
+        for order in ("II", "MM"):
+            for tags in ([0x8825], [0x0112, 0x8825]):  # GPSInfo alone, and next to the orientation tag
+                located = self.picture("photo-0123456789abcdef.jpg", (800, 800), extra=self.exif(tags, order=order))
+                self.assertNotIn(b"GPS", (self.tmp / located).read_bytes())  # no ASCII marker: only the numeric tag says it
+                got = self.check(located, {"house": "off"}, house=False)
+                self.assertIn("picture carries location data", got, (order, tags))
+                self.assertIn("picture carries metadata", got)
+        thumb = self.picture("photo-0123456789abcdef.jpg", (800, 800), extra=self.exif([0x0112], nxt=8 + 2 + 12 + 4))  # a second IFD in the chain is not orientation only
+        self.assertIn("picture carries metadata", self.check(thumb, {"house": "off"}, house=False))
+
+    def test_plain_copy_allows_only_a_clean_orientation_block(self):
+        for name, extra in (("camera tags", self.exif([0x0112, 0x010F])), ("truncated", b"\xff\xe1\x00\x0cExif\0\0II*\0"),
+                            ("xmp", b"\xff\xe1" + (len(b"http://ns.adobe.com/xap/1.0/\0x") + 2).to_bytes(2, "big") + b"http://ns.adobe.com/xap/1.0/\0x"),
+                            ("no tags", self.exif([]))):
+            pic = self.picture("photo-0123456789abcdef.jpg", (800, 800), extra=extra)
+            self.assertIn("picture carries metadata", self.check(pic, {"house": "off"}, house=False), name)
 
     def test_photo_row_goes_through_the_media_binding_and_the_house_render(self):
         plain = {"id": "lemons-plain", "schema_version": 1, "tag": "photo", "skill": "item.picture", "skill_version": 1,

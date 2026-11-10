@@ -200,6 +200,7 @@ def load_expected(fixture_root, row):
           and all(isinstance(e, dict) and isinstance(e.get("file"), str) and isinstance(e.get("path"), str) for e in data["residue"]["content"])
           and isinstance(data["residue"]["assets"], dict) and all(_safe_rel(k) and isinstance(v, str) and SHA_RE.fullmatch(v) for k, v in data["residue"]["assets"].items()))
     if not ok: raise InputError(f"row {row['id']}: expected file does not follow expected schema {SCHEMA_VERSION}")
+    if _residue_keys(data["residue"]["content"]) is None: raise InputError(f"row {row['id']}: expected residue names the same file and path twice")
     return data
 
 
@@ -476,6 +477,25 @@ def _kind_of(e):
     return "product" if p.startswith("products") else "maker" if p.startswith("makers") else "event" if p.startswith("events") else "routeIdea" if p.startswith("routeIdeas") else "store" if e["file"].endswith("store.json") else "club"
 
 
+def _exif_kind(tiff):
+    """'orientation' for a well-formed TIFF/Exif block whose only tag is Orientation (0x0112), 'gps' when any IFD in its chain carries
+    the GPSInfo pointer (0x8825), else 'other' (more tags, a next IFD, or a block that cannot be parsed: never trusted)."""
+    order = {b"II": "little", b"MM": "big"}.get(bytes(tiff[:2]))
+    if order is None or int.from_bytes(tiff[2:4], order) != 42 or len(tiff) < 8: return "other"
+    off, seen, tags, nexts = int.from_bytes(tiff[4:8], order), set(), set(), []
+    while off and off not in seen and len(seen) < 8:
+        seen.add(off)
+        if off + 2 > len(tiff): return "other"
+        count = int.from_bytes(tiff[off:off + 2], order)
+        end = off + 2 + 12 * count
+        if end + 4 > len(tiff): return "other"
+        tags |= {int.from_bytes(tiff[off + 2 + 12 * k:off + 4 + 12 * k], order) for k in range(count)}
+        off = int.from_bytes(tiff[end:end + 4], order)
+        nexts.append(off)
+    if 0x8825 in tags: return "gps"
+    return "orientation" if tags == {0x0112} and nexts == [0] else "other"
+
+
 def _image_info(data):
     """(type, width, height, metadata problems) read from the bytes; no image library needed."""
     if data[:8] == b"\x89PNG\r\n\x1a\n":
@@ -483,6 +503,7 @@ def _image_info(data):
         while i + 8 <= len(data):
             n, kind = int.from_bytes(data[i:i + 4], "big"), data[i + 4:i + 8]
             if kind in (b"eXIf", b"tEXt", b"iTXt", b"zTXt"): meta.append(kind.decode("ascii"))
+            if kind == b"eXIf" and _exif_kind(data[i + 8:i + 8 + n]) == "gps": meta.append("exif-gps")
             i += 12 + n
         return "png", w, h, meta
     if data[:2] == b"\xff\xd8":
@@ -490,7 +511,11 @@ def _image_info(data):
         while i + 4 <= len(data):
             if data[i] != 0xFF: break
             marker, n = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
-            if marker in (0xE1, 0xED, 0xFE): meta.append(f"segment-{marker:02x}")
+            if marker == 0xE1:  # APP1: only an Exif block holding nothing but the orientation tag is the plain-copy exception
+                payload = data[i + 4:i + 2 + n]
+                kind = _exif_kind(payload[6:]) if payload[:6] == b"Exif\0\0" else "other"
+                meta.append("segment-e1" if kind == "orientation" else "exif-gps" if kind == "gps" else "segment-e1-other")
+            elif marker in (0xED, 0xFE): meta.append(f"segment-{marker:02x}")
             if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
                 h, w = int.from_bytes(data[i + 5:i + 7], "big"), int.from_bytes(data[i + 7:i + 9], "big")
                 break
@@ -515,7 +540,7 @@ def picture_problems(new_assets, wt, expect, house_render, originals):
         if typ is None or (m is not None and (typ == "jpeg") != (m.group(2) == "jpg")): problems.append("picture type does not match its name")
         if spec.get("type") and typ != spec["type"]: problems.append("picture is not the expected type")
         if meta and (house_render or any(x != "segment-e1" for x in meta)): problems.append("picture carries metadata")  # a plain web copy may keep only its orientation tag
-        if b"GPS" in data: problems.append("picture carries location data")
+        if b"GPS" in data or "exif-gps" in meta: problems.append("picture carries location data")  # the ASCII word, or the numeric GPSInfo tag of a parsed Exif block
         if spec.get("size") and [w, h] != spec["size"]: problems.append("picture size is not the expected size")
         if house_render and kind == "product" and w != h: problems.append("a product picture is not square")
         if house_render and kind == "product" and house != "off":
@@ -662,11 +687,19 @@ def _approve_and_check(row, sess, registry, res, expected, observe, base, texts,
     if observe: res.recorded = {"schema_version": SCHEMA_VERSION, "diff": _norm_entries(diff), "files": files, "assets": assets, "residue": residue or {"content": [], "assets": {}}}
 
 
+def _residue_keys(entries):
+    """{(file, path): entry}, or None when two entries share a key (a pin names one leftover once, a leftover is one entry)."""
+    keyed = {(e.get("file"), e.get("path")): e for e in entries}
+    return keyed if len(keyed) == len(entries) else None
+
+
 def residue_matches(leftover, left_assets, want):
-    """The leftover after undo against the residue the row pins: the same content entries (file, path and every pinned before / after)
-    and exactly the same picture files and hashes. There is no whole-file exemption."""
-    if len(leftover) != len(want["content"]) or left_assets != want["assets"]: return False
-    return all(any(a["file"] == w.get("file") and a["path"] == w.get("path") and _subset(w, a) for a in leftover) for w in want["content"])
+    """The leftover after undo against the residue the row pins, one to one: the same unique (file, path) entries, each with every pinned
+    before / after, and exactly the same picture files and hashes. A repeated key on either side never matches (two pins on one path
+    must not cover a second, unpinned leftover). There is no whole-file exemption."""
+    left, pins = _residue_keys(leftover), _residue_keys(want["content"])
+    if left is None or pins is None or left_assets != want["assets"] or set(left) != set(pins): return False
+    return all(_subset(w, left[k]) for k, w in pins.items())
 
 
 def _undo(sess, registry, res, expected, observe, base, after, chosen, duplicate):
