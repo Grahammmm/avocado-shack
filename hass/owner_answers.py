@@ -17,7 +17,7 @@ PENDING = ("proposed", "needs-details")  # not applied yet: never described as a
 UNDER_WAY = "You said yes, but it isn't saved yet, so nothing has changed on the website."  # approved, not saved
 SAVED = ("applied", "verified")
 KNOWN = PENDING + ("approved", "reverted", "rejected", "expired", "failed") + SAVED  # = conversation.TRANSITIONS states
-UNKNOWN_STATE = "I don't know where this change stands, so I can't say whether the website changed. Please ask Graham."
+UNKNOWN_STATE = "I don't know where this change stands, so I can't say whether the website changed. Say status in a few minutes and I'll look again."
 INSTALL_REASONS = (  # SHOP-2 install failure reasons -> plain words (the file name that follows is dropped)
     ("write failed", "I couldn't update the website pages"),
     ("readback mismatch", "The website pages didn't come out the way I wrote them"),
@@ -38,8 +38,8 @@ CHECK_WORDS = {  # AV1222-03: result-check key -> plain words (an unknown key is
 RECORD_RE = re.compile(r"([a-z][a-z0-9_-]{0,40}) ([A-Za-z0-9][A-Za-z0-9._-]{0,80}): (.*)", re.S)  # no path characters
 NOT_COPIED = "Copying it to the website hasn't been done, or didn't finish"
 PARTIAL = ("If copying it started and stopped partway, some pages may already show it. "
-           "Please ask Graham to copy it to the website again, which puts every page in place")
-NOT_LIVE = "It's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website."
+           "Copying it to the website again, by hand, puts every page in place")
+NOT_LIVE = "It's saved, but not on the website yet. Copying it there is a separate step, done by hand."
 LIVE_SHOWN = "Your change is on the website now."
 LIVE_PICTURE = "The picture is Hass's own view of the published page."
 LIVE_NO_PICTURE = "No picture this time."
@@ -75,7 +75,7 @@ LIVE_UNKNOWN = "I sent that change to the website, but I can't tell whether it a
 LIVE_UNCONFIRMED = "I sent that change to the website, but I can't see it there yet. Graham has been told."
 UNCHANGED = "The website is as it was before"
 ROUTE_UNSHOWN = "The route idea isn't shown on the website right now, so there was nothing to check."  # AV1222-06
-ROLLBACK_FAILED_WORDS = "it didn't finish, and some website files could not be put back - please ask Graham"  # RF1230-19
+ROLLBACK_FAILED_WORDS = "it didn't finish, and some website files could not be put back - please hold off on more changes"  # RF1230-19
 
 
 def _when(iso, now) -> str:
@@ -125,7 +125,7 @@ def did_it_work(change, install, now) -> str:
     if install.get("state") == "failed":
         if _rollback_failed(install):  # SHOP-2 could not put every file back
             return (f"That didn't reach the website, and some website files could not be put back. "
-                    f"{_install_reason(install.get('reason'))}. Please ask Graham before making more changes.")
+                    f"{_install_reason(install.get('reason'))}. Please hold off on more changes until those files are put back by hand.")
         return f"That didn't reach the website, and the website is unchanged. {_install_reason(install.get('reason'))}."
     # No install result: never run, or stopped before it could record one (install.py may already have replaced
     # some files), so the website is unconfirmed, never called intact.
@@ -187,7 +187,7 @@ def recovered_text(code, live_site=None) -> str:
 def history_words(change, install) -> str:
     """A short where-is-it phrase for one history line."""
     state = change.get("state")
-    if state not in KNOWN and state is not None: return "I'm not sure where this one stands - please ask Graham"  # RF0910-5
+    if state not in KNOWN and state is not None: return "I'm not sure where this one stands yet"  # RF0910-5
     if state in SAVED:
         if _rollback_failed(install): return ROLLBACK_FAILED_WORDS  # RF1230-19: asks for help, as did_it_work does
         state = (install if isinstance(install, dict) else {}).get("state")  # same rule as did_it_work

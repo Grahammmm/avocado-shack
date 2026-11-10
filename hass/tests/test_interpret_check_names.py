@@ -34,7 +34,7 @@ class NameTests(unittest.TestCase):
 
     def test_direction_override_in_op_is_removed(self):
         self.assertEqual(self.question(ask([call("store\u202e.set")])),
-                         "I can't do that kind of change yet. You can ask Graham.")
+                         "I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change.")
 
     def test_zero_width_and_isolates_in_field_are_removed(self):
         field = "co\u200blo\u200dur\ufeff\u2066\u2067\u2068\u2069"

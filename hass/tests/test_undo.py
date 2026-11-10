@@ -109,7 +109,7 @@ class UndoTests(H06TestCase):
         self.apply("desc2")
         self.assertEqual(self.say(f"undo {a['code']}"), "not-drafted")
         [reply] = self.replies()
-        self.assertEqual(reply, "That has changed since, so I can't undo it cleanly. Please ask Graham.")
+        self.assertEqual(reply, "That has changed since, so I can't undo it cleanly. Tell me what it should say now, and I'll change it to that.")
         self.assertEqual((len(self.drafts()), self.commits()), (2, 2))
 
     def test_result_is_persisted_before_the_reply(self):

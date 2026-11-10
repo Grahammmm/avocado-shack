@@ -20,7 +20,7 @@ PAUSED = ("Changes are stopped. I won't save anything new until you say 'resume 
           "Changes already on the website stay there.")  # SHOP-4 wording
 PAUSED_ONE = PAUSED.replace("No requests are waiting.", "1 request is waiting.")
 NOT_ON_SITE = ("It's saved, but I'm not sure it's on the website. {why}. If copying it started and stopped partway, some "
-               "pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.")
+               "pages may already show it. Copying it to the website again, by hand, puts every page in place.")
 NOT_COPIED = "Copying it to the website hasn't been done, or didn't finish"
 PAST = ('Past hike was yesterday at 9 am and is still listed as coming up. '  # AV1537-07: started before T0
         'Tell me if it happened or was cancelled.')

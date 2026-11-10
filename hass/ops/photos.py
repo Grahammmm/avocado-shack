@@ -51,7 +51,7 @@ ALT_REPLY = ("imageAlt should say what the photo shows (for example \"Hass avoca
 
 
 HOUSE_FLAG = "houseRender"  # settings key; only the JSON value true turns the house render on
-MAKE_FAILED = "I can't make that picture right now, so nothing was changed. Please ask Graham."
+MAKE_FAILED = "I can't make that picture right now, so nothing was changed. Please send the photo again in a few minutes."
 ALREADY_RAW = "That photo is already on the website the way it came, so I can't change how it looks."
 RETAKE = {  # defect code -> the plain sentence for Mike (docs/hass/VOICE.md: short, nothing technical, one next step)
     "busy": "The background behind it is too busy for me to make a clean picture. Could you take it again on a plain surface, like a counter or a sheet?",

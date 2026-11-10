@@ -111,7 +111,7 @@ USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NO
 AUDIT = """CREATE TABLE IF NOT EXISTS interpreter_audit(provider_id TEXT PRIMARY KEY, at TEXT NOT NULL, backend TEXT NOT NULL,
   fallback INTEGER NOT NULL, primary_error TEXT, error TEXT, seconds REAL)"""
 DAILY_LIMIT = ("I've read as many new requests as I can for today, so I couldn't read that one and nothing changed. "
-               "Yes, no, undo and status still work. Please send it again tomorrow, or ask Graham.")
+               "Yes, no, undo and status still work. Please send it again tomorrow.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
 MAX_INTERPRETER_ALIASES = 50  # AV0007-06: live owner aliases the interpreter sees (newest first)
 MAX_NOTES = 20  # AV1102-09: saved notes the interpreter sees (newest first)
@@ -1691,7 +1691,7 @@ class Conversation:
             self._move(row, "failed", reason=_reason(out))
             self._problem("error", "save-failed")
             self._reply((self.settings.get("liveSite") and answers.live_refused(out.get("reason")))  # HASS-LIVE-PLAN-1: the real reason, in words
-                        or "I couldn't save that change, so nothing changed. Please try again, or ask Graham if it keeps happening.")
+                        or "I couldn't save that change, so nothing changed. Please reply yes again in a minute.")
 
     def recover(self) -> list:
         """Settle drafts left `approved` by a crash from the editor's change record, then verify (once) any applied

@@ -36,6 +36,7 @@ OWNER_FACING = {
                         "_record_lines", "proposal_text", "_summary", "_plain", "_asked_again", "_late", "_delayed", "_handle_message",
                         "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
+    "hike_chat.py": "all",  # HASS-CHAT-1
     "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render"], "interpret_check.py": "all",
     "label_reader.py": ["question", "_maker_line", "_product_line"],
 }
@@ -276,7 +277,7 @@ class Honesty(ConversationTestCase):
     def test_a_reply_that_is_not_done_never_claims_done(self):
         self.assertFalse(voice.claims_live(owner_answers.NOT_LIVE), owner_answers.NOT_LIVE)  # saved is true; on the website is not
         for text in ("It's waiting for your yes. Nothing has changed yet.", owner_answers.UNDER_WAY,
-                     "I couldn't save that change, so nothing changed. Please try again, or ask Graham if it keeps happening.",
+                     "I couldn't save that change, so nothing changed. Please reply yes again in a minute.",
                      "Reply yes to save it, or no to cancel.", "I haven't changed anything yet. To go ahead, reply yes a1b2.",
                      "Changes are paused, so I haven't saved that.", "Nothing changed. Tell me what you'd like to change."):
             self.assertFalse(voice.claims_success(text), text)

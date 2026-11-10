@@ -37,7 +37,7 @@ class CheckTests(unittest.TestCase):
 
     def test_unknown_op_and_unknown_argument_are_named(self):
         self.assertEqual(ask([call("product.colour", id="p1")]), {"question": (
-            "I can't do that kind of change yet. You can ask Graham.")})
+            "I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change.")})
         self.assertAsks(ask([call("product.edit", id="p1", colour="green")]), "I can't do that kind of change yet")
         # a later call is checked too: the first problem wins, in call order
         self.assertAsks(ask([call("product.edit", id="p1"), call("hike.nope")]), "I can't do that kind of change yet")
@@ -140,7 +140,7 @@ class FixtureConversationTests(ConversationTestCase):
     def test_test_registry_is_the_one_checked(self):
         self.interp.mapping["prod"] = _ops(("product.edit", {"id": "photo-product-001", "name": "Hass"}))
         self.assertEqual(self.say("prod"), "question")
-        self.assertIn("I can't do that kind of change yet. You can ask Graham.", self.replies()[0])
+        self.assertIn("I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change.", self.replies()[0])
 
 
 if __name__ == "__main__":
