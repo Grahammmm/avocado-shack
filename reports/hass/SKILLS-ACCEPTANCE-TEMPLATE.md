@@ -11,9 +11,12 @@ Each row has exactly one primary tag and is counted once. `hass/tests/test_skill
 |---|---|---|
 | vague | 10 | 0 |
 | typo | 8 | 0 |
-| multi | 8 | 0 |
+| multi | 8 | 1 |
 | refuse | 8 | 0 |
 | turns | 6 | 0 |
+
+Known failure (recorded, not accepted): `acc-multi-01` (`wrong-disposition`: the router asks which skill instead of drafting the shelf check).
+The offline thresholds are therefore not met at this commit; the row keeps its SKILLS-SPEC 4.3 expectation until the owner fixes the router.
 
 Total rows in the corpus = registry-derived Primary rows + the inherited `tag=photo` companions + 40. At this commit: 38 + 5 + 40 = 83.
 The historical 32 or 72 totals of SKILLS-SPEC 4.3 are superseded by AV1109-17's registry-derived count.

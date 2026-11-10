@@ -17,8 +17,11 @@ from hass.skills import acceptance_run as A, load_skills
 TEMPLATE = REPO_ROOT / "reports" / "hass" / "SKILLS-ACCEPTANCE-TEMPLATE.md"
 WANT = {"vague": 10, "typo": 8, "multi": 8, "refuse": 8, "turns": 6}
 IDS = [f"acc-{tag}-{n:02d}" for tag, count in WANT.items() for n in range(1, count + 1)]
-# Rows pinned to today's behaviour where the real code asks instead of drafting (each needs its owner, then a re-record; README).
-PINNED_QUESTION = {"acc-multi-01": "question", "acc-turns-04": "question"}
+# Rows pinned to today's behaviour where the real code asks and the row says it should (acc-turns-04: a topic change never drafts the old ask).
+PINNED_QUESTION = {"acc-turns-04": "question"}
+# Rows that genuinely FAIL today (SKILLS-SPEC 4.3 asks for a draft, the code does not give one). They keep their spec expectation and are
+# recorded here, not accepted: when the owner fixes the code the row passes, this test fails, and the entry is deleted (README, "Known failures").
+KNOWN_FAILURES = {"acc-multi-01": ["wrong-disposition"]}
 
 
 def group_problems(rows, registry_names):
@@ -75,12 +78,27 @@ class Groups(unittest.TestCase):
 
     def test_all_forty_recorded_cases_pass(self):
         self.assertEqual(sorted(self.results), sorted(IDS))
-        self.assertEqual([(i, r.codes) for i, r in self.results.items() if not r.ok], [])
-        self.assertTrue(A.summarize(list(self.results.values()))["met"])
+        self.assertEqual({i: r.codes for i, r in self.results.items() if not r.ok}, KNOWN_FAILURES)  # genuine failures are recorded, never passed
+        self.assertFalse(A.summarize(list(self.results.values()))["met"])  # so the thresholds are honestly not met until the owner fixes them
         for rid in IDS:  # no row was skipped: every recorded reply was used and every disposition is the one the row names
-            self.assertEqual(self.results[rid].dispositions, self.by_id[rid]["expect"]["dispositions"], rid)
+            if rid not in KNOWN_FAILURES: self.assertEqual(self.results[rid].dispositions, self.by_id[rid]["expect"]["dispositions"], rid)
         goldens = {p.stem for p in (A.FIXTURE_ROOT / "expected").glob("acc-*.json")}
         self.assertEqual(goldens, {r["id"] for r in self.new if r["expect"].get("expected")})  # proposed rows only: no empty goldens, no orphans
+
+    def test_spec_expectations_are_not_weakened(self):
+        multi = self.by_id["acc-multi-01"]  # all three shelf-check slots are in the message: zero questions, one exact approved draft, undo
+        self.assertEqual(multi["expect"], {"skills": ["stock.checked", "none"], "dispositions": ["proposed"], "expected": "acc-multi-01.json", "undo": True})
+        self.assertEqual(sorted(multi["replies"][0]["slots"]), ["in", "limited", "out"])
+        self.assertEqual(self.results["acc-multi-01"].codes, ["wrong-disposition"])  # the router tie is the real failure
+        self.assertEqual(self.results["acc-multi-01"].dispositions, ["question"])
+        golden = json.loads((A.FIXTURE_ROOT / "expected" / "acc-multi-01.json").read_text("utf-8"))
+        self.assertEqual([d["path"] for d in golden["diff"] if d["path"].endswith(".available")],
+                         [f"products[photo-product-{n}].available" for n in ("017", "056", "076")])
+        self.assertEqual([d["after"] for d in golden["diff"] if d["path"].endswith(".available")], ["yes", "no", "limited"])
+        for rid in IDS:  # every row that ends in a proposal also runs the real undo and its own yes: no row opts out
+            if self.by_id[rid]["expect"].get("expected"): self.assertIs(self.by_id[rid]["expect"].get("undo"), True, rid)
+        for rid in ("acc-turns-02", "acc-turns-05"):
+            self.assertEqual(self.results[rid].facts["undo"], "identical", rid)
 
     def test_vague_and_hostile_never_draft(self):
         for rid in [i for i in IDS if i.startswith(("acc-vague", "acc-refuse-01", "acc-refuse-03", "acc-refuse-04", "acc-refuse-05", "acc-refuse-06", "acc-refuse-07"))]:
@@ -169,10 +187,11 @@ class Groups(unittest.TestCase):
     def test_group_report_counts_once_and_scrubs_text(self):
         text = TEMPLATE.read_text("utf-8")
         rows = {m[0]: (int(m[1]), int(m[2])) for m in re.findall(r"^\| (vague|typo|multi|refuse|turns) \| (\d+) \| (\d+) \|", text, re.M)}
-        measured = {g: (n, 0) for g, n in collections.Counter(r["tag"] for r in self.new).items()}
-        self.assertEqual(rows, measured)  # counted once each by its single primary tag
         failed = {g: sum(1 for i, r in self.results.items() if not r.ok and self.by_id[i]["tag"] == g) for g in WANT}
-        self.assertEqual({g: v[1] for g, v in rows.items()}, failed)
+        measured = {g: (n, failed[g]) for g, n in collections.Counter(r["tag"] for r in self.new).items()}
+        self.assertEqual(rows, measured)  # counted once each by its single primary tag, with the failures actually executed
+        self.assertEqual(failed, {"vague": 0, "typo": 0, "multi": 1, "refuse": 0, "turns": 0})
+        self.assertIn("acc-multi-01", text)  # the known failure is named in the report, not hidden
         self.assertIn("synthetic", text.casefold())
         self.assertIn("offline", text.casefold())
         self.assertIn("human", text.casefold())

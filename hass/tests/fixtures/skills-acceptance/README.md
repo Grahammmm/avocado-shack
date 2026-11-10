@@ -110,8 +110,8 @@ registry-derived Primary + the five photo companions + 40 = 83 at this commit. E
 engine is unchanged): `senders` (a row text may come from a `stranger`, who is ignored before any model call) and `expect.approval: "paused"` (the
 proposal is made under the current policy and the real `yes <code>` is refused with no write; such a row has no golden and no undo).
 
-Goldens (`expected/acc-*.json`, 21) exist only for rows that end in a proposal; the other 19 rows assert an unchanged site tree (content, generated
-files and assets/products byte-identical, HEAD and tree clean) and are not given empty goldens. Each golden was recorded once with `--record ROW` and then
+Goldens (`expected/acc-*.json`, 22) exist only for rows that end in a proposal; the other 18 rows assert an unchanged site tree (content, generated
+files and assets/products byte-identical, HEAD and tree clean) and are not given empty goldens. Each golden but one was recorded once with `--record ROW` and then
 read against the typed plan, the skill's declared edits and its Undo sentence; that is a builder check, not an owner review. Review inventory:
 typo-01 eggs shelf word `no` + shelf-check day; typo-02 one new hike (Cass Hill gate, Sat 14 Nov 9am); typo-03 `Cal Poly strawberry jam` hidden;
 typo-04 eggs sold-out flag cleared; typo-05 avocado `limited` + shelf-check day; typo-06 Linn's story; typo-07 Friday hours; typo-08 notice until 27 Nov;
@@ -119,11 +119,17 @@ multi-02 two new hikes in one draft; multi-03 two new makers; multi-04 three pro
 multi-05 two product descriptions; multi-06 two hike meeting points; multi-07 two sold-out flags cleared; multi-08 hours + notice in one draft;
 refuse-02 the maker without the "certified organic ... since 1990" story the owner never said (`Left off (you didn't say it): story`);
 turns-01 the hike built over three messages; turns-02 reschedule to 10am after a one-word answer; turns-03 only the corrected Friday 8pm; turns-05 the
-fresh request after the 30-minute request TTL (offset 31 minutes); turns-06 the lemons picture sent before the words (photo bound by real dispatch).
+fresh request after the 30-minute request TTL (offset 31 minutes); turns-06 the lemons picture sent before the words (photo bound by real dispatch); multi-01 lemons yes, strawberries no, peppers limited + shelf-check day
+(hand-written, because the row cannot be recorded while it fails; its seven diff entries were checked by running the same slots under a reworded message that the
+router does not tie, which drafted and undid identically).
+
+Known failures (genuine, recorded, not accepted; the row keeps its SKILLS-SPEC 4.3 expectation of zero questions, one exact approved diff and a clean undo):
+* `acc-multi-01` (`wrong-disposition`): the router ties the shelf-check and stock skills on "the strawberries are sold out", so the owner gets a question
+  instead of one draft although every slot was given. The offline thresholds are not met until the owner fixes the router; then delete the
+  `KNOWN_FAILURES` entries in `test_skills_acceptance_groups.py` and `test_skills_acceptance_offline.py`.
 
 Behaviour pinned to today's code (not a claim that it is right; each needs its owner, then a re-record):
 * `acc-vague-03` ends `refused` with the question "What should change on Guacamole?" (the dispatcher words a missing field as a refusal).
-* `acc-multi-01`: the router ties the shelf-check and stock skills, so the owner is asked which one (`question`, no draft) instead of one draft.
 * `acc-turns-04`: with a hike question open, a new notice sentence is asked about again (`question`, `question`) instead of dropping the old slots into a draft.
 * `acc-refuse-02`: the interpreter-invented claim is not refused outright; the dispatcher leaves the story off and drafts the maker without it.
 * `acc-refuse-08`: `pause` returns `pause`, the proposal still drafts, and `yes <code>` returns `paused` (draft kept, tree unchanged).
