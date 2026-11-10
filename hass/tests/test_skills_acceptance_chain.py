@@ -1,4 +1,4 @@
-"""Short real-session chain checks; not the full 24-request acceptance fixture."""
+"""Full offline acceptance chain plus bounded real-session safety negatives."""
 import contextlib
 import copy
 import io
@@ -174,6 +174,52 @@ class Chain(unittest.TestCase):
             with mock.patch.object(A.Session, "say", interrupt): results = self.run_chain(root)
             self.assertIn("apply-failed", results[-1].codes, (fault, results[-1].codes))
             self.assertEqual(results[-1].facts["inverses"], 0)
+
+    def test_one_session_twenty_four_requests_then_thirteen_reverse_undos(self):
+        path = A.FIXTURE_ROOT / "chain.jsonl"
+        rows = A.load_chain(path, fixture_root=A.FIXTURE_ROOT)
+        opened, private = [], []
+        original_open, original_close = A.Session._open, A.Session.close
+        def track_open(sess, registry):
+            opened.append(sess)
+            return original_open(sess, registry)
+        def inspect_close(sess):
+            try:
+                private.extend(dict(r) for r in sess.conv.db.execute(
+                    "SELECT text, state FROM backlog ORDER BY id"))
+                self.assertEqual(len(sess.drafts()), 26)
+                drafts = sess.drafts()
+                self.assertEqual([d["state"] for d in drafts[:13]], ["reverted"] * 13)
+                self.assertTrue(all(d["state"] in ("applied", "verified") for d in drafts[13:]))
+            finally:
+                original_close(sess)
+        with mock.patch.object(A.Session, "_open", track_open), mock.patch.object(A.Session, "close", inspect_close):
+            results = A.run_chain(path, registry=self.registry)
+        self.assertEqual(len(opened), 1)
+        numbers = (3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 16, 18, 20)
+        ids = [f"chain-{n:02d}" for n in range(1, 25)] + [f"chain-undo-{n:02d}" for n in reversed(numbers)]
+        self.assertEqual([(r.id, r.codes) for r in results], [(rid, []) for rid in ids])
+        summary = A.summarize(results)
+        self.assertTrue(summary["met"])
+        for measure in ("structural", "outcome", "diff", "undo"):
+            self.assertEqual(summary["measures"][measure], 1.0)
+        facts = results[-1].facts
+        self.assertEqual({k: facts[k] for k in ("requests", "controls", "deliveries", "originals", "inverses")},
+                         {"requests": 24, "controls": 128, "deliveries": 152, "originals": 13, "inverses": 13})
+        self.assertEqual(private, [{"text": rows[-1]["texts"][0], "state": "open"}])
+        self.assertEqual(facts["residue"], {
+            "content": [
+                {"file": "hass/content/community.json", "path": "events[hike-2026-11-21-pebble-loop-hike]",
+                 "sha256": "b5e4b7c481e6876d20865f59d5b70eaf295a348a266582d5f4b210c8f169ef49"},
+                {"file": "hass/content/makers.json", "path": "makers.Pebble Kitchen",
+                 "sha256": "b6065e84386363b9f720175e573329a37c0b345ea262a05cc25bbd34da4b1604"},
+                {"file": "hass/content/products.json", "path": "products[photo-product-175]",
+                 "sha256": "82bdb794dffb91937e8545fa866b6924be24c2403add5a658ce17c172e2819b5"}],
+            "assets": {
+                "storefront-mockup/assets/products/photo-2cec1911a5900242.jpg": "6de89b6af9589b8749e9fb1bbe578df8912050df3d8caa2a11e8926297962782",
+                "storefront-mockup/assets/products/photo-91c700264e60552f.jpg": "47c973da2b315c19c9ac922d3963e271d62ca93b50f0f17e9257ea449e80fd0b"}})
+        self.assertEqual({p.name for p in (A.FIXTURE_ROOT / "expected").glob("chain-undo-*.json")},
+                         {f"chain-undo-{n:02d}.json" for n in numbers})
 
     def test_forward_fixture_inventory(self):
         rows = A.load_chain(A.FIXTURE_ROOT / "chain.jsonl", fixture_root=A.FIXTURE_ROOT)
