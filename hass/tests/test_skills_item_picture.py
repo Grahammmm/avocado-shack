@@ -354,7 +354,7 @@ class RealDispatcher(unittest.TestCase):
         chat = self.open(BUSY, JAR, house_render=True)
         d, r = chat.say("new picture for the lemons", {"item": "Lemons"}, BUSY)
         self.assertNotEqual(d, "proposed")  # the installer will not stand behind it: nothing drafted, nothing installed
-        self.assertIn("nothing changed", r)  # the conversation's own sentence for an installer refusal, as for item.add
+        self.assertIn("too busy", r)  # the retake reply: take it again on a plain surface
         self.assertEqual((chat.drafts(), chat.head()), ([], chat.base))
         self.assertFalse((chat.kit.wt / "storefront-mockup" / f"assets/products/photo-{SHA[BUSY][:16]}.jpg").exists())
         d, r = chat.say("here is a better one of the lemons", {"item": "Lemons"}, JAR)
@@ -371,7 +371,7 @@ class RealDispatcher(unittest.TestCase):
         plan = ip.plan_picture({"item": LEMONS, "photo": SHA[JAR]}, chat.kit._ctx())
         out = chat.kit.editor.prepare(plan)
         self.assertEqual(out["result"], "ok", out)
-        self.assertNotEqual(live_policy.check(out["draft"]), [])  # private-only: product.set_photo is not live
+        self.assertEqual(live_policy.check(out["draft"]), [])  # HASS-LIVE-ADD-2: product.set_photo is live
 
 
 if __name__ == "__main__":
