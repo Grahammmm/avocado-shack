@@ -201,13 +201,18 @@ class CaseRowTests(SocialCase):
         for name in NAMES:
             for row in rows(name):
                 with self.subTest(row["id"]):
+                    replay = row["note"]["dispatch"]
                     self.now = T0
                     self.conv.requests.close_live(CHAT, self.now, "closed")
                     before = self.snapshot()
-                    disposition, said = self.answered(row["texts"][0], row["skill"])
-                    self.assertEqual(disposition, row["disposition"])
-                    self.assertEqual(said, row["said"])
-                    self.assertEqual(row["replies"], [{"unsupported": "\n\n".join(said)}])
+                    disposition, said = self.answered(row["texts"][0], replay["skill"])
+                    self.assertEqual(disposition, replay["disposition"])
+                    self.assertEqual(said, replay["said"])
+                    # The generic ops-only kit has no long-caption reply path.
+                    # Its short wording replay is separate from this exact oracle.
+                    answer = "\n\n".join(said)
+                    generic = answer.splitlines()[0] if len(answer) > voice.LONG_AFTER else answer
+                    self.assertEqual(row["replies"], [{"unsupported": generic}])
                     self.assertIn(row["expect"]["reply_contains"], "\n\n".join(said))
                     self.assert_untouched(before)
 
