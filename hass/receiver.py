@@ -83,9 +83,12 @@ class Receiver:
 
     def handle(self, msg, last_try=False) -> str:
         """What drain() calls for each message: Conversation.handle with apply=self.apply (False: an owner approval is
-        held, never applied), noting the code of the draft THIS message made proposed (a new row, or a question it filled)."""
+        held, never applied), noting the code of the draft THIS message made proposed (a new row, or a question it filled).
+        HASS-SEC-2 (L5): also passes when the message reached the inbox, so a yes forwarded long after it was sent approves nothing."""
         before = self._proposed()
-        disposition = self.conversation.handle(msg, last_try=last_try, apply=self.apply)
+        forwarded = getattr(self.inbox, "forwarded_at", None)
+        disposition = self.conversation.handle(msg, last_try=last_try, apply=self.apply,
+                                               forwarded_at=forwarded(msg.provider_id) if callable(forwarded) else None)
         if disposition == "proposed":
             made = {k: v for k, v in self._proposed().items() if k not in before}
             self._codes[msg.provider_id] = made[max(made)] if made else None  # None: a repeat reused a waiting draft

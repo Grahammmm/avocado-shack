@@ -160,12 +160,20 @@ class TheRulesOnRealDrafts(LiveAddBase):
         quiet = op("hike.create", title="Walk", date="2026-11-14", time="08:00", meetingPoint="Trailhead", rsvpEnabled=False)
         self.assertEqual(self.reasons(*self.new_product(), quiet), [])
 
-    def test_1_undo_always_passes(self):
+    def test_1_undo_meets_the_same_content_gates(self):
+        # HASS-SEC-2 (M1): an undo no longer always passes. The undo of a new product and maker (the product hidden, the maker
+        # hidden, as history.revert writes them) passes; one that would change a protected field or sentence is refused.
         self.assertEqual(policy.check(edit("old", "new", op="history.revert")), [])
+        product = {"brand": "Test Orchard", "producerKey": KEY, "status": "active"}
+        maker = {"name": "Test Orchard", "place": PLACE, "story": "Test Orchard is based in Paso Robles, California."}
+        hidden = {"ops": [{"op": "history.revert", "args": {}}], "records": [
+            {"collection": "products", "key": "x", "before": product, "after": {**product, "status": "hidden"}},
+            {"collection": "makers", "key": KEY, "before": maker, "after": {**maker, "hidden": True}}]}
+        self.assertEqual(policy.check(hidden), [])
         undo = {"ops": [{"op": "history.revert", "args": {}}], "records": [
             {"collection": "products", "key": "x", "before": {"brand": "Test Orchard", "producerKey": KEY}, "after": None},
             {"collection": "makers", "key": KEY, "before": {"place": PLACE, "url": "https://example.com"}, "after": None}]}
-        self.assertEqual(policy.check(undo), [])
+        self.assertIn("protected field: makers.url", policy.check(undo))
 
     def test_2_the_maker_link_stays_protected(self):
         reasons = self.reasons(maker_op(url="https://www.example.com/orchard"), product_op(self.sha))
