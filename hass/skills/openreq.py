@@ -52,6 +52,17 @@ def _iso(dt: datetime) -> str:
     return dt.isoformat()
 
 
+def _instant(text):
+    """The stored timestamp as an aware UTC datetime, or None when it is not text or not an aware ISO time."""
+    if not isinstance(text, str):
+        return None
+    try:
+        when = datetime.fromisoformat(text)
+        return when.astimezone(timezone.utc) if when.utcoffset() is not None else None
+    except (ValueError, OverflowError):
+        return None
+
+
 def _idle_deadline(now: datetime) -> datetime:
     # Add on the timeline, not the repeated/skipped wall-clock hour. Keep naive semantics.
     if now.utcoffset() is None:
@@ -259,6 +270,8 @@ class OpenRequests:
         closed request more than RETENTION_HOURS old, text and all."""
         if not self.exists():
             return
+        if not isinstance(now, datetime) or now.utcoffset() is None:
+            raise ValueError("retention requires an aware clock")
         for row in self.db.execute("SELECT request_id, expires_at FROM open_requests WHERE state IN ('open','drafted')").fetchall():
             try:
                 due = now > datetime.fromisoformat(row["expires_at"])
@@ -266,9 +279,15 @@ class OpenRequests:
                 due = True
             if due:
                 self.mark(row["request_id"], "expired", now)
-        cutoff = _iso(now - timedelta(hours=RETENTION_HOURS))
-        self.db.execute("DELETE FROM open_requests WHERE state IN ('closed','expired','cancelled','superseded')"
-                        " AND closed_at IS NOT NULL AND closed_at < ?", (cutoff,))
+        # Age is the instant closed_at names, not its text: rows stamped with another UTC offset are compared as instants.
+        cutoff = now.astimezone(timezone.utc) - timedelta(hours=RETENTION_HOURS)
+        for row in self.db.execute("SELECT request_id, closed_at FROM open_requests WHERE state IN ('closed','expired','cancelled',"
+                                   "'superseded') AND closed_at IS NOT NULL").fetchall():
+            closed = _instant(row["closed_at"])
+            # A closed_at that is not a readable aware timestamp has an unknown age: the row is held, never read as ancient.
+            if closed is not None and closed < cutoff:
+                self.db.execute("DELETE FROM open_requests WHERE request_id = ? AND closed_at = ?"
+                                " AND state IN ('closed','expired','cancelled','superseded')", (row["request_id"], row["closed_at"]))
 
     # -- the owner's photo (spec 2.7) -------------------------------------------------------------------------
     def bind_attachment(self, owner: str, provider_id: str, sha: str, now: datetime, registry=None):

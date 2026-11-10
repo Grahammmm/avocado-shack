@@ -25,6 +25,7 @@ if __package__ in (None, ""):
 
 from hass.content_model import AVAILABILITY, ID_RE  # noqa: E402
 from hass.interpret_check import PRICE_REPLY  # noqa: E402
+from hass.skills import kinds  # noqa: E402
 from hass.skills.model import Slot, Skill, Trigger, Undo  # noqa: E402
 from hass.sitegen import STALE_AFTER_DAYS  # noqa: E402
 
@@ -49,9 +50,10 @@ NONE_NAMED = "Which products should I clear?"
 class Refusal(ValueError):
     """A plan that refuses carries the fixed owner reply (the test kit and the dispatcher read ``.reply``)."""
 
-    def __init__(self, reply):
+    def __init__(self, reply, kind="refuse"):
         super().__init__(reply)
         self.reply = reply
+        self.kind = kind
 
 
 def _content(ctx):
@@ -84,11 +86,33 @@ def _today(ctx):
         return None
 
 
-def _ids(value, cap: int | None = MAX_ITEMS) -> list:
-    """A list of product ids, in the owner's order, each once; the whole-shelf cap applies unless ``cap`` is None."""
-    if not isinstance(value, (list, tuple)) or not all(isinstance(x, str) and ID_RE.fullmatch(x) for x in value):
+def _refs(value, ctx) -> list:
+    """RF2135-10: the product ids a list of references names, in the owner's order, repeats kept.
+
+    A canonical id keeps the id path (the editor judges an id the content does not know). Any other string is a
+    product name or alias, resolved with the existing ``kinds.product_ref``; only one active product is accepted, so an
+    ambiguous, unknown, held or hidden name refuses the whole plan with the resolver's own plain reply.
+    """
+    if not isinstance(value, (list, tuple)) or not all(isinstance(x, str) and x.strip() for x in value):
         raise Refusal(BAD_ITEM)
-    out = list(dict.fromkeys(value))
+    content = _content(ctx)
+    out = []
+    for ref in value:
+        if ID_RE.fullmatch(ref):
+            out.append(ref)
+        elif content is None:
+            raise Refusal(BAD_ITEM)
+        else:
+            found = kinds.product_ref(content, ref, getattr(ctx, "aliases", None))
+            if found.status != "one":
+                raise Refusal(found.reply)
+            out.append(found.value)
+    return out
+
+
+def _ids(value, ctx, cap: int | None = MAX_ITEMS) -> list:
+    """Resolved product ids, in the owner's order, each once; the whole-shelf cap applies unless ``cap`` is None."""
+    out = list(dict.fromkeys(_refs(value, ctx)))
     if cap is not None and len(out) > cap:
         raise Refusal(TOO_MANY.format(count=len(out)))
     return out
@@ -105,7 +129,7 @@ def _set_plan(slots, ctx) -> list:
     for item in items:  # the same product twice with the same word is one change; two words is a question
         pid, word = item["product"], item["availability"]
         if chosen.setdefault(pid, word) != word:
-            raise Refusal(TWICE.format(name=_name(ctx, pid)))
+            raise Refusal(TWICE.format(name=_name(ctx, pid)), kind="question")
     if len(chosen) > MAX_ITEMS:
         raise Refusal(TOO_MANY.format(count=len(chosen)))
     today = _today(ctx)
@@ -134,9 +158,9 @@ def _checked_plan(slots, ctx) -> list:
     seen: dict = {}
     args: dict = {}
     for word, ids in lists.items():
-        if isinstance(ids, (list, tuple)) and len(set(ids)) != len(ids) and all(isinstance(x, str) and ID_RE.fullmatch(x) for x in ids):
-            raise Refusal(TWICE.format(name=_name(ctx, next(x for x in ids if list(ids).count(x) > 1))))  # each product once, same list too
-        ids = _ids(ids, cap=None)  # a morning check may name any number of products: one change, not one per product
+        ids = _refs(ids, ctx)  # a morning check may name any number of products: one change, not one per product
+        if len(set(ids)) != len(ids):
+            raise Refusal(TWICE.format(name=_name(ctx, next(x for x in ids if ids.count(x) > 1))))  # each product once, same list too
         for pid in ids:
             _usable(ctx, pid)
             if pid in seen:
@@ -170,7 +194,7 @@ def _clear_plan(slots, ctx) -> list:
     raw = slots.get("items")
     if not raw:
         raise Refusal(NONE_NAMED)
-    ids = _ids(raw)
+    ids = _ids(raw, ctx)
     ops = []
     for pid in ids:
         _usable(ctx, pid)

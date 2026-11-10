@@ -1,0 +1,20 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "2026-11-15",
+      "before": "2026-11-13",
+      "file": "hass/content/store.json",
+      "path": "specials[avocado-honey].end"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

@@ -2138,14 +2138,33 @@ Checks: `node storefront-mockup/catalog-only-qa.cjs` against an isolated loopbac
 
 MAIN-RED fix (statebackup bundle determinism): `git bundle create` in statebackup.create now runs with `-c pack.threads=1`. With the default thread count Git delta-packs the same HEAD differently from run to run (probe: 25 bundles of one fixture commit gave 3 distinct hashes; with one thread, 1), so two backups of an unchanged commit carried different content.bundle hashes and test_statebackup_diff (identical backups differ in nothing; added/removed/changed) failed intermittently on main since run 42743080672 and locally on 330191b too. Not a clock or environment change; no merged PR reverted.
 
+## RF1915-13: closed open-requests age by instant, not by timestamp spelling — November 10, 2026
+
+Branch rb/rf1915-13. openreq.py: `OpenRequests.sweep` compared `closed_at` text with the cutoff text, so a row stamped with another UTC offset was erased up to hours late (+02:00) or early (-07:00, even exactly at the cutoff). The closed-row phase now parses each stored `closed_at` as an aware instant (offsets and Z), converts to UTC, and erases only an instant strictly earlier than now minus the unchanged 24 hours, measured in elapsed time across DST. A `closed_at` that is NULL, not text, zone-less or unparseable has unknown age and is held untouched. A naive or non-datetime clock raises `ValueError("retention requires an aware clock")` before any write (no table yet stays lazy). Live-request expiry, the immediate erasure of legacy-kind rows, retained rows and the schema are unchanged. test_open_requests.py gains six real-store cases: mixed offsets for every closed state, microsecond cutoff, DST, held unknown-age rows, live and other data untouched, naive clock.
+
+Checks: `python3 -B -m unittest hass.tests.test_open_requests` ran 33 tests, OK on the builder's clone; the six new cases failed on main's openreq.py. Not deployed; no backup-erasure claim.
+
 ## RF1915-11: correspondence prune skips impossible calendar-named files — November 10, 2026
 
 Branch rb/rf1915-11. hass/corrlog.py: CorrLog.prune() parsed every regular, non-symlink file named like a day with strptime inside one loop, so a stray file named like 2026-02-30.jsonl raised ValueError, which record() swallowed before opening today's file: the first correspondence row of the day was lost (a second record in the same instance worked) and the prune command died with a traceback. The date is now parsed per candidate; a ValueError means an unknown file, left untouched (name, bytes, mode), and the scan continues, so valid expired days are still deleted whole at the unchanged 90-day UTC cutoff. OSError handling, the once-a-day scan, the count and the CLI wording are unchanged. test_corrlog.py (Retention) gains four regressions on synthetic temporary state: impossible names skipped while a valid expired file is deleted, the first and second record of a day both written (also on the next UTC day), cutoff and leap-day boundaries, and the CLI printing `Deleted 1 old day files.` then `Deleted 0 old day files.` with empty stderr.
 
 Checks: `python3 -B -m unittest hass.tests.test_corrlog` ran 68 tests, OK on the builder's clone; the four new tests failed (3 errors, 1 failure) with the fix removed. Not deployed or merged; no live state touched.
 
+
 ## RF1915-10: require both sides of new-item comparison evidence
 
 Branch rb/rf1915-10. Actual builder: sol-reviewer (gpt-6.1-sol). The offline preview command now returns 1 if any BEFORE or AFTER result fails, after collecting all three cases and writing the existing preview.json. Capture order, diagnostics, JSON schema/format and missing-PLAYWRIGHT_MODULE exit 2 are unchanged. No renderer, product, published content or committed preview artifact changed.
 
 Builder checks: the new BEFORE-only regression failed on the old predicate in all three subcases (first, last and all BEFORE failures returned 0 instead of 1). After repair, `python3 -B -m unittest hass.tests.test_newitem` ran 53 tests, `python3 -B -m unittest hass.tests.test_ledger_rf1120` ran 3, and `python3 -B -m unittest hass.tests.test_ci_shards` ran 25: all OK under the host memcap wrapper. Five new main-level tests cover BEFORE-only, AFTER/both-side, all-pass, complete retained diagnostics/JSON after early failure, and missing Playwright with no output side effects. These aggregation tests use synthetic capture/photo dependencies and external temporary output; they do not prove Chromium ran or establish fresh rendering quality. No server, live operation, publication or send was performed.
+
+## RF1635-7: backlog purge compares timestamp instants — November 10, 2026
+
+Branch rb/rf1635-7. hass/skills/backlog.py: Backlog.purge() compared received_at to the cutoff as strings, so an offset-stamped row could be kept up to hours too long (+02:00) or deleted early (-07:00, including at exactly 90 days). It now converts the clock (UTC, before subtracting the days) and each stored stamp to UTC instants and deletes only rows strictly older than the cutoff, open or closed, per row by id and original stamp. Unparseable, date-only or zone-less stamps have unknown age and are kept; a naive clock raises a fixed ValueError before any delete. record(), stored bytes, the CLI wording and the 90-day period are unchanged.
+
+Checks: `python3 -B -m unittest hass.tests.test_skills_backlog` on the builder clone (new offset, microsecond, DST, legacy-row, unknown-age and CLI tests). Not deployed; no live state touched; old backups are not erased.
+
+Review fix (same branch): stored stamps are now compared to the cutoff as aware instants without converting them to UTC, so valid range-edge stamps such as `0001-01-01T00:00:00+02:00` or `9999-12-31T23:59:59.999999-02:00` no longer raise OverflowError and abort the purge; later expired rows are still deleted. New test `test_purge_survives_range_edge_stamps_and_continues`.
+
+Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it actually read (0 < length <= MAX_PHOTO) and raises the existing fixed refusal when a file shrank to empty or grew past the cap after fstat; live() still checks every photo before any transport call and writes nothing on refusal. A file shrinking to a nonempty allowed length is still admitted; no snapshot guarantee. Valid input and output are byte-identical.
+
+Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.

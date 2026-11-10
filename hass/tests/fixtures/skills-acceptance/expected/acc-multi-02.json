@@ -1,0 +1,67 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": {
+        "id": "hike-2026-11-21-cass-hill-hike",
+        "meetingPoint": "the gate",
+        "rsvpEnabled": false,
+        "startsAt": "2026-11-21T09:00:00-08:00",
+        "status": "scheduled",
+        "timezone": "America/Los_Angeles",
+        "title": "Cass Hill hike"
+      },
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-21-cass-hill-hike]"
+    },
+    {
+      "after": {
+        "id": "hike-2026-11-28-point-buchon-hike",
+        "meetingPoint": "the trailhead",
+        "rsvpEnabled": false,
+        "startsAt": "2026-11-28T08:00:00-08:00",
+        "status": "scheduled",
+        "timezone": "America/Los_Angeles",
+        "title": "Point Buchon hike"
+      },
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-28-point-buchon-hike]"
+    }
+  ],
+  "files": [
+    "hass/content/community.json",
+    "storefront-mockup/community.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": [
+      {
+        "after": {
+          "id": "hike-2026-11-21-cass-hill-hike",
+          "meetingPoint": "the gate",
+          "rsvpEnabled": false,
+          "startsAt": "2026-11-21T09:00:00-08:00",
+          "status": "cancelled",
+          "timezone": "America/Los_Angeles",
+          "title": "Cass Hill hike"
+        },
+        "file": "hass/content/community.json",
+        "path": "events[hike-2026-11-21-cass-hill-hike]"
+      },
+      {
+        "after": {
+          "id": "hike-2026-11-28-point-buchon-hike",
+          "meetingPoint": "the trailhead",
+          "rsvpEnabled": false,
+          "startsAt": "2026-11-28T08:00:00-08:00",
+          "status": "cancelled",
+          "timezone": "America/Los_Angeles",
+          "title": "Point Buchon hike"
+        },
+        "file": "hass/content/community.json",
+        "path": "events[hike-2026-11-28-point-buchon-hike]"
+      }
+    ]
+  },
+  "schema_version": 1
+}

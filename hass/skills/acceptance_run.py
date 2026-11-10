@@ -69,9 +69,10 @@ UNDO_CODES = {"undo-not-identical", "residue-undeclared"}
 CONTENT_CODES = {"content-rule", "unstated-claim", "bad-picture"}
 STRUCTURAL_CODES = {"write-before-yes", "duplicate-effect", "privacy-leak", "audit-missing", "harness-error"} | UNDO_CODES | CONTENT_CODES
 
-ROW_KEYS = {"id", "schema_version", "tag", "skill", "skill_version", "texts", "replies", "expect", "setup", "seed", "photos", "house_render", "offsets"}
+STRANGER = "stranger-acceptance@example.invalid"  # AV1109-18: a sender who is not an owner (the Conversation ignores it before any model call)
+ROW_KEYS = {"id", "schema_version", "tag", "skill", "skill_version", "texts", "replies", "expect", "setup", "seed", "photos", "house_render", "offsets", "senders"}
 SELFTEST_ONLY = {"fault", "must_fail"}
-EXPECT_KEYS = {"skills", "dispositions", "reply_contains", "reply_not_contains", "expected", "undo", "picture"}
+EXPECT_KEYS = {"skills", "dispositions", "reply_contains", "reply_not_contains", "expected", "undo", "picture", "approval"}
 PICTURE_KEYS = {"kind", "type", "size", "house"}
 EXPECTED_KEYS = {"schema_version", "diff", "files", "assets", "residue"}
 FAULTS = ("write-on-prepare", "undo-leaves", "undo-stale-generated", "undo-dirty", "leak-stage")  # self-test only: a path that writes unasked / an undo that leaves a trace, a stale site file or an untracked file / a stage line that carries the owner's words
@@ -124,6 +125,8 @@ def validate_row(row, *, selftest=False):
     if not all(_safe_rel(p["fixture"], FIXTURE_PATH_RE) for p in photos): _bad(rid, "photo fixture must be a safe relative .jpg or .png path")
     if any(not t.strip() and i not in turns for i, t in enumerate(texts)): _bad(rid, "an empty text is only allowed for a photo turn")
     if "house_render" in row and type(row["house_render"]) is not bool: _bad(rid, "house_render is true or false")
+    senders = row.get("senders")
+    if senders is not None and not (isinstance(senders, list) and len(senders) == len(texts) and all(s in ("owner", "stranger") for s in senders)): _bad(rid, "senders is owner or stranger, one per text")
     offsets = row.get("offsets")
     if offsets is not None and not (isinstance(offsets, list) and len(offsets) == len(texts) and all(type(o) is int and 0 <= o <= 2880 for o in offsets)): _bad(rid, "offsets is one bounded minute count (0-2880) per text")
     setup, seed = row.get("setup"), row.get("seed")
@@ -149,7 +152,9 @@ def _validate_expect(rid, row, n_turns):
         if k in expect and not (isinstance(expect[k], list) and all(isinstance(s, str) and s for s in expect[k])): _bad(rid, f"expect.{k} is a list of fragments")
     proposed = disp[-1] == "proposed"
     ref = expect.get("expected")
-    if proposed and ref != f"{rid}.json": _bad(rid, "a proposed row names its expected file: expected is <id>.json")
+    if expect.get("approval", "paused") != "paused": _bad(rid, "expect.approval is paused (the one approval refusal the engine knows)")
+    if expect.get("approval") == "paused" and (not proposed or ref is not None or expect.get("undo")): _bad(rid, "a paused-approval row ends in a proposal, has no expected file and no undo")
+    if proposed and expect.get("approval") is None and ref != f"{rid}.json": _bad(rid, "a proposed row names its expected file: expected is <id>.json")
     if not proposed and ref is not None: _bad(rid, "only a proposed row has an expected file")
     if "undo" in expect and type(expect["undo"]) is not bool: _bad(rid, "expect.undo is true or false")
     if expect.get("undo") and not proposed: _bad(rid, "undo needs a proposed row")
@@ -375,14 +380,14 @@ class Session:
     def drafts(self): return [dict(r) for r in self.conv.db.execute("SELECT * FROM drafts ORDER BY row_id")]
 
     # -- saying --------------------------------------------------------------------------------------------------
-    def say(self, text, *, photo=None, minutes=1):
-        """One owner message through Conversation.handle + flush. Returns (Inbound, disposition, reply texts)."""
+    def say(self, text, *, photo=None, minutes=1, sender=OWNER):
+        """One message through Conversation.handle + flush (the owner's unless ``sender`` says otherwise). Returns (Inbound, disposition, reply texts)."""
         from hass.skills import testkit
         self.n += 1
         self.now += timedelta(minutes=minutes)
         pid = f"acc-{self.n}"
         if photo is not None: self.photos.by_id[pid] = photo
-        msg = self.Inbound(pid, CHAT, OWNER, text, False, "new", self.now.isoformat(), 1 if photo is not None else 0)
+        msg = self.Inbound(pid, CHAT, sender, text, False, "new", self.now.isoformat(), 1 if photo is not None else 0)
         with testkit._clock_scope(self._clock):
             self.stagelog("accepted", pid)
             calls = self.interp.calls
@@ -625,8 +630,9 @@ def _drive(row, sess, registry, res, expected, photos, observe):
         if sess.replay(msg) != "duplicate" or sess.snapshot() != before_snap or sess.counts() != before_counts: res.fail("duplicate-effect")
 
     offsets = row.get("offsets") or [0] * len(texts)
+    senders = row.get("senders") or ["owner"] * len(texts)
     for i, text in enumerate(texts):
-        msg, disposition, out = sess.say(text, photo=photos.get(i), minutes=1 + offsets[i])
+        msg, disposition, out = sess.say(text, photo=photos.get(i), minutes=1 + offsets[i], sender=STRANGER if senders[i] == "stranger" else OWNER)
         msgs.append(msg), dispositions.append(disposition), replies.append(out)
         res.dispositions = list(dispositions)
         if sess.snapshot() != base:  # nothing may change before a yes
@@ -645,9 +651,23 @@ def _drive(row, sess, registry, res, expected, photos, observe):
     if sess.interp.queue: res.fail("reply-queue")
     res.facts.update(turns=len(texts), model_calls=sess.interp.calls)
     drafts = sess.drafts()
-    if dispositions[-1] == "proposed" and drafts and drafts[-1]["state"] == "proposed":
+    if dispositions[-1] == "proposed" and drafts and drafts[-1]["state"] == "proposed" and expect.get("approval") == "paused":
+        _approve_paused(sess, res, base, duplicate)
+    elif dispositions[-1] == "proposed" and drafts and drafts[-1]["state"] == "proposed":
         _approve_and_check(row, sess, registry, res, expected, observe, base, texts, duplicate, seen)
     for code in privacy_problems(sess, texts): res.fail(code)
+
+
+def _approve_paused(sess, res, base, duplicate):
+    """AV1109-18, a paused store: the draft was proposed under the current policy, and the real `yes <code>` is refused with no write: the tree
+    is the start tree, the draft is still waiting, and the same provider id again changes nothing."""
+    draft = sess.drafts()[-1]
+    msg, disposition, _texts = sess.say(f"yes {draft['code']}")
+    if disposition != "paused": res.fail("wrong-disposition")
+    if sess.snapshot() != base: res.fail("write-before-yes")
+    if {r["code"]: r["state"] for r in sess.drafts()}.get(draft["code"]) != "proposed": res.fail("apply-failed")
+    duplicate(msg)
+    res.facts["approval"] = disposition
 
 
 def _approve_and_check(row, sess, registry, res, expected, observe, base, texts, duplicate, seen):

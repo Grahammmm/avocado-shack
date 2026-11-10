@@ -1,0 +1,21 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "Linn's has been farming on the coast since 1979.",
+      "before": "Linn’s story starts with a family and a Central Coast farm. They have been growing crops and making food since 1979, with the next generation still working the land. These preserves belong on real bread, with real butter. A modest breakfast can be a very good meal.",
+      "file": "hass/content/makers.json",
+      "path": "makers.Linn's.story"
+    }
+  ],
+  "files": [
+    "hass/content/makers.json",
+    "storefront-mockup/producers.js",
+    "storefront-mockup/producers.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}
