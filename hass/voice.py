@@ -258,7 +258,19 @@ def explain(technical) -> tuple:
     return GENERIC_REFUSAL, "unmapped"
 
 
+_DAY_WORDS = (r"(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day, (?:January|February|March|April|May|June|July|August|"
+              r"September|October|November|December) \d{1,2}, \d{4}")
+EXACT_WARNINGS = (  # AV2137-04 (H04): on the original text, so the hike title keeps its case; the title is quoted
+    (re.compile(rf"(.+) \(({_DAY_WORDS})\) shows this route; its Route line changes", re.S),
+     lambda m: f"The Route line on {quote(m[1])} ({m[2]}) changes too."),
+    (re.compile(r"the trail journal entry for (.+) changes too", re.S),
+     lambda m: f"The trail journal entry for {quote(m[1])} changes too."),
+)
+
+
 def explain_warning(technical) -> str:
+    for rx, build in EXACT_WARNINGS:
+        if m := rx.fullmatch(str(technical or "")): return build(m)
     text = str(technical or "").lower()
     for rx, build in WARNINGS:
         m = re.search(rx, text)
