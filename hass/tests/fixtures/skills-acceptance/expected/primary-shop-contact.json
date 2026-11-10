@@ -1,0 +1,19 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "8055550100",
+      "file": "hass/content/store.json",
+      "path": "phone"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

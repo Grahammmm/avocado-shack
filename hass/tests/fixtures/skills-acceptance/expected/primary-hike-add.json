@@ -1,0 +1,45 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": {
+        "bring": "Water",
+        "difficulty": "easy",
+        "id": "hike-2026-11-14-mill-creek-hike",
+        "meetingPoint": "Mill Creek trailhead",
+        "rsvpEnabled": false,
+        "startsAt": "2026-11-14T08:00:00-08:00",
+        "status": "scheduled",
+        "timezone": "America/Los_Angeles",
+        "title": "Mill Creek hike"
+      },
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-14-mill-creek-hike]"
+    }
+  ],
+  "files": [
+    "hass/content/community.json",
+    "storefront-mockup/community.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": [
+      {
+        "after": {
+          "bring": "Water",
+          "difficulty": "easy",
+          "id": "hike-2026-11-14-mill-creek-hike",
+          "meetingPoint": "Mill Creek trailhead",
+          "rsvpEnabled": false,
+          "startsAt": "2026-11-14T08:00:00-08:00",
+          "status": "cancelled",
+          "timezone": "America/Los_Angeles",
+          "title": "Mill Creek hike"
+        },
+        "file": "hass/content/community.json",
+        "path": "events[hike-2026-11-14-mill-creek-hike]"
+      }
+    ]
+  },
+  "schema_version": 1
+}
