@@ -312,6 +312,66 @@ class Retention(LogCase):
         self.assertEqual(self.log.prune(), 0)
         self.assertTrue(elsewhere.exists())
 
+    IMPOSSIBLE = ("2026-02-30.jsonl", "2025-02-29.jsonl", "2026-00-01.jsonl", "0000-01-01.jsonl", "2026-13-01.jsonl")
+
+    def plant_impossible(self):
+        folder = self.state / corrlog.FOLDER
+        folder.mkdir(mode=0o700, exist_ok=True)
+        for i, name in enumerate(self.IMPOSSIBLE):
+            (folder / name).write_text(f"unknown-{i}\n")
+            (folder / name).chmod(0o640)
+        return folder
+
+    def test_prune_skips_impossible_calendar_names_and_continues(self):
+        folder = self.plant_impossible()
+        (folder / "2026-01-01.jsonl").write_text("old\n")  # a valid expired day, wherever the scan meets it
+        (folder / "2026-08-10.jsonl").write_text("cutoff day\n")  # NOW 2026-11-08 minus 90 days: kept
+        self.assertEqual(self.log.prune(), 1)
+        self.assertEqual(self.files(), sorted(self.IMPOSSIBLE + ("2026-08-10.jsonl",)))
+        for i, name in enumerate(self.IMPOSSIBLE):
+            self.assertEqual((folder / name).read_text(), f"unknown-{i}\n")
+            self.assertEqual((folder / name).stat().st_mode & 0o777, 0o640)
+        self.assertEqual(self.log.prune(), 0)
+
+    def test_first_daily_record_survives_invalid_day_file(self):
+        folder = self.plant_impossible()
+        (folder / "2026-01-01.jsonl").write_text("old\n")
+        self.assertTrue(self.log.record("error", "first"))
+        self.assertTrue(self.log.record("error", "second"))
+        today = folder / "2026-11-08.jsonl"
+        self.assertEqual([json.loads(x)["reason"] for x in today.read_text("utf-8").splitlines()], ["first", "second"])
+        self.assertEqual(today.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.files(), sorted(self.IMPOSSIBLE + ("2026-11-08.jsonl",)))
+        self.now = NOW + timedelta(days=1)  # a new UTC day scans again and still writes its first row
+        self.assertTrue(self.log.record("error", "third"))
+        self.assertEqual(json.loads((folder / "2026-11-09.jsonl").read_text("utf-8"))["reason"], "third")
+        self.assertEqual((folder / "2026-02-30.jsonl").read_text(), "unknown-0\n")
+
+    def test_prune_calendar_boundaries_and_valid_leap_day(self):
+        folder = self.state / corrlog.FOLDER
+        folder.mkdir(mode=0o700)
+        self.now = datetime(2028, 5, 29, 12, 0, tzinfo=timezone.utc)  # cutoff day 2028-02-29, a real leap day
+        for name in ("2028-02-28.jsonl", "2028-02-29.jsonl", "2028-03-01.jsonl", "2028-05-30.jsonl", "2027-02-29.jsonl"):
+            (folder / name).write_text("x\n")
+        self.assertEqual(self.log.prune(), 1)  # only 2028-02-28 is valid and strictly older
+        self.assertEqual(self.files(), ["2027-02-29.jsonl", "2028-02-29.jsonl", "2028-03-01.jsonl", "2028-05-30.jsonl"])
+        self.now = datetime(2028, 5, 30, 12, 0, tzinfo=timezone.utc)  # the valid leap day is now one day too old
+        self.assertEqual(self.log.prune(), 1)
+        self.assertEqual(self.files(), ["2027-02-29.jsonl", "2028-03-01.jsonl", "2028-05-30.jsonl"])
+
+    def test_prune_cli_with_invalid_day_name_keeps_fixed_output(self):
+        folder = self.plant_impossible()
+        old = (datetime.now(timezone.utc) - timedelta(days=200)).strftime("%Y-%m-%d.jsonl")
+        (folder / old).write_text("old\n")
+        for expected in ("Deleted 1 old day files.\n", "Deleted 0 old day files.\n"):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(corrlog.main(["prune", "--state", str(self.state)], out=out), 0)
+            self.assertEqual(err.getvalue(), "")
+            self.assertEqual(out.getvalue(), expected)
+        self.assertEqual(self.files(), sorted(self.IMPOSSIBLE))
+        self.assertEqual((folder / "2026-02-30.jsonl").read_text(), "unknown-0\n")
+
 
 class ForG(LogCase):
     def fill(self, kinds):
