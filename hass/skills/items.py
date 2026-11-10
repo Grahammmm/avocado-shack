@@ -55,6 +55,8 @@ _DELETING = r"(?:delet(?:e|ing)|erase|wipe)"
 CLAUSE_SPLIT = re.compile(  # marks, commas, dashes, colons, ' / ', 'but', and an 'and' that starts a new instruction
     r"[.;!?\n,:\u2014\u2013]|\s/\s|\s-+\s|--+|\bbut\b|\band then\b|"
     rf"\band\b(?=\s+(?:(?:do not|does not|never|not|no|without)\b[^.]*\b{_DELETING}\b|just hide\b|{_DELETING}\b))")
+INSTRUCTION = re.compile(  # where one delete/hide instruction starts, lead-in words included
+    rf"\b(?:(?:and|or|do not|does not|never|not|no|without|just|instead of|instead|rather than)\s+)*\b(?:{_DELETING}|hid(?:e|ing)?)\b")
 NOT_A_THING = frozenset(  # clause words that name no product: verbs, negations, fillers and the 'forever' words
     "a an and the my our your please pls actually just instead of to for on in at me us i you do does did not no never without "
     "dont don't yes yeah ok okay now then also still really delete deleting deletes erase erasing wipe wiping hide hiding hid "
@@ -174,20 +176,43 @@ def owner_asks_permanent_delete(texts, content=None) -> bool:
         for name in names:
             text = text.replace(name, " ")
         for clause in CLAUSE_SPLIT.split(" ".join(text.split())):
-            wants = bool(DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause))
-            if REJECTS_HIDE.search(clause):  # "..., not just hide it" rejects hiding; it never withdraws a deletion request
-                if wants:
-                    asked.append(_things(clause))
-            elif NEGATED_DELETE.search(clause) or HIDE_INSTEAD.search(clause):
-                things = _things(clause)
-                if not things:
-                    asked = []  # 'don't', 'just hide it instead', 'never delete them': names no product, so it is about the request just made
-                else:  # it names products: it withdraws only the instructions about those products
-                    kept = [a if not a else a - things for a in asked]  # 'it' requests stay; the rest lose only the products named
-                    asked = [a for a, was in zip(kept, asked) if a or not was]
-            elif wants:
-                asked.append(_things(clause))
+            for part in _instructions(clause):
+                kind = _kind(part)
+                if kind == "ask":  # "..., not just hide it" rejects hiding; it never withdraws a deletion request
+                    asked.append(_things(part))
+                elif kind == "withdraw":
+                    things = _things(part)
+                    if not things:
+                        asked = []  # 'don't', 'just hide it instead', 'never delete them': names no product, so it is about the request just made
+                    else:  # it names products: it withdraws only the instructions about those products
+                        kept = [a if not a else a - things for a in asked]  # 'it' requests stay; the rest lose only the products named
+                        asked = [a for a, was in zip(kept, asked) if a or not was]
     return bool(asked)
+
+
+def _kind(part):
+    """'ask' (a permanent-deletion instruction, even one that also rejects hiding), 'withdraw' (a negated delete or a hide
+    instead) or None for a fragment that is neither."""
+    wants = bool(DELETE_WORD.search(part) and PERMANENT_WORD.search(part))
+    if REJECTS_HIDE.search(part):
+        return "ask" if wants else None
+    if NEGATED_DELETE.search(part) or HIDE_INSTEAD.search(part):
+        return "withdraw"
+    return "ask" if wants else None
+
+
+def _instructions(clause) -> list:
+    """One clause as its separate instructions, cut where a delete/hide verb (with its 'never', 'without', 'just', 'instead',
+    'and', 'or' lead-in) starts, so a request and an unrelated prohibition in one run-on sentence are judged apart. A fragment
+    that is neither a request nor a withdrawal stays with the instruction before it ('delete the cashews and hide the plums forever')."""
+    cuts = sorted({0, *(m.start() for m in INSTRUCTION.finditer(clause))})
+    parts = []
+    for a, b in zip(cuts, cuts[1:] + [len(clause)]):
+        if parts and _kind(clause[a:b]) is None:
+            parts[-1] += " " + clause[a:b]
+        else:
+            parts.append(clause[a:b])
+    return parts
 
 
 

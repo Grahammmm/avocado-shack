@@ -105,6 +105,22 @@ class PermanentIntent(unittest.TestCase):
                      "delete the cashews forever: just hide it"):
             self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for(text)), ok, text)
 
+    def test_request_and_unrelated_withdrawal_in_one_clause_still_refuses(self):
+        for text in ("delete the cashews forever without deleting the plums", "delete the cashews forever and hide the plums instead",
+                     "delete the cashews forever and instead hide the plums", "delete the cashews forever or never delete the plums",
+                     "wipe the cashews for good or just hide the plums", "delete the cashews forever never delete the plums",
+                     "delete the cashews forever just hide the plums instead", "never delete the plums delete the cashews forever",
+                     "delete it forever without deleting all the plums", "delete the cashews and the walnuts forever",
+                     "delete the cashews forever and the walnuts forever", "delete the cashews and hide the walnuts forever"):
+            self.refuses({"items": [ID]}, ctx_for(text))
+        ok = [{"op": "product.hide", "args": {"id": ID}}]
+        for text in ("delete the cashews forever and hide them instead", "delete the cashews forever and instead hide it",
+                     "delete the cashews forever and just hide it", "delete the cashews forever without deleting the cashews",
+                     "delete the cashews forever without deleting them", "delete the cashews forever just hide it instead",
+                     "delete the cashews forever and never delete the cashews", "delete it forever or just hide it",
+                     "delete the cashews forever without deleting anything"):
+            self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for(text)), ok, text)
+
     def test_real_dispatch_refuses_logs_policy_and_never_prepares_hide(self):
         r = row("perm-1", ["delete the cashews forever"], "refuse")  # the model omits its optional reason
         res = run_case_row(r, SKILLS, HIDE)
