@@ -539,6 +539,8 @@ class Dispatcher:
             if said:  # a read-only answer about a held or hidden record: said in its own words, nothing left open
                 conv.requests.mark(req["request_id"], "closed", now) if req else None
                 conv._reply(said)
+                if req and req["calls"]:  # this ask is refused; the owner's other caption asks of the same message are not
+                    return self._next_queued(msg, now, None, req["calls"], texts, attachments, "refused")
                 return "refused"
             conv.requests.put(owner, msg.provider_id, now, texts=texts, skill=skill.name, slots=slots, attachments=attachments,
                               request_id=req["request_id"] if req else None, question=filled.refused, asked_slot=None)

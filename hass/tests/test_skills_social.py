@@ -311,6 +311,21 @@ class BatchTests(SocialCase):
         self.assertIsNone(self.live())
         self.assert_untouched(before)
 
+    def test_a_held_answer_to_the_first_question_keeps_the_queued_caption(self):
+        before = self.snapshot()
+        two = {"calls": [{"skill": "social.item", "slots": {}}, {"skill": "social.hike", "slots": {}}]}
+        self.assertEqual(self.answered("posts for a product and a hike", two),
+                         ("question", ["Which product should the post be about?"]))
+        self.assertEqual(len(self.live()["calls"]), 1)
+        # the held product is refused in its own words, and the queued hike is still asked
+        disposition, said = self.answered("the oranges", skill_reply("social.item", item="Oranges"))
+        self.assertEqual((disposition, said), ("refused", [social.RESOLVER_REFUSALS[("item", "held")], "Which hike should the post be about?"]))
+        self.assertEqual(self.live()["skill"], "social.hike")
+        disposition, said = self.answered("bluff walk", skill_reply("social.hike", hike="Bluff Walk"))
+        self.assertEqual((disposition, said), ("answer", [self.want("hike", "h-ok")]))
+        self.assertIsNone(self.live())
+        self.assert_untouched(before)
+
     def test_a_caption_and_a_change_in_one_message_draft_nothing(self):
         before = self.snapshot()
         mixed = {"calls": [{"skill": "social.item", "slots": {"item": "Hass avocado"}},
