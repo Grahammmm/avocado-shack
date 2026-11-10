@@ -45,6 +45,7 @@ PHOTO_ASK = "Send me the photo you want on the home page."
 ALT_ASK = "What does the photo show?"
 ALT_REPLY = "Tell me what the photo shows, in a few words, like “the shop front on a sunny morning”."
 NO_OWN_PHOTO = "There is no photo of yours on the home page, so there is nothing to put back."
+PHOTO_OR_RESET = "Do you want the home page photo changed, or put back the way it was? I can only do one."
 
 
 def _clean(value) -> str:
@@ -254,11 +255,13 @@ PHOTO_CHECKS = {"alt-says-what-it-shows": check_photo_alt}
 
 def plan_photo(slots, ctx):
     store = store_of(ctx)
+    photo, alt = slots.get("photo"), _clean(slots.get("image_alt"))
+    if slots.get("clear") and (photo or alt):  # a replacement and putting the old one back: ask, never pick one (RF1345-11)
+        raise SkillStop(PHOTO_OR_RESET, "question")
     if slots.get("clear"):
         if store is not None and "homeImage" not in store:
             raise SkillStop(NO_OWN_PHOTO)
         return [{"op": "store.clear_home_image", "args": {}}]
-    photo, alt = slots.get("photo"), _clean(slots.get("image_alt"))
     if not photo:
         raise SkillStop(PHOTO_ASK, "question")
     if not alt:
