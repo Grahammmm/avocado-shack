@@ -203,7 +203,9 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  check(!v.cards.find(c=>c.title==='QA trail fixture').text.includes('Add to calendar'),'Started hike offered a calendar link');
  const sentence='This hike is cancelled. Nothing else is needed from you.',cx=v=>v.cards.find(c=>c.title==='Cancelled: QA cancelled fixture');
  // AV1737-12 inverts RF1720-2's same-day check: a hike cancelled earlier today stays listed, marked, with no RSVP, despite rsvpOpen.
- check(cx(v)&&cx(v).rsvp===0&&cx(v).text.includes(sentence)&&cx(v).text.includes(today),'Cancelled hike from earlier today not listed: '+v.up);
+ // RF0834-14: its date line is still the planned date/time (the fixture has no zone, so Pacific), never "started".
+ const planned=new Date(start).toLocaleString('en-US',{timeZone:'America/Los_Angeles',weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'});
+ check(cx(v)&&cx(v).rsvp===0&&cx(v).text.includes(sentence)&&v.dates['Cancelled: QA cancelled fixture']===planned&&!/started/i.test(cx(v).text),'Cancelled hike from earlier today not listed with its planned date: '+v.up);
  v=await view(start-6e4);
  check(v.dates['QA trail fixture']&&!v.dates['QA trail fixture'].includes('Today'),'Hike before start not shown with its date');
  v=await view(pacificAt(nextDay+6e4));
@@ -297,6 +299,33 @@ for(const stat of [false,true])for(const tz of ['America/Los_Angeles','Asia/Toky
  for(const stat of [false,true]){const v=await view(Date.parse('2026-11-09T20:00:00Z'),'America/Los_Angeles',pair,e=>false,stat),card=t=>v.cards.find(c=>c.title===t);
   check(card('QA started morning walk')&&card('QA started morning walk').label==='TODAY','/hike lost the TODAY card (static='+stat+'): '+v.up);
   check(card('QA future afternoon walk')&&card('QA future afternoon walk').label==='THE NEXT HIKE','/hike lost THE NEXT HIKE card (static='+stat+'): '+v.up)}}
+// RF0834-14: a cancelled hike's date line is its planned date/time (event zone, else Pacific) before, at and after its start, never "started";
+// a scheduled hike at the same start keeps TODAY and "Today — started". Both stay listed until Pacific midnight. Expected dates are literal strings.
+{const rf=(id,title,startsAt,status,more={})=>({...hike,rsvpOpen:true,remaining:3,rsvpEnabled:true,confirmedGuests:2,id,title,status,startsAt,timezone:'America/Los_Angeles',...more});
+ const X='Cancelled: QA cancelled nine',S='QA scheduled nine',PLANNED='Monday, November 9, 2026 at 9:00 AM PST',NOTE='QA moved to next week.';
+ const pair=[rf('rf-x','QA cancelled nine','2026-11-09T09:00:00-08:00','cancelled',{cancelNote:NOTE}),rf('rf-s',S,'2026-11-09T09:00:00-08:00','scheduled')];
+ const nine=Date.parse('2026-11-09T17:00:00Z'),midnight=Date.parse('2026-11-10T08:00:00Z');
+ for(const stat of [false,true])for(const tz of ['America/Los_Angeles','Asia/Tokyo']){const m='RF0834-14 '+(stat?'static ':'service ')+tz+' ';
+  // cancelledDateNeverStartedAtBoundary / scheduledStartedDateUnchanged / cancelledDateVisibleUntilPacificMidnight (still listed)
+  for(const [name,now] of [['start-1ms',nine-1],['exact start',nine],['start+1ms',nine+1],['later that day',nine+3*36e5],['Pacific midnight-1ms',midnight-1]]){
+   const q=await view(now,tz,pair,none,stat),x=q.cards.find(c=>c.title===X),s=q.cards.find(c=>c.title===S),w=m+name+': ';
+   check(x&&x.cls==='hike-event hike-cancelled'&&x.label===CX&&q.dates[X]===PLANNED,w+'cancelled date is not the planned date: '+JSON.stringify(q.dates));
+   check(!/started/i.test(x.text)&&x.text.includes(sentence)&&x.text.includes(NOTE)&&x.rsvp===0&&!x.ics&&!OLD.test(x.text),w+'cancelled card wrong: '+x.text);
+   check(!q.past.includes('QA cancelled nine')&&!q.past.includes(S),w+'hike moved to past hikes: '+q.past);
+   if(now<nine)check(s&&s.label===NEXT&&q.dates[S]===PLANNED&&!s.text.includes(STARTED),w+'scheduled hike before its start wrong: '+JSON.stringify(s));
+   else check(s&&s.label==='TODAY'&&q.dates[S]==='Today — started 9:00 AM'&&s.text.includes(STARTED)&&s.rsvp===0&&!s.ics,w+'scheduled started hike wrong: '+JSON.stringify(s));
+  }
+  for(const [name,now] of [['Pacific midnight',midnight],['Pacific midnight+1ms',midnight+1]]){const q=await view(now,tz,pair,none,stat);
+   check(!/QA (cancelled|scheduled) nine/.test(q.up+q.past)&&!q.cards.length,m+name+': hike still listed or moved to past hikes: '+q.up+' | '+q.past)}
+ }
+ // cancelledDateUsesEventZoneNotViewerZone: a Tokyo viewer (already the next calendar day there) sees the event's own zone, else Pacific;
+ // on the fall-back day the two 1:30 AM starts keep their instants (PDT, then PST).
+ for(const stat of [false,true]){const m='RF0834-14 '+(stat?'static':'service')+' zones: ';
+  let q=await view(nine+1,'Asia/Tokyo',[rf('z-ny','QA cancelled New York','2026-11-09T09:00:00-08:00','cancelled',{timezone:'America/New_York'}),rf('z-none','QA cancelled no zone','2026-11-09T09:00:00-08:00','cancelled',{timezone:undefined})],none,stat);
+  check(q.dates['Cancelled: QA cancelled New York']==='Monday, November 9, 2026 at 12:00 PM EST'&&q.dates['Cancelled: QA cancelled no zone']===PLANNED&&!/started/i.test(q.up),m+'event-zone dates wrong: '+JSON.stringify(q.dates));
+  q=await view(Date.parse('2026-11-01T10:00:00Z'),'Asia/Tokyo',[rf('z-pst','QA cancelled PST','2026-11-01T01:30:00-08:00','cancelled',{timezone:undefined}),rf('z-pdt','QA cancelled PDT','2026-11-01T01:30:00-07:00','cancelled')],none,stat);
+  check(L(q)===[CX+'|Cancelled: QA cancelled PDT',CX+'|Cancelled: QA cancelled PST'].join(' ; ')&&q.dates['Cancelled: QA cancelled PDT']==='Sunday, November 1, 2026 at 1:30 AM PDT'&&q.dates['Cancelled: QA cancelled PST']==='Sunday, November 1, 2026 at 1:30 AM PST'&&!/started/i.test(q.up),m+'fall-back dates wrong: '+L(q)+' '+JSON.stringify(q.dates));
+ }}
 }
 // AV1102-04/AV0007-01: the home page shows one "Next hike" line from the live API, else the published community.json; none, cancelled-only, past-only or both sources failing leaves it hidden. A valid live answer is never second-guessed by the static file.
 const days=n=>new Date(Date.now()+n*864e5).toISOString(),oneLine=s=>s.replace(/\s+/g,' ').trim();
