@@ -13,6 +13,7 @@ A new ``title`` already used by another route idea or a hike (case and spacing i
 Look-alike Unicode forms count as the same title (NFKC); an edit that only re-encodes the text (NFC) already says that.
 ``route.add`` (AV1322-02) drafts a new idea ``idea-<title slug>`` (all fields; public https source); undo removes it.
 ``route.hide``/``route.restore`` (AV1322-03) take an idea off the generated route list and back; source link kept.
+AV2137-04: an edit of a visible idea warns (never refuses) per linked hike card whose shown route text changes.
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ from __future__ import annotations
 import copy
 import re
 import unicodedata
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from hass import voice
 from hass.content_model import TEXT_LIMITS, _https
@@ -29,6 +32,11 @@ from hass.ops.hikes import MAX_ID_BASE
 
 ROUTE_EDITABLE = ("title", "place", "character", "distance", "difficulty", "elevation", "elevationLabel", "duration",
                   "routeType", "terrain", "description")
+JOURNAL_FIELDS = frozenset(("place", "distance", "difficulty", "elevationLabel", "elevation", "duration"))  # pastEntry
+PACIFIC = ZoneInfo("America/Los_Angeles")
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")  # never the machine locale
+MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+          "November", "December")
 
 
 def _fold(text):
@@ -67,9 +75,41 @@ def _route_edit(content, args, ctx):
         return Refused(f"route idea {route_id} already says that")
     if "title" in changes and (taken := _title_taken(content, changes["title"], route_id)):
         return taken
+    _link_warnings(content, idea, changes, ctx)
     before = copy.deepcopy(idea)
     idea.update(changes)
     return [Touched("routeIdeas", route_id, before, copy.deepcopy(idea))]
+
+
+def _pacific_day(event, now):
+    """The Pacific date of ``startsAt`` when the hike card shows (that day is today or later), else None."""
+    try:
+        starts = datetime.fromisoformat(str(event.get("startsAt")).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if starts.tzinfo is None:
+        return None
+    day = starts.astimezone(PACIFIC).date()
+    return day if day >= now.astimezone(PACIFIC).date() else None
+
+
+def _link_warnings(content, idea, changes, ctx):
+    """AV2137-04: an advisory (never a refusal) per real hike linking this visible idea whose shown route text changes.
+
+    Scheduled/cancelled cards show the route title on their Route line while the card shows (through the hike's
+    Pacific day); completed hikes' trail-journal entries show ``JOURNAL_FIELDS`` (community.js pastEntry)."""
+    if idea.get("status") != "idea":  # hidden: the site omits it, so no linked card shows it
+        return
+    for event in content.community["events"]:
+        if event.get("trailId") != idea["id"]:
+            continue
+        title = str(event.get("title"))
+        if event.get("status") in ("scheduled", "cancelled") and "title" in changes:
+            if (day := _pacific_day(event, ctx.now)) is not None:
+                when = f"{WEEKDAYS[day.weekday()]}, {MONTHS[day.month - 1]} {day.day}, {day.year}"
+                ctx.warnings.append(f"{title} ({when}) shows this route; its Route line changes")
+        elif event.get("status") == "completed" and JOURNAL_FIELDS & set(changes):
+            ctx.warnings.append(f"the trail journal entry for {title} changes too")
 
 
 def _title_taken(content, title, skip_id=None):
