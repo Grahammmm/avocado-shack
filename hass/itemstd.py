@@ -145,7 +145,8 @@ def check_product(record, makers):
     own = bool(_OWN_PHOTO_RE.fullmatch(image))
     if not own: missing.append("own_photo")
     elif not _text(record.get("imageAlt")): display.append("alt_is_default")
-    fresh = shelf in FRESH_SHELVES and record.get("id") not in PACKAGED_IDS
+    # a non-string shelf (list, object) is already a missing shelf above and is never hashed here
+    fresh = isinstance(shelf, str) and shelf in FRESH_SHELVES and record.get("id") not in PACKAGED_IDS
 
     def question(code):
         if code == "producer":
