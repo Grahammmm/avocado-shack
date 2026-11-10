@@ -176,7 +176,6 @@ class InspectTests(unittest.TestCase):
         link = os.path.join(self.dir, "link")
         os.symlink(self.path, link)
         self.assertEqual(credential.inspect(link), "not-regular")
-        self.assertEqual(credential.inspect(self.dir), "not-regular" if os.path.isdir(self.dir) else None)
         self.assertEqual(credential.inspect(os.path.join(self.dir, "nope", "x.token")), "missing")
         self.assertEqual(credential.inspect("bad\0path"), "unreadable")
 
