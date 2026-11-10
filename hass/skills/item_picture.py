@@ -66,7 +66,7 @@ _CAPTION_LEAD = frozenset({"in", "on", "at", "with", "without", "from", "by", "f
                            "but", "so", "or", "if", "when", "which", "that's", "thats", "please", "pls", "plz"})
 # a reply that opens with one of these is an acknowledgement before the answer: "yes, the lemons"
 _REPLY_LEAD = frozenset({"sorry", "hi", "hello", "hey", "sure", "oh", "well", "so", "actually", "just", "right", "great", "good",
-                         "cool", "yeah", "yep", "nope", "um", "uh", "hmm", "sorry,", "wait", "oops"})
+                         "cool", "yeah", "yep", "nope", "um", "uh", "hmm", "sorry,", "wait", "oops", "not", "no"})  # 'not the plums, the lemons' rejects one and picks one
 # the last word of a place or a setting in a photo caption: "the lemons, plain counter" (never a word that could name a product)
 _SETTING_NOUNS = frozenset({"counter", "countertop", "bench", "benchtop", "table", "tabletop", "shelf", "shelve", "window",
                             "windowsill", "background", "backdrop", "wall", "floor", "surface", "desk", "sink", "kitchen",
@@ -209,6 +209,32 @@ def _crowded(turn, name="", alt="") -> str | None:
     return None
 
 
+_NEGATORS = frozenset({"not", "no", "never", "nor", "neither", "except", "without", "isn't", "isnt", "wasn't", "wasnt", "don't",
+                       "dont", "doesn't", "doesnt", "didn't", "didnt", "wouldn't", "wouldnt", "shouldn't", "shouldnt", "aren't", "arent"})
+_REJECT_FRAME = re.compile(r"\b(?:anything|everything|anyone|everyone)\s+but\b|\bother\s+than\b|\binstead\s+of\b|\brather\s+than\b",
+                           re.IGNORECASE)
+_CLAUSE = re.compile(r"[,.;:!?\n]+|\s+(?:but|though|however)\s+", re.IGNORECASE)
+
+
+def _picks(turn, want):
+    """True when his text affirmatively picks the product (its words, not negated); False when it only rejects it ('not the
+    lemons', 'anything but lemons', 'the plums instead of the lemons'); None when it does not mention it. Each clause (bounded
+    by a comma, a stop or 'but') is read on its own, so 'not the plums, the lemons' picks it and 'the plums, not the lemons'
+    does not. Within a clause a negation covers the words after it; the last mention in the text decides."""
+    if not want:
+        return None
+    text = _REJECT_FRAME.sub("not", (turn or "").replace("\u2019", "'"))
+    verdict = None
+    for clause in _CLAUSE.split(text):
+        negated = False
+        for token in re.findall(r"[a-z0-9']+", clause.casefold()):
+            if token in _NEGATORS or token.endswith("n't"):
+                negated = True
+            elif _words(token) & want:
+                verdict = not negated
+    return verdict
+
+
 def one_place(texts, name="", alt="") -> str | None:
     """The question to ask when his texts put the one photo on two products or on the home page and a product; None when it
     is one place. A later text of his that names the one product (and asks nothing new, so not another list) answers it; the
@@ -220,10 +246,12 @@ def one_place(texts, name="", alt="") -> str | None:
         return None
     last, question = asked[-1]
     want = _words(name)
-    for turn in turns[last + 1:]:
-        if want and want & _words(turn):
-            return None
-    return question
+    chosen = False
+    for turn in turns[last + 1:]:  # his latest word on the product wins: a yes can follow a no, and a no can follow a yes
+        verdict = _picks(turn, want)
+        if verdict is not None:
+            chosen = verdict
+    return None if chosen else question
 
 
 # -- the drafted caption (the dispatcher calls it by name; the plan calls it for a caption still empty) -------------------
@@ -322,7 +350,7 @@ def notes(name, slots, ctx) -> dict:
 
 # -- the skill ----------------------------------------------------------------------------------------------------------
 ITEM_PICTURE = Skill(
-    name="item.picture", label="change a product's picture", version=1,
+    name="item.picture", label="change a product's picture", version=2,
     summary="Put the photo he sent on one product, with a caption that says what it shows.",
     triggers=(
         Trigger("new picture for the lemons"),
