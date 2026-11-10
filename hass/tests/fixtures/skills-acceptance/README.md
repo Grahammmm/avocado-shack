@@ -96,11 +96,12 @@ bag-red-cloth.jpg (item.add companions).
 
 * `photo-bag-bench-small`, `photo-jar-dark-wood`, `photo-bag-red-cloth`: a warned picture is refused (`not-drafted`); the D6 knowingly-approved
   fallback of AV1109-05 is not available, so no warning-then-yes path is claimed. These rows have no golden.
-* `primary-item-restore` (`refused`, "is hidden"): the real dispatcher's product resolver refuses a hidden product by name, so restore cannot draft.
+* `primary-item-restore`: now proposes, applies and undoes; hidden resolution is allowed only for this skill. Held products remain refused.
 * `primary-page-about`, `primary-maker-edit` (`question`): `traceable()` in `hass/skills/dispatch.py` never accepts an owner-words value containing "and"
   (it is a clause splitter), so the owner's own sentence is asked for again.
 * `primary-stock-set` (`question`, `question`): the router ties stock.set with stock.checked and the follow-up ties again.
-* `primary-hike-reschedule`, `primary-hike-recap`: the undo is not byte-identical (`undo-not-identical`), so the rows run with `undo: false`.
+* `primary-hike-reschedule`: now checks exact undo with an isolated empty RSVP database. The old failure was the missing guest-count fixture, not byte restoration; the production capacity gate is unchanged.
+* `primary-hike-recap` retains `undo: false`; recap repair is outside this card.
 
 ## Forty non-primary rows (AV1109-18)
 

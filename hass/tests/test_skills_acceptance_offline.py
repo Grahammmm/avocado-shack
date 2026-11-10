@@ -495,7 +495,7 @@ PHOTO_SOURCES = {  # the eight synthetic photos of #504 (reports/hass/newitem-1/
     "jar-white-sheet.jpg": True, "bottle-grey-wall-tilted.jpg": True, "jar-phone-rotated.jpg": True, "bottle-bench-png.png": True,
     "jar-cutout-alpha.png": True, "bag-bench-small.jpg": False, "jar-dark-wood.jpg": False, "bag-red-cloth.jpg": False}
 # Rows pinned to a dependency behaviour that blocks the draft; each must be fixed by its owner and re-recorded (README, "Held rows").
-HELD = {"primary-item-restore": "refused", "primary-page-about": "question", "primary-maker-edit": "question", "primary-stock-set": "question",
+HELD = {"primary-page-about": "question", "primary-maker-edit": "question", "primary-stock-set": "question",
         "photo-bag-bench-small": "not-drafted", "photo-jar-dark-wood": "not-drafted", "photo-bag-red-cloth": "not-drafted"}
 
 

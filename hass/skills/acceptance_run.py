@@ -33,6 +33,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -298,6 +299,11 @@ class Session:
             cfg = json.loads((self.repo.state / "config.json").read_text("utf-8"))
             settings = {"ownerSenders": [OWNER], "ownerChat": CHAT, "approvalTtlSeconds": TTL_SECONDS, "skills": {"mode": "both"},
                         "mediaRoot": self.media_root, "houseRender": row.get("house_render") is True}
+            # Synthetic empty RSVP store: undo must retain the real fail-closed guest-count gate.
+            guest_db = self.repo.state / "guests.sqlite3"
+            with sqlite3.connect(guest_db) as db:
+                db.execute("CREATE TABLE rsvps (event_id TEXT, party_size INTEGER)")
+            settings["guestCountsDb"] = str(guest_db)
             editor._write_json(self.repo.state / "config.json", {**cfg, "settings": settings})
             self.out = FixtureAdapter()
             if row.get("seed"): testkit.Scratch._seed(self, copy.deepcopy(row["seed"]))
