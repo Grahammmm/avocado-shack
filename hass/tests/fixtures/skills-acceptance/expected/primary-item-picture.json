@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "storefront-mockup/assets/products/photo-91c700264e60552f.jpg": "47c973da2b315c19c9ac922d3963e271d62ca93b50f0f17e9257ea449e80fd0b"
+  },
+  "diff": [
+    {
+      "after": "assets/products/photo-91c700264e60552f.jpg",
+      "before": "assets/products/photo-product-017.webp",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-017].image"
+    },
+    {
+      "after": "Lemons",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-017].imageAlt"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "storefront-mockup/assets/products/photo-91c700264e60552f.jpg",
+    "storefront-mockup/catalog-products.js"
+  ],
+  "residue": {
+    "assets": {
+      "storefront-mockup/assets/products/photo-91c700264e60552f.jpg": "47c973da2b315c19c9ac922d3963e271d62ca93b50f0f17e9257ea449e80fd0b"
+    },
+    "content": []
+  },
+  "schema_version": 1
+}

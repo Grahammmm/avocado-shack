@@ -2144,6 +2144,13 @@ Branch rb/rf1915-13. openreq.py: `OpenRequests.sweep` compared `closed_at` text 
 
 Checks: `python3 -B -m unittest hass.tests.test_open_requests` ran 33 tests, OK on the builder's clone; the six new cases failed on main's openreq.py. Not deployed; no backup-erasure claim.
 
+## RF1915-11: correspondence prune skips impossible calendar-named files — November 10, 2026
+
+Branch rb/rf1915-11. hass/corrlog.py: CorrLog.prune() parsed every regular, non-symlink file named like a day with strptime inside one loop, so a stray file named like 2026-02-30.jsonl raised ValueError, which record() swallowed before opening today's file: the first correspondence row of the day was lost (a second record in the same instance worked) and the prune command died with a traceback. The date is now parsed per candidate; a ValueError means an unknown file, left untouched (name, bytes, mode), and the scan continues, so valid expired days are still deleted whole at the unchanged 90-day UTC cutoff. OSError handling, the once-a-day scan, the count and the CLI wording are unchanged. test_corrlog.py (Retention) gains four regressions on synthetic temporary state: impossible names skipped while a valid expired file is deleted, the first and second record of a day both written (also on the next UTC day), cutoff and leap-day boundaries, and the CLI printing `Deleted 1 old day files.` then `Deleted 0 old day files.` with empty stderr.
+
+Checks: `python3 -B -m unittest hass.tests.test_corrlog` ran 68 tests, OK on the builder's clone; the four new tests failed (3 errors, 1 failure) with the fix removed. Not deployed or merged; no live state touched.
+
+
 ## RF1915-10: require both sides of new-item comparison evidence
 
 Branch rb/rf1915-10. Actual builder: sol-reviewer (gpt-6.1-sol). The offline preview command now returns 1 if any BEFORE or AFTER result fails, after collecting all three cases and writing the existing preview.json. Capture order, diagnostics, JSON schema/format and missing-PLAYWRIGHT_MODULE exit 2 are unchanged. No renderer, product, published content or committed preview artifact changed.
