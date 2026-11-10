@@ -493,10 +493,17 @@ def set_line(phrases) -> str | None:
 SET_PHRASES = {"hike.add": add_set_phrases}  # skill name -> fn(slots as the owner gave them, ctx) -> phrases; consumed by the kit and the dispatcher
 
 
+PAGE_ONLY_NOTE = "Cancelling changes the hike page. Nobody is notified."  # RF2315-12: said before yes, whatever the sign-up state or guest count
+
+
 def notes(name, slots, ctx) -> dict:
-    """Lines shown beside a hike.add / hike.edit draft: ``I set: 6 spots.`` when the code supplied the six (only when no other
-    default already carries it in SET_PHRASES), and the capacity-only page note for the hike's own limit."""
+    """Lines shown beside a hike draft: for hike.cancel, that it changes the page and tells nobody; for hike.add / hike.edit,
+    ``I set: 6 spots.`` when the code supplied the six (only when no other default already carries it in SET_PHRASES), and the
+    capacity-only page note for the hike's own limit."""
     out = {"say": [], "set": [], "warn": []}
+    if name == "hike.cancel":
+        out["say"].append(PAGE_ONLY_NOTE)  # fixed text: reads no guest data, files or settings
+        return out
     if name not in ("hike.add", "hike.edit"):
         return out
     given = dict(slots)
