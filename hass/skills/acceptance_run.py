@@ -785,14 +785,21 @@ def load_chain(path, *, fixture_root):
         if not isinstance(expect, dict): raise InputError("chain expect must be an object")
         ordinary = copy.deepcopy(row)
         request = ordinary["expect"].pop("request", None)
+        ops = ordinary["expect"].pop("ops", None)
+        if expect.get("dispositions") == ["proposed"]:
+            if not (isinstance(ops, list) and ops and all(isinstance(o, dict) and set(o) == {"op", "args"}
+                    and isinstance(o["op"], str) and isinstance(o["args"], dict) for o in ops)):
+                raise InputError("chain proposal pins its full intended ops and targets")
+        elif ops is not None: raise InputError("only a chain proposal pins ops")
         # First-row photos use global forward-turn indices; validate their closed shape here,
         # while reusing ordinary validation for all other fields.
         photos = ordinary.pop("photos", [])
-        if photos and (not isinstance(photos, list) or any(not isinstance(p, dict) or set(p) != {"turn", "fixture"}
+        if (not isinstance(photos, list) or any(not isinstance(p, dict) or set(p) != {"turn", "fixture"}
                 or type(p["turn"]) is not int or not 0 <= p["turn"] < 24 or not _safe_rel(p["fixture"], FIXTURE_PATH_RE) for p in photos)
                 or len({p["turn"] for p in photos}) != len(photos)):
             raise InputError("chain photos are distinct global request indices and safe fixtures")
-        if ordinary["expect"].get("picture") or not ordinary.get("texts", ["x"])[0]:
+        turn_texts = ordinary.get("texts")
+        if ordinary["expect"].get("picture") or (isinstance(turn_texts, list) and turn_texts == [""]):
             ordinary["photos"] = [{"turn": 0, "fixture": "photo.jpg"}]
         validate_row(ordinary)
         rid = f"chain-{len(rows) + 1:02d}"
@@ -943,6 +950,7 @@ def run_chain(path, *, fixture_root=None, registry=None):
                 if len(sess.drafts()) != ndrafts + 1: res.fail("apply-failed")
                 else:
                     draft = sess.drafts()[-1]
+                    if json.loads(draft["ops_json"]) != expect["ops"]: res.fail("wrong-diff")
                     if row["skill"] not in res.skills: res.fail("wrong-skill")
                     golden = load_expected(root, row)
                     # Reuse the complete inherited claims/content/picture/declared-edit/approval checks
@@ -1095,8 +1103,8 @@ def main(argv=None):
     try: args = ap.parse_args(argv)
     except SystemExit as exc: return 2 if exc.code else 0
     try:
-        if args.chain:
-            if args.rows or args.record or args.selftest: raise InputError("--chain is exclusive with --rows, --record and --selftest")
+        if args.chain is not None:
+            if args.rows is not None or args.record is not None or args.selftest: raise InputError("--chain is exclusive with --rows, --record and --selftest")
             results = run_chain(args.chain)
             for result in results: print(result.line())
             if results: print("chain: " + json.dumps(results[-1].facts, sort_keys=True))

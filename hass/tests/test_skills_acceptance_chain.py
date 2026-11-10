@@ -22,6 +22,8 @@ def mini():
             row(2, "item.hide", "the lemons", [{"skill": "item.hide", "slots": {"items": "lemons"}}], "proposed"),
             row(3, "shop.hours", "we're open till 7 on fridays now", [{"skill": "shop.hours", "slots": {"hours": hours}}], "proposed"),
             row(4, "none", "status", [], "status")]
+    rows[1]["expect"]["ops"] = [{"op": "product.hide", "args": {"id": "photo-product-017"}}]
+    rows[2]["expect"]["ops"] = [{"op": "store.set_hours", "args": {"hours": hours}}]
     rows[0]["expect"]["request"] = {"skill": "item.hide", "slots": {}, "asked_slot": "items", "calls": [], "attachments": []}
     return rows
 
@@ -70,7 +72,7 @@ class Chain(unittest.TestCase):
     def test_bad_order_empty_schema_mixed_modes_refuse_before_scratch(self):
         root = self.fixture()
         variants = [[], list(reversed(mini())), mini() + [mini()[0]]]
-        for key, value in (("schema_version", 2), ("tag", "primary"), ("texts", ["a", "b"]), ("skill_version", 99)):
+        for key, value in (("schema_version", 2), ("tag", "primary"), ("texts", []), ("texts", ["a", "b"]), ("photos", {}), ("skill_version", 99)):
             rows = mini(); rows[0][key] = value; variants.append(rows)
         rows = mini(); rows[1]["seed"] = {}; variants.append(rows)
         rows = mini(); del rows[0]["expect"]["request"]; variants.append(rows)
@@ -78,7 +80,7 @@ class Chain(unittest.TestCase):
             for rows in variants:
                 self.write_rows(root, rows)
                 with self.assertRaises(A.InputError): self.run_chain(root)
-            for flags in (["--rows", "x"], ["--selftest"], ["--record", "chain-02"]):
+            for flags in (["--rows", "x"], ["--rows", ""], ["--selftest"], ["--record", "chain-02"], ["--record", ""]):
                 with contextlib.redirect_stderr(io.StringIO()): self.assertEqual(A.main(["--chain", str(root / "chain-mini.jsonl"), *flags]), 2)
             session.assert_not_called()
         with self.assertRaises(A.InputError): A.validate_row(mini()[0])
@@ -149,6 +151,29 @@ class Chain(unittest.TestCase):
                 return final(sess, res, *args)
             with mock.patch.object(A, "_chain_final", inject): results = self.run_chain(root)
             self.assertTrue({"residue-undeclared", "undo-not-identical"} & set(results[-1].codes), (fault, results[-1].codes))
+
+    def test_cancelled_expired_and_stale_approval_fail_without_false_success(self):
+        from datetime import timedelta
+        for fault in ("cancelled", "expired", "stale"):
+            root = self.fixture(); say = A.Session.say
+            def interrupt(sess, text, **kw):
+                if text.startswith("yes ") and any(d["code"] == text[4:] for d in sess.drafts()):
+                    if fault == "cancelled":
+                        sess.conv.db.execute("UPDATE drafts SET state = 'cancelled' WHERE code = ?", (text[4:],))
+                    elif fault == "expired": sess.now += timedelta(minutes=31)
+                    else:
+                        p = sess.wt / "hass/content/products.json"
+                        data = json.loads(p.read_text())
+                        # Change the very record the pending hide targets.
+                        target = next(x for x in data["products"] if x["id"] == "photo-product-017")
+                        target["description"] = "Synthetic conflicting edit."
+                        p.write_text(json.dumps(data))
+                        A._git(sess.wt, "add", "hass/content/products.json")
+                        A._git(sess.wt, "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "synthetic stale base")
+                return say(sess, text, **kw)
+            with mock.patch.object(A.Session, "say", interrupt): results = self.run_chain(root)
+            self.assertIn("apply-failed", results[-1].codes, (fault, results[-1].codes))
+            self.assertEqual(results[-1].facts["inverses"], 0)
 
     def test_cli_exits_and_sanitized_summary(self):
         root = self.fixture(); output = io.StringIO()
