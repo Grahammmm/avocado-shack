@@ -89,13 +89,15 @@ function nearestExhaustive(fg, bgs, thr) {
   return best && best.rgb;
 }
 const nearCache = new Map();
+// Distinct backings in a deterministic order: luminance, then numeric RGB.
+const byLum = (a, b) => lum(a) - lum(b) || (a[0] * 65536 + a[1] * 256 + a[2]) - (b[0] * 65536 + b[1] * 256 + b[2]);
+const distinct = bgs => [...new Map(bgs.map(b => [hex(b), b])).values()].sort(byLum);
 function recommend(fg, bgs, thr) {
-  // Passing against the lightest and the darkest backing passes against every colour in between (ratio is
-  // quasi-convex in the backing luminance), so only the extremes are searched.
-  const sorted = [...new Map(bgs.map(b => [hex(b), b])).values()].sort((a, b) => lum(a) - lum(b));
-  const ext = sorted.length > 2 ? [sorted[0], sorted[sorted.length - 1]] : sorted;
-  const key = hex(fg) + '|' + ext.map(hex).join(',') + '|' + thr;
-  if (!nearCache.has(key)) nearCache.set(key, nearestPassing(fg, ext, thr));
+  // Every backing is searched: passing the lightest and darkest does NOT pass one in between (the ratio is
+  // smallest where the luminances meet), so the whole set is the constraint and the cache key.
+  const sorted = distinct(bgs);
+  const key = hex(fg) + '|' + sorted.map(hex).join(',') + '|' + thr;
+  if (!nearCache.has(key)) nearCache.set(key, nearestPassing(fg, sorted, thr));
   const rgb = nearCache.get(key);
   if (!rgb) return { ok: false, lightest: hex(sorted[sorted.length - 1]), darkest: hex(sorted[0]) };
   if (!sorted.every(bg => contrastRatio(rgb, bg) >= thr)) throw new Error('recommendation failed its own recheck');
@@ -113,10 +115,10 @@ function assess(run) {
     const f = effectiveFg(run.fg, run.opacity, bg), r = contrastRatio(f, bg);
     if (r < worst) { worst = r; worstBg = bg; fgOut = f; }
   }
-  const sorted = [...bgs].sort((a, b) => lum(a) - lum(b));
+  const sorted = distinct(bgs);
   const out = { threshold: thr, ratio: worst, fg: hex(fgOut), bg: hex(worstBg), status: worst >= thr ? 'pass' : 'fail' };
   if (bgs.length > 1) { out.bgRange = [hex(sorted[0]), hex(sorted[sorted.length - 1])]; out.bgCount = bgs.length; }
-  out.bgs = bgs.length > 1 ? [sorted[0], sorted[sorted.length - 1]].map(hex) : [hex(bgs[0])];
+  out.bgs = sorted.map(hex); // every distinct backing: the recommendation must pass all of them
   return out;
 }
 
