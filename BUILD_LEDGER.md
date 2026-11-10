@@ -2124,6 +2124,12 @@ Branch rb/rf0844-12. storefront-mockup/community-server.py: `email_address` now 
 
 Checks: `python3 -B -m unittest hass.tests.test_community_email_controls -v` ran 5 tests, OK on the builder's clone (failed before the fix). Not deployed; no email is sent and no historical row is cleaned.
 
+## RF0854-12: shared dialogs stay open for clicks inside their padding — November 9, 2026
+
+Branch rb/rf0854-12. script.js: the shared Privacy/RSVP `<dialog>` used to close on every click whose target was the dialog itself, and a click on its own padding or border has that target too. It now closes only when the pointer lies outside the dialog's rectangle, measured at click time; child clicks, the Close button and native Escape are unchanged. static-site-qa.cjs gains real mouse-coordinate checks at 390 and 1440 px (each point confirmed by elementFromPoint and the rectangle before the click): padding clicks keep Privacy open (also after a resize) and keep the real RSVP form open with its typed synthetic values, while a backdrop click, Close and Escape still close it and return focus; nothing is posted or stored.
+
+Checks: `node storefront-mockup/static-site-qa.cjs DIR` on a fresh `hass/sitegen.py --publish` folder outside the repo (local Chromium, loopback only) passed on the builder's clone; the new padding check failed before the fix. Not deployed; no physical-device or Safari check.
+
 ## RF0854-13: stale Available today filter retires at the next catalog render — November 9, 2026
 
 Branch rb/rf0854-13. shop.js: right after renderCatalog's existing refreshFreshness(), retireStaleAvail() checks the whole catalog; when no product still carries a current word (an open page aged its shelf check from seven to eight days), the Available today checkbox is unchecked and removed, and only ?avail is dropped with replaceState (other params, duplicates, hash, item and status line untouched; no history write when avail is absent). The render then continues with the other filters and repaints in full. Before the fix, the same page kept avail=1 and showed 0 selections while a reload showed the full list. catalog-only-qa.cjs gains fixed-clock cases (Pacific Nov 7 = age seven, Nov 8 = age eight): checked control on search/view/shelf renders with reload equivalence, unchecked control on load more with no history write, paginated repaint without duplicates, preserved view/shelf/search/maker/from/item/status/focus/scroll, and current words outside the results (Sold out included) keeping the control.
