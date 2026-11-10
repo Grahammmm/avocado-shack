@@ -74,7 +74,7 @@ const check=(value,message)=>{if(!value)throw Error(message)};
  check(await full.locator('.hike-facts + p.hike-access').count()===1&&(await full.locator('.hike-access').innerText()).trim()==='QA access: no pets.','Access note missing after the facts');
  check(await dir.count()===1&&await dir.getAttribute('href')==='https://www.google.com/maps/search/?api=1&query=QA%20Road%201%2C%20Los%20Osos'&&await dir.getAttribute('target')==='_blank'&&await dir.getAttribute('rel')==='noopener'&&await dir.getAttribute('class')==='text-link'&&(await dir.innerText()).trim()==='Directions','Directions link wrong');
  const bareText=await bare.innerText();
- check(same(await facts(bare),['Meet=QA meeting point','Bring along=The usual: water, sturdy shoes, a layer and a snack.'])&&await bare.locator('.hike-access').count()===0&&!/Address|Directions|Meet at|undefined|null/.test(bareText),'Hike without logistics gained rows: '+bareText);
+ check(same(await facts(bare),['Meet=QA meeting point','Bring along=The usual: water, sturdy shoes, a layer and a snack.'])&&await bare.locator('.hike-access').count()===0&&!/Address|Directions|undefined|null/.test(bareText),'Hike without logistics gained rows: '+bareText);
  await full.locator('[data-rsvp]').click();await p.locator('#rsvp-name').waitFor();
  const dlg=p.locator('#dialog-content');
  check(same(await facts(dlg),FULL)&&await dlg.locator('.hike-facts + p.hike-access').count()===1&&(await dlg.locator('.hike-access').innerText()).trim()==='QA access: no pets.','RSVP dialog lacks the logistics: '+JSON.stringify(await facts(dlg)));

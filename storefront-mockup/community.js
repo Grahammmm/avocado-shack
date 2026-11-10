@@ -36,7 +36,7 @@ function invitationModel(e,t,{sample=false,label='',canExplore=false}={}){
  const past=isNaN(Date.parse(e.startsAt))||pacificDay(e.startsAt)<pacificDay(Date.now());
  const day=new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:'America/Los_Angeles',weekday:'long',month:'long',day:'numeric',year:'numeric'});
  const rows=sample?[['Round trip',t.distance],['Difficulty',t.difficulty],[t.elevationLabel,t.elevation],['Allow',t.duration]]:
-  [['Difficulty',firstText(e.difficulty,t?.difficulty,'to be confirmed')],['Distance',firstText(e.distance,t?.distance,'to be confirmed')],['Time',firstText(e.duration,t?.duration,'to be confirmed')],...(set(t?.elevation)?[[firstText(t.elevationLabel,'Elevation change'),t.elevation]]:[])];
+  [['Distance',firstText(e.distance,t?.distance,'to be confirmed')],['Difficulty',firstText(e.difficulty,t?.difficulty,'to be confirmed')],...(set(t?.elevation)?[[firstText(t.elevationLabel,'Elevation change'),t.elevation]]:[]),['Time',firstText(e.duration,t?.duration,'to be confirmed')]];
  const state=sample||x||started?null:spotsState(e,spotsCount(e));
  const guide=safeGuide(t);
  return {e,t,sample,label:sample?'THE NEXT HIKE':label,cancelled:x,
