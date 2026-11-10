@@ -75,7 +75,7 @@ registered skill; skill coverage is enforced there, not here. `_selftest/` is th
 ## Primary corpus (AV1109-17)
 
 `messages.jsonl` holds one `tag=primary` row for every registered skill (38 at this commit, derived from `load_skills()` by
-`PrimaryCorpus`, never hard-coded) plus five `tag=photo` companions: 43 rows, 27 `expected/` goldens. The first owner text of each
+`PrimaryCorpus`, never hard-coded) plus five `tag=photo` companions: 43 rows, 28 `expected/` goldens. The first owner text of each
 primary row is the first numbered example sentence of the skill's catalog entry (SKILLS-SPEC section 3; specials.md for the five
 specials skills; social.md for social.maker), tags such as `(p)` removed. **This is a partial acceptance run (Primary only, not the
 historical 72 rows) and a passing run is not human acceptance.** The builder read each golden against the typed plan and the skill's

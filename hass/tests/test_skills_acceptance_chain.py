@@ -1,6 +1,5 @@
 """Chain prerequisites: restore resolves hidden items only in its own skill; undo retains guest safety."""
 import copy
-import json
 import unittest
 
 from hass.skills import acceptance_run as A, load_skills
@@ -11,7 +10,7 @@ class Prerequisites(unittest.TestCase):
         return copy.deepcopy(next(r for r in A.load_rows(A.DEFAULT_ROWS) if r['id'] == name))
 
     def test_restore_hidden_by_name_and_undo(self):
-        r = A.run_row(self.row('primary-item-restore'), fixture_root=A.FIXTURE_ROOT, observe=True)
+        r = A.run_row(self.row('primary-item-restore'), fixture_root=A.FIXTURE_ROOT)
         self.assertEqual(r.codes, [])
         self.assertEqual(r.dispositions, ['proposed'])
         self.assertEqual(r.facts['undo'], 'identical')
