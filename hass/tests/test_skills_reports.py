@@ -516,6 +516,37 @@ class SiteSources(unittest.TestCase):
             self.assertTrue(reports.site_reply(slots, site_ctx()))
         self.assertEqual(reports.site_reply(None, site_ctx()), reports.SITE_ASK)
 
+    def test_the_generated_prompt_spells_out_the_kind_tokens_and_subject_rules(self):
+        """The interpreter sees only skills.prompt output: every accepted kind and its subject rule must be in it."""
+        import re
+        from hass.interpreter_prompt import build
+        from hass.skills.prompt import skills_section
+        from hass.tests.test_interpreter_prompt import TEST_REGISTRY, tiny_content
+        reg = load_skills()
+        for prompt in (skills_section(reg, [("answer.site", 9.0)]),
+                       build(TEST_REGISTRY, tiny_content(), reg, [("answer.site", 9.0)])):
+            [kind_line] = [ln for ln in prompt.splitlines() if ln.startswith("  slots: kind: enum, required")]
+            self.assertIn("answer.site", prompt)
+            [kinds_text] = re.findall(r"kind: enum, required - exactly one of \(([^)]*)\)", kind_line)
+            self.assertEqual(tuple(kinds_text.split(" | ")), reports.KINDS)
+            [subject_text] = re.findall(r"subject: text, optional - \(([^)]*)\)", kind_line)
+            mapped = {}
+            for family, kinds_ in re.findall(r"the (product|maker|hike)'s name for ([a-z_ ]+?)(?:,|$)", subject_text):
+                mapped.update({k: family for k in kinds_.split(" or ")})
+            self.assertEqual(mapped, reports.SUBJECTS)
+            self.assertIn("day: day, optional - only for hours", kind_line)
+        # the tokens the prompt gives are exactly the ones the guard lets through
+        for kind in reports.KINDS:
+            slots = {"kind": kind}
+            if kind in reports.SUBJECTS:
+                slots["subject"] = {"product": "eggs", "maker": "Sunny Farm", "hike": "Cass Hill"}[reports.SUBJECTS[kind]]
+            self.assertIsNone(reports.site_guard(slots, [], site_ctx()), kind)
+        # and the vocabulary is on the slot line, which the cap never shortens, with three candidates in full
+        crowded = skills_section(reg, [("answer.site", 9.0), ("report.shelf", 5.0), ("stock.set", 4.0)])
+        self.assertLessEqual(len(crowded.encode("utf-8")), 6 * 1024)
+        for kind in reports.KINDS:
+            self.assertIn(kind, crowded)
+
     def test_hours_day_today_and_literal_fallback(self):
         self.assertEqual(site("hours"), "The site says: Monday–Friday 9am–6pm")
         self.assertEqual(site("hours",day="saturday"), "The site says: Saturday 9am–5pm")

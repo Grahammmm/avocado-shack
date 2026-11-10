@@ -160,6 +160,13 @@ REPORT_SHELF = Skill(
 # -- deterministic site answers (AV1109-09) -----------------------------------------------------------------------
 KINDS = ("hours", "next_hike", "product", "product_maker", "maker_story", "hike_count", "hike_signups")
 SUBJECTS = {"product": "product", "product_maker": "product", "maker_story": "maker", "hike_signups": "hike"}
+_SUBJECT_NAMES = {"product": "the product's name", "maker": "the maker's name", "hike": "the hike's name"}
+# The interpreter prompt shows these (hass/skills/prompt.py), built from KINDS and SUBJECTS so they cannot drift.
+KIND_HINT = "exactly one of (" + " | ".join(KINDS) + "), spelled that way"
+SUBJECT_HINT = "(" + ", ".join(
+    f"{_SUBJECT_NAMES[fam]} for {' or '.join(k for k in KINDS if SUBJECTS.get(k) == fam)}" for fam in dict.fromkeys(SUBJECTS.values())
+) + "), left out for other kinds"
+DAY_HINT = "only for hours"
 SITE_ASK = "What would you like to know about the site?"
 SITE_UNREADABLE = "I can't read that from the site right now. Nothing has changed."
 NO_MAKER = "I can't see who makes that on the site."
@@ -342,7 +349,8 @@ ANSWER_SITE = Skill(
               Trigger("tell me the maker's story"), Trigger("how many upcoming hikes are scheduled"),
               Trigger("how many signed up for Cass Hill"), Trigger("wat are the hours", "typo"),
               Trigger("what does the site say", "vague"), Trigger("when and where is our next hike", "multi")),
-    slots=(Slot("kind", "enum", True, ask=SITE_ASK), Slot("subject", "text"), Slot("day", "day")),
+    slots=(Slot("kind", "enum", True, ask=SITE_ASK, hint=KIND_HINT), Slot("subject", "text", hint=SUBJECT_HINT),
+           Slot("day", "day", hint=DAY_HINT)),
     rules=("site-guard",), plan=plan_site, edits=(), side_effects=("none",), preview="none", approval="none",
     live_class="read-only", undo=Undo("none", "none"),
     refuse=(("prices", "The website doesn't show prices."), ("sales", "I can't see sales from the site.")),

@@ -97,6 +97,11 @@ class SkillsBlockTests(unittest.TestCase):
             self.assertNotIn("(", _slot_text(slot))
         self.assertEqual(_slot_text(model.Slot("items", "text_list", True)), "items: text_list, required")
 
+    def test_a_slot_hint_is_shown_after_the_kind_and_only_when_set(self):  # AV1109-09
+        slot = model.Slot("kind", "enum", True, ask="Which?", hint="exactly one of (a | b)")
+        self.assertEqual(_slot_text(slot), "kind: enum, required - exactly one of (a | b)")
+        self.assertEqual(_slot_text(dataclasses.replace(slot, hint="")), "kind: enum, required")
+
 
 if __name__ == "__main__":
     unittest.main()

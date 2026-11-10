@@ -93,6 +93,12 @@ A readable RSVP table with no rows for the hike confirms **0**. Missing setting,
 party size for that hike means **unavailable**, never a guess. Bad rows for another hike do not spoil a confirmed count.
 No creation, repair, migration, participant listing, network access or cached estimate is involved.
 
+The interpreter-facing definition spells the vocabulary out. `Slot.hint` (a new optional field, shown by `hass/skills/prompt.py`
+after the slot kind, never validated by the model) carries the exact `kind` tokens, which kinds take a `subject` (the product's name
+for `product` and `product_maker`, the maker's name for `maker_story`, the hike's name for `hike_signups`) and that `day` is only for
+`hours`. The hints are built from `KINDS` and `SUBJECTS`, so they cannot drift, and `test_skills_reports` checks the generated
+prompt (both `skills_section` and the full `interpreter_prompt.build`) against them.
+
 Examples: “what time do we close Saturday”, “who makes eggs and where”, “tell me Sunny Farm story”,
 “when and where is our next hike”, “how many signed up for Cass Hill”. Names are resolved by the existing product,
 maker and hike resolvers. Unknown kinds/subjects or incorrect slot combinations use the existing catch-all and one backlog

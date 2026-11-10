@@ -59,6 +59,7 @@ class Slot:
     owner_words: bool = False  # the value must be traceable to the owner's own texts
     limit: tuple | None = None  # (content kind, field): read from content_model.TEXT_LIMITS, never copied
     from_attachment: bool = False
+    hint: str = ""  # prompt-visible closed vocabulary or rule for this slot (shown after the kind; never validated here)
 
 
 @dataclass(frozen=True)
