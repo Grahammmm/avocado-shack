@@ -50,6 +50,19 @@ PERMANENT_WORD = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?)\b
 NEGATED_DELETE = re.compile(r"\b(?:do not|does not|never|not|no|without)\b[^.]*\b(?:delet(?:e|ing)|erase|wipe)\b")
 HIDE_INSTEAD = re.compile(r"\bjust hide\b|\bhide\b[^.]*\binstead\b|\binstead\b[^.]*\bhide\b")
 REJECTS_HIDE = re.compile(r"\b(?:not|rather than|instead of)\s+(?:to\s+)?(?:just\s+)?hid(?:e|ing)\b")
+REFERS_BACK = re.compile(r"\b(?:it|them|that|this|those|these|everything|all|one|ones)\b")  # points at what was just asked for
+NOT_A_THING = frozenset(  # clause words that name no product: verbs, negations, fillers and the 'forever' words
+    "a an and the my our your please pls actually just instead of to for on in at me us i you do does did not no never without "
+    "dont don't yes yeah ok okay now then also still really delete deleting deletes erase erasing wipe wiping hide hiding hid "
+    "ever forever good permanent permanently or rather than want need like would should can could will".split())
+
+
+def _things(clause) -> frozenset:
+    """The product words of one clause, plural folded, so a prohibition can be matched to the request it withdraws."""
+    words = (w for w in re.findall(r"[a-z0-9']+", clause) if w not in NOT_A_THING and not REFERS_BACK.fullmatch(w))
+    return frozenset(w[:-1] if len(w) > 3 and w.endswith("s") else w for w in words)
+
+
 FIELD_WORDS = {"name": "name", "description": "description", "displayBrand": "maker line", "imageAlt": "picture caption"}
 SLOT_OF = {"displayBrand": "display_brand", "imageAlt": "image_alt"}  # slot names are lower case; the op arguments keep their camel case
 
@@ -145,10 +158,11 @@ def rule_whole_shelf(ids):
 
 def owner_asks_permanent_delete(texts, content=None) -> bool:
     """True when this request's owner texts, oldest first, end on an explicit permanent-deletion instruction: a deletion word
-    and a 'forever' word in one clause. A negated one, or a later 'just hide it instead', withdraws it."""
+    and a 'forever' word in one clause. A negated one, or a later 'just hide it instead', withdraws it, but only the
+    instruction it is about: 'delete the cashews forever, never delete the plums' still asks for the cashews."""
     names = [n.casefold() for p in getattr(content, "products", None) or [] if isinstance(n := p.get("name"), str)
              and PERMANENT_WORD.search(n.casefold())]
-    asked = False
+    asked = []  # the product words of each standing deletion instruction (empty: it only said 'it' or 'them')
     for text in texts or ():
         if not isinstance(text, str):
             continue
@@ -156,13 +170,21 @@ def owner_asks_permanent_delete(texts, content=None) -> bool:
         for name in names:
             text = text.replace(name, " ")
         for clause in re.split(r"[.;!?\n]|,|\bbut\b|\band then\b", " ".join(text.split())):
+            wants = bool(DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause))
             if REJECTS_HIDE.search(clause):  # "..., not just hide it" rejects hiding; it never withdraws a deletion request
-                asked = asked or bool(DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause))
+                if wants:
+                    asked.append(_things(clause))
             elif NEGATED_DELETE.search(clause) or HIDE_INSTEAD.search(clause):
-                asked = False
-            elif DELETE_WORD.search(clause) and PERMANENT_WORD.search(clause):
-                asked = True
-    return asked
+                things = _things(clause)
+                if not things or REFERS_BACK.search(clause):
+                    asked = []  # 'don't', 'just hide it instead': about the request just made
+                else:  # it names products: it withdraws only the instructions about those products
+                    kept = [a if not a else a - things for a in asked]  # 'it' requests stay; the rest lose only the products named
+                    asked = [a for a, was in zip(kept, asked) if a or not was]
+            elif wants:
+                asked.append(_things(clause))
+    return bool(asked)
+
 
 
 def rule_no_permanent_delete(slots, ctx=None):

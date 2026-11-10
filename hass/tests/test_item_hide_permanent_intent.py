@@ -67,6 +67,21 @@ class PermanentIntent(unittest.TestCase):
         self.refuses({"items": [ID]}, ctx_for("just hide it", "no, delete it for good"))
         self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for("hide the cashews")), ok)
 
+    def test_unrelated_prohibition_does_not_withdraw_a_deletion_request(self):
+        for text in ("delete the cashews forever, never delete the plums", "delete the cashews for good but don't delete the plums",
+                     "never delete the plums. delete the cashews forever", "wipe the cashews forever; just hide the plums instead",
+                     "delete it forever, don't delete the plums"):
+            self.refuses({"items": [ID]}, ctx_for(text))
+        self.refuses({"items": [ID]}, ctx_for("delete the cashews forever", "never delete the plums"))
+        self.refuses({"items": [ID]}, ctx_for("delete cashews forever and plums forever, don't delete the plums"))
+
+    def test_withdrawal_of_the_same_instruction_still_wins(self):
+        ok = [{"op": "product.hide", "args": {"id": ID}}]
+        for text in ("delete the cashews forever, never delete the cashews", "delete the cashews forever, don't delete the cashew",
+                     "delete the cashews forever, no wait, just hide it", "delete the cashews forever, just hide the cashews instead"):
+            self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for(text)), ok, text)
+        self.assertEqual(HIDE.plan({"items": [ID]}, ctx_for("delete the cashews forever", "never delete the cashews")), ok)
+
     def test_real_dispatch_refuses_logs_policy_and_never_prepares_hide(self):
         r = row("perm-1", ["delete the cashews forever"], "refuse")  # the model omits its optional reason
         res = run_case_row(r, SKILLS, HIDE)
