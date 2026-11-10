@@ -10,6 +10,7 @@ candidate detail is shortened first, then catalog lines are left off.
 """
 from __future__ import annotations
 
+from hass.content_model import AVAILABILITY
 from hass.skills.model import MAX_OPS, MAX_PROMPT_BYTES, Registry
 
 EXAMPLES_FULL, EXAMPLES_SHORT = 3, 1
@@ -30,10 +31,16 @@ def _items(skills) -> list:
     return [s for s in sorted(skills or (), key=lambda s: s.name) if getattr(s, "status", "active") == "active"]
 
 
+# RF0814-12: the one structured kind is spelled out, with a JSON example and the canonical words, so the model can fill it.
+STOCK_ITEMS_SHAPE = (' (a JSON list of {"product": "<product id>", "availability": ' + "|".join(f'"{w}"' for w in AVAILABILITY)
+                     + '}, e.g. [{"product": "photo-product-001", "availability": "no"}])')
+
+
 def _slot_text(slot) -> str:
     req = "required" if slot.required is True else "optional" if slot.required is False else f"required {slot.required.replace(':', ' ')}"
     default = f", default {slot.default}" if slot.default is not None else ""
-    return f"{slot.name}: {slot.kind}, {req}{default}"
+    shape = STOCK_ITEMS_SHAPE if slot.kind == "stock_items" else ""
+    return f"{slot.name}: {slot.kind}, {req}{default}{shape}"
 
 
 def _detail(skill, examples, summary=True) -> str:
