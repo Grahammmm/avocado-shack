@@ -1,8 +1,11 @@
-"""HASS-CLOVER-1: the Clover settings block (a later card adds it to `<state>/config.json`; this card only defines and validates it).
+"""HASS-CLOVER-1/2: the Clover settings block: the optional `clover` key of host.json (HASS-CLOVER-2 accepts it in `hass/host.py`).
 
 Closed keys, no defaults for the three identity keys, every number range-checked. A problem is reported by field name only, never by value
-(the block holds a path to the token, not the token). `liveApproved` must be true for `environment: production`: the go-live card, not code,
-decides that, and a sandbox merchant is the default.
+(the block holds a path to the token, not the token). An absent block means "Clover not configured" and nothing else changes.
+
+`liveApproved` (default false) is about WRITES only: Hass has no Clover write path yet, and when one comes it needs `liveApproved: true`
+for `environment: production` plus a separate write token (a later card, behind its own approval). Read-only use of production (`check`,
+`sync`, the owner's stock questions) works with `liveApproved: false`; that is how the real store is connected (HASS-CLOVER-2).
 """
 from dataclasses import dataclass, field
 
@@ -32,6 +35,12 @@ class CloverConfig:
     low_stock_threshold: int = 5       # at or under this count is "low"
     max_stock: int = 100_000           # a typo guard on a typed count
     category_map: dict = field(default_factory=dict)  # Hass category word -> Clover category name
+    live_approved: bool = False        # writes to production: not used by any code yet (there is no write path)
+
+    @property
+    def writes_allowed(self):
+        """False for production unless liveApproved. Nothing calls a write today; a later write card must check this AND hold a write token."""
+        return self.environment == "sandbox" or self.live_approved
 
 
 def _int(v, low, high):
@@ -57,9 +66,8 @@ def from_settings(raw):
         "categoryMap": isinstance(cmap, dict) and all(k in CATEGORIES and isinstance(v, str) and 0 < len(v) <= 100 for k, v in cmap.items()),
     }
     bad += [k for k, ok in checks.items() if not ok and k not in bad and (k in raw or k in REQUIRED)]
-    if not bad and raw["environment"] == "production" and raw.get("liveApproved") is not True:
-        bad.append("liveApproved")
     if bad:
         raise ConfigProblem(bad)
     return CloverConfig(raw["environment"], raw["merchantId"], raw["tokenFile"], raw.get("dailyWriteCap", 20), raw.get("priceConfirmPct", 25),
-                        raw.get("maxPriceCents", MAX_PRICE_CENTS), raw.get("lowStockThreshold", 5), raw.get("maxStock", 100_000), dict(cmap))
+                        raw.get("maxPriceCents", MAX_PRICE_CENTS), raw.get("lowStockThreshold", 5), raw.get("maxStock", 100_000), dict(cmap),
+                        raw.get("liveApproved", False))

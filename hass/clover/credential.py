@@ -18,6 +18,7 @@ BEARER_RE = re.compile(r"(?i)bearer\s+\S+")
 
 # Fixed reason words. The CLI/health output shows these and nothing else.
 REASONS = {
+    "missing": "the token file is not there",
     "unreadable": "the token file could not be opened",
     "not-regular": "the token file is not a plain file",
     "owner": "the token file is not owned by the service user",
@@ -90,17 +91,47 @@ def load_token(path, uid=None):
     return Token(value)
 
 
+def inspect(path, uid=None):
+    """HASS-CLOVER-2: the problem word for the token file, or None when it looks usable, WITHOUT opening it (lstat and access only).
+    `hass/host.py check` and `hass/health.py` use this: they never hold the token. The answer is one REASONS key; never the path."""
+    uid = os.getuid() if uid is None else uid
+    try:
+        folder = os.lstat(os.path.dirname(os.path.abspath(path)))
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return "missing"
+    except (OSError, ValueError):   # ValueError: an embedded NUL
+        return "unreadable"
+    if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != uid or folder.st_mode & 0o022:
+        return "folder"
+    if not stat.S_ISREG(st.st_mode):
+        return "not-regular"
+    if st.st_uid != uid:
+        return "owner"
+    if stat.S_IMODE(st.st_mode) != 0o600:
+        return "mode"
+    if not 0 < st.st_size <= MAX_TOKEN_FILE_BYTES:
+        return "size"
+    if not os.access(path, os.R_OK, follow_symlinks=False):
+        return "unreadable"
+    return None
+
+
 def _read(path, uid):
     try:
         folder = os.lstat(os.path.dirname(os.path.abspath(path)))
-    except OSError:
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, ValueError):
         return "unreadable", None
     if not stat.S_ISDIR(folder.st_mode) or folder.st_uid != uid or folder.st_mode & 0o022:
         return "folder", None
     try:
         # O_NONBLOCK: a FIFO with no writer must not hang the open; the descriptor check below then refuses it as not-regular
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
-    except OSError:
+    except FileNotFoundError:
+        return "missing", None
+    except (OSError, ValueError):
         return "unreadable", None
     try:
         st = os.fstat(fd)

@@ -1,6 +1,8 @@
-# Hass and Clover: items and stock straight from the till (HASS-CLOVER-1)
+# Hass and Clover: items and stock straight from the till (HASS-CLOVER-1, HASS-CLOVER-2)
 
-**Status: design plus a fixture-tested prototype. Nothing is wired into the running Hass service. No credential, no network call and no live data exist in this change.**
+**Status (HASS-CLOVER-2): READ-ONLY connection to the real store, built and fixture-tested; the operator turns it on after review and merge
+("Go live: read-only", below).** Hass reads items and stock into a private cache and answers Mike's stock questions. It cannot change the till:
+there is no write path, and the installed token is Inventory: Read only. Writes (HASS-CLOVER-3/4) come later, behind their own approval and a write token.
 G decided on 2026-11-09 that Hass talks to Clover directly so that Mike (the owner) can make SKUs and manage inventory by text. This page is the
 design (the seven questions, one chosen answer each) and describes the code in `hass/clover/`. It builds on `reports/hass/SKILLS-SPEC.md`
 (5.2 asked these questions; the answers are mapped at the end) and `docs/hass/TASKMAP.md` (T26 "Price change", gated until Clover).
@@ -17,7 +19,8 @@ G's standing fleet rule is that no agent handles credentials; this design keeps 
 * The module reads the token's **path** from the host/state settings (`tokenFile`), never the token itself.
 * Before reading, the module checks on the open descriptor that the file is a regular file (no symlink), **owned by the service user**, mode **exactly 600**,
   not empty or larger than 512 bytes, in a folder only that user can write to. Any other state is refused with one fixed reason word
-  (`unreadable`, `not-regular`, `owner`, `mode`, `folder`, `size`, `format`); the reason never contains the path or any bytes.
+  (`missing`, `unreadable`, `not-regular`, `owner`, `mode`, `folder`, `size`, `format`); the reason never contains the path or any bytes.
+  `hass/host.py check` and `hass/health.py` judge the file by `lstat` only (`credential.inspect`): they never open it.
 * The `Token` object prints as `Token(<redacted>)`, cannot be pickled, copied or inspected, and the Authorization header exists only inside the request
   handed to the HTTP layer. Request headers print as names only. **No code path logs a header.** A foreign error message (a transport failure, a Clover
   error body) is never repeated: the client reports a status number or a fixed phrase.
@@ -58,7 +61,8 @@ the client's path allow-list), not by the token.
 
 | Need | Clover permission to tick | Endpoints (all under `/v3/merchants/{mId}`) |
 |---|---|---|
-| Read items, stock, categories, tags | **Inventory: Read** only | `GET /items` (`expand=itemStock,categories,tags`, `limit` up to 1000, `offset`, `filter=modifiedTime>=ms`, `filter=sku=...`), `GET /items/{id}`, `GET /item_stocks`, `GET /item_stocks/{id}`, `GET /categories`, `GET /tags` |
+| Read items, stock, categories | **Inventory: Read** only | `GET /items` (`expand=itemStock,categories,tags`, `limit` up to 1000, `offset`, `filter=modifiedTime>=ms`, `filter=sku=...`), `GET /items/{id}`, `GET /item_stocks` (paged), `GET /item_stocks/{id}`, `GET /categories` |
+| The merchant's basic record (`check` only) | Merchant: Read (**not** ticked; see below) | `GET /v3/merchants/{mId}` (no expand). With an Inventory-only token Clover may answer 401/403: `check` then shows `"merchant": "4xx"` and still passes on the items read |
 | Create item | **Inventory: Write** | `POST /items` (required: `name`, `price` in cents), then `POST /category_items` to file it |
 | Set price | **Inventory: Write** | `POST /items/{id}` with `{"price": cents}` |
 | Set stock | **Inventory: Write** | `PUT /item_stocks/{id}` with `{"quantity": n}` (the item update cannot change stock: Clover says so) |
@@ -79,8 +83,9 @@ read, used for matching, never written), tax (the till's default applies and the
 try again in a minute"). A normal day is a handful of requests every 15 minutes; the limits are not a design pressure.
 
 **Sandbox.** All build and rehearsal use a Clover **sandbox test merchant** (created in the developer dashboard under *Test Merchants*; Clover provides a sample inventory file to
-import). Live calls (production host) only after G approves a go-live card; the settings block refuses `environment: production` unless `liveApproved: true` is set, and a
-go-live card, not code, sets it.
+import). HASS-CLOVER-2: G installed a **production read token** (Inventory: Read only) on 2026-11-10 and the real store is connected READ-ONLY with
+`environment: production`, `liveApproved: false`. `liveApproved` now gates WRITES only (`CloverConfig.writes_allowed`); no write path exists yet, and a
+write card must also hold a separate write token.
 
 ## 2. Data model
 
@@ -196,13 +201,20 @@ unchanged. "Got more honey in" with a linked product asks "How many came in?" (a
 
 * **Pull** (read-only, the client in section 1): every 15 minutes an incremental pull (`filter=modifiedTime>=` the last pull minus 2 minutes, `expand=itemStock,categories,tags`), plus a full pull nightly at 03:15 Pacific that replaces the
   cache (this catches items removed in the till). **On demand:** a question about one item re-reads that item first if the cache is over 5 minutes old; a write always re-reads the item live (at draft time and again at apply).
-* **Cache:** `<state>/clover/cache.json` (0600, replaced atomically) holds the whitelisted item fields and the time of the pull, plus a short hash of the merchant id so a sandbox cache is never read as production. It is derivable
-  (excluded from backups); the link table and journal are not (included). No `cost`, no sales, no customer or employee data exists in it.
+* **Cache (HASS-CLOVER-2, built):** `<state>/clover/cache.sqlite3` (folder 0700, file 0600, owner the service user; `hass/clover/cache.py`). One sync replaces every row
+  in one transaction. Per item: id, name, SKU, barcode `code`, price in cents, price type, unit, category ids and names, hidden, available, the stock count (from
+  `GET /item_stocks` where the merchant counts the item, else none) and modified times; plus `asOf`, `lastAttempt`, `lastResult` (one fixed word), `failures` and
+  `nextAttempt`. It is derivable and not in the state backup; it is never in git (the sync refuses a state folder inside the repository) and never on the site.
+  No `cost`, no tax, no sales, no customer or employee data exists in it.
+* **Built in HASS-CLOVER-2:** a FULL pull every 15 minutes (`hass-clover-sync.timer`; a shop's few hundred items are 2 requests), paging, pacing (0.25 s),
+  retries (429/5xx, `Retry-After`), and a backoff between failing runs (15, 30, 60, 120, then every 240 minutes; `--force` ignores it). The incremental pull and
+  the on-demand re-read above are not built (a later card may add them).
 * **Staleness label** (`hass/clover/reads.py`): up to 20 minutes old, answered as is; older, `(till count as of 3:09 pm)` (`Sun 4:30 pm` if not today); Clover unreachable: `I can't reach the till right now. The last count I have is from 2:00 pm,
   so treat it as old.` before the answer; over 24 hours old: no count is quoted at all ("I have not been able to read the till since Sun 2:30 pm, so I will not quote a count that old.").
 * **When Clover is unreachable** (network down, 5xx after retries, 429 after retries, 401 after the token is revoked or expired): reads answer from the cache with the label above; **writes are refused** ("I can't reach the till, so nothing
   was changed") and a 401 is reported as a health problem to the operator by reason word only (the token is never mentioned). The site and the rest of Hass are unaffected.
-* **Privacy:** only the six read endpoints above are ever called (the client refuses `/orders`, `/payments`, `/customers`, `/employees`, `/refunds`, anything else, any other method, any other host); sales and customer data are **never**
+* **Privacy:** only the read endpoints above are ever called (HASS-CLOVER-2: the allow-list is exactly the merchant's basic record, items, item stocks and
+  categories; `/tags` was dropped; a test pins it) (the client refuses `/orders`, `/payments`, `/customers`, `/employees`, `/refunds`, anything else, any other method, any other host); sales and customer data are **never**
   requested; nothing leaves the box except the HTTPS requests to the Clover host, and no model is involved (section 4). Logs carry the path template and the status number only. `status` shows counts of items, never prices.
 
 ## 7. Rollout and who does what
@@ -211,7 +223,7 @@ unchanged. "Got more honey in" with a linked product asks "How many came in?" (a
 |---|---|---|
 | 0. This card | sonnet-coder, reviewer queued by the operator | design, `hass/clover/`, fixture tests, `docs/hass/CLOVER.md`. No credential, no network |
 | 1. Accounts | **G** | Clover developer account, one sandbox test merchant (with Clover's sample inventory imported), one sandbox API token, stored as below |
-| 2. HASS-CLOVER-2 (build) | worker | settings block `clover` in `<state>/config.json` (loader checks, host KEYS), `UrllibTransport`, cache, sync job, read commands, `status` line; **sandbox only**; health shows the credential reason word |
+| 2. HASS-CLOVER-2 (build) | worker | done: settings block `clover` in **host.json** (`hass/host.py` KEYS and check), `cli.py check/sync/status`, cache, 15-minute timer template, the three read replies, health `clover-token` / `clover-sync`; **production, read-only** (G installed the read token first, skipping the sandbox for reads) |
 | 3. HASS-CLOVER-3 (build) | worker | apply step (intent row, live re-read, stale check, call, read-back, journal), undo, cap, second-yes; sandbox only |
 | 4. HASS-CLOVER-4 (build) | worker | owner commands, `help`, `COMMANDS.md`, parser-before-interpreter wiring, the site bundle and its undo |
 | 5. Sandbox rehearsal | worker + G reads | run section "Sandbox acceptance" with the sandbox token; evidence on the card |
@@ -225,6 +237,43 @@ past 1000; a sale in the sandbox register changes the count (so the stale check 
 (Inventory: Read only), stores it in the production token file, and sets `environment: production`, `liveApproved: true` via a reviewed config change; (d) **read-only week:** sync and reads only, compared with the till by eye;
 (e) G creates the **write token** (Inventory: Read + Write) and a second file; the daily cap starts at 5; (f) first live writes watched by G on one test item that Mike creates and hides; (g) revocation drill: G revokes the token in the Clover
 dashboard and Hass shows the reason word and refuses writes; (h) the cap is raised to its normal value.
+
+## Go live: read-only (HASS-CLOVER-2; the operator, after review and merge)
+
+Facts: merchant id `W68KRZHTAH801` (an identifier, not a secret); environment `production` (`https://api.clover.com`); token file
+`/home/user/.config/hass/clover/production-read.token` (mode 600, folder 700, owned by the service user, created by G). **Nobody reads, prints, copies or
+`cat`s that file**; `stat` is fine. The runtime worktree is updated the usual way (`docs/hass/MAC_RUNBOOK.md`); nothing here is run from a writer worktree.
+
+1. **Settings block.** In the private `~/.local/state/hass/host/host.json` (mode 600) add, keeping every other key:
+   ```
+   "clover": {"environment": "production", "merchantId": "W68KRZHTAH801", "tokenFile": "/home/user/.config/hass/clover/production-read.token", "liveApproved": false}
+   ```
+   Optional keys, all range-checked: `lowStockThreshold` (default 5), `dailyWriteCap`, `priceConfirmPct`, `maxPriceCents`, `maxStock`, `categoryMap` (writes; unused yet).
+   Closed keys: anything else is refused by field name (`clover.<field>`), never by value.
+2. **Static check (no network):** from the runtime, `python3 -B hass/host.py check --host ~/.local/state/hass/host/host.json`.
+   Expected `{"clover": "ok", "result": "ok"}`. A token problem is one word: `{"clover": "mode", "result": "clover"}` (`missing`, `unreadable`, `not-regular`,
+   `owner`, `mode`, `folder`, `size`); fix it with `chmod`/`chown` on the file or folder only. A bad block is `{"fields": ["clover.<field>"], "result": "config"}`.
+3. **Live check (two GETs):** `python3 -B hass/clover/cli.py check --host ~/.local/state/hass/host/host.json` (or `python3 -B -m hass.clover.cli check --host ...`
+   from the runtime folder). One JSON line, e.g. `{"elapsedMs": 412, "environment": "production", "itemCount": null, "items": "2xx", "itemsOnPage": 1,
+   "merchant": "4xx", "merchantId": "W68KRZHTAH801", "merchantMatches": null, "readOnly": true, "result": "ok", "tokenAccepted": true, "tokenFileOk": true}`.
+   `merchant` may be `4xx` (the token has no Merchant permission; expected). `items: "4xx"` with `tokenAccepted: false` = Clover refused the key (wrong token or
+   missing *Inventory: Read*): stop and tell G (no retries). `unreachable` = network. It never prints a header, the token, a body, a name or a price.
+4. **First sync:** `python3 -B hass/clover/cli.py sync --host ~/.local/state/hass/host/host.json`. Expected `{"asOf": "...", "counted": <n>, "elapsedMs": ...,
+   "items": <n>, "result": "ok", "skipped": 0}`; then `python3 -B hass/clover/cli.py status --host ...` shows the same `asOf` and `itemCount`.
+   Check `stat -c '%a %U' ~/.local/state/hass/state/clover ~/.local/state/hass/state/clover/cache.sqlite3` reads `700` and `600`.
+5. **Timer:** `cp ~/.local/share/hass/runtime/deploy/hass/hass-clover-sync.{service,timer} ~/.config/systemd/user/`, `systemctl --user daemon-reload`,
+   `systemctl --user enable --now hass-clover-sync.timer`. Exit 1 (Clover down this time) is recorded and is not a failed unit; exit 2 (config, token, state) is.
+6. **Chat:** `systemctl --user restart hass-worker` (the worker reads host.json at start; with the block it answers till questions). Owner smoke test:
+   `how many <item> do we have`, `low stock`, `is <item> in stock` answer from the cache; `change the price of <item> to 5` answers
+   "I can read the till but I can't change it yet."; a hike or website question is unchanged.
+7. **Health:** `hass-health` now also reports `clover-token` (one word) and `clover-sync` (no good pull for over 2 h, with the last result word).
+8. **Turn it off:** `systemctl --user disable --now hass-clover-sync.timer`, remove the `clover` block, restart `hass-worker`. The cache may stay (private) or be
+   removed by the operator. G revokes the token in the Clover dashboard if it is ever exposed.
+
+What the owner sees (voice rules): counts as the till has them; after 20 minutes `(till count as of 3:05 pm)`; when the last pull failed, "I can't reach the
+till right now. The last count I have is from 2:00 pm, so treat it as old."; over 24 hours, no count at all; before the first pull, "I haven't been able to
+read the till yet ..."; any add/change of an item, count or price: "I can read the till but I can't change it yet." A question is claimed only when it uses
+stock words (`do we have`, `left`, `in stock`, `on hand`, `sold out`) or names a till item; hike, sign-up, website, draft or photo questions go on as before.
 
 ## What G does (the exact steps)
 
@@ -247,9 +296,13 @@ link table, exact matching, one-sided items reported. 5 Prices on the site: neve
 customers or card data, ever. 8 Where processed: local code only; no model sees Clover data. 9 Credentials: G creates and installs one file; the service reads it; revocation drill at go-live. 10 Counts vs words: counts live in Clover; the site
 shows a word. 11 Failure: cached answers labelled old, writes refused, nothing quoted after 24 hours. 12 Refunds, voids, shrink, spoilage: not pulled (they are sales data); a count can drift when sales happen, which is why every write re-reads first.
 
-## The prototype in this change
+## The code
 
-`hass/clover/` (stdlib only; not imported by any live module): `credential.py` (token file check, `Token`, redaction), `client.py` (read-only client, injected transport, pacing, retries, allow-list), `transport.py` (the real HTTPS layer with host allow-list and
+HASS-CLOVER-2 adds `cache.py` (the private cache), `sync.py` (one pull: items + item stocks, whitelisted rows), `cli.py` (`check`, `sync`, `status`),
+`chat.py` (the owner's three reads and the write refusal, from the cache only; wired by `hass/host.py make_worker` when host.json has a `clover` block,
+and called by `hass/conversation.py` before the interpreter), `credential.inspect` (stat-only check), the `deploy/hass/hass-clover-sync.{service,timer}`
+templates and tests `hass/tests/test_clover_{cli,chat,host}.py` (recorded fixtures, sockets patched, a token leak test and a forbidden-path test).
+The transport now ignores environment proxies. HASS-CLOVER-1's `hass/clover/` (stdlib only): `credential.py` (token file check, `Token`, redaction), `client.py` (read-only client, injected transport, pacing, retries, allow-list), `transport.py` (the real HTTPS layer with host allow-list and
 no redirects, never called by a test against a network; plus the replay layer the tests use), `mapper.py` (whitelist parse, cents maths, matching, exact resolve), `sku.py`, `config.py`, `drafts.py` (five write kinds plus undo), `reads.py` (read replies and
 staleness). Tests: `hass/tests/test_clover_{credential,client,mapper,sku,drafts,reads}.py` on hand-written fixtures in `hass/tests/fixtures/clover/` (fake merchant `FAKEMERCH0001`, fake ids, fake token string); every test runs with sockets
 patched so any network attempt fails the run. `python3 -B hass/acceptance.py` is unaffected.

@@ -93,7 +93,7 @@ class TokenFileTests(unittest.TestCase):
             load_token(sub)
         self.assertEqual(ctx.exception.reason, "not-regular")
         os.unlink(self.path)
-        self.refused("unreadable")
+        self.refused("missing")
 
     def test_a_fifo_with_no_writer_is_refused_not_waited_on(self):
         os.mkfifo(self.path, 0o600)
@@ -116,7 +116,7 @@ class TokenFileTests(unittest.TestCase):
 
     def test_no_error_carries_the_token_the_file_bytes_or_the_path(self):
         marker = "SECRET-MARKER-not-a-token but with spaces"
-        cases = [(lambda: self.write(marker), "format"), (lambda: self.write(FAKE_TOKEN, 0o644), "mode"), (lambda: os.unlink(self.path), "unreadable")]
+        cases = [(lambda: self.write(marker), "format"), (lambda: self.write(FAKE_TOKEN, 0o644), "mode"), (lambda: os.unlink(self.path), "missing")]
         for setup, reason in cases:
             setup()
             exc = self.refused(reason)
@@ -127,7 +127,62 @@ class TokenFileTests(unittest.TestCase):
             self.assertTrue(exc.__suppress_context__ or exc.__context__ is None)
 
     def test_every_reason_has_a_fixed_phrase(self):
-        self.assertEqual(set(credential.REASONS), {"unreadable", "not-regular", "owner", "mode", "folder", "size", "format"})
+        self.assertEqual(set(credential.REASONS), {"missing", "unreadable", "not-regular", "owner", "mode", "folder", "size", "format"})
+
+
+class InspectTests(unittest.TestCase):
+    """HASS-CLOVER-2: host check and health judge the token file by lstat only; they never open it and never name it."""
+
+    setUp, write = TokenFileTests.setUp, TokenFileTests.write
+
+    def inspect(self, **kw):
+        real_open = os.open
+        with mock.patch.object(credential.os, "open", side_effect=AssertionError("opened")) as opened, \
+                mock.patch("builtins.open", side_effect=AssertionError("opened")):
+            got = credential.inspect(self.path, **kw)
+        self.assertFalse(opened.called)
+        self.assertIs(os.open, real_open)
+        return got
+
+    def test_a_good_file_is_fine_and_is_never_opened(self):
+        self.write()
+        self.assertIsNone(self.inspect())
+
+    def test_each_problem_is_one_word(self):
+        self.assertEqual(self.inspect(), "missing")
+        self.write(mode=0o644)
+        self.assertEqual(self.inspect(), "mode")
+        self.write(mode=0o400)
+        self.assertEqual(self.inspect(), "mode")
+        self.write("")
+        self.assertEqual(self.inspect(), "size")
+        self.write()
+        self.assertEqual(self.inspect(uid=os.getuid() + 1), "folder")
+        os.chmod(self.dir, 0o770)
+        self.assertEqual(self.inspect(), "folder")
+        os.chmod(self.dir, 0o700)
+        real = os.lstat
+
+        def other_owner(path, *a, **k):
+            st = real(path, *a, **k)
+            if not str(path).endswith("clover.token"):
+                return st
+            return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, st.st_uid + 1, st.st_gid, st.st_size,
+                                   int(st.st_atime), int(st.st_mtime), int(st.st_ctime)))
+        with mock.patch.object(credential.os, "lstat", other_owner):
+            self.assertEqual(self.inspect(), "owner")
+        with mock.patch.object(credential.os, "access", return_value=False):
+            self.assertEqual(self.inspect(), "unreadable")
+        link = os.path.join(self.dir, "link")
+        os.symlink(self.path, link)
+        self.assertEqual(credential.inspect(link), "not-regular")
+        self.assertEqual(credential.inspect(self.dir), "not-regular" if os.path.isdir(self.dir) else None)
+        self.assertEqual(credential.inspect(os.path.join(self.dir, "nope", "x.token")), "missing")
+        self.assertEqual(credential.inspect("bad\0path"), "unreadable")
+
+    def test_every_answer_is_a_reason_word(self):
+        self.write(mode=0o644)
+        self.assertIn(self.inspect(), credential.REASONS)
 
 
 class TokenObjectTests(unittest.TestCase):

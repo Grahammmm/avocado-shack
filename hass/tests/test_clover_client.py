@@ -74,9 +74,9 @@ class ReadTests(NoNetwork):
         self.assertIsNone(req.body)
 
     def test_production_uses_the_production_host_only_when_asked(self):
-        transport = ReplayTransport({f"{BASE}/tags?limit=1000": (200, {}, fixture("tags.json"))})
+        transport = ReplayTransport({f"{BASE}/categories?limit=1000&offset=0": (200, {}, fixture("categories.json"))})
         client = cl.CloverClient(MID, Token(FAKE_TOKEN), transport, "production", min_interval=0)
-        client.list_tags()
+        client.list_categories()
         self.assertTrue(transport.seen[0].url.startswith("https://api.clover.com/v3/merchants/"))
 
     def test_paging_follows_offsets_until_a_short_page(self):
@@ -98,15 +98,13 @@ class ReadTests(NoNetwork):
     def test_the_other_reads(self):
         client, _, _ = make({f"{BASE}/items/FAKEITEM00001?expand=itemStock,categories,tags": (200, {}, fixture("items.json")["elements"][0]),
                              f"{BASE}/item_stocks/FAKEITEM00001": (200, {}, fixture("item_stock.json")),
-                             f"{BASE}/item_stocks": (200, {}, {"elements": [fixture("item_stock.json")]}),
-                             f"{BASE}/categories?limit=1000": (200, {}, fixture("categories.json")),
-                             f"{BASE}/tags?limit=1000": (200, {}, fixture("tags.json")),
+                             f"{BASE}/item_stocks?limit=1000&offset=0": (200, {}, {"elements": [fixture("item_stock.json")]}),
+                             f"{BASE}/categories?limit=1000&offset=0": (200, {}, fixture("categories.json")),
                              f"{BASE}/items?filter=sku=AS-PAN-SUNSHINE-OLIVE-OIL-01&limit=10": (200, {}, {"elements": [{"id": "FAKEITEM00001"}]})})
         self.assertEqual(client.get_item("FAKEITEM00001")["name"], "Sunshine olive oil")
         self.assertEqual(client.get_stock("FAKEITEM00001")["quantity"], 12.0)
         self.assertEqual(len(client.list_stocks()), 1)
         self.assertEqual([c["name"] for c in client.list_categories()][:2], ["Pantry", "Fruit"])
-        self.assertEqual(client.list_tags()[0]["name"], "Local")
         self.assertEqual(len(client.find_by_sku("AS-PAN-SUNSHINE-OLIVE-OIL-01")), 1)
 
 
@@ -120,11 +118,11 @@ class RefusalTests(NoNetwork):
     def test_only_the_item_stock_category_and_tag_reads_exist(self):
         public = {n for n in dir(self.client) if not n.startswith("_")}
         self.assertEqual(public, {"build", "environment", "find_by_sku", "get_item", "get_stock", "list_categories", "list_items", "list_stocks",
-                                  "list_tags"})
+                                  "get_merchant", "first_items"})
 
     def test_sales_customer_and_staff_paths_are_refused(self):
         for path in ("/orders", "/orders/ABC", "/payments", "/payments/ABC", "/customers", "/employees", "/employees/ABC/shifts", "/refunds",
-                     "/credits", "/devices", "/properties", "", "/", "/items/", "/items/AB/orders", "/items/../orders", "/items/A%2Fb",
+                     "/credits", "/devices", "/properties", "/tags", "/", "/items/", "/items/AB/orders", "/items/../orders", "/items/A%2Fb",
                      "/items/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "/v3/merchants/OTHER/items", "/category_items", "/item_groups"):
             with self.subTest(path=path), self.assertRaises(cl.CloverRefused):
                 self.client.build("GET", path, {})
@@ -156,9 +154,9 @@ class RefusalTests(NoNetwork):
 
 class ErrorTests(NoNetwork):
     def run_status(self, status, headers=None, **kw):
-        client, transport, clock = make({f"{BASE}/tags?limit=1000": [(status, headers or {}, {"message": "x"})]}, **kw)
+        client, transport, clock = make({f"{BASE}/categories?limit=1000&offset=0": [(status, headers or {}, {"message": "x"})]}, **kw)
         with self.assertRaises(cl.CloverError) as ctx:
-            client.list_tags()
+            client.list_categories()
         return ctx.exception, transport, clock
 
     def test_status_mapping(self):
@@ -171,8 +169,8 @@ class ErrorTests(NoNetwork):
         self.assertIsInstance(self.run_status(403)[0], cl.CloverError)
 
     def test_429_honours_retry_after_then_succeeds(self):
-        client, transport, clock = make({f"{BASE}/tags?limit=1000": [(429, {"Retry-After": "2"}, {}), (200, {}, fixture("tags.json"))]})
-        self.assertEqual(client.list_tags()[0]["name"], "Local")
+        client, transport, clock = make({f"{BASE}/categories?limit=1000&offset=0": [(429, {"Retry-After": "2"}, {}), (200, {}, fixture("categories.json"))]})
+        self.assertEqual(client.list_categories()[0]["name"], "Pantry")
         self.assertEqual((len(transport.seen), clock.sleeps), (2, [2]))
 
     def test_429_without_a_header_backs_off_1_2_4_then_gives_up(self):
@@ -197,13 +195,13 @@ class ErrorTests(NoNetwork):
                 exc, transport, _ = self.run_status(status)
                 self.assertIsInstance(exc, cl.CloverUnavailable)
                 self.assertEqual((exc.status, len(transport.seen)), (status, 4))
-        client, transport, _ = make({f"{BASE}/tags?limit=1000": [(503, {}, {}), (200, {}, fixture("tags.json"))]})
-        self.assertEqual(len(client.list_tags()), 1)
+        client, transport, _ = make({f"{BASE}/categories?limit=1000&offset=0": [(503, {}, {}), (200, {}, fixture("categories.json"))]})
+        self.assertEqual(len(client.list_categories()), 4)
 
     def test_a_dead_transport_is_reported_with_a_fixed_phrase(self):
         client, _, _ = make({})       # no recorded answer: the replay layer raises LookupError
         with self.assertRaises(cl.CloverUnavailable) as ctx:
-            client.list_tags()
+            client.list_categories()
         self.assertEqual(str(ctx.exception), "clover could not be reached")
         self.assertIsNone(ctx.exception.__context__)
 
@@ -211,24 +209,24 @@ class ErrorTests(NoNetwork):
         for junk in (None, "x", object(), cl.Response("200")):
             client = cl.CloverClient(MID, Token(FAKE_TOKEN), lambda r, j=junk: j, min_interval=0, sleep=lambda s: None)
             with self.subTest(junk=type(junk).__name__), self.assertRaises(cl.CloverUnavailable):
-                client.list_tags()
+                client.list_categories()
 
     def test_bad_bodies(self):
         for body in (b"not json", b"[1, 2]", b'{"elements": "no"}', b'{"elements": [1]}', b"\xff\xfe", b"{}"):
-            client, _, _ = make({f"{BASE}/tags?limit=1000": (200, {}, body)})
+            client, _, _ = make({f"{BASE}/categories?limit=1000&offset=0": (200, {}, body)})
             with self.subTest(body=body[:12]), self.assertRaises(cl.CloverError):
-                client.list_tags()
+                client.list_categories()
 
     def test_an_oversized_body_is_refused(self):
-        client, _, _ = make({f"{BASE}/tags?limit=1000": (200, {}, b" " * (cl.BODY_LIMIT + 1))})
+        client, _, _ = make({f"{BASE}/categories?limit=1000&offset=0": (200, {}, b" " * (cl.BODY_LIMIT + 1))})
         with self.assertRaises(cl.CloverError):
-            client.list_tags()
+            client.list_categories()
 
     def test_pacing_keeps_requests_apart(self):
         clock = FakeClock()
-        client, _, _ = make({f"{BASE}/tags?limit=1000": (200, {}, fixture("tags.json"))}, clock=clock, min_interval=0.25)
+        client, _, _ = make({f"{BASE}/categories?limit=1000&offset=0": (200, {}, fixture("categories.json"))}, clock=clock, min_interval=0.25)
         for _ in range(3):
-            client.list_tags()
+            client.list_categories()
         self.assertEqual(clock.sleeps, [0.25, 0.25])
         self.assertLessEqual(1 / 0.25, 16)       # four requests a second: under Clover's 16 per second per token
 
@@ -258,8 +256,8 @@ class LeakTests(NoNetwork):
         raise RuntimeError(f"connect failed, sent Authorization: Bearer {FAKE_TOKEN} to {request.url}")
 
     def test_token_is_in_the_request_but_in_nothing_that_prints(self):
-        client, transport, _ = make({f"{BASE}/tags?limit=1000": (200, {}, fixture("tags.json"))})
-        records, _ = self.collect(client.list_tags)
+        client, transport, _ = make({f"{BASE}/categories?limit=1000&offset=0": (200, {}, fixture("categories.json"))})
+        records, _ = self.collect(client.list_categories)
         (req,) = transport.seen
         self.assertIn(FAKE_TOKEN, req.headers["Authorization"])       # the transport does need it
         shown = [repr(req), str(req), repr(req.headers), str(req.headers), repr(client), str(client), repr(client._token), *records]
@@ -272,7 +270,7 @@ class LeakTests(NoNetwork):
 
     def test_a_hostile_transport_message_is_dropped(self):
         client = cl.CloverClient(MID, Token(FAKE_TOKEN), self.hostile, min_interval=0)
-        records, text = self.collect(client.list_tags)
+        records, text = self.collect(client.list_categories)
         self.assertIn("could not be reached", text)
         for out in [text, *records]:
             self.assertNotIn(FAKE_TOKEN, out)
@@ -281,15 +279,15 @@ class LeakTests(NoNetwork):
     def test_a_far_side_that_echoes_the_token_is_not_repeated(self):
         for status in (400, 401, 404, 429, 500):
             echo = {"message": f"bad token {FAKE_TOKEN}", "Authorization": f"Bearer {FAKE_TOKEN}"}
-            client, _, _ = make({f"{BASE}/tags?limit=1000": (status, {"X-Echo": FAKE_TOKEN}, echo)}, max_retries=0)
-            records, text = self.collect(client.list_tags)
+            client, _, _ = make({f"{BASE}/categories?limit=1000&offset=0": (status, {"X-Echo": FAKE_TOKEN}, echo)}, max_retries=0)
+            records, text = self.collect(client.list_categories)
             with self.subTest(status=status):
                 self.assertTrue(text)
                 for out in [text, *records]:
                     self.assertNotIn(FAKE_TOKEN, out)
-        client, _, _ = make({f"{BASE}/tags?limit=1000": (200, {}, {"elements": [{"name": FAKE_TOKEN}]})})
-        self.assertEqual(client.list_tags(), [{"name": FAKE_TOKEN}])   # a 200 body is data for the caller; the client never logs it
-        records, _ = self.collect(client.list_tags)
+        client, _, _ = make({f"{BASE}/categories?limit=1000&offset=0": (200, {}, {"elements": [{"name": FAKE_TOKEN}]})})
+        self.assertEqual(client.list_categories(), [{"name": FAKE_TOKEN}])   # a 200 body is data for the caller; the client never logs it
+        records, _ = self.collect(client.list_categories)
         self.assertTrue(all(FAKE_TOKEN not in r for r in records))
 
 

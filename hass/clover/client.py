@@ -1,8 +1,8 @@
-"""HASS-CLOVER-1: read-only Clover REST v3 client with an injected HTTP layer.
+"""HASS-CLOVER-1/2: read-only Clover REST v3 client with an injected HTTP layer.
 
-READ ONLY: the client has no write method. It can only GET the item, item-stock, category and tag endpoints named in READ_PATHS
-(items and stock, nothing about sales, orders, payments, customers or employees); any other path, method or host is refused before
-a request exists. The HTTP layer is a callable `transport(Request) -> Response` that is passed in; tests pass recorded fixtures.
+READ ONLY: the client has no write method. It can only GET the paths in READ_PATHS: the merchant's basic record, items, item stocks and
+categories (nothing about sales, orders, payments, customers or employees); any other path, method or host is refused before a request
+exists. The HTTP layer is a callable `transport(Request) -> Response` that is passed in; tests pass recorded fixtures.
 
 Errors carry a status number or a fixed phrase, never a header, a body, a URL query or the token. Nothing here logs a header.
 Rate limits (docs.clover.com/dev/docs/api-usage-rate-limits): 16 requests/s and 5 concurrent per token. This client is
@@ -22,7 +22,9 @@ HOSTS = {"sandbox": "https://apisandbox.dev.clover.com", "production": "https://
 USER_AGENT = "AvocadoShack-Hass/1 (read-only inventory client)"
 MERCHANT_RE = re.compile(r"[A-Za-z0-9]{8,20}")
 ID = r"[A-Za-z0-9]{1,32}"
-READ_PATHS = tuple(re.compile(p) for p in (r"/items", rf"/items/{ID}", r"/item_stocks", rf"/item_stocks/{ID}", r"/categories", r"/tags"))
+# HASS-CLOVER-2: the ONLY reads: "" is the merchant's basic record (GET /v3/merchants/{mId}); then items, item stocks, categories.
+READ_PATH_TEXT = ("", r"/items", rf"/items/{ID}", r"/item_stocks", rf"/item_stocks/{ID}", r"/categories")
+READ_PATHS = tuple(re.compile(p) for p in READ_PATH_TEXT)
 READ_METHODS = frozenset({"GET"})
 PAGE_SIZE = 1000                 # documented maximum `limit` for GET /items
 MAX_PAGES = 50                   # 50,000 items is far beyond a shop; a longer loop is a bug
@@ -110,6 +112,18 @@ class CloverClient:
         raise TypeError("CloverClient cannot be serialised")
 
     # ---- the read API -------------------------------------------------------------------------------------------------
+    def get_merchant(self):
+        """The merchant's basic record (GET /v3/merchants/{mId}, no expand). `check` uses its status and id only."""
+        return self._get("", {})
+
+    def first_items(self, limit=1):
+        """One page of items, no expand: `check` proves the token can read inventory. Returns the raw page document."""
+        if type(limit) is not int or not 1 <= limit <= 10:
+            raise CloverRefused("bad limit")
+        doc = self._get("/items", {"limit": limit})
+        self._elements(doc)
+        return doc
+
     def list_items(self, modified_since_ms=None):
         """All items with stock, categories and tags, page by page. `modified_since_ms` limits to items changed since then."""
         query = {"expand": EXPAND, "limit": self._page_size}
@@ -117,12 +131,15 @@ class CloverClient:
             if type(modified_since_ms) is not int or modified_since_ms < 0:
                 raise CloverRefused("bad filter")
             query["filter"] = f"modifiedTime>={modified_since_ms}"
-        items = []
+        return self._pages("/items", query)
+
+    def _pages(self, path, query):
+        out = []
         for page in range(MAX_PAGES):
-            got = self._elements(self._get("/items", {**query, "offset": page * self._page_size}))
-            items.extend(got)
+            got = self._elements(self._get(path, {**query, "offset": page * self._page_size}))
+            out.extend(got)
             if len(got) < self._page_size:
-                return items
+                return out
         raise CloverError("too many pages")
 
     def get_item(self, item_id):
@@ -132,13 +149,11 @@ class CloverClient:
         return self._get(f"/item_stocks/{item_id}", {})
 
     def list_stocks(self):
-        return self._elements(self._get("/item_stocks", {}))
+        """Every item stock record (items the merchant counts), page by page."""
+        return self._pages("/item_stocks", {"limit": self._page_size})
 
     def list_categories(self):
-        return self._elements(self._get("/categories", {"limit": self._page_size}))
-
-    def list_tags(self):
-        return self._elements(self._get("/tags", {"limit": self._page_size}))
+        return self._pages("/categories", {"limit": self._page_size})
 
     def find_by_sku(self, sku):
         """Items whose SKU equals `sku` exactly (the collision check made right before a create)."""
@@ -173,7 +188,7 @@ class CloverClient:
                 self._pace()
                 failure, response = self._send(request)
                 status = failure or getattr(response, "status", None)
-                LOG.info("clover GET %s -> %s", path, status)  # path template + status only; never a header, query or body
+                LOG.info("clover GET %s -> %s", path or "(merchant)", status)  # path template + status only; never a header, query or body
                 if failure is None and status == 200:
                     return self._json(response)
                 wait = self._retry_wait(response, attempt)

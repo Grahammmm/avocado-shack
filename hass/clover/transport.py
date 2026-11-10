@@ -25,7 +25,8 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 class UrllibTransport:
     def __init__(self, timeout=TIMEOUT_SECONDS):
         self._timeout = timeout
-        self._opener = urllib.request.build_opener(_NoRedirect)
+        # HASS-CLOVER-2: no environment proxy (the Authorization header goes to Clover's host and nowhere else) and no redirect
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
 
     def __call__(self, request):
         parts = urlsplit(request.url)
