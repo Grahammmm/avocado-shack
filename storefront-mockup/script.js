@@ -9,7 +9,8 @@ function show(html){
  dialog.scrollTop=0;if(!dialog.open)dialog.showModal();
 }
 $('.close').onclick=()=>dialog.close();
-dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close()});
+// A click whose target is the dialog itself is either its backdrop or its own padding/border; only a pointer outside the dialog's box (measured now) is the backdrop.
+dialog.addEventListener('click',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()});
 $('[data-policy]').onclick=()=>show('<h2>Your privacy matters.</h2><p>This site doesn’t use cookies, analytics or advertising trackers. Catalog search and filters work inside this page. Nothing is sold on this website, so no payment information is collected.</p><p>Online signup for Michael’s newsletter and hiking updates isn’t open yet. Until it is, those forms don’t send or save what you type, and the sample hike RSVP never leaves your browser. To hear about news or the next hike, ask us at the Shack.</p><p>Links to producers, trail information and maps go to other websites, which have their own privacy policies.</p>');
 
 // Keep old shared hiking anchors useful after moving the club onto its own page.
