@@ -1352,7 +1352,7 @@ class Conversation:
             calls = row.get("calls") if hasattr(row, "get") else row["calls"]
             return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else [],
                     "calls": calls if isinstance(calls, list) else [], "ask": pending.get("ask"),  # HASS-CHAT-1: "meet" or None (shelf check)
-                    "suggest": pending.get("suggest"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)]}
+                    "suggest": pending.get("suggest"), "index": pending.get("index"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)]}
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
 
     def _check_day(self):
@@ -1396,7 +1396,7 @@ class Conversation:
                 return "offer-no"
             return self._draft(msg, now, {"ops": ask["ops"], "revises": ask["revises"]}, ask["texts"], notes=ask["notes"])
         if verb == "approve" and isinstance(ask.get("suggest"), str) and ask["suggest"]:
-            ops = hike_chat.with_meeting(ask["ops"], ask["suggest"], self._routes())
+            ops = hike_chat.with_meeting(ask["ops"], ask["suggest"], self._routes(), ask.get("index"))
             return self._draft(msg, now, {"ops": ops, "revises": ask["revises"]}, ask["texts"], notes=ask["notes"])
         self._open_ask(msg, now, ask["texts"])  # the request stays open: his next words say where
         self._reply(MEET_NO)
@@ -1556,7 +1556,8 @@ class Conversation:
                 return "question" if shaped.ask["ops"] and legacy else "not-drafted"
             if shaped.ask and legacy:  # a trail name is not a place to meet: ask once, keep the shaped hike for his answer
                 self._open_ask(msg, now, earlier, {"ops": shaped.ops, "revises": result["revises"], "ask": "meet",
-                                                   "suggest": shaped.ask["suggest"], "notes": [*notes, *shaped.notes]})
+                                                   "suggest": shaped.ask["suggest"], "index": shaped.ask.get("index"),
+                                                   "notes": [*notes, *shaped.notes]})
                 self._reply(shaped.ask["question"])
                 self._asked_again(shaped.ask["question"], msg)
                 return "question"

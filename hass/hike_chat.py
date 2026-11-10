@@ -49,7 +49,7 @@ TITLE_LIMIT = 80
 class Shaped:
     ops: list
     notes: list = field(default_factory=list)   # plain lines for the proposal, in the order they apply
-    ask: dict | None = None                       # {"question", "suggest" (meeting place text or None)}
+    ask: dict | None = None                       # {"question", "suggest" (meeting place text or None), "index" (the call asked about)}
 
 
 def _fold(text) -> str:
@@ -163,11 +163,11 @@ def shape(ops, routes=None, *, live=True, events=None) -> Shaped:
     offer = _signup_offer(ops, events)
     if offer is not None:
         return offer
-    for call in ops:
+    for index, call in enumerate(ops):
         if not (isinstance(call, dict) and call.get("op") == "hike.create" and isinstance(call.get("args"), dict)):
             continue
         args = call["args"]
-        route = _route_for(args, routes)
+        route = _route_for(args, routes)  # before _trail_fields strips trailId: the route is only findable now
         title = build_title(args.get("title"), args.get("meetingPoint"))
         if title:
             args["title"] = title
@@ -175,7 +175,9 @@ def shape(ops, routes=None, *, live=True, events=None) -> Shaped:
         _trail_fields(args, routes, out.notes)
         if out.ask is None and only_a_trail(args.get("meetingPoint"), route):
             suggestion = suggest_meeting(route)
-            out.ask = {"kind": "meet", "question": meeting_question(args.get("title"), suggestion), "suggest": suggestion}
+            # "index": which call the question is about. trailId is gone from the call once shaped, so a later yes could not
+            # rediscover the route from an abbreviated place ("Fiscalini"); the question keeps the call's place in the list.
+            out.ask = {"kind": "meet", "question": meeting_question(args.get("title"), suggestion), "suggest": suggestion, "index": index}
     return out
 
 
@@ -205,9 +207,17 @@ def _signup_offer(ops, events):
     return Shaped(ops, ask={"kind": "offer", "question": question, "suggest": None, "ops": [{"op": "hike.update", "args": rest}]})
 
 
-def with_meeting(ops, place, routes=None) -> list:
-    """The waiting calls with the meeting place he confirmed: on the first hike.create whose meeting place is only a trail."""
+def with_meeting(ops, place, routes=None, index=None) -> list:
+    """The waiting calls with the meeting place he confirmed. ``index`` is the call the question was asked about (``ask["index"]``):
+    the place goes to that hike.create and no other. Without a usable index (an older stored question) it falls back to the first
+    hike.create whose meeting place is only a trail."""
     ops = copy.deepcopy(ops)
+    if isinstance(index, int) and not isinstance(index, bool) and 0 <= index < len(ops):
+        call = ops[index]
+        if isinstance(call, dict) and call.get("op") == "hike.create" and isinstance(call.get("args"), dict):
+            if not MEET_WORD.search(str(call["args"].get("meetingPoint") or "")):  # a real place he gave is never overwritten
+                call["args"]["meetingPoint"] = place
+                return ops
     for call in ops:
         if isinstance(call, dict) and call.get("op") == "hike.create" and isinstance(call.get("args"), dict) \
                 and only_a_trail(call["args"].get("meetingPoint"), _route_for(call["args"], routes)):

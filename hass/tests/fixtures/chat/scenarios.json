@@ -111,6 +111,17 @@
    "model": {"ops": [{"op": "hike.create", "args": {"title": "Fiscalini Ranch hike", "date": "2026-11-08", "time": "10:00", "meetingPoint": "The bench at the end of Windsor Blvd", "rsvpEnabled": false, "trailId": "idea-fiscalini-bluff"}}], "revises": null},
    "disposition": "proposed", "has": ["the meeting place: The bench at the end of Windsor Blvd", "I left out the link to the saved route Fiscalini Ranch"]}]},
 
+{"id": "hike-abbreviated-place-yes-keeps-the-confirmed-meeting-place", "area": "hike",
+ "about": "He names the route in short (\"Fiscalini\"); the question suggests the full trailhead; his yes puts that trailhead on the hike, so the proposal and the stored hike carry the place he confirmed, not the short name.",
+ "turns": [
+  {"owner": "Fiscalini hike Sunday 10am",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Fiscalini Ranch hike", "date": "2026-11-08", "time": "10:00", "meetingPoint": "Fiscalini", "rsvpEnabled": false, "trailId": "idea-fiscalini-bluff"}}], "revises": null},
+   "disposition": "question", "has": ["Meet at the Fiscalini Ranch trailhead in Cambria? Reply yes, or tell me where."]},
+  {"owner": "yes", "model": null, "disposition": "proposed",
+   "has": ["the meeting place: Fiscalini Ranch trailhead, Cambria"], "lacks": ["the meeting place: Fiscalini\n"]},
+  {"owner": "yes {code}", "model": null, "disposition": "approved",
+   "event": {"meetingPoint": "Fiscalini Ranch trailhead, Cambria", "trailId": null}}]},
+
 {"id": "hike-signup-turned-on-later-is-refused-with-an-alternative", "area": "hike",
  "about": "Turning sign-up on for a posted hike cannot go live: the reply says what it understood, why, and the nearest thing that can.",
  "turns": [
