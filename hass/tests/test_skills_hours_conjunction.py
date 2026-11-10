@@ -95,6 +95,23 @@ class ConjunctionSchedules(unittest.TestCase):
         self.assertEqual(shop.schedule_pieces(line), ["Closed Mon and Fri", "Sat 9–5"])
         self.assertIsNone(shop.check_hours_conflict({"hours": [line]}, [], None))
 
+    def test_open_hours_before_a_bare_day_and_comma_schedule_still_split(self):
+        # Only a closed-day list continues over "and"; an open-hours left side is an independent schedule.
+        line = "Mon 9–5 and Fri, Sat 10–4"
+        self.assertEqual(shop.schedule_pieces(line), ["Mon 9–5", "Fri, Sat 10–4"])
+        by_day, opaque = shop.hours_by_day([line])
+        self.assertEqual((by_day, opaque), ({0: ["9–5"], 4: ["10–4"], 5: ["10–4"]}, []))
+        self.assertIsNone(shop.check_hours_conflict({"hours": [line]}, [], None))
+        line = "Weekdays 9–5 and Fri, Sat 10–4"
+        self.assertEqual(shop.schedule_pieces(line), ["Weekdays 9–5", "Fri, Sat 10–4"])
+        self.assertEqual(shop.hours_by_day([line])[0][4], ["9–5", "10–4"])
+        question = "I see two different hours for Friday. Which one do you want?"
+        for ctx in (None, ctx_for(store={"hours": H0}, texts=["change the hours"])):
+            with self.subTest(ctx=ctx is not None):
+                stop = shop.check_hours_conflict({"hours": [line]}, [], ctx)
+                self.assertEqual((stop.kind, stop.reply), ("question", question))
+                self.assertEqual(asks(self, [line], ctx), ("question", question))
+
     def test_conjunction_schedule_keeps_unnamed_days(self):
         saved = ["Mon–Thu 9–6 and Fri 9–5", "Sat 9–5 and Closed Sun"]
         said = ["Monday till 7"]
