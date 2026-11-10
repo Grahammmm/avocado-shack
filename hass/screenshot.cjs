@@ -44,15 +44,19 @@ const allowed=req=>{
         // identity: a card's id is its anchor (id attribute), RSVP button or calendar link; only a card naming this id counts, none is guessed
         const mine=cards.filter(c=>!!target.id&&c.ids.includes(target.id)),pool=mine;
         const LABEL={meetTime:'Meet at',meetingAddress:'Address',returnTime:'Back',walkTime:'Start'};
+        // AV1109-12: the count the page was given, read GET-only from the preview origin by exact id; null when the API is silent or lacks the id.
+        const seen=await page.evaluate(async id=>{try{const r=await fetch('/api/community',{cache:'no-store'});if(!r.ok)return null;const e=((await r.json()).events||[]).find(x=>x.id===id);return e?{capacity:e.capacity,remaining:e.remaining}:null}catch{return null}},target.id||'');
         const evaluate=card=>{
           const r={},when=new Date(target.startsAt),pt=o=>when.toLocaleString('en-US',{timeZone:'America/Los_Angeles',...o});
           r.dateShown=card.date===(when<=new Date()?`Today — started ${pt({hour:'numeric',minute:'2-digit'})}`:pt({weekday:'long',month:'long',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}));
           r.meetShown=target.meetingPoint?card.meet.length===1&&card.meet[0]===target.meetingPoint:card.meet.length===0;
           const n=target.capacity,open=target.rsvpEnabled&&!!target.meetingPoint&&when>new Date();  // community-server.py scheduled(): RSVPs close at startsAt
           const day=d=>d.toLocaleDateString('en-US',{timeZone:'America/Los_Angeles'}),started=when<=new Date()&&day(when)===day(new Date());  // AV1104-05 community.js: started today reads closed
-          const want=started?'This hike has started, so RSVPs are closed.':!open?'RSVP details will be shared when confirmed.':n===null?'RSVPs open':n===0?'This hike is full.':`${n} place${n===1?'':'s'} available`;
-          // guests already confirmed are not in the target: an open hike with a capacity may also be full (remaining 0)
-          r.placesShown=card.places.length===1&&(card.places[0]===want||(open&&n>0&&card.places[0]==='This hike is full.'));
+          // HIKE-PAGE 3.3.1: "left" only from a count whose capacity is this hike's own (the observed API count; whole numbers, 0..capacity); a limit with no trusted count says so; never remaining inferred from capacity
+          const left=seen&&Number.isInteger(n)&&seen.capacity===n&&Number.isInteger(seen.remaining)&&seen.remaining>=0&&seen.remaining<=n?seen.remaining:null;
+          const want=started?'This hike has started, so RSVPs are closed.':!open?'RSVP details will be shared when confirmed.':n===null?'To join, ask at the Shack.':!Number.isInteger(n)||n<1?null
+            :left===null?`Limited to ${n} people · availability unconfirmed; ask at the Shack`:left===0?'Full. Ask at the Shack to go on the waitlist.':`${left} spot${left===1?'':'s'} left`;
+          r.placesShown=want!==null&&card.places.length===1&&card.places[0]===want;
           const ch=Object.entries(target.changed||{});  // each changed value must be the one under its own label
           const gone=target.cleared||[];  // a cleared field's labeled line must be absent
           if(ch.length||gone.length)r.fieldsShown=ch.every(([k,v])=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===1&&card.facts[LABEL[k]][0]===ws(v))&&gone.every(k=>!!LABEL[k]&&(card.facts[LABEL[k]]||[]).length===0);
