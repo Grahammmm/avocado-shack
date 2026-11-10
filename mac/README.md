@@ -9,7 +9,7 @@ Commands: `python3 -B mac/hass_forwarder.py {serve,status,check} --config FILE`.
 `serve` binds the webhook to 127.0.0.1 and reaches the receiver over Tailscale.
 
 Create the config privately (0600, regular file, owned by the dedicated Mac user):
-closed keys `ownerChat` (`iMessage;-;<address>`), `receiverUrl`
+closed keys `ownerChat` (`iMessage;-;<address>`), optional `ownerChats` (every owner's own one-to-one chat, `ownerChat` among them), `receiverUrl`
 (`http://<tailnet-name>:8795`), `bbPort`, `bbPasswordFile`, `secretFile`,
 `spoolDir`, `webhookTokenFile`, and optional `webhookPort` (8796).
 All file/directory paths are absolute. The spool directory must already exist at

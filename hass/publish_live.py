@@ -140,7 +140,7 @@ class LiveEditor(conversation.Editor):
     def private_values(self):
         """Every owner address and chat id (Mike's and, with gIsOwner, G's): none may appear in a published file."""
         st = self.settings
-        return (*st['ownerSenders'], st['ownerChat'], *st.get('gSenders', ()), st.get('gChat'))
+        return (*st['ownerSenders'], st['ownerChat'], *st.get('ownerChats', ()), *st.get('gSenders', ()), st.get('gChat'))
 
     def alert(self, code):
         if code not in self.alerts:
@@ -211,6 +211,12 @@ class LiveEditor(conversation.Editor):
         can hold drafts with the same change_id, so the newest draft row is never used). An entry with no recorded chat (written
         before this field, or Graham's one-command revert) goes to ownerChat."""
         return j.get('chat') or self.settings['ownerChat']
+
+    def open_release(self):
+        """HASS-OWNERS-2: the owner chat whose release has not settled (any journal entry not closed), or None. An unreadable book\n        says None here: apply() refuses on it anyway, in plain words."""
+        try: _books, entries = self.load()
+        except (journal.BooksError, OSError, ValueError): return None
+        return next((self._asker(j) for j in entries if j['state'] not in journal.CLOSED), None)
 
     def _has_draft(self, cid):
         db = getattr(self.conv, 'db', None)
@@ -429,7 +435,7 @@ class LiveEditor(conversation.Editor):
         elif state == 'unconfirmed': text = owner_answers.LIVE_UNCONFIRMED.format(code=j['code'])
         else: return
         chat = self._asker(j)
-        if chat != self.settings['ownerChat']: attachments = []  # G's chat is text only
+        if chat not in self.settings.get('ownerChats', (self.settings['ownerChat'],)): attachments = []  # G's chat is text only; every owner chat gets the picture
         self.conv.outbox.add(chat, text, attachments)
         self.books.write(j, notified=[*j['notified'], state])
 
