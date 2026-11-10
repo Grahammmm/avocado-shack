@@ -4,7 +4,8 @@ const dateLabel=e=>new Date(e.startsAt).toLocaleString('en-US',{timeZone:e.timez
 const pacificDay=d=>new Date(d).toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});
 const upcoming=e=>e.status==='scheduled'&&(new Date(e.startsAt)>new Date()||pacificDay(e.startsAt)===pacificDay(Date.now()));
 const showCancelled=e=>e.status==='cancelled'&&pacificDay(e.startsAt)>=pacificDay(Date.now());
-const hikeDate=e=>new Date(e.startsAt)<=new Date()?`Today — started ${new Date(e.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})}`:dateLabel(e);
+// RF0834-14: only a scheduled hike says it started; a cancelled one keeps its planned date/time (dateLabel) before, at and after its start.
+const hikeDate=e=>e.status==='scheduled'&&new Date(e.startsAt)<=new Date()?`Today — started ${new Date(e.startsAt).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'})}`:dateLabel(e);
 const trailById=id=>(club.routeIdeas||[]).find(t=>t.id===id);
 // AV0207-03: route ideas that have trail-explorer data (assets/trails/point-buchon.json); the explorer's element ids allow one per page.
 const EXPLORER_TRAILS=new Set(['idea-point-buchon']);
@@ -26,25 +27,50 @@ function ics(e){const t=new Date(e.startsAt).toISOString().replace(/[-:]|\.\d+/g
 // RF1050-24: only an explicitly zoned start (Z or +/-HH:MM) is exported; a zone-less one would take the visitor's zone. JS $ (no m flag) matches only the true end, so a final newline fails.
 const calendarStart=e=>{const s=e&&e.startsAt;if(typeof s!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?(Z|[+-][0-9]{2}:[0-9]{2})$/.test(s))return null;const t=Date.parse(s);return Number.isFinite(t)?t:null};
 function calendar(e){const t=e.status==='scheduled'?calendarStart(e):null;return t!==null&&t>Date.now()?`<p><a class="text-link hike-ics" download="${esc(e.id)}.ics" href="${esc('data:text/calendar;charset=utf-8,'+encodeURIComponent(ics(e)))}">Add to calendar</a></p>`:''}
-function sampleInvitation(e){
- const t=trailById(e.trailId); if(!t)return '';
- // AV1422-05: once the sample's Pacific day has passed (or startsAt is unparseable) say so instead of showing a past date.
+// AV1109-13: display-only facts; the original record still owns RSVP and calendar data.
+const invitationPhotos={'idea-point-buchon':`<figure class="trail-photograph"><img src="/assets/trails/point-buchon-coast.webp" alt="Sunlit sea arches and blue Pacific water below the bluffs at Point Buchon" loading="lazy" width="1600" height="1067"><figcaption><span>Point Buchon, from the bluffs.</span><span>Photo: <a href="https://commons.wikimedia.org/wiki/File:Waterscape_with_massive_arches_and_stone_outcroppings_of_Miguelito_shale,_Point_Buchon.jpg" target="_blank" rel="noopener">Mike Baird</a> · <a href="https://creativecommons.org/licenses/by/2.0/" target="_blank" rel="noopener">CC BY 2.0</a></span></figcaption></figure>`};
+const firstText=(...values)=>values.find(set);
+const safeGuide=t=>{try{return new URL(t?.sourceUrl).protocol==='https:'?t.sourceUrl:null}catch{return null}};
+function invitationModel(e,t,{sample=false,label='',canExplore=false}={}){
+ const x=e.status==='cancelled',started=label==='TODAY';
  const past=isNaN(Date.parse(e.startsAt))||pacificDay(e.startsAt)<pacificDay(Date.now());
  const day=new Date(e.startsAt).toLocaleDateString('en-US',{timeZone:'America/Los_Angeles',weekday:'long',month:'long',day:'numeric',year:'numeric'});
- return `<article class="trail-invitation" aria-labelledby="featured-hike-title">
-  <div class="trail-invitation-head"><p class="label">THE NEXT HIKE</p><p class="sample-caption">Sample invitation · plans to be confirmed</p></div>
-  <div class="trail-feature">
-   <div class="trail-feature-copy"><p class="trail-place">${esc(t.place)} · Central Coast, California</p><h2 id="featured-hike-title">${esc(t.title)}<br><em>A morning on the coast.</em></h2>${past?'<p class="trail-invitation-date">Date to be confirmed</p>':`<p class="trail-invitation-date"><time datetime="${esc(e.startsAt)}">${esc(day)}</time> · ${esc(e.walkTime)}</p>`}<p>${esc(e.invitation)}</p><p class="trail-host-note">A community hike led by Michael Wolfe.</p></div>
-   <figure class="trail-photograph"><img src="/assets/trails/point-buchon-coast.webp" alt="Sunlit sea arches and blue Pacific water below the bluffs at Point Buchon" loading="lazy" width="1600" height="1067"><figcaption><span>Point Buchon, from the bluffs.</span><span>Photo: <a href="https://commons.wikimedia.org/wiki/File:Waterscape_with_massive_arches_and_stone_outcroppings_of_Miguelito_shale,_Point_Buchon.jpg" target="_blank" rel="noopener">Mike Baird</a> · <a href="https://creativecommons.org/licenses/by/2.0/" target="_blank" rel="noopener">CC BY 2.0</a></span></figcaption></figure>
+ const rows=sample?[['Round trip',t.distance],['Difficulty',t.difficulty],[t.elevationLabel,t.elevation],['Allow',t.duration]]:
+  [['Distance',firstText(e.distance,t?.distance,'to be confirmed')],['Difficulty',firstText(e.difficulty,t?.difficulty,'to be confirmed')],...(set(t?.elevation)?[[firstText(t.elevationLabel,'Elevation change'),t.elevation]]:[]),['Time',firstText(e.duration,t?.duration,'to be confirmed')]];
+ const state=sample||x||started?null:spotsState(e,spotsCount(e));
+ const guide=safeGuide(t);
+ return {e,t,sample,label:sample?'THE NEXT HIKE':label,cancelled:x,
+  title:sample?`${esc(t.title)}<br><em>A morning on the coast.</em>`:`${x?'Cancelled: ':''}${esc(e.title)}`,
+  place:sample?`${esc(t.place)} · Central Coast, California`:set(t?.place)?esc(t.place):'',
+  date:sample?(past?'<p class="trail-invitation-date">Date to be confirmed</p>':`<p class="trail-invitation-date"><time datetime="${esc(e.startsAt)}">${esc(day)}</time> · ${esc(e.walkTime)}</p>`):`<p class="hike-date">${esc(hikeDate(e))}</p>`,
+  description:sample?e.invitation:firstText(t?.description,e.description,'Michael will share the details soon.'),
+  photo:Object.hasOwn(invitationPhotos,e.trailId)?invitationPhotos[e.trailId]:'',stats:rows.map(([k,v])=>metric(k,v)).join(''),
+  spots:state?spotsMarkup(state):'',
+  map:canExplore?'<div data-trail-explorer><p class="trail-map-unavailable">Loading the trail map…</p></div>':guide?`<p class="trail-map-unavailable"><a class="text-link" href="${esc(guide)}" target="_blank" rel="noopener">Trail map: official guide ↗</a></p>`:'<p class="trail-map-unavailable">Map to come.</p>',
+  plan:sample?`<div class="trail-plan"><h3>Meet at the trailhead.</h3><dl class="trail-logistics"><div><dt>Meet at ${esc(e.meetTime)}</dt><dd>${esc(e.meetingPoint)}<br><span>${esc(e.meetingAddress)}</span></dd></div><div><dt>On the trail</dt><dd>${esc(e.walkTime)} start · back ${esc(e.returnTime.toLowerCase())}.<br><span>Time includes a relaxed pace and stops along the way.</span></dd></div><div><dt>Bring along</dt><dd>${esc(e.bring)}</dd></div></dl><p class="trail-access">${esc(e.accessNote)}</p><a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">Trail access &amp; visitor information <span aria-hidden="true">↗</span></a></div>`:richLogistics(e,t),
+  join:sample?`<div class="trail-rsvp-wrap"><p class="label">WALK WITH US</p><h3 id="preview-rsvp-heading">I’ll come along.</h3>${attendance({confirmedGuests:0})}<p>Tell us who’s coming and how many are in your group.</p><form id="preview-hike-rsvp" aria-labelledby="preview-rsvp-heading"><div class="trail-form-row"><div><label for="preview-rsvp-name">Your name</label><input id="preview-rsvp-name" name="name" autocomplete="name" maxlength="120" required></div><div><label for="preview-rsvp-party">How many?</label><select id="preview-rsvp-party" name="partySize" aria-label="People attending, including you">${Array.from({length:6},(_,i)=>`<option value="${i+1}">${i+1} ${i?'people':'person'}</option>`).join('')}</select></div></div><label for="preview-rsvp-email">Email address</label><input id="preview-rsvp-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com"><button class="button" type="submit">Count me in <span aria-hidden="true">↗</span></button><p class="sample-caption">Sample RSVP · nothing is sent or saved.</p><p class="form-status" role="status" tabindex="-1"></p></form></div>`:`<div class="trail-rsvp-wrap">${attendance(e)}${calendar(e)}${x?`${typeof e.cancelNote==='string'&&e.cancelNote?`<p class="club-small hike-cancel-note" data-hike-id="${esc(e.id)}">${esc(e.cancelNote)}</p>`:''}<p class="club-small">This hike is cancelled. Nothing else is needed from you.</p>`:started?'<p class="club-small">This hike has started, so RSVPs are closed.</p>':e.rsvpOpen&&(state.kind==='left'||state.kind==='nolimit')?`<button class="button" data-rsvp="${esc(e.id)}">RSVP to this hike ↗</button>`:''}</div>`};
+}
+function richLogistics(e,t){
+ const rows=[['Meet',e.meetingPoint],['Meet at',e.meetTime],['Address',e.meetingAddress],['Start',e.walkTime],['Back',e.returnTime],['Route type',t?.routeType],['Terrain',t?.terrain],['Bring along',firstText(e.bring,'The usual: water, sturdy shoes, a layer and a snack.')]];
+ return `<div class="trail-plan"><h3>Meet at the trailhead.</h3><dl class="hike-facts trail-logistics">${rows.filter(x=>set(x[1])).map(([k,v])=>metric(k,v,k==='Address'?directions(v):'')).join('')}</dl>${set(e.accessNote)?`<p class="hike-access">${esc(e.accessNote)}</p>`:''}${route(e)}</div>`;
+}
+function renderInvitation(m){
+ const {e,sample}=m;
+ return `<article${sample?'':anchor(e)} class="${sample?'':'hike-event'+(m.cancelled?' hike-cancelled':'')+' '}trail-invitation" ${sample?'aria-labelledby="featured-hike-title"':`aria-label="${esc(e.title)}"`}>
+  <div class="trail-invitation-head"><p class="label">${m.label}</p>${sample?'<p class="sample-caption">Sample invitation · plans to be confirmed</p>':''}</div>
+  <div class="trail-feature${m.photo?'':' trail-feature-no-photo'}">
+   <div class="trail-feature-copy">${sample?`${m.place?`<p class="trail-place">${m.place}</p>`:''}<h2 id="featured-hike-title">${m.title}</h2>${m.date}`:`${m.date}<h2>${m.title}</h2>${m.place?`<p class="trail-place">${m.place}</p>`:''}`}<p>${esc(m.description)}</p><p class="trail-host-note">A community hike led by Michael Wolfe.</p></div>
+   ${m.photo}
   </div>
-  <dl class="trail-stats" aria-label="Hike at a glance">${metric('Round trip',t.distance)}${metric('Difficulty',t.difficulty)}${metric(t.elevationLabel,t.elevation)}${metric('Allow',t.duration)}</dl>
-  <div data-trail-explorer><p class="trail-map-unavailable">Loading the trail map…</p></div>
+  <dl class="trail-stats" aria-label="Hike at a glance">${m.stats}</dl>
+  ${m.spots}${m.map}
   <div class="trail-plan-rsvp">
-   <div class="trail-plan"><h3>Meet at the trailhead.</h3><dl class="trail-logistics"><div><dt>Meet at ${esc(e.meetTime)}</dt><dd>${esc(e.meetingPoint)}<br><span>${esc(e.meetingAddress)}</span></dd></div><div><dt>On the trail</dt><dd>${esc(e.walkTime)} start · back ${esc(e.returnTime.toLowerCase())}.<br><span>Time includes a relaxed pace and stops along the way.</span></dd></div><div><dt>Bring along</dt><dd>${esc(e.bring)}</dd></div></dl><p class="trail-access">${esc(e.accessNote)}</p><a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">Trail access &amp; visitor information <span aria-hidden="true">↗</span></a></div>
-   <div class="trail-rsvp-wrap"><p class="label">WALK WITH US</p><h3 id="preview-rsvp-heading">I’ll come along.</h3>${attendance({confirmedGuests:0})}<p>Tell us who’s coming and how many are in your group.</p><form id="preview-hike-rsvp" aria-labelledby="preview-rsvp-heading"><div class="trail-form-row"><div><label for="preview-rsvp-name">Your name</label><input id="preview-rsvp-name" name="name" autocomplete="name" maxlength="120" required></div><div><label for="preview-rsvp-party">How many?</label><select id="preview-rsvp-party" name="partySize" aria-label="People attending, including you">${Array.from({length:6},(_,i)=>`<option value="${i+1}">${i+1} ${i?'people':'person'}</option>`).join('')}</select></div></div><label for="preview-rsvp-email">Email address</label><input id="preview-rsvp-email" name="email" type="email" autocomplete="email" required placeholder="you@example.com"><button class="button" type="submit">Count me in <span aria-hidden="true">↗</span></button><p class="sample-caption">Sample RSVP · nothing is sent or saved.</p><p class="form-status" role="status" tabindex="-1"></p></form></div>
+   ${m.plan}
+   ${m.join}
   </div>
  </article>`;
 }
+function sampleInvitation(e){const t=trailById(e.trailId);return t?renderInvitation(invitationModel(e,t,{sample:true,canExplore:EXPLORER_TRAILS.has(e.trailId)})):''}
 function sampleHistory(item,index){
  const t=trailById(item.trailId);if(!t)return '';
  return `<article class="trail-journal-entry"><div class="trail-journal-marker" aria-hidden="true">${index===0?'↗':'≈'}</div><div class="trail-journal-copy"><p class="trail-place">${esc(t.place)} <span>· ${esc(item.dateLabel)}</span></p><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p><dl class="trail-journal-stats">${metric('Distance',t.distance)}${metric('Difficulty',t.difficulty)}${metric(t.elevationLabel,t.elevation)}${metric('Allow',t.duration)}</dl><a class="text-link" href="${esc(t.sourceUrl)}" target="_blank" rel="noopener">Explore this trail <span aria-hidden="true">↗</span></a></div></article>`;
@@ -67,6 +93,22 @@ function mountWhenNear(host){
  if(!('IntersectionObserver' in window))return window.AvoshackTrailExplorer?.mount(host);
  const io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){io.disconnect();window.AvoshackTrailExplorer?.mount(host)}},{rootMargin:'100% 0px'});io.observe(host);
 }
+// SPOTS-BEGIN AV1109-12 (docs/hass/HIKE-PAGE.md 3.3.1): one line says what is known about spots. A limit (capacity) may be stated on its own; "left" only from a trusted count, i.e. whole numbers, capacity 1-1000 equal to the hike's own capacity, 0 <= left <= capacity. Anything else is unknown, never coerced or inferred.
+// count is null or {capacity, remaining}. Internal seam (AV1109-13 reuses it), not a wire format.
+const spotsCapacity=e=>Number.isInteger(e.capacity)&&e.capacity>0?e.capacity:null;
+function spotsState(e,count){
+ const cap=spotsCapacity(e);
+ if(e.rsvpEnabled!==true||(!e.staticSite&&e.rsvpOpen!==true))return {kind:'off',text:'RSVP details will be shared when confirmed.'};
+ if(cap===null)return {kind:'nolimit',text:'To join, ask at the Shack.'};
+ const c=count&&Number.isInteger(count.capacity)&&count.capacity>=1&&count.capacity<=1000&&count.capacity===cap&&Number.isInteger(count.remaining)&&count.remaining>=0&&count.remaining<=cap?count.remaining:null;
+ if(c===null)return {kind:'unknown',text:`Limited to ${cap} people · availability unconfirmed; ask at the Shack`};
+ if(c===0)return {kind:'full',full:true,text:'Full. Ask at the Shack to go on the waitlist.',compact:'Full'};
+ return {kind:'left',text:`${c} spot${c===1?'':'s'} left`};
+}
+const spotsMarkup=s=>`<p class="club-small${s.full?' hike-full':''}">${esc(s.text)}</p>`;
+// The live API computes capacity and remaining together; the static community.json has no count (any stray one is ignored).
+const spotsCount=e=>e.staticSite?null:{capacity:e.capacity,remaining:e.remaining};
+// SPOTS-END
 // AV1622-01: a real hike card carries its event id (the address the .ics URL: line links to), unless the id is empty, already a page id, or already used by an earlier card.
 const staticIds=new Set(),usedIds=new Set();let jumped=false,scanned=false;
 const anchor=e=>{const id=e&&e.id;if(typeof id!=='string'||id===''||staticIds.has(id)||usedIds.has(id))return '';usedIds.add(id);return ` id="${esc(id)}"`};
@@ -80,7 +122,9 @@ function render(){
  const next=club.events.filter(e=>upcoming(e)||showCancelled(e)).sort((a,b)=>new Date(a.startsAt)-new Date(b.startsAt));
  const samplesOn=club.showSamples!==false,demo=samplesOn&&preview?.enabled&&preview.upcoming&&trailById(preview.upcoming.trailId);
  let explorer=false;const now=Date.now(),started=e=>e.status==='scheduled'&&Date.parse(e.startsAt)<=now&&pacificDay(e.startsAt)===pacificDay(now),first=next.find(e=>e.status==='scheduled'&&Date.parse(e.startsAt)>now);
- $('#upcoming-hikes').innerHTML=next.length?next.map(e=>{const x=e.status==='cancelled',t=started(e);return `<article${anchor(e)} class="hike-event${x?' hike-cancelled':''}"><p class="label">${x?'CANCELLED':t?'TODAY':e===first?'THE NEXT HIKE':'COMING UP'}</p><p class="hike-date">${esc(hikeDate(e))}</p><h2>${x?'Cancelled: ':''}${esc(e.title)}</h2><p>${esc(e.description||'')}</p>${attendance(e)}${details(e)}${route(e)}${!explorer&&e.status==='scheduled'&&EXPLORER_TRAILS.has(e.trailId)&&trailById(e.trailId)&&(explorer=true)?'<div data-trail-explorer><p class="trail-map-unavailable">Loading the trail map…</p></div>':''}${calendar(e)}${x?`${typeof e.cancelNote==='string'&&e.cancelNote?`<p class="club-small hike-cancel-note" data-hike-id="${esc(e.id)}">${esc(e.cancelNote)}</p>`:''}<p class="club-small">This hike is cancelled. Nothing else is needed from you.</p>`:t?'<p class="club-small">This hike has started, so RSVPs are closed.</p>':e.rsvpOpen?e.remaining===0?'<p class="club-small hike-full">This hike is full.</p>':`<p class="club-small">${e.remaining===null?'RSVPs open':`${e.remaining} place${e.remaining===1?'':'s'} available`}</p><button class="button" data-rsvp="${esc(e.id)}">RSVP to this hike ↗</button>`:e.staticSite&&e.rsvpEnabled?'<p class="club-small">To join, ask at the Shack.</p>':'<p class="club-small">RSVP details will be shared when confirmed.</p>'}</article>`}).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h2>The next walk starts here.</h2><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
+ $('#upcoming-hikes').innerHTML=next.length?next.map(e=>{const x=e.status==='cancelled',t=started(e),trail=trailById(e.trailId);
+  const canExplore=!explorer&&e.status==='scheduled'&&!!trail&&EXPLORER_TRAILS.has(e.trailId);if(canExplore)explorer=true;
+  return renderInvitation(invitationModel(e,trail,{label:x?'CANCELLED':t?'TODAY':e===first?'THE NEXT HIKE':'COMING UP',canExplore}));}).join(''):demo?sampleInvitation(preview.upcoming):'<div class="hike-empty"><h2>The next walk starts here.</h2><p>No hike is currently scheduled. When Michael confirms the next outing, you’ll find the trail, date, meeting point, and RSVP here.</p><a class="text-link" href="#hike-updates">Tell me when a hike is planned ↗</a></div>';
  const past=club.events.filter(e=>e.status==='completed').sort((a,b)=>new Date(b.startsAt)-new Date(a.startsAt));
  const samplePast=samplesOn&&!past.length&&preview?.enabled&&(preview.past||[]).some(e=>trailById(e.trailId));
  $('#history-context').textContent=samplePast?'Sample archive · these outings are not confirmed club history.':'Places and memories from our walks together.';

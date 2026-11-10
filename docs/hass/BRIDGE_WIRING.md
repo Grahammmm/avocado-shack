@@ -30,6 +30,7 @@ Closed key set (any other key is refused):
 | key | holds | notes |
 |---|---|---|
 | `ownerChat` | `iMessage;-;<owner address>` | one-to-one owner chat only |
+| `ownerChats` | list of `iMessage;-;<address>` | optional (HASS-OWNERS-2); every owner's own one-to-one chat when several people are owners, `ownerChat` (the main one) among them, no repeats, at most 8, never `gChat`. The forwarder then reads, taps back and answers in each of those chats, pictures included. Leave it out and `ownerChat` is the only owner chat. Must match `ownerChats` in the host settings; upgrade the Mac forwarder and the host together |
 | `gChat` | `iMessage;-;<G address>` | optional; G's own one-to-one chat for `problems` and `weekly` (text only). Leave it out and nothing but the owner chat is read or sent. Must match `gChat` in the host config and never be the owner chat |
 | `receiverUrl` | `http://<agentorange tailnet name>:8795` | host must be loopback or in 100.64.0.0/10; port 8795; no path/credentials |
 | `bbPort` | integer | BlueBubbles port shown in its settings (default 1234) |

@@ -86,3 +86,11 @@
 .hiking-club .hike-attendance{display:flex;align-items:baseline;gap:8px;font:13px/1.5 Arial,sans-serif;margin:10px 0 18px;padding:10px 0;border-top:1px solid #c3cbb7;border-bottom:1px solid #c3cbb7}
 .hike-attendance strong{font:28px/1.2 Georgia,serif;font-variant-numeric:tabular-nums}
 @media(max-width:800px){.hike-page .hiking-club{margin-top:0;margin-bottom:0}.hike-page footer{margin-top:0}}
+
+/* Real invitations share the sample layout without empty photo/stat slots. */
+.hike-event.trail-invitation{padding:0;margin-bottom:28px;overflow-wrap:anywhere}
+.trail-feature-no-photo{grid-template-columns:minmax(0,1fr)}
+.hike-event .trail-stats{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:18px 0}
+.hike-event.trail-invitation>.club-small,.hike-event.trail-invitation>.trail-map-unavailable{margin:20px 30px}
+.hike-event .trail-feature-copy,.hike-event .trail-plan,.hike-event .trail-rsvp-wrap{min-width:0}
+@media(max-width:800px){.hike-event.trail-invitation>.club-small,.hike-event.trail-invitation>.trail-map-unavailable{margin-left:20px;margin-right:20px}.hike-event .trail-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}

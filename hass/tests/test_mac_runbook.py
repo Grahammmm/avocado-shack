@@ -99,7 +99,7 @@ class MacRunbookTests(unittest.TestCase):
         blocks = re.findall(r'```json\n(.*?)\n\s*```', self.doc, re.S)
         self.assertEqual(len(blocks), 3)
         names = lambda text: set(re.findall(r'"(\w+)"\s*:', text))
-        self.assertEqual(names(blocks[0]), hass_forwarder.KEYS - {'gChat'})  # gChat is optional: documented in BRIDGE_WIRING.md
+        self.assertEqual(names(blocks[0]), hass_forwarder.KEYS - {'gChat', 'ownerChats'})  # gChat and ownerChats are optional: documented in BRIDGE_WIRING.md
         self.assertEqual(names(blocks[1]) - {'url', 'model'}, host.KEYS - {'release', 'clover'})  # clover: CLOVER.md
         tree = ast.parse(inspect.getsource(publish_live.release_config))
         release_keys = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)

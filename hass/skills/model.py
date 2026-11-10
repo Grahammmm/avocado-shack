@@ -17,7 +17,10 @@ from hass.ops import KINDS as OP_KINDS
 # Skill-level kinds are resolved by code (hass/skills/kinds.py) before the plan runs.
 SKILL_KINDS = ("product_ref", "maker_ref", "hike_ref", "route_ref", "shelf", "availability", "day", "clock",
                "attachment")
-SLOT_KINDS = OP_KINDS + SKILL_KINDS
+# Plain kinds the dispatcher checks for shape only (never resolved, never an op kind). stock_items: stock.set's list of
+# {"product": <id>, "availability": "yes"|"limited"|"no"} objects (RF0814-12).
+PLAIN_KINDS = ("stock_items",)
+SLOT_KINDS = OP_KINDS + SKILL_KINDS + PLAIN_KINDS
 
 SIDE_EFFECTS = ("picture-render", "inventory-word", "shelf-check-day", "maker-create", "restock-date",
                 "private-note", "backlog-row", "none")
@@ -56,6 +59,7 @@ class Slot:
     owner_words: bool = False  # the value must be traceable to the owner's own texts
     limit: tuple | None = None  # (content kind, field): read from content_model.TEXT_LIMITS, never copied
     from_attachment: bool = False
+    hint: str = ""  # prompt-visible closed vocabulary or rule for this slot (shown after the kind; never validated here)
 
 
 @dataclass(frozen=True)
@@ -219,8 +223,9 @@ def lint_skill(skill, ops_registry, coll_files=None) -> list:
             bad("edits", "a skill without approval declares no content edits")
     elif skill.live_class == "read-only":
         bad("live_class", "read-only needs approval 'none'")
-    if skill.approval == "owner-yes" and skill.preview == "none":
-        bad("preview", "'none' only for read-only skills")
+    publishes = any(isinstance(e, tuple) and e and str(e[0]).startswith("storefront-mockup/") for e in skill.edits or ())
+    if skill.approval == "owner-yes" and skill.preview == "none" and (skill.live_class != "private-only" or publishes):
+        bad("preview", "'none' only for read-only skills, or a private-only skill that edits no site file")  # AV1109-04: stock.restock
     if skill.approval == "owner-yes" and not skill.edits:
         bad("edits", "a skill that asks for approval declares what it edits")
     return out

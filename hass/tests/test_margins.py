@@ -126,5 +126,91 @@ class MarginTests(unittest.TestCase):
         self.assertNotIn("open", calls)
 
 
+# Run in a child with a small, supported digit limit so the parent runner's global limit is never touched.
+OVERSIZED_PROBE = r'''
+import json, sys
+from decimal import Decimal, getcontext, localcontext, ROUND_DOWN, InvalidOperation
+sys.path.insert(0, sys.argv[1])
+from hass import margins
+
+limit = sys.get_int_max_str_digits()
+out = {"limit": limit, "refusals": [], "text": None, "context": None}
+ok = ("24.00", "12", "5", "35")
+for sign in (1, -1):
+    huge = sign * 10 ** 1000  # built arithmetically, never from giant decimal text
+    for i, label in enumerate(("pack cost", "units", "shrink", "margin", "round-to")):
+        args = list(ok) + [None]
+        args[i if i < 4 else 4] = huge
+        try:
+            margins.compute(*args[:4], args[4]) if i == 4 else margins.compute(*args[:4])
+            out["refusals"].append(["compute", label, sign, "no error", ""])
+        except Exception as e:
+            out["refusals"].append(["compute", label, sign, type(e).__name__, str(e)])
+    for i, label in enumerate(("pack cost", "units", "shrink", "price")):
+        args = ["24.00", "12", "5", "3.49"]
+        args[i] = huge
+        try:
+            margins.check(*args)
+            out["refusals"].append(["check", label, sign, "no error", ""])
+        except Exception as e:
+            out["refusals"].append(["check", label, sign, type(e).__name__, str(e)])
+
+try:  # giant digit TEXT keeps its ordinary range refusal
+    margins.compute("9" * 1000, "12", "5", "35")
+except Exception as e:
+    out["text"] = [type(e).__name__, str(e)]
+
+caller = getcontext().copy()
+caller.prec, caller.rounding = 5, ROUND_DOWN
+caller.clear_flags()
+caller.traps[InvalidOperation] = False
+before = (caller.prec, caller.rounding, caller.Emin, caller.Emax, dict(caller.flags), dict(caller.traps))
+with localcontext(caller):
+    try:
+        margins.compute("24.00", "12", "5", 10 ** 1000)
+    except margins.InputError as e:
+        err = str(e)
+    cur = getcontext()
+    after = (cur.prec, cur.rounding, cur.Emin, cur.Emax, dict(cur.flags), dict(cur.traps))
+out["context"] = [before == after, err, margins.compute(*ok)["price"], margins.compute(*ok) == margins.compute("24", "12.0", "5.00", "35.0"),
+                  sys.get_int_max_str_digits() == limit]
+print(json.dumps(out))
+'''
+
+
+class OversizedIntegerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        p = subprocess.run([sys.executable, "-B", "-X", "int_max_str_digits=640", "-", str(ROOT)], input=OVERSIZED_PROBE,
+                           cwd=ROOT, capture_output=True, text=True, timeout=60)
+        assert p.returncode == 0, p.stderr
+        cls.out = json.loads(p.stdout)
+
+    def test_oversized_integer_compute_refuses_each_field(self):
+        rows = [r for r in self.out["refusals"] if r[0] == "compute"]
+        self.assertEqual(self.out["limit"], 640)
+        self.assertEqual(sorted({r[1] for r in rows}), ["margin", "pack cost", "round-to", "shrink", "units"])
+        self.assertEqual(len(rows), 10)  # five fields, positive and negative
+        for _, label, sign, kind, msg in rows:
+            self.assertEqual((kind, msg), ("InputError", f"{label} must be a number"), (label, sign))
+
+    def test_oversized_integer_check_refuses_each_field(self):
+        rows = [r for r in self.out["refusals"] if r[0] == "check"]
+        self.assertEqual(sorted({r[1] for r in rows}), ["pack cost", "price", "shrink", "units"])
+        self.assertEqual(len(rows), 8)
+        for _, label, sign, kind, msg in rows:
+            self.assertEqual((kind, msg), ("InputError", f"{label} must be a number"), (label, sign))
+
+    def test_integer_conversion_refusal_preserves_context_and_next_call(self):
+        same_context, msg, price, same_result, same_limit = self.out["context"]
+        self.assertEqual((same_context, msg, price, same_result, same_limit), (True, "margin must be a number", "3.24", True, True))
+
+    def test_huge_numeric_text_retains_existing_refusal(self):
+        self.assertEqual(self.out["text"], ["InputError", "pack cost must be 0.01 to 100000.00"])
+        r = margins.compute(24, 12, Decimal("5"), 35, Decimal("0.99"))  # accepted ints and Decimals keep their values
+        self.assertEqual((r["price"], r["inputs"]["units"]), ("3.99", "12"))
+        self.assertEqual(margins.check(24, 12, 5, "3.49")["price"], "3.49")
+
+
 if __name__ == "__main__":
     unittest.main()

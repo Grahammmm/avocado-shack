@@ -3,6 +3,7 @@
     python3 hass/social_draft.py PRODUCT_ID
     python3 hass/social_draft.py --hike EVENT_ID
     python3 hass/social_draft.py --maker KEY
+    python3 hass/social_draft.py --recap EVENT_ID
 
 Prints one JSON object. Success: {"draft": true, "image", "alt", "caption"} built only from the product's
 stored name, description, image, imageAlt and its maker's name and place (caption <= 2200 characters, at most
@@ -22,6 +23,12 @@ cancelled" | "hike already happened" (completed, or start before now) | "not sch
 maker's active products, then fixed #AvocadoShack #MeetTheMaker (no photo, url or derived text). Refusal (exit 1): "cannot read content" |
 "no such maker" (exact, case-sensitive key) | "not on the site" (hidden maker) | "no active products" | "maker record incomplete"
 (name/place not one line, story not text) | "free text has a hashtag or account name" | "caption too long".
+--recap prints {"draft": true, "caption"}: title, Pacific weekday date with year (no time), the owner's saved recap of a completed hike
+verbatim, then fixed #AvocadoShack #NorthCoastHikingClub. No people count, route or meeting point is added. A recap too long for the
+caption is cut after its last ".", "!" or "?" (followed by white space or the end) that fits; never mid-sentence, never an ellipsis.
+Refusal (exit 1): "cannot read content" | "no such hike" | "say how it went first" (not completed, or no recap) | "hike record
+incomplete" (title not one line, recap not text, start unreadable) | "free text has a hashtag or account name" (title or any part of
+the recap, also the part cut off) | "caption too long".
 Read-only: nothing is posted, scheduled, written or sent, and the module imports no network code.
 """
 from __future__ import annotations
@@ -81,7 +88,8 @@ def build(content, product_id: str, site_dir: Path = SITE_DIR) -> dict:
     if any(_TAG_RE.search(text) for text in free): return refuse("free text has a hashtag or account name")
     lines = [name, description]
     if maker: lines.append(f"From {maker['name']} in {maker['place']}.")
-    tags = ["#AvocadoShack", *([CATEGORY_TAGS[product["category"]]] if product.get("category") in CATEGORY_TAGS else [])]
+    category = product.get("category")  # only a text member of CATEGORY_TAGS adds a tag; a list or object is as unknown as null
+    tags = ["#AvocadoShack", *([CATEGORY_TAGS[category]] if isinstance(category, str) and category in CATEGORY_TAGS else [])]
     caption = "\n".join(lines) + "\n\n" + " ".join(tags)
     if len(caption) > MAX_CAPTION: return refuse("caption too long")
     alt = product.get("imageAlt")
@@ -117,6 +125,36 @@ def build_hike(content, event_id: str, now: datetime) -> dict:
     return refuse("caption too long") if len(caption) > MAX_CAPTION else {"draft": True, "caption": caption}
 
 
+def _day(starts_at):  # "Saturday, October 17, 2026 (Pacific)" for the Pacific calendar day of an aware start, else None
+    try: aware, (day, _clock) = datetime.fromisoformat(starts_at.replace("Z", "+00:00")).tzinfo, hikes._local_parts(starts_at)
+    except (AttributeError, TypeError, ValueError, OverflowError): return None
+    d = date.fromisoformat(day)
+    return f"{d:%A, %B} {d.day}, {d.year} (Pacific)" if aware else None
+
+
+def build_recap(content, event_id: str) -> dict:
+    """Return {"draft": True, "caption"} for one completed hike with a saved recap, or {"draft": False, "reason": ...}.
+    The recap is the owner's own saved text: only cut (after a sentence end) when the caption would pass MAX_CAPTION."""
+    def refuse(reason): return {"draft": False, "reason": reason}
+    community = content.community if isinstance(getattr(content, "community", None), dict) else {}
+    events = community.get("events")
+    if not isinstance(events, list) or not all(isinstance(e, dict) for e in events): return refuse("cannot read content")
+    hike = next((e for e in events if e.get("id") == event_id), None)
+    if hike is None: return refuse("no such hike")
+    recap = hike.get("recap")
+    if hike.get("status") != "completed" or recap is None or (isinstance(recap, str) and not recap.strip()): return refuse("say how it went first")
+    title, day = hike.get("title"), _day(hike.get("startsAt"))
+    if not (_block(recap) and _line(title) and day): return refuse("hike record incomplete")
+    if any(_TAG_RE.search(t) for t in (title, recap)): return refuse("free text has a hashtag or account name")
+    head, tail = f"{title}\n{day}\n", "\n\n" + HIKE_TAGS
+    room = MAX_CAPTION - len(head) - len(tail)
+    if len(recap) > room:  # the longest prefix that ends a sentence (. ! ? then white space or the end) and fits
+        ends = [i + 1 for i, c in enumerate(recap) if c in ".!?" and i + 1 <= room and (i + 1 == len(recap) or recap[i + 1].isspace())]
+        if not ends: return refuse("caption too long")
+        recap = recap[:max(ends)]
+    return {"draft": True, "caption": head + recap + tail}
+
+
 def build_maker(content, maker_key: str) -> dict:
     """Return {"draft": True, "caption"} for one visible maker with active products, or {"draft": False, "reason": ...}."""
     def refuse(reason): return {"draft": False, "reason": reason}
@@ -143,12 +181,14 @@ def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) 
     which.add_argument("product_id", nargs="?")
     which.add_argument("--hike", metavar="ID")
     which.add_argument("--maker", metavar="KEY")
+    which.add_argument("--recap", metavar="ID")
     parser.add_argument("--now", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)  # --now: tests only
     try: content = load_content(content_dir)
     except (ContentError, OSError): content = None  # missing or invalid content: one JSON refusal, never a traceback
     if content is None: result = {"draft": False, "reason": "cannot read content"}
     elif args.maker is not None: result = build_maker(content, args.maker)
+    elif args.recap is not None: result = build_recap(content, args.recap)
     elif args.hike is not None: result = build_hike(content, args.hike, args.now or datetime.now(timezone.utc))
     else: result = build(content, args.product_id, site_dir)
     print(json.dumps(result, ensure_ascii=False, indent=2))

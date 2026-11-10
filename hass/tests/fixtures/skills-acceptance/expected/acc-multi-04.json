@@ -1,0 +1,32 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "hidden",
+      "before": "active",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175].status"
+    },
+    {
+      "after": "hidden",
+      "before": "active",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-176].status"
+    },
+    {
+      "after": "hidden",
+      "before": "active",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-177].status"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "storefront-mockup/catalog-products.js"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

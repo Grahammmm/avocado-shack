@@ -27,6 +27,28 @@ Slots (snake_case; the plan turns them into the op's own argument names):
 * `maker.edit`: `maker`, then any of `name`, `place`, `story` (replaces the whole text), `url`, `clear_url`.
 * `maker.hide`: `maker`, `with_products`. `maker.restore`: `maker`.
 
+### The town (rule `town-state`, ITEM-STANDARD section 5, SKILLS-MAKERS-2)
+
+* A maker's place is "Town, State". The plan asks the item-standard checker (`hass/itemstd.py` `check_maker`) about the place he
+  gave and reads only its `producer_town` answer; the checker's other gaps (no story, no website) never stop or ask anything here.
+  A region ("Central Coast", "Northern California", "California's Central Coast", "Near Chico, California") or anything else that is
+  not "Town, State" (a bare "Atascadero") is not drafted: Hass asks the one question **"Which town are they in?"** and keeps the open
+  request (maker, name, region, story and link), so his short answer continues it.
+* The town he gives is used **as he typed it**, spelling included ("Paso Robels, Califronia" stays so). Only extra spaces are
+  tidied. Nothing is looked up, corrected or completed, and no state is filled in from memory.
+* **"I don't know the town"**: when his latest message ends with that sentence (any case, straight or curly apostrophe, a final full
+  stop, "!" or "?" allowed, alone or after the request itself, punctuated or not) and the place is a region, the draft keeps the region exactly as he gave
+  it and the proposal says **"Still missing: the town"** (the module's `notes` hook; apart from the story line below, nothing else from the plan's notes is shown).
+  Only his latest message counts: not a slot the model fills, not his story, not an older message. The sentence itself is never
+  saved as a place, and a bare town that is not a region is still asked about.
+* `maker.add` always checks its place. `maker.edit` checks **only a place he gives in this request**, even when it is the region the
+  maker already has; a story, name or link edit never asks about the saved place. The six saved makers whose place is a region
+  (Straus, Alle-Pia, Corberosa, Massa Organics, Sierra Nevada, Ava's) are left as they are until an edit names their place.
+  "I don't know the town" with a place that is already saved still says "already says that" and drafts nothing.
+* Prices, special marks and over-long text are refused first, as before. D5 is unchanged: with no story the one line is
+  "<Maker> is based in <place>.", with the region when the town is unknown. Nothing marks the gap in the saved content; the checker
+  keeps listing it.
+
 ### The about text (spec 3.16, D5)
 
 * The story is **his sentences**. A sentence that starts with They, She, He, Their, His or Her gets the maker's name instead
@@ -36,7 +58,8 @@ Slots (snake_case; the plan turns them into the op's own argument names):
   joined texts (`ctx.owner_text`) a story sentence with a claim he did not say is left off and listed under "Left off". The editor
   runs the same claims check again on the draft, so the real conversation asks even without that.
 * **D5 (G's default, 2026-11-08): a maker with no story gets the one line "<Maker> is based in <place>."** and the proposal says
-  "I set the about text to ..., because you didn't give one". Leaving the story empty would need a content-model, sitegen and
+  "I set: the about text to ..., because you didn't give one." before the yes line (the `notes` hook forwards the plan's own set
+  line, once, for a `maker.add` with no story; a story he gave gets no such line, and a plan that stops has no draft to note). Leaving the story empty would need a content-model, sitegen and
   `shop.js` change (a separate card).
 
 ### Questions and refusals (plain words, one question at a time)
@@ -44,6 +67,7 @@ Slots (snake_case; the plan turns them into the op's own argument names):
 | Situation | Reply |
 |---|---|
 | no name / no town | "What is the maker called?" / "Where are they based (town and state)?" |
+| a region or anything not "Town, State" | "Which town are they in?" (no draft; "I don't know the town" keeps the region, see above) |
 | the maker is already there | "<Maker> is already on the site. Do you want to change it instead?" (a hidden twin: offers to bring them back) |
 | price in any maker text | the site-wide `PRICE_REPLY` ("The website doesn't show prices ...") |
 | special marks (`<`, `>`, `{{`) | `PLAIN_TEXT_REPLY` |
@@ -72,7 +96,10 @@ attribute is optional:
 | `source_urls` | website links recorded at migration | the frozen baseline in `hass/content/migration-baseline.json`, read once at import |
 
 * The maker slot is the key or the name as he said it; the plan resolves it with `catalog.lookup` and says what is wrong in plain
-  words. `maker_ref` in `kinds.py` hides hidden makers from restore, so these skills resolve their own (`find_maker`).
+  words. `maker_ref` in `kinds.py` hides hidden makers from restore, so these skills resolve their own (`find_maker`). The
+  `maker.restore` slot is therefore declared as plain `text` (the dispatcher checks only that it is ordinary text) and its plan
+  passes the owner's words to its own hidden-aware `find_maker`; `maker.edit` and `maker.hide` keep `maker_ref`, which still
+  refuses a hidden maker.
 * A plan that must stop raises `makers.Refusal` (a `ValueError` with `.reply`, the fixed owner reply, and `.kind`, "question" or
   "refuse"). The shared kit already turns a plan that raises into an `unsupported` reply carrying `.reply`.
 * `describe_add / describe_edit / describe_hide / describe_restore` return `Outcome(ops, set_lines, left_off, notes)` for the proposal
@@ -88,9 +115,15 @@ attribute is optional:
 ## What is proved and what is not
 
 Proved in CI with no model and nothing live: the lint; every rule one by one; the plain-words check over every reply for all 26
-current makers; the case files (about 60 rows: add 18, edit 20, hide 12, restore 10) through the real Conversation, Editor, sitegen and
+current makers; the case files (about 77 rows: add 27, edit 28, hide 12, restore 10) through the real Conversation, Editor, sitegen and
 claims on a scratch copy, including the exact content diff, the exact generated files, "nothing written before yes", undo returning
 the tree (an added maker stays hidden, declared as the skill's residue), and a restore of a hidden maker with its undo.
+
+The town rule is proved the same way: 17 case rows (`town-*`, `plan-town-*`) and the `TownState` tests on the plan, and the
+`TownStateDispatch` tests through the production `maker.add` / `maker.edit` declarations, the real dispatcher, Conversation and
+Editor: the question, the same request continued by his town or by "I don't know the town" (the line shown once, before his yes),
+nothing written before yes, and apply and undo. The shared kit turns a plan question into an `unsupported` reply that ends the
+request, so its rows that go on after the question repeat what he said; only the dispatcher tests prove the real continuation.
 
 Not proved: a real model choosing these skills (the dispatcher and router are SKILLS-FW-2 / FW-3, not touched here), the live boundary
 on the real site, and a real maker added to the live site. A maker the owner adds shows nowhere until a product uses them.

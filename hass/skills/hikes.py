@@ -55,6 +55,7 @@ R_FAR = "That is more than a year away. Could you check the day?"
 R_WHAT_MOVE = "What day or time should it move to?"
 R_SIGNUP_NOT_SAID = "You didn't say guests can sign up, so I haven't turned it on. Should guests be able to sign up?"
 R_SPOTS_NOT_SAID = "You didn't say how many can come, so I haven't set a limit. How many can come, or is there no limit?"
+R_CAP_MAX = "The most I can set is 6."  # G 2026-11-08 "available spots (max 6)"; decision 2 stays open, so 6 is the ceiling
 R_NO_RECAP_YET = "Say how it went first, then I can write the post."
 
 R_SIGNUP_UNCLEAR = "I'm not sure if you want guests to be able to sign up. Should they?"
@@ -62,7 +63,8 @@ R_SIGNUP_UNCLEAR = "I'm not sure if you want guests to be able to sign up. Shoul
 _SIGNUP_WORDS = re.compile(r"\b(sign ?-?ups?|signing up|rsvps?|register(?:ed|ing)?|reserv\w*|how many can|people can (?:join|come|sign))\b", re.I)
 # only words about SIGNING UP decide its direction: "limited parking", "no space for dogs" or "a seat cushion" say nothing about it;
 # a guest limit ("15 spots", "max 12") is read by _said_limits and counts as the owner asking for sign-up
-_PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:person|head|lb|pound|oz|ounce|kg|dozen)\b", re.I)
+# "per person"/"per head" is a price only right after a number ("12 per person"); "Bring water per person" is packing advice
+_PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:lb|pound|oz|ounce|kg|dozen)\b|\b\d+(?:\.\d+)?\s+per\s+(?:person|head)\b", re.I)
 _PLACE_TAIL = re.compile(r"(?:^|\s+)(?:trail ?head|gate|entrance|parking(?:\s+lot)?|lot|staging area|picnic area)\s*$", re.I)
 _PLACE_HEAD = re.compile(r"^(?:the|at|by)\s+", re.I)
 _TAG_RE = re.compile(r"[#@\uFF03\uFF20\uFE5F\uFE6B]\w")  # as social_draft: no hashtag or account in free text
@@ -383,10 +385,49 @@ def rule_no_invention(slots, texts, ctx):
     return None
 
 
+CAPACITY_CEILING = 6
+PAGE_LIMIT_NOTE = "Page will say: Limited to {n} people · availability unconfirmed; ask at the Shack"  # the limit only: never "N spots left"
+
+
+def _count(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def rule_capacity_ceiling(slots, texts, ctx):
+    """The most the skill will set is 6 (after the no-invention rule, which keeps priority). An add writes a limit only with
+    sign-up on; an edit writes any limit it is given. Zero, negative and non-number values are the editor's to refuse."""
+    cap = _count(slots.get("capacity"))
+    if cap is None or cap <= CAPACITY_CEILING:
+        return None
+    if "hike" not in slots and slots.get("signup") is not True:
+        return None  # hike.add discards a limit when sign-up is not on
+    return R_CAP_MAX, "other"
+
+
+def default_capacity(slots, ctx):
+    """6 when sign-up is explicitly turned on with no number and no "no limit" (his or the slots'), else None. Called only
+    AFTER the rules passed, so a model-written 6 he did not say was already refused. With his words known they must show a
+    sign-up instruction and no count or "no limit" the model left out (those stay with the editor's question)."""
+    if slots.get("signup") is not True or slots.get("capacity") is not None or slots.get("no_limit") is True:
+        return None
+    said = "\n".join(t for t in (getattr(ctx, "texts", ()) or ()) if isinstance(t, str))
+    if said.strip() and (_signup_state(said) is not True or _said_limits(said) or _said_unlimited(said)):
+        return None
+    return CAPACITY_CEILING
+
+
+def _with_default(slots, ctx):
+    slots = dict(slots)
+    cap = default_capacity(slots, ctx)
+    if cap is not None:
+        slots["capacity"] = cap
+    return slots
+
+
 RULES = {"no-price": rule_no_price, "hike-in-future": rule_in_future, "hike-twin": rule_twin,
          "hike-repeat-twin": rule_repeat_twin, "hike-scheduled": rule_scheduled, "hike-cancel-state": rule_cancel_state,
          "hike-already-then": rule_already_then, "hike-recap-state": rule_recap_state,
-         "hike-no-invention": rule_no_invention}
+         "hike-no-invention": rule_no_invention, "hike-capacity-ceiling": rule_capacity_ceiling}
 
 
 def _guard(skill, slots, ctx):
@@ -426,6 +467,13 @@ def add_set_phrases(slots, ctx) -> list:
     """What hike.add chose for the owner, as the plain phrases of the one ``I set:`` line (D8): ``["sign-up off", "the title
     “Mill Creek hike”"]``. ``slots`` are the slots as the owner gave them, BEFORE any default is applied; a slot he gave is
     never listed. Empty when nothing was chosen for him. (The dispatcher's generic default text would read "signup: False".)"""
+    out = _add_defaults(slots, ctx)
+    if out and default_capacity(slots, ctx) is not None:
+        out.append(f"{CAPACITY_CEILING} spots")  # with no other default the skill's notes carry this line instead
+    return out
+
+
+def _add_defaults(slots, ctx) -> list:
     out = []
     if slots.get("signup") is None:
         out.append("sign-up off")  # plan_add writes rsvpEnabled False when sign-up was not said
@@ -443,6 +491,40 @@ def set_line(phrases) -> str | None:
 
 
 SET_PHRASES = {"hike.add": add_set_phrases}  # skill name -> fn(slots as the owner gave them, ctx) -> phrases; consumed by the kit and the dispatcher
+
+
+PAGE_ONLY_NOTE = "Cancelling changes the hike page. Nobody is notified."  # RF2315-12: said before yes, whatever the sign-up state or guest count
+
+
+def notes(name, slots, ctx) -> dict:
+    """Lines shown beside a hike draft: for hike.cancel, that it changes the page and tells nobody; for hike.add / hike.edit,
+    ``I set: 6 spots.`` when the code supplied the six (only when no other default already carries it in SET_PHRASES), and the
+    capacity-only page note for the hike's own limit."""
+    out = {"say": [], "set": [], "warn": []}
+    if name == "hike.cancel":
+        out["say"].append(PAGE_ONLY_NOTE)  # fixed text: reads no guest data, files or settings
+        return out
+    if name not in ("hike.add", "hike.edit"):
+        return out
+    given = dict(slots)
+    derived = default_capacity(given, ctx)
+    limit = derived if derived is not None else _count(given.get("capacity"))
+    if name == "hike.add":
+        on = given.get("signup") is True
+        if derived is not None and not _add_defaults(given, ctx):
+            out["set"].append(set_line([f"{CAPACITY_CEILING} spots"]))
+    else:
+        event = _event(ctx, given.get("hike")) or {}
+        on = given["signup"] if isinstance(given.get("signup"), bool) else event.get("rsvpEnabled") is True
+        if derived is not None:
+            out["set"].append(set_line([f"{CAPACITY_CEILING} spots"]))
+        if limit is None:
+            limit = _count(event.get("capacity"))
+    if given.get("no_limit") is True:
+        limit = None
+    if on and limit is not None and limit > 0:
+        out["say"].append(PAGE_LIMIT_NOTE.format(n=limit))
+    return out
 
 
 def _signup_args(slots):
@@ -465,6 +547,7 @@ def plan_add(slots, ctx):
         slots["title"] = place_title(slots, ctx)
     _need(ADD, slots, "title", "day", "clock", "meeting_point")
     _guard(ADD, slots, ctx)
+    slots = _with_default(slots, ctx)
     args = {"title": _text(slots["title"]), "date": slots["day"], "time": slots["clock"],
             "meetingPoint": _text(slots["meeting_point"]), **_signup_args(slots)}
     if _given(slots, "trail"):
@@ -476,6 +559,7 @@ def plan_add(slots, ctx):
 def plan_edit(slots, ctx):
     _need(EDIT, slots, "hike")
     _guard(EDIT, slots, ctx)
+    slots = _with_default(slots, ctx)
     args = {"id": slots["hike"]}
     args.update({ARG.get(f, f): _text(slots[f]) for f in EDIT_TEXT_SLOTS if _given(slots, f)})
     if isinstance(slots.get("signup"), bool):
@@ -558,7 +642,7 @@ ADD = Skill(
            Slot("signup", "bool", False, default=False),
            Slot("capacity", "int"), Slot("no_limit", "bool"), Slot("trail", "route_ref"),
            *(_text_slot(f) for f in TEXT_SLOTS)),
-    rules=("hike-in-future", "hike-twin", "hike-no-invention", "no-price"),
+    rules=("hike-in-future", "hike-twin", "hike-no-invention", "hike-capacity-ceiling", "no-price"),
     plan=plan_add,
     edits=((_COMMUNITY, "events[id]"), *_SITE),
     side_effects=("none",), preview="hike", approval="owner-yes", live_class="private-only",
@@ -584,7 +668,7 @@ EDIT = Skill(
     ),
     slots=(_HIKE, Slot("title", "text", limit=_TITLE_LIMIT), _text_slot("meeting_point"), *(_text_slot(f) for f in TEXT_SLOTS),
            Slot("signup", "bool"), Slot("capacity", "int"), Slot("no_limit", "bool")),
-    rules=("hike-scheduled", "hike-no-invention", "no-price"),
+    rules=("hike-scheduled", "hike-no-invention", "hike-capacity-ceiling", "no-price"),
     plan=plan_edit,
     edits=tuple((_COMMUNITY, f"events[id].{ARG.get(f, f)}") for f in (*EDIT_TEXT_SLOTS, "rsvpEnabled", "capacity")) + _SITE,
     side_effects=("none",), preview="hike", approval="owner-yes", live_class="private-only",

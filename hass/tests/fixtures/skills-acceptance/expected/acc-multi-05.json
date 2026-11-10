@@ -1,0 +1,26 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "Mashed fresh each week.",
+      "before": "Avocado, a bowl of chips, and a few people close enough to reach. Good food does not always need a plate.",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-031].description"
+    },
+    {
+      "after": "Jarred fresh with basil.",
+      "before": "A spoonful can change a pot of pasta. Loosen with a little cooking water, toss thoroughly, and keep bread nearby for what is left.",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-032].description"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "storefront-mockup/catalog-products.js"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

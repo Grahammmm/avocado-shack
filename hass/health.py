@@ -139,6 +139,8 @@ def _backup_check(raw, now: datetime, hours: int, problems: list):
     except OSError:
         return problems.append(_problem("backup-age", "backup dir unreadable"))
     if newest is None: problems.append(_problem("backup-age", "no complete backup"))
+    elif newest[0] > now:  # RF0754-11: a future stamp is a clock problem, never fresh; no fallback to an older one
+        problems.append(_problem("backup-age", "newest complete backup timestamp is in the future"))
     elif now - newest[0] > timedelta(hours=hours):
         problems.append(_problem("backup-age", f"newest complete backup older than {hours} h"))
     else: return newest[1]  # the newest complete backup within the window: the only one verified

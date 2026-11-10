@@ -1,0 +1,26 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "the upper lot",
+      "before": "Cass Hill gate",
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-21-cass-hill].meetingPoint"
+    },
+    {
+      "after": "the beach lot",
+      "before": "Point Buchon trailhead",
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-28-point-buchon].meetingPoint"
+    }
+  ],
+  "files": [
+    "hass/content/community.json",
+    "storefront-mockup/community.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

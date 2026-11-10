@@ -11,14 +11,15 @@ NAME_RE = re.compile(r"hass-[0-9]{1,18}-[01]\.png")
 
 
 class BlueBubblesAttachmentSender(bridge.BlueBubblesSender):
-    """send_png(chat, data, name) -> one multipart POST (built in memory), or BridgeError. Only `owner_chat` is accepted."""
+    """send_png(chat, data, name) -> one multipart POST (built in memory), or BridgeError. Only an owner chat is accepted (HASS-OWNERS-2: `owner_chat` is one chat id or a tuple of them)."""
     def __init__(self, base_url, password_file, owner_chat, transport=None):
         super().__init__(base_url, password_file, transport)
-        self._owner = owner_chat
+        self._owners = (owner_chat,) if isinstance(owner_chat, str) else tuple(owner_chat)
+        self._owner = self._owners[0]
 
     def send_png(self, chat, data, name):
         code, status = None, None
-        if chat != self._owner or not NAME_RE.fullmatch(name) or not (1 <= len(data) <= relay.MAX_PNG) or not data.startswith(relay.PNG_SIG):
+        if chat not in self._owners or not NAME_RE.fullmatch(name) or not (1 <= len(data) <= relay.MAX_PNG) or not data.startswith(relay.PNG_SIG):
             code = "refused"
         else:
             try: password = Path(bridge._private_file(self._password_file)).read_text("utf-8").strip()

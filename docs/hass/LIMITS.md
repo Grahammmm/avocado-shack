@@ -89,6 +89,30 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Weekly specials (the "This week's specials" box at the top of the page) are one saved detail: undoing an older specials change is refused if you changed the specials again after it. Undo the newer change first.
 - A special shows through its last day (Pacific) and never after, even if nobody removes it. At most 6 show on one day, each runs at most 31 days, and the title and deal line are at most 60 characters with no links, email addresses or phone numbers. Only the deal line may have a price, and it appears exactly as typed.
 
+## Several owners
+
+- With `ownerChats` set in the config, two or more people can be owners, each in their own one-to-one chat (up to eight chats; how to
+  set it up is in the connection guide, step 6). Without it there is one owner chat, as before.
+- A message counts only when it comes from an owner's own address in that owner's own chat. An owner's number in another owner's chat
+  is ignored, like a stranger.
+- Every answer, picture and question goes to the chat the request came from. G's separate `gChat` stays text only and may never be
+  an owner chat.
+- A `yes` or `no` only reaches a change that the same chat asked for. If one owner tries the other's code, Hass says the change
+  belongs to someone else and changes nothing.
+- There is one website, so one change is open at a time. While one owner has a change waiting for a yes, waiting for details, being
+  saved or going on the website, the other owner's request, photo or undo gets a plain "has a change waiting" answer and nothing is
+  drafted. It works again once the first is saved, cancelled or has timed out.
+- `history`, `status` and `undo` look at the whole site, so they say whose change it was ("Mike's change", "Your change"). A plain
+  `undo` never takes back the other owner's change: Hass says whose it was and how to ask for it (`undo` and its code), and that is
+  still only a proposal until the same owner replies `yes`.
+- Pause and resume, the daily limit on new requests, the daily limit on live changes and the STOP file are shared by all owners.
+  Open requests and questions are kept for each chat separately.
+- The Mac forwarder takes the same list (`ownerChats` in its own config) and reads, taps back and answers in every owner chat,
+  pictures included. Add the second chat to both the host settings and the forwarder config, and restart both. A forwarder that has
+  not been upgraded keeps the second owner's answers waiting (nothing is sent to the wrong chat, nothing is lost).
+- A change kept from before a second owner was added (everyone in one chat) can only be saved or cancelled by the person who asked
+  for it; the other person is told it is not theirs and nothing changes.
+
 ## Problems log (for Graham, not for Mike)
 
 - Hass keeps a private log of the moments where talking with Mike went wrong (it did not understand, could not do something, asked

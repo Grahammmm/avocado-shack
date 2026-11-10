@@ -1,0 +1,35 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": {
+        "name": "Bee Happy Farm",
+        "place": "Atascadero, California",
+        "story": "Bee Happy Farm is based in Atascadero, California."
+      },
+      "file": "hass/content/makers.json",
+      "path": "makers.Bee Happy Farm"
+    }
+  ],
+  "files": [
+    "hass/content/makers.json",
+    "storefront-mockup/producers.js",
+    "storefront-mockup/producers.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": [
+      {
+        "after": {
+          "hidden": true,
+          "name": "Bee Happy Farm",
+          "place": "Atascadero, California",
+          "story": "Bee Happy Farm is based in Atascadero, California."
+        },
+        "file": "hass/content/makers.json",
+        "path": "makers.Bee Happy Farm"
+      }
+    ]
+  },
+  "schema_version": 1
+}

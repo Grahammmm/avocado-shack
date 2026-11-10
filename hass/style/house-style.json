@@ -1481,7 +1481,8 @@
    "status",
    "hold",
    "available",
-   "available_on"
+   "available_on",
+   "restock_on"
   ],
   "product_optional_public": [
    "imageAlt",
