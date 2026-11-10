@@ -8,6 +8,7 @@ import json
 import unittest
 
 from hass import social_draft
+from hass.content_model import CATEGORIES
 from hass.tests import test_social_draft_inputs as inputs
 from hass.tests.test_social_draft import product
 
@@ -78,6 +79,58 @@ class SocialDraftShapeTests(unittest.TestCase):
             self.assertEqual(social_draft.main(["p1"], self.root / "content", self.site), 0)
         expected = {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough", "caption": HAPPY_CAPTION}
         self.assertEqual(out.getvalue(), json.dumps(expected, ensure_ascii=False, indent=2) + "\n")
+
+    # RF2205-12: a container or other non-text category is treated like a null or unknown one (no category tag).
+    BAD_CATEGORIES = ([], {}, ["dairy"], {"name": "dairy"}, [["dairy"]], {"a": {"b": 1}})
+    OK = {"draft": True, "image": "assets/products/p1.webp", "alt": "Sourdough"}
+
+    def shack_only(self):
+        return HAPPY_CAPTION.replace(" #Bread", "")
+
+    def test_container_category_omits_only_category_tag(self):
+        self.assertEqual(self.shack_only(), self.build("p1", product("p1", category=None))["caption"])
+        for category in self.BAD_CATEGORIES:
+            with self.subTest(category=category):
+                p = product("p1", category=category)
+                before = json.dumps(p, sort_keys=True)
+                self.assertEqual(self.build("p1", p), {**self.OK, "caption": self.shack_only()})
+                self.assertEqual(json.dumps(p, sort_keys=True), before)
+
+    def test_container_category_real_main(self):
+        for category in self.BAD_CATEGORIES:
+            with self.subTest(category=category):
+                self.set_products([product("p1", category=category), product("p2", category="dairy", image="assets/products/p1.webp")])
+                before = self.tree()
+                code, obj = self.run_cli("p1")  # run_cli: one JSON object, empty stderr, nothing written
+                self.assertEqual((code, obj), (0, {**self.OK, "caption": self.shack_only()}))
+                self.assertEqual(self.tree(), before)  # source and photo bytes unchanged
+
+    def test_category_tag_controls(self):
+        for category in ("absent", None, 5, True, 0, "unknown", "#Hash", "@me", "Dairy", ""):
+            with self.subTest(category=category):
+                p = product("p1")
+                if category == "absent": del p["category"]
+                else: p["category"] = category
+                out = self.build("p1", p)
+                self.assertEqual(out["caption"], self.shack_only())
+                self.assertEqual([w for w in out["caption"].split() if w.startswith(("#", "@"))], ["#AvocadoShack"])
+        for category in CATEGORIES:
+            with self.subTest(category=category):
+                out = self.build("p1", product("p1", category=category))
+                self.assertTrue(out["caption"].endswith(f"#AvocadoShack {social_draft.CATEGORY_TAGS[category]}"))
+
+    def test_bad_category_does_not_bypass_refusals(self):
+        cases = ({"status": "held"}, {"status": "hidden"}, {"image": "assets/products/none.webp"}, {"image": None},
+                 {"name": ""}, {"description": None}, {"description": "Try #tag"}, {"description": "word " * 600})
+        for changes in cases:
+            self.set_products([product("p1", category="dairy", **changes)])
+            reference = self.run_cli("p1")  # the refusal with a valid category
+            self.assertEqual(reference[1]["draft"], False)
+            for category in self.BAD_CATEGORIES:
+                with self.subTest(category=category, changes=list(changes)):
+                    self.set_products([product("p1", category=category, **changes), product("p2", image="assets/products/p1.webp")])
+                    self.assertEqual(self.run_cli("p1"), reference)
+                    self.assertEqual(self.run_cli("p2")[1]["draft"], True)  # a valid neighbour is unaffected
 
 
 if __name__ == "__main__":
