@@ -540,7 +540,7 @@ class PrimaryCorpus(Base):
 
     def test_expected_inventory_and_reviewed_declarations(self):
         want = {r["expect"]["expected"] for r in self.rows if r["expect"].get("expected")}
-        have = {p.name for p in (A.FIXTURE_ROOT / "expected").glob("*.json")}
+        have = {p.name for p in (A.FIXTURE_ROOT / "expected").glob("*.json") if not p.name.startswith("chain-")}  # chain has its own inventory/session
         self.assertEqual(want, have)  # every proposal has a golden, no orphan
         broken = self.root([dict(r) for r in self.rows if r["id"] == "primary-stock-clear"] and [r for r in self.rows if r["id"] == "primary-stock-clear"])
         (broken / "expected").mkdir()

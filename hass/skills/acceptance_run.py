@@ -63,10 +63,10 @@ LIVE_BARS = MappingProxyType({"outcome": 0.90, "diff": 0.90, "wrong_drafts_per_r
 # assertion codes: each result lists the codes it failed with
 CODES = ("wrong-skill", "wrong-disposition", "wrong-reply", "reply-queue", "write-before-yes", "apply-failed", "wrong-diff",
          "edit-undeclared", "content-rule", "unstated-claim", "bad-picture", "undo-not-identical", "residue-undeclared",
-         "duplicate-effect", "privacy-leak", "audit-missing", "harness-error", "request-leak", "undo-order")
+         "duplicate-effect", "privacy-leak", "audit-missing", "harness-error", "request-leak", "undo-order", "missing-undo-golden")
 OUTCOME_CODES = {"wrong-skill", "wrong-disposition", "wrong-reply", "reply-queue"}
 DIFF_CODES = {"wrong-diff", "edit-undeclared", "apply-failed"}
-UNDO_CODES = {"undo-not-identical", "residue-undeclared"}
+UNDO_CODES = {"undo-not-identical", "residue-undeclared", "missing-undo-golden"}
 CONTENT_CODES = {"content-rule", "unstated-claim", "bad-picture"}
 STRUCTURAL_CODES = {"request-leak", "undo-order", "write-before-yes", "duplicate-effect", "privacy-leak", "audit-missing", "harness-error"} | UNDO_CODES | CONTENT_CODES
 
@@ -770,7 +770,9 @@ def load_chain(path, *, fixture_root):
 
     Unlike isolated rows, questions may continue the same request. expect.request pins the exact
     {skill, slots, asked_slot, calls, attachments} for questions; completed tasks must have no live
-    request. Each proposal requires undo:true and both chain-NN / chain-undo-NN goldens. Only the
+    request. Plan questions without a slot additionally pin their exact question. Each proposal
+    requires undo:true and a forward golden. Existing inverse goldens are preflighted; missing
+    inverses fail closed at the reverse boundary, before any undo delivery. Only the
     first turn may seed/setup/select house rendering. Normal row admission is unchanged.
     """
     try: lines = Path(path).read_text("utf-8").splitlines()
@@ -809,15 +811,19 @@ def load_chain(path, *, fixture_root):
         if any(k in row for k in ("offsets", "senders")) or "approval" in expect: _bad(rid, "chain uses the monotonic owner clock and named approvals")
         question = expect["dispositions"] == ["question"]
         if question:
-            if not (isinstance(request, dict) and set(request) == {"skill", "slots", "asked_slot", "calls", "attachments"}
+            fields = {"skill", "slots", "asked_slot", "calls", "attachments"}
+            if isinstance(request, dict) and request.get("asked_slot") is None: fields.add("question")
+            if not (isinstance(request, dict) and set(request) == fields
                     and isinstance(request["skill"], str) and isinstance(request["slots"], dict)
-                    and isinstance(request["asked_slot"], str) and request["asked_slot"]
+                    and (isinstance(request["asked_slot"], str) and request["asked_slot"]
+                         or request["asked_slot"] is None and isinstance(request.get("question"), str) and request["question"])
                     and isinstance(request["calls"], list) and isinstance(request["attachments"], list)):
-                _bad(rid, "a question pins its exact request fields and one asked slot")
+                _bad(rid, "a question pins its exact request fields and one asked slot or plan question")
         elif request is not None: _bad(rid, "only questions pin a live request")
         if expect["dispositions"] == ["proposed"]:
             if expect.get("undo") is not True: _bad(rid, "every chain proposal must be undone")
             for key in (rid, rid.replace("chain-", "chain-undo-")):
+                if key != rid and not os.path.lexists(expected_path(fixture_root, key)): continue
                 golden = load_expected(fixture_root, {"id": key})
                 for entry in golden["residue"]["content"]:
                     if not {"file", "path", "after"} <= set(entry) or set(entry) - {"file", "path", "before", "after"}: _bad(rid, "chain residue pins exact before and after")
@@ -945,7 +951,8 @@ def run_chain(path, *, fixture_root=None, registry=None):
             reply = "\n".join(out).lower()
             if any(w.lower() not in reply for w in expect.get("reply_contains", [])) or any(w.lower() in reply for w in expect.get("reply_not_contains", [])): res.fail("wrong-reply")
             req = _chain_request(sess)
-            if previous is not None and (req is None or req["request_id"] != previous): res.fail("request-leak")
+            if previous is not None and (req is not None and req["request_id"] != previous
+                                         or req is None and disp in ("question", "proposed")): res.fail("request-leak")
             if disp == "proposed":
                 if len(sess.drafts()) != ndrafts + 1: res.fail("apply-failed")
                 else:
@@ -969,6 +976,16 @@ def run_chain(path, *, fixture_root=None, registry=None):
             if disp != "question": task_texts = []
             for code in privacy_problems(sess, texts): res.fail(code)
             if not res.ok: return results
+        if sess.interp.queue:
+            res.fail("reply-queue")
+            return results
+        missing = [row["id"].replace("chain-", "chain-undo-") for row, _draft in reversed(stack)
+                   if not os.path.lexists(expected_path(root, row["id"].replace("chain-", "chain-undo-")))]
+        if missing:
+            res = Result(missing[0])
+            res.fail("missing-undo-golden")
+            results.append(res)
+            return results
         while stack:
             row, original = stack.pop()
             res = Result(row["id"].replace("chain-", "chain-undo-"))

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-21-pebble-loop-hike]",
+      "after": {
+        "id": "hike-2026-11-21-pebble-loop-hike",
+        "title": "Pebble Loop hike",
+        "startsAt": "2026-11-21T09:00:00-08:00",
+        "timezone": "America/Los_Angeles",
+        "status": "scheduled",
+        "meetingPoint": "the Pebble Loop gate",
+        "rsvpEnabled": false
+      }
+    }
+  ],
+  "files": [
+    "hass/content/community.json",
+    "storefront-mockup/community.json"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}

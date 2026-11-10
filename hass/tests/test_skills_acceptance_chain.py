@@ -175,6 +175,74 @@ class Chain(unittest.TestCase):
             self.assertIn("apply-failed", results[-1].codes, (fault, results[-1].codes))
             self.assertEqual(results[-1].facts["inverses"], 0)
 
+    def test_forward_fixture_inventory(self):
+        rows = A.load_chain(A.FIXTURE_ROOT / "chain.jsonl", fixture_root=A.FIXTURE_ROOT)
+        self.assertEqual([r["id"] for r in rows], [f"chain-{n:02d}" for n in range(1, 25)])
+        numbers = (3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 16, 18, 20)
+        want = {f"chain-{n:02d}.json" for n in numbers}
+        self.assertEqual({r["expect"]["expected"] for r in rows if r["expect"].get("expected")}, want)
+        self.assertEqual({p.name for p in (A.FIXTURE_ROOT / "expected").glob("chain-*.json") if not p.name.startswith("chain-undo-")}, want)
+
+    def test_missing_inverse_stops_after_forward_before_any_undo(self):
+        root = self.fixture()
+        (root / "expected/chain-undo-03.json").unlink()
+        say = A.Session.say
+        deliveries = []
+        def observed(sess, text, **kw):
+            deliveries.append(text)
+            return say(sess, text, **kw)
+        with mock.patch.object(A.Session, "say", observed): results = self.run_chain(root)
+        self.assertEqual([(r.id, r.codes) for r in results],
+                         [(f"chain-{n:02d}", []) for n in range(1, 5)] + [("chain-undo-03", ["missing-undo-golden"])])
+        self.assertFalse(any(t.startswith("undo ") for t in deliveries))
+        self.assertEqual(results[-1].facts["inverses"], 0)
+        # An existing malformed inverse is still rejected before scratch.
+        (root / "expected/chain-undo-03.json").write_text("{}")
+        with mock.patch.object(A, "Session") as session:
+            with self.assertRaises(A.InputError): self.run_chain(root)
+            session.assert_not_called()
+
+    def test_slotless_plan_question_pins_exact_question_and_state(self):
+        root = self.fixture()
+        rows = mini()[:2]
+        rows[0].update(skill="page.home", texts=["keep the headline, change the intro"],
+                       replies=[{"skill": "page.home", "slots": {}}])
+        question = "What should the headline or the intro say?"
+        rows[0]["expect"] = {"skills": ["page.home", "none"], "dispositions": ["question"],
+                             "request": {"skill": "page.home", "slots": {}, "asked_slot": None,
+                                         "calls": [], "attachments": [], "question": question}}
+        rows[1].update(skill="page.home", texts=["intro: Come browse our shelves. Say hello."],
+                       replies=[{"skill": "page.home", "slots": {"intro": "Come browse our shelves. Say hello."}}])
+        rows[1]["expect"] = {"skills": ["page.home"], "dispositions": ["proposed"], "undo": True,
+                             "expected": "chain-02.json", "ops": [{"op": "store.set_intro", "args": {"text": "Come browse our shelves. Say hello."}}]}
+        self.write_rows(root, rows)
+        # Stop on the first question by corrupting its exact question pin.
+        rows[0]["expect"]["request"]["question"] = "Wrong question"
+        self.write_rows(root, rows)
+        self.assertEqual(self.run_chain(root)[-1].codes, ["request-leak"])
+        del rows[0]["expect"]["request"]["question"]
+        self.write_rows(root, rows)
+        with self.assertRaises(A.InputError): self.run_chain(root)
+
+    def test_readonly_continuation_closes_request_without_false_leak(self):
+        root = self.fixture()
+        rows = mini()[:2]
+        for row in rows: row.update(skill="social.item")
+        rows[0].update(texts=["write an instagram caption for the honey"], replies=[{"skill": "social.item", "slots": {"item": "honey"}}])
+        rows[0]["expect"] = {"skills": ["social.item", "none"], "dispositions": ["question"], "request": {
+            "skill": "social.item", "slots": {}, "asked_slot": "item", "calls": [], "attachments": []}}
+        rows[1].update(texts=["the lemons instead"], replies=[{"skill": "social.item", "slots": {"item": "lemons"}}])
+        rows[1]["expect"] = {"skills": ["social.item", "none"], "dispositions": ["answer"], "reply_contains": ["I haven't posted anything."]}
+        self.write_rows(root, rows)
+        self.assertEqual([r.codes for r in self.run_chain(root)], [[], []])
+        say = A.Session.say
+        def stale(sess, text, **kw):
+            out = say(sess, text, **kw)
+            if out[1] == "answer": sess.conv.db.execute("UPDATE open_requests SET state = 'open'")
+            return out
+        with mock.patch.object(A.Session, "say", stale): results = self.run_chain(root)
+        self.assertIn("request-leak", results[-1].codes)
+
     def test_cli_exits_and_sanitized_summary(self):
         root = self.fixture(); output = io.StringIO()
         with contextlib.redirect_stdout(output): self.assertEqual(A.main(["--chain", str(root / "chain-mini.jsonl")]), 0)
