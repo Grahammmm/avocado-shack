@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from hass import nl_prep
 
@@ -50,6 +50,13 @@ ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth
 
 def _iso(dt: datetime) -> str:
     return dt.isoformat()
+
+
+def _idle_deadline(now: datetime) -> datetime:
+    # Add on the timeline, not the repeated/skipped wall-clock hour. Keep naive semantics.
+    if now.utcoffset() is None:
+        return now + timedelta(minutes=TTL_MINUTES)
+    return (now.astimezone(timezone.utc) + timedelta(minutes=TTL_MINUTES)).astimezone(now.tzinfo)
 
 
 def bound_texts(texts, *, turns=None, per=MAX_OWNER_TEXT, total=MAX_TOTAL_TEXT) -> list:
@@ -197,7 +204,7 @@ class OpenRequests:
                                   (request_id, owner)).fetchone()
             if row is not None:
                 created = datetime.fromisoformat(row["created_at"])
-                expires = now + timedelta(minutes=TTL_MINUTES)
+                expires = _idle_deadline(now)
                 if not legacy:
                     expires = min(expires, created + timedelta(minutes=MAX_MINUTES))
                 fields["expires_at"] = _iso(expires)
@@ -205,7 +212,7 @@ class OpenRequests:
                 self.db.execute(f"UPDATE open_requests SET {sets} WHERE request_id = ?", (*fields.values(), request_id))
                 return request_id
         self.close_live(owner, now, "superseded" if skill is not None and not legacy else "closed")
-        fields.update(owner=owner, created_at=_iso(now), expires_at=_iso(now + timedelta(minutes=TTL_MINUTES)))
+        fields.update(owner=owner, created_at=_iso(now), expires_at=_iso(_idle_deadline(now)))
         cur = self.db.execute(f"INSERT INTO open_requests({', '.join(fields)}) VALUES ({', '.join('?' * len(fields))})",
                               tuple(fields.values()))
         return cur.lastrowid
