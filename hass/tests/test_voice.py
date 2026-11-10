@@ -179,7 +179,8 @@ class EveryTemplate(unittest.TestCase):
                  owner_answers.NOT_LIVE, owner_answers.LIVE_SHOWN, owner_answers.LIVE_UNKNOWN, owner_answers.LIVE_UNCONFIRMED,
                  owner_answers.LIVE_NOT_PUBLISHED.format(reason=owner_answers.live_reason("the release was interrupted")),
                  owner_answers.live_reason("something odd"), reports.NO_PUSH, reports.UNREADABLE, reports.NOT_ON_REPORT,
-                 reports.COUNTS_LEAD + q("Cal Poly eggs") + ": not confirmed"]
+                 reports.COUNTS_LEAD + q("Cal Poly eggs") + ": not confirmed",
+                 reports.SITE_ASK, reports.SITE_UNREADABLE, reports.NO_MAKER, reports.NO_STORY, reports.NO_HOURS, reports.NO_HIKE]
         bad = [(t[:80], voice.check(t, long_ok=True)) for t in texts if voice.check(t, long_ok=True)]
         self.assertEqual(bad, [])
 
