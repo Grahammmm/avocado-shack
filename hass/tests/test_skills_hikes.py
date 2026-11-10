@@ -8,6 +8,7 @@ policy class each skill declares, the announcement draft, the dispatcher hand-of
 Run: python3 -B -m unittest hass.tests.test_skills_hikes -v
 """
 import json
+import sqlite3
 import sys
 import types
 import unittest
@@ -422,7 +423,7 @@ class SixSpotDefault(unittest.TestCase):
         self.assertEqual(got("hike.add", {**self.ADD, "signup": True, "capacity": 2}), {"say": [note.format(2)], "set": [], "warn": []})
         self.assertEqual(got("hike.add", {**self.ADD, "signup": True, "no_limit": True}), {"say": [], "set": [], "warn": []})
         self.assertEqual(got("hike.add", {**self.ADD, "signup": False}), {"say": [], "set": [], "warn": []})
-        self.assertEqual(got("hike.cancel", {"hike": "hike-on"}), {"say": [], "set": [], "warn": []})
+        self.assertEqual(got("hike.cancel", {"hike": "hike-on"}), {"say": ["Cancelling changes the hike page. Nobody is notified."], "set": [], "warn": []})  # RF2315-12
         self.assertEqual(voice.check(note.format(6)), [])
         self.assertTrue(all("left" not in line for name in ("hike.add", "hike.edit") for line in got(name, {**self.ADD, "hike": "hike-on", "signup": True})["say"]))
         # add_set_phrases: six is added to the one I set line only when another default is already on it
@@ -479,6 +480,118 @@ class SixSpotDefault(unittest.TestCase):
                     self.assertIn(hikes.R_CAP_MAX, case.replies()[0])
                 self.assertEqual(case.drafts(), [])
                 case.nothing_written()
+
+
+class CancelDisclosure(unittest.TestCase):
+    """RF2315-12: before yes, hike.cancel says it changes the page and tells nobody (a skill-local proposal note, no guest count)."""
+    SAID = "Cancelling changes the hike page. Nobody is notified."
+    CASS_TEXT, PINE_TEXT = "cancel the Cass Hill hike", "cancel the Pine Ridge hike"
+
+    def case(self, *skills, guests=None):
+        from hass.tests.test_skill_dispatch import SkillCase, registry_of
+
+        case = SkillCase()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        for title, date, time in (("Cass Hill hike", "2026-11-21", "09:00"), ("Pine Ridge hike", "2026-11-22", "09:00")):
+            made = case.editor.prepare([{"op": "hike.create", "args": {"title": title, "date": date, "time": time,
+                                                                        "meetingPoint": "the gate", "rsvpEnabled": guests is not None,
+                                                                        **({"capacity": 6} if guests is not None else {})}}])
+            self.assertEqual(made["result"], "ok", made)
+            self.assertEqual(case.editor.apply(made["draft"]["change_id"], made["draft"]["draft_hash"])["result"], "applied")
+        events = json.loads((case.repo.wt / "hass" / "content" / "community.json").read_text("utf-8"))["events"]
+        self.ids = [e["id"] for e in events]
+        if guests is not None:  # placeholder guests in a throwaway RSVP file
+            from hass.tests.test_conversation import SETTINGS
+            from hass.tests.test_hike_ops import SCHEMA
+
+            db = case.repo.state.parent / "rsvps.sqlite3"
+            conn = sqlite3.connect(db)
+            conn.execute(SCHEMA)
+            for n in range(guests):
+                conn.execute("INSERT INTO rsvps(event_id,email,name,party_size,created_at) VALUES(?,?,?,?,?)",
+                             (self.ids[0], f"guest{n}@example.invalid", f"Guest {n}", 1, "2026-10-30T00:00:00Z"))
+            conn.commit()
+            conn.close()
+            case.set_settings({**SETTINGS, "skills": {"mode": case.MODE}, "guestCountsDb": str(db)})
+        case.base = case.count()  # the seeded hikes are the start state: only what happens after this must write nothing
+        case.registry = registry_of(*skills)
+        case.conv = case.open()
+        return case
+
+    def test_cancel_notes_is_pure_and_only_for_cancel(self):
+        slots, c = {"hike": CASS["id"], "note": "rain"}, ctx(CASS)
+        before = (dict(slots), list(c.texts))
+        self.assertEqual(hikes.notes("hike.cancel", slots, c), {"say": [self.SAID], "set": [], "warn": []})
+        self.assertEqual(hikes.notes("hike.cancel", slots, None)["say"], [self.SAID])  # no context needed: it reads nothing
+        self.assertEqual(hikes.notes("hike.cancel", {}, ctx())["say"], [self.SAID])
+        self.assertEqual((slots, c.texts), before)
+        for name in (n for n in NAMES if n != "hike.cancel"):
+            self.assertNotIn(self.SAID, hikes.notes(name, {"hike": CASS["id"], "day": "2026-12-12"}, c)["say"], name)
+        self.assertEqual(hikes.notes("item.hide", {}, c), {"say": [], "set": [], "warn": []})
+        self.assertEqual(voice.check(self.SAID), [])
+
+    def test_real_cancel_without_guests_discloses_before_yes(self):
+        for envelope in ("single", "calls"):
+            with self.subTest(envelope):
+                case = self.case(hikes.CANCEL)
+                call = {"skill": "hike.cancel", "slots": {"hike": "Cass Hill hike"}}
+                case.script(self.CASS_TEXT, call if envelope == "single" else {"calls": [call]})
+                draft, reply = case.propose(self.CASS_TEXT)
+                lines = reply.splitlines()
+                self.assertEqual(lines.count(self.SAID), 1, reply)
+                self.assertLess(reply.index(self.SAID), reply.index("Reply yes"))
+                self.assertEqual([(o["op"], o["args"]) for o in json.loads(draft["ops_json"])], [("hike.cancel", {"id": self.ids[0]})])
+                self.assertEqual(draft["state"], "proposed")
+                case.nothing_written()  # nothing is saved and nothing approved before his coded yes
+                self.assertEqual(case.say(f"yes {draft['code']}"), "approved")
+                self.assertEqual(case.commits(), 1)
+
+    def test_real_cancel_with_note_and_guest_warning(self):
+        case = self.case(hikes.CANCEL, guests=3)
+        text = self.CASS_TEXT + ",  rained   out"
+        case.script(text, {"skill": "hike.cancel", "slots": {"hike": "Cass Hill hike", "note": "rained   out"}})
+        draft, reply = case.propose(text)
+        self.assertEqual(reply.splitlines().count(self.SAID), 1, reply)
+        self.assertIn("3 guests have signed up", reply)  # the editor's own warning is kept
+        self.assertEqual([(o["op"], o["args"]) for o in json.loads(draft["ops_json"])], [("hike.cancel", {"id": self.ids[0], "note": "rained out"})])
+        case.nothing_written()
+
+    def test_real_two_cancel_calls_share_one_disclosure(self):
+        case = self.case(hikes.CANCEL, hikes.EDIT)
+        text = "cancel the Cass Hill hike and the Pine Ridge hike"
+        case.script(text, {"calls": [{"skill": "hike.cancel", "slots": {"hike": name}} for name in ("Cass Hill hike", "Pine Ridge hike")]})
+        draft, reply = case.propose(text)
+        self.assertEqual(reply.splitlines().count(self.SAID), 1, reply)
+        self.assertEqual([(o["op"], o["args"]) for o in json.loads(draft["ops_json"])],
+                         [("hike.cancel", {"id": ids}) for ids in self.ids])
+        case.nothing_written()
+        mixed = "cancel the Cass Hill hike and tell people to bring a hat on the Pine Ridge hike"
+        case.script(mixed, {"calls": [{"skill": "hike.cancel", "slots": {"hike": "Cass Hill hike"}},
+                                      {"skill": "hike.edit", "slots": {"hike": "Pine Ridge hike", "bring": "a hat"}}]})
+        draft, reply = case.propose(mixed)
+        self.assertEqual(reply.splitlines().count(self.SAID), 1, reply)
+        self.assertEqual([o["op"] for o in json.loads(draft["ops_json"])], ["hike.cancel", "hike.update"])
+        case.nothing_written()
+
+    def test_cancel_refusals_do_not_claim_cancellation(self):
+        case = self.case(hikes.CANCEL)
+        first = case.editor.prepare([{"op": "hike.cancel", "args": {"id": self.ids[1]}}])  # Pine Ridge is already cancelled
+        case.editor.apply(first["draft"]["change_id"], first["draft"]["draft_hash"])
+        case.base = case.count()
+        for label, said, name in (("already cancelled", self.PINE_TEXT, "Pine Ridge hike"), ("unknown", "cancel the Nowhere hike", "Nowhere hike"),
+                                  ("missing", "scrap it", None)):
+            with self.subTest(label):
+                slots = {"hike": name} if name else {}
+                case.script(said, {"skill": "hike.cancel", "slots": slots})
+                self.assertNotEqual(case.say(said), "proposed")
+                said_back = " ".join(case.replies())
+                self.assertNotIn("Nobody is notified", said_back)
+                if label == "already cancelled":
+                    self.assertIn("already cancelled", said_back)
+                self.assertEqual(case.drafts(), [])
+                case.nothing_written()
+                case.conv.requests.close_live(case.conv._chat(), case.now, "closed")
 
 
 class Rules(unittest.TestCase):
