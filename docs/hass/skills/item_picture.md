@@ -41,7 +41,9 @@ that suffix, even if an old caption had it.
   page, or for a product?". Nothing is drafted until he names one product; his answer ("the lemons") goes on to one draft.
   A single product whose name has "and" in it (Salt and vinegar chips) is one product. The list is found with or without
   "the" ("photos for lemons and plums" asks too), and a reply that is itself a list ("lemons and plums please") is not
-  the one product he was asked for, so it asks again.
+  the one product he was asked for, so it asks again. A list can be commas alone ("photos for lemons, plums", and the reply
+  "lemons, plums please"); a comma before a caption or a reply word ("photo for the Etto rigatoni, in the box", "the
+  lemons, please", "yes, the lemons") is still one product.
 * No product list to check against (the plan is handed no content): nothing is drafted. The plan refuses with "I couldn't
   check that product just now, so nothing is changed. Try again in a moment." rather than skip the hidden/held recheck.
 * `alt-says-what-it-shows`: above.

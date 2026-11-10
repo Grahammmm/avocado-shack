@@ -133,6 +133,30 @@ class Plan(unittest.TestCase):
                          ip.ONE_AT_A_TIME)  # the name is one product; the second "and" adds another
         self.assertEqual(refusal({"item": cream, "photo": SHA[JAR]}, "photos for cookies and lemons").reply, ip.ONE_AT_A_TIME)
 
+    def test_comma_only_lists_ask_and_are_not_an_answer(self):
+        slots = {"item": LEMONS, "photo": SHA[JAR]}
+        for text in ("photos for lemons, plums", "new photo for the lemons, the plums", "photo of lemons, plums, limes",
+                     "pictures for lemons,plums"):
+            with self.subTest(text=text):  # a model-picked Lemon must not draft half of this
+                self.assertEqual(refusal(slots, text).reply, ip.ONE_AT_A_TIME)
+        for answer in ("lemons, plums please", "the lemons, the plums", "lemons, plums, limes"):
+            with self.subTest(answer=answer):
+                self.assertEqual(refusal(slots, "photos for lemons and plums", answer).reply, ip.ONE_AT_A_TIME)
+                self.assertEqual(refusal(slots, "photos for lemons, plums", answer).reply, ip.ONE_AT_A_TIME)
+        ip.plan_picture(slots, ctx("photos for lemons, plums", "the lemons please"))  # one product settles it
+        ip.plan_picture(slots, ctx("photos for lemons and plums", "yes, the lemons"))
+
+    def test_a_comma_before_a_caption_or_a_reply_word_is_one_product(self):
+        etto = {"item": "photo-product-172", "photo": SHA[JAR], "image_alt": "Etto rigatoni in the box"}
+        for text in ("photo for the Etto rigatoni, in the box", "photo for the Etto rigatoni, on the shelf",
+                     "photo for the Etto rigatoni, please", "photo for the Etto rigatoni, 500 g", "photo for the Etto rigatoni, I took it today"):
+            with self.subTest(text=text):
+                ip.plan_picture(etto, ctx(text))
+        slots = {"item": LEMONS, "photo": SHA[JAR]}
+        for answer in ("the lemons, please", "no, the lemons", "ok, lemons", "lemons, definitely"):
+            with self.subTest(answer=answer):
+                ip.plan_picture(slots, ctx("photos for the lemons and the plums", answer))
+
     def test_multi_product_or_home_target_asks_then_single_answer_continues(self):
         slots = {"item": LEMONS, "photo": SHA[JAR]}
         self.assertEqual(refusal(slots, "photos for the lemons and the plums").reply, ip.ONE_AT_A_TIME)

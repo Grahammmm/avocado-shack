@@ -58,6 +58,15 @@ _DET = r"(?:the|a|an|some|my|our|these|those|their)"
 _WORD = r"[\w'\u2019-]+"
 _AND = r"\s*,?\s*(?:\band\b|&|\+|\bplus\b)\s+(?:also\s+)?"
 CONJUNCTION = re.compile(_AND, re.IGNORECASE)
+COMMA = re.compile(r"\s*,\s*")  # a list can be commas alone: "photos for lemons, plums"
+# after a comma these start a caption or an aside, not a second product: "the Etto rigatoni, in the box", "the lemons, please"
+_CAPTION_LEAD = frozenset({"in", "on", "at", "with", "without", "from", "by", "for", "of", "to", "as", "under", "over", "near", "next",
+                           "inside", "outside", "behind", "beside", "around", "against", "between", "into", "onto", "about", "like",
+                           "just", "only", "also", "too", "instead", "though", "definitely", "obviously", "actually", "sorry", "not",
+                           "but", "so", "or", "if", "when", "which", "that's", "thats", "please", "pls", "plz"})
+# a reply that opens with one of these is an acknowledgement before the answer: "yes, the lemons"
+_REPLY_LEAD = frozenset({"sorry", "hi", "hello", "hey", "sure", "oh", "well", "so", "actually", "just", "right", "great", "good",
+                         "cool", "yeah", "yep", "nope", "um", "uh", "hmm", "sorry,", "wait", "oops"})
 PLACE = re.compile(r"\b(?:for|of|on|to)\s+", re.IGNORECASE)
 SHORT_REPLY = re.compile(rf"(?:[\s,&+]*{_WORD}){{1,8}}[\s.!]*")  # a reply that is only a short phrase: "lemons and plums please"
 # a word after "and" that carries on the sentence instead of naming a second product
@@ -130,15 +139,35 @@ def _is_list(left, right, name) -> bool:
     return not (left_hit and right_hit)
 
 
+def _first(words) -> str:
+    """The first word of a phrase, lower case, without a leading 'the/a/my...'."""
+    words = re.sub(rf"^{_DET}\s+", "", words.strip().casefold().replace("\u2019", "'")).split()
+    return words[0] if words else ""
+
+
+def _is_comma_list(left, right, name) -> bool:
+    """A bare comma between two names ('lemons, plums') is a list; a comma before a caption or a reply word ('the Etto
+    rigatoni, in the box', 'the lemons, please', 'yes, the lemons') is not."""
+    lead, nxt = _first(left), _first(right)
+    if not lead or lead in _NOT_A_PRODUCT or lead in _REPLY_LEAD or not nxt or nxt in _CAPTION_LEAD or nxt[0].isdigit():
+        return False
+    return _is_list(left, right, name)
+
+
 def _lists_two(turn, name) -> bool:
-    """True when the text puts two products on the one photo: an 'and' (or &, +, plus) between two names after 'for/of/on/to',
-    or a reply that is only such a list. Every 'and' is read on its own, so 'cookies and cream chocolate and lemons' lists two."""
+    """True when the text puts two products on the one photo: an 'and' (or &, +, plus) or a bare comma between two names
+    after 'for/of/on/to', or a reply that is only such a list. Every 'and' and comma is read on its own, so 'cookies and cream
+    chocolate and lemons' lists two while 'the Etto rigatoni, in the box' is one product with a caption."""
     text = turn.strip()
     short = SHORT_REPLY.fullmatch(text) is not None
-    for found in CONJUNCTION.finditer(text):
+    for found in sorted([(m, False) for m in CONJUNCTION.finditer(text)] + [(m, True) for m in COMMA.finditer(text)],
+                        key=lambda pair: pair[0].start()):
+        found, comma = found
         before, after = text[:found.start()], text[found.end():]
+        if comma and CONJUNCTION.match(after):  # ', and plums' is the 'and' read above
+            continue
         place = None
-        for place in PLACE.finditer(before):  # the last 'for/of/on/to' before this 'and'
+        for place in PLACE.finditer(before):  # the last 'for/of/on/to' before this 'and' or comma
             pass
         if place is not None:
             left = before[place.end():]
@@ -146,10 +175,10 @@ def _lists_two(turn, name) -> bool:
             left = before
         else:
             continue
-        left = re.split(r"\s*,?\s*(?:\band\b|&|\+|\bplus\b)\s+", left)[-1]  # only the words next to this 'and'
+        left = re.split(r"\s*,\s*|\s*,?\s*(?:\band\b|&|\+|\bplus\b)\s+", left)[-1]  # only the words next to this 'and' or comma
         left = " ".join(re.sub(rf"^{_DET}\s+", "", left.strip(), flags=re.IGNORECASE).split()[-4:])
         right = " ".join(re.split(r"[,.;:!?]|\s" + _AND, after)[0].split()[:3])
-        if left and _is_list(left, right, name):
+        if left and (_is_comma_list if comma else _is_list)(left, right, name):
             return True
     return False
 
