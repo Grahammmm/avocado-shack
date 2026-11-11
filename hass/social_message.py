@@ -111,6 +111,8 @@ def _units(text: str):
 
 def classify_social(text) -> "str | None":
     if not isinstance(text, str): return None
+    # U+001C-U+001F are str.isspace()/\s but not Unicode White_Space; never normalize them away.
+    if any(c in text for c in "\x1c\x1d\x1e\x1f"): return None
     phrase = re.sub(r"\s+", " ", text.strip()).casefold().rstrip(".!?")
     if phrase in PHRASES: return "social"
     if not text.strip(): return None

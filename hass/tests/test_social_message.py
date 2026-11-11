@@ -28,6 +28,21 @@ class ClassifierTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(classify_social(text))
 
+    def test_information_separators_are_not_whitespace(self):
+        for c in "\x1c\x1d\x1e\x1f":
+            for text in (c + "thanks", "thank" + c + "you", "thanks" + c, "good" + c + c + "morning", c, c + c,
+                         AVOCADO + c, c + AVOCADO, AVOCADO + c + AVOCADO, THUMB + c + CHECKS[0], c + THUMB):
+                with self.subTest(text=text):
+                    self.assertIsNone(classify_social(text))
+
+    def test_unicode_white_space_controls_remain_supported(self):
+        for c in ("\t", "\n", "\x0b", "\x0c", "\r", " ", "\x85", "\xa0", "\u1680", "\u2003", "\u2028", "\u2029",
+                  "\u202f", "\u205f", "\u3000"):
+            with self.subTest(c=c):
+                self.assertEqual(classify_social("thank" + c + "you"), "social")
+                self.assertEqual(classify_social(c + AVOCADO + c + AVOCADO + c), "social")
+                self.assertEqual(classify_social(THUMB + c + CHECKS[0]), "near")
+
     def test_emoji_units_and_nonemoji_rejection(self):
         for text in (AVOCADO, HEART, FAMILY, FLAG_US, KEYCAP, FLAG_ENG, "\U0001F469\U0001F3FD\u200d\U0001F373", "\u00a9\ufe0f"):
             with self.subTest(text=text):
@@ -147,6 +162,19 @@ class SocialConversationTests(H06TestCase):
                 self.replies()
                 self.assertEqual(self.interp.texts, [text])
                 self.assertEqual((self.approvals(), self.commits(), self.drafts()), (0, 0, drafts))
+
+    def test_control_bearing_social_lookalikes_reach_request_unchanged(self):
+        for text in ("thank\x1cyou", AVOCADO + "\x1f", THUMB + "\x1e" + CHECKS[0]):
+            with self.subTest(text=text):
+                self.interp.texts.clear()
+                drafts = self.drafts()
+                self.assertNotIn(self.say(text), ("social", "near-approval"))
+                self.replies()
+                self.assertEqual(self.interp.texts, [text])
+                self.assertEqual((self.approvals(), self.commits(), self.drafts()), (0, 0, drafts))
+        self.interp.texts.clear()
+        self.social("thank\tyou")
+        self.social(AVOCADO + "\t" + AVOCADO)
 
     def test_duplicate_gets_one_reply_and_mixed_words_still_interpreted(self):
         self.assertEqual(self.say("thanks", pid="dup1"), "social")
