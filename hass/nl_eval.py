@@ -193,7 +193,9 @@ def _percentile(values, p):
 
 
 def score(corpus, replies, registry) -> dict:
-    """Metrics over the cases that have a reply row; ids and short reasons only."""
+    """Metrics over the cases that have a reply row; ids and short reasons only.
+
+    schemaValidRate counts nonfailed replies whose raw top-level envelope is one `_checked` admits; it is not registry validity."""
     done = [(c, judge(c, replies[c["id"]], registry)) for c in corpus if c["id"] in replies]
     n = len(done)
     count = lambda verdict: sum(j["verdict"] == verdict for _, j in done)  # noqa: E731
@@ -204,7 +206,7 @@ def score(corpus, replies, registry) -> dict:
     calls = [replies[c["id"]] for c, _ in done]
     ok_ms = [r.get("firstMs", r["ms"]) for r in calls if r.get("firstMs", r["ms"]) is not None and not r.get("firstFailed", r["failed"])]  # first attempts that finished in time
     raw_ok = [r for r in calls if not r["failed"] and isinstance(r["reply"], dict)]
-    schema_ok = [r for r in raw_ok if any(k in r["reply"] for k in ("ops", "question", "unsupported"))]
+    schema_ok = [r for r in raw_ok if _checked(r["reply"]) == r["reply"]]  # top-level envelope only; registry/op-member checks happen in judge
     per = {}
     for c, j in done:
         row = per.setdefault(c["intent"], {"cases": 0, "pass": 0, "wrongDraft": 0})
