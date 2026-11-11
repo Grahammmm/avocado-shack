@@ -214,5 +214,74 @@ class LiveTests(Base):
         self.assertEqual((stop.exception.code, self.calls, out.exists()), (2, [], False))
 
 
+class SurrogatePhotoTests(Base):
+    """RF0415-10: an unpaired-surrogate photo name is refused at admission with the line-numbered case error."""
+    def line(self, photo_json, id="s1"):
+        return '{"id": "%s", "photo": "%s", "expected": {"name": null, "brand": null, "category": null}}' % (id, photo_json)
+
+    def test_photo_surrogate_case_is_line_numbered_refusal(self):
+        for photo in ("\\ud800", "CANARY-\\ud800.jpg", "\\ud800x.jpg", "x\\ud800", "a\\udc80b.jpg", "\\udcff", "ok-\\udfff.jpg", "\\ude00\\ud83d"):
+            for n, rows in ((1, [self.line(photo)]), (2, [self.line("ok.jpg", "s0"), self.line(photo)])):
+                with self.subTest(photo=photo, line=n):
+                    path = self.write("c.jsonl", rows)
+                    with self.assertRaises(ev.EvalError) as caught: ev.load_cases(path)
+                    self.assertEqual(str(caught.exception), f"cases line {n}: not a case")
+                    self.assertIsNone(caught.exception.__cause__)
+                    code, out, err = run("score", "--cases", path, "--replies", self.tmp / "absent.jsonl")
+                    self.assertEqual((code, out, err), (2, "", f"cases line {n}: not a case"))
+                    self.assertNotIn("CANARY", err)
+
+    def test_photo_scalar_unicode_is_preserved(self):
+        names = {"ascii": "plain.jpg", "accent": "caf\u00e9-\u00e9t\u00e9.jpg", "greek": "\u03b5\u03bb\u03b1\u03b9\u03cc\u03bb\u03b1\u03b4\u03bf.jpg",
+                 "emoji": "\U0001f951.jpg"}
+        rows = [self.line(json.dumps(name, ensure_ascii=False)[1:-1], key) for key, name in names.items()]
+        rows.append(self.line("\\ud83e\\udd51-pair.jpg", "pair"))  # valid escaped pair decodes to one scalar
+        cases = ev.load_cases(self.write("c.jsonl", rows))
+        self.assertEqual([c["photo"] for c in cases], [*names.values(), "\U0001f951-pair.jpg"])
+
+    def test_score_bad_photo_refuses_before_reply_or_catalog_read(self):
+        path = self.write("c.jsonl", [self.line("ok.jpg", "s0"), self.line("bad-\\udc80.jpg")])
+        with mock.patch.object(ev, "catalog_categories", side_effect=AssertionError("catalog read")), \
+             mock.patch.object(ev, "score", side_effect=AssertionError("scored")):
+            self.assertEqual(run("score", "--cases", path, "--replies", self.tmp / "no-replies.jsonl"), (2, "", "cases line 2: not a case"))
+
+    def photos_dir(self, *names):
+        photos = self.tmp / "photos"
+        photos.mkdir()
+        for name in names: (photos / name).write_bytes(b"\xff\xd8synthetic")
+        return photos
+
+    def test_fake_live_bad_later_photo_never_reaches_io(self):
+        photos, out, calls = self.photos_dir("ok.jpg"), self.tmp / "out" / "replies.jsonl", []
+        out.parent.mkdir()
+        path = self.write("c.jsonl", [self.line("ok.jpg", "s0"), self.line("bad\\ud800.jpg")])
+        with mock.patch.object(ev, "_read_photo", side_effect=AssertionError("photo read")), mock.patch.object(ev.tempfile, "mkstemp", side_effect=AssertionError("temp")):
+            result = run("--live", "--url", URL, "--model", "m", "--photos", photos, "--out", out, "--cases", path,
+                         transport=lambda *a: calls.append(a))
+        self.assertEqual((result, calls, list(out.parent.iterdir())), ((2, "", "cases line 2: not a case"), [], []))
+
+    def test_fake_live_scalar_unicode_photo_still_records(self):
+        name, calls = "caf\u00e9-\U0001f951.jpg", []
+        photos, out = self.photos_dir(name), self.tmp / "out" / "replies.jsonl"
+        out.parent.mkdir()
+        path = self.write("c.jsonl", [self.line(json.dumps(name, ensure_ascii=False)[1:-1])])
+
+        def transport(url, body, headers, timeout):
+            calls.append(json.loads(body))
+            return 200, json.dumps({"done": True, "message": {"content": json.dumps({"name": "x"})}}).encode()
+        code, stdout, err = run("--live", "--url", URL, "--model", "m", "--photos", photos, "--out", out, "--cases", path, transport=transport)
+        self.assertEqual((code, err, json.loads(stdout), len(calls)), (0, "", {"recorded": 1, "failedCalls": 0}, 1))
+        self.assertEqual(base64.b64decode(calls[0]["messages"][0]["images"][0]), b"\xff\xd8synthetic")
+        self.assertEqual((stat.S_IMODE(out.stat().st_mode), [p.name for p in out.parent.iterdir()]), (0o600, ["replies.jsonl"]))
+        self.assertEqual(json.loads(out.read_text("utf-8")), {"id": "s1", "reply": {"name": "x"}})
+
+    def test_other_bad_photo_and_expected_diagnostics_preserved(self):
+        expected = '{"name": 5, "brand": null, "category": null}'
+        for label, text, message in (("dot", self.line("."), "not a case"), ("slash", self.line("a/b.jpg"), "not a case"), ("nul", self.line("a\\u0000b"), "not a case"),
+                                     ("expected", '{"id": "s1", "photo": "a.jpg", "expected": %s}' % expected, "expected value is neither text nor null")):
+            with self.subTest(label):
+                self.assertEqual(run("score", "--cases", self.write("c.jsonl", [text]), "--replies", self.tmp / "r.jsonl"), (2, "", f"cases line 1: {message}"))
+
+
 if __name__ == "__main__":
     unittest.main()

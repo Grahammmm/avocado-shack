@@ -38,6 +38,8 @@ def load_cases(path) -> list:
         if not (set(row) == {"id", "photo", "expected"} and isinstance(photo, str) and photo not in ("", ".", "..")
                 and not set(photo) & set("/\\\x00") and isinstance(expected, dict) and set(expected) == set(FIELDS)):
             raise EvalError(f"cases line {n}: not a case")
+        try: photo.encode("utf-8", "strict")  # an unpaired surrogate cannot name a file; refuse it here, not in the filesystem encoder
+        except UnicodeEncodeError: raise EvalError(f"cases line {n}: not a case") from None
         if not all(v is None or isinstance(v, str) for v in expected.values()):
             raise EvalError(f"cases line {n}: expected value is neither text nor null")
         cases.append({**row, "_line": n})
