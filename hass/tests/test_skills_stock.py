@@ -132,8 +132,7 @@ class PlanRules(unittest.TestCase):
             (stock.STOCK_SET, {"items": _items((EGGS, "no"))},
              _ctx([_product(available="no", available_on="2026-11-08")])),
             (stock.STOCK_CLEAR, {"items": [EGGS]}, ctx),
-            (stock.STOCK_CHECKED, {"in": [EGGS, EGGS]}, ctx),
-            (stock.STOCK_CHECKED, {"in": [EGGS], "out": [EGGS]}, ctx)]
+            (stock.STOCK_CHECKED, {"in": [EGGS, EGGS]}, ctx)]  # across lists is a question: test_stock_checked_conflict
         for skill, args, context in controls:
             with self.subTest(skill=skill.name, args=args, context=context):
                 before = copy.deepcopy((args, vars(context.content)))
