@@ -31,6 +31,7 @@ if __package__ in (None, ""):
 from hass import voice  # noqa: E402
 from hass.content_model import ID_RE, iso_day  # noqa: E402
 from hass.morning_report import restock_day, restock_text  # noqa: E402
+from hass.nl_prep import WORD_NUMBERS  # noqa: E402
 from hass.ops.restock import FIELD, MAX_AHEAD  # noqa: E402
 from hass.skills.model import Skill, Slot, Trigger, Undo  # noqa: E402
 
@@ -51,7 +52,10 @@ SHELF_SAME = "This does not change what the shelf says."
 # a number with a unit of goods: "40 jars", "2 dozen", "12 lbs", "x40". A date ("the 14th") or a wait ("in 2 weeks") is not one.
 UNITS = ("jars?|bottles?|boxes|box|bags?|cartons?|dozens?|cases?|crates?|units?|pieces?|pcs|packs?|packets?|loaves|loaf|cans?|tubs?|"
          "trays?|pints?|quarts?|gallons?|liters?|litres?|lbs?|pounds?|oz|ounces?|kg|kilos?|kilograms?|grams?|items?|bunch(?:es)?")
-QUANTITY = re.compile(rf"(?<![\w.])\d[\d,]*(?:\.\d+)?\s*(?:x\s*)?(?:{UNITS})\b|\b[x×]\s*\d+\b|\b\d+\s*[x×](?!\w)", re.IGNORECASE)
+# a spelled-out run ("forty", "twenty-one", "one hundred and five", "two", "dozen") right before a unit of goods; a bare number word is not a count
+SPOKEN = "|".join(sorted({*WORD_NUMBERS, "seventy", "eighty", "ninety", "hundred", "thousand"}, key=len, reverse=True))
+QUANTITY = re.compile(rf"(?<![\w.])\d[\d,]*(?:\.\d+)?\s*(?:x\s*)?(?:{UNITS})\b|\b[x×]\s*\d+\b|\b\d+\s*[x×](?!\w)"
+                      rf"|\b(?:{SPOKEN})(?:[\s-]+(?:and[\s-]+)?(?:{SPOKEN}))*[\s-]+(?:{UNITS})\b", re.IGNORECASE)
 
 
 class Refusal(ValueError):
