@@ -699,7 +699,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     # 9. the inventory word and today's shelf check (D2): the check goes in the same change, on its own line
     new_id = _next_id(ctx, content)
     if new_id is None:
-        raise Refusal("I can't tell which product number comes next, so nothing changed. You can ask Graham.")
+        raise Refusal("I can't tell which product number comes next, so nothing was drafted. Please send it again in a few minutes.")
     if _selection_checked_today(ctx, content):
         ops.append({"op": "product.set_availability", "args": {"id": new_id, "available": word}})
     else:

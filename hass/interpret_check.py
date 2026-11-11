@@ -24,7 +24,7 @@ UNDO_GUIDANCE = "To undo the last change, say " + voice.quote("undo") + ". To se
 PRICE_REPLY = "The website doesn't show prices, so I haven't made any change. Could you send it without the price?"  # AV0222-03
 PLAIN_TEXT_REPLY = ("The website only takes plain words, so I haven't made any change. "
                     "Could you send it again without special marks?")
-CANT_DO_YET = "I can't do that kind of change yet. You can ask Graham."
+CANT_DO_YET = "I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change."
 WANTS = {"bool": "yes or no", "int": "a whole number", "text_list": "a list of words"}
 
 

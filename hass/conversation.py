@@ -17,7 +17,7 @@ from hass import claims, interpret_check, label_reader, margins, media, morning_
 from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, checked_on, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
-from hass import corrlog, live_policy, voice  # noqa: E402
+from hass import corrlog, hike_chat, live_policy, voice  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, openreq  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -111,7 +111,7 @@ USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NO
 AUDIT = """CREATE TABLE IF NOT EXISTS interpreter_audit(provider_id TEXT PRIMARY KEY, at TEXT NOT NULL, backend TEXT NOT NULL,
   fallback INTEGER NOT NULL, primary_error TEXT, error TEXT, seconds REAL)"""
 DAILY_LIMIT = ("I've read as many new requests as I can for today, so I couldn't read that one and nothing changed. "
-               "Yes, no, undo and status still work. Please send it again tomorrow, or ask Graham.")
+               "Yes, no, undo and status still work. Please send it again tomorrow.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
 MAX_INTERPRETER_ALIASES = 50  # AV0007-06: live owner aliases the interpreter sees (newest first)
 MAX_NOTES = 20  # AV1102-09: saved notes the interpreter sees (newest first)
@@ -143,6 +143,13 @@ SHELF_QUESTION = "Before I change that, " + SHELF_ASK[0].lower() + SHELF_ASK[1:]
 SHELF_NO = "Okay, nothing was changed. Tell me what is different on the shelf list and I will draft that."
 SHELF_FAILED = "Sorry, I could not set that up, so nothing was changed. Please send the change again."
 SHELF_CLOCK = "The last shelf check is dated in the future, so the date on this phone or computer looks wrong. Nothing was changed."
+MEET_NO = "Okay. Where should people meet? Tell me the spot, like a trailhead or a parking lot."  # HASS-CHAT-1
+# HASS-CHAT-1 (C): a proposal whose picture could not be drawn is never silent; the picture is tried once more a bit later
+PREVIEW_FAILED_HEAD = "I could not draw the picture right now; here is exactly what will change:"
+PREVIEW_RETRY_LINE = "I'll try the picture again in a moment."
+PREVIEW_RETRY_SECONDS = 30
+PREVIEW_LATER = "Here is the picture of how {what} will look."
+PREVIEW_STILL_FAILED = "I still couldn't draw the picture for {what}. The change I listed is exactly what will happen."
 ASK_TURNS, ASK_CHARS, ASK_TEXT_CUT = 4, 2000, 1000
 LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -671,21 +678,39 @@ def _shown(field, v, cut=True) -> str:
     return voice.value_words(v, field)
 
 
-def _added(r: dict) -> list:  # AV1737-06 (H05/H06): an added record's visible fields, one per line (at most 40)
+UNREADABLE_TIME = voice.natural_iso("soon")  # the words voice gives a time it cannot read
+EVENT_ORDER = ("title", "startsAt", "meetingPoint", "trailId", "description", "difficulty", "distance", "duration", "bring",
+               "accessNote", "rsvpEnabled", "capacity")  # HASS-CHAT-1: a new hike reads name, when, where first
+
+
+def _shown_in(r: dict, k, v, routes=None, cut=True) -> str:
+    """HASS-CHAT-1: _shown for one record: a hike's start says its time zone, and a route link is the route's name, never its id."""
+    if k == "trailId" and isinstance(v, str):
+        route = (routes or {}).get(v)
+        return route["title"] if isinstance(route, dict) and isinstance(route.get("title"), str) and route["title"].strip() else "a saved route"
+    shown = _shown(k, v, cut)
+    return shown + " (Pacific time)" if r.get("collection") == "events" and k == "startsAt" and _when(k, v) and \
+        isinstance(v, str) and _when(k, v) != UNREADABLE_TIME else shown
+
+
+def _added(r: dict, routes=None) -> list:  # AV1737-06 (H05/H06): an added record's visible fields, one per line (at most 40)
     rows = [(k, v) for k, v in sorted(r["after"].items()) if v not in (None, "", []) and k not in voice.SKIP_FIELDS and k in voice.FIELDS]
+    if r.get("collection") == "events":  # HASS-CHAT-1: name, when, where first; a new hike is scheduled, so that line says nothing
+        rank = {k: i for i, k in enumerate(EVENT_ORDER)}
+        rows = sorted((kv for kv in rows if kv != ("status", "scheduled")), key=lambda kv: (rank.get(kv[0], len(rank)), kv[0]))
     word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _name(r)
     lines = [f"A new {word}" + (f": {q(name)}" if name else "")]
     for k, v in rows[:40]:
         photo = k == "image" and PHOTO_PATH_RE.fullmatch(str(v))
-        lines.append(f"  {voice.field_phrase(k)}: " + ("the photo from your message" if photo else q(_shown(k, v, False)).replace("\n", "\n    ")))
+        lines.append(f"  {voice.field_phrase(k)}: " + ("the photo from your message" if photo else q(_shown_in(r, k, v, routes, False)).replace("\n", "\n    ")))
     return lines + (["  and a few more details"] if len(rows) > 40 else [])
 
 
-def _change_line(r: dict, field, b, a, undo: bool, full_before: bool) -> str:
+def _change_line(r: dict, field, b, a, undo: bool, full_before: bool, routes=None) -> str:
     who, phrase = _subject(r), voice.field_phrase(field)
     if field == "image" and (PHOTO_PATH_RE.fullmatch(str(a)) or undo and PHOTO_PATH_RE.fullmatch(str(b))):
         return f"{who}: the photo goes back to the previous one" if undo else f"{who}: the photo will be the one from your message"
-    old, new = _shown(field, b, not full_before), _shown(field, a, False)
+    old, new = _shown_in(r, field, b, routes, not full_before), _shown_in(r, field, a, routes, False)
     if "\n" in new or "\n" in old or len(old) + len(new) > 70:
         return f"{who}, {phrase}:\n  was: " + q(old).replace("\n", "\n    ") + "\n  now: " + q(new).replace("\n", "\n    ")
     return f"{who}, {phrase}: from {q(old)} to {q(new)}"
@@ -702,22 +727,26 @@ def _removal(r: dict, done: bool = False) -> str:
     return f"Remove the {word} {q(name)}." if name else f"Remove this {word}."
 
 
-def _record_lines(draft: dict, undo: bool = False, full_before=False, done: bool = False) -> list:  # AV0022-08: proposal_text and show
+def _record_lines(draft: dict, undo: bool = False, full_before=False, done: bool = False, routes=None) -> list:  # AV0022-08: proposal_text and show
     lines = []
     for r in draft["records"]:
-        lines += [_removal(r, done)] if _removed(r) else _added(r) if r.get("before") is None and isinstance(r.get("after"), dict) else [
-            _change_line(r, f, b, a, undo, full_before) for f, b, a in _changes(r)]
+        lines += [_removal(r, done)] if _removed(r) else _added(r, routes) if r.get("before") is None and isinstance(r.get("after"), dict) else [
+            _change_line(r, f, b, a, undo, full_before, routes) for f, b, a in _changes(r)]
     return lines + [f"Heads up: {voice.explain_warning(w)}" for w in draft.get("warnings") or []]
 
 
 def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None, now=None,
-                  reasons=None) -> str:
-    lines = [head or "Here's the change I'd make:"] + _record_lines(draft, undo, full_before=bool(live_site))
+                  notes=(), routes=None, reasons=None) -> str:
+    """notes (HASS-CHAT-1): plain lines on what Hass chose so the change can go live (sign-up, a detail left out), shown under
+    the change; routes: route ideas by id, so a route link is shown by its name."""
+    lines = [head or "Here's the change I'd make:"] + _record_lines(draft, undo, full_before=bool(live_site), routes=routes) + list(notes)
     wait = f"I'll hold this for you until {voice.natural_iso(expires_at, now)}."
     if live_site:
         reasons = live_policy.check(draft) if reasons is None else reasons  # HASS-SEC-2 (M1): the conversation's own reasons
+        that_way = " that way" if notes else ""
         return "\n".join(lines + [wait, live_policy.refusal(reasons) if reasons else
-                                 f"Reply {q('yes ' + code)} to put it on the website (it should show within a few minutes), or {q('no ' + code)} to cancel."])
+                                 f"Reply {q('yes ' + code)} to put it on the website{that_way} (it should show within a few minutes), "
+                                 f"or {q('no ' + code)} to cancel." + (" To change something, just tell me." if notes else "")])
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
     lines += [wait, f"Reply {q(yes)} to save it, or no to cancel. If something's wrong, tell me what to fix."]
     return "\n".join(lines)
@@ -936,23 +965,69 @@ class Conversation:
             reasons = sorted({*reasons, live_policy.UNDO_NOT_LIVE})
         return reasons
 
-    def _proposal_reply(self, row, draft, prefix=""):
-        """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
+    def _capture(self, draft):
+        """The proposal screenshot of ``draft`` (H06): {"ok", "png", "error"}; never raises past the previewer's own guard."""
+        rendered = self.editor.render_draft(draft["change_id"])
+        extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
+        return self.previewer.capture(rendered["files"], preview_mod.target_for(preview_mod.proposal_record(draft["records"]), shop_today(), store=rendered.get("store")),
+                                      self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
+            if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
+
+    def _proposal_reply(self, row, draft, prefix="", notes=()):
+        """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06). HASS-CHAT-1: a picture
+        that could not be drawn is never silent: the text says so first, the proposal is complete without it, and the picture
+        is tried once more PREVIEW_RETRY_SECONDS later (retry_previews, outside this message's transaction)."""
         reasons = self._live_reasons(draft) if self.settings.get("liveSite") else []
         if reasons: self._save_private(row, reasons)
-        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=self._now(), reasons=reasons), []
+        shots, head, tail = [], "", ""
         if self.previewer is not None:
-            rendered = self.editor.render_draft(draft["change_id"])
-            extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
-            shot = self.previewer.capture(rendered["files"], preview_mod.target_for(preview_mod.proposal_record(draft["records"]), shop_today(), store=rendered.get("store")),
-                                          self.sdir / "screenshots" / f"{draft['change_id']}-proposal.png", **extra) \
-                if rendered.get("result") == "ok" else {"ok": False, "png": None, "error": _reason(rendered)}
+            shot = self._capture(draft)
             shots = [shot["png"]] if shot.get("png") else []
             if not shot["ok"]:
-                self._problem("error", "preview-failed")
-                text += "\nI couldn't make a picture of how it will look."
+                self._problem("error", "preview-failed", excerpt=preview_mod.failure_kind(shot.get("error")))
+                if shots: tail = "\nThe picture may not show every part of this change; the list above is exactly what will change."
+                else:
+                    head, tail = PREVIEW_FAILED_HEAD, "\n" + PREVIEW_RETRY_LINE
+                    self._queue_preview_retry(row)
+        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), head=head, undo=_is_undo(row),
+                                      live_site=self.settings.get("liveSite"), now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
         if self._paused(): text += "\n" + PAUSED_LINE
         self._reply(text, shots, long_ok=True)
+
+    PREVIEW_RETRY = ("CREATE TABLE IF NOT EXISTS preview_retry (row_id INTEGER PRIMARY KEY, change_id TEXT NOT NULL, chat TEXT NOT NULL,"
+                     " due_at TEXT NOT NULL)")
+
+    def _queue_preview_retry(self, row):
+        """HASS-CHAT-1: one later try at the picture for this proposal (a second failure of the same row is not queued again)."""
+        self.db.execute(self.PREVIEW_RETRY)
+        due = _iso(self._now() + timedelta(seconds=PREVIEW_RETRY_SECONDS))
+        self.db.execute("INSERT OR IGNORE INTO preview_retry(row_id, change_id, chat, due_at) VALUES (?, ?, ?, ?)",
+                        (row["row_id"], row["change_id"], self._chat(), due))
+
+    def retry_previews(self) -> int:
+        """HASS-CHAT-1: draw the pictures that failed at least PREVIEW_RETRY_SECONDS ago, once each, and send them (or say once
+        that it still failed). A proposal that is no longer waiting gets nothing. The slow capture runs outside any transaction;
+        each row is taken off the list before its try, so a crash never tries it twice. Returns the number of rows taken."""
+        if self.previewer is None or not self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'preview_retry'").fetchone(): return 0
+        now, taken = self._now(), 0
+        for due in self.db.execute("SELECT * FROM preview_retry ORDER BY row_id").fetchall():
+            if datetime.fromisoformat(due["due_at"]) > now: continue
+            with self._tx():
+                if not self.db.execute("DELETE FROM preview_retry WHERE row_id = ?", (due["row_id"],)).rowcount: continue
+            taken += 1
+            row = self._row(due["row_id"])
+            if row is None or row["state"] != "proposed" or row["change_id"] != due["change_id"] or self._expiry(row) <= now: continue
+            draft = self.editor.show(row["change_id"]).get("draft")
+            shot = self._capture(draft) if isinstance(draft, dict) else {"ok": False, "png": None}
+            with self._tx(), self._answer_to(due["chat"]):
+                what = q(row["summary"])
+                if shot.get("png") and shot.get("ok"):
+                    self._reply(PREVIEW_LATER.format(what=what) + f" To go ahead, reply {q('yes ' + row['code'])}.", [shot["png"]])
+                else:
+                    self._problem("error", "preview-failed", excerpt=preview_mod.failure_kind(shot.get("error")))
+                    self._reply(PREVIEW_STILL_FAILED.format(what=what) + f" To go ahead, reply {q('yes ' + row['code'])}.")
+        return taken
 
     def _record(self, msg, disposition, owner=True):
         self.db.execute("INSERT INTO messages(provider_id, disposition, received_at) VALUES (?, ?, ?)",
@@ -1168,7 +1243,7 @@ class Conversation:
             return "no-target", None
         if self.settings.get("liveSite") and (reasons := self._live_reasons(self.editor.show(target["change_id"]).get("draft"))):
             self._save_private(target, reasons)  # HASS-LIVE-PLAN-1: refused for the website, kept for Graham, never lost
-            self._reply(live_policy.refusal(reasons))
+            self._reply(live_policy.refusal(reasons, understood=q(target["summary"])))
             self._record(msg, "no-target")
             return "no-target", None
         self.db.execute(
@@ -1346,7 +1421,8 @@ class Conversation:
             if not (isinstance(ops, list) and all(isinstance(c, dict) and isinstance(c.get("op"), str) for c in ops)): return None
             calls = row.get("calls") if hasattr(row, "get") else row["calls"]
             return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else [],
-                    "calls": calls if isinstance(calls, list) else []}
+                    "calls": calls if isinstance(calls, list) else [], "ask": pending.get("ask"),  # HASS-CHAT-1: "meet" or None (shelf check)
+                    "suggest": pending.get("suggest"), "index": pending.get("index"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)]}
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
 
     def _check_day(self):
@@ -1372,11 +1448,29 @@ class Conversation:
         """SKILLS-FW-3: the shelf-check answer (below), then the owner's other queued asks go on one at a time: the next one
         becomes the open request and its question is asked, whichever way the shelf-check change went."""
         if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)  # HASS-OWNERS-2
+        if ask.get("ask") in ("meet", "offer"): return self._meet_answer(msg, now, verb, ask)  # HASS-CHAT-1: our hike question
         disposition = self._shelf_decide(msg, now, verb, ask)
         calls = ask.get("calls") or []
         if calls and self.skills_mode != dispatch_mod.DEFAULT_MODE:
             self.dispatch._next_queued(msg, now, None, calls, ask["texts"], [], disposition)
         return disposition
+
+    def _meet_answer(self, msg, now, verb, ask) -> str:
+        """HASS-CHAT-1: our hike questions. "meet": a bare yes takes the suggested meeting place and drafts the waiting hike (its
+        notes kept); a bare no, or a yes when there was no suggestion, asks where instead and keeps the request open for his
+        answer in words. "offer": a bare yes drafts the offered change (the nearest one that can go live); no changes nothing."""
+        self._close_asks()
+        if ask.get("ask") == "offer":
+            if verb != "approve":
+                self._reply("Okay, I've left it as it is. Nothing changed.")
+                return "offer-no"
+            return self._draft(msg, now, {"ops": ask["ops"], "revises": ask["revises"]}, ask["texts"], notes=ask["notes"])
+        if verb == "approve" and isinstance(ask.get("suggest"), str) and ask["suggest"]:
+            ops = hike_chat.with_meeting(ask["ops"], ask["suggest"], self._routes(), ask.get("index"))
+            return self._draft(msg, now, {"ops": ops, "revises": ask["revises"]}, ask["texts"], notes=ask["notes"])
+        self._open_ask(msg, now, ask["texts"])  # the request stays open: his next words say where
+        self._reply(MEET_NO)
+        return "question"
 
     def _shelf_decide(self, msg, now, verb, ask) -> str:
         """HASS-SHELFCHECK-FLOW-1: the owner's bare yes or no to the open shelf-check question (never a draft's yes/no).
@@ -1484,7 +1578,7 @@ class Conversation:
         earlier = (recent or {}).get("earlier") or []  # HASS-HIKE-FLOW-1: the open request this text may be answering
         return self._draft(msg, now, result, earlier, failed=failed, req=req)
 
-    def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True):
+    def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True, notes=()):
         """Draft ``result["ops"]`` (from the interpreter, or from a skill plan: SKILLS-FW-3), or relay its question / unsupported
         reply: revises, the interpret check, the editor, the claims gate over the owner's JOINED texts, the proposal. The caller
         has already counted the model call, if there was one. Returns the disposition."""
@@ -1521,6 +1615,23 @@ class Conversation:
             return self._reply("A photo can go on one product at a time. Which product is it for?") or "photo-many-ops"
         if any(c["args"].setdefault("photo", photo) != photo for c in calls):
             return self._reply("That answer goes with a different photo, so nothing changed. Which product is this photo for?") or "photo-mismatch"
+        notes = list(notes)
+        if self.settings.get("liveSite") and any(c.get("op") in ("hike.create", "hike.update") for c in result["ops"]):  # HASS-CHAT-1
+            shaped = hike_chat.shape(result["ops"], self._routes(), events=self._sources())
+            if shaped.ask and shaped.ask["kind"] == "offer":  # sign-up asked for on a posted hike: the nearest live change, as a yes/no
+                if shaped.ask["ops"] and legacy:
+                    self._open_ask(msg, now, earlier, {"ops": shaped.ask["ops"], "revises": result["revises"], "ask": "offer", "notes": notes})
+                self._reply(shaped.ask["question"])
+                self._problem("could-not-do", "signup-offered")
+                return "question" if shaped.ask["ops"] and legacy else "not-drafted"
+            if shaped.ask and legacy:  # a trail name is not a place to meet: ask once, keep the shaped hike for his answer
+                self._open_ask(msg, now, earlier, {"ops": shaped.ops, "revises": result["revises"], "ask": "meet",
+                                                   "suggest": shaped.ask["suggest"], "index": shaped.ask.get("index"),
+                                                   "notes": [*notes, *shaped.notes]})
+                self._reply(shaped.ask["question"])
+                self._asked_again(shaped.ask["question"], msg)
+                return "question"
+            result, notes = {**result, "ops": shaped.ops}, [*notes, *shaped.notes]
         out = self.editor.prepare(result["ops"])
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
@@ -1563,7 +1674,7 @@ class Conversation:
             row = self._propose(draft, msg.sender, now)
             if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
         self._last_draft_code = row["code"]
-        self._proposal_reply(row, draft, prefix)
+        self._proposal_reply(row, draft, prefix, notes)
         return "proposed"
 
     def _photo(self, msg, now, last_try=False) -> str:  # NB-AV-09: store one photo, then open (or name) its needs-details draft
@@ -1650,10 +1761,19 @@ class Conversation:
                 self._reply("The website changed while that was waiting, and now I can't make this change. Nothing changed. "
                             + self._plain(_reason(again)))
         else:
-            self._move(row, "failed", reason=_reason(out))
+            refused = self.settings.get("liveSite") and answers.live_refused(out.get("reason"))  # HASS-LIVE-PLAN-1: the real reason, in words
+            # A failed draft is never approved again (yes only targets `proposed`), so recovery is a fresh proposal with
+            # its own code, written up from the same change; the owner's next yes (and code, when needed) approves that one.
+            again = None if refused else self.editor.prepare(json.loads(row["ops_json"]))
+            new = self._propose(again["draft"], row["sender"], now) if again and again["result"] == "ok" else None
+            self._move(row, "failed", reason=_reason(out), **({"replaced_by": new["code"]} if new else {}))
             self._problem("error", "save-failed")
-            self._reply((self.settings.get("liveSite") and answers.live_refused(out.get("reason")))  # HASS-LIVE-PLAN-1: the real reason, in words
-                        or "I couldn't save that change, so nothing changed. Please try again, or ask Graham if it keeps happening.")
+            if refused: self._reply(refused)
+            elif new:
+                self._proposal_reply(new, again["draft"], "I couldn't save that change, so nothing changed. "
+                                                          "I've written it up again so you can try once more:\n")
+            else:
+                self._reply("I couldn't save that change, so nothing changed. Please send me the request again in a minute.")
 
     def recover(self) -> list:
         """Settle drafts left `approved` by a crash from the editor's change record, then verify (once) any applied

@@ -876,6 +876,7 @@ class EndToEnd(host_tests.HostCase):
         proxy = mock.Mock(wraps=sqlite3)
         proxy.connect = lambda *a, **kw: Hooked(sqlite3.connect(*a, **kw))
         proxy.Error, proxy.Row = sqlite3.Error, sqlite3.Row
+        proxy.OperationalError = sqlite3.OperationalError  # HASS-CHAT-1: Worker.cycle now catches it, so it must be a real exception class
         return mock.patch.object(host, "sqlite3", proxy), fired
 
     def test_a_pause_moved_from_the_queue_to_the_flag_between_the_reads_is_never_reported_unpaused(self):

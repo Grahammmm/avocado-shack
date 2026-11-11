@@ -379,9 +379,9 @@ class Scratch:
             return 200, "text/html; charset=utf-8", (REPO_ROOT / want).read_bytes()
         return lambda url: maker_site.fetch(url, get=get, sleep=lambda _s: None, today=date.fromisoformat("2026-11-08"), cache=False)
 
-    def _with_set_line(self, row, draft, prefix=""):
+    def _with_set_line(self, row, draft, prefix="", notes=()):  # HASS-CHAT-1: the conversation now passes the notes it chose
         line, self.interp.chosen = self.interp.set_line(), []  # once, and only for the message whose plan chose something
-        return self._proposal_reply(row, draft, line + prefix)
+        return self._proposal_reply(row, draft, line + prefix, notes)
 
     def _seed_or_clean(self, seed):
         try: self._seed(seed)

@@ -184,7 +184,7 @@ class RepeatConversationTests(ConversationTestCase):
     def test_an_interpreter_flag_exempts_nothing(self):
         rows, result = self.ask("flagged", ("hike.repeat", {**REPEAT, "copied": True}))
         self.assertEqual(result, "question")  # an unknown argument asks; no draft row exists
-        self.assertIn("I can't do that kind of change yet. You can ask Graham.", self.replies()[0])
+        self.assertIn("I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change.", self.replies()[0])
         self.assertEqual(self.drafts(), rows)
 
 
