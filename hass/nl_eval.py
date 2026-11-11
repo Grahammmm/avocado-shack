@@ -214,6 +214,16 @@ ROWS = (("Cases scored", "scored", "{}"), ("Intent accuracy", "intentAccuracy", 
         ("Calls failed at the end", "callsFailed", "{}"), ("First attempts that timed out", "firstAttemptTimeouts", "{}"))
 
 
+def _seconds_cell(ms) -> str:
+    """Milliseconds as a one-decimal seconds cell; integers too large for float division use exact integer tenths (ties to even)."""
+    if ms is None: return "n/a"
+    try: return f"{ms / 1000:.1f}"
+    except OverflowError:
+        tenths, rest = divmod(ms, 100)
+        tenths += rest > 50 or (rest == 50 and tenths % 2 == 1)
+        return f"{tenths // 10}.{tenths % 10}"
+
+
 def report(summaries) -> str:
     """A markdown table, one column per (label, summary)."""
     labels = [label for label, _ in summaries]
@@ -221,7 +231,7 @@ def report(summaries) -> str:
     for title, key, fmt in ROWS:
         lines.append(f"| {title} | " + " | ".join("n/a" if s[key] is None else fmt.format(s[key]) for _, s in summaries) + " |")
     for title, key in (("Latency p50 (s)", "p50"), ("Latency p95 (s)", "p95")):
-        lines.append(f"| {title} | " + " | ".join("n/a" if s["latencyMs"][key] is None else f"{s['latencyMs'][key] / 1000:.1f}" for _, s in summaries) + " |")
+        lines.append(f"| {title} | " + " | ".join(_seconds_cell(s["latencyMs"][key]) for _, s in summaries) + " |")
     return "\n".join(lines)
 
 
