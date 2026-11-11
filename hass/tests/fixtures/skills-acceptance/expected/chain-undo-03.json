@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/makers.json",
+      "path": "makers.Pebble Kitchen.hidden",
+      "after": true
+    },
+    {
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175].available",
+      "before": "no"
+    },
+    {
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175].available_on",
+      "before": "2026-11-08"
+    },
+    {
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175].status",
+      "before": "active",
+      "after": "hidden"
+    },
+    {
+      "file": "hass/content/store.json",
+      "path": "selection_checked_on",
+      "before": "2026-11-08"
+    }
+  ],
+  "files": [
+    "hass/content/makers.json",
+    "hass/content/products.json",
+    "hass/content/store.json",
+    "storefront-mockup/catalog-products.js",
+    "storefront-mockup/index.html",
+    "storefront-mockup/producers.js",
+    "storefront-mockup/producers.json"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [
+      {
+        "file": "hass/content/makers.json",
+        "path": "makers.Pebble Kitchen",
+        "after": {
+          "name": "Pebble Kitchen",
+          "place": "Atascadero, California",
+          "story": "Pebble Kitchen is based in Atascadero, California.",
+          "hidden": true
+        }
+      },
+      {
+        "file": "hass/content/products.json",
+        "path": "products[photo-product-175]",
+        "after": {
+          "id": "photo-product-175",
+          "name": "Pebble jam",
+          "brand": "Pebble Kitchen",
+          "category": "pantry",
+          "image": "assets/products/photo-2cec1911a5900242.jpg",
+          "description": "Pebble jam from Pebble Kitchen in Atascadero. Butter the toast first.",
+          "producerKey": "Pebble Kitchen",
+          "displayBrand": "Pebble Kitchen",
+          "status": "hidden",
+          "imageAlt": "Pebble jam in a jar",
+          "addedOn": "2026-11-08"
+        }
+      },
+      {
+        "file": "hass/content/community.json",
+        "path": "events[hike-2026-11-21-pebble-loop-hike]",
+        "after": {
+          "id": "hike-2026-11-21-pebble-loop-hike",
+          "title": "Pebble Loop hike",
+          "startsAt": "2026-11-21T09:00:00-08:00",
+          "timezone": "America/Los_Angeles",
+          "status": "cancelled",
+          "meetingPoint": "the Pebble Loop gate",
+          "rsvpEnabled": false
+        }
+      }
+    ],
+    "assets": {
+      "storefront-mockup/assets/products/photo-2cec1911a5900242.jpg": "6de89b6af9589b8749e9fb1bbe578df8912050df3d8caa2a11e8926297962782",
+      "storefront-mockup/assets/products/photo-91c700264e60552f.jpg": "47c973da2b315c19c9ac922d3963e271d62ca93b50f0f17e9257ea449e80fd0b"
+    }
+  }
+}

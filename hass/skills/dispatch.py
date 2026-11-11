@@ -265,7 +265,7 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
                 replaced.add(name)
             continue
         if slot.kind in kinds.RESOLVERS:
-            res = _resolve(slot, value, ctx)
+            res = _resolve(slot, value, ctx, include_hidden=skill.name == "item.restore")
             if res.status == "one":
                 out.slots[name] = res.value
                 replaced.add(name)
@@ -291,12 +291,14 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
     return out
 
 
-def _resolve(slot, value, ctx):
+def _resolve(slot, value, ctx, *, include_hidden=False):
     fn = kinds.RESOLVERS[slot.kind]
     if slot.kind == "attachment":
         return fn(value)
     if not isinstance(value, str) or not value.strip():
         return kinds.Resolved("invalid", reply=f"I can't use that for the {slot.name.replace('_', ' ')}.")
+    if slot.kind == "product_ref" and include_hidden:
+        return fn(ctx.content, value, ctx.aliases, include_hidden=True)
     if slot.kind in ("product_ref", "maker_ref"):
         return fn(ctx.content, value, ctx.aliases)
     if slot.kind in ("hike_ref", "route_ref"):
