@@ -311,7 +311,8 @@ class ForgetDispositionTest(unittest.TestCase):
         self.assertEqual(list(r["totals"]["messages"]), list(ts.MESSAGE_KEYS)); self.assertEqual(len(ts.MESSAGE_KEYS), 24)
         self.assertEqual(set(r), {"result", "from", "days", "timezone", "daysSummary", "unknown", "totals"})
         text = run("--state", self.tmp, "--from", "2026-11-01")[1].splitlines()
-        totals = dict(re.findall(r"[\[\s]([^\s\[\]=]+)=(\d+)", text[8]))
+        pairs = re.findall(r"[\[\s]([^\s\[\]=]+)=(\d+)", text[8])  # messages come first; drafts also have an `other`
+        totals = dict(reversed(pairs))
         self.assertEqual((totals["commands"], totals["other"]), ("4", "1"))
         self.assertEqual((r["totals"]["messages"]["commands"], r["totals"]["messages"]["other"]), (4, 1))
         for word in FORGET: self.assertNotIn(word, "\n".join(text))
