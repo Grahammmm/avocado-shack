@@ -33,6 +33,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -62,12 +63,12 @@ LIVE_BARS = MappingProxyType({"outcome": 0.90, "diff": 0.90, "wrong_drafts_per_r
 # assertion codes: each result lists the codes it failed with
 CODES = ("wrong-skill", "wrong-disposition", "wrong-reply", "reply-queue", "write-before-yes", "apply-failed", "wrong-diff",
          "edit-undeclared", "content-rule", "unstated-claim", "bad-picture", "undo-not-identical", "residue-undeclared",
-         "duplicate-effect", "privacy-leak", "audit-missing", "harness-error")
+         "duplicate-effect", "privacy-leak", "audit-missing", "harness-error", "request-leak", "undo-order", "missing-undo-golden")
 OUTCOME_CODES = {"wrong-skill", "wrong-disposition", "wrong-reply", "reply-queue"}
 DIFF_CODES = {"wrong-diff", "edit-undeclared", "apply-failed"}
-UNDO_CODES = {"undo-not-identical", "residue-undeclared"}
+UNDO_CODES = {"undo-not-identical", "residue-undeclared", "missing-undo-golden"}
 CONTENT_CODES = {"content-rule", "unstated-claim", "bad-picture"}
-STRUCTURAL_CODES = {"write-before-yes", "duplicate-effect", "privacy-leak", "audit-missing", "harness-error"} | UNDO_CODES | CONTENT_CODES
+STRUCTURAL_CODES = {"request-leak", "undo-order", "write-before-yes", "duplicate-effect", "privacy-leak", "audit-missing", "harness-error"} | UNDO_CODES | CONTENT_CODES
 
 STRANGER = "stranger-acceptance@example.invalid"  # AV1109-18: a sender who is not an owner (the Conversation ignores it before any model call)
 ROW_KEYS = {"id", "schema_version", "tag", "skill", "skill_version", "texts", "replies", "expect", "setup", "seed", "photos", "house_render", "offsets", "senders"}
@@ -298,6 +299,11 @@ class Session:
             cfg = json.loads((self.repo.state / "config.json").read_text("utf-8"))
             settings = {"ownerSenders": [OWNER], "ownerChat": CHAT, "approvalTtlSeconds": TTL_SECONDS, "skills": {"mode": "both"},
                         "mediaRoot": self.media_root, "houseRender": row.get("house_render") is True}
+            # Synthetic empty RSVP store: undo must retain the real fail-closed guest-count gate.
+            guest_db = self.repo.state / "guests.sqlite3"
+            with sqlite3.connect(guest_db) as db:
+                db.execute("CREATE TABLE rsvps (event_id TEXT, party_size INTEGER)")
+            settings["guestCountsDb"] = str(guest_db)
             editor._write_json(self.repo.state / "config.json", {**cfg, "settings": settings})
             self.out = FixtureAdapter()
             if row.get("seed"): testkit.Scratch._seed(self, copy.deepcopy(row["seed"]))
@@ -678,7 +684,7 @@ def _approve_and_check(row, sess, registry, res, expected, observe, base, texts,
     draft = sess.drafts()[-1]
     out = sess.editor.prepare(json.loads(draft["ops_json"]))  # the same draft again: the claims gate over the joined texts, as the conversation applies it
     if out.get("result") == "ok" and claims.unstated(out["draft"], " ".join(texts), sess.conv._makers(), sess.conv._routes(), sess.conv._sources()): res.fail("unstated-claim")
-    wrong = "ffff" if draft["code"] != "ffff" else "eeee"
+    wrong = next(f"{i:04x}" for i in range(65536) if f"{i:04x}" not in {d["code"] for d in sess.drafts()})
     sess.say(f"yes {wrong}")  # a well-formed code that names no draft never approves
     if sess.snapshot() != base:
         res.fail("write-before-yes")
@@ -758,6 +764,274 @@ def _undo(sess, registry, res, expected, observe, base, after, chosen, duplicate
     return {"content": leftover, "assets": left_assets}
 
 
+# -- persistent chain ---------------------------------------------------------------------------------------------
+def load_chain(path, *, fixture_root):
+    """Closed chain admission, before scratch. 1..24 contiguous chain-NN turns (mini chains are test fixtures).
+
+    Unlike isolated rows, questions may continue the same request. expect.request pins the exact
+    {skill, slots, asked_slot, calls, attachments} for questions; completed tasks must have no live
+    request. Plan questions without a slot additionally pin their exact question. Each proposal
+    requires undo:true and a forward golden. Existing inverse goldens are preflighted; missing
+    inverses fail closed at the reverse boundary, before any undo delivery. Only the
+    first turn may seed/setup/select house rendering. Normal row admission is unchanged.
+    """
+    try: lines = Path(path).read_text("utf-8").splitlines()
+    except (OSError, UnicodeDecodeError): raise InputError("the chain file cannot be read") from None
+    rows = []
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"): continue
+        try: row = json.loads(line)
+        except ValueError: raise InputError("chain line is not JSON") from None
+        if not isinstance(row, dict): raise InputError("chain row must be an object")
+        expect = row.get("expect")
+        if not isinstance(expect, dict): raise InputError("chain expect must be an object")
+        ordinary = copy.deepcopy(row)
+        request = ordinary["expect"].pop("request", None)
+        ops = ordinary["expect"].pop("ops", None)
+        if expect.get("dispositions") == ["proposed"]:
+            if not (isinstance(ops, list) and ops and all(isinstance(o, dict) and set(o) == {"op", "args"}
+                    and isinstance(o["op"], str) and isinstance(o["args"], dict) for o in ops)):
+                raise InputError("chain proposal pins its full intended ops and targets")
+        elif ops is not None: raise InputError("only a chain proposal pins ops")
+        # First-row photos use global forward-turn indices; validate their closed shape here,
+        # while reusing ordinary validation for all other fields.
+        photos = ordinary.pop("photos", [])
+        if (not isinstance(photos, list) or any(not isinstance(p, dict) or set(p) != {"turn", "fixture"}
+                or type(p["turn"]) is not int or not 0 <= p["turn"] < 24 or not _safe_rel(p["fixture"], FIXTURE_PATH_RE) for p in photos)
+                or len({p["turn"] for p in photos}) != len(photos)):
+            raise InputError("chain photos are distinct global request indices and safe fixtures")
+        turn_texts = ordinary.get("texts")
+        if ordinary["expect"].get("picture") or (isinstance(turn_texts, list) and turn_texts == [""]):
+            ordinary["photos"] = [{"turn": 0, "fixture": "photo.jpg"}]
+        validate_row(ordinary)
+        rid = f"chain-{len(rows) + 1:02d}"
+        if row["id"] != rid or len(rows) >= 24: raise InputError("chain ids must be contiguous chain-01..chain-24")
+        if row["tag"] != "turns" or len(row["texts"]) != 1: _bad(rid, "chain has one request text and tag turns")
+        if rows and any(k in row for k in ("setup", "seed", "photos", "house_render")): _bad(rid, "chain setup belongs only to the first turn")
+        if any(k in row for k in ("offsets", "senders")) or "approval" in expect: _bad(rid, "chain uses the monotonic owner clock and named approvals")
+        question = expect["dispositions"] == ["question"]
+        if question:
+            fields = {"skill", "slots", "asked_slot", "calls", "attachments"}
+            if isinstance(request, dict) and request.get("asked_slot") is None: fields.add("question")
+            if not (isinstance(request, dict) and set(request) == fields
+                    and isinstance(request["skill"], str) and isinstance(request["slots"], dict)
+                    and (isinstance(request["asked_slot"], str) and request["asked_slot"]
+                         or request["asked_slot"] is None and isinstance(request.get("question"), str) and request["question"])
+                    and isinstance(request["calls"], list) and isinstance(request["attachments"], list)):
+                _bad(rid, "a question pins its exact request fields and one asked slot or plan question")
+        elif request is not None: _bad(rid, "only questions pin a live request")
+        if expect["dispositions"] == ["proposed"]:
+            if expect.get("undo") is not True: _bad(rid, "every chain proposal must be undone")
+            for key in (rid, rid.replace("chain-", "chain-undo-")):
+                if key != rid and not os.path.lexists(expected_path(fixture_root, key)): continue
+                golden = load_expected(fixture_root, {"id": key})
+                for entry in golden["residue"]["content"]:
+                    if not {"file", "path", "after"} <= set(entry) or set(entry) - {"file", "path", "before", "after"}: _bad(rid, "chain residue pins exact before and after")
+        load_photos(row, fixture_root)
+        rows.append(row)
+    if not rows: raise InputError("the chain has no rows")
+    if any(p["turn"] >= len(rows) for p in rows[0].get("photos", [])): raise InputError("chain photo turn is outside the chain")
+    if rows[-1]["expect"]["dispositions"] == ["question"]: raise InputError("chain ends with an unfinished request")
+    return rows
+
+
+def _chain_request(sess):
+    from hass.skills.openreq import OpenRequests
+    store = OpenRequests(sess.conv.db)
+    if not store.exists(): return None
+    rows = sess.conv.db.execute("SELECT * FROM open_requests WHERE state IN ('open','drafted')").fetchall()
+    if len(rows) > 1: raise AssertionError("multiple live requests")
+    return store.get(CHAT, sess.now) if rows else None
+
+
+def _chain_boundary(sess, res, expected=None, previous=None):
+    req = _chain_request(sess)
+    if expected is None:
+        live = sess.conv.requests.exists() and sess.conv.db.execute("SELECT 1 FROM open_requests WHERE state IN ('open','drafted')").fetchone()
+        if req is not None or live: res.fail("request-leak")
+        if any(d["state"] == "proposed" for d in sess.drafts()): res.fail("request-leak")
+    elif req is None or any(req.get(k) != v for k, v in expected.items()): res.fail("request-leak")
+    if previous is not None and (req is None or req["request_id"] != previous): res.fail("request-leak")
+    return req["request_id"] if req else None
+
+
+def _chain_delta(sess, res, base, golden):
+    from hass.skills import testkit
+    after = sess.snapshot()
+    files, diff = testkit.tree_diff(sess.wt, base["head"])
+    assets = _entries(files, after["files"], base["files"])
+    if (_norm_entries(diff) != _norm_entries(golden["diff"]) or files != sorted(golden["files"])
+            or assets != golden["assets"]): res.fail("wrong-diff")
+    if after["status"]: res.fail("undo-not-identical")
+
+
+def _chain_final(sess, res, baseline, initial_head, golden, chosen, registry):
+    from hass import sitegen
+    from hass.content_model import load_and_validate
+    from hass.editor import GENERATED_PATHS
+    from hass.skills import testkit
+    files, diff = testkit.tree_diff(sess.wt, initial_head)
+    done = sess.snapshot()
+    assets = _entries(files, done["files"], baseline["files"])
+    want = golden["residue"]
+    # Chains require equality, not the isolated engine's intentionally partial residue pins.
+    if _norm_entries(diff) != _norm_entries(want["content"]) or assets != want["assets"]: res.fail("residue-undeclared")
+    if (diff or assets) and not any(testkit._residue_declared(registry.skills[n]) for n in chosen): res.fail("residue-undeclared")
+    if (done["status"] or any(f not in GENERATED_PATHS and not f.startswith("hass/content/") and f not in assets for f in files)
+            or any(done["files"].get(p) != h for p, h in baseline["files"].items() if p.startswith(ASSET_DIR))):
+        res.fail("undo-not-identical")
+    if sitegen.stale_paths(load_and_validate(sess.wt / "hass/content", sess.wt / "storefront-mockup"), sess.wt): res.fail("undo-not-identical")
+    # Only newly added hidden/cancelled records are public content residue; never an old field edit.
+    for e in diff:
+        after = e.get("after")
+        kind = _kind_of(e)
+        valid = (not e.get("before") and isinstance(after, dict) and (
+            kind == "product" and after.get("status") == "hidden" and "available" not in after and "available_on" not in after
+            or kind == "maker" and after.get("hidden") is True
+            or kind == "event" and after.get("status") == "cancelled"))
+        if not valid: res.fail("residue-undeclared")
+    # No content values, prose, senders, absolute paths or runtime change ids in the public result.
+    res.facts["residue"] = {"content": [{"file": e["file"], "path": e["path"], "sha256": _sha(json.dumps(e["after"], sort_keys=True).encode())} for e in diff], "assets": assets}
+
+
+def run_chain(path, *, fixture_root=None, registry=None):
+    """One real session, row-relative approvals, then a strict stack of named original undos.
+
+    Returns Results in forward then reverse order; final facts carry distinct requests/controls/
+    deliveries (duplicates included). No recorder or live path, and no immediate per-row undo.
+    """
+    from hass.skills import load_skills
+    root = Path(fixture_root) if fixture_root is not None else Path(path).parent
+    rows = load_chain(path, fixture_root=root)
+    registry = registry if registry is not None else load_skills()
+    for row in rows:
+        skill = registry.skills.get(row["skill"])
+        if row["skill"] != "none" and (skill is None or skill.version != row["skill_version"]): _bad(row["id"], "stale skill or skill version")
+    seed = copy.deepcopy(rows[0])
+    seed["replies"] = [r for row in rows for r in row["replies"]]
+    sess = Session(seed, registry, root)
+    results, stack, originals, inverses, chosen = [], [], [], [], set()
+    counts = {"requests": 0, "controls": 0, "deliveries": 0}
+    texts, task_texts, previous = [], [], None
+    initial_head, baseline = sess.base_head, sess.baseline
+    res = Result("chain-01")
+    try:
+        def duplicate(msg):
+            before, c = sess.snapshot(), sess.counts()
+            counts["controls"] += 1
+            counts["deliveries"] += 1
+            if sess.replay(msg) != "duplicate" or sess.snapshot() != before or sess.counts() != c: res.fail("duplicate-effect")
+
+        # Inherited approval checks call say directly, so count every real delivery at this boundary.
+        say = sess.say
+        def counted(text, **kw):
+            counts["deliveries"] += 1
+            counts["controls"] += 1
+            texts.append(text)
+            return say(text, **kw)
+        sess.say = counted
+        photos = load_photos(rows[0], root)
+        for index, row in enumerate(rows):
+            res = Result(row["id"])
+            results.append(res)
+            res.row = row
+            sess.observed.clear()
+            base, ndrafts = sess.snapshot(), len(sess.drafts())
+            task_texts += row["texts"]
+            counts["requests"] += 1
+            msg, disp, out = sess.say(row["texts"][0], photo=photos.get(index))
+            counts["controls"] -= 1
+            duplicate(msg)
+            res.skills = sorted(set(sess.observed)) or ["none"]
+            res.dispositions = [disp]
+            if sess.snapshot() != base: res.fail("write-before-yes")
+            expect = row["expect"]
+            if [disp] != expect["dispositions"]: res.fail("wrong-disposition")
+            if not set(res.skills) <= set(expect["skills"]): res.fail("wrong-skill")
+            reply = "\n".join(out).lower()
+            if any(w.lower() not in reply for w in expect.get("reply_contains", [])) or any(w.lower() in reply for w in expect.get("reply_not_contains", [])): res.fail("wrong-reply")
+            req = _chain_request(sess)
+            if previous is not None and (req is not None and req["request_id"] != previous
+                                         or req is None and disp in ("question", "proposed")): res.fail("request-leak")
+            if disp == "proposed":
+                if len(sess.drafts()) != ndrafts + 1: res.fail("apply-failed")
+                else:
+                    draft = sess.drafts()[-1]
+                    if json.loads(draft["ops_json"]) != expect["ops"]: res.fail("wrong-diff")
+                    if row["skill"] not in res.skills: res.fail("wrong-skill")
+                    golden = load_expected(root, row)
+                    # Reuse the complete inherited claims/content/picture/declared-edit/approval checks
+                    # relative to the current approved HEAD, without its immediate undo.
+                    check_row = copy.deepcopy(row)
+                    check_row["expect"]["undo"] = False
+                    check_row["house_render"] = seed.get("house_render", False)
+                    sess.base_head = base["head"]
+                    _approve_and_check(check_row, sess, registry, res, golden, False, base, task_texts, duplicate, res.skills)
+                    if sess.snapshot()["status"]: res.fail("apply-failed")
+                    stack.append((row, draft))
+                    originals.append(draft["change_id"])
+                    chosen.update(n for n in res.skills if n in registry.skills)
+            elif len(sess.drafts()) != ndrafts: res.fail("apply-failed")
+            previous = _chain_boundary(sess, res, expect.get("request"), previous if disp == "question" else None)
+            if disp != "question": task_texts = []
+            for code in privacy_problems(sess, texts): res.fail(code)
+            if not res.ok: return results
+        if sess.interp.queue:
+            res.fail("reply-queue")
+            return results
+        missing = [row["id"].replace("chain-", "chain-undo-") for row, _draft in reversed(stack)
+                   if not os.path.lexists(expected_path(root, row["id"].replace("chain-", "chain-undo-")))]
+        if missing:
+            res = Result(missing[0])
+            res.fail("missing-undo-golden")
+            results.append(res)
+            return results
+        while stack:
+            row, original = stack.pop()
+            res = Result(row["id"].replace("chain-", "chain-undo-"))
+            results.append(res)
+            base, ndrafts = sess.snapshot(), len(sess.drafts())
+            msg, disp, _ = sess.say(f"undo {original['code']}")
+            res.dispositions = [disp]
+            if disp != "proposed" or len(sess.drafts()) != ndrafts + 1:
+                res.fail("undo-not-identical")
+                return results
+            draft = sess.drafts()[-1]
+            ops = json.loads(draft["ops_json"])
+            if ops != [{"op": "history.revert", "args": {"changeId": original["change_id"]}}]:
+                res.fail("undo-order")
+                return results
+            if sess.snapshot() != base: res.fail("write-before-yes")
+            duplicate(msg)
+            wrong = next(c for c in ("ffff", "eeee", "dddd") if c not in {d["code"] for d in sess.drafts()})
+            sess.say(f"yes {wrong}")
+            if sess.snapshot() != base: res.fail("write-before-yes")
+            approved, disp, _ = sess.say(f"yes {draft['code']}")
+            duplicate(approved)
+            if sess.drafts()[-1]["state"] not in ("applied", "verified") or sess.snapshot()["head"] == base["head"]: res.fail("undo-not-identical")
+            change = sess.editor.show(original["change_id"]).get("change", {})
+            if change.get("revertedBy") != draft["change_id"]: res.fail("undo-order")
+            inverses.append(draft["change_id"])
+            golden = load_expected(root, {"id": res.id})
+            _chain_delta(sess, res, base, golden)
+            _chain_boundary(sess, res)
+            for code in privacy_problems(sess, texts): res.fail(code)
+            if not stack: _chain_final(sess, res, baseline, initial_head, golden, chosen, registry)
+            if not res.ok: return results
+        if len(set(originals)) != len(originals) or len(set(inverses)) != len(originals) or set(originals) & set(inverses): res.fail("undo-order")
+        if sess.interp.queue: res.fail("reply-queue")
+        if not originals:
+            empty = {"residue": {"content": [], "assets": {}}}
+            _chain_final(sess, res, baseline, initial_head, empty, chosen, registry)
+    except ReplyQueueError: res.fail("reply-queue")
+    except InputError: raise
+    except Exception: res.fail("harness-error")
+    finally:
+        res.facts.update(counts, originals=len(originals), inverses=len(inverses))
+        sess.close()
+    return results
+
+
 # -- running files ------------------------------------------------------------------------------------------------
 def _refuse_policy(thresholds):
     if thresholds is not None and dict(thresholds) != dict(THRESHOLDS): raise InputError("the acceptance thresholds are constants and cannot be changed")
@@ -834,6 +1108,7 @@ def judge_selftest(results, rows):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="hass/skills/acceptance_run.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
+    ap.add_argument("--chain", metavar="FILE")
     ap.add_argument("--rows", metavar="FILE")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--record", metavar="ROW")
@@ -845,6 +1120,13 @@ def main(argv=None):
     try: args = ap.parse_args(argv)
     except SystemExit as exc: return 2 if exc.code else 0
     try:
+        if args.chain is not None:
+            if args.rows is not None or args.record is not None or args.selftest: raise InputError("--chain is exclusive with --rows, --record and --selftest")
+            results = run_chain(args.chain)
+            for result in results: print(result.line())
+            if results: print("chain: " + json.dumps(results[-1].facts, sort_keys=True))
+            print("Offline recorded chain only; machine-valid output still requires human review.")
+            return 0 if results and all(r.ok for r in results) else 1
         if args.selftest:
             if args.rows: raise InputError("--selftest runs only its own eight rows")
             rows_path = SELFTEST_ROWS

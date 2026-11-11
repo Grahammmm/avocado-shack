@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-21-pebble-loop-hike].startsAt",
+      "after": "2026-11-28T10:00:00-08:00",
+      "before": "2026-11-21T09:00:00-08:00"
+    }
+  ],
+  "files": [
+    "hass/content/community.json",
+    "storefront-mockup/community.json"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}
