@@ -152,7 +152,7 @@ def parse_facts(raw: str) -> dict:
     """The LLM's JSON reply as facts: only FACT_KEYS, each a non-empty string or None; anything else is ignored."""
     try:
         doc = json.loads(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):  # RecursionError: decoder-excessive nesting is just invalid JSON
         return dict.fromkeys(FACT_KEYS)
     doc = doc if isinstance(doc, dict) else {}
     return {k: (doc[k].strip() or None) if isinstance(doc.get(k), str) else None for k in FACT_KEYS}
