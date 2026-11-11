@@ -357,7 +357,7 @@ def rule_source_link(maker: dict, ctx) -> None:
     the migration check at the yes, so the owner is told now). ``ctx.source_urls`` overrides the frozen baseline."""
     urls = getattr(ctx, "source_urls", None)
     if maker.get("url") and maker["url"] in (SOURCE_URLS if urls is None else urls):
-        raise Refusal(f"The website link for {maker['name']} was on the site from the start, so I can't remove or change it. You can ask Graham.")
+        raise Refusal(f"The website link for {maker['name']} was on the site from the start, so I can't remove or change it from chat. Nothing changed.")
 
 
 def describe_edit(slots: dict, ctx=None) -> Outcome:
@@ -548,7 +548,7 @@ SKILLS = (
             ("nothing would change", "<Maker> already says that. I haven't changed anything."),
             ("the maker is hidden", "<Maker> is hidden. Do you want me to bring them back first?"),
             ("the website link was on the site from the start",
-             "The website link for <Maker> was on the site from the start, so I can't remove or change it. You can ask Graham."),
+             "The website link for <Maker> was on the site from the start, so I can't remove or change it from chat. Nothing changed."),
         ),
         cases=_CASES.format("maker.edit"),
     ),

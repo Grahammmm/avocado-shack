@@ -11,7 +11,7 @@ from hass.conversation import TRANSITIONS
 NOW = datetime(2026, 11, 2, 17, 0, tzinfo=timezone.utc)
 SAVED_UNCONFIRMED = ("It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't "
                      "finish. If copying it started and stopped partway, some pages may already show it. "
-                     "Please ask Graham to copy it to the website again, which puts every page in place.")
+                     "Copying it to the website again, by hand, puts every page in place.")
 # Each known state -> (did_it_work, history_words) with no install entry: the strings main gave before RF0910-5.
 TODAY = {
     "needs-details": ("It's waiting for your yes. Nothing has changed yet.", 'waiting for your yes'),
@@ -52,7 +52,7 @@ class UnknownStateTest(unittest.TestCase):
                     did = answers.did_it_work(change, install, NOW)
                     words = answers.history_words(change, install)
                     self.assertEqual(did, answers.UNKNOWN_STATE)
-                    self.assertEqual(words, "I'm not sure where this one stands - please ask Graham")
+                    self.assertEqual(words, "I'm not sure where this one stands yet")
                     for claim in ("unchanged", "Done", "waiting", "Waiting", "on the website now"):
                         self.assertNotIn(claim, did)
                         self.assertNotIn(claim, words)

@@ -262,7 +262,7 @@ class TheRulesOnRealDrafts(LiveAddBase):
         for name in ("product.set_photo", "maker.hide", "maker.restore", "store.set_phone", "store.set_hours", "route.add", "hike.samples"):
             with self.subTest(op=name):
                 self.assertIn(name, policy.PRIVATE)
-                self.assertIn("I've saved it for Graham", policy.refusal([f"not live: {name}"]))
+                self.assertIn("I've kept it on the list of changes to make by hand", policy.refusal([f"not live: {name}"]))
         for name in ("product.add", "maker.add"):
             self.assertNotIn(name, policy.PRIVATE)
 
@@ -391,7 +391,7 @@ class InChat(LiveAddBase):
         self.assertEqual(self.say("change the brand to Test Orchard"), "proposed")
         [reply] = self.replies()
         self.assertIn("I can't put this on the website from chat", reply)
-        self.assertIn("I've saved it for Graham", reply)
+        self.assertIn("I've kept it on the list of changes to make by hand", reply)
         self.assertNotIn("Reply yes", reply)
         code = self.drafts()[0]["code"]
         self.assertEqual(self.say(f"yes {code}"), "no-target")  # a yes cannot get around it

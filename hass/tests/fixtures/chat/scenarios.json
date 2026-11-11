@@ -1,0 +1,217 @@
+[
+{"about": "HASS-CHAT-1 transcript scenarios on the live site. Clock: Monday 2026-11-02 09:00 Pacific, so 'this Saturday' is 2026-11-07. A row: id, area, about, turns: [{owner, model (what a correct model returns for that text; null = the text never reaches the model), disposition, has, lacks, dates (what nl_prep.date_hints works out), event (the stored hike after a yes; null = the field is absent)}]."},
+
+{"id": "g-transcript-2026-11-09", "area": "hike",
+ "about": "G's exact texts of 2026-11-09 19:47: the time is asked; the meeting place is asked with a suggestion; the guest limit becomes words on the page with sign-up off; the route link is left out with a plain line; the yes posts it.",
+ "turns": [
+  {"owner": "Can you post a new hike for this Saturday, Fiscalini ranch bluff trail, maximum of six people can attend",
+   "model": {"question": "What time on Saturday for the Fiscalini Ranch hike?"},
+   "disposition": "question", "has": ["What time on Saturday for the Fiscalini Ranch hike?"], "dates": [{"next": "2026-11-07"}]},
+  {"owner": "10am",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Fiscalini Ranch", "date": "2026-11-07", "time": "10:00", "meetingPoint": "Fiscalini Ranch bluff trail", "rsvpEnabled": true, "capacity": 6, "trailId": "idea-fiscalini-bluff"}}], "revises": null},
+   "disposition": "question",
+   "has": ["Where should people meet for Fiscalini Ranch bluff trail hike? Meet at the Fiscalini Ranch trailhead in Cambria? Reply yes, or tell me where."],
+   "lacks": ["Here's the change"]},
+  {"owner": "yes", "model": null, "disposition": "proposed",
+   "has": ["A new hike: Fiscalini Ranch bluff trail hike", "the start time: Saturday, Nov 7 at 10 am (Pacific time)",
+           "the meeting place: Fiscalini Ranch trailhead, Cambria", "Limited to 6 people. Ask at the Shack to save a place.",
+           "The website can't take sign-ups yet, so there's no sign-up button. I'll post it limited to 6 people",
+           "I left out the link to the saved route Fiscalini Ranch: that can't go on the website from chat yet.",
+           "whether guests can sign up: no",
+           "I can't put this on the website from chat, because it mentions where the food comes from or whether it is organic",
+           "Send it again without that part, and I can put the rest on the website."],
+   "lacks": ["whether it shows", "the guest limit", "the route idea", "Reply yes"]}]},
+
+{"id": "hike-complete-in-one-text", "area": "hike",
+ "about": "Everything said at once with a real meeting place: no question, one summary, the yes posts it.",
+ "turns": [
+  {"owner": "add a hike Saturday at 8am, meet at the Cass Hill trailhead, bring water",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-07", "time": "08:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": false, "bring": "Water"}}], "revises": null},
+   "disposition": "proposed",
+   "has": ["A new hike: Cass Hill hike", "the start time: Saturday, Nov 7 at 8 am (Pacific time)", "the meeting place: Cass Hill trailhead", "what to bring: Water",
+           "Reply yes {code} to put it on the website (it should show within a few minutes)"],
+   "lacks": ["that way", "sign-ups yet", "I left out"]},
+  {"owner": "yes {code}", "model": null, "disposition": "approved", "event": {"title": "Cass Hill hike", "bring": "Water", "rsvpEnabled": false}}]},
+
+{"id": "hike-correction-mid-flow", "area": "hike",
+ "about": "'actually make it 11' after the proposal: the same hike at the new time, one new summary, the old one replaced.",
+ "turns": [
+  {"owner": "hike Saturday 10am at the Cass Hill trailhead",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-07", "time": "10:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": false}}], "revises": null},
+   "disposition": "proposed", "has": ["Saturday, Nov 7 at 10 am (Pacific time)"]},
+  {"owner": "actually make it 11",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-07", "time": "11:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": false}}], "revises": "{code}"},
+   "disposition": "proposed", "has": ["the start time: Saturday, Nov 7 at 11 am (Pacific time)", "Reply yes {code}"], "lacks": ["10 am"]},
+  {"owner": "yes {code}", "model": null, "disposition": "approved", "event": {"startsAt": "2026-11-07T11:00:00-08:00"}}]},
+
+{"id": "hike-next-saturday-is-asked", "area": "hike",
+ "about": "'next Saturday' on a Monday can mean two days: the date reader flags both, Hass asks which, the answer drafts it.",
+ "turns": [
+  {"owner": "can we do a walk next Saturday at 9 from the Cass Hill gate",
+   "model": {"question": "Do you mean this Saturday, Nov 7, or Saturday, Nov 14?"},
+   "disposition": "question", "has": ["Saturday, Nov 7, or Saturday, Nov 14?"], "dates": [{"unclear": ["2026-11-07", "2026-11-14"]}]},
+  {"owner": "the 14th",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill walk", "date": "2026-11-14", "time": "09:00", "meetingPoint": "Cass Hill gate", "rsvpEnabled": false}}], "revises": null},
+   "disposition": "proposed", "has": ["A new hike: Cass Hill walk", "Saturday, Nov 14 at 9 am (Pacific time)", "the meeting place: Cass Hill gate"],
+   "dates": [{"date": "2026-11-14"}]}]},
+
+{"id": "hike-missing-time-and-place", "area": "hike",
+ "about": "Only a day: one question at a time, then the answer drafts it.",
+ "turns": [
+  {"owner": "add a hike Saturday", "model": {"question": "What time on Saturday, and where should people meet?"},
+   "disposition": "question", "has": ["What time on Saturday"]},
+  {"owner": "9am at the Shack",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Shack hike", "date": "2026-11-07", "time": "09:00", "meetingPoint": "the Shack", "rsvpEnabled": false}}], "revises": null},
+   "disposition": "proposed", "has": ["the meeting place: the Shack", "Saturday, Nov 7 at 9 am (Pacific time)"]}]},
+
+{"id": "hike-signup-asked-for", "area": "hike",
+ "about": "He asks for RSVPs with a number: the plain truth (no sign-up on the website yet) and the nearest thing that can go live, as the yes.",
+ "turns": [
+  {"owner": "Put up a Point Buchon hike Sunday at 8, meet at the Montana de Oro main entrance, RSVP with 12 spots",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Point Buchon hike", "date": "2026-11-08", "time": "08:00", "meetingPoint": "Montana de Oro main entrance", "rsvpEnabled": true, "capacity": 12, "trailId": "idea-point-buchon"}}], "revises": null},
+   "disposition": "proposed",
+   "has": ["The website can't take sign-ups yet, so there's no sign-up button. I'll post it limited to 12 people",
+           "Limited to 12 people. Ask at the Shack to save a place.", "I left out the link to the saved route Point Buchon",
+           "Reply yes {code} to put it on the website that way", "To change something, just tell me."],
+   "lacks": ["can't put this on the website"]},
+  {"owner": "yes {code}", "model": null, "disposition": "approved",
+   "event": {"rsvpEnabled": false, "capacity": null, "description": "Limited to 12 people. Ask at the Shack to save a place."}}]},
+
+{"id": "hike-signup-without-a-number", "area": "hike",
+ "about": "Sign-up asked for, no number: sign-up off, said plainly, nothing invented.",
+ "turns": [
+  {"owner": "hike Sunday 9am Cass Hill trailhead, let people sign up",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-08", "time": "09:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": true, "noCapacityLimit": true}}], "revises": null},
+   "disposition": "proposed",
+   "has": ["The website can't take sign-ups yet, so there's no sign-up button. I'll post it without one, and people can ask you at the shop.",
+           "whether guests can sign up: no"],
+   "lacks": ["Limited to"]}]},
+
+{"id": "hike-trail-details-left-out", "area": "hike",
+ "about": "How hard and how far are trail details the website takes only by hand: left out with one plain line, the rest goes live.",
+ "turns": [
+  {"owner": "hike at the Cass Hill trailhead Saturday 9am, moderate, 3 miles",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-07", "time": "09:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": false, "difficulty": "moderate", "distance": "3 miles"}}], "revises": null},
+   "disposition": "proposed",
+   "has": ["I left out how hard it is (moderate), how far it is (3 miles): trail details like that can't go on the website from chat yet.",
+           "Reply yes {code} to put it on the website that way"],
+   "lacks": ["can't put this on the website", "how hard it is: moderate"]},
+  {"owner": "yes {code}", "model": null, "disposition": "approved", "event": {"difficulty": null, "distance": null, "meetingPoint": "Cass Hill trailhead"}}]},
+
+{"id": "hike-meeting-place-in-his-words", "area": "hike",
+ "about": "He says no to the suggested meeting place and names his own: that is what goes on the page.",
+ "turns": [
+  {"owner": "Fiscalini Ranch hike Sunday 10am",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Fiscalini Ranch hike", "date": "2026-11-08", "time": "10:00", "meetingPoint": "Fiscalini Ranch", "rsvpEnabled": false, "trailId": "idea-fiscalini-bluff"}}], "revises": null},
+   "disposition": "question", "has": ["Meet at the Fiscalini Ranch trailhead in Cambria? Reply yes, or tell me where."]},
+  {"owner": "no", "model": null, "disposition": "question", "has": ["Where should people meet? Tell me the spot"]},
+  {"owner": "the bench at the end of Windsor Blvd",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Fiscalini Ranch hike", "date": "2026-11-08", "time": "10:00", "meetingPoint": "The bench at the end of Windsor Blvd", "rsvpEnabled": false, "trailId": "idea-fiscalini-bluff"}}], "revises": null},
+   "disposition": "proposed", "has": ["the meeting place: The bench at the end of Windsor Blvd", "I left out the link to the saved route Fiscalini Ranch"]}]},
+
+{"id": "hike-abbreviated-place-yes-keeps-the-confirmed-meeting-place", "area": "hike",
+ "about": "He names the route in short (\"Fiscalini\"); the question suggests the full trailhead; his yes puts that trailhead on the hike, so the proposal and the stored hike carry the place he confirmed, not the short name.",
+ "turns": [
+  {"owner": "Fiscalini hike Sunday 10am",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Fiscalini Ranch hike", "date": "2026-11-08", "time": "10:00", "meetingPoint": "Fiscalini", "rsvpEnabled": false, "trailId": "idea-fiscalini-bluff"}}], "revises": null},
+   "disposition": "question", "has": ["Meet at the Fiscalini Ranch trailhead in Cambria? Reply yes, or tell me where."]},
+  {"owner": "yes", "model": null, "disposition": "proposed",
+   "has": ["the meeting place: Fiscalini Ranch trailhead, Cambria"], "lacks": ["the meeting place: Fiscalini\n"]},
+  {"owner": "yes {code}", "model": null, "disposition": "no-target",
+   "has": ["About a new hike: Fiscalini Ranch hike: I can't put this on the website from chat, because it mentions where the food comes from or whether it is organic",
+           "Send it again without that part, and I can put the rest on the website."]}]},
+
+{"id": "hike-signup-turned-on-later-is-refused-with-an-alternative", "area": "hike",
+ "about": "Turning sign-up on for a posted hike cannot go live: the reply says what it understood, why, and the nearest thing that can.",
+ "turns": [
+  {"owner": "hike Saturday 9am at the Cass Hill trailhead",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-07", "time": "09:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": false}}], "revises": null},
+   "disposition": "proposed"},
+  {"owner": "yes {code}", "model": null, "disposition": "approved"},
+  {"owner": "turn on sign-ups for the Cass Hill hike, 10 spots",
+   "model": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-07-cass-hill-hike", "rsvpEnabled": true, "capacity": 10}}], "revises": null},
+   "disposition": "question",
+   "has": ["The website can't take sign-ups yet, so I can't turn sign-up on for Cass Hill hike. I can add Limited to 10 people. Ask at the Shack to save a place. to its description instead, so people ask you at the shop. Want that? Reply yes or no."],
+   "lacks": ["Here's the change"]},
+  {"owner": "yes", "model": null, "disposition": "proposed",
+   "has": ["Cass Hill hike, the description", "Limited to 10 people. Ask at the Shack to save a place.", "Reply yes {code} to put it on the website"]},
+  {"owner": "yes {code}", "model": null, "disposition": "approved",
+   "event": {"rsvpEnabled": false, "capacity": null, "description": "Limited to 10 people. Ask at the Shack to save a place."}}]},
+
+{"id": "signup-offer-declined", "area": "hike",
+ "about": "He says no to the offer: nothing changes, and he is told so.",
+ "turns": [
+  {"owner": "hike Sunday 8am at the Cass Hill trailhead",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-08", "time": "08:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": false}}], "revises": null},
+   "disposition": "proposed"},
+  {"owner": "yes {code}", "model": null, "disposition": "approved"},
+  {"owner": "cap the Cass Hill hike at 8",
+   "model": {"ops": [{"op": "hike.update", "args": {"id": "hike-2026-11-08-cass-hill-hike", "capacity": 8}}], "revises": null},
+   "disposition": "question", "has": ["I can add Limited to 8 people. Ask at the Shack to save a place. to its description instead"]},
+  {"owner": "no", "model": null, "disposition": "offer-no", "has": ["Okay, I've left it as it is. Nothing changed."]}]},
+
+{"id": "hours-refused-again-at-yes", "area": "hours",
+ "about": "A yes to a change that cannot go live says what it was about, why it stops, and that nothing is lost.",
+ "turns": [
+  {"owner": "change Saturday hours to 8 to 4",
+   "model": {"ops": [{"op": "store.set_hours", "args": {"hours": ["Monday–Friday 9am–6pm", "Saturday 8am–4pm · Closed Sunday"]}}], "revises": null},
+   "disposition": "proposed", "has": ["because it changes the shop hours"]},
+  {"owner": "yes {code}", "model": null, "disposition": "no-target",
+   "has": ["About the opening hours for Avocado Shack: I can't put this on the website from chat, because it changes the shop hours. Nothing will be published."]}]},
+
+{"id": "special-no-price", "area": "specials",
+ "about": "A weekly special in his words goes live with the yes.",
+ "turns": [
+  {"owner": "add a special: free fig tasting this Saturday, ends Sunday",
+   "model": {"ops": [{"op": "specials.add", "args": {"title": "Fig tasting", "deal": "Free taste of fresh figs", "start": "2026-11-07", "end": "2026-11-08"}}], "revises": null},
+   "disposition": "proposed", "has": ["Reply yes {code} to put it on the website"], "lacks": ["can't put this"]}]},
+
+{"id": "special-with-a-price-says-the-way-forward", "area": "specials",
+ "about": "A price can't go on the website: the reply says so and the one step that works (send it without the price).",
+ "turns": [
+  {"owner": "special on strawberries, 2 baskets for $6 until Sunday",
+   "model": {"ops": [{"op": "specials.add", "args": {"title": "Strawberries", "deal": "Fresh strawberries, 2 baskets for $6", "end": "2026-11-08"}}], "revises": null},
+   "disposition": "proposed",
+   "has": ["I can't put this on the website from chat, because it mentions a price, and I can't check that from chat.",
+           "Send it again without that part, and I can put the rest on the website."]}]},
+
+{"id": "sold-out-needs-todays-shelf-check", "area": "sold-out",
+ "about": "Sold out before today's shelf check: Hass asks one yes/no question, and the yes drafts both.",
+ "turns": [
+  {"owner": "we're out of lemons",
+   "model": {"ops": [{"op": "product.set_availability", "args": {"id": "photo-product-017", "available": "no"}}], "revises": null},
+   "disposition": "question", "has": ["is the shelf list right for today?"]},
+  {"owner": "yes", "model": null, "disposition": "proposed", "has": ["Lemons", "Reply yes {code} to put it on the website"]}]},
+
+{"id": "hours-are-kept-for-by-hand", "area": "hours",
+ "about": "Shop hours can't change from chat: plain why, nothing lost, never 'ask Graham'.",
+ "turns": [
+  {"owner": "we're open till 7 on weekdays now",
+   "model": {"ops": [{"op": "store.set_hours", "args": {"hours": ["Monday–Friday 9am–7pm", "Saturday 9am–5pm · Closed Sunday"]}}], "revises": null},
+   "disposition": "proposed",
+   "has": ["I can't put this on the website from chat, because it changes the shop hours.", "Nothing will be published.",
+           "I've kept it on the list of changes to make by hand, so it isn't lost."]}]},
+
+{"id": "new-item-asks-for-the-photo", "area": "new-items",
+ "about": "A new item without a photo: one question, nothing drafted.",
+ "turns": [
+  {"owner": "we have a new quince jam from Test Orchard in Paso Robles",
+   "model": {"question": "Could you send a photo of the quince jam?"},
+   "disposition": "question", "has": ["Could you send a photo of the quince jam?"]}]},
+
+{"id": "photo-asks-for-the-picture", "area": "photos",
+ "about": "A new photo asked for in words only: one question.",
+ "turns": [
+  {"owner": "put a new photo on the lemons", "model": {"question": "Send the new photo of the lemons, and I'll put it with them."},
+   "disposition": "question", "has": ["Send the new photo of the lemons"]}]},
+
+{"id": "undo-the-last-change", "area": "undo",
+ "about": "Undo after a posted hike: the undo is proposed and its yes puts the page back.",
+ "turns": [
+  {"owner": "hike Sunday 9am at the Cass Hill trailhead",
+   "model": {"ops": [{"op": "hike.create", "args": {"title": "Cass Hill hike", "date": "2026-11-08", "time": "09:00", "meetingPoint": "Cass Hill trailhead", "rsvpEnabled": false}}], "revises": null},
+   "disposition": "proposed"},
+  {"owner": "yes {code}", "model": null, "disposition": "approved"},
+  {"owner": "undo", "model": null, "disposition": "proposed", "has": ["Reply yes {code} to put it on the website"]},
+  {"owner": "yes {code}", "model": null, "disposition": "approved"}]}
+]
