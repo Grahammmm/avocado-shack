@@ -194,9 +194,7 @@ class Folders(unittest.TestCase):
         boom = PermissionError(13, "Permission denied", str(folder))
         with mock.patch.object(photo_trial.os, "scandir", side_effect=boom):
             self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
-        with mock.patch.object(photo_trial.Path, "exists", side_effect=boom):
-            self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
-        with mock.patch.object(photo_trial.Path, "is_symlink", side_effect=OSError(5, "I/O error", str(folder))):
+        with mock.patch.object(photo_trial.os, "open", side_effect=boom):
             self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
 
     def test_flat_sorted_case_insensitive_candidates(self):
@@ -252,10 +250,10 @@ class Failures(unittest.TestCase):
                                 "c-gone.png": _PHOTOS["bottle-bench-png.png"], "d-ok.jpg": _PHOTOS["jar-phone-rotated.jpg"]})
         real = photo_trial._read_photo
 
-        def read(path):
+        def read(path, dir_fd=None):
             if path.name == "c-gone.png":
                 raise OSError("secret path /nope")
-            return real(path)
+            return real(path, dir_fd=dir_fd)
         with mock.patch.object(photo_trial, "_read_photo", read):
             code, out, err = _run([str(folder), "--json"])
         self.assertEqual((code, err), (1, ""))
@@ -284,6 +282,122 @@ class Failures(unittest.TestCase):
         with mock.patch.object(item_picture, "picture_review", return_value=((), ())):
             code, out, err = _run([str(folder)])
         self.assertEqual((code, out), (2, ""))
+
+
+class Substitution(unittest.TestCase):
+    """The admitted folder is held by descriptor: replacing its name or a photo's name afterwards must not redirect reads."""
+    ORIGINAL, CANARY = b"ORIGINAL-EXTERNAL-BYTES", b"FAKE-REPOSITORY-CANARY"
+
+    def _world(self, replacement_in_repo=True):
+        base = _tmp(self)
+        fake = base / "repo"
+        (fake / "inside").mkdir(parents=True)
+        other = base / "other"
+        other.mkdir()
+        target = fake / "inside" if replacement_in_repo else other
+        folder = base / "photos"
+        folder.mkdir()
+        for place in (folder, target):
+            (place / "probe.jpg").write_bytes(self.ORIGINAL if place == folder else self.CANARY)
+        return base, fake, folder, target
+
+    def _swap_folder(self, base, folder, target):
+        real = photo_trial._read_photo
+        done = []
+
+        def read(path, dir_fd=None):
+            if not done:  # after the listing, immediately before the real reader
+                done.append(1)
+                folder.rename(base / "moved")
+                folder.symlink_to(target)
+            return real(path, dir_fd=dir_fd)
+        return read
+
+    def _assert_replacement_not_read(self, replacement_in_repo, extra):
+        base, fake, folder, target = self._world(replacement_in_repo)
+        seen = []
+
+        def assess(name, data):
+            seen.append(data)
+            return photo_trial._row(name, "pass", [], [])
+        with mock.patch.object(photo_trial, "REPO_ROOT", fake), mock.patch.object(photo_trial, "assess_photo", assess), \
+                mock.patch.object(photo_trial, "_read_photo", self._swap_folder(base, folder, target)):
+            code, out, err = _run([str(folder), *extra])
+        self.assertTrue(folder.is_symlink())  # the swap really happened
+        self.assertNotIn(self.CANARY, seen)
+        if code == 0:  # original bytes through the pinned descriptor, or a fixed refusal
+            self.assertEqual(seen, [self.ORIGINAL])
+        else:
+            self.assertEqual((code, out, seen), (2, "", []))
+            self.assertNotIn(str(base), err)
+
+    def test_parent_swap_after_listing_never_reads_replacement(self):
+        for extra in ((), ("--json",)):
+            self._assert_replacement_not_read(True, extra)
+
+    def test_parent_swap_to_other_external_directory_is_not_a_new_input(self):
+        for extra in ((), ("--json",)):
+            self._assert_replacement_not_read(False, extra)
+
+    def test_component_swap_during_directory_open_refuses_without_reads(self):
+        base, fake, folder, target = self._world()
+        real_open = os.open
+        swapped = []
+
+        def opener(path, flags, *args, **kw):
+            if path == "photos" and not swapped:  # the component changes after the preliminary look
+                swapped.append(1)
+                folder.rename(base / "moved")
+                folder.symlink_to(target)
+            return real_open(path, flags, *args, **kw)
+        with mock.patch.object(photo_trial, "REPO_ROOT", fake), mock.patch.object(photo_trial.os, "open", opener), \
+                mock.patch.object(photo_trial, "_read_photo") as read, mock.patch.object(photo_trial, "assess_photo") as assess:
+            code, out, err = _run([str(folder)])
+        self.assertTrue(swapped)
+        self.assertEqual((code, out), (2, ""))
+        self.assertFalse(read.called or assess.called)
+        self.assertIn("symbolic link", err)
+        self.assertNotIn(str(base), err)
+
+    def test_leaf_swap_after_enumeration_never_follows_link(self):
+        for name in ("probe.jpg", "probe.PNG"):
+            folder = _tmp(self) / "photos"
+            folder.mkdir()
+            (folder / name).write_bytes(self.ORIGINAL)
+            canary = folder.parent / "canary.bin"
+            canary.write_bytes(self.CANARY)
+            real = photo_trial._read_photo
+
+            def read(path, dir_fd=None):
+                (folder / name).unlink()
+                (folder / name).symlink_to(canary)
+                return real(path, dir_fd=dir_fd)
+            with mock.patch.object(photo_trial, "_read_photo", read), mock.patch.object(photo_trial, "assess_photo") as assess:
+                code, out, err = _run([str(folder), "--json"])
+            self.assertEqual((code, out), (2, ""), name)
+            self.assertFalse(assess.called)
+            self.assertIn("symbolic link", err)
+            self.assertNotIn(str(folder), err)
+
+    def test_input_descriptors_close_on_every_exit(self):
+        def count():
+            return len(os.listdir("/proc/self/fd"))
+        folder = _folder(self, {"a.jpg": _PHOTOS["jar-white-sheet.jpg"]})
+        missing = folder.parent / "missing"
+        passed = lambda name, data: photo_trial._row(name, "pass", [], [])  # noqa: E731
+        before = count()
+        with mock.patch.object(photo_trial, "assess_photo", passed):
+            self.assertEqual(_run([str(folder)])[0], 0)  # success
+        self.assertEqual(_run([str(missing)])[0], 2)  # path refusal
+        self.assertEqual(_run([str(folder / "a.jpg")])[0], 2)  # not a folder
+        with mock.patch.object(photo_trial, "_read_photo", side_effect=OSError("gone")):
+            self.assertEqual(_run([str(folder)])[0], 1)  # file read failure
+        with mock.patch.object(photo_trial, "_tools", side_effect=ImportError("x")):
+            self.assertEqual(_run([str(folder)])[0], 2)  # setup failure
+        with mock.patch.object(photo_trial, "assess_photo", side_effect=RuntimeError("render blew up")):
+            with self.assertRaises(RuntimeError):
+                _run([str(folder)])
+        self.assertEqual(count(), before)
 
 
 class Privacy(unittest.TestCase):
