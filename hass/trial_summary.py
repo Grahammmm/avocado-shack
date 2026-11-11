@@ -79,12 +79,12 @@ def _check_store(state_dir):
 
 
 def _rows(db, tables, table, wanted, optional):
-    """Rows of `wanted` columns (required) plus `optional` ones (NULL when the old table lacks them); [] without the table."""
+    """Rows of `wanted` columns (required) plus `optional` ones (NULL when the old table lacks them); [] without the table; a lazy cursor, consumed before the connection closes."""
     if table not in tables: return []
     have = {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
     if not set(wanted) <= have: raise Unreadable
     cols = [*wanted, *(c if c in have else "NULL" for c in optional)]
-    return db.execute(f"SELECT {', '.join(cols)} FROM {table}").fetchall()
+    return db.execute(f"SELECT {', '.join(cols)} FROM {table}")
 
 
 def summarize(state_dir, start, days):
