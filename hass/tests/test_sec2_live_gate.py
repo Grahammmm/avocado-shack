@@ -272,6 +272,12 @@ class RETURN597PhoneDomainNameTests(unittest.TestCase):
             self.refused(f"Email {spelled}.", "contact")
         self.assertEqual(policy.check(edit_draft("See harborlane.photography for details")), ["protected sentences: contact"])
 
+    def test_2_one_character_names_with_any_registered_ending_are_contact(self):
+        for host in ("x.pizza", "a.io", "q.photography", "z.xyz/menu", "X.Pizza", "a.b.pizza"):
+            self.refused(f"See {host} for details", "contact")
+        for text in ("See a plain sentence here.", "Version 1.5 is fine, a.k.a. the jam.", "Saturday at 5 p.m. sharp."):
+            with self.subTest(text=text): self.assertEqual(policy.check(hike_draft(text)), [])
+
     def test_2_the_ending_list_is_the_whole_iana_list(self):
         from hass.tlds import TLDS
         self.assertGreater(len(TLDS), 1400)

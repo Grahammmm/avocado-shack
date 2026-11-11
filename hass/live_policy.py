@@ -40,15 +40,12 @@ PHONE = re.compile(
     + _PHONE_SEP + r"\d{4}(?![\w]|[.,]\d)"
     + r"|(?<![\w+])\+\s?\d(?:[ \t.\-()]?\d){7,14}(?![\w]|[.,]\d)")
 # HASS-SEC-2 (RETURN t_439e2607, finding 2): a bare web address is any name.ending whose ending is a registered top-level domain
-# (hass.tlds, the whole IANA list), not a short list: harborlane.photography is contact details like harborlane.com. The short
-# list stays as the one-letter-name guard below: "e.g." and "i.e." are not addresses, but "t.co" and "x.com" are.
-_COMMON_TLDS = frozenset({"com", "net", "org", "edu", "gov", "io", "co", "us", "info", "biz", "me", "app", "dev", "shop", "store",
-                          "farm", "ca", "uk", "ai", "online", "site", "xyz", "live", "page", "link", "website"})
+# (hass.tlds, the whole IANA list), not a short list: harborlane.photography is contact details like harborlane.com. A one-letter name counts too (x.pizza, a.io).
+# because no one-letter ending exists, "e.g." and "i.e." are still not addresses.
 _TLDS = r"(?:" + "|".join(sorted(TLDS, key=lambda t: (-len(t), t))) + r")"
-_COMMON = r"(?:" + "|".join(sorted(_COMMON_TLDS, key=lambda t: (-len(t), t))) + r")"
 URL = re.compile(r"(?:https?://|www\.)\S+"
                  r"|(?<![\w@.\-])[a-z0-9][a-z0-9\-]*[a-z0-9](?:\.[a-z0-9\-]+)*\." + _TLDS + r"(?![\w\-])"   # a name of 2+ characters
-                 r"|(?<![\w@.\-])[a-z0-9](?:\.[a-z0-9\-]+)*\." + _COMMON + r"(?![\w\-])", re.I)            # a 1-character name: common endings only
+                 r"|(?<![\w@.\-])[a-z0-9](?:\.[a-z0-9\-]+)*\." + _TLDS + r"(?![\w\-])", re.I)            # a 1-character name: any registered ending (x.pizza)
 _AT, _DOT = r"\s*[\[(]?\s*(?:@|\bat\b)\s*[\])]?\s*", r"\s*[\[(]?\s*(?:\.|\bdot\b)\s*[\])]?\s*"
 SPELLED_ADDRESS = re.compile(r"\b[\w.+\-]+" + _AT + r"[\w\-]+(?:" + _DOT + r"[\w\-]+)*?" + _DOT + _TLDS + r"\b", re.I)
 SPELLED_HOST = re.compile(r"\b[\w\-]+\s*[\[(]?\s*\bdot\b\s*[\])]?\s*" + _TLDS + r"\b", re.I)
