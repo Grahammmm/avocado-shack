@@ -8,6 +8,8 @@ REST (docs.bluebubbles.app): GET /api/v1/message/{guid}?with=attachment -> {"dat
 GET /api/v1/attachment/{guid}/download -> raw bytes.
 A download whose length differs from the attachment's declared int totalBytes is refused as size-mismatch.
 Attachments after the first n are never read or checked.
+A repeated JSON member `data`, `attachments`, or (in the first n attachments) `guid` or `totalBytes` is ambiguous: a `shape`
+refusal before any download, even for equal values or escaped spellings. Other repeated members, and repeats after n, are ignored.
 A guid is scalar text: non-empty, at most MAX_GUID code points, no C0/C1 control and no surrogate code point
 (U+D800-U+DFFF, which UTF-8 cannot encode); a bad attachment guid in the first n is a `shape` refusal before any download.
 """
@@ -34,6 +36,20 @@ def _urllib_transport(url, headers, timeout, limit):
     except urllib.error.HTTPError as exc:
         exc.close()
         return exc.code, b""
+
+
+class _Obj(dict):
+    """Decoded JSON object that remembers which decoded key names were repeated (names only, no values)."""
+    dups = frozenset()
+
+
+def _pairs(pairs):
+    obj, seen = _Obj(), set()
+    for k, v in pairs:
+        if k in obj: seen.add(k)
+        obj[k] = v
+    obj.dups = frozenset(seen)
+    return obj
 
 
 def _valid_guid(value):
@@ -82,13 +98,14 @@ class BlueBubblesPhotos:
     def _attachment_ids(meta, n):
         """(code, ids): the first n (guid, declared totalBytes or None) pairs from the metadata, or a failure code."""
         try:
-            doc = json.loads(meta.decode("utf-8"))
+            doc = json.loads(meta.decode("utf-8"), object_pairs_hook=_pairs)
         except (UnicodeDecodeError, ValueError, RecursionError):
             return "not-json", []
         data = doc.get("data") if isinstance(doc, dict) else None
         items = data.get("attachments") if isinstance(data, dict) else None
-        if not isinstance(items, list): return "shape", []
-        head = items[:n]  # H10: only these are downloaded or checked; each guid bounded like the message guid, unique
+        if not isinstance(items, list) or "data" in doc.dups or "attachments" in data.dups: return "shape", []
+        head = items[:n]
+        if any(isinstance(a, _Obj) and a.dups & {"guid", "totalBytes"} for a in head): return "shape", []  # ambiguous key  # H10: only these are downloaded or checked; each guid bounded like the message guid, unique
         if not all(isinstance(a, dict) and isinstance(a.get("guid"), str) and a["guid"] for a in head):
             return "shape", []
         if len({a["guid"] for a in head}) < len(head) or any(
