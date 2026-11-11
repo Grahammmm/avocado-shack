@@ -109,6 +109,10 @@ def _why(case, reply, registry):
     expect, same = case["expect"], lambda a, b: json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
     if _kind(got) != _kind(expect): return f"expected {_kind(expect)}, got {_kind(got)}"
     if "ops" not in expect: return None
+    for call in expect["ops"]:  # RF2210-12: expected names are case data; never format an unregistered one into a reason
+        op = registry.get(call["op"])
+        if op is None: return "expected op is not registered"
+        if any(k not in op.args for k in call["args"]): return "expected arg is not registered"
     names, wanted = [c["op"] for c in got["ops"]], [c["op"] for c in expect["ops"]]
     if names != wanted: return f"ops {','.join(names)} but expected {','.join(wanted)}"
     for n, (have, call) in enumerate(zip(got["ops"], expect["ops"]), 1):
