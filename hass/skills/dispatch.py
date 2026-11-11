@@ -803,7 +803,7 @@ class Dispatcher:
                 conv._reply(PLAN_FAILED)
                 return "not-drafted"
             return refused
-        note = self._note_lines(parts)
+        note = self._note_lines(parts, left)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
                                   prefix="\n".join(note) + "\n" if note else "", legacy=False)
         if disposition == "proposed":  # HASS-SEC-3 (L3): each drafted call's own source record, as for one skill

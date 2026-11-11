@@ -449,5 +449,130 @@ class Pictures(Base):
         self.assertEqual(res.codes, ["wrong-diff"])
 
 
+# -- AV1109-17: the Primary corpus (one row per registered skill) ---------------------------------------------------
+# First example sentence of each catalog entry (SKILLS-SPEC section 3, docs/hass/skills/specials.md and social.md), tags such as (p) removed.
+FIRST_SENTENCES = {
+    'answer.site': 'what time do we close saturday?',
+    'backlog.log': 'can you order more eggs from the farm',
+    'hike.add': 'add a hike Saturday at 8am, Mill Creek trailhead, easy, bring water',
+    'hike.cancel': 'cancel the Point Buchon hike, rained out - we will pick a new date soon',
+    'hike.edit': 'change the Cass Hill meeting point to the upper lot',
+    'hike.recap': 'recap: 12 people, great morning',
+    'hike.repeat': 'do the Cass Hill hike again on the 29th at 9',
+    'hike.reschedule': 'can we push the Morro Rock Beach Stroll back to 10am, the tide is lower later',
+    'item.add': 'new honey from Cal Poly, goes on the pantry shelf',
+    'item.edit': 'rename the Hass avocado to Hass avocados',
+    'item.hide': 'hide the plums',
+    'item.picture': 'new picture for the lemons',
+    'item.restore': 'bring back the lemons',
+    'maker.add': 'add a maker: Bee Happy Farm in Atascadero, they keep bees on the hill, beehappyfarm.com',
+    'maker.edit': "update Etto's story: they started in a small kitchen and now dry pasta slowly",
+    'maker.hide': 'we stopped carrying Etto',
+    'maker.restore': 'Etto is back',
+    'page.about': 'change the about text to: Michael has been buying produce for 30 years and knows every grower',
+    'page.faq': 'add an FAQ',
+    'page.home': 'change the headline to Fresh from the coast. Picked this week.',
+    'page.photo': "use this for the home page, it's the front of the shop",
+    'report.shelf': 'morning report',
+    'shop.contact': 'our new number is 805-555-0100',
+    'shop.hours': "we're open till 7 on fridays now",
+    'shop.notice': "put a notice up: we're closed Thanksgiving, back Friday",
+    'social.hike': 'announcement for the Cass Hill hike',
+    'social.item': 'write an instagram post for the honey',
+    'social.maker': "write a meet the maker post for Linn's",
+    'social.recap': "write the thank-you post for Saturday's hike",
+    'specials.add': 'put the avocado honey on special this week, 2 for 5 dollars',
+    'specials.clear_expired': 'clear out the old specials',
+    'specials.edit': 'extend the honey special to next Sunday',
+    'specials.remove': 'take the special off',
+    'specials.show': "what are this week's specials",
+    'stock.checked': 'I checked the selection today: the avocados are in, the eggs are limited, the sourdough is sold out',
+    'stock.clear': 'stop showing the eggs as sold out',
+    'stock.restock': 'more honey coming Thursday',
+    'stock.set': 'eggs are out',
+}
+PHOTO_SOURCES = {  # the eight synthetic photos of #504 (reports/hass/newitem-1/synthetic): five clean, three warned
+    "jar-white-sheet.jpg": True, "bottle-grey-wall-tilted.jpg": True, "jar-phone-rotated.jpg": True, "bottle-bench-png.png": True,
+    "jar-cutout-alpha.png": True, "bag-bench-small.jpg": False, "jar-dark-wood.jpg": False, "bag-red-cloth.jpg": False}
+# Rows pinned to a dependency behaviour that blocks the draft; each must be fixed by its owner and re-recorded (README, "Held rows").
+HELD = {"primary-item-restore": "refused", "primary-page-about": "question", "primary-maker-edit": "question", "primary-stock-set": "question",
+        "photo-bag-bench-small": "not-drafted", "photo-jar-dark-wood": "not-drafted", "photo-bag-red-cloth": "not-drafted"}
+
+
+class PrimaryCorpus(Base):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.rows = A.load_rows(A.DEFAULT_ROWS)
+        cls.results = A.run_rows(A.DEFAULT_ROWS, registry=cls.registry)
+
+    def primaries(self, rows=None):
+        return [r for r in (rows or self.rows) if r["tag"] == "primary"]
+
+    def coverage_problems(self, rows):
+        names = [r["skill"] for r in self.primaries(rows)]
+        reg = self.registry.skills
+        problems = [f"missing {n}" for n in sorted(set(reg) - set(names))] + [f"unknown {n}" for n in sorted(set(names) - set(reg))]
+        problems += [f"duplicate {n}" for n in sorted({n for n in names if names.count(n) > 1})]
+        problems += [f"stale {r['skill']}" for r in self.primaries(rows) if r["skill"] in reg and r["skill_version"] != reg[r["skill"]].version]
+        return problems
+
+    def test_primary_set_equals_registry_once(self):
+        self.assertEqual(self.coverage_problems(self.rows), [])
+        self.assertEqual(set(FIRST_SENTENCES), set(self.registry.skills))  # a skill added later needs its sentence here too
+        without = [r for r in self.rows if r["id"] != "primary-shop-hours"]
+        self.assertEqual(self.coverage_problems(without), ["missing shop.hours"])
+        stale = [dict(r, skill_version=2) if r["id"] == "primary-shop-hours" else r for r in self.rows]
+        self.assertEqual(self.coverage_problems(stale), ["stale shop.hours"])
+        self.assertEqual(self.coverage_problems(self.rows + [self.rows[0]]), [f"duplicate {self.rows[0]['skill']}"])
+
+    def test_primary_first_sentence_matches_catalog(self):
+        for r in self.primaries():
+            self.assertEqual(r["texts"][0], FIRST_SENTENCES[r["skill"]], r["id"])
+            self.assertEqual(r["id"], "primary-" + r["skill"].replace(".", "-"))
+
+    def test_all_primary_rows_replay_real_dispatch_at_100_percent(self):
+        self.assertEqual(len(self.results), len(self.rows))
+        self.assertEqual([(r.id, r.codes) for r in self.results if not r.ok], [("acc-multi-01", ["wrong-disposition"])])  # AV1109-18: the one recorded genuine failure (README, "Known failures"); delete this entry when the router is fixed
+        by_id = {r.id: r for r in self.results}
+        self.assertEqual(by_id["primary-report-shelf"].dispositions, ["report"])  # an existing command: command precedence, no model call
+        self.assertEqual(by_id["primary-report-shelf"].facts["model_calls"], 0)
+
+    def test_expected_inventory_and_reviewed_declarations(self):
+        want = {r["expect"]["expected"] for r in self.rows if r["expect"].get("expected")}
+        have = {p.name for p in (A.FIXTURE_ROOT / "expected").glob("*.json")}
+        self.assertEqual(want, have)  # every proposal has a golden, no orphan
+        broken = self.root([dict(r) for r in self.rows if r["id"] == "primary-stock-clear"] and [r for r in self.rows if r["id"] == "primary-stock-clear"])
+        (broken / "expected").mkdir()
+        golden = json.loads((A.FIXTURE_ROOT / "expected" / "primary-stock-clear.json").read_text("utf-8"))
+        golden["diff"][0]["before"] = "limited"  # a corrupted golden fails the exact diff
+        (broken / "expected" / "primary-stock-clear.json").write_text(json.dumps(golden), "utf-8")
+        [res] = A.run_rows(broken / "messages.jsonl", registry=self.registry)
+        self.assertEqual(res.codes, ["wrong-diff"])
+
+    def test_photo_rows_eight_unique_five_clean_three_warned(self):
+        photo_rows = [r for r in self.rows if r.get("photos") and r["tag"] in ("primary", "photo")]  # AV1109-18: the forty rows' own photo turn is not one of the eight
+        fixtures = sorted(Path(r["photos"][0]["fixture"]).name for r in photo_rows)
+        self.assertEqual(sorted(PHOTO_SOURCES), fixtures)
+        for name, clean in PHOTO_SOURCES.items():
+            self.assertEqual((A.FIXTURE_ROOT / "photos" / name).read_bytes(), (SYNTHETIC / name).read_bytes(), name)  # the committed source bytes
+        warned = [r for r in photo_rows if Path(r["photos"][0]["fixture"]).name not in {n for n, c in PHOTO_SOURCES.items() if c}]
+        self.assertEqual(len(warned), 3)
+        self.assertEqual(len([r for r in photo_rows if r["tag"] == "primary"]), 3)  # item.add, item.picture, page.photo
+        by_id = {r.id: r for r in self.results}
+        for r in photo_rows:
+            if r in warned: continue
+            self.assertEqual(by_id[r["id"]].facts["pictures"], 1, r["id"])
+
+    def test_warned_fallback_never_bypasses_installer_or_approval(self):
+        # D6 (AV1109-05) is unresolved: a warned photo is NOT drafted today. When the owner-approved fallback lands these rows
+        # fail here and must be re-recorded with the warning shown before a fresh yes; they are never silently passed.
+        by_id = {r.id: r for r in self.results}
+        for rid, disp in HELD.items():
+            self.assertEqual(by_id[rid].dispositions[-1], disp, rid)
+            self.assertEqual(by_id[rid].facts.get("pictures", 0), 0, rid)
+            self.assertNotIn("expected", next(r for r in self.rows if r["id"] == rid)["expect"], rid)
+
+
 if __name__ == "__main__":
     unittest.main()

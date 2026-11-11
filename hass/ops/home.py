@@ -29,7 +29,7 @@ field is refused as a conflict.
 from __future__ import annotations
 
 import copy
-from datetime import date, timedelta
+from datetime import date
 
 from hass.content_model import DEFAULT_HEADLINE, DEFAULT_STORY, MAX_HEADLINE_LINE, MAX_NOTICE, MAX_NOTICE_DAYS, MAX_STORY, shop_today
 from hass.ops import Arg, Op, Refused, photos
@@ -96,7 +96,7 @@ def _set_notice(content, args, ctx):
     text, until, today = args["text"], date.fromisoformat(args["until"]), shop_today(ctx.now)
     if until < today:
         return Refused(f"the last day {args['until']} is already past")
-    if until > today + timedelta(days=MAX_NOTICE_DAYS):
+    if (until - today).days > MAX_NOTICE_DAYS:
         return Refused(f"the last day is more than {MAX_NOTICE_DAYS} days ahead")
     if len(text) > MAX_NOTICE:
         return Refused(f"the notice is longer than {MAX_NOTICE} characters")

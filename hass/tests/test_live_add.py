@@ -141,6 +141,22 @@ class TheRulesOnRealDrafts(LiveAddBase):
         self.assertIn("protected sentences: origin/organic", self.reasons(*self.new_product(description="Grown in Paso Robles on the family farm.")))
         self.assertIn("protected sentences: prices", self.reasons(*self.new_product(description="A fair price for a jar.")))
 
+    def test_1_a_claim_cannot_hide_as_a_new_product_or_maker_name(self):
+        """RETURN t_439e2607, finding 3: the same wording that is refused in a description is refused as a name."""
+        claim = "Won first place at the county fair"
+        for label, ops in {
+            "product name": self.new_product(name=claim),
+            "brand": self.new_product(brand=claim),
+            "display brand": self.new_product(displayBrand=claim),
+            "maker name": [op("maker.add", key=KEY, name=claim, place=PLACE, story="Based in Paso Robles, California."), product_op(self.sha)],
+        }.items():
+            with self.subTest(label=label):
+                self.assertIn("protected sentences: health/awards/endorsements", self.reasons(*ops))
+        with self.subTest(label="the same words in a description"):
+            self.assertIn("protected sentences: health/awards/endorsements", self.reasons(*self.new_product(description=claim + ".")))
+        with self.subTest(label="a plain farm-noun name still goes live"):
+            self.assertEqual(self.reasons(*self.new_product()), [])
+
     def test_1_the_maker_text_goes_through_the_same_sentence_gates(self):
         for story in ("Test Orchard is a certified organic farm.", "Test Orchard has won an award."):
             with self.subTest(story=story):
@@ -160,12 +176,20 @@ class TheRulesOnRealDrafts(LiveAddBase):
         quiet = op("hike.create", title="Walk", date="2026-11-14", time="08:00", meetingPoint="Trailhead", rsvpEnabled=False)
         self.assertEqual(self.reasons(*self.new_product(), quiet), [])
 
-    def test_1_undo_always_passes(self):
+    def test_1_undo_meets_the_same_content_gates(self):
+        # HASS-SEC-2 (M1): an undo no longer always passes. The undo of a new product and maker (the product hidden, the maker
+        # hidden, as history.revert writes them) passes; one that would change a protected field or sentence is refused.
         self.assertEqual(policy.check(edit("old", "new", op="history.revert")), [])
+        product = {"brand": "Test Orchard", "producerKey": KEY, "status": "active"}
+        maker = {"name": "Test Orchard", "place": PLACE, "story": "Test Orchard is based in Paso Robles, California."}
+        hidden = {"ops": [{"op": "history.revert", "args": {}}], "records": [
+            {"collection": "products", "key": "x", "before": product, "after": {**product, "status": "hidden"}},
+            {"collection": "makers", "key": KEY, "before": maker, "after": {**maker, "hidden": True}}]}
+        self.assertEqual(policy.check(hidden), [])
         undo = {"ops": [{"op": "history.revert", "args": {}}], "records": [
             {"collection": "products", "key": "x", "before": {"brand": "Test Orchard", "producerKey": KEY}, "after": None},
             {"collection": "makers", "key": KEY, "before": {"place": PLACE, "url": "https://example.com"}, "after": None}]}
-        self.assertEqual(policy.check(undo), [])
+        self.assertIn("protected field: makers.url", policy.check(undo))
 
     def test_2_the_maker_link_stays_protected(self):
         reasons = self.reasons(maker_op(url="https://www.example.com/orchard"), product_op(self.sha))

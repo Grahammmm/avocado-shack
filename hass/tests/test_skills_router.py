@@ -264,3 +264,81 @@ class RouteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _loaf_content():
+    from types import SimpleNamespace
+    return SimpleNamespace(products=[
+        {"id": "synthetic-loaf-a", "name": "Plain loaf", "status": "active", "category": "bread"},
+        {"id": "synthetic-loaf-b", "name": "Seeded loaf", "status": "active", "category": "bread"}])
+
+
+class HintScoringTests(unittest.TestCase):
+    TODAY = datetime(2030, 1, 10).date()
+
+    def _hints(self, text):
+        from hass import nl_prep
+        return nl_prep.make_hinter(_loaf_content())(text, self.TODAY, None)
+
+    def test_date_hint_boosts_hike_with_no_trigger_overlap(self):
+        hints = self._hints("2030-01-15")
+        self.assertTrue(hints.get("dates") and not hints.get("hikes"), hints)
+        self.assertEqual(router.candidates("2030-01-15", skills=SKILLS), [])
+        self.assertEqual(router.candidates("2030-01-15", hints, skills=SKILLS), [("hike.add", 1.5)])
+
+    def test_shelf_hint_boosts_stock_from_real_synthetic_membership(self):
+        hints = self._hints("all the bread")
+        self.assertTrue(hints.get("shelves") and not hints.get("products"), hints)
+        plain = dict(router.candidates("all the bread", skills=SKILLS))
+        boosted = dict(router.candidates("all the bread", hints, skills=SKILLS))
+        self.assertEqual(round(boosted["stock.set"] - plain["stock.set"], 4), 1.5)
+        self.assertEqual(boosted["social.item"], plain["social.item"])
+        self.assertEqual(router.candidates("all the bread", hints, skills=SKILLS)[0][0], "stock.set")
+
+    def test_family_signals_do_not_stack(self):
+        both = {"dates": [{"date": "2030-01-15"}], "hikes": {"named": [1]}, "shelves": [{"shelf": "bread"}], "products": [{"id": "x"}]}
+        plain = dict(router.candidates("bread", skills=SKILLS))
+        got = dict(router.candidates("bread", both, skills=SKILLS))
+        self.assertEqual(round(got["hike.add"] - plain.get("hike.add", 0), 4), 1.5)
+        self.assertEqual(round(got["stock.set"] - plain["stock.set"], 4), 1.5)
+        self.assertNotIn("shop.hours", got)
+        dates_only = dict(router.candidates("hike", {"dates": [{"date": "x"}]}, skills=SKILLS))
+        self.assertEqual(dates_only["hike.add"], dict(router.candidates("hike", {"hikes": {"named": [1]}}, skills=SKILLS))["hike.add"])
+        asked = dict(router.candidates("2030-01-15", {"dates": [1]}, {"skill": "hike.add"}, skills=SKILLS))
+        self.assertEqual(asked["hike.add"], 1.5 + router.OPEN_BOOST)
+
+    def test_hints_cannot_cross_attachment_or_retirement_filter(self):
+        photo = _skill("item.picture", "replace a picture", ["new picture for the honey"],
+                       slots=(model.Slot("photo", "attachment", True, ask="Which photo?"),))
+        reg = model.Registry({**SKILLS.skills, photo.name: photo})
+        strong = {"dates": [1], "shelves": [1]}
+        ranked = router.candidates("2030-01-15 all the bread", strong, attachment={"kind": "image"}, skills=reg)
+        self.assertEqual([n for n, _s in ranked], [])
+        retired = _skill("hike.old", "old hike", ["old hike"], status="retired") if "status" in model.Skill.__dataclass_fields__ else None
+        if retired:
+            reg2 = model.Registry({**SKILLS.skills, retired.name: retired})
+            self.assertNotIn("hike.old", [n for n, _s in router.candidates("2030-01-15", strong, skills=reg2)])
+
+    def test_empty_and_nondict_hints_preserve_scores(self):
+        base = router.candidates("bread is gone", skills=SKILLS)
+        for hints in (None, {}, {"dates": [], "shelves": []}, "dates", ["dates"], 5):
+            with self.subTest(hints=hints):
+                self.assertEqual(router.candidates("bread is gone", hints, skills=SKILLS), base)
+        self.assertLessEqual(len(router.candidates("hike post bread hours maker", {"dates": [1], "shelves": [1]}, skills=SKILLS)), 3)
+
+    def test_real_dispatch_router_seam_preserves_date_and_shelf_hints(self):
+        from types import SimpleNamespace
+        from hass.skills import dispatch
+        conv = SimpleNamespace(aliases=lambda: None)
+        disp = dispatch.Dispatcher(conv, SKILLS)
+        disp._ctx = lambda now, texts: SimpleNamespace(content=_loaf_content(), today=self.TODAY)
+        self.assertEqual(disp._router_names(["2030-01-15"], None, [], None), [("hike.add", 1.5)])
+        ranked = disp._router_names(["all the bread"], None, [], None)
+        self.assertEqual(ranked[0][0], "stock.set")
+
+    def test_hint_ranking_does_not_complete_or_apply_a_request(self):
+        ranked = router.candidates("2030-01-15", {"dates": [1]}, skills=SKILLS)
+        self.assertEqual(ranked, [("hike.add", 1.5)])
+        # a hint-only candidate is still only the second opinion: a model pick outside it is asked, not run
+        result = router.route({"skill": "stock.set", "slots": {"what": "x"}}, ranked, SKILLS, text="2030-01-15")
+        self.assertEqual(result.action, "ask")

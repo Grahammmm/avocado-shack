@@ -71,3 +71,66 @@ no owner text, sender, chat or path in `interpreter_audit` or the stage log. Ite
 
 AV1109-17 adds `messages.jsonl`, `expected/` and `chain.jsonl` here and consumes this engine and schema unchanged. The engine accepts any
 registered skill; skill coverage is enforced there, not here. `_selftest/` is the engine's own and is never run as a skill.
+
+## Primary corpus (AV1109-17)
+
+`messages.jsonl` holds one `tag=primary` row for every registered skill (38 at this commit, derived from `load_skills()` by
+`PrimaryCorpus`, never hard-coded) plus five `tag=photo` companions: 43 rows, 27 `expected/` goldens. The first owner text of each
+primary row is the first numbered example sentence of the skill's catalog entry (SKILLS-SPEC section 3; specials.md for the five
+specials skills; social.md for social.maker), tags such as `(p)` removed. **This is a partial acceptance run (Primary only, not the
+historical 72 rows) and a passing run is not human acceptance.** The builder read each golden against the typed plan and the skill's
+declared edits and Undo sentence (for example hike.add keeps a cancelled event, page.photo keeps its hero file, stock.restock changes
+`products.json` only); that is a builder check, not a G or owner review.
+
+Exchanges: where the router ties two skills (SKILLS-SPEC 2.5) or a first example is incomplete, the row is a short honest exchange:
+item.add (stock?), item.hide (plums are not on the site, then "the lemons"), item.picture, stock.restock (three honeys, then the pick),
+maker.add (state), specials.add (end day), specials.show, social.item/hike/recap. `more honey coming Thursday` is Thursday 2026-11-12.
+`morning report` is an existing command, so its row is command-covered (no model call, disposition `report`).
+
+Photos (`photos/`, copied byte for byte from `reports/hass/newitem-1/synthetic/`): clean jar-white-sheet.jpg (item.add),
+bottle-grey-wall-tilted.jpg (item.picture), jar-phone-rotated.jpg (page.photo, hero, no product render), bottle-bench-png.png and
+jar-cutout-alpha.png (item.add companions, `house_render` on, 800x800 jpeg); warned bag-bench-small.jpg, jar-dark-wood.jpg,
+bag-red-cloth.jpg (item.add companions).
+
+### Held rows (pinned to today's behaviour; each needs its owner, then a re-record)
+
+* `photo-bag-bench-small`, `photo-jar-dark-wood`, `photo-bag-red-cloth`: a warned picture is refused (`not-drafted`); the D6 knowingly-approved
+  fallback of AV1109-05 is not available, so no warning-then-yes path is claimed. These rows have no golden.
+* `primary-item-restore` (`refused`, "is hidden"): the real dispatcher's product resolver refuses a hidden product by name, so restore cannot draft.
+* `primary-page-about`, `primary-maker-edit` (`question`): `traceable()` in `hass/skills/dispatch.py` never accepts an owner-words value containing "and"
+  (it is a clause splitter), so the owner's own sentence is asked for again.
+* `primary-stock-set` (`question`, `question`): the router ties stock.set with stock.checked and the follow-up ties again.
+* `primary-hike-reschedule`, `primary-hike-recap`: the undo is not byte-identical (`undo-not-identical`), so the rows run with `undo: false`.
+
+## Forty non-primary rows (AV1109-18)
+
+`messages.jsonl` appends exactly forty `acc-*` rows, one exclusive tag each: `vague` 10, `typo` 8, `multi` 8, `refuse` 8, `turns` 6 (counted by
+`hass/tests/test_skills_acceptance_groups.py`; the report template `reports/hass/SKILLS-ACCEPTANCE-TEMPLATE.md` shows the measured counts). Total corpus =
+registry-derived Primary + the five photo companions + 40 = 83 at this commit. Every text is synthetic. Two engine controls were added (the rest of the
+engine is unchanged): `senders` (a row text may come from a `stranger`, who is ignored before any model call) and `expect.approval: "paused"` (the
+proposal is made under the current policy and the real `yes <code>` is refused with no write; such a row has no golden and no undo).
+
+Goldens (`expected/acc-*.json`, 22) exist only for rows that end in a proposal; the other 18 rows assert an unchanged site tree (content, generated
+files and assets/products byte-identical, HEAD and tree clean) and are not given empty goldens. Each golden but one was recorded once with `--record ROW` and then
+read against the typed plan, the skill's declared edits and its Undo sentence; that is a builder check, not an owner review. Review inventory:
+typo-01 eggs shelf word `no` + shelf-check day; typo-02 one new hike (Cass Hill gate, Sat 14 Nov 9am); typo-03 `Cal Poly strawberry jam` hidden;
+typo-04 eggs sold-out flag cleared; typo-05 avocado `limited` + shelf-check day; typo-06 Linn's story; typo-07 Friday hours; typo-08 notice until 27 Nov;
+multi-02 two new hikes in one draft; multi-03 two new makers; multi-04 three products (plums, dried figs, walnut oil, added by `setup`) hidden;
+multi-05 two product descriptions; multi-06 two hike meeting points; multi-07 two sold-out flags cleared; multi-08 hours + notice in one draft;
+refuse-02 the maker without the "certified organic ... since 1990" story the owner never said (`Left off (you didn't say it): story`);
+turns-01 the hike built over three messages; turns-02 reschedule to 10am after a one-word answer; turns-03 only the corrected Friday 8pm; turns-05 the
+fresh request after the 30-minute request TTL (offset 31 minutes); turns-06 the lemons picture sent before the words (photo bound by real dispatch); multi-01 lemons yes, strawberries no, peppers limited + shelf-check day
+(hand-written, because the row cannot be recorded while it fails; its seven diff entries were checked by running the same slots under a reworded message that the
+router does not tie, which drafted and undid identically).
+
+Known failures (genuine, recorded, not accepted; the row keeps its SKILLS-SPEC 4.3 expectation of zero questions, one exact approved diff and a clean undo):
+* `acc-multi-01` (`wrong-disposition`): the router ties the shelf-check and stock skills on "the strawberries are sold out", so the owner gets a question
+  instead of one draft although every slot was given. The offline thresholds are not met until the owner fixes the router; then delete the
+  `KNOWN_FAILURES` entries in `test_skills_acceptance_groups.py` and `test_skills_acceptance_offline.py`.
+
+Behaviour pinned to today's code (not a claim that it is right; each needs its owner, then a re-record):
+* `acc-vague-03` ends `refused` with the question "What should change on Guacamole?" (the dispatcher words a missing field as a refusal).
+* `acc-turns-04`: with a hike question open, a new notice sentence is asked about again (`question`, `question`) instead of dropping the old slots into a draft.
+* `acc-refuse-02`: the interpreter-invented claim is not refused outright; the dispatcher leaves the story off and drafts the maker without it.
+* `acc-refuse-08`: `pause` returns `pause`, the proposal still drafts, and `yes <code>` returns `paused` (draft kept, tree unchanged).
+* The multi-item `item.hide` row uses three `item.hide` calls, because the dispatcher's `items` slot takes one product name per call.

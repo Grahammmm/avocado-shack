@@ -164,6 +164,53 @@ class PriorityTest(unittest.TestCase):
         self.assertEqual(voice.plain(chips["question"]), "Who makes the Chips?")
 
 
+BAD_CATEGORIES = ([], {}, ["vegetables"], {"vegetables": True}, None, 7, True, "invalid")
+
+
+class BadShelfTest(unittest.TestCase):
+    def test_container_categories_are_missing_shelf_without_mutation(self):
+        for bad in ([], {}, ["vegetables"], {"name": "vegetables"}):
+            rec, makers = product(category=bad), copy.deepcopy(MAKERS)
+            before = (copy.deepcopy(rec), copy.deepcopy(makers))
+            res = itemstd.check_product(rec, makers)
+            self.assertEqual(set(res), KEYS, bad)
+            self.assertEqual(res["missing"], ["shelf", "own_photo"], bad)
+            self.assertFalse(res["complete"], bad)
+            self.assertEqual(res["ask_order"], ["shelf"], bad)
+            self.assertEqual(voice.plain(res["question"]), "Which shelf should it go on?", bad)
+            self.assertEqual((rec, makers), before, "inputs are never changed")
+
+    def test_bad_category_preserves_question_priority(self):
+        makers = {"Smith Farm": TOWN_MAKER}
+        for bad in BAD_CATEGORIES:
+            res = itemstd.check_product(product(name="", category=bad), makers)
+            self.assertEqual(res["ask_order"], ["name", "shelf"], bad)
+            self.assertEqual(voice.plain(res["question"]), "What is it called?", bad)
+            res = itemstd.check_product(product(category=bad, brand="", producerKey=None), makers)
+            self.assertEqual(res["ask_order"], ["shelf", "producer", "producer_town"], bad)
+            self.assertEqual(voice.plain(res["question"]), "Which shelf should it go on?", bad)
+            self.assertEqual(res["missing"].count("shelf"), 1, bad)
+        # the container answers exactly like the existing null and unknown-string controls
+        controls = [itemstd.check_product(product(category=c, brand="", producerKey=None), makers)
+                    for c in (None, "invalid", [], {})]
+        self.assertTrue(all(c == controls[0] for c in controls))
+
+    def test_bad_category_keeps_inactive_suppression(self):
+        makers = {"Smith Farm": TOWN_MAKER}
+        for bad in ([], {}):
+            self.assertIsNone(itemstd.check_product({"status": "held", "category": bad}, makers))
+            res = itemstd.check_product(product(status="hidden", category=bad), makers)
+            self.assertIn("shelf", res["missing"])
+            self.assertEqual((res["ask_order"], res["question"]), ([], None))
+        report = itemstd.build_report(
+            [product(id="a", category=[]), product(id="b", status="held", category={}),
+             product(id="c", status="hidden", category=[]), product(id="d")], makers, {})
+        s = report["summary"]
+        self.assertEqual((s["products_active"], s["products_held"], s["products_hidden"]), (2, 1, 1))
+        self.assertEqual((s["products_with_an_information_gap"], s["products_incomplete"]), (1, 1))
+        self.assertEqual(s["missing_by_field_products"]["shelf"], 1)
+
+
 class VoiceTest(unittest.TestCase):
     def test_every_question_passes_voice(self):
         self.assertEqual(set(itemstd.QUESTIONS), {"name", "shelf", "producer_fresh", "producer_packaged", "producer_town",
@@ -300,6 +347,74 @@ class ReportTest(unittest.TestCase):
                 self.assertEqual(got.stdout, "")
                 self.assertEqual(target.read_bytes(), b"old report\n", products_text)
                 self.assertEqual(sorted(p.name for p in reports.iterdir()), ["catalog-gaps.json"])
+
+
+    def test_report_cli_handles_container_categories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            content = tmp / "content"
+            content.mkdir()
+            (content / "products.json").write_text(json.dumps({"schemaVersion": 1, "products": [
+                product(id="ok"), product(id="lst", category=[]), product(id="obj", category={"a": 1}),
+                product(id="held", status="held", category=[])]}), encoding="utf-8")
+            (content / "makers.json").write_text(json.dumps({"schemaVersion": 1, "makers": MAKERS}), encoding="utf-8")
+            inputs = tree_hashes(content / "products.json", content / "makers.json")
+            text = self.run_cli(SCRIPT, "--content", str(content), cwd=tmp)
+            as_json = self.run_cli(SCRIPT, "--content", str(content), "--json", cwd=tmp)
+            for got in (text, as_json):
+                self.assertEqual(got.returncode, 0, got.stderr)
+                self.assertEqual(got.stderr, "")
+            self.assertIn("Active products with an information gap: 2 of 3", text.stdout)
+            self.assertIn("  shelf: 2", text.stdout)
+            report = json.loads(as_json.stdout)
+            s = report["summary"]
+            self.assertEqual((s["products_active"], s["products_held"], s["products_incomplete"]), (3, 1, 2))
+            self.assertEqual(s["missing_by_field_products"]["shelf"], 2)
+            rows = {r["id"]: r for r in report["products"]}
+            self.assertEqual(rows["ok"]["missing"], ["own_photo"])
+            for pid in ("lst", "obj"):
+                self.assertEqual(rows[pid]["ask_order"], ["shelf"])
+                self.assertEqual(rows[pid]["question"], "Which shelf should it go on?")
+            self.assertEqual(report, itemstd.report_for(content), "report and pure checker agree")
+            self.assertEqual(tree_hashes(content / "products.json", content / "makers.json"), inputs)
+            self.assertEqual(sorted(p.name for p in tmp.iterdir()), ["content"])
+
+    def test_report_write_with_bad_shelf_is_atomic_and_scratch_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            repo = tmp / "repo"
+            (repo / "hass" / "style").mkdir(parents=True)
+            for f in ("__init__.py", "voice.py", "itemstd.py", "style/item-standard.json"):
+                shutil.copy(REPO / "hass" / f, repo / "hass" / f)
+            content, reports = repo / "hass" / "content", repo / "reports" / "hass"
+            content.mkdir()
+            reports.mkdir(parents=True)
+            target = reports / "catalog-gaps.json"
+            target.write_bytes(b"old report\n")
+            (content / "products.json").write_text(json.dumps({"schemaVersion": 1, "products": [
+                product(), product(id="lst", category=[]), product(id="obj", category={})]}), encoding="utf-8")
+            (content / "makers.json").write_text(json.dumps({"schemaVersion": 1, "makers": MAKERS}), encoding="utf-8")
+            inputs = tree_hashes(content / "products.json", content / "makers.json")
+            foreign = tmp / "elsewhere"
+            foreign.mkdir()
+            script = repo / "hass" / "itemstd.py"
+            got = self.run_cli(script, "--write", cwd=foreign)
+            self.assertEqual(got.returncode, 0, got.stderr)
+            self.assertEqual(got.stderr, "")
+            written = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(written["summary"]["missing_by_field_products"]["shelf"], 2)
+            self.assertEqual(sorted(r["id"] for r in written["products"] if "shelf" in r["missing"]), ["lst", "obj"])
+            self.assertEqual(sorted(p.name for p in reports.iterdir()), ["catalog-gaps.json"], "no orphan temp file")
+            self.assertEqual(tree_hashes(content / "products.json", content / "makers.json"), inputs)
+            # a real refusal still exits 2 and keeps the sentinel report
+            target.write_bytes(b"old report\n")
+            (content / "products.json").write_text(json.dumps({"schemaVersion": 1, "products": [
+                product(category=[]), {"name": "no id", "category": {}}]}), encoding="utf-8")
+            got = self.run_cli(script, "--write", cwd=foreign)
+            self.assertEqual((got.returncode, got.stdout), (2, ""))
+            self.assertIn("itemstd:", got.stderr)
+            self.assertEqual(target.read_bytes(), b"old report\n")
+            self.assertEqual(sorted(p.name for p in reports.iterdir()), ["catalog-gaps.json"])
 
 
 if __name__ == "__main__":

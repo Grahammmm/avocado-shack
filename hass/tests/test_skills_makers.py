@@ -501,6 +501,7 @@ class CaseFiles(unittest.TestCase):
 TOWN_Q, MISSING = "Which town are they in?", "Still missing: the town"
 REGION_MAKERS = ("Straus", "Alle-Pia", "Corberosa", "Massa Organics", "Sierra Nevada", "Ava\u2019s")  # the six saved regions
 ORCHARD = {"name": "Synthetic Orchard", "place": "Central Coast"}
+FALLBACK_SET = "I set: the about text to \u201cSynthetic Orchard is based in Central Coast.\u201d, because you didn't give one."
 
 
 def said(*texts):
@@ -557,7 +558,7 @@ class TownState(unittest.TestCase):
                 self.assertEqual(out.ops, [{"op": "maker.add", "args": {"key": "Synthetic Orchard", "name": "Synthetic Orchard", "place": "Central Coast",
                                                                        "story": "Synthetic Orchard is based in Central Coast."}}])
                 self.assertEqual(out.notes.count(MISSING), 1)
-                self.assertEqual(m.notes("maker.add", dict(ORCHARD), c), {"say": [MISSING], "set": [], "warn": []})
+                self.assertEqual(m.notes("maker.add", dict(ORCHARD), c), {"say": [MISSING], "set": [FALLBACK_SET], "warn": []})
                 edit = m.describe_edit({"maker": "Etto", "place": "Northern California"}, c)
                 self.assertEqual((edit.ops[0]["args"], edit.notes.count(MISSING)), ({"key": "Etto", "place": "Northern California"}, 1))
                 self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "place": "Northern California"}, c)["say"], [MISSING])
@@ -682,6 +683,93 @@ class TownStateDispatch(SkillCase):
         self.assertEqual(len(out), 1)
         self.assertIn(out[0], (TOWN_Q, "Where are they based (town and state)?"))
         self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+
+class FallbackStoryDisclosure(SkillCase):
+    """A maker with no story: the proposal says the based-in line was Hass's choice, once, before the owner's yes."""
+    SKILLS = (BY_NAME["maker.add"], BY_NAME["maker.edit"], BY_NAME["maker.hide"], BY_NAME["maker.restore"])
+    BEE = {"name": "Bee Happy Farm", "place": "Atascadero, California"}
+    BEE_SET = "I set: the about text to \u201cBee Happy Farm is based in Atascadero, California.\u201d, because you didn't give one."
+
+    def propose_reply(self, text, mapping):
+        self.script(text, mapping)
+        self.assertEqual(self.say(text), "proposed")
+        [reply] = self.replies()
+        return reply
+
+    def test_fallback_story_notes_disclose_exact_generated_value(self):
+        for story in (None, "", "   "):
+            with self.subTest(story=story):
+                slots = {**self.BEE, **({} if story is None else {"story": story})}
+                out = m.describe_add(dict(slots), ctx())
+                got = m.notes("maker.add", slots, ctx())
+                self.assertEqual(got, {"say": [], "set": [self.BEE_SET], "warn": []})
+                self.assertEqual(out.ops[0]["args"]["story"], "Bee Happy Farm is based in Atascadero, California.")
+                self.assertIn(out.ops[0]["args"]["story"], got["set"][0])
+                self.assertEqual(voice.check(got["set"][0], long_ok=True), [])
+        before = copy.deepcopy(CONTENT.makers)
+        m.notes("maker.add", dict(self.BEE), ctx())
+        self.assertEqual(CONTENT.makers, before)
+        supplied = m.notes("maker.add", {**self.BEE, "story": "They keep bees on the hill."}, ctx())
+        self.assertEqual(supplied, {"say": [], "set": [], "warn": []})
+
+    def test_unknown_town_marker_and_story_disclosure_coexist(self):
+        c = said("add Synthetic Orchard in Central Coast", "I don't know the town")
+        self.assertEqual(m.notes("maker.add", dict(ORCHARD), c), {"say": [MISSING], "set": [FALLBACK_SET], "warn": []})
+        for slots in ({"name": "Synthetic Orchard", "place": "Central Coast"}, {"name": "Synthetic Orchard"}, {"place": "Central Coast"},
+                      {"name": "Synthetic Orchard", "place": "Central Coast", "story": "A $3 jar."}):
+            with self.subTest(slots=slots):  # a plan that stops (a region not declined, a missing slot, a price) has no draft to note
+                self.assertEqual(m.notes("maker.add", dict(slots), ctx()), {"say": [], "set": [], "warn": []})
+
+    def test_production_add_discloses_default_before_yes(self):
+        reply = self.propose_reply("add Bee Happy Farm in Atascadero, California", {"skill": "maker.add", "slots": dict(self.BEE)})
+        self.assertEqual(reply.count(self.BEE_SET), 1)
+        self.assertLess(reply.index(self.BEE_SET), reply.lower().index("reply yes"))
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.add", "args": {
+            "key": "Bee Happy Farm", "name": "Bee Happy Farm", "place": "Atascadero, California",
+            "story": "Bee Happy Farm is based in Atascadero, California."}}])
+        self.nothing_written()
+        self.say("no")
+        self.replies()
+        again = self.propose_reply("add Bee Happy Farm in Atascadero, California again", {"calls": [{"skill": "maker.add", "slots": dict(self.BEE)}], "revises": None})
+        self.assertEqual(again.count(self.BEE_SET), 1)
+        self.assertLess(again.index(self.BEE_SET), again.lower().index("reply yes"))
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"])[0]["args"]["story"], "Bee Happy Farm is based in Atascadero, California.")
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+
+    def test_continued_maker_discloses_only_after_place_answer(self):
+        self.script("add Bee Happy Farm", {"skill": "maker.add", "slots": {"name": "Bee Happy Farm"}})
+        self.assertEqual(self.say("add Bee Happy Farm"), "question")
+        [asked] = self.replies()
+        self.assertNotIn("I set", asked)
+        self.assertEqual(self.drafts(), [])
+        reply = self.propose_reply("Atascadero, California", {"skill": "maker.add", "slots": {"place": "Atascadero, California"}})
+        self.assertEqual(reply.count(self.BEE_SET), 1)
+        self.say("no")
+        self.replies()
+        self.script("add Bee Happy Farm. They keep bees", {"skill": "maker.add", "slots": {"name": "Bee Happy Farm"}})
+        self.assertEqual(self.say("add Bee Happy Farm. They keep bees"), "question")
+        self.replies()
+        reply = self.propose_reply("Atascadero, California", {"skill": "maker.add", "slots": {"place": "Atascadero, California", "story": "They keep bees."}})
+        self.assertNotIn("I set", reply)
+        self.assertNotIn("because you didn't give one", reply)
+        self.assertIn("Bee Happy Farm keeps bees.", reply)
+
+    def test_edit_hide_restore_and_refusals_keep_old_notes(self):
+        c = said("Etto is in Northern California", "I don't know the town")
+        self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "place": "Northern California"}, c), {"say": [MISSING], "set": [], "warn": []})
+        self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "story": "They roast."}, ctx()), {"say": [], "set": [], "warn": []})
+        self.assertEqual(m.notes("maker.hide", {"maker": "Etto"}, ctx()), {"say": [], "set": [], "warn": []})
+        self.assertEqual(m.notes("maker.restore", {"maker": "Etto"}, ctx()), {"say": [], "set": [], "warn": []})
+        twin = m.notes("maker.add", {"name": "Etto", "place": "Atascadero, California"}, ctx())  # already on the site: a question, no draft
+        self.assertEqual(twin, {"say": [], "set": [], "warn": []})
+        self.script("add Etto in Atascadero", {"skill": "maker.add", "slots": {"name": "Etto", "place": "Atascadero, California"}})
+        self.assertEqual(self.say("add Etto in Atascadero"), "question")
+        [reply] = self.replies()
+        self.assertNotIn("I set", reply)
+        self.assertEqual([d for d in self.drafts() if d["state"] == "proposed"], [])
         self.nothing_written()
 
 

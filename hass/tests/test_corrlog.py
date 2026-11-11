@@ -145,6 +145,70 @@ class NeverRaises(LogCase):
         self.assertEqual([r["reason"] for r in self.log.rows()], ["good"])
 
 
+    def _write(self, rows, when=None):
+        when = when or self.now
+        day = self.state / corrlog.FOLDER
+        day.mkdir(exist_ok=True)
+        path = day / f"{when:%Y-%m-%d}.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return path
+
+    def _mixed(self, when=None):
+        at = (when or self.now).isoformat()
+        good = lambda reason: {"at": at, "kind": "error", "reason": reason}
+        bad = [{"at": at, "kind": k, "reason": "CANARY"} for k in ([], {}, ["error"], {"error": 1})]
+        return [good("first")] + bad + [good("last")], [good("first"), good("last")]
+
+    def test_container_kind_lines_skip_and_continue(self):
+        mixed, accepted = self._mixed()
+        path = self._write(mixed)
+        before = path.read_bytes()
+        self.assertEqual(self.log.rows(), accepted)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_non_string_kind_controls(self):
+        at = NOW.isoformat()
+        rows = [{"at": at, "kind": k, "reason": "x"} for k in (None, 5, True, "bogus")] + [{"at": at, "reason": "x"}]
+        kept = [{"at": at, "kind": k, "reason": "x"} for k in corrlog.KINDS]
+        self._write(rows + kept)
+        self.assertEqual(self.log.rows(), kept)
+
+    def test_support_formatters_ignore_only_bad_kind_rows(self):
+        mixed, accepted = self._mixed()
+        self._write(mixed)
+        ref = self.state / "ref"
+        (ref / corrlog.FOLDER).mkdir(parents=True)
+        (ref / corrlog.FOLDER / f"{NOW:%Y-%m-%d}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in accepted), encoding="utf-8")
+        other = corrlog.CorrLog(ref, lambda: NOW)
+        for fn in (corrlog.problems_text, corrlog.weekly_line):
+            self.assertEqual(fn(self.log), fn(other))
+            self.assertNotIn("CANARY", fn(self.log))
+        self.assertIn("first", corrlog.problems_text(self.log))
+
+    def test_cli_reports_survive_container_kinds(self):
+        now = datetime.now(timezone.utc)
+        mixed, accepted = self._mixed(now)
+        path = self._write(mixed, now)
+        before = path.read_bytes()
+        ref = Path(tempfile.mkdtemp(dir=self.state))
+        (ref / corrlog.FOLDER).mkdir()
+        (ref / corrlog.FOLDER / path.name).write_text("".join(json.dumps(r) + "\n" for r in accepted), encoding="utf-8")
+        members = sorted(p.name for p in self.state.rglob("*"))
+        for what in ("problems", "weekly"):
+            got = []
+            for state in (self.state, ref):
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    self.assertEqual(corrlog.main([what, "--state", str(state)]), 0)
+                self.assertEqual(err.getvalue(), "")
+                got.append(out.getvalue())
+            self.assertEqual(got[0], got[1])
+            self.assertNotIn("CANARY", got[0])
+            self.assertNotIn("No problems", got[0])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in self.state.rglob("*")), members)
+
+
 class PathAdmission(LogCase):
     def bounded(self, operation):
         """A regression must fail, not leave a test runner stuck opening a pipe."""

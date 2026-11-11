@@ -38,7 +38,7 @@ Slots (snake_case; the plan turns them into the op's own argument names):
   tidied. Nothing is looked up, corrected or completed, and no state is filled in from memory.
 * **"I don't know the town"**: when his latest message ends with that sentence (any case, straight or curly apostrophe, a final full
   stop, "!" or "?" allowed, alone or after the request itself, punctuated or not) and the place is a region, the draft keeps the region exactly as he gave
-  it and the proposal says **"Still missing: the town"** (the module's `notes` hook; nothing else from the plan's notes is shown).
+  it and the proposal says **"Still missing: the town"** (the module's `notes` hook; apart from the story line below, nothing else from the plan's notes is shown).
   Only his latest message counts: not a slot the model fills, not his story, not an older message. The sentence itself is never
   saved as a place, and a bare town that is not a region is still asked about.
 * `maker.add` always checks its place. `maker.edit` checks **only a place he gives in this request**, even when it is the region the
@@ -58,7 +58,8 @@ Slots (snake_case; the plan turns them into the op's own argument names):
   joined texts (`ctx.owner_text`) a story sentence with a claim he did not say is left off and listed under "Left off". The editor
   runs the same claims check again on the draft, so the real conversation asks even without that.
 * **D5 (G's default, 2026-11-08): a maker with no story gets the one line "<Maker> is based in <place>."** and the proposal says
-  "I set the about text to ..., because you didn't give one". Leaving the story empty would need a content-model, sitegen and
+  "I set: the about text to ..., because you didn't give one." before the yes line (the `notes` hook forwards the plan's own set
+  line, once, for a `maker.add` with no story; a story he gave gets no such line, and a plan that stops has no draft to note). Leaving the story empty would need a content-model, sitegen and
   `shop.js` change (a separate card).
 
 ### Questions and refusals (plain words, one question at a time)
