@@ -160,6 +160,9 @@ def shape(ops, routes=None, *, live=True, events=None) -> Shaped:
     out = Shaped(ops)
     if not live or not isinstance(ops, list):
         return out
+    if any(_capacity_conflict(call) for call in ops):  # one contradictory call: nothing in the batch is shaped or offered
+        out.ask = {"kind": "offer", "question": CAPACITY_CONFLICT, "suggest": None, "ops": None}
+        return out
     offer = _signup_offer(ops, events)
     if offer is not None:
         return offer
@@ -179,6 +182,17 @@ def shape(ops, routes=None, *, live=True, events=None) -> Shaped:
             # rediscover the route from an abbreviated place ("Fiscalini"); the question keeps the call's place in the list.
             out.ask = {"kind": "meet", "question": meeting_question(args.get("title"), suggestion), "suggest": suggestion, "index": index}
     return out
+
+
+CAPACITY_CONFLICT = "Please give either a guest limit or no limit, not both."
+
+
+def _capacity_conflict(call) -> bool:
+    """A hike.create/update that gives a positive guest limit and also says no limit."""
+    if not (isinstance(call, dict) and call.get("op") in ("hike.create", "hike.update") and isinstance(call.get("args"), dict)):
+        return False
+    cap = call["args"].get("capacity")
+    return isinstance(cap, int) and not isinstance(cap, bool) and cap > 0 and call["args"].get("noCapacityLimit") is True
 
 
 def _signup_offer(ops, events):
