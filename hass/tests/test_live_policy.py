@@ -28,7 +28,9 @@ class LivePolicyTests(unittest.TestCase):
         draft["records"].append(draft["records"][0])
         self.assertIn("more than 10 records", policy.check(draft))
         draft["ops"] = [{"op": "history.revert", "args": {}}]
-        self.assertEqual(policy.check(draft), [])
+        self.assertIn("more than 10 records", policy.check(draft))  # HASS-SEC-2 (M1): an undo meets the same limit
+        draft["records"].pop()
+        self.assertEqual(policy.check(draft), [])  # ten plain records: an undo still passes
         draft["ops"].append({"op": "route.edit"})
         self.assertTrue(policy.check(draft))
 

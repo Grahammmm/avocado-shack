@@ -147,6 +147,11 @@ ASK_TURNS, ASK_CHARS, ASK_TEXT_CUT = 4, 2000, 1000
 LATE_AFTER = timedelta(minutes=15)  # AV0022-10 (H16): a reply sent this much after the message it answers says so
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 DELAYED_AFTER_S = 600  # AVB-07 (H16): an outbox reply older than this at send time is marked delayed
+# HASS-SEC-2 (L5): a yes counts only when it reached the inbox within approvalTtlSeconds plus this of when it was sent (the
+# envelope clock window is 300 s, so a yes forwarded at once is always inside it).
+LATE_FORWARD_S = 300
+LATE_YES_REPLY = ("Your yes reached me long after you sent it, so I haven't saved anything. "
+                  "If you still want that change, tell me again.")
 VERIFY_MAX = 5  # AV1737-08 (H06): result check captures at most this many distinct touched records
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages(provider_id TEXT PRIMARY KEY, disposition TEXT NOT NULL, received_at TEXT);
@@ -696,11 +701,12 @@ def _record_lines(draft: dict, undo: bool = False, full_before=False, done: bool
     return lines + [f"Heads up: {voice.explain_warning(w)}" for w in draft.get("warnings") or []]
 
 
-def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None, now=None) -> str:
+def proposal_text(code: str, draft: dict, expires_at: str, repeat: bool = False, head: str = "", undo: bool = False, live_site=None, now=None,
+                  reasons=None) -> str:
     lines = [head or "Here's the change I'd make:"] + _record_lines(draft, undo, full_before=bool(live_site))
     wait = f"I'll hold this for you until {voice.natural_iso(expires_at, now)}."
     if live_site:
-        reasons = live_policy.check(draft)
+        reasons = live_policy.check(draft) if reasons is None else reasons  # HASS-SEC-2 (M1): the conversation's own reasons
         return "\n".join(lines + [wait, live_policy.refusal(reasons) if reasons else
                                  f"Reply {q('yes ' + code)} to put it on the website (it should show within a few minutes), or {q('no ' + code)} to cancel."])
     yes = f"yes {code}" if repeat else "yes"  # a repeat of a closed draft needs its new code
@@ -907,10 +913,21 @@ class Conversation:
                        f"{row['summary']}. Steps: {row['ops_json']}")
         self._problem("could-not-do", "live-policy")
 
+    def _live_reasons(self, draft) -> list:
+        """live_policy.check, and HASS-SEC-2 (M1): an undo of a change the release engine never put on the website (saved in
+        private mode before live) is refused too. Only a live editor (publish_live.LiveEditor.went_live) can tell; its apply()
+        refuses the same undo again."""
+        reasons = live_policy.check(draft)
+        went_live = getattr(self.editor, "went_live", None)
+        if callable(went_live) and live_policy.is_undo(draft) and not all(went_live(cid) for cid in live_policy.undone(draft)):
+            reasons = sorted({*reasons, live_policy.UNDO_NOT_LIVE})
+        return reasons
+
     def _proposal_reply(self, row, draft, prefix=""):
         """The proposal text plus, with a previewer, a private screenshot of the rendered draft (H06)."""
-        if self.settings.get("liveSite") and (reasons := live_policy.check(draft)): self._save_private(row, reasons)
-        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=self._now()), []
+        reasons = self._live_reasons(draft) if self.settings.get("liveSite") else []
+        if reasons: self._save_private(row, reasons)
+        text, shots = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=self._now(), reasons=reasons), []
         if self.previewer is not None:
             rendered = self.editor.render_draft(draft["change_id"])
             extra = {"assets": rendered["assets"]} if rendered.get("assets") else {}  # a new photo the draft would add
@@ -948,14 +965,26 @@ class Conversation:
 
     # -- message handling ----------------------------------------------------------------------------------------
     _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
+    _forwarded = None  # HASS-SEC-2 (L5): when the message reached the inbox (inbox.Inbox.forwarded_at); None when not known
 
-    def handle(self, msg: Inbound, last_try=False, apply=True) -> str:
-        self._answering = msg.received_at
+    def handle(self, msg: Inbound, last_try=False, apply=True, forwarded_at=None) -> str:
+        self._answering, self._forwarded = msg.received_at, forwarded_at
         self._to = msg.chat if self._is_owner(msg) else None
         self._asker = sender_key(msg.sender)
         self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)
         try: return self._handle_message(msg, last_try, apply)
-        finally: self._answering, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, False
+        finally: self._answering, self._forwarded, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, None, False
+
+    def _forwarded_late(self, msg) -> bool:
+        """HASS-SEC-2 (L5): a yes is judged at the time it was sent (AV0022-06), so one the Mac held back and forwarded long
+        after must not approve anything: it counts only when it reached the inbox within the approval time plus LATE_FORWARD_S of
+        its send time. A message whose forwarding time is not known (called directly, not through the inbox) is not late."""
+        try:
+            sent, forwarded = datetime.fromisoformat(msg.received_at), self._forwarded
+            if isinstance(forwarded, str): forwarded = datetime.fromisoformat(forwarded)
+            return forwarded is not None and (forwarded - sent).total_seconds() > self.settings["approvalTtlSeconds"] + LATE_FORWARD_S
+        except (TypeError, ValueError):
+            return False
 
     def _handle_message(self, msg: Inbound, last_try=False, apply=True) -> str:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
@@ -1013,6 +1042,8 @@ class Conversation:
         phone = None if msg.attachments > 0 else parse_phone(msg.text)  # AV1352-04
         coded = None if phone is None or phone[2] or phone[0] is None else phone[:2]  # decorated answer without a ?
         cutoff = _answered_at(msg, now) if msg.attachments <= 0 and (parse_keyword(msg.text) or coded) is not None else now
+        late = cutoff != now and self._forwarded_late(msg)  # HASS-SEC-2 (L5): forwarded long after it was sent
+        if late: cutoff = now  # ... judged when it arrived, never at its send time
         expired = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) <= cutoff]
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
@@ -1053,6 +1084,10 @@ class Conversation:
             self._record(msg, disposition)
             return disposition, None
         verb, code = keyword
+        if late and verb == "approve":  # HASS-SEC-2 (L5): a yes that reached me long after it was sent approves nothing
+            self._reply(LATE_YES_REPLY)
+            self._record(msg, "no-target")
+            return "no-target", None
         if code is None and (ask := self._shelf_ask(now)) is not None:  # HASS-SHELFCHECK-FLOW-1: a bare yes/no answers our question
             disposition = self._shelf_answer(msg, now, verb, ask)  # (never a waiting draft's approval or cancel)
             self._record(msg, disposition)
@@ -1095,7 +1130,7 @@ class Conversation:
             self._reply(f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it.")
             self._record(msg, "no-target")
             return "no-target", None
-        if self.settings.get("liveSite") and (reasons := live_policy.check(self.editor.show(target["change_id"]).get("draft"))):
+        if self.settings.get("liveSite") and (reasons := self._live_reasons(self.editor.show(target["change_id"]).get("draft"))):
             self._save_private(target, reasons)  # HASS-LIVE-PLAN-1: refused for the website, kept for Graham, never lost
             self._reply(live_policy.refusal(reasons))
             self._record(msg, "no-target")
@@ -2043,7 +2078,8 @@ class Conversation:
             rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
             draft = {"records": rec["records"], "warnings": rec.get("warnings"), "ops": rec.get("ops") or json.loads(row["ops_json"])}  # ops: the live check reads them
             if state == "proposed":
-                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=now)
+                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=now,
+                                     reasons=self._live_reasons(draft) if self.settings.get("liveSite") else None)
                 shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
             else:
                 text, shot = "\n".join(["Here's what was saved:"] + _record_lines(draft, _is_undo(row), done=True)), row["screenshot"]
