@@ -247,6 +247,48 @@ class OnePhotoOneProduct(unittest.TestCase):
         slots = {**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}
         self.assertEqual(refusal(slots, "the lemon curd only", "add the lemon curd and the plum jam, both in stock").reply, ia.ONE_PHOTO)
 
+    def test_add_bare_and_comma_lists_ask_before_any_plan(self):
+        for text in ("add the lemon curd and the plum jam", "add lemon curd and plum jam", "add lemon curd, plum jam",
+                     "add lemon curd, and plum jam", "add lemon curd & plum jam", "Adding lemon curd, plum jam, from Linn's"):
+            for name in ("Lemon curd", "Plum jam"):
+                with self.subTest(text=text, name=name):
+                    slots = {**FULL, "name": name, "maker": "Linn's", "shelf": "pantry"}
+                    given = copy.deepcopy(slots)
+                    got = refusal(slots, text)
+                    self.assertEqual((got.reply, got.kind, got.backlog), (ia.ONE_PHOTO, "question", None))
+                    self.assertEqual(slots, given)
+                    with self.assertRaises(ia.Refusal):
+                        ia.plan_add(copy.deepcopy(slots), ctx(text))  # no ops at all
+
+    def test_add_compound_name_and_caption_are_not_lists(self):
+        for name, text in (("Salt and vinegar chips", "add salt and vinegar chips"),
+                           ("Cookies and Cream chocolate", "Add Cookies and Cream chocolate from Linn's"),
+                           ("Lemon curd", "add lemon curd, in a jar"),
+                           ("Lemon curd", "add lemon curd, please"),
+                           ("Lemon curd", "add lemon curd, on a plain counter"),
+                           ("Lemon curd", "add lemon curd, great on toast and scones"),
+                           ("Lemon curd", "add lemon curd, from Smith Farm in Salem, Oregon"),
+                           ("Lemon curd", "add lemon curd, Smith Farm, Oregon"),
+                           ("Lemon curd", "add lemon curd, in stock and on the pantry shelf")):
+            with self.subTest(text=text):
+                done = ia.describe_add({**FULL, "name": name, "maker": "Linn's", "shelf": "pantry"}, ctx(text))
+                self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+        for name in ("Salt and vinegar chips", "Lemon curd"):  # a list that holds a compound name still asks
+            with self.subTest(name=name):
+                self.assertEqual(refusal({**FULL, "name": name, "maker": "Linn's"}, "add salt and vinegar chips and lemon curd").reply, ia.ONE_PHOTO)
+
+    def test_add_bare_list_keeps_question_until_positive_single_choice(self):
+        slots = {**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}
+        for first in ("add lemon curd and plum jam", "add lemon curd, plum jam"):
+            for later in ("ok", "add lemon curd and plum jam", "add lemon curd, plum jam", "yes, both", "the plum jam only please"):
+                with self.subTest(first=first, later=later):
+                    self.assertEqual(refusal(slots, first, later).reply, ia.ONE_PHOTO)
+            with self.subTest(first=first, later="pick"):
+                done = ia.describe_add(slots, ctx(first, "the lemon curd only please"))
+                self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+                self.assertEqual(done.ops[0]["args"]["name"], "Lemon curd")
+                self.assertNotIn("plum", repr(done.ops).lower())
+
 
 class HouseDescriptionIsEnforced(unittest.TestCase):
     """Rule house-description: the hard checks refuse or ask, they do not only warn (finding 2)."""
