@@ -85,10 +85,18 @@ def _check_store(state_dir):
     try:
         _check_links(state_dir)
         if sdir.is_symlink() or not sdir.is_dir(): raise Unreadable
-        mode = os.lstat(path := sdir / "conversation.sqlite3").st_mode  # lstat: a dangling link is seen
+        st = os.lstat(path := sdir / "conversation.sqlite3")  # lstat: a dangling link is seen
     except OSError: raise Unreadable from None
-    if not stat.S_ISREG(mode): raise Unreadable
-    return path
+    if not stat.S_ISREG(st.st_mode): raise Unreadable
+    return path, (st.st_dev, st.st_ino)
+
+
+def _same_leaf(path, ident):
+    """Detection only, not confinement: refuse if the admitted leaf is no longer the same regular file (lstat, never
+    following a link; no size/mtime test, so committed WAL growth is fine). A swap between checks is not prevented."""
+    try: st = os.lstat(path)
+    except OSError: raise Unreadable from None
+    if not stat.S_ISREG(st.st_mode) or (st.st_dev, st.st_ino) != ident: raise Unreadable
 
 
 def _rows(db, tables, table, wanted, optional):
@@ -102,7 +110,7 @@ def _rows(db, tables, table, wanted, optional):
 
 def summarize(state_dir, start, days):
     """The report dict for `days` Pacific days from date `start`; raises Unreadable."""
-    path = _check_store(state_dir)
+    path, ident = _check_store(state_dir)
     window = [(start + timedelta(n)).isoformat() for n in range(days)]
     buckets = {d: _blank() for d in window}
     unknown = _blank()
@@ -111,7 +119,9 @@ def summarize(state_dir, start, days):
         return unknown if day is None else buckets.get(day)  # None: dated, but outside the window
 
     try:
+        _same_leaf(path, ident)
         with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
+            _same_leaf(path, ident)
             db.isolation_level = None
             db.execute("PRAGMA query_only = 1")
             db.execute("BEGIN")
@@ -128,6 +138,7 @@ def summarize(state_dir, start, days):
                 if type(calls) is not int or calls < 0: raise Unreadable
                 if (b := where(_iso_day(day))) is not None: b["interpreterCalls"] += calls
             db.execute("COMMIT")
+        _same_leaf(path, ident)
     except (sqlite3.Error, OSError): raise Unreadable from None
     totals = _blank()
     for d in window: _add(totals, buckets[d])
