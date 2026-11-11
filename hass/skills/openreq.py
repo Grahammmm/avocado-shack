@@ -202,6 +202,10 @@ class OpenRequests:
         """Write the owner's request. With ``request_id`` that row is updated (its first-message time and 2 hour limit are
         kept); without, any live row of this owner is erased/closed first and a new one is made. ``legacy`` rows (the
         old question-and-texts requests) renew their 30 minutes on every write, as the old table did."""
+        try:
+            idle = _idle_deadline(now)  # refuse an unrepresentable deadline before any write
+        except OverflowError:
+            raise ValueError("request expiry is outside the supported date range") from None
         self.ensure(owner)
         kept = json.dumps(bound_texts(texts, turns=turns, per=per, total=total), ensure_ascii=False)
         fields = dict(provider_id=provider_id, state=state, skill=skill, slots_json=json.dumps(slots or {}, sort_keys=True),
@@ -215,15 +219,18 @@ class OpenRequests:
                                   (request_id, owner)).fetchone()
             if row is not None:
                 created = datetime.fromisoformat(row["created_at"])
-                expires = _idle_deadline(now)
+                expires = idle
                 if not legacy:
-                    expires = min(expires, created + timedelta(minutes=MAX_MINUTES))
+                    try:
+                        expires = min(expires, created + timedelta(minutes=MAX_MINUTES))
+                    except OverflowError:
+                        pass  # a cap past the calendar end cannot tighten a representable idle deadline
                 fields["expires_at"] = _iso(expires)
                 sets = ", ".join(f"{k} = ?" for k in fields)
                 self.db.execute(f"UPDATE open_requests SET {sets} WHERE request_id = ?", (*fields.values(), request_id))
                 return request_id
         self.close_live(owner, now, "superseded" if skill is not None and not legacy else "closed")
-        fields.update(owner=owner, created_at=_iso(now), expires_at=_iso(_idle_deadline(now)))
+        fields.update(owner=owner, created_at=_iso(now), expires_at=_iso(idle))
         cur = self.db.execute(f"INSERT INTO open_requests({', '.join(fields)}) VALUES ({', '.join('?' * len(fields))})",
                               tuple(fields.values()))
         return cur.lastrowid
