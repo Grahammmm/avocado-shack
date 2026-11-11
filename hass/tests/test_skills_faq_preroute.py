@@ -10,9 +10,10 @@ from hass.tests.test_conversation import CHAT, SETTINGS, STRANGER
 from hass.tests.test_skill_dispatch import HIKE_ADD, SkillCase, registry_of, skill_reply
 
 POSITIVE = ("FAQ", "add an FAQ", "Add a FAQ.", "FAQ: what are your hours? Nine to five", "frequently asked questions",
-            "please add a frequently asked questions page", "add a questions page!", "  add a   delivery policy page?  ")
+            "please add a frequently asked questions page", "add a questions page!", "  add a   delivery policy page?  ",
+            "please FAQ: do you deliver? no", "Please   FAQ: hours? nine", "please FAQ", "please add an FAQ.")
 NEGATIVE = ("add to the about text that we're closed Sundays", "intro: FAQ coming soon", "don't add an FAQ", "remove the FAQ",
-            '"add an FAQ"', "what is an FAQ?", "add an FAQs", "addanFAQ", "add FAQ and change the hours", "FAQ:", "",
+            '"add an FAQ"', "what is an FAQ?", "add an FAQs", "addanFAQ", "add FAQ and change the hours", "FAQ:", "please FAQ:", "please", "",
             "update the delivery policy notice", "add a page")
 
 

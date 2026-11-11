@@ -215,9 +215,8 @@ def explicit_page_request(text) -> bool:
     if not isinstance(text, str):
         return False
     t = re.sub(r"\s+", " ", text.strip().lower())
+    if t.startswith("please "):
+        t = t[len("please "):].lstrip()
     if _FAQ_PAYLOAD.match(t):
         return True
-    t = t.rstrip(".?!").strip()
-    if t.startswith("please "):
-        t = t[len("please "):]
-    return t in _PAGE_FORMS
+    return t.rstrip(".?!").strip() in _PAGE_FORMS
