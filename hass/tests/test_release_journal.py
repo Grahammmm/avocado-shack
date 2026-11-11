@@ -153,5 +153,97 @@ class JournalTests(unittest.TestCase):
                 self.assertTrue(held)
                 with b.lock() as other: self.assertFalse(other)
 
+CAP = 1048576
+
+
+def private_file(directory, name, data):
+    path = Path(directory) / name
+    fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'wb') as stream: stream.write(data)
+    return path
+
+
+def grow_after_lstat(path, extra):
+    """Real lstat of path, then append extra bytes (valid JSON whitespace) before returning the captured result."""
+    original = Path.lstat
+
+    def lstat(self, *a, **kw):
+        st = original(self, *a, **kw)
+        if self == path:
+            with open(path, 'ab') as stream: stream.write(extra)
+        return st
+    return patch.object(Path, 'lstat', lstat)
+
+
+class ReadCapTests(unittest.TestCase):
+    def test_read_refuses_growth_after_lstat_before_decode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"canary": 1}')
+            with grow_after_lstat(path, b' ' * (CAP + 1 - 13)), patch.object(r.json, 'loads') as loads:
+                with self.assertRaises(r.BooksError) as ctx: r.read(path)
+            loads.assert_not_called()
+            self.assertEqual(str(ctx.exception), 'release-books; run adopt if missing')
+            self.assertNotIn('canary', repr(ctx.exception))
+
+    def test_read_never_consumes_more_than_cap_plus_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"a": 1}')
+            requests, returned = [], []
+            real_open = Path.open
+
+            def spy_open(self, *a, **kw):
+                stream = real_open(self, *a, **kw)
+                if self != path: return stream
+                real_read = stream.read
+
+                class Spy:
+                    def __enter__(s): return s
+                    def __exit__(s, *e): stream.close()
+                    def read(s, *args):
+                        requests.append(args)
+                        data = real_read(*args)
+                        returned.append(len(data))
+                        return data
+                return Spy()
+            with grow_after_lstat(path, b' ' * (4 * CAP)), patch.object(Path, 'open', spy_open):
+                with self.assertRaises(r.BooksError): r.read(path)
+            self.assertTrue(requests and all(len(a) == 1 and 0 < a[0] <= CAP + 1 for a in requests))
+            self.assertLessEqual(sum(returned), CAP + 1)
+
+    def test_books_load_refuses_growing_anchor_and_journal(self):
+        for target in ('anchor', 'journal'):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tmp:
+                books = r.Books(tmp)
+                r.atomic(Path(tmp) / 'publish.json', anchor())
+                books.write(entry())
+                path = Path(tmp) / 'publish.json' if target == 'anchor' else next(books.directory.iterdir())
+                before = path.read_bytes()
+                with grow_after_lstat(path, b' ' * (CAP + 1 - len(before))):
+                    with self.assertRaises(r.BooksError): books.load()
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(path.stat().st_size, CAP + 1)
+
+    def test_static_byte_boundary_is_inclusive(self):
+        body = '{"t": "éé"}'.encode()
+        with tempfile.TemporaryDirectory() as tmp:
+            for size, ok in ((CAP - 1, True), (CAP, True), (CAP + 1, False)):
+                with self.subTest(size=size):
+                    path = private_file(tmp, f's{size}.json', body + b' ' * (size - len(body)))
+                    if ok: self.assertEqual(r.read(path), {'t': 'éé'})
+                    else:
+                        with self.assertRaises(r.BooksError): r.read(path)
+
+    def test_reader_decode_and_privacy_controls_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            good = {'a': 'é'}
+            self.assertEqual(r.read(private_file(tmp, 'u8', json.dumps(good, ensure_ascii=False).encode())), good)
+            self.assertEqual(r.read(private_file(tmp, 'u16', json.dumps(good).encode('utf-16'))), good)
+            for i, bad in enumerate((b'{"a": 1, "a": 2}', b'[1]', b'{bad', b'', b'[' * 100000)):
+                with self.subTest(bad=bad[:8]), self.assertRaises(r.BooksError): r.read(private_file(tmp, f'b{i}', bad))
+            with self.assertRaises(r.BooksError): r.read(Path(tmp) / 'missing')
+            wrong = private_file(tmp, 'mode', b'{}')
+            wrong.chmod(0o644)
+            with self.assertRaises(r.BooksError): r.read(wrong)
+
 
 if __name__ == '__main__': unittest.main()
