@@ -153,6 +153,8 @@ def check_skill(result: dict, skills, pending_codes=()) -> dict:
     if not is_skill_reply(result): return result
     if "skill" in result and "calls" in result:
         return {"question": f"I could not read that message as one change. {AGAIN}"}
+    if "calls" in result and not set(result) <= {"calls", "revises"}:  # closed envelope: refuse the whole reply, never strip
+        return {"question": f"I could not read that message as a change. {AGAIN}"}
     code = result.get("revises")
     if code is not None and (not isinstance(code, str) or code not in set(pending_codes)):
         return {"question": f"I could not find draft {_clean(code)} waiting; reply with the change again."}
