@@ -11,7 +11,7 @@ to a question, questions that are not change requests, jokes). Each row says wha
 `expect` is the interpreter_eval shape: {"ops": [...], "revises": code|None}, {"question": true} or {"unsupported": true}.
 `ask` is true when the right outcome is one short question, `refuse` when it is a plain refusal (nothing drafted).
 Ops args listed in `expect` must match; args it does not list are not checked (hours and descriptions are free text and
-are checked with `mustContain`, words that must appear in the drafted args, or in the question / refusal text).
+are checked with `mustContain`, words that must appear inside one drafted arg value, never in an op name or arg name, or in the question / refusal text).
 Op order does not matter. Everything runs after the same `_checked` and registry checks the conversation applies.
 
 Verdicts per case: pass | wrong-draft (a draft that is not an accepted outcome: the unsafe one) | over-cautious (asked or
@@ -137,9 +137,21 @@ def _matched(wanted, got, registry, tally=None):
     return all(claim(i, set()) for i in range(len(want)))
 
 
-def _text_of(got) -> str:
+def _leaves(value):
+    """Lowercased content of an args value: strings as decoded text, other JSON primitives as their spelling; dict keys never."""
+    if isinstance(value, str): yield value.lower()
+    elif isinstance(value, dict):
+        for v in value.values(): yield from _leaves(v)
+    elif isinstance(value, list):
+        for v in value: yield from _leaves(v)
+    else: yield json.dumps(value).lower()
+
+
+def _texts_of(got) -> list:
+    """Content candidates of a checked reply: every drafted argument value (never op names, arg names or JSON syntax), or the one
+    question / refusal text. A required word must occur wholly inside one candidate; candidates are never joined."""
     kind = ie._kind(got)
-    return json.dumps(got["ops"], ensure_ascii=False).lower() if kind == "ops" else str(got.get(kind, "")).lower()
+    return [t for call in got["ops"] for t in _leaves(call["args"])] if kind == "ops" else [str(got.get(kind, "")).lower()]
 
 
 def judge(case, record, registry) -> dict:
@@ -151,7 +163,7 @@ def judge(case, record, registry) -> dict:
     expects = [case["expect"], *case.get("also", [])]
     accepted = {ie._kind(e) for e in expects}
     must = [m.lower() for m in case.get("mustContain", [])]
-    problems, intent_ok = [], False
+    problems, intent_ok, texts = [], False, _texts_of(got)
     for expect in expects:
         if ie._kind(expect) != kind: continue
         wanted = {**case, "expect": {**expect, "ops": _order(expect["ops"])} if "ops" in expect else expect}
@@ -162,7 +174,7 @@ def judge(case, record, registry) -> dict:
             intent_ok = intent_ok or (names == [c["op"] for c in wanted["expect"]["ops"]] and got["revises"] == expect["revises"])
         else:
             intent_ok = True
-        if why is None and all(m in _text_of(got) for m in must):
+        if why is None and all(any(m in t for t in texts) for m in must):
             return {"verdict": "pass", "kind": kind, "intent": True, "why": None}
         problems.append(why or "required words missing")
     if kind == "ops":
