@@ -259,18 +259,37 @@ _HOME_PAGE = re.compile(r"\bhome\s*page\b", re.I)
 _PRODUCT = re.compile(r"\bproducts?\b", re.I)
 
 
+_DENIES = re.compile(r"\b(?:no|not|never|without|none|nothing|neither|nor|cannot|skip|except|besides|instead\s+of|rather\s+than|other\s+than"
+                     r"|(?:any|every)(?:where|thing)\s+but)\b|n't\b", re.I)
+_CLAUSE_END = re.compile(r"[,;:.!?\n\u2013\u2014]|\s-+\s|\b(?:and|then)\b|(?<!anywhere )(?<!anything )(?<!everywhere )(?<!everything )\bbut\b", re.I)
+
+
+def _chose_home(text) -> bool:
+    """True when the text names the home page as the destination: affirmatively (not "not the home page"), and not a product."""
+    if _PRODUCT.search(text):
+        return False
+    for hit in _HOME_PAGE.finditer(text):
+        clause = _CLAUSE_END.split(text[:hit.start()])[-1]  # a denial only covers its own clause: "no, the home page" still chooses it
+        if not _DENIES.search(clause):
+            return True
+    return False
+
+
 def photo_destination_open(texts) -> bool:
     """True when the owner's latest 'main picture' / 'main photo' request has not been given a home-page destination (RF2345-11).
 
-    Only the owner's request texts count, in order: a text that names the home page (and not a product) answers the
-    question; a later main-picture text without it opens the question again; yes/no or unrelated text never answers it."""
-    open_ = False
+    Only the owner's request texts count, in order: a text that affirmatively names the home page (and not a product)
+    answers the question; a later main-picture text without it, or a refusal of the home page, opens it again; yes/no or
+    unrelated text never answers it. "not the home page" is a refusal, never a choice."""
+    open_, asked = False, False
     for text in texts:
-        home = bool(_HOME_PAGE.search(text)) and not _PRODUCT.search(text)
+        home = _chose_home(text)
         if _MAIN_PICTURE.search(text):
-            open_ = not home
+            open_, asked = not home, True
         elif home:
             open_ = False
+        elif asked and _HOME_PAGE.search(text) and not _PRODUCT.search(text):  # he turned the home page down
+            open_ = True
     return open_
 
 
