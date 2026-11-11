@@ -114,9 +114,9 @@ def _prepare_out(out: str, top: str) -> Path:
     return path
 
 
-def _private_png(value, expected: Path) -> str | None:
+def _private_png(value, expected: Path | None) -> str | None:
     """The expected path when value names it exactly and it is a regular 0600 file; else None."""
-    if not isinstance(value, str) or value != str(expected):
+    if expected is None or not isinstance(value, str) or value != str(expected):
         return None
     try:
         info = os.lstat(value)
@@ -125,11 +125,15 @@ def _private_png(value, expected: Path) -> str | None:
     return value if info and stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600 else None
 
 
-def _entry(side: str, page: str, result: dict, expected: Path) -> dict:
+def _entry(side: str, page: str, result: dict, expected: Path | None = None) -> dict:
+    """run() always passes the planned phone path; without it only the result's own png names the pair."""
+    if expected is None:
+        own = result.get("png")
+        expected = Path(own) if isinstance(own, str) and own and "\0" not in own else None
     raw = result.get("checks")
     raw = raw if isinstance(raw, dict) else {}
     checks = {k: v for k, v in raw.items() if isinstance(k, str) and type(v) is bool}
-    desktop_path = expected.with_name(expected.stem + "-desktop.png")
+    desktop_path = expected and expected.with_name(expected.stem + "-desktop.png")
     png, desktop = _private_png(result.get("png"), expected), _private_png(result.get("desktopPng"), desktop_path)
     failed = sorted(k for k, v in checks.items() if not v)
     if not checks or len(checks) != len(raw):

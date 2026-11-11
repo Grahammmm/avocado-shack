@@ -397,12 +397,12 @@ class OutputTests(RepoCase):
         phone = {k: True for k in OK_CHECKS if not k.startswith("desktop:")}
         desktop = {k: True for k in OK_CHECKS if k.startswith("desktop:")}
         for checks in ({"other": True}, phone, desktop):
-            self.assertEqual(dp._entry("base", "home", self.result_for(checks), self.tmp / "x.png")["error"], "bad checks")
-        self.assertIsNone(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": True}), self.tmp / "x.png")["error"])
-        self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": False}), self.tmp / "x.png")["error"], "check failed: extra")
-        self.assertEqual(dp._entry("base", "home", self.result_for(phone | {"noPosts": False}), self.tmp / "x.png")["error"], "check failed: noPosts")
+            self.assertEqual(dp._entry("base", "home", self.result_for(checks))["error"], "bad checks")
+        self.assertIsNone(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": True}))["error"])
+        self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": False}))["error"], "check failed: extra")
+        self.assertEqual(dp._entry("base", "home", self.result_for(phone | {"noPosts": False}))["error"], "check failed: noPosts")
         for bad in (None, "true", 1):
-            self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "noPosts": bad}), self.tmp / "x.png")["error"], "bad checks")
+            self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "noPosts": bad}))["error"], "bad checks")
 
     def result_for(self, checks):
         png, desk = self.tmp / "x.png", self.tmp / "x-desktop.png"
