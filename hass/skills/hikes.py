@@ -371,6 +371,18 @@ def _said_unlimited(said):
     return state
 
 
+def _off_answered_after_limit(texts):
+    """RF2345-10: whether his latest sign-up-off instruction is in a LATER message than any guest limit he stated (the answer
+    to \"Should they?\" after \"3 spots\"). Off and a limit in the same message stay contradictory: that is still asked."""
+    last_limit = last_off = -1
+    for i, text in enumerate(t for t in (texts or ()) if isinstance(t, str)):
+        if _said_limits(text):
+            last_limit = i
+        if _signup_state(text) is False:
+            last_off = i
+    return last_off > last_limit
+
+
 def rule_no_invention(slots, texts, ctx):
     """The E2E-HIKE-1 finding: the model added sign-up and a guest limit nobody asked for. A word or a number somewhere in
     the text is not evidence: sign-up on needs his latest sign-up instruction to be on ("sign-up off" never turns it on), a
@@ -392,6 +404,8 @@ def rule_no_invention(slots, texts, ctx):
     elif state is True or (signup is False and "hike" in slots and state is None and not limits):
         return R_SIGNUP_UNCLEAR, "other"  # he said on and the slots say off (or nothing), or an edit turns sign-up off without a word
     if cap is not None or no_limit:
+        if state is False and "hike" not in slots and _off_answered_after_limit(texts):
+            return None  # an add: he was asked about sign-up after stating spots and said off, so the kept spots are not written
         if state is False:
             return R_SIGNUP_UNCLEAR, "other"
         if cap is not None and (no_limit or limits != {cap}):  # alternatives ("15 spots or 20 spots") support neither: one unequivocal count only
@@ -453,6 +467,24 @@ def _guard(skill, slots, ctx):
         hit = RULES[rule_id](slots, texts, ctx)
         if hit:
             raise Refusal(hit[0])
+
+
+class SignupQuestion(Refusal):
+    """A Refusal that is one question the owner's short answer fixes: the dispatcher keeps the request open (kind ``question``)."""
+
+    kind = "question"
+
+
+def _guard_spots_not_lost(slots, ctx):
+    """hike.add only: the owner's words state a guest limit (\"3 spots\") but the slots leave sign-up off or unsaid, so
+    ``_signup_args`` would silently drop the count. Ask whether guests should be able to sign up; never turn it on, pick
+    one of several counts or write a number. An explicit sign-up instruction in the owner's words (either way) is left to
+    the no-invention rule, and unknown owner words keep the plain slot-only behaviour."""
+    if slots.get("signup") is True:
+        return
+    said = "\n".join(t for t in (getattr(ctx, "texts", ()) or ()) if isinstance(t, str))
+    if said.strip() and _signup_state(said) is None and _said_limits(said):
+        raise SignupQuestion(R_SIGNUP_UNCLEAR)
 
 
 # -- slot helpers --------------------------------------------------------------------------------------------------
@@ -563,6 +595,7 @@ def plan_add(slots, ctx):
         slots["title"] = place_title(slots, ctx)
     _need(ADD, slots, "title", "day", "clock", "meeting_point")
     _guard(ADD, slots, ctx)
+    _guard_spots_not_lost(slots, ctx)
     slots = _with_default(slots, ctx)
     args = {"title": _text(slots["title"]), "date": slots["day"], "time": slots["clock"],
             "meetingPoint": _text(slots["meeting_point"]), **_signup_args(slots)}
