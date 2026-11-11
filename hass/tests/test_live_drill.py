@@ -158,7 +158,7 @@ class Drill(pl.ReleaseCase):
         self.assertEqual(self.say("organic"), "proposed")
         [(_c, reply)] = self.sent()
         self.assertIn("I can't put this on the website from chat", reply)
-        self.assertIn("I've saved it for Graham", reply)
+        self.assertIn("I've kept it on the list of changes to make by hand", reply)
         code = self.conv.db.execute("SELECT code FROM drafts").fetchone()[0]
         self.assertEqual(self.say(f"yes {code}"), "no-target")
         self.assertIn("I can't put this on the website", self.sent()[0][1])

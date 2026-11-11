@@ -213,7 +213,7 @@ def rule_image_missing(ctx, content, ids):
         image = product.get("image")
         if not isinstance(image, str) or _image_file_problem(site_dir, image):
             raise Refusal(f"I can't bring {_quoted(product)} back because its picture is missing. "
-                          "Nothing changed. You can ask Graham.")
+                          "Nothing changed. Its picture has to be put back by hand first.")
 
 
 def plan_restore(slots, ctx) -> list:
@@ -447,7 +447,7 @@ ITEM_RESTORE = Skill(
     refuse=(("the product is already on the website", "I already have it on the website. Nothing changed."),
             ("the product is on hold", "I can't change it right now. It is on hold until someone has looked at it."),
             ("the maker is hidden", "Its maker is hidden. Bring the maker back first."),
-            ("the picture file is missing", "I can't bring it back because its picture is missing. Nothing changed. You can ask Graham.")),
+            ("the picture file is missing", "I can't bring it back because its picture is missing. Nothing changed. Its picture has to be put back by hand first.")),
     cases=_CASES.format("item.restore"), version=1)
 
 ITEM_EDIT = Skill(

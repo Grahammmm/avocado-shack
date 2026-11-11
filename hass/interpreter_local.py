@@ -4,7 +4,7 @@ LocalInterpreter(base_url, model, system_prompt).interpret(text, pending) sends 
 http URL and returns the decoded JSON object the model wrote, or {"unsupported": FAILED} on any failure. The failure
 reason is kept only as a short code in `last_error` (never the URL, prompt or owner text; `request` means the text or
 pending list could not be encoded); nothing is logged.
-RF1240-20: repeated keys and NaN/Infinity in a reply are a failed call (`not-json` in the envelope, `shape` in content).
+RF1240-20: repeated keys and NaN/Infinity (also RF0755-13: exponent-overflow numbers such as 1e999) in a reply are a failed call (`not-json` in the envelope, `shape` in content).
 Not wired into any service: the operator names the existing local model; nothing is pulled or changed here.
 
 HASS-INTERP-OPENAI-1: `api="openai"` speaks OpenAI-style `POST /v1/chat/completions` (the fleet's model router, loopback
@@ -13,7 +13,7 @@ only, same checks and limits) instead of Ollama `/api/chat`. It asks for a non-t
 FallbackInterpreter(primary, fallback, valid) asks the second interpreter once, never more, when the first one failed or
 answered outside the reply contract, and records in `last_backend` / `last_fallback` / `last_primary_error` which one answered.
 """
-import json, time, urllib.error, urllib.parse, urllib.request  # noqa: E401
+import json, math, time, urllib.error, urllib.parse, urllib.request  # noqa: E401
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -74,7 +74,13 @@ def _pairs(pairs):  # a key repeated in one object is refused, never read as its
 def _constant(name): raise ValueError("non-finite constant")  # noqa: E704 - NaN, Infinity, -Infinity
 
 
-def _strict(text): return json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant)  # noqa: E704
+def _number(token):  # RF0755-13: a number token that converts to infinity (1e999) is refused like a bare constant
+    value = float(token)
+    if not math.isfinite(value): raise ValueError("non-finite number")
+    return value
+
+
+def _strict(text): return json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant, parse_float=_number)  # noqa: E704
 
 
 def strip_reasoning(text) -> str:
@@ -231,6 +237,8 @@ class FallbackInterpreter:
     def __init__(self, primary, fallback, valid):
         if not (callable(valid) and hasattr(primary, "interpret") and hasattr(fallback, "interpret")):
             raise ValueError("primary and fallback must interpret and valid must be callable")
+        if isinstance(primary, FallbackInterpreter) or isinstance(fallback, FallbackInterpreter):  # nested wrapper = 3+ attempts
+            raise ValueError("interpreters must not have a fallback of their own")
         self.primary, self.fallback, self.valid = primary, fallback, valid
         self.last_error, self.last_backend, self.last_fallback, self.last_primary_error, self.last_seconds = None, None, False, None, None
 

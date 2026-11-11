@@ -417,8 +417,17 @@ def check_notice_already(slots, texts, ctx):
 NOTICE_CHECKS = {"no-price": check_notice_price, "notice-dates": check_notice_dates, "not-already-true": check_notice_already}
 
 
+NOTICE_CONFLICT = "Do you want the notice changed, or taken down? I can only do one."
+
+
+def _given(value):
+    return isinstance(value, str) and bool(value.strip())
+
+
 def plan_notice(slots, ctx):
     store = store_of(ctx)
+    if slots.get("clear") is True and (_given(slots.get("text")) or _given(slots.get("until"))):
+        raise SkillStop(NOTICE_CONFLICT, "question")
     if slots.get("clear"):
         if store is not None and not store.get("notice"):
             raise SkillStop(NO_NOTICE)
@@ -583,7 +592,7 @@ SHOP_NOTICE = Skill(
             ("the last day is more than 60 days away", NOTICE_LONG),
             ("the last day has passed", NOTICE_PAST),
             ("there is no notice to take down", NO_NOTICE)),
-    cases=_CASES.format("shop.notice"), version=1)
+    cases=_CASES.format("shop.notice"), version=2)
 
 SHOP_CONTACT = Skill(
     name="shop.contact", label="change the phone number or the address",

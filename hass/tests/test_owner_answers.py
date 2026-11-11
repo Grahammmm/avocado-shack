@@ -22,9 +22,9 @@ INTERNAL = re.compile(r"chg-|sha256|[0-9a-f]{7,}|/|worktree|commit|revision|inde
 STOPPED = "Changes are stopped. I won't save anything new until you say 'resume changes'."
 STAYS = "Changes already on the website stay there."
 NOT_COPIED = ("It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. "
-              "If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it "
-              "to the website again, which puts every page in place.")
-NOT_LIVE = "It's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website."
+              "If copying it started and stopped partway, some pages may already show it. Copying it to the website "
+              "again, by hand, puts every page in place.")
+NOT_LIVE = "It's saved, but not on the website yet. Copying it there is a separate step, done by hand."
 
 
 def row(state, **kw):
@@ -64,7 +64,7 @@ class DidItWorkTests(unittest.TestCase):
         got = answers.did_it_work(row("applied"), {"state": "failed", "reason": "write failed: OSError; rollback "
                                                    "failed: index.html"}, NOW)
         self.assertNotIn("unchanged", got)
-        self.assertEqual(got, "That didn't reach the website, and some website files could not be put back. I couldn't update the website pages. Please ask Graham before making more changes.")
+        self.assertEqual(got, "That didn't reach the website, and some website files could not be put back. I couldn't update the website pages. Please hold off on more changes until those files are put back by hand.")
 
     def test_not_yet_approved_is_never_described_as_applied(self):
         installed = {"state": "installed", "installed_at": "2026-11-02T17:05:00+00:00"}
@@ -114,16 +114,16 @@ class DidItWorkTests(unittest.TestCase):
                         self.assertNotIn(raw, text)
 
     def test_apply_reply_says_it_is_not_on_the_website(self):  # RETURN 2: the approve/apply reply point
-        self.assertEqual(answers.applied_text("ab12", "store store: hours"), "Saved: \ue000store store: hours\ue001\nIt's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.")
+        self.assertEqual(answers.applied_text("ab12", "store store: hours"), "Saved: \ue000store store: hours\ue001\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand.")
         self.assertEqual(answers.applied_text("ab12", "store store: hours", checked=True),
-                         "Saved and checked: \ue000store store: hours\ue001\nIt's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.")
+                         "Saved and checked: \ue000store store: hours\ue001\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand.")
 
     def test_no_install_result_is_unconfirmed_never_intact(self):  # RETURN 3: install.py may have died part way
         for change in (row("applied"), row("verified"), row("applied", reason="not verified: check failed: x")):
             with self.subTest(reason=change["reason"]):
                 got = answers.did_it_work(change, None, NOW)
                 self.assertTrue(got.startswith("It's saved, but I'm not sure it's on the website. "), got)
-                self.assertIn("some pages may already show it. Please ask Graham to copy it to the website again", got)
+                self.assertIn("some pages may already show it. Copying it to the website again, by hand,", got)
                 for word in ("Nothing is broken", "unchanged", "as it was"):
                     self.assertNotIn(word, got)
 
@@ -171,7 +171,7 @@ class ConversationAnswerTests(ConversationTestCase):
     def applied(self):
         draft, _reply = self.propose("hours")
         self.assertEqual(self.say("yes"), "approved")
-        self.assertEqual(self.replies(), ["Saved: the opening hours for Avocado Shack\nIt's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website."])  # RETURN 2
+        self.assertEqual(self.replies(), ["Saved: the opening hours for Avocado Shack\nIt's saved, but not on the website yet. Copying it there is a separate step, done by hand."])  # RETURN 2
         return draft
 
     def last_line(self, text="did it work?"):
@@ -194,7 +194,7 @@ class ConversationAnswerTests(ConversationTestCase):
 
     def test_did_it_work_follows_the_install(self):
         draft = self.applied()
-        self.assertEqual(self.last_line(), "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.")
+        self.assertEqual(self.last_line(), "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Copying it to the website again, by hand, puts every page in place.")
         self.assertEqual(self.history(), ["- the opening hours for Avocado Shack: saved, but I'm not sure it's on the website"])
         self.now = T0 + timedelta(minutes=5)
         out = install.install(draft["change_id"], state=str(self.repo.state), now=self.now)
@@ -222,7 +222,7 @@ class ConversationAnswerTests(ConversationTestCase):
         self.assertNotEqual(self.snapshot(), before)  # RETURN 3: one file was replaced before the process died
         self.conv = self.open()  # restart: recovery has nothing to settle, the answer reads the change record
         line = self.last_line()
-        self.assertEqual(line, "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.")
+        self.assertEqual(line, "Last change: the opening hours for Avocado Shack. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Copying it to the website again, by hand, puts every page in place.")
         self.assertNotIn("unchanged", line)  # never claims an intact site; says some pages may show it, ask for help
         self.assertEqual(install.install(draft["change_id"], state=str(self.repo.state))["result"], "installed")
         self.assertIn("is on the website now", self.last_line())

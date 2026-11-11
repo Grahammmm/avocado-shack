@@ -38,6 +38,8 @@ def load_cases(path) -> list:
         if not (set(row) == {"id", "photo", "expected"} and isinstance(photo, str) and photo not in ("", ".", "..")
                 and not set(photo) & set("/\\\x00") and isinstance(expected, dict) and set(expected) == set(FIELDS)):
             raise EvalError(f"cases line {n}: not a case")
+        try: photo.encode("utf-8", "strict")  # an unpaired surrogate cannot name a file; refuse it here, not in the filesystem encoder
+        except UnicodeEncodeError: raise EvalError(f"cases line {n}: not a case") from None
         if not all(v is None or isinstance(v, str) for v in expected.values()):
             raise EvalError(f"cases line {n}: expected value is neither text nor null")
         cases.append({**row, "_line": n})
@@ -77,19 +79,23 @@ def score(cases, replies, categories) -> dict:
 
 
 def _read_photo(folder_fd, name) -> bytes:
-    """Bytes of a regular, non-link file directly in the photos folder (the open itself refuses a link)."""
+    """Bytes of a regular, non-link file directly in the photos folder (the open itself refuses a link). An OSError after a
+    successful open (metadata, stream, read, wrapper exit, the one raw close) is the same content-free refusal."""
     try:
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=folder_fd)
     except OSError:
         raise EvalError("a photo is missing or is a link") from None
     try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= MAX_PHOTO: raise EvalError("a photo is not a usable regular file")
-        with os.fdopen(fd, "rb", closefd=False) as fh: image = fh.read(MAX_PHOTO + 1)
-        if not 0 < len(image) <= MAX_PHOTO: raise EvalError("a photo is not a usable regular file")  # changed after fstat
-        return image
-    finally:
-        os.close(fd)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= MAX_PHOTO: raise EvalError("a photo is not a usable regular file")
+            with os.fdopen(fd, "rb", closefd=False) as fh: image = fh.read(MAX_PHOTO + 1)
+            if not 0 < len(image) <= MAX_PHOTO: raise EvalError("a photo is not a usable regular file")  # changed after fstat
+            return image
+        finally:
+            os.close(fd)  # once, never retried: the number may be reused after a failed close
+    except OSError:
+        raise EvalError("a photo is not a usable regular file") from None
 
 
 def live(cases, url, model, photos, out, transport=None, api="ollama") -> dict:

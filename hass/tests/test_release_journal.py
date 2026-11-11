@@ -153,5 +153,220 @@ class JournalTests(unittest.TestCase):
                 self.assertTrue(held)
                 with b.lock() as other: self.assertFalse(other)
 
+CAP = 1048576
+
+
+def private_file(directory, name, data):
+    path = Path(directory) / name
+    fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'wb') as stream: stream.write(data)
+    return path
+
+
+def grow_after_lstat(path, extra):
+    """Real lstat of path, then append extra bytes (valid JSON whitespace) before returning the captured result."""
+    original = Path.lstat
+
+    def lstat(self, *a, **kw):
+        st = original(self, *a, **kw)
+        if self == path:
+            with open(path, 'ab') as stream: stream.write(extra)
+        return st
+    return patch.object(Path, 'lstat', lstat)
+
+
+class ReadCapTests(unittest.TestCase):
+    def test_read_refuses_growth_after_lstat_before_decode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"canary": 1}')
+            with grow_after_lstat(path, b' ' * (CAP + 1 - 13)), patch.object(r.json, 'loads') as loads:
+                with self.assertRaises(r.BooksError) as ctx: r.read(path)
+            loads.assert_not_called()
+            self.assertEqual(str(ctx.exception), 'release-books; run adopt if missing')
+            self.assertNotIn('canary', repr(ctx.exception))
+
+    def test_read_never_consumes_more_than_cap_plus_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"a": 1}')
+            requests, returned = [], []
+            real_fdopen, real_fstat = os.fdopen, os.fstat
+
+            def grow_after_fstat(fd):  # growth after descriptor admission, before the read
+                st = real_fstat(fd)
+                with open(path, 'ab') as stream: stream.write(b' ' * (4 * CAP))
+                return st
+
+            def spy_open(fd, *a, **kw):
+                stream = real_fdopen(fd, *a, **kw)
+                real_read = stream.read
+
+                class Spy:
+                    def __enter__(s): return s
+                    def __exit__(s, *e): stream.close()
+                    def read(s, *args):
+                        requests.append(args)
+                        data = real_read(*args)
+                        returned.append(len(data))
+                        return data
+                return Spy()
+            with patch.object(r.os, 'fdopen', spy_open), patch.object(r.os, 'fstat', grow_after_fstat):
+                with self.assertRaises(r.BooksError): r.read(path)
+            self.assertTrue(requests and all(len(a) == 1 and 0 < a[0] <= CAP + 1 for a in requests))
+            self.assertLessEqual(sum(returned), CAP + 1)
+
+    def test_books_load_refuses_growing_anchor_and_journal(self):
+        for target in ('anchor', 'journal'):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tmp:
+                books = r.Books(tmp)
+                r.atomic(Path(tmp) / 'publish.json', anchor())
+                books.write(entry())
+                path = Path(tmp) / 'publish.json' if target == 'anchor' else next(books.directory.iterdir())
+                before = path.read_bytes()
+                with grow_after_lstat(path, b' ' * (CAP + 1 - len(before))):
+                    with self.assertRaises(r.BooksError): books.load()
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(path.stat().st_size, CAP + 1)
+
+    def test_static_byte_boundary_is_inclusive(self):
+        body = '{"t": "éé"}'.encode()
+        with tempfile.TemporaryDirectory() as tmp:
+            for size, ok in ((CAP - 1, True), (CAP, True), (CAP + 1, False)):
+                with self.subTest(size=size):
+                    path = private_file(tmp, f's{size}.json', body + b' ' * (size - len(body)))
+                    if ok: self.assertEqual(r.read(path), {'t': 'éé'})
+                    else:
+                        with self.assertRaises(r.BooksError): r.read(path)
+
+    def test_reader_decode_and_privacy_controls_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            good = {'a': 'é'}
+            self.assertEqual(r.read(private_file(tmp, 'u8', json.dumps(good, ensure_ascii=False).encode())), good)
+            self.assertEqual(r.read(private_file(tmp, 'u16', json.dumps(good).encode('utf-16'))), good)
+            for i, bad in enumerate((b'{"a": 1, "a": 2}', b'[1]', b'{bad', b'', b'[' * 100000)):
+                with self.subTest(bad=bad[:8]), self.assertRaises(r.BooksError): r.read(private_file(tmp, f'b{i}', bad))
+            with self.assertRaises(r.BooksError): r.read(Path(tmp) / 'missing')
+            wrong = private_file(tmp, 'mode', b'{}')
+            wrong.chmod(0o644)
+            with self.assertRaises(r.BooksError): r.read(wrong)
+
+
+def swap_after_lstat(path, make):
+    """Real lstat of path, then move the original aside and let make() install a replacement before returning."""
+    original, fired = Path.lstat, []
+
+    def lstat(self, *a, **kw):
+        st = original(self, *a, **kw)
+        if self == path and not fired:
+            fired.append(1)
+            os.rename(path, str(path) + '.orig')
+            make()
+        return st
+    return patch.object(Path, 'lstat', lstat)
+
+
+def wrote(path, data, mode):
+    with open(path, 'wb') as stream: stream.write(data)
+    os.chmod(path, mode)
+
+
+class SubstitutionTests(unittest.TestCase):
+    def refuses(self, path):
+        with self.assertRaises(r.BooksError) as ctx: r.read(path)
+        self.assertEqual(str(ctx.exception), 'release-books; run adopt if missing')
+        self.assertNotIn('canary', repr(ctx.exception))
+
+    def test_read_rejects_symlink_installed_after_lstat(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"a": 1}')
+            foreign = Path(tmp) / 'foreign'
+            wrote(foreign, b'{"canary": 1}', 0o644)
+            with swap_after_lstat(path, lambda: os.symlink(foreign, path)), patch.object(r.json, 'loads') as loads:
+                self.refuses(path)
+            loads.assert_not_called()
+            self.assertEqual(foreign.read_bytes(), b'{"canary": 1}')
+            self.assertEqual(foreign.stat().st_mode & 0o777, 0o644)
+
+    def test_read_rejects_replacement_inode_even_when_private(self):
+        for mode in (0o644, 0o600):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                path = private_file(tmp, 'x.json', b'{"a": 1}')
+                with swap_after_lstat(path, lambda: wrote(path, b'{"a": 1}', mode)): self.refuses(path)
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(r.read(private_file(tmp, 'x.json', b'{"a": 1}')), {'a': 1})
+
+    def test_opened_descriptor_metadata_is_rechecked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"a": 1}')
+            original = Path.lstat
+
+            def lstat(self, *a, **kw):
+                st = original(self, *a, **kw)
+                if self == path: os.chmod(path, 0o644)
+                return st
+            with patch.object(Path, 'lstat', lstat): self.refuses(path)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"a": 1}')
+            real = os.fstat
+
+            def foreign_uid(fd):
+                st = real(fd)
+                return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink, st.st_uid + 1, *tuple(st)[5:]))
+            with patch.object(r.os, 'fstat', foreign_uid): self.refuses(path)
+
+    def test_books_load_rejects_anchor_and_journal_substitution(self):
+        for target in ('anchor', 'journal'):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as tmp:
+                books = r.Books(tmp)
+                r.atomic(Path(tmp) / 'publish.json', anchor())
+                books.write(entry())
+                path = Path(tmp) / 'publish.json' if target == 'anchor' else next(books.directory.iterdir())
+                body = path.read_bytes()
+                with swap_after_lstat(path, lambda: wrote(path, body, 0o644)):
+                    with self.assertRaises(r.BooksError): books.load()
+                self.assertEqual(path.read_bytes(), body)
+                self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+
+    def test_late_fifo_or_directory_refuses_without_blocking(self):
+        makers = {'fifo': lambda p: os.mkfifo(p, 0o600), 'dir': lambda p: os.mkdir(p, 0o700)}
+        for name, make in makers.items():
+            with self.subTest(kind=name), tempfile.TemporaryDirectory() as tmp:
+                path = private_file(tmp, 'x.json', b'{"a": 1}')
+                with swap_after_lstat(path, lambda: make(path)): self.refuses(path)
+
+    def test_descriptor_closes_on_every_reader_path(self):
+        opened = []
+        real_open, real_fstat = os.open, os.fstat
+
+        def spy_open(p, *a, **kw):
+            fd = real_open(p, *a, **kw)
+            if a and a[0] & os.O_NOFOLLOW: opened.append(fd)
+            return fd
+
+        def closed(fd):
+            with self.assertRaises(OSError): real_fstat(fd)
+        with tempfile.TemporaryDirectory() as tmp, patch.object(r.os, 'open', spy_open):
+            good = private_file(tmp, 'good', b'{"a": 1}')
+            bad = private_file(tmp, 'bad', b'{bad')
+            self.assertEqual(r.read(good), {'a': 1})
+            self.refuses(bad)
+            with patch.object(r.os, 'fstat', side_effect=OSError): self.refuses(good)
+            with patch.object(r.os, 'fdopen', side_effect=OSError): self.refuses(good)
+            swapped = private_file(tmp, 'swapped', b'{}')
+            with swap_after_lstat(swapped, lambda: wrote(swapped, b'{}', 0o600)): self.refuses(swapped)
+            self.assertEqual(r.read(good), {'a': 1})
+        self.assertEqual(len(opened), 6)
+        for fd in opened: closed(fd)
+
+    def test_post_open_rename_cannot_redirect_stream(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = private_file(tmp, 'x.json', b'{"a": "original"}')
+            real_fdopen = os.fdopen
+
+            def fdopen(fd, *a, **kw):
+                os.rename(path, str(path) + '.orig')
+                wrote(path, b'{"a": "replacement"}', 0o600)
+                return real_fdopen(fd, *a, **kw)
+            with patch.object(r.os, 'fdopen', fdopen): self.assertEqual(r.read(path), {'a': 'original'})
+
 
 if __name__ == '__main__': unittest.main()

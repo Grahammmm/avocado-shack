@@ -14,6 +14,7 @@ from hass.interpreter_local import LocalInterpreter
 from hass.tests.test_conversation import ConversationTestCase
 
 MONDAY = date(2026, 11, 9)  # the corpus' fixed "today"
+LAST_DAY, FIRST_DAY = date.max, date.min  # 9999-12-31 (Friday) and 0001-01-01 (Monday): the calendar's ends
 URL = "http://127.0.0.1:11434"
 
 
@@ -186,6 +187,35 @@ class HintTests(unittest.TestCase):
         for text in ("Monday 9 to 6 and Tuesday closed", "Tuesday closed and Monday 9 to 6", "Monday 9 to 6, Tuesday off", "Saturday 9 to 5 and closed Sunday", "Saturday 9 to 5 and Wednesday from 10", "Monday 9 to 6 and Tuesday opens at 10am", "Monday 9 to 6 and Tuesday moves to later"):
             self.assertNotIn("alreadyTrue", self.ask(text), text)
 
+    def test_weekday_range_never_claims_endpoints_cover_the_interior(self):
+        hours = ("Monday 9am–5pm · Tuesday 10am–4pm · Wednesday 9am–5pm · Thursday 9am–5pm · Friday 9am–5pm",)
+        hint = nl_prep.make_hinter(tiny(hours=hours))
+        for text in ("Monday-Friday 9 to 5", "Monday\u2013Friday 9 to 5", "Monday through Friday 9 to 5"):
+            self.assertNotIn("alreadyTrue", hint(text, MONDAY), text)
+            self.assertIsNone(nl_prep.hours_hints(text, nl_prep._Index(tiny(hours=hours))), text)
+        self.assertEqual(hint("Monday and Friday 9 to 5", MONDAY)["alreadyTrue"], ["Monday already 9am–5pm", "Friday already 9am–5pm"])
+
+    def test_every_weekday_range_form_omits_the_hours_hint_even_when_true(self):
+        uniform = nl_prep._Index(tiny(hours=("Monday–Friday 9am–5pm",)))
+        for text in ("Monday-Friday 9 to 5", "Mon - Fri 9 to 5", "Monday \u2014 Friday 9 to 5", "Monday to Friday 9 to 5", "Monday until Friday 9 to 5",
+                     "Mondays-Fridays 9 to 5", "Friday-Monday 9 to 5", "Monday-Monday 9 to 5", "Monday-Wednesday and Friday 9 to 5"):
+            self.assertIsNone(nl_prep.hours_hints(text, uniform), text)
+        for text, want in (("Monday, Friday 9 to 5", ["Monday already 9am–5pm", "Friday already 9am–5pm"]), ("Saturday 9-5", None)):
+            self.assertEqual(nl_prep.hours_hints(text, uniform), want, text)
+        self.assertEqual(nl_prep.hours_hints("Monday and Friday 9 to 5", uniform), ["Monday already 9am–5pm", "Friday already 9am–5pm"])
+
+    def test_range_omission_keeps_unrelated_hints_and_the_request(self):
+        seen = []
+        hours = ("Monday 9am–5pm · Tuesday 10am–4pm · Wednesday 9am–5pm",)
+        interp = LocalInterpreter(URL, "m", "SYSTEM", transport=RequestTests.fake(None, seen), clock=lambda: datetime(2026, 11, 9, 17, 40, tzinfo=timezone.utc),
+                                  hinter=nl_prep.make_hinter(tiny(hours=hours)))
+        text = "lemons are out, Monday-Wednesday 9 to 5"
+        interp.interpret(text, [])
+        user = json.loads(seen[-1]["messages"][1]["content"])
+        self.assertEqual(user["message"], text)
+        self.assertNotIn("alreadyTrue", user["hints"])
+        self.assertEqual(user["hints"]["products"][0]["is"]["id"], "photo-product-002")
+
     def test_a_shared_prefix_is_not_resolved_to_one_product(self):
         hint = nl_prep.make_hinter(SimpleNamespace(products=[product(1, "Lemons"), product(2, "Lemonade", "drinks")], makers={},
                                                    community={}, store={"hours": []}))
@@ -212,6 +242,109 @@ class HintTests(unittest.TestCase):
         out = json.dumps(self.ask("honey is sold out"))
         for word in ("organic", "local", "$", "quantity"):
             self.assertNotIn(word, out)
+
+
+class CalendarEndpointTests(unittest.TestCase):
+    """RF0015-10: a day that would leave date.min..date.max gives no date row, and the rest of the message's hints survive."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.hint = staticmethod(nl_prep.make_hinter(tiny()))
+
+    def said(self, text, today):
+        rows, hits = nl_prep.date_hints(text, today)
+        return {row["said"]: row for row in rows}, hits
+
+    def test_relative_calendar_overflow_is_local_to_the_date_token(self):
+        rows, _ = self.said("tomorrow, day after tomorrow, today, tonight, yesterday", LAST_DAY)
+        self.assertEqual(sorted(rows), ["today", "tonight", "yesterday"])
+        self.assertEqual((rows["today"]["date"], rows["today"]["weekday"], rows["yesterday"]["date"]), ("9999-12-31", "Friday", "9999-12-30"))
+        rows, _ = self.said("yesterday and today and tomorrow", FIRST_DAY)
+        self.assertEqual({k: v["date"] for k, v in rows.items()}, {"today": "0001-01-01", "tomorrow": "0001-01-02"})
+        rows, _ = self.said("day after tomorrow", date(9999, 12, 30))
+        self.assertEqual(rows, {})
+        rows, _ = self.said("day after tomorrow", date(9999, 12, 29))
+        self.assertEqual(rows["day after tomorrow"]["date"], "9999-12-31")
+
+    def test_duration_calendar_overflow_skips_without_traceback(self):
+        for text in ("in 2 weeks", "in 99 days", "in 1 week", "in two weeks"):
+            self.assertEqual(self.said(text, LAST_DAY)[0], {}, text)
+        self.assertEqual(self.said("in 99 days", date(9999, 9, 24))[0], {})
+        self.assertEqual(self.said("in 99 days", date(9999, 9, 23))[0]["in 99 days"]["date"], "9999-12-31")
+        self.assertEqual(self.said("in 2 weeks", date(9999, 12, 17))[0]["in 2 weeks"]["date"], "9999-12-31")
+        self.assertEqual(self.said("in 2 weeks", date(9999, 12, 18))[0], {})
+        self.assertEqual(self.said("in 1 day", date(9999, 12, 30))[0]["in 1 day"]["date"], "9999-12-31")
+        self.assertEqual(self.said("in 2 weeks", FIRST_DAY)[0]["in 2 weeks"]["date"], "0001-01-15")
+        self.assertEqual(self.said("in 1 day", date(2028, 2, 28))[0]["in 1 day"]["date"], "2028-02-29")  # leap day
+        self.assertEqual(self.said("in 2 weeks", date(2026, 12, 25))[0]["in 2 weeks"]["date"], "2027-01-08")  # year crossing
+
+    def test_weekday_overflow_does_not_collapse_ambiguity(self):
+        # 9999-12-31 is a Friday: every coming Friday/Saturday..Thursday is past the end; "last" ones are fine.
+        for text in ("friday", "next friday", "this friday", "saturday", "next saturday", "thursday", "next thursday", "on sunday"):
+            rows, hits = self.said(text, LAST_DAY)
+            self.assertEqual(rows, {}, text)  # no partial row, no lone date for an ambiguous day
+            self.assertEqual(len(hits), 1, text)  # the lexical weekday survives
+        rows, hits = self.said("last friday", LAST_DAY)
+        self.assertEqual((rows["last friday"]["date"], hits), ("9999-12-24", [("friday", 4)]))
+        self.assertEqual(self.said("last saturday", LAST_DAY)[0]["last saturday"]["date"], "9999-12-25")
+        # 0001-01-01 is a Monday: "last" and the bare form need a day before the start; next/same-day readings are fine.
+        for text in ("last monday", "last tuesday", "tuesday", "sunday", "last sunday"):
+            rows, hits = self.said(text, FIRST_DAY)
+            self.assertEqual(rows, {}, text)
+            self.assertEqual(len(hits), 1, text)
+        rows, _ = self.said("monday, next tuesday, next sunday", FIRST_DAY)
+        self.assertEqual(rows["monday"]["unclear"], ["0001-01-01", "0001-01-08"])
+        self.assertEqual(rows["next tuesday"]["unclear"], ["0001-01-02", "0001-01-09"])
+        self.assertEqual(rows["next sunday"]["unclear"], ["0001-01-07", "0001-01-14"])
+        self.assertTrue(all("date" not in r for r in rows.values()))
+        # the +7 alternative alone overflows: near the end a same-weekday or next reading is omitted, not reduced to one date
+        self.assertEqual(self.said("friday", date(9999, 12, 24))[0]["friday"]["unclear"], ["9999-12-24", "9999-12-31"])
+        self.assertEqual(self.said("friday", date(9999, 12, 25))[0]["friday"]["next"], "9999-12-31")  # both bare-weekday dates fit: unchanged
+        self.assertEqual(self.said("next friday", date(9999, 12, 25))[0], {})
+        self.assertEqual(self.said("next saturday", date(9999, 12, 24))[0], {})  # 12-25 is fine, 01-01 is not
+        self.assertEqual(self.said("wednesday", date(9999, 12, 30))[0], {})
+
+    def test_mixed_date_tokens_preserve_valid_rows(self):
+        rows, _ = nl_prep.date_hints("tomorrow, today, dec 5 2027, in 2 weeks, yesterday", LAST_DAY)
+        self.assertEqual([(r["said"], r["date"]) for r in rows], [("today", "9999-12-31"), ("yesterday", "9999-12-30"), ("dec 5 2027", "2027-12-05")])
+        self.assertEqual([r["said"] for r in nl_prep.date_hints("friday, today, dec 5 2027", LAST_DAY)[0]], ["today", "dec 5 2027"])
+        many = ", ".join(f"jan {n} 2027" for n in range(1, 11))  # ten valid written dates keep the old cap of eight
+        rows, _ = nl_prep.date_hints("tomorrow, " + many, LAST_DAY)
+        self.assertEqual(len(rows), nl_prep.MAX_LIST)
+        self.assertEqual(rows[0]["said"], "jan 1 2027")
+
+    def test_hinter_keeps_products_and_clock_when_date_overflows(self):
+        control = self.hint("lemons at 9am", LAST_DAY)
+        self.assertEqual(control, {"products": [{"said": "lemons", "is": {"id": "photo-product-002", "name": "Lemons"}}], "times": [{"said": "9am", "time": "09:00"}]})
+        self.assertEqual(self.hint("lemons tomorrow at 9am", LAST_DAY), control)
+        self.assertEqual(self.hint("lemons yesterday at 9am", FIRST_DAY), control)
+        out = self.hint("lemons today and tomorrow at 9am", LAST_DAY)
+        self.assertEqual(out["dates"], [{"said": "today", "date": "9999-12-31", "weekday": "Friday"}])
+        self.assertEqual((out["products"], out["times"]), (control["products"], control["times"]))
+        self.assertEqual(self.hint("lemons in 2 weeks at 9am", LAST_DAY), control)
+
+    def test_an_overflowing_weekday_keeps_the_hike_weekday_match(self):
+        events = [{"id": "hike-9999-12-26", "title": "Far walk", "startsAt": "9999-12-26T08:30:00-08:00", "status": "scheduled"}]  # a Sunday
+        content = SimpleNamespace(**{**vars(tiny()), "community": {"events": events}})
+        out = nl_prep.make_hinter(content)("move the walk on sunday at 9am", LAST_DAY)
+        self.assertNotIn("dates", out)
+        self.assertEqual(out["hikes"]["onThatWeekday"][0]["scheduled hikes"][0]["hike"], "hike-9999-12-26")
+        self.assertEqual(out["times"], [{"said": "9am", "time": "09:00"}])
+
+    def test_ordinary_date_and_year_contract_is_unchanged(self):
+        rows, hits = nl_prep.date_hints("wednesday, next saturday, last friday, monday", MONDAY)
+        self.assertEqual(hits, [("wednesday", 2), ("saturday", 5), ("friday", 4), ("monday", 0)])
+        self.assertEqual(rows[0], {"said": "wednesday", "next": "2026-11-11", "last": "2026-11-04", "weekday": "Wednesday",
+                                   "note": "next = the coming one; last = the one just past"})
+        self.assertEqual((rows[1]["unclear"], rows[2]["date"], rows[3]["unclear"]), (["2026-11-14", "2026-11-21"], "2026-11-06", ["2026-11-09", "2026-11-16"]))
+        self.assertEqual(rows[1]["note"], "two readings; ask which unless the owner said")
+        self.assertEqual([(r["said"], r["date"]) for r in nl_prep.date_hints("in 2 weeks, in 3 days, today, tomorrow", MONDAY)[0]],
+                         [("today", "2026-11-09"), ("tomorrow", "2026-11-10"), ("in 2 weeks", "2026-11-23"), ("in 3 days", "2026-11-12")])
+        self.assertEqual(nl_prep.date_hints("the 31st", date(2026, 11, 9))[0][0]["date"], "2026-12-31")  # ordinal rollover
+        self.assertEqual(nl_prep.date_hints("feb 29 2028 and dec 5 202", MONDAY)[0][0]["date"], "2028-02-29")
+        self.assertEqual(nl_prep._next_weekday(MONDAY, 0), date(2026, 11, 16))
+        self.assertEqual(nl_prep._next_weekday(MONDAY, 0, include_today=True), MONDAY)
+        self.assertIsNone(nl_prep._next_weekday(LAST_DAY, 5))
 
 
 class CorpusHintTests(unittest.TestCase):
@@ -269,6 +402,18 @@ class RequestTests(unittest.TestCase):
         interp.interpret("tomorrow", [], sent_at=late)
         user = self.user(seen)
         self.assertEqual((user["today"], user["hints"]["dates"][0]["date"]), ("2026-11-09", "2026-11-10"))
+
+    def test_transport_receives_surviving_hints_without_guessed_day(self):
+        seen = []
+        last = datetime(9999, 12, 31, 20, 0, tzinfo=timezone.utc)  # noon on the last Pacific day; midday keeps the Pacific day put
+        interp = LocalInterpreter(URL, "m", "SYSTEM", transport=self.fake(seen), clock=lambda: last, hinter=nl_prep.make_hinter(tiny()))
+        interp.interpret("lemons tomorrow at 9am", [])
+        user = self.user(seen)
+        self.assertEqual(user["today"], "9999-12-31")
+        self.assertEqual(user["hints"], {"products": [{"said": "lemons", "is": {"id": "photo-product-002", "name": "Lemons"}}], "times": [{"said": "9am", "time": "09:00"}]})
+        self.assertNotIn("dates", user["hints"])
+        interp.interpret("lemons today and tomorrow at 9am", [])
+        self.assertEqual([row["date"] for row in self.user(seen)["hints"]["dates"]], ["9999-12-31"])
 
     def test_a_raising_or_wrong_hinter_means_no_hints_not_a_failed_call(self):
         for hinter in (lambda *a: 1 / 0, lambda *a: "text", lambda *a: None):
@@ -352,6 +497,103 @@ class RecentQuestionTests(ConversationTestCase):
     def test_a_missing_table_or_bad_row_is_no_recent_not_a_crash(self):
         self.conv.db.execute("DROP TABLE outbox")
         self.assertIsNone(self.conv._recent_question(self.now))
+
+
+class QuotedYearTests(unittest.TestCase):
+    """A malformed apostrophe-prefixed year after a month and day leaves that date out instead of rolling to the next annual date."""
+    fake, user, make = RequestTests.fake, RequestTests.user, RequestTests.make
+
+    def dates(self, text):
+        return nl_prep.date_hints(text, MONDAY)[0]
+
+    def test_malformed_apostrophe_year_never_rolls_to_current_year(self):
+        for text in ("hike on December 5 '2027", "hike on December 5 '277", "hike on December 5 '2", "hike on dec 5 '20277",
+                     "hike on December 5, '2027", "hike on December 5th '277", "hike on 5 Dec. '2027", "hike on 5th of Dec. '277",
+                     "hike on 5 December, '2027", "hike on 5 Dec '2"):
+            self.assertEqual(self.dates(text), [], text)
+
+    def test_curly_apostrophe_year_refusal_uses_existing_fold(self):
+        for q in ("'", "\u2019", "\u2018"):
+            self.assertEqual(self.dates(f"hike on December 5 {q}2027"), [])
+            self.assertEqual(self.dates(f"hike on 5 Dec. {q}27")[0]["date"], "2027-12-05")
+
+    def test_valid_year_and_yearless_controls_keep_exact_rows(self):
+        self.assertEqual(self.dates("hike on December 5 '27"), [{"said": "december 5 '27", "date": "2027-12-05", "weekday": "Sunday"}])
+        self.assertEqual(self.dates("hike on 5 Dec. '27")[0]["date"], "2027-12-05")
+        self.assertEqual(self.dates("hike on December 5 2027")[0]["date"], "2027-12-05")
+        self.assertEqual(self.dates("hike on December 5"), [{"said": "december 5", "date": "2026-12-05", "weekday": "Saturday"}])
+        self.assertEqual(self.dates("hike on December 5 '27:30"), self.dates("hike on December 5 27:30"))
+        self.assertEqual(self.dates("hike on dec 5 at 3 pm"), self.dates("hike on dec 5 3pm"))
+
+    def test_bad_quoted_year_is_local_to_one_date_occurrence(self):
+        rows = self.dates("hike on December 5 '277 or 12 Dec. '2027 or January 3 2027")
+        self.assertEqual([r["date"] for r in rows], ["2027-01-03"])
+
+    def test_serialized_request_omits_bad_year_but_keeps_owner_words(self):
+        for q in ("'", "\u2019"):
+            for text in (f"hike on December 5 {q}2027 at 9am", f"hike on 5 Dec. {q}2027 at 9am"):
+                seen = []
+                self.make(seen, hinter=nl_prep.make_hinter(tiny())).interpret(text, [])
+                user = self.user(seen)
+                self.assertNotIn("dates", user["hints"])
+                self.assertEqual(user["message"], text)
+                self.assertEqual(user["hints"]["times"], [{"said": "9am", "time": "09:00"}])
+
+
+class RouteTitleHintTests(unittest.TestCase):
+    """A route idea whose title carries hike/walk is named by its distinctive tokens, like the event branch."""
+
+    def idx(self, titles, events=()):
+        ideas = [{"id": f"idea-{i}", "title": t} for i, t in enumerate(titles)]
+        return SimpleNamespace(products=[], makers={}, community={"events": list(events), "routeIdeas": ideas}, store={"hours": []})
+
+    def named(self, titles, text, events=()):
+        return nl_prep.make_hinter(self.idx(titles, events))(text, MONDAY, None).get("hikes", {}).get("named", [])
+
+    def test_route_name_with_hike_or_walk_suffix_is_recognized(self):
+        for title in ("Morro Rock hike", "Morro Rock walk", "Morro Rock hikes", "Morro Rock walks", "Hike Morro Rock"):
+            for text in (title, "plan the MORRO rock please", "Morró Rock hike"):
+                self.assertEqual(self.named([title], text), [{"routeIdea": "idea-0", "title": title}], (title, text))
+
+    def test_generic_only_route_title_never_names_a_route(self):
+        for title in ("hike", "Walks", "hike walk", "", "the"):
+            self.assertEqual(self.named([title], "any hike or walk on saturday please"), [], title)
+
+    def test_route_requires_every_distinctive_whole_token(self):
+        for text in ("morro hike", "rock walk", "the morrow rocks hike", "morrorock hike"):
+            self.assertEqual(self.named(["Morro Rock hike"], text), [], text)
+        self.assertEqual(len(self.named(["Morro Rock hike"], "rock then morro")), 1)
+
+    def test_named_routes_preserve_order_shape_and_cap(self):
+        event = {"id": "ev-1", "title": "Morro Rock hike", "startsAt": None, "status": None}
+        out = self.named(["Morro Rock walk", "Rock hike"], "morro rock hike", [event])
+        self.assertEqual([r.get("hike") or r.get("routeIdea") for r in out], ["ev-1", "idea-0", "idea-1"])
+        self.assertEqual(out[1], {"routeIdea": "idea-0", "title": "Morro Rock walk"})
+        many = [f"Rock hike {i}" for i in range(12)]
+        self.assertEqual(len(self.named(many, "rock hike " + " ".join(str(i) for i in range(12)))), nl_prep.MAX_LIST)
+
+    def test_route_matching_preserves_other_hints_and_inputs(self):
+        idx = self.idx(["Morro Rock hike"])
+        idx.products = [product(1, "Lemons")]
+        before = json.dumps(idx.community, sort_keys=True)
+        hint = nl_prep.make_hinter(idx)
+        first = hint("morro rock hike and lemons at 9am", MONDAY, None)
+        self.assertEqual(first["times"], [{"said": "9am", "time": "09:00"}])
+        self.assertEqual(first["hikes"]["named"], [{"routeIdea": "idea-0", "title": "Morro Rock hike"}])
+        self.assertEqual(first["products"][0]["is"]["id"], "photo-product-001")
+        self.assertEqual(hint("morro rock hike and lemons at 9am", MONDAY, None), first)
+        self.assertEqual(json.dumps(idx.community, sort_keys=True), before)
+
+    def test_fake_request_contains_named_suffix_route(self):
+        seen = []
+        req = RequestTests()
+        interp = req.make(seen, hinter=nl_prep.make_hinter(self.idx(["Morro Rock hike"])))
+        interp.interpret("plan the Morro Rock hike at 9am", [])
+        user = req.user(seen)
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(user["message"], "plan the Morro Rock hike at 9am")
+        self.assertEqual(user["hints"]["hikes"]["named"], [{"routeIdea": "idea-0", "title": "Morro Rock hike"}])
+        self.assertEqual(user["hints"]["times"], [{"said": "9am", "time": "09:00"}])
 
 
 class GuideTests(unittest.TestCase):

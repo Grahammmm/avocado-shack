@@ -87,7 +87,8 @@ class Declaration(unittest.TestCase):
         self.assertEqual(skill.plan({}, Untouchable()), [])
         self.assertIs(dispatch.READ_ONLY["report.shelf"], reports.shelf_reply)
         self.assertIn("report.shelf", dispatch.READ_ONLY_LONG)
-        self.assertNotIn("specials.show", dispatch.READ_ONLY_LONG)  # every other read-only skill keeps the everyday length rule
+        self.assertIn("specials.show", dispatch.READ_ONLY_LONG)  # RF0325-11: the complete specials list also runs long
+        self.assertNotIn("answer.site", dispatch.READ_ONLY_LONG)  # every other read-only skill keeps the everyday length rule
         self.assertTrue(set(CATALOG) <= {t.text for t in skill.triggers})
         problems = skill_lint(registry, load_registry(), repo_root=REPO_ROOT, golden={"report.shelf": [{}]})
         # The kit's rows have no 'undo' marker (it undoes every draft itself), as for specials.show: the no-op undo is the `turns` row.
@@ -372,13 +373,19 @@ class RealDispatch(ShelfCase):
             with self.assertRaises(voice.VoiceError):
                 self.ask("how are we doing")
 
-    def test_only_this_skill_is_allowed_a_long_answer(self):
+    def test_only_registered_skills_are_allowed_a_long_answer(self):
+        self.registry = base.registry_of(reports.ANSWER_SITE)
+        self.conv = self.open()
+        self.interp.mapping["what time do we close"] = base.skill_reply("answer.site", kind="hours")
+        with mock.patch.object(self.conv, "_reply", wraps=self.conv._reply) as reply:
+            self.say("what time do we close")
+        self.assertEqual(reply.call_args.kwargs, {"long_ok": False})  # an unregistered read-only skill keeps the everyday length rule
         self.registry = base.registry_of(specials.SPECIALS_SHOW)
         self.conv = self.open()
         self.interp.mapping["what are this week's specials"] = base.skill_reply("specials.show")
         with mock.patch.object(self.conv, "_reply", wraps=self.conv._reply) as reply:
             self.assertEqual(self.say("what are this week's specials"), "answer")
-        self.assertEqual(reply.call_args.kwargs, {"long_ok": False})
+        self.assertEqual(reply.call_args.kwargs, {"long_ok": True})  # RF0325-11: a registered one may run long
         self.scenario("fresh")
         self.registry = base.registry_of(reports.REPORT_SHELF)
         self.conv = self.open()

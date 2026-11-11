@@ -152,7 +152,7 @@ def parse_facts(raw: str) -> dict:
     """The LLM's JSON reply as facts: only FACT_KEYS, each a non-empty string or None; anything else is ignored."""
     try:
         doc = json.loads(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):  # RecursionError: decoder-excessive nesting is just invalid JSON
         return dict.fromkeys(FACT_KEYS)
     doc = doc if isinstance(doc, dict) else {}
     return {k: (doc[k].strip() or None) if isinstance(doc.get(k), str) else None for k in FACT_KEYS}
@@ -302,7 +302,7 @@ def ground(facts: dict, message: str, content) -> tuple:
         value = kept.get(key)
         if not value: continue
         if key == "name":  # his product words, with the maker first: every word of it is his, no claim word he did not affirm
-            ok = all(_fold(w) in low for w in re.findall(r"[\w’'-]+", value)) and not _unaffirmed_terms(value, low)
+            ok = all(_has(message, w) for w in re.findall(r"[\w’'-]+", value)) and not _unaffirmed_terms(value, low)
         elif key == "story":
             ok = _story_ok(value, kept.get("maker"), message)
         elif key == "maker":  # the maker must be WHO he says makes it, not just a capitalised word somewhere in the message

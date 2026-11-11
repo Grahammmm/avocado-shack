@@ -52,7 +52,8 @@ def _id(row, n, label, seen):
 
 
 def _expect_ok(expect) -> bool:
-    if expect in ({"question": True}, {"unsupported": True}): return True
+    # RF1155-12: the no-draft sentinel is literal JSON true; == would also admit 1 and 1.0
+    if isinstance(expect, dict) and len(expect) == 1 and expect.get("question", expect.get("unsupported")) is True: return True
     if not (isinstance(expect, dict) and set(expect) == {"ops", "revises"}): return False
     return (isinstance(expect["ops"], list) and bool(expect["ops"]) and isinstance(expect["revises"], (str, type(None)))
             and all(isinstance(c, dict) and set(c) == {"op", "args"} and isinstance(c["op"], str)

@@ -19,7 +19,8 @@ MESSAGE_KEYS = ("approved", "rejected", "near-approval", "no-target", "needs-det
                 "photo-on-product", "photo-draft", "photo-refused", "other")
 COMMANDS = frozenset({"status", "pause", "resume", "help", "history", "find", "show", "report", "post", "margin", "hidden",
                       "listing", "undo", "memory-list", "memory-none", "memory-forgot", "memory-saved", "memory-updated",
-                      "memory-unchanged", "memory-invalid"})
+                      "memory-unchanged", "memory-invalid", "memory-ambiguous", "backlog-forgot", "backlog-none"})
+# `backlog` itself stays other: it also records declined/unknown skill requests, so it cannot be told from a command
 # keys of media.REPLIES (a test keeps this equal); only these suffixes of `photo-refused:` count as photo-refused
 PHOTO_REFUSED = frozenset({"empty", "too-large", "unsupported-type", "truncated", "corrupt-store", "not-found", "unreadable",
                            "needs-rotation", "many", "audio"})
@@ -68,28 +69,48 @@ def _add(into, other):
     into["interpreterCalls"] += other["interpreterCalls"]
 
 
+def _check_links(state_dir):
+    """Static admission: lstat each component from the anchor; a symlink at any depth (even dangling) is refused. `..` only
+    follows an already-checked real directory, so `link/../x` is refused at `link`. Not race-free."""
+    cur = os.sep
+    for part in os.path.join(os.getcwd(), os.fspath(state_dir)).split(os.sep):
+        if part in ("", "."): continue
+        cur = os.path.dirname(cur) if part == ".." else os.path.join(cur, part)
+        if part != ".." and not stat.S_ISDIR(os.lstat(cur).st_mode): raise Unreadable  # S_ISDIR is false for a link
+
+
 def _check_store(state_dir):
+    """The store file path; the state directory must be real, with no symlink anywhere in its traversal."""
     sdir = Path(state_dir)
     try:
+        _check_links(state_dir)
         if sdir.is_symlink() or not sdir.is_dir(): raise Unreadable
-        mode = os.lstat(path := sdir / "conversation.sqlite3").st_mode  # lstat: a dangling link is seen
+        st = os.lstat(path := sdir / "conversation.sqlite3")  # lstat: a dangling link is seen
     except OSError: raise Unreadable from None
-    if not stat.S_ISREG(mode): raise Unreadable
-    return path
+    if not stat.S_ISREG(st.st_mode): raise Unreadable
+    return path, (st.st_dev, st.st_ino)
+
+
+def _same_leaf(path, ident):
+    """Detection only, not confinement: refuse if the admitted leaf is no longer the same regular file (lstat, never
+    following a link; no size/mtime test, so committed WAL growth is fine). A swap between checks is not prevented."""
+    try: st = os.lstat(path)
+    except OSError: raise Unreadable from None
+    if not stat.S_ISREG(st.st_mode) or (st.st_dev, st.st_ino) != ident: raise Unreadable
 
 
 def _rows(db, tables, table, wanted, optional):
-    """Rows of `wanted` columns (required) plus `optional` ones (NULL when the old table lacks them); [] without the table."""
+    """Rows of `wanted` columns (required) plus `optional` ones (NULL when the old table lacks them); [] without the table; a lazy cursor, consumed before the connection closes."""
     if table not in tables: return []
     have = {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
     if not set(wanted) <= have: raise Unreadable
     cols = [*wanted, *(c if c in have else "NULL" for c in optional)]
-    return db.execute(f"SELECT {', '.join(cols)} FROM {table}").fetchall()
+    return db.execute(f"SELECT {', '.join(cols)} FROM {table}")
 
 
 def summarize(state_dir, start, days):
     """The report dict for `days` Pacific days from date `start`; raises Unreadable."""
-    path = _check_store(state_dir)
+    path, ident = _check_store(state_dir)
     window = [(start + timedelta(n)).isoformat() for n in range(days)]
     buckets = {d: _blank() for d in window}
     unknown = _blank()
@@ -98,7 +119,9 @@ def summarize(state_dir, start, days):
         return unknown if day is None else buckets.get(day)  # None: dated, but outside the window
 
     try:
+        _same_leaf(path, ident)
         with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
+            _same_leaf(path, ident)
             db.isolation_level = None
             db.execute("PRAGMA query_only = 1")
             db.execute("BEGIN")
@@ -115,6 +138,7 @@ def summarize(state_dir, start, days):
                 if type(calls) is not int or calls < 0: raise Unreadable
                 if (b := where(_iso_day(day))) is not None: b["interpreterCalls"] += calls
             db.execute("COMMIT")
+        _same_leaf(path, ident)
     except (sqlite3.Error, OSError): raise Unreadable from None
     totals = _blank()
     for d in window: _add(totals, buckets[d])

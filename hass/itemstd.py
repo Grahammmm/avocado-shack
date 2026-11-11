@@ -183,6 +183,8 @@ def _load(path: Path, key: str, kind: type):
     try:
         raw = path.read_bytes()
         data = json.loads(raw.decode("utf-8"))
+    except RecursionError:
+        raise ReportError(f"cannot read {path}: JSON nesting is too deep") from None
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise ReportError(f"cannot read {path}: {exc}") from None
     if not isinstance(data, dict) or data.get("schemaVersion") != 1 or not isinstance(data.get(key), kind):
@@ -294,7 +296,8 @@ def main(argv=None) -> int:
         report = report_for(args.content)
         if args.write:
             if not REPORT_PATH.parent.is_dir(): raise ReportError(f"{REPORT_PATH.parent} does not exist")
-            write_report(report)
+            try: write_report(report)
+            except OSError: raise ReportError("cannot write report") from None
     except ReportError as exc:
         print(f"itemstd: {exc}", file=sys.stderr)
         return 2

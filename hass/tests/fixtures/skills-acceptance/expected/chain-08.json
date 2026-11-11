@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-017].status",
+      "after": "active",
+      "before": "hidden"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "storefront-mockup/catalog-products.js"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}

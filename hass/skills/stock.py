@@ -80,6 +80,8 @@ def _usable(ctx, pid):
 
 def _today(ctx):
     raw = getattr(ctx, "today", None)
+    if type(raw) is date:  # production dispatch supplies the Pacific date object; a datetime is not a date here
+        return raw
     try:
         return date.fromisoformat(raw) if isinstance(raw, str) else None
     except ValueError:
@@ -164,7 +166,7 @@ def _checked_plan(slots, ctx) -> list:
         for pid in ids:
             _usable(ctx, pid)
             if pid in seen:
-                raise Refusal(TWICE.format(name=_name(ctx, pid)))
+                raise Refusal(TWICE.format(name=_name(ctx, pid)), kind="question")
             seen[pid] = word
         if ids:
             args[word] = ids
@@ -237,7 +239,7 @@ STOCK_SET = Skill(
             ("a product is on hold", HELD),
             ("more than six products", TOO_MANY),
             ("the product already says it", ALREADY)),
-    cases=_CASES.format("stock.set"), version=1)
+    cases=_CASES.format("stock.set"), version=2)
 
 STOCK_CHECKED = Skill(
     name="stock.checked", label="record the shelf check",
@@ -264,7 +266,7 @@ STOCK_CHECKED = Skill(
             ("the day is before the last check", AFTER),
             ("a product is named twice", TWICE),
             ("the check is already recorded", DONE_TODAY)),
-    cases=_CASES.format("stock.checked"), version=1)
+    cases=_CASES.format("stock.checked"), version=3)
 
 STOCK_CLEAR = Skill(
     name="stock.clear", label="stop showing a word on a product",

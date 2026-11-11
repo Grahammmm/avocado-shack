@@ -11,7 +11,7 @@ to a question, questions that are not change requests, jokes). Each row says wha
 `expect` is the interpreter_eval shape: {"ops": [...], "revises": code|None}, {"question": true} or {"unsupported": true}.
 `ask` is true when the right outcome is one short question, `refuse` when it is a plain refusal (nothing drafted).
 Ops args listed in `expect` must match; args it does not list are not checked (hours and descriptions are free text and
-are checked with `mustContain`, words that must appear in the drafted args, or in the question / refusal text).
+are checked with `mustContain`, words that must appear inside one drafted arg value, never in an op name or arg name, or in the question / refusal text).
 Op order does not matter. Everything runs after the same `_checked` and registry checks the conversation applies.
 
 Verdicts per case: pass | wrong-draft (a draft that is not an accepted outcome: the unsafe one) | over-cautious (asked or
@@ -66,11 +66,13 @@ def load_corpus(path=CORPUS) -> list:
             raise EvalError(f"corpus line {n}: not a case")
         bad = lambda why: EvalError(f"corpus line {n}: {why}")  # noqa: E731
         if not (isinstance(row["text"], str) and row["text"].strip() and len(row["text"]) <= 4000): raise bad("bad text")
-        if row["intent"] not in INTENTS: raise bad("unknown intent")
+        if not (isinstance(row["intent"], str) and row["intent"] in INTENTS): raise bad("unknown intent")
         if not (isinstance(row["pending"], list) and all(isinstance(p, dict) for p in row["pending"])): raise bad("bad pending")
         codes = ie._pending_codes(row["pending"], n)
-        expects = [row["expect"], *row.get("also", [])]
-        if not isinstance(row.get("also", []), list) or not all(ie._expect_ok(e) for e in expects): raise bad("bad expect")
+        also = row.get("also", [])
+        if not isinstance(also, list): raise bad("bad expect")
+        expects = [row["expect"], *also]
+        if not all(ie._expect_ok(e) for e in expects): raise bad("bad expect")
         if any("ops" in e and e["revises"] not in (None, *codes) for e in expects): raise bad("revises names no pending draft")
         if row["ask"] is not ("question" in row["expect"]) or row["refuse"] is not ("unsupported" in row["expect"]): raise bad("ask/refuse disagree with expect")
         if "notes" in row and not ie._notes_ok(row["notes"]): raise bad("bad notes")
@@ -114,9 +116,42 @@ def _ordered(reply):
     return {**reply, "ops": _order(reply["ops"])} if isinstance(reply, dict) and isinstance(reply.get("ops"), list) else reply
 
 
-def _text_of(got) -> str:
+def _matched(wanted, got, registry, tally=None):
+    """True when every expected call pairs with its own already-checked actual call under the interpreter_eval rules (the sort key
+    can tie, so positional comparison alone would report a harmless permutation as a wrong draft). Augmenting-path matching."""
+    want, have = wanted["expect"]["ops"], got["ops"]
+    if len(want) != len(have): return False
+    def fits(w, h):
+        if tally is not None: tally.append(1)
+        return ie._why({**wanted, "expect": {**wanted["expect"], "ops": [w]}}, {**got, "ops": [h]}, registry) is None
+    edges = [[j for j, h in enumerate(have) if fits(w, h)] for w in want]
+    owner = {}
+    def claim(i, seen):
+        for j in edges[i]:
+            if j in seen: continue
+            seen.add(j)
+            if j not in owner or claim(owner[j], seen):
+                owner[j] = i
+                return True
+        return False
+    return all(claim(i, set()) for i in range(len(want)))
+
+
+def _leaves(value):
+    """Lowercased content of an args value: strings as decoded text, other JSON primitives as their spelling; dict keys never."""
+    if isinstance(value, str): yield value.lower()
+    elif isinstance(value, dict):
+        for v in value.values(): yield from _leaves(v)
+    elif isinstance(value, list):
+        for v in value: yield from _leaves(v)
+    else: yield json.dumps(value).lower()
+
+
+def _texts_of(got) -> list:
+    """Content candidates of a checked reply: every drafted argument value (never op names, arg names or JSON syntax), or the one
+    question / refusal text. A required word must occur wholly inside one candidate; candidates are never joined."""
     kind = ie._kind(got)
-    return json.dumps(got["ops"], ensure_ascii=False).lower() if kind == "ops" else str(got.get(kind, "")).lower()
+    return [t for call in got["ops"] for t in _leaves(call["args"])] if kind == "ops" else [str(got.get(kind, "")).lower()]
 
 
 def judge(case, record, registry) -> dict:
@@ -128,17 +163,18 @@ def judge(case, record, registry) -> dict:
     expects = [case["expect"], *case.get("also", [])]
     accepted = {ie._kind(e) for e in expects}
     must = [m.lower() for m in case.get("mustContain", [])]
-    problems, intent_ok = [], False
+    problems, intent_ok, texts = [], False, _texts_of(got)
     for expect in expects:
         if ie._kind(expect) != kind: continue
         wanted = {**case, "expect": {**expect, "ops": _order(expect["ops"])} if "ops" in expect else expect}
         why = ie._why(wanted, got, registry)
+        if why and kind == "ops" and _matched(wanted, got, registry): why = None  # same sort key, different order: still one-to-one
         if kind == "ops":
             names = [c["op"] for c in got["ops"]]
             intent_ok = intent_ok or (names == [c["op"] for c in wanted["expect"]["ops"]] and got["revises"] == expect["revises"])
         else:
             intent_ok = True
-        if why is None and all(m in _text_of(got) for m in must):
+        if why is None and all(any(m in t for t in texts) for m in must):
             return {"verdict": "pass", "kind": kind, "intent": True, "why": None}
         problems.append(why or "required words missing")
     if kind == "ops":
@@ -212,6 +248,16 @@ ROWS = (("Cases scored", "scored", "{}"), ("Intent accuracy", "intentAccuracy", 
         ("Calls failed at the end", "callsFailed", "{}"), ("First attempts that timed out", "firstAttemptTimeouts", "{}"))
 
 
+def _seconds_cell(ms) -> str:
+    """Milliseconds as a one-decimal seconds cell; integers too large for float division use exact integer tenths (ties to even)."""
+    if ms is None: return "n/a"
+    try: return f"{ms / 1000:.1f}"
+    except OverflowError:
+        tenths, rest = divmod(ms, 100)
+        tenths += rest > 50 or (rest == 50 and tenths % 2 == 1)
+        return f"{tenths // 10}.{tenths % 10}"
+
+
 def report(summaries) -> str:
     """A markdown table, one column per (label, summary)."""
     labels = [label for label, _ in summaries]
@@ -219,7 +265,7 @@ def report(summaries) -> str:
     for title, key, fmt in ROWS:
         lines.append(f"| {title} | " + " | ".join("n/a" if s[key] is None else fmt.format(s[key]) for _, s in summaries) + " |")
     for title, key in (("Latency p50 (s)", "p50"), ("Latency p95 (s)", "p95")):
-        lines.append(f"| {title} | " + " | ".join("n/a" if s["latencyMs"][key] is None else f"{s['latencyMs'][key] / 1000:.1f}" for _, s in summaries) + " |")
+        lines.append(f"| {title} | " + " | ".join(_seconds_cell(s["latencyMs"][key]) for _, s in summaries) + " |")
     return "\n".join(lines)
 
 

@@ -111,6 +111,30 @@ class LoadCasesRefusalTests(unittest.TestCase):
         path.write_text("".join(json.dumps(r) + "\n" for r in rows), "utf-8")
         self.assertEqual(self.run_main(path)[2], "interpreter_eval: cases line 5: bad pending code\n")
 
+    def test_no_draft_expectation_requires_literal_true(self):  # RF1155-12
+        for key in ("question", "unsupported"):
+            self.assertTrue(ev._expect_ok(json.loads('{"%s": true}' % key)))
+            for raw in ("1", "1.0", "1e0", "false", "0", "null", '"true"', "[true]", "{}"):
+                self.assertFalse(ev._expect_ok(json.loads('{"%s": %s}' % (key, raw))), (key, raw))
+        self.assertFalse(ev._expect_ok({"question": True, "unsupported": True}))
+        self.assertFalse(ev._expect_ok([True]))
+
+    def test_score_and_compare_reject_numeric_expectation_by_first_bad_line(self):
+        late = next(n for n, r in enumerate(self.rows, 1) if r["expect"] == {"unsupported": True})
+        early = self.kind_line("question")
+        first, second = sorted((early, late))
+        rows = [dict(r) for r in self.rows]
+        rows[first - 1]["expect"] = {next(iter(rows[first - 1]["expect"])): 1}
+        rows[second - 1]["expect"] = {next(iter(rows[second - 1]["expect"])): 1.0}
+        path = self.tmp / "numeric.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), "utf-8")
+        self.assertRefused(path, first, "not a case")
+        out, err = io.StringIO(), io.StringIO()
+        missing = str(self.tmp / "absent.jsonl")
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = ev.main(["compare", "--cases", str(path), "--before", missing, "--after", missing])
+        self.assertEqual((code, out.getvalue(), err.getvalue()), (2, "", f"interpreter_eval: cases line {first}: not a case\n"))
+
 
 class V4NotesTests(base.EvalTestCase):
     """AV1102-10: the v4 cases, the optional `notes` on a case, and how live() and the scorer treat them."""

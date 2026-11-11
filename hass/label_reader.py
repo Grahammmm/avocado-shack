@@ -24,11 +24,20 @@ PROMPT = ("Read the product label in this photo. Answer only with a JSON object 
           '{"name": string or null, "brand": string or null, "category": string or null}: the product name and the '
           "brand exactly as printed on the label, and the kind of product. Use null for anything not printed. "
           "Add nothing else.")
-_TERMS = tuple(claims.fold(term).replace("-", " ") for term in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS)
+
+
+def _claim_key(value) -> str:
+    return " ".join(claims.fold(value).replace("-", " ").split())  # dashes and space runs of any width compare alike
+
+
+_TERMS = tuple(_claim_key(term) for term in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS)
 PLACEHOLDERS = frozenset({"null", "none", "nil", "n/a", "na", "unknown", "not printed", "not visible", "not shown",
                           "-", "--", "?", "no brand", "no name", "unbranded"})  # a "not printed" answer, not a value
-AMOUNT_RE = re.compile(r"[$€£]?\s*\d+(?:[.,]\d+)?\s*(?:fl\.?\s*oz|oz|lbs?|g|kg|mg|ml|l|ct|count|pack|pk)?\.?",
+_UNIT = r"(?:fl\.?\s*oz|oz|lbs?|g|kg|mg|ml|l|ct|count|pack|pk)"
+AMOUNT_RE = re.compile(r"[$€£]?\s*\d+(?:[.,]\d+)?\s*" + _UNIT + r"?\.?",
                        re.IGNORECASE)  # a price or a size (amount + unit), not a name
+FRACTION_SIZE_RE = re.compile(r"(?:\d+\s+)?(?:\d+\s*[/\u2044]\s*\d+|[\u00bc-\u00be\u2150-\u215e])\s*" + _UNIT + r"\.?",
+                              re.IGNORECASE)  # RF1025-13: a whole-value fractional size ("1 1/2 oz", "½ lb")
 
 
 def _norm(value) -> str:
@@ -49,10 +58,11 @@ def _clean(field, value, categories):
     value = " ".join(value.split())  # RF1050-8: inner spaces, tabs and NBSP collapse to one space before every check
     if any(bad in value for bad in FORBIDDEN_TEXT): return None  # the catalog refuses it (content_model._text); never offered
     if len(value) > TEXT_LIMITS["product"][field]: return None
-    folded = claims.fold(value).replace("-", " ")
+    folded = _claim_key(value)
     if any(term in folded for term in _TERMS): return None  # no organic/origin claim ever comes from a photo
     if _norm(value) in PLACEHOLDERS: return None  # a whole-value placeholder only
-    if field in ("name", "brand") and (not _has_letter(value) or AMOUNT_RE.fullmatch(" ".join(value.split()))):
+    if field in ("name", "brand") and (not _has_letter(value) or AMOUNT_RE.fullmatch(value)
+                                          or FRACTION_SIZE_RE.fullmatch(value)):
         return None  # a barcode, price or bare size
     if field == "category":
         return next((c for c in categories if isinstance(c, str) and c.casefold() == value.casefold()), None)

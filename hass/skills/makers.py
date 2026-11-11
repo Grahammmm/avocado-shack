@@ -357,7 +357,7 @@ def rule_source_link(maker: dict, ctx) -> None:
     the migration check at the yes, so the owner is told now). ``ctx.source_urls`` overrides the frozen baseline."""
     urls = getattr(ctx, "source_urls", None)
     if maker.get("url") and maker["url"] in (SOURCE_URLS if urls is None else urls):
-        raise Refusal(f"The website link for {maker['name']} was on the site from the start, so I can't remove or change it. You can ask Graham.")
+        raise Refusal(f"The website link for {maker['name']} was on the site from the start, so I can't remove or change it from chat. Nothing changed.")
 
 
 def describe_edit(slots: dict, ctx=None) -> Outcome:
@@ -414,15 +414,18 @@ def plan_edit(slots: dict, ctx=None) -> list:
 
 
 def notes(skill_name: str, slots: dict, ctx=None) -> dict:
-    """The proposal-notes hook the dispatcher (and the shared kit) shows beside a draft. Two lines only: a maker drafted with a
-    region because he doesn't know the town gets "Still missing: the town", and a maker.add he gave no story for gets the
-    plan's own set line ("I set: the about text to ..., because you didn't give one."). Nothing else from the plan is shown."""
+    """The proposal-notes hook the dispatcher (and the shared kit) shows beside a draft. A maker drafted with a region because he
+    doesn't know the town gets "Still missing: the town", and a maker.add he gave no story for gets the plan's own set line
+    ("I set: the about text to ..., because you didn't give one."). maker.hide and maker.restore show their plan's own product-effect
+    note ("This hides ... too." / "Their products stay hidden until you bring them back: ..."). Nothing else from a plan is shown."""
     out = {"say": [], "set": [], "warn": []}
-    describe = {"maker.add": describe_add, "maker.edit": describe_edit}.get(skill_name)
+    describe = {"maker.add": describe_add, "maker.edit": describe_edit, "maker.hide": describe_hide, "maker.restore": describe_restore}.get(skill_name)
     try:
         if describe is not None:
             plan = describe(dict(slots or {}), ctx)
-            if TOWN_MISSING in plan.notes:
+            if skill_name in ("maker.hide", "maker.restore"):  # the plan's own product-effect note, word for word
+                out["say"] += plan.notes
+            elif TOWN_MISSING in plan.notes:
                 out["say"].append(TOWN_MISSING)
             if skill_name == "maker.add" and not _clean((slots or {}).get("story")):  # rule story-note (D5): said before yes
                 out["set"] += [f"I set: {line}." for line in plan.set_lines]
@@ -548,7 +551,7 @@ SKILLS = (
             ("nothing would change", "<Maker> already says that. I haven't changed anything."),
             ("the maker is hidden", "<Maker> is hidden. Do you want me to bring them back first?"),
             ("the website link was on the site from the start",
-             "The website link for <Maker> was on the site from the start, so I can't remove or change it. You can ask Graham."),
+             "The website link for <Maker> was on the site from the start, so I can't remove or change it from chat. Nothing changed."),
         ),
         cases=_CASES.format("maker.edit"),
     ),
