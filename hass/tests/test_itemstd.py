@@ -1,8 +1,11 @@
 """AV1109-01 (ITEMSTD-2): the item-standard checker in hass/itemstd.py and its report CLI."""
+import contextlib
 import copy
 import hashlib
+import io
 import itertools
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -515,6 +518,143 @@ class ReportTest(unittest.TestCase):
             got = self.run_cli(SCRIPT, "--content", str(content), "--json", cwd=tmp)
             self.assertEqual(got.returncode, 0, got.stderr)
             self.assertEqual(json.loads(got.stdout), itemstd.report_for(content))
+
+    REFUSAL = "itemstd: cannot write report\n"
+    CANARY = "private-canary-7f3a"
+
+    def synthetic_repo(self, tmp: Path):
+        repo = tmp / "repo"
+        (repo / "hass" / "style").mkdir(parents=True)
+        for f in ("__init__.py", "voice.py", "itemstd.py", "style/item-standard.json"):
+            shutil.copy(REPO / "hass" / f, repo / "hass" / f)
+        content, reports = repo / "hass" / "content", repo / "reports" / "hass"
+        content.mkdir()
+        reports.mkdir(parents=True)
+        (content / "products.json").write_text(json.dumps({"schemaVersion": 1, "products": [product()]}), encoding="utf-8")
+        (content / "makers.json").write_text(json.dumps({"schemaVersion": 1, "makers": MAKERS}), encoding="utf-8")
+        return repo, content, reports
+
+    def external(self, tmp: Path, old: bytes | None = b"old report\n"):
+        """A real catalog and an explicit external target; the checkout's own report is never named."""
+        content, out = tmp / "content", tmp / "out"
+        content.mkdir()
+        out.mkdir()
+        (content / "products.json").write_text('{"schemaVersion": 1, "products": []}', encoding="utf-8")
+        (content / "makers.json").write_text('{"schemaVersion": 1, "makers": {}}', encoding="utf-8")
+        target = out / "catalog-gaps.json"
+        if old is not None: target.write_bytes(old)
+        return content, out, target
+
+    def call_main(self, content: Path, target: Path, *args):
+        real = itemstd.write_report
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(itemstd, "REPORT_PATH", target), \
+             mock.patch.object(itemstd, "write_report", lambda report, target=target: real(report, target)), \
+             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = itemstd.main(["report", "--content", str(content), *args])
+        return rc, out.getvalue(), err.getvalue()
+
+    def assert_refused(self, got, out_dir: Path, names):
+        rc, out, err = got
+        self.assertEqual((rc, out, err), (2, "", self.REFUSAL))
+        self.assertEqual(sorted(p.name for p in out_dir.iterdir()), names, "no staging residue")
+
+    def test_report_cli_directory_target_is_private_exit_two(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            repo, content, reports = self.synthetic_repo(tmp)
+            target = reports / "catalog-gaps.json"
+            target.mkdir()
+            (target / "canary.txt").write_bytes(self.CANARY.encode())
+            foreign = tmp / "elsewhere"
+            foreign.mkdir()
+            inputs = tree_hashes(content / "products.json", content / "makers.json")
+            got = self.run_cli(repo / "hass" / "itemstd.py", "--write", cwd=foreign)
+            self.assertEqual((got.returncode, got.stdout, got.stderr), (2, "", self.REFUSAL))
+            self.assertEqual((target / "canary.txt").read_bytes(), self.CANARY.encode())
+            self.assertEqual(sorted(p.name for p in reports.iterdir()), ["catalog-gaps.json"])
+            self.assertEqual(sorted(p.name for p in target.iterdir()), ["canary.txt"])
+            self.assertEqual(list(foreign.iterdir()), [])
+            self.assertEqual(tree_hashes(content / "products.json", content / "makers.json"), inputs)
+
+    def test_report_cli_staging_creation_failure_is_controlled(self):
+        for old in (b"old report\n", None):
+            with self.subTest(old=old), tempfile.TemporaryDirectory() as tmp:
+                content, out, target = self.external(Path(tmp), old)
+                with mock.patch.object(itemstd.tempfile, "mkstemp", side_effect=OSError(self.CANARY)):
+                    got = self.call_main(content, target, "--write")
+                self.assert_refused(got, out, [] if old is None else ["catalog-gaps.json"])
+                self.assertEqual(target.read_bytes() if old is not None else None, old)
+
+    def test_report_cli_write_and_close_failure_preserve_old_report(self):
+        real_fdopen, opened = os.fdopen, []
+
+        class FaultFile:
+            def __init__(self, fh, mode):
+                self.fh, self.mode = fh, mode
+                opened.append(fh)
+
+            def __enter__(self): return self
+
+            def __exit__(self, *exc):
+                self.fh.close()
+                if self.mode == "close" and exc[0] is None: raise OSError(self.CANARY)
+                return False
+
+            def write(self, text):
+                if self.mode == "write": raise OSError(self.CANARY)
+                return self.fh.write(text)
+
+        FaultFile.CANARY = self.CANARY
+        for mode in ("write", "close"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                content, out, target = self.external(Path(tmp))
+                opened.clear()
+                with mock.patch.object(itemstd.os, "fdopen", lambda fd, *a, **k: FaultFile(real_fdopen(fd, *a, **k), mode)):
+                    got = self.call_main(content, target, "--write")
+                self.assert_refused(got, out, ["catalog-gaps.json"])
+                self.assertEqual(target.read_bytes(), b"old report\n")
+                self.assertTrue(opened and all(fh.closed for fh in opened), "staging descriptor closed")
+
+    def test_report_cli_replace_failure_preserves_old_report(self):
+        staged = []
+
+        def failing_replace(src, dst):
+            staged.append(Path(src).read_bytes())
+            raise OSError(f"{self.CANARY} {src} {dst}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            content, out, target = self.external(Path(tmp))
+            with mock.patch.object(itemstd.os, "replace", failing_replace):
+                got = self.call_main(content, target, "--write")
+            self.assert_refused(got, out, ["catalog-gaps.json"])
+            self.assertEqual(target.read_bytes(), b"old report\n")
+            self.assertEqual(json.loads(staged[0])["schema"], 2, "the real report was staged before the failure")
+
+    def test_report_success_and_readonly_modes_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            content, out, target = self.external(Path(tmp))
+            report = itemstd.report_for(content)
+            with mock.patch.object(itemstd, "write_report") as writer:
+                rc, text, err = self.call_main(content, target)
+                rc_json, as_json, err_json = self.call_main(content, target, "--json")
+            writer.assert_not_called()
+            self.assertEqual((rc, text, err, rc_json, err_json), (0, itemstd.report_text(report) + "\n", "", 0, ""))
+            self.assertEqual(json.loads(as_json), report)
+            self.assertEqual(target.read_bytes(), b"old report\n")
+            rc, text, err = self.call_main(content, target, "--write")
+            self.assertEqual((rc, text, err), (0, itemstd.report_text(report) + "\n", ""))
+            self.assertEqual(target.read_text(encoding="utf-8"), json.dumps(report, ensure_ascii=False, indent=1) + "\n")
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["catalog-gaps.json"])
+
+    def test_non_os_programming_errors_are_not_swallowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            content, out, target = self.external(Path(tmp))
+            with mock.patch.object(itemstd.os, "replace", side_effect=RuntimeError("bug")):
+                with self.assertRaises(RuntimeError):
+                    self.call_main(content, target, "--write")
+            self.assertEqual(target.read_bytes(), b"old report\n")
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["catalog-gaps.json"])
 
 
 if __name__ == "__main__":

@@ -296,7 +296,8 @@ def main(argv=None) -> int:
         report = report_for(args.content)
         if args.write:
             if not REPORT_PATH.parent.is_dir(): raise ReportError(f"{REPORT_PATH.parent} does not exist")
-            write_report(report)
+            try: write_report(report)
+            except OSError: raise ReportError("cannot write report") from None
     except ReportError as exc:
         print(f"itemstd: {exc}", file=sys.stderr)
         return 2
