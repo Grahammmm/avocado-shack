@@ -37,7 +37,10 @@ REQUIRED_CHECKS = frozenset(n for b in ("pageLoaded", "noHorizontalOverflow", "n
 
 def _read_blob(sha: str, path: str, top: str) -> bytes:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
-    out = subprocess.run(["git", "--literal-pathspecs", "show", f"{sha}:{path}"], capture_output=True, env=env, cwd=top)
+    try:
+        out = subprocess.run(["git", "--literal-pathspecs", "show", f"{sha}:{path}"], capture_output=True, env=env, cwd=top)
+    except OSError:  # launch failure: same fixed refusal, no errno/argv/path
+        raise Usage("git show failed") from None
     if out.returncode:
         raise Usage("git show failed")
     return out.stdout
