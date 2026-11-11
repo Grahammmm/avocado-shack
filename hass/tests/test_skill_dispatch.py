@@ -183,9 +183,14 @@ class SetPhrasesTests(SkillCase):
         self.registry = registry_of(toy("hike.add", "add a hike", slots, _plan_hike, **kw))
         self.conv = self.open()
 
-    def tearDown(self):
+    def setUp(self):
+        super().setUp()
+        # restore the hikes module's own wording afterwards: popping it for good made later modules in the same process
+        # (test_skill_hidden_route) see the generic "signup: False" line
+        patched = mock.patch.dict(dispatch.SET_PHRASES)
+        patched.start()
+        self.addCleanup(patched.stop)
         dispatch.SET_PHRASES.pop("hike.add", None)
-        super().tearDown()
 
     def propose_mill(self, **extra):
         slots = {k: v for k, v in MILL.items() if k != "difficulty"}
