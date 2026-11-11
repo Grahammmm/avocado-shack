@@ -93,6 +93,21 @@ class LowStockTests(unittest.TestCase):
         self.assertNotIn("Old honey", got)
         self.assertIn("And 6 more.", got)
 
+    def test_mixed_groups_share_one_limit_and_count_only_what_is_left_out(self):
+        def listed(text):
+            return sum(text.count(f"Item {n:02d}") for n in range(40))
+        for sold, low in ((1, 15), (1, 14), (3, 20), (15, 2), (16, 0), (0, 16)):
+            with self.subTest(sold=sold, low=low):
+                extra = [item(id=f"S{n}", name=f"Item {n:02d}", stock=Decimal(0)) for n in range(sold)]
+                extra += [item(id=f"P{n}", name=f"Item {sold + n:02d}", stock=Decimal(2)) for n in range(low)]
+                got = reads.low_stock(reads.Snapshot(tuple(extra), NOW - timedelta(minutes=5)), NOW, 5)
+                shown = min(sold + low, reads.LIST_LIMIT)
+                self.assertEqual(listed(got), shown)
+                if sold + low > shown:
+                    self.assertIn(f"And {sold + low - shown} more.", got)
+                else:
+                    self.assertNotIn("more.", got)
+
     def test_labels_apply_to_lists_too(self):
         self.assertTrue(reads.low_stock(snap(60), NOW, 5).endswith("(till count as of 2:30 pm)"))
         self.assertTrue(reads.low_stock(snap(60), NOW, 5, reachable=False).startswith("I can't reach the till"))

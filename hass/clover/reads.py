@@ -86,14 +86,17 @@ def low_stock(snapshot, now, threshold, reachable=True):
         return label
     counted = [i for i in snapshot.items if not i.hidden and i.stock is not None]
     low = sorted((i for i in counted if i.stock <= threshold), key=lambda i: (i.stock, i.name))
-    out, more = [i for i in low if i.stock <= 0], [i for i in low if i.stock > 0]
+    # One combined limit across both groups (sold out first), so "And N more" counts exactly the items not shown.
+    out = [i for i in low if i.stock <= 0][:LIST_LIMIT]
+    more = [i for i in low if i.stock > 0][:LIST_LIMIT - len(out)]
     parts = []
     if out:
-        parts.append("Sold out: " + ", ".join(i.name for i in out[:LIST_LIMIT]) + ".")
+        parts.append("Sold out: " + ", ".join(i.name for i in out) + ".")
     if more:
-        parts.append(f"Low ({threshold} or fewer): " + ", ".join(f"{i.name} {format_quantity(i.stock)}" for i in more[:LIST_LIMIT]) + ".")
-    if len(low) > LIST_LIMIT:
-        parts.append(f"And {len(low) - LIST_LIMIT} more.")
+        parts.append(f"Low ({threshold} or fewer): " + ", ".join(f"{i.name} {format_quantity(i.stock)}" for i in more) + ".")
+    omitted = len(low) - len(out) - len(more)
+    if omitted:
+        parts.append(f"And {omitted} more.")
     untracked = sum(1 for i in snapshot.items if not i.hidden and i.stock is None)
     body = " ".join(parts) or "Nothing is low."
     if untracked:
