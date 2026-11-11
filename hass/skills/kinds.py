@@ -155,11 +155,11 @@ def availability(text) -> Resolved:
     t = " " + " ".join(re.findall(r"[a-z']+", nl_prep.fold(text or ""))) + " "
     if (text or "").strip() in AVAILABILITY:
         return Resolved("one", value=text.strip())
-    found = {k for k, words in WORDS_FOR_AVAILABILITY.items() if any(f" {w} " in t for w in words)}
+    # 'almost out' is one limited phrase: its own 'out' must not also read as sold out, but any other occurrence still does
+    t_no = re.sub(r"(?<= )almost out(?= )", "_", t)
+    found = {k for k, words in WORDS_FOR_AVAILABILITY.items() if any(f" {w} " in (t_no if k == "no" else t) for w in words)}
     if found and NEGATION.search(t):  # 'not available', 'not out': never assert the opposite stock state, ask
         return Resolved("none", reply="Is it in stock, running low, or sold out?")
-    if "limited" in found and "no" in found and "almost out" in t:
-        found.discard("no")
     if "no" in found and " no more " in t:
         found.discard("yes")
     if len(found) == 1:
