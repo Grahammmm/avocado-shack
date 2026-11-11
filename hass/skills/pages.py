@@ -45,6 +45,7 @@ PHOTO_ASK = "Send me the photo you want on the home page."
 ALT_ASK = "What does the photo show?"
 ALT_REPLY = "Tell me what the photo shows, in a few words, like “the shop front on a sunny morning”."
 NO_OWN_PHOTO = "There is no photo of yours on the home page, so there is nothing to put back."
+PHOTO_DESTINATION = "Is it for the home page or for a product?"
 PHOTO_OR_RESET = "Do you want the home page photo changed, or put back the way it was? I can only do one."
 
 
@@ -253,6 +254,26 @@ def check_photo_alt(slots, texts, ctx):
 PHOTO_CHECKS = {"alt-says-what-it-shows": check_photo_alt}
 
 
+_MAIN_PICTURE = re.compile(r"\bmain\s+(?:picture|photo)\b", re.I)
+_HOME_PAGE = re.compile(r"\bhome\s*page\b", re.I)
+_PRODUCT = re.compile(r"\bproducts?\b", re.I)
+
+
+def photo_destination_open(texts) -> bool:
+    """True when the owner's latest 'main picture' / 'main photo' request has not been given a home-page destination (RF2345-11).
+
+    Only the owner's request texts count, in order: a text that names the home page (and not a product) answers the
+    question; a later main-picture text without it opens the question again; yes/no or unrelated text never answers it."""
+    open_ = False
+    for text in texts:
+        home = bool(_HOME_PAGE.search(text)) and not _PRODUCT.search(text)
+        if _MAIN_PICTURE.search(text):
+            open_ = not home
+        elif home:
+            open_ = False
+    return open_
+
+
 def plan_photo(slots, ctx):
     store = store_of(ctx)
     photo, alt = slots.get("photo"), _clean(slots.get("image_alt"))
@@ -262,6 +283,8 @@ def plan_photo(slots, ctx):
         if store is not None and "homeImage" not in store:
             raise SkillStop(NO_OWN_PHOTO)
         return [{"op": "store.clear_home_image", "args": {}}]
+    if photo_destination_open(texts_of(ctx)):  # "make this the main picture": home page or a product? Never assume (RF2345-11)
+        raise SkillStop(PHOTO_DESTINATION, "question")
     if not photo:
         raise SkillStop(PHOTO_ASK, "question")
     if not alt:
@@ -348,6 +371,6 @@ PAGE_PHOTO = Skill(
     undo=Undo("revert", "The photo file stays in the site folder with nothing pointing at it; the page shows the shop's own photo again."),
     refuse=(("the description is a file or camera name", ALT_REPLY), ("there is no photo of his to put back", NO_OWN_PHOTO),
             ("the photo is sideways (a rotation tag)", media.REPLIES["needs-rotation"])),
-    cases=_CASES.format("page.photo"), version=1)
+    cases=_CASES.format("page.photo"), version=2)
 
 SKILLS = (PAGE_HOME, PAGE_ABOUT, PAGE_PHOTO)
