@@ -97,7 +97,12 @@ def make_photo(product="jar", background="white-sheet", size=(1200, 900), angle=
         ImageDraw.Draw(shadow).ellipse((left, top + item.height - item.height // 14, left + item.width, top + item.height + item.height // 14), fill=90)
         shadow = shadow.filter(ImageFilter.GaussianBlur(max(3, h // 70)))
         scene = Image.composite(Image.new("RGB", upright, (40, 40, 40)), scene, shadow)
-    scene.paste(item, (left, top), item)
+    if alpha:  # source-over onto the transparent scene; pasting the layer through its own alpha would apply coverage twice
+        layer = Image.new("RGBA", upright, (0, 0, 0, 0))
+        layer.paste(item, (left, top))  # no mask: copies the straight RGBA and clips at the scene edge
+        scene = Image.alpha_composite(scene, layer)
+    else:
+        scene.paste(item, (left, top), item)
     stored = scene
     exif = None
     if phone_orientation:
