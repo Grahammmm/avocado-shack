@@ -166,7 +166,7 @@ def _checked_plan(slots, ctx) -> list:
         for pid in ids:
             _usable(ctx, pid)
             if pid in seen:
-                raise Refusal(TWICE.format(name=_name(ctx, pid)))
+                raise Refusal(TWICE.format(name=_name(ctx, pid)), kind="question")
             seen[pid] = word
         if ids:
             args[word] = ids
@@ -266,7 +266,7 @@ STOCK_CHECKED = Skill(
             ("the day is before the last check", AFTER),
             ("a product is named twice", TWICE),
             ("the check is already recorded", DONE_TODAY)),
-    cases=_CASES.format("stock.checked"), version=2)
+    cases=_CASES.format("stock.checked"), version=3)
 
 STOCK_CLEAR = Skill(
     name="stock.clear", label="stop showing a word on a product",
