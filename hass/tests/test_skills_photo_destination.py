@@ -49,15 +49,23 @@ class DestinationGuard(unittest.TestCase):
     def test_negated_home_page_is_not_a_choice(self):
         for later in ("not the home page", "Not the home page.", "no, not the home page", "don't put it on the home page",
                       "never the home page", "anywhere but the home page", "instead of the home page", "not for the home page",
-                      "it isn't for the home page", "no home page"):
+                      "it isn't for the home page", "no home page", "don\u2019t put it on the home page", "do not put it on the home page",
+                      "dont put it on the home page", "the home page is not where I want it", "the home page isn\u2019t where I want it",
+                      "the home page is not for this", "THE HOME PAGE IS NOT WHERE I WANT IT", "I do not want it on the home page"):
             with self.subTest(later=later):
                 self.asks(dict(SLOTS), ctx_for("make this the main picture", later))
+        self.asks(dict(SLOTS), ctx_for("make this the main picture", "the home page is not where I want it", ALT))
+        self.asks(dict(SLOTS), ctx_for("make this the main picture", "don\u2019t put it on the home page", ALT))
+        self.asks(dict(SLOTS), ctx_for("make this the main picture for the home page", "actually the home page is not where I want it"))
+        self.asks(dict(SLOTS), ctx_for("make this the main picture, don\u2019t put it on the home page"))
         self.asks(dict(SLOTS), ctx_for("make this the main picture", "not the home page", ALT))
         self.asks(dict(SLOTS), ctx_for("make this the main picture for the home page", "actually not the home page"))
         self.asks(dict(SLOTS), ctx_for("make this the main picture, not the home page"))
 
     def test_affirmative_home_page_still_chooses_after_a_denial_elsewhere(self):
-        for later in ("no, the home page", "no - the home page please", "not that one, the home page"):
+        for later in ("no, the home page", "no - the home page please", "not that one, the home page",
+                      "the home page", "the home page without a caption", "put it on the home page", "yes, the home page is where I want it",
+                      "I don\u2019t mind, the home page"):
             with self.subTest(later=later):
                 self.assertEqual(pages.plan_photo(dict(SLOTS), ctx_for("make this the main picture", later)), SET_OP)
 

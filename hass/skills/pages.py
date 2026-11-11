@@ -260,17 +260,26 @@ _PRODUCT = re.compile(r"\bproducts?\b", re.I)
 
 
 _DENIES = re.compile(r"\b(?:no|not|never|without|none|nothing|neither|nor|cannot|skip|except|besides|instead\s+of|rather\s+than|other\s+than"
-                     r"|(?:any|every)(?:where|thing)\s+but)\b|n't\b", re.I)
+                     r"|(?:any|every)(?:where|thing)\s+but|(?:dont|doesnt|didnt|wont|isnt|arent|wasnt|cant))\b|n't\b", re.I)
 _CLAUSE_END = re.compile(r"[,;:.!?\n\u2013\u2014]|\s-+\s|\b(?:and|then)\b|(?<!anywhere )(?<!anything )(?<!everywhere )(?<!everything )\bbut\b", re.I)
 
 
+# A refusal AFTER the home-page mention in the same clause ("the home page is not where I want it"). "without"/"except"
+# are left out here: "the home page without a caption" is still a home-page choice.
+_DENIES_AFTER = re.compile(r"\b(?:no|nope|not|never|nowhere|cannot)\b|n't\b|\b(?:dont|doesnt|didnt|wont|isnt|arent|wasnt|cant)\b", re.I)
+_APOSTROPHES = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'", "\u2032": "'", "\u00b4": "'", "`": "'", "\uff07": "'"})
+
+
 def _chose_home(text) -> bool:
-    """True when the text names the home page as the destination: affirmatively (not "not the home page"), and not a product."""
+    """True when the text names the home page as the destination: affirmatively (not "not the home page", "don't put it on
+    the home page", "the home page is not where I want it"), and not a product."""
+    text = str(text or "").translate(_APOSTROPHES)  # curly apostrophes spell the same refusal as the straight one
     if _PRODUCT.search(text):
         return False
     for hit in _HOME_PAGE.finditer(text):
-        clause = _CLAUSE_END.split(text[:hit.start()])[-1]  # a denial only covers its own clause: "no, the home page" still chooses it
-        if not _DENIES.search(clause):
+        before = _CLAUSE_END.split(text[:hit.start()])[-1]  # a denial only covers its own clause: "no, the home page" still chooses it
+        after = _CLAUSE_END.split(text[hit.end():])[0]
+        if not _DENIES.search(before) and not _DENIES_AFTER.search(after):
             return True
     return False
 
