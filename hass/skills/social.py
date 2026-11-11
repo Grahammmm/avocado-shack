@@ -79,6 +79,7 @@ INTENT = (
     re.compile(r"^\s*(?:please\s+)?(?:post|share)\b(?!\s+about\b).*\bnow\s*[.!]?\s*$"),
     re.compile(r"\b(?:send|email|text|message)\b.*\b(?:club|members|hikers|mailing list|everyone|followers)\b"),
     re.compile(r"\b(?:send|email|text)\s+" + _OBJ + r"\s+(?:out|to)\b"),
+    re.compile(r"^\s*(?:please\s+)?(?:send|email|text)\s+" + _OBJ + r"(?:\s+(?:now|please))*\s*[.!?]?\s*$"),  # a whole short imperative: "send it"
 )
 
 
