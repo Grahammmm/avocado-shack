@@ -65,20 +65,26 @@ def _resample(Image, name):
 
 
 def _bg_plane(px, w, h, ring):
-    """Per-side median colours of the border ring, as a function (x, y) -> (r, g, b): the mean of a left-right and a
-    top-bottom linear blend, so an even gradient across the sheet is background, not subject. Also the border noise."""
+    """Per-side median colours of the border ring, fitted as ONE additive affine plane (x, y) -> (r, g, b) through the
+    ring centroids, so a smooth light gradient is background, not subject. Also the border noise: the mean largest
+    channel residual of the sampled outer border against that plane (unexplained texture, not explained illumination)."""
     side = lambda pts: tuple(int(statistics.median(p[i] for p in pts)) for i in range(3))  # noqa: E731
     top = side([px[y * w + x] for y in range(ring) for x in range(w)])
     bottom = side([px[y * w + x] for y in range(h - ring, h) for x in range(w)])
     left = side([px[y * w + x] for y in range(h) for x in range(ring)])
     right = side([px[y * w + x] for y in range(h) for x in range(w - ring, w)])
-    edge = ([(0, x, top) for x in range(0, w, 2)] + [(h - 1, x, bottom) for x in range(0, w, 2)]
-            + [(y, 0, left) for y in range(0, h, 2)] + [(y, w - 1, right) for y in range(0, h, 2)])
-    mad = statistics.fmean(max(abs(px[y * w + x][i] - ref[i]) for i in range(3)) for y, x, ref in edge)
+    cx, cy = (w - 1) / 2, (h - 1) / 2
+    xl, yt = (ring - 1) / 2, (ring - 1) / 2
+    xr, yb = w - 1 - xl, h - 1 - yt
+    gx = [(right[i] - left[i]) / (xr - xl) for i in range(3)]
+    gy = [(bottom[i] - top[i]) / (yb - yt) for i in range(3)]
+    mid = [(left[i] + right[i] + top[i] + bottom[i]) / 4 for i in range(3)]
 
     def plane(x, y):
-        fx, fy = x / max(1, w - 1), y / max(1, h - 1)
-        return tuple((left[i] * (1 - fx) + right[i] * fx + top[i] * (1 - fy) + bottom[i] * fy) / 2 for i in range(3))
+        return tuple(mid[i] + gx[i] * (x - cx) + gy[i] * (y - cy) for i in range(3))
+    edge = ([(0, x) for x in range(0, w, 2)] + [(h - 1, x) for x in range(0, w, 2)]
+            + [(y, 0) for y in range(0, h, 2)] + [(y, w - 1) for y in range(0, h, 2)])
+    mad = statistics.fmean(max(abs(px[y * w + x][i] - r[i]) for i in range(3)) for y, x in edge for r in (plane(x, y),))
     return plane, mad
 
 
