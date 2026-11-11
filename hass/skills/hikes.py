@@ -476,11 +476,13 @@ class SignupQuestion(Refusal):
 
 
 def _guard_spots_not_lost(slots, ctx):
-    """hike.add only: the owner's words state a guest limit (\"3 spots\") but the slots leave sign-up off or unsaid, so
-    ``_signup_args`` would silently drop the count. Ask whether guests should be able to sign up; never turn it on, pick
-    one of several counts or write a number. An explicit sign-up instruction in the owner's words (either way) is left to
-    the no-invention rule, and unknown owner words keep the plain slot-only behaviour."""
-    if slots.get("signup") is True:
+    """hike.add only: the slots carry a guest limit (\"3 spots\") that the owner's words also state, but sign-up is off or
+    unsaid, so ``_signup_args`` would silently drop the count. Ask whether guests should be able to sign up; never turn it
+    on, pick one of several counts or write a number. An explicit sign-up instruction in the owner's words (either way) is
+    left to the no-invention rule, and unknown owner words keep the plain slot-only behaviour. Only a limit the call itself
+    carries counts: the owner's words are shared by every call of one message, so a count with no slot cannot be tied to
+    this hike (\"4 spots or 6 spots, and a Pine hike\")."""
+    if slots.get("signup") is True or _count(slots.get("capacity")) is None:
         return
     said = "\n".join(t for t in (getattr(ctx, "texts", ()) or ()) if isinstance(t, str))
     if said.strip() and _signup_state(said) is None and _said_limits(said):

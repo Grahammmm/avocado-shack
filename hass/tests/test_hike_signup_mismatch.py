@@ -30,7 +30,7 @@ def add_args(slots, *texts):
 
 class PurePlan(unittest.TestCase):
     def test_add_asks_when_spots_would_be_lost(self):
-        for extra in ({"signup": False, "capacity": 3}, {"signup": False}, {"capacity": 3}, {}):
+        for extra in ({"signup": False, "capacity": 3}, {"capacity": 3}):
             slots = {**BASE, **extra}
             before = copy.deepcopy(slots)
             with self.assertRaises(hikes.Refusal) as cm:
@@ -45,8 +45,9 @@ class PurePlan(unittest.TestCase):
     def test_affirmed_guest_alternatives_are_not_silently_ignored(self):
         for text in ("Add Harbor Walk November 14 at 9, the gate, 3 spots or 4 spots", "hike at the gate, 3 spots, 4 spots"):
             with self.assertRaises(hikes.Refusal) as cm:
-                hikes.plan_add({**BASE, "signup": False}, ctx(text))
-            self.assertEqual((cm.exception.reply, getattr(cm.exception, "kind", None)), (hikes.R_SIGNUP_UNCLEAR, "question"))
+                hikes.plan_add({**BASE, "signup": False, "capacity": 3}, ctx(text))
+            self.assertEqual(cm.exception.reply, hikes.R_SPOTS_NOT_SAID)  # the existing ambiguity refusal fires first: no count is chosen or dropped
+            self.assertFalse(hasattr(cm.exception, "kind"))
         with self.assertRaises(hikes.Refusal) as cm:  # sign-up on keeps the existing ambiguity refusal
             hikes.plan_add({**BASE, "signup": True, "capacity": 3}, ctx("sign up the gate, 3 spots or 4 spots"))
         self.assertEqual(cm.exception.reply, hikes.R_SPOTS_NOT_SAID)
@@ -74,6 +75,8 @@ class PurePlan(unittest.TestCase):
         on = add_args({"signup": True, "capacity": 3}, TEXT)  # affirmative sign-up passes through the existing validation
         self.assertEqual((on["rsvpEnabled"], on["capacity"]), (True, 3))
         direct = hikes.plan_add({**BASE}, types.SimpleNamespace(today="2026-11-08"))  # no ctx.texts: slot-only behaviour
+        shared = add_args({"signup": False}, "Add Harbor Walk 4 spots or 6 spots, and Pine hike at the gate")  # a count no slot ties to this call
+        self.assertEqual(shared["rsvpEnabled"], False)
         self.assertEqual(direct[0]["args"]["rsvpEnabled"], False)
         self.assertEqual(hikes.plan_add({**BASE, "signup": False, "capacity": 3}, types.SimpleNamespace(today="2026-11-08", texts=[]))[0]["args"]["rsvpEnabled"], False)
 
