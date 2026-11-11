@@ -40,7 +40,10 @@ class Parser(argparse.ArgumentParser):
 
 def git(*args: str, empty_ok: bool = False, cwd: str | None = None) -> str:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
-    out = subprocess.run(["git", "--literal-pathspecs", *args], capture_output=True, env=env, cwd=cwd)
+    try:
+        out = subprocess.run(["git", "--literal-pathspecs", *args], capture_output=True, env=env, cwd=cwd)
+    except OSError:  # Git cannot be launched (missing, not executable, E2BIG): same usage result, no detail
+        raise Usage(f"git {args[0]} failed") from None
     if out.returncode and not (empty_ok and out.returncode == 1 and not out.stdout.strip()):
         raise Usage(f"git {args[0]} failed")
     return out.stdout.decode("utf-8", "surrogateescape")
