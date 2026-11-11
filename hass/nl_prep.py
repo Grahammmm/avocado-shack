@@ -422,6 +422,9 @@ def _day_shows(index, wd, asked):
     return None
 
 
+_DAY_SPAN_RE = re.compile(r"\s*(?:[-\u2013\u2014]|to|through|until)\s*")  # what joins two weekdays into a span
+
+
 def hours_hints(text, index):
     """The Store already shows EVERY day and hours the owner asks for: a fact for "it already says that", never a draft.
     Each day is matched to its own range (the nearest one); any change not already true, or any pairing in doubt, gives no hint."""
@@ -429,6 +432,7 @@ def hours_hints(text, index):
     ranges = [(m.start(), m.end(), asked_range(m.group(0))) for m in RANGE_RE.finditer(t)]
     days = [(m.start(), m.end(), WEEKDAYS[m.group(2)]) for m in WEEKDAY_RE.finditer(t)]
     if not (ranges and days and index.hours) or any(r[2] is None for r in ranges): return None
+    if any(_DAY_SPAN_RE.fullmatch(t[a[1]:b[0]]) for a, b in zip(days, days[1:])): return None  # "Monday-Friday": endpoints never prove the days between
     rest = WEEKDAY_RE.sub(" ", RANGE_RE.sub(" ", t))  # every other word must be plain filler: "closed", "opens at 10am", "from 10" are changes nothing here proves already true
     if any(w not in PLAIN_WORDS for w in TOKEN_RE.findall(rest)): return None
     same, used = [], set()
