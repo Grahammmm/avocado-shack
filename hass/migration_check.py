@@ -85,7 +85,11 @@ def _sample_ids(preview) -> set | str:
         return "not an object"
     if not isinstance(upcoming := preview.get("upcoming", {}), dict):
         return "upcoming is not an object"
-    return {upcoming.get("id")} - {None}
+    if (sample_id := upcoming.get("id")) is None:
+        return set()
+    if not isinstance(sample_id, str):
+        return "upcoming id is not text"
+    return {sample_id}
 
 
 def _image_present(repo: Path, image) -> bool:

@@ -324,9 +324,9 @@ def render(data: bytes, spec=None) -> dict:
         subject, cut = img.crop(box), mask.crop(box)
         target = min(stats["fill_max"]["p50"], .90) * SIZE
         factor = target / max(subject.size)
-        report["scale"] = round(factor, 3)
+        report["scale"] = round(factor, 3)  # the REQUESTED frame-filling factor, before the cap: ops/photos.py and house_render read it for the small retake
         if factor > MAX_UPSCALE:
-            review.append(f"The photo is small (product only {max(subject.size)} px); enlarged {factor:.1f} times it will look soft.")
+            review.append(f"The photo is small (product only {max(subject.size)} px); filling the frame would need {factor:.1f} times enlargement. I limited it to {MAX_UPSCALE:.1f} times; it may still look soft.")
             factor = MAX_UPSCALE
         size = (max(1, round(subject.width * factor)), max(1, round(subject.height * factor)))
         subject, cut = subject.resize(size, lanczos), cut.resize(size, lanczos)

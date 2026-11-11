@@ -609,5 +609,56 @@ class GuideTests(unittest.TestCase):
         self.assertNotIn("$", guide.replace("`", "").replace("prices", ""))  # no price is promised anywhere on the page
 
 
+class LeapDayHintTests(unittest.TestCase):
+    def dates(self, text, today):
+        return [(r["said"], r["date"], r["weekday"]) for r in nl_prep.date_hints(text, today)[0] if "date" in r]
+
+    def test_yearless_leap_day_finds_next_occurrence(self):
+        today = date(2026, 11, 9)
+        for said in ("feb 29", "29 feb", "2/29"):
+            self.assertEqual(self.dates(said, today), [(said, "2028-02-29", "Tuesday")], said)
+
+    def test_leap_day_today_and_after_rollover(self):
+        self.assertEqual(self.dates("feb 29", date(2028, 2, 28))[0][1], "2028-02-29")
+        self.assertEqual(self.dates("feb 29", date(2028, 2, 29))[0][1], "2028-02-29")
+        self.assertEqual(self.dates("feb 29", date(2028, 3, 1))[0][1], "2032-02-29")
+        self.assertEqual(self.dates("mar 1", date(2028, 3, 2))[0][1], "2029-03-01")  # ordinary rollover unchanged
+
+    def test_century_gap_uses_gregorian_calendar(self):
+        self.assertEqual(self.dates("feb 29", date(2097, 1, 1))[0][1], "2104-02-29")
+
+    def test_explicit_year_never_searches_or_rewrites(self):
+        today = date(2026, 11, 9)
+        self.assertEqual(self.dates("feb 29 2027", today), [])
+        self.assertEqual(self.dates("feb 29 2028", today)[0][1], "2028-02-29")
+        self.assertEqual(self.dates("feb 29 2028", date(2030, 1, 1))[0][1], "2028-02-29")
+
+    def test_impossible_date_and_calendar_exhaustion_remain_absent(self):
+        today = date(2026, 11, 9)
+        self.assertEqual(self.dates("feb 30", today), [])
+        self.assertEqual(self.dates("apr 31", today), [])
+        self.assertEqual(self.dates("feb 29", date(9996, 3, 1)), [])  # no leap day left before date.max
+        self.assertEqual(self.dates("dec 31", date(9999, 12, 31))[0][1], "9999-12-31")
+
+    def test_day_resolver_inherits_date(self):
+        from hass.skills import kinds
+        r = kinds.day("feb 29", date(2026, 11, 9))
+        self.assertEqual((r.status, r.value), ("one", "2028-02-29"))
+
+    def test_request_keeps_owner_text_and_independent_hints(self):
+        seen = []
+        def transport(url, body, headers, timeout):
+            seen.append(json.loads(body))
+            return 200, json.dumps({"done": True, "message": {"content": json.dumps({"question": "ok"})}}).encode()
+        interp = LocalInterpreter(URL, "m", "SYSTEM", transport=transport, hinter=nl_prep.make_hinter(tiny()),
+                                  clock=lambda: datetime(2026, 11, 9, 17, 40, tzinfo=timezone.utc))
+        interp.interpret("lemons on feb 29 at 9am", [])
+        self.assertEqual(len(seen), 1)
+        user = json.loads(seen[0]["messages"][1]["content"])
+        self.assertEqual(user["message"], "lemons on feb 29 at 9am")
+        self.assertEqual(user["hints"]["times"], [{"said": "9am", "time": "09:00"}])
+        self.assertEqual(user["hints"]["dates"], [{"said": "feb 29", "date": "2028-02-29", "weekday": "Tuesday"}])
+
+
 if __name__ == "__main__":
     unittest.main()

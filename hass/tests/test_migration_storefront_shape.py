@@ -9,6 +9,7 @@ import subprocess
 import sys
 import unittest
 
+from hass import migration_check
 from hass.content_model import REPO_ROOT
 from hass.tests.test_content import IsolatedRepo
 from hass.tests.test_migration_baseline_shape import REPORT_KEYS, _main
@@ -107,6 +108,32 @@ class MisshapedStorefrontTests(unittest.TestCase):
     def test_both_misshaped_give_two_lines_and_full_report(self):
         root = self._repo(held=lambda d: {**d, "products": {}}, preview=lambda d: {**d, "upcoming": "soon"}).root
         self.assertFails(root, _held_line("products is not a list"), _preview_line("upcoming is not an object"))
+
+    def test_upcoming_nontext_id_is_named_failure_not_traceback(self):
+        canary = "SYNTHETIC CANARY"
+        for bad in ([], {}, [canary], {"k": canary}, 42, 1.5, True, False):
+            with self.subTest(id=bad):
+                self.assertFails(self._repo(preview=lambda d: {**d, "upcoming": {"id": bad}}).root,
+                                 _preview_line("upcoming id is not text"))
+        root = self._repo(preview=lambda d: {**d, "upcoming": {"id": [canary]}}).root
+        proc = subprocess.run([sys.executable, "-B", "hass/migration_check.py", "--repo", str(root)],
+                              cwd=REPO_ROOT, capture_output=True, text=True, timeout=120)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertTrue(proc.stdout.endswith(f"MIGRATION CHECK FAILED:\n  {_preview_line('upcoming id is not text')}\n"))
+        self.assertEqual(proc.stderr, "")
+        self.assertNotIn(canary, proc.stdout)
+
+    def test_null_and_text_ids_keep_working(self):
+        for ok in (None, "synthetic-sample", "", "caf\u00e9-\u2603"):
+            with self.subTest(id=ok):
+                self.assertPasses(self._repo(preview=lambda d: {**d, "upcoming": {"id": ok}}).root)
+        self.assertEqual(migration_check._sample_ids({"upcoming": {"id": "x"}}), {"x"})
+        self.assertEqual(migration_check._sample_ids({"upcoming": {"id": None}}), set())
+
+    def test_bad_id_does_not_suppress_other_failures(self):
+        root = self._repo(held=lambda d: {**d, "products": {}},
+                          preview=lambda d: {**d, "upcoming": {"id": ["x"]}}).root
+        self.assertFails(root, _held_line("products is not a list"), _preview_line("upcoming id is not text"))
 
     def test_real_files_pass(self):
         self.assertPasses(self._repo().root)

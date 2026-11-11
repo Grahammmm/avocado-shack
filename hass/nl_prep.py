@@ -299,8 +299,11 @@ def _named_date(t, m, month, day, today, year=True):
         d = _safe_date(n, month, day) if 2000 <= n <= 2099 else None
         return (t[m.start():y.end()], d) if d is not None else None
     if year and BAD_YEAR_RE.match(t, m.end()): return None  # digits that look like a year but are not one (dec 5 202, 5 dec 20277): no hint
-    d = _safe_date(today.year, month, day)
-    if d is not None and d < today: d = _safe_date(today.year + 1, month, day)
+    # Earliest real occurrence on/after today; Feb 29 can be up to 8 years away (non-leap century), so search a bounded 9 years.
+    d = None
+    for yr in range(today.year, min(today.year + 8, date.max.year) + 1):
+        c = _safe_date(yr, month, day)
+        if c is not None and c >= today: d = c; break
     return (m.group(0), d) if d is not None else None
 
 
