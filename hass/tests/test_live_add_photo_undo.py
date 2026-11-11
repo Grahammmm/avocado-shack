@@ -50,7 +50,7 @@ class LivePolicyForPhotos(SetPhotoTestCase):
                 tampered = json.loads(json.dumps(draft))
                 tampered["ops"][0]["args"][extra] = value
                 self.assertEqual(policy.check(tampered), [f"not live: product.set_photo.{extra}"])
-                self.assertIn("I've saved it for Graham", policy.refusal([f"not live: product.set_photo.{extra}"]))
+                self.assertIn(policy.KEPT, policy.refusal([f"not live: product.set_photo.{extra}"]))
 
     def test_a_picture_that_also_changes_a_protected_field_is_refused(self):
         draft = self.draft(_photo(PID, self.jpg))
