@@ -499,6 +499,47 @@ class RecentQuestionTests(ConversationTestCase):
         self.assertIsNone(self.conv._recent_question(self.now))
 
 
+class QuotedYearTests(unittest.TestCase):
+    """A malformed apostrophe-prefixed year after a month and day leaves that date out instead of rolling to the next annual date."""
+    fake, user, make = RequestTests.fake, RequestTests.user, RequestTests.make
+
+    def dates(self, text):
+        return nl_prep.date_hints(text, MONDAY)[0]
+
+    def test_malformed_apostrophe_year_never_rolls_to_current_year(self):
+        for text in ("hike on December 5 '2027", "hike on December 5 '277", "hike on December 5 '2", "hike on dec 5 '20277",
+                     "hike on December 5, '2027", "hike on December 5th '277", "hike on 5 Dec. '2027", "hike on 5th of Dec. '277",
+                     "hike on 5 December, '2027", "hike on 5 Dec '2"):
+            self.assertEqual(self.dates(text), [], text)
+
+    def test_curly_apostrophe_year_refusal_uses_existing_fold(self):
+        for q in ("'", "\u2019", "\u2018"):
+            self.assertEqual(self.dates(f"hike on December 5 {q}2027"), [])
+            self.assertEqual(self.dates(f"hike on 5 Dec. {q}27")[0]["date"], "2027-12-05")
+
+    def test_valid_year_and_yearless_controls_keep_exact_rows(self):
+        self.assertEqual(self.dates("hike on December 5 '27"), [{"said": "december 5 '27", "date": "2027-12-05", "weekday": "Sunday"}])
+        self.assertEqual(self.dates("hike on 5 Dec. '27")[0]["date"], "2027-12-05")
+        self.assertEqual(self.dates("hike on December 5 2027")[0]["date"], "2027-12-05")
+        self.assertEqual(self.dates("hike on December 5"), [{"said": "december 5", "date": "2026-12-05", "weekday": "Saturday"}])
+        self.assertEqual(self.dates("hike on December 5 '27:30"), self.dates("hike on December 5 27:30"))
+        self.assertEqual(self.dates("hike on dec 5 at 3 pm"), self.dates("hike on dec 5 3pm"))
+
+    def test_bad_quoted_year_is_local_to_one_date_occurrence(self):
+        rows = self.dates("hike on December 5 '277 or 12 Dec. '2027 or January 3 2027")
+        self.assertEqual([r["date"] for r in rows], ["2027-01-03"])
+
+    def test_serialized_request_omits_bad_year_but_keeps_owner_words(self):
+        for q in ("'", "\u2019"):
+            for text in (f"hike on December 5 {q}2027 at 9am", f"hike on 5 Dec. {q}2027 at 9am"):
+                seen = []
+                self.make(seen, hinter=nl_prep.make_hinter(tiny())).interpret(text, [])
+                user = self.user(seen)
+                self.assertNotIn("dates", user["hints"])
+                self.assertEqual(user["message"], text)
+                self.assertEqual(user["hints"]["times"], [{"said": "9am", "time": "09:00"}])
+
+
 class GuideTests(unittest.TestCase):
     """docs/hass/NATURAL_LANGUAGE.md says the same numbers and commands the code uses."""
     DOCS = Path(__file__).resolve().parents[2] / "docs" / "hass"
