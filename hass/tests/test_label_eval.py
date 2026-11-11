@@ -205,6 +205,107 @@ class LiveTests(Base):
             return info
         return mock.patch.object(ev.os, "fstat", fake)
 
+    def faults(self, name, **faults):
+        """RF0645-13: inject faults scoped to the real descriptor opened for photo ``name`` (fstat, fdopen, read, exit, close);
+        the real stream and the real close always run first. Returns a record of the fd, read sizes and close attempts."""
+        rec, real = {"fd": None, "reads": [], "closes": []}, {k: getattr(ev.os, k) for k in ("open", "fstat", "close", "fdopen")}
+        mine = lambda fd: rec["fd"] is not None and fd == rec["fd"]  # noqa: E731
+
+        def open_(path, *a, **kw):
+            fd = real["open"](path, *a, **kw)
+            if path == name: rec["fd"], rec["closes"] = fd, []
+            return fd
+
+        def fstat(fd):
+            if mine(fd) and "fstat" in faults: raise faults["fstat"]
+            return real["fstat"](fd)
+
+        def close(fd):
+            if mine(fd): rec["closes"].append(fd)
+            real["close"](fd)
+            if mine(fd) and "close" in faults: raise faults["close"]
+
+        class Stream:
+            def __init__(self, fh): self.fh = fh
+            def __enter__(self): return self
+            def read(self, n):
+                rec["reads"].append(n)
+                if "read" in faults: raise faults["read"]
+                return self.fh.read(n)
+            def __exit__(self, *exc):
+                self.fh.close()
+                if "exit" in faults: raise faults["exit"]
+
+        def fdopen(fd, *a, **kw):
+            if mine(fd) and "fdopen" in faults: raise faults["fdopen"]
+            return Stream(real["fdopen"](fd, *a, **kw)) if mine(fd) else real["fdopen"](fd, *a, **kw)
+        stack = contextlib.ExitStack()
+        for key, fn in (("open", open_), ("fstat", fstat), ("close", close), ("fdopen", fdopen)): stack.enter_context(mock.patch.object(ev.os, key, fn))
+        return stack, rec
+
+    def refused(self, name, **faults):
+        """Run the real helper on ``name`` with the faults; assert the exact private refusal and one close of the acquired fd."""
+        stack, rec = self.faults(name, **faults)
+        with stack, self.assertRaises(ev.EvalError) as caught: self.read_photo(name)
+        self.assertEqual(str(caught.exception), "a photo is not a usable regular file")
+        self.assertTrue(caught.exception.__suppress_context__ and caught.exception.__cause__ is None)
+        self.assertNotIn(CANARY, repr(caught.exception))
+        self.assertEqual(rec["closes"], [rec["fd"]])
+        return rec
+
+    def canary(self): return OSError(5, f"{CANARY} {self.photos}")
+
+    def test_photo_post_open_fstat_error_is_private(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        self.assertEqual(self.refused("a.jpg", fstat=self.canary())["reads"], [])
+
+    def test_photo_stream_creation_and_read_errors_are_private(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        self.assertEqual(self.refused("a.jpg", fdopen=self.canary())["reads"], [])
+        self.assertEqual(self.refused("a.jpg", read=self.canary())["reads"], [ev.MAX_PHOTO + 1])
+
+    def test_photo_context_exit_and_close_errors_are_private(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        self.assertEqual(self.refused("a.jpg", exit=self.canary())["reads"], [ev.MAX_PHOTO + 1])
+        self.assertEqual(self.refused("a.jpg", close=self.canary())["reads"], [ev.MAX_PHOTO + 1])
+        (self.photos / "b.jpg").write_bytes(b"")  # an existing refusal still reads the same when cleanup succeeds
+        self.assertEqual(self.refused("b.jpg", close=self.canary())["reads"], [])
+        with self.assertRaisesRegex(ev.EvalError, "^a photo is not a usable regular file$"): self.read_photo("b.jpg")
+
+    def test_main_last_photo_io_failure_prevents_all_calls_and_output(self):
+        out, last = self.tmp / "replies.jsonl", self.cases[-1]["photo"]
+        before = {p.name: (p.read_bytes(), stat.S_IMODE(p.stat().st_mode)) for p in self.photos.iterdir()}
+        for label, fault in (("fstat", {"fstat": self.canary()}), ("read", {"read": self.canary()}), ("close", {"close": self.canary()})):
+            with self.subTest(label):
+                stack, rec = self.faults(last, **fault)
+                with stack: result = self.live(out)
+                self.assertEqual(result, (2, "", "a photo is not a usable regular file"))
+                self.assertEqual((self.calls, out.exists(), sorted(p.name for p in self.tmp.iterdir()), rec["closes"]), ([], False, ["photos"], [rec["fd"]]))
+                self.assertEqual({p.name: (p.read_bytes(), stat.S_IMODE(p.stat().st_mode)) for p in self.photos.iterdir()}, before)
+
+    def test_existing_output_refusal_precedes_photo_fault(self):
+        out, last = self.tmp / "taken.jsonl", self.cases[-1]["photo"]
+        out.write_text("theirs\n")
+        stack, rec = self.faults(last, fstat=self.canary())
+        with stack: result = self.live(out)
+        self.assertEqual((result, self.calls, out.read_text(), rec["fd"]), ((2, "", "--out already exists"), [], "theirs\n", None))
+
+    def test_post_open_non_io_exceptions_are_not_swallowed(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        for exc in (RuntimeError(CANARY), KeyboardInterrupt()):
+            for phase in ("fstat", "read"):
+                with self.subTest(exc=type(exc).__name__, phase=phase):
+                    stack, rec = self.faults("a.jpg", **{phase: exc})
+                    with stack, self.assertRaises(type(exc)) as caught: self.read_photo("a.jpg")
+                    self.assertIs(caught.exception, exc)
+                    self.assertEqual(rec["closes"], [rec["fd"]])
+
+    def test_healthy_photo_read_is_unchanged_with_one_close(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        stack, rec = self.faults("a.jpg")
+        with stack: self.assertEqual(self.read_photo("a.jpg"), b"abc")
+        self.assertEqual((rec["reads"], rec["closes"]), ([ev.MAX_PHOTO + 1], [rec["fd"]]))
+
     def test_non_loopback_url_and_missing_flags_send_nothing(self):
         out = self.tmp / "replies.jsonl"
         self.assertEqual(self.live(out, url="http://example.com:11434"), BAD_URL)
