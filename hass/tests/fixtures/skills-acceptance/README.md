@@ -87,6 +87,11 @@ item.add (stock?), item.hide (plums are not on the site, then "the lemons"), ite
 maker.add (state), specials.add (end day), specials.show, social.item/hike/recap. `more honey coming Thursday` is Thursday 2026-11-12.
 `morning report` is an existing command, so its row is command-covered (no model call, disposition `report`).
 
+RF0535-13 refreshes only the house-render JPEG hashes for jar-white-sheet.jpg and bottle-grey-wall-tilted.jpg,
+including the forward/undo chain goldens and final residue assertion. Real scratch approval/undo with Pillow 12.0.0
+on main `db18a64` reproduced the old hashes; the affine-fit renderer produced the new hashes with identical content
+diffs, asset paths, changed-file inventories and undo content. Source photos and all acceptance checks are unchanged.
+
 Photos (`photos/`, copied byte for byte from `reports/hass/newitem-1/synthetic/`): clean jar-white-sheet.jpg (item.add),
 bottle-grey-wall-tilted.jpg (item.picture), jar-phone-rotated.jpg (page.photo, hero, no product render), bottle-bench-png.png and
 jar-cutout-alpha.png (item.add companions, `house_render` on, 800x800 jpeg); warned bag-bench-small.jpg, jar-dark-wood.jpg,
