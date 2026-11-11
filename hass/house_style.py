@@ -27,7 +27,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 from hass import claims  # noqa: E402
 from hass.content_model import (CATEGORIES, FORBIDDEN_TEXT, MAKER_FIELDS, PRODUCT_INTERNAL_FIELDS,  # noqa: E402
                                 PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, SHELF_LABELS, TEXT_LIMITS,
-                                _https, load_content)
+                                _https, _text, load_content)
 
 SPEC_PATH = REPO_ROOT / "hass" / "style" / "house-style.json"
 SITE = REPO_ROOT / "storefront-mockup"
@@ -415,6 +415,9 @@ def check_product(rec: dict, makers: dict, spec=None) -> dict:
     unknown = rec.get("brand") == "Producer not identified"
     shown_ok = rec.get("displayBrand") == ("From the market" if unknown else rec.get("brand"))
     img = rec.get("image", "")
+    text_problems: list = []  # same validator the content loader uses; never raises on odd value types
+    for field in ("name", "brand"):
+        _text(text_problems, field, rec.get(field), limit=TEXT_LIMITS["product"][field])
     checks = [_c("fields", need <= set(rec) <= allowed, sorted(set(rec) ^ need), 3, True),
               _c("shelf is one of the nine", rec.get("category") in CATEGORIES, str(rec.get("category")), 3, True),
               _c("id photo-product-NNN", re.fullmatch(r"photo-product-\d{3,}", rec.get("id", "")) is not None, rec.get("id", ""), 1),
@@ -422,7 +425,7 @@ def check_product(rec: dict, makers: dict, spec=None) -> dict:
               _c("maker link", (key is None) or key in makers, str(key), 3, True),
               _c("unknown producer has no maker key", not (unknown and key), str(key), 1),
               _c("picture path", bool(CATALOG_IMAGE_RE.fullmatch(img) or OWNER_IMAGE_RE.fullmatch(img)), img, 2, True),
-              _c("name lengths", len(rec.get("name", "")) <= 80 and len(rec.get("brand", "")) <= 60, "ok", 1)]
+              _c("name and brand text", not text_problems, "invalid name or brand" if text_problems else "ok", 1, True)]
     return _result(checks)
 
 
