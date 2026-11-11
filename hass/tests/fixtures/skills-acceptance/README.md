@@ -75,7 +75,7 @@ registered skill; skill coverage is enforced there, not here. `_selftest/` is th
 ## Primary corpus (AV1109-17)
 
 `messages.jsonl` holds one `tag=primary` row for every registered skill (38 at this commit, derived from `load_skills()` by
-`PrimaryCorpus`, never hard-coded) plus five `tag=photo` companions: 43 rows, 27 `expected/` goldens. The first owner text of each
+`PrimaryCorpus`, never hard-coded) plus five `tag=photo` companions: 43 rows, 28 `expected/` goldens. The first owner text of each
 primary row is the first numbered example sentence of the skill's catalog entry (SKILLS-SPEC section 3; specials.md for the five
 specials skills; social.md for social.maker), tags such as `(p)` removed. **This is a partial acceptance run (Primary only, not the
 historical 72 rows) and a passing run is not human acceptance.** The builder read each golden against the typed plan and the skill's
@@ -96,11 +96,12 @@ bag-red-cloth.jpg (item.add companions).
 
 * `photo-bag-bench-small`, `photo-jar-dark-wood`, `photo-bag-red-cloth`: a warned picture is refused (`not-drafted`); the D6 knowingly-approved
   fallback of AV1109-05 is not available, so no warning-then-yes path is claimed. These rows have no golden.
-* `primary-item-restore` (`refused`, "is hidden"): the real dispatcher's product resolver refuses a hidden product by name, so restore cannot draft.
+* `primary-item-restore`: now proposes, applies and undoes; hidden resolution is allowed only for this skill. Held products remain refused.
 * `primary-page-about`, `primary-maker-edit` (`question`): `traceable()` in `hass/skills/dispatch.py` never accepts an owner-words value containing "and"
   (it is a clause splitter), so the owner's own sentence is asked for again.
 * `primary-stock-set` (`question`, `question`): the router ties stock.set with stock.checked and the follow-up ties again.
-* `primary-hike-reschedule`, `primary-hike-recap`: the undo is not byte-identical (`undo-not-identical`), so the rows run with `undo: false`.
+* `primary-hike-reschedule`: now checks exact undo with an isolated empty RSVP database. The old failure was the missing guest-count fixture, not byte restoration; the production capacity gate is unchanged.
+* `primary-hike-recap` retains `undo: false`; recap repair is outside this card.
 
 ## Forty non-primary rows (AV1109-18)
 
@@ -134,3 +135,64 @@ Behaviour pinned to today's code (not a claim that it is right; each needs its o
 * `acc-refuse-02`: the interpreter-invented claim is not refused outright; the dispatcher leaves the story off and drafts the maker without it.
 * `acc-refuse-08`: `pause` returns `pause`, the proposal still drafts, and `yes <code>` returns `paused` (draft kept, tree unchanged).
 * The multi-item `item.hide` row uses three `item.hide` calls, because the dispatcher's `items` slot takes one product name per call.
+
+## Persistent change-and-undo chain (AV1109-19)
+
+From the repository root:
+
+```
+python3 -B hass/skills/acceptance_run.py --chain hass/tests/fixtures/skills-acceptance/chain.jsonl
+python3 -B -m unittest hass.tests.test_skills_acceptance_offline hass.tests.test_skills_acceptance_chain
+```
+
+`--chain FILE` is exclusive with `--rows`, `--record` and `--selftest` (including empty explicit options).
+It has the same exits: 0 all assertions pass, 1 an assertion fails, 2 invalid input before scratch creation.
+Ordinary row admission, missing-only recording and thresholds are unchanged. Chain files use a separate
+namespace: contiguous `chain-01` through `chain-NN` (at most 24), one text per `tag=turns` row. The full fixture
+and its inventory test require exactly 24. Setup, seed, house-render and photos belong only to the first row;
+photo turn indices are global, zero-based forward request indices. Continuations pin exact request skill,
+slots, asked slot, calls and attachment hashes; a slotless plan question additionally pins its exact question.
+Proposals pin the complete typed ops, a forward golden and `undo: true`. Every existing inverse golden is
+validated before scratch; a missing inverse fails before any undo delivery, never counts as full success.
+
+### Count convention and task order
+
+This is **24 scripted forward requests, not 24 total messages**. The driver opens one real session and keeps
+all approved changes while adding Pebble jam and its new maker (01–03), marking it in (04), changing description
+(05) and picture (06), hiding/restoring the seeded lemons (07–08), adding a future hike (09–11), moving it (12),
+changing its meeting point (13), cancelling it (14), changing Friday hours (15–16), adding a dated notice (17–18),
+changing the home intro (19–20), getting a read-only caption (21–22), reading the current report (23), and logging
+one unsupported request privately (24). Clear owner wording is intentional where the router legitimately ties;
+no router bypass or canned read-only answer is used.
+
+The 13 original approvals are 03,04,05,06,07,08,11,12,13,14,16,18,20. Only then does the driver undo their original
+codes in strict reverse order, each once, using a new named approval for each inverse, never undo-of-undo.
+The passing fixture reports **24 requests, 128 controls, 152 deliveries, 13 originals and 13 inverses**.
+Controls include wrong-code yes, named approvals, undo requests and duplicate replays; duplicates are actual
+deliveries too. Forward-only counts are 24 requests, 63 controls, 87 deliveries. Counts are observed at the real
+say/replay boundaries. No direct apply, clock reset, snapshot restoration or safety exception is used.
+
+### Golden review and exact residue
+
+The builder independently specified the forward and reverse deltas against the typed plans/history contract,
+then cross-checked the real run; neither a recorder nor a passing machine check is semantic acceptance.
+There are exactly 13 `chain-NN.json` and 13 `chain-undo-NN.json` goldens. Each checks the immediately preceding
+approved tree, including exact content presence/values, complete changed-file set and picture hashes. Inverse
+review inventory: intro/notice remove their added keys; hours restore the original Friday grouping; cancel,
+meeting-point and reschedule restore the prior hike record; hike creation leaves that original hike cancelled;
+restore/hide return lemons through hidden to its initial active state; picture restores the old reference and
+alt text while retaining the orphan file; description and stock restore their original values; item+maker undo
+hides both new records, removes the item's availability/day and removes the new shelf-check day.
+
+The final inverse (`chain-undo-03.json`) pins the complete residual added records: hidden Pebble Kitchen,
+hidden Pebble jam (original description/image, no stock word/day), and the cancelled added hike (original
+start and meeting point, no cancellation note). Both exact committed picture paths and SHA-256s remain pinned.
+All other parsed content and original assets must match the initial tree; generated bytes must equal fresh
+sitegen for that exact residue and git must be clean. There is no whole-file exemption. The final vague request
+remains exactly one open private backlog row, checked separately, never an exception to public-tree equality.
+
+The full offline test checks one session, all 37 ordered results at 100%, all exact counts, 26 applied drafts,
+private backlog, and sanitized residual hashes. Mini-chain negatives retain checks for schema/mixed modes,
+missing/malformed inverses, corrupt middle deltas, wrong targets, preapproval writes, duplicate/privacy faults,
+stale requests, cancelled/expired/stale approvals, undeclared residue, orphan bytes, dirty and stale generated
+files. Machine-valid photos/caption still require human review; this is not live or full-site acceptance.

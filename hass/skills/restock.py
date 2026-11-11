@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -31,6 +31,7 @@ if __package__ in (None, ""):
 from hass import voice  # noqa: E402
 from hass.content_model import ID_RE, iso_day  # noqa: E402
 from hass.morning_report import restock_day, restock_text  # noqa: E402
+from hass.nl_prep import WORD_NUMBERS  # noqa: E402
 from hass.ops.restock import FIELD, MAX_AHEAD  # noqa: E402
 from hass.skills.model import Skill, Slot, Trigger, Undo  # noqa: E402
 
@@ -51,7 +52,10 @@ SHELF_SAME = "This does not change what the shelf says."
 # a number with a unit of goods: "40 jars", "2 dozen", "12 lbs", "x40". A date ("the 14th") or a wait ("in 2 weeks") is not one.
 UNITS = ("jars?|bottles?|boxes|box|bags?|cartons?|dozens?|cases?|crates?|units?|pieces?|pcs|packs?|packets?|loaves|loaf|cans?|tubs?|"
          "trays?|pints?|quarts?|gallons?|liters?|litres?|lbs?|pounds?|oz|ounces?|kg|kilos?|kilograms?|grams?|items?|bunch(?:es)?")
-QUANTITY = re.compile(rf"(?<![\w.])\d[\d,]*(?:\.\d+)?\s*(?:x\s*)?(?:{UNITS})\b|\b[x×]\s*\d+\b|\b\d+\s*[x×](?!\w)", re.IGNORECASE)
+# a spelled-out run ("forty", "twenty-one", "one hundred and five", "two", "dozen") right before a unit of goods; a bare number word is not a count
+SPOKEN = "|".join(sorted({*WORD_NUMBERS, "seventy", "eighty", "ninety", "hundred", "thousand"}, key=len, reverse=True))
+QUANTITY = re.compile(rf"(?<![\w.])\d[\d,]*(?:\.\d+)?\s*(?:x\s*)?(?:{UNITS})\b|\b[x×]\s*\d+\b|\b\d+\s*[x×](?!\w)"
+                      rf"|\b(?:{SPOKEN})(?:[\s-]+(?:and[\s-]+)?(?:{SPOKEN}))*[\s-]+(?:{UNITS})\b", re.IGNORECASE)
 
 
 class Refusal(ValueError):
@@ -125,7 +129,7 @@ def _plan(slots, ctx=None) -> list:
         raise Refusal(ASK_DAY, "question")
     if when < today:
         raise Refusal(PAST.format(when=restock_day(when)))
-    if when > today + timedelta(days=MAX_AHEAD):
+    if (when - today).days > MAX_AHEAD:
         raise Refusal(TOO_FAR)
     if product is not None and product.get(FIELD) == when.isoformat():
         raise Refusal(ALREADY.format(name=name, when=restock_day(when)))
@@ -157,7 +161,7 @@ def notes(name, slots, ctx) -> dict:
 _PRODUCTS = "hass/content/products.json"
 
 STOCK_RESTOCK = Skill(
-    name="stock.restock", label="record when more is coming", version=1,
+    name="stock.restock", label="record when more is coming", version=2,
     summary="Note the day more of one product is expected. A day only; never a count, never the shelf word.",
     triggers=(
         Trigger("more honey coming Thursday"),

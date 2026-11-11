@@ -416,6 +416,106 @@ class ReportTest(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b"old report\n")
             self.assertEqual(sorted(p.name for p in reports.iterdir()), ["catalog-gaps.json"])
 
+    DEEP = 20000
+
+    def deep_repo(self, tmp: Path, bad: str, shape: str, report: bytes = None):
+        """Synthetic copied repo; `bad` (products.json or makers.json) carries raw over-deep JSON."""
+        repo = tmp / "repo"
+        (repo / "hass" / "style").mkdir(parents=True)
+        for f in ("__init__.py", "voice.py", "itemstd.py", "style/item-standard.json"):
+            shutil.copy(REPO / "hass" / f, repo / "hass" / f)
+        content, reports = repo / "hass" / "content", repo / "reports" / "hass"
+        content.mkdir()
+        good = {"products.json": '{"schemaVersion": 1, "products": [%s]}' % json.dumps(product()),
+                "makers.json": '{"schemaVersion": 1, "makers": %s}' % json.dumps(MAKERS)}
+        key = "products" if bad == "products.json" else "makers"
+        empty = "[]" if key == "products" else "{}"
+        deep = "[" * self.DEEP + "]" * self.DEEP if shape == "array" else '{"a":' * self.DEEP + "1" + "}" * self.DEEP
+        good[bad] = '{"schemaVersion": 1, "%s": %s, "extra": %s}' % (key, empty, deep)
+        for name, text in good.items():
+            (content / name).write_text(text, encoding="utf-8")
+        target = reports / "catalog-gaps.json"
+        if report is not None:
+            reports.mkdir(parents=True)
+            target.write_bytes(report)
+        return repo, content, reports, target
+
+    def test_load_refuses_excessive_json_nesting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            for bad in ("products.json", "makers.json"):
+                for shape in ("array", "object"):
+                    _, content, _, _ = self.deep_repo(tmp / f"{bad}{shape}", bad, shape)
+                    for name, key, kind in (("products.json", "products", list), ("makers.json", "makers", dict)):
+                        if name == bad:
+                            with self.assertRaises(itemstd.ReportError) as cm:
+                                itemstd._load(content / name, key, kind)
+                            self.assertIn("JSON nesting is too deep", str(cm.exception))
+                            self.assertNotIn("[[[", str(cm.exception))
+                        else:
+                            self.assertIsInstance(itemstd._load(content / name, key, kind)[0], kind)
+
+    def test_report_cli_deep_products_and_makers_are_exit_two(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            for bad in ("products.json", "makers.json"):
+                for shape in ("array", "object"):
+                    root = tmp / f"{bad}{shape}"
+                    root.mkdir()
+                    repo, content, _, _ = self.deep_repo(root, bad, shape)
+                    for extra in ((), ("--json",)):
+                        got = self.run_cli(repo / "hass" / "itemstd.py", "--content", str(content), *extra, cwd=root)
+                        self.assertEqual((got.returncode, got.stdout), (2, ""))
+                        self.assertIn("itemstd:", got.stderr)
+                        self.assertIn("JSON nesting is too deep", got.stderr)
+                        self.assertNotIn("Traceback", got.stderr)
+                        self.assertNotIn("RecursionError", got.stderr)
+
+    def test_deep_input_preserves_existing_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            for bad in ("products.json", "makers.json"):
+                for shape in ("array", "object"):
+                    root = tmp / f"{bad}{shape}"
+                    root.mkdir()
+                    repo, content, reports, target = self.deep_repo(root, bad, shape, report=b"old report\n")
+                    inputs = tree_hashes(content / "products.json", content / "makers.json")
+                    foreign = root / "elsewhere"
+                    foreign.mkdir()
+                    got = self.run_cli(repo / "hass" / "itemstd.py", "--write", cwd=foreign)
+                    self.assertEqual((got.returncode, got.stdout), (2, ""))
+                    self.assertIn("itemstd:", got.stderr)
+                    self.assertNotIn("Traceback", got.stderr)
+                    self.assertEqual(target.read_bytes(), b"old report\n")
+                    self.assertEqual(sorted(p.name for p in reports.iterdir()), ["catalog-gaps.json"])
+                    self.assertEqual(tree_hashes(content / "products.json", content / "makers.json"), inputs)
+                    self.assertEqual(list(foreign.iterdir()), [])
+
+    def test_deep_input_does_not_create_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            for bad in ("products.json", "makers.json"):
+                root = tmp / bad
+                root.mkdir()
+                repo, _, reports, target = self.deep_repo(root, bad, "array")
+                got = self.run_cli(repo / "hass" / "itemstd.py", "--write", cwd=root)
+                self.assertEqual((got.returncode, got.stdout), (2, ""))
+                self.assertFalse(target.exists())
+                self.assertFalse(reports.exists())
+
+    def test_shallow_unknown_metadata_remains_compatible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            content = tmp / "content"
+            content.mkdir()
+            (content / "products.json").write_text(
+                '{"schemaVersion": 1, "products": [], "extra": [[[{"a": [1]}]]]}', encoding="utf-8")
+            (content / "makers.json").write_text(
+                '{"schemaVersion": 1, "makers": %s, "extra": {"a": {"b": [[]]}}}' % json.dumps(MAKERS), encoding="utf-8")
+            got = self.run_cli(SCRIPT, "--content", str(content), "--json", cwd=tmp)
+            self.assertEqual(got.returncode, 0, got.stderr)
+            self.assertEqual(json.loads(got.stdout), itemstd.report_for(content))
+
 
 if __name__ == "__main__":
     unittest.main()

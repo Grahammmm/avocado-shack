@@ -143,6 +143,22 @@ def _text(value):
     return value.strip() if isinstance(value, str) else value
 
 
+def _owner_case(value, ctx):
+    """RF2345-9: the difficulty as the owner wrote it. The interpreter may have capitalised it (``EASY``); when the same phrase
+    (case and ordinary whitespace aside, whole words only) is in the owner's own texts, return his spelling of it: the last
+    occurrence in the latest message that has one. Otherwise ``value`` unchanged."""
+    words = value.split() if isinstance(value, str) else []
+    if not words:
+        return value
+    pattern = re.compile(r"(?<!\w)" + r"\s+".join(re.escape(w) for w in words) + r"(?!\w)", re.IGNORECASE)
+    for text in reversed(list(getattr(ctx, "texts", ()) or ())):
+        if isinstance(text, str):
+            hits = list(pattern.finditer(text))
+            if hits:
+                return re.sub(r"\s+", " ", hits[-1].group(0))
+    return value
+
+
 def _given(slots, name):
     value = slots.get(name)
     return value if isinstance(value, str) and value.strip() else None
@@ -355,6 +371,18 @@ def _said_unlimited(said):
     return state
 
 
+def _off_answered_after_limit(texts):
+    """RF2345-10: whether his latest sign-up-off instruction is in a LATER message than any guest limit he stated (the answer
+    to \"Should they?\" after \"3 spots\"). Off and a limit in the same message stay contradictory: that is still asked."""
+    last_limit = last_off = -1
+    for i, text in enumerate(t for t in (texts or ()) if isinstance(t, str)):
+        if _said_limits(text):
+            last_limit = i
+        if _signup_state(text) is False:
+            last_off = i
+    return last_off > last_limit
+
+
 def rule_no_invention(slots, texts, ctx):
     """The E2E-HIKE-1 finding: the model added sign-up and a guest limit nobody asked for. A word or a number somewhere in
     the text is not evidence: sign-up on needs his latest sign-up instruction to be on ("sign-up off" never turns it on), a
@@ -376,6 +404,8 @@ def rule_no_invention(slots, texts, ctx):
     elif state is True or (signup is False and "hike" in slots and state is None and not limits):
         return R_SIGNUP_UNCLEAR, "other"  # he said on and the slots say off (or nothing), or an edit turns sign-up off without a word
     if cap is not None or no_limit:
+        if state is False and "hike" not in slots and _off_answered_after_limit(texts):
+            return None  # an add: he was asked about sign-up after stating spots and said off, so the kept spots are not written
         if state is False:
             return R_SIGNUP_UNCLEAR, "other"
         if cap is not None and (no_limit or limits != {cap}):  # alternatives ("15 spots or 20 spots") support neither: one unequivocal count only
@@ -437,6 +467,29 @@ def _guard(skill, slots, ctx):
         hit = RULES[rule_id](slots, texts, ctx)
         if hit:
             raise Refusal(hit[0])
+
+
+class SignupQuestion(Refusal):
+    """A Refusal that is one question the owner's short answer fixes: the dispatcher keeps the request open (kind ``question``)."""
+
+    kind = "question"
+
+
+def _guard_spots_not_lost(slots, ctx):
+    """hike.add only: the owner's words state a guest limit (\"3 spots\") but sign-up is off or unsaid, so ``_signup_args``
+    would silently drop the count, whether the call copied the count into its capacity slot or left that slot out. Ask
+    whether guests should be able to sign up; never turn it on, pick one of several counts or write a number. An explicit
+    sign-up instruction in the owner's words (either way) is left to the no-invention rule, and unknown owner words keep the
+    plain slot-only behaviour. In a message that carries several calls (``ctx.multi_call``) the owner's words are shared by
+    every call, so a count with no capacity slot cannot be tied to this hike (\"4 spots or 6 spots, and a Pine hike\"): there
+    only a limit the call itself carries counts."""
+    if slots.get("signup") is True:
+        return
+    if _count(slots.get("capacity")) is None and getattr(ctx, "multi_call", False):
+        return
+    said = "\n".join(t for t in (getattr(ctx, "texts", ()) or ()) if isinstance(t, str))
+    if said.strip() and _signup_state(said) is None and _said_limits(said):
+        raise SignupQuestion(R_SIGNUP_UNCLEAR)
 
 
 # -- slot helpers --------------------------------------------------------------------------------------------------
@@ -547,12 +600,15 @@ def plan_add(slots, ctx):
         slots["title"] = place_title(slots, ctx)
     _need(ADD, slots, "title", "day", "clock", "meeting_point")
     _guard(ADD, slots, ctx)
+    _guard_spots_not_lost(slots, ctx)
     slots = _with_default(slots, ctx)
     args = {"title": _text(slots["title"]), "date": slots["day"], "time": slots["clock"],
             "meetingPoint": _text(slots["meeting_point"]), **_signup_args(slots)}
     if _given(slots, "trail"):
         args["trailId"] = slots["trail"]
     args.update({ARG.get(f, f): _text(slots[f]) for f in TEXT_SLOTS if _given(slots, f)})
+    if "difficulty" in args:
+        args["difficulty"] = _owner_case(args["difficulty"], ctx)
     return [{"op": "hike.create", "args": args}]
 
 
@@ -562,6 +618,8 @@ def plan_edit(slots, ctx):
     slots = _with_default(slots, ctx)
     args = {"id": slots["hike"]}
     args.update({ARG.get(f, f): _text(slots[f]) for f in EDIT_TEXT_SLOTS if _given(slots, f)})
+    if "difficulty" in args:
+        args["difficulty"] = _owner_case(args["difficulty"], ctx)
     if isinstance(slots.get("signup"), bool):
         args["rsvpEnabled"] = slots["signup"]
     if isinstance(slots.get("capacity"), int) and not isinstance(slots.get("capacity"), bool):

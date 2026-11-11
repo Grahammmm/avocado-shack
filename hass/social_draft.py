@@ -175,6 +175,14 @@ def build_maker(content, maker_key: str) -> dict:
     return refuse("caption too long") if len(caption) > MAX_CAPTION else {"draft": True, "caption": caption}
 
 
+def _aware_clock(text: str) -> datetime:
+    """argparse type for the hidden --now: an ISO timestamp that carries a timezone offset (never guessed)."""
+    try: value = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except (ValueError, AttributeError): raise argparse.ArgumentTypeError("--now needs an ISO timestamp with a timezone offset") from None
+    if value.tzinfo is None or value.utcoffset() is None: raise argparse.ArgumentTypeError("--now needs a timezone offset")
+    return value
+
+
 def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) -> int:
     parser = argparse.ArgumentParser(description="Print a local DRAFT Instagram post for one active product or hike, or a maker introduction (posts nothing).")
     which = parser.add_mutually_exclusive_group(required=True)
@@ -182,7 +190,7 @@ def main(argv=None, content_dir: Path = CONTENT_DIR, site_dir: Path = SITE_DIR) 
     which.add_argument("--hike", metavar="ID")
     which.add_argument("--maker", metavar="KEY")
     which.add_argument("--recap", metavar="ID")
-    parser.add_argument("--now", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")), help=argparse.SUPPRESS)
+    parser.add_argument("--now", type=_aware_clock, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)  # --now: tests only
     try: content = load_content(content_dir)
     except (ContentError, OSError): content = None  # missing or invalid content: one JSON refusal, never a traceback

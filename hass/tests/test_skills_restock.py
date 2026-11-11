@@ -279,5 +279,40 @@ class RealDispatcher(unittest.TestCase):
         self.assertIn("stock", dispatch.GROUP_OPS)
 
 
+class CalendarEnd(unittest.TestCase):
+    """RF0015-9: the 60-day window is a difference of days, so it never builds a date past 9999-12-31."""
+
+    def test_plan_accepts_representable_days_at_calendar_end(self):
+        for today, day in (("9999-12-01", "9999-12-31"), ("9999-12-31", "9999-12-31")):
+            for form in (today, date.fromisoformat(today)):
+                with self.subTest(today=today, day=day, form=type(form).__name__):
+                    self.assertEqual(rs.STOCK_RESTOCK.plan({"item": HONEY, "day": day}, ctx(today=form)), set_op(HONEY, day))
+        self.assertIn("has already passed", refusal({"item": HONEY, "day": "9999-12-30"}, today="9999-12-31").reply)
+
+    def test_sixty_and_sixty_one_day_boundaries_unchanged(self):
+        self.assertEqual(rs.STOCK_RESTOCK.plan({"item": HONEY, "day": "2028-02-29"}, ctx(today="2027-12-31")), set_op(HONEY, "2028-02-29"))
+        self.assertEqual(refusal({"item": HONEY, "day": "2028-03-01"}, today="2027-12-31").reply, rs.TOO_FAR)
+        self.assertEqual(rs.STOCK_RESTOCK.plan({"item": HONEY, "day": "2027-01-07"}, ctx()), set_op(HONEY, "2027-01-07"))
+        self.assertEqual(refusal({"item": HONEY, "day": "2027-01-08"}).reply, rs.TOO_FAR)
+        same = with_product(HONEY, restock_on="9999-12-31")
+        self.assertIn("already says", voice.plain(refusal({"item": HONEY, "day": "9999-12-31"}, content=same, today="9999-12-31").reply))
+
+    def test_notes_at_calendar_end_use_existing_report_wording(self):
+        out = rs.notes("stock.restock", {"item": HONEY, "day": "9999-12-31"}, ctx(today="9999-12-31"))
+        self.assertEqual(out, {"say": [rs.restock_text(HONEY_NAME, "9999-12-31") + ".", rs.SHELF_SAME]})
+
+    def test_calendar_end_clear_and_refusals_preserve_state(self):
+        before = copy.deepcopy(CONTENT.products)
+        end = {"today": "9999-12-31"}
+        self.assertEqual(rs.STOCK_RESTOCK.plan({"item": HONEY, "clear": True}, ctx(content=with_product(HONEY, restock_on="9999-12-31"), **end)),
+                         [{"op": "product.set_restock", "args": {"id": HONEY, "clear": True}}])
+        self.assertIn("has no restock day to clear", voice.plain(refusal({"item": HONEY, "clear": True}, **end).reply))
+        self.assertEqual(refusal({"item": HONEY, "day": "9999-12-31", "clear": True}, **end).reply, rs.NOT_BOTH)
+        self.assertIn("on hold", voice.plain(refusal({"item": HELD, "day": "9999-12-31"}, **end).reply))
+        self.assertIn("is hidden", voice.plain(refusal({"item": HONEY, "day": "9999-12-31"}, content=with_product(HONEY, status="hidden"), **end).reply))
+        self.assertEqual(refusal({"item": "photo-product-999", "day": "9999-12-31"}, **end).reply, rs.UNKNOWN)
+        self.assertEqual(CONTENT.products, before)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-21-pebble-loop-hike].cancelNote",
+      "after": "Rained out - we will pick a new date soon"
+    },
+    {
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-21-pebble-loop-hike].status",
+      "after": "cancelled",
+      "before": "scheduled"
+    }
+  ],
+  "files": [
+    "hass/content/community.json",
+    "storefront-mockup/community.json"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}
