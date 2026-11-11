@@ -89,7 +89,8 @@ class VerifyFailureTests(BrowserCase):
 
     def test_failed_check_is_reported_not_retried(self):
         draft, reply = self.propose("desc")
-        self.assertIn("\nI couldn't make a picture of how it will look.", reply)
+        self.assertTrue(reply.startswith(conversation.PREVIEW_FAILED_HEAD), reply)  # HASS-CHAT-1: said first, then tried again
+        self.assertIn(conversation.PREVIEW_RETRY_LINE, reply)
         self.assertEqual(self.say("yes"), "approved")
         [reply] = self.replies()
         [row] = self.drafts()

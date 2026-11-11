@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from hass import owner_answers as answers
 
 NOW = datetime(2026, 11, 2, 18, 0, tzinfo=timezone.utc)
-WORDS = "it didn't finish, and some website files could not be put back - please ask Graham"
+WORDS = "it didn't finish, and some website files could not be put back - please hold off on more changes"
 BOTH = {"state": "failed", "reason": "write failed: x; rollback failed: y"}
 DID_BOTH = ("That didn't reach the website, and some website files could not be put back. "
-            "I couldn't update the website pages. Please ask Graham before making more changes.")
+            "I couldn't update the website pages. Please hold off on more changes until those files are put back by hand.")
 PUT_BACK = "some website files could not be put back"
 
 
@@ -62,7 +62,7 @@ class RollbackFailedHistoryTests(unittest.TestCase):
                              ("failed", "I couldn't save it, so nothing changed"), ("proposed", 'waiting for your yes'),
                              ("needs-details", 'waiting for your yes'), ("rejected", "cancelled, nothing changed"),
                              ("expired", "timed out, nothing changed"), (None, 'waiting for your yes'),
-                             ("bogus", "I'm not sure where this one stands - please ask Graham")):
+                             ("bogus", "I'm not sure where this one stands yet")):
             with self.subTest(state=state):
                 self.assertEqual(answers.history_words({"state": state}, BOTH), words)
                 self.assertNotIn(PUT_BACK, answers.did_it_work({"state": state}, BOTH, NOW))

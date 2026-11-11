@@ -171,12 +171,18 @@ def parse_segment(segment):
 
 
 def schedule_pieces(line):
-    """Split separators and independent comma schedules, not commas joining days or ordinary prose."""
+    """Split separators and independent comma or "and" schedules, not those joining days or ordinary prose."""
     out = []
     for piece in re.split(r"\s*[·;]\s*", line):
         piece = piece.strip()
-        for comma in re.finditer(",", piece):
-            left, right = piece[:comma.start()].strip(), piece[comma.end():].strip()
+        for cut in re.finditer(r",|\band\b", piece, re.I):
+            left, right = piece[:cut.start()].strip(), piece[cut.end():].strip()
+            # "Closed Mon and Fri, Fri 9–5": when the left is only a closed-day list and the right's first comma part is
+            # only days, that part continues the closed list, so the "and" is not the boundary; the comma after it is.
+            # An open-hours left ("Mon 9–5 and Fri, Sat 10–4") is an independent schedule, so the "and" still splits.
+            if (cut.group(0) != "," and "," in right and parse_segment(right.split(",", 1)[0]) is None
+                    and (parse_segment(left) or (None, None))[1] == "closed"):
+                continue
             if parse_segment(left) is not None and parse_segment(right) is not None:
                 out.append(left)
                 out.extend(schedule_pieces(right))
@@ -284,6 +290,9 @@ def check_hours_untouched(slots, texts, ctx):
         first = lost[0]
         same = [d for d in lost if _same(old[0][d], old[0][first])]
         return SkillStop(f"Do you want {day_names(same)} to stay {_stay_phrase(old[0][first][0])}?", "question")
+    for d in range(7):
+        if d in new[0] and d not in old[0] and d not in named:
+            return SkillStop(f"You didn't name {DAY_NAMES[d]}. Should I add hours for it?", "question")
     return None
 
 
@@ -390,7 +399,7 @@ def check_notice_dates(slots, texts, ctx):
         return SkillStop(UNTIL_ASK, "question")
     if until < today:
         return SkillStop(NOTICE_PAST, "question")
-    if until > today + timedelta(days=MAX_NOTICE_DAYS):
+    if (until - today).days > MAX_NOTICE_DAYS:
         return SkillStop(NOTICE_LONG)
     return None
 
@@ -408,8 +417,17 @@ def check_notice_already(slots, texts, ctx):
 NOTICE_CHECKS = {"no-price": check_notice_price, "notice-dates": check_notice_dates, "not-already-true": check_notice_already}
 
 
+NOTICE_CONFLICT = "Do you want the notice changed, or taken down? I can only do one."
+
+
+def _given(value):
+    return isinstance(value, str) and bool(value.strip())
+
+
 def plan_notice(slots, ctx):
     store = store_of(ctx)
+    if slots.get("clear") is True and (_given(slots.get("text")) or _given(slots.get("until"))):
+        raise SkillStop(NOTICE_CONFLICT, "question")
     if slots.get("clear"):
         if store is not None and not store.get("notice"):
             raise SkillStop(NO_NOTICE)
@@ -574,7 +592,7 @@ SHOP_NOTICE = Skill(
             ("the last day is more than 60 days away", NOTICE_LONG),
             ("the last day has passed", NOTICE_PAST),
             ("there is no notice to take down", NO_NOTICE)),
-    cases=_CASES.format("shop.notice"), version=1)
+    cases=_CASES.format("shop.notice"), version=2)
 
 SHOP_CONTACT = Skill(
     name="shop.contact", label="change the phone number or the address",

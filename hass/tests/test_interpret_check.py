@@ -37,10 +37,10 @@ class CheckTests(unittest.TestCase):
 
     def test_unknown_op_and_unknown_argument_are_named(self):
         self.assertEqual(ask([call("product.colour", id="p1")]), {"question": (
-            "I can't do that kind of change yet. You can ask Graham.")})
-        self.assertAsks(ask([call("product.edit", id="p1", colour="green")]), "I can't do that kind of change yet")
+            "I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change.")})
+        self.assertAsks(ask([call("product.edit", id="p1", colour="green")]), "I can't do that kind of change from chat yet")
         # a later call is checked too: the first problem wins, in call order
-        self.assertAsks(ask([call("product.edit", id="p1"), call("hike.nope")]), "I can't do that kind of change yet")
+        self.assertAsks(ask([call("product.edit", id="p1"), call("hike.nope")]), "I can't do that kind of change from chat yet")
 
     def test_wrong_kind_names_the_field(self):
         cases = [(call("hike.update", id="h1", capacity="ten"), "I need the guest limit as a whole number"),
@@ -102,8 +102,8 @@ class ProductionConversationTests(ConversationTestCase):
         return reply
 
     def test_registry_problems_ask_before_any_draft(self):
-        self.assertIn("I can't do that kind of change yet", self.asked("colour", _ops(("product.colour", {"id": "photo-product-001"}))))
-        self.assertIn("I can't do that kind of change yet", self.asked("edit", _ops(("product.edit", {"id": "photo-product-001",
+        self.assertIn("I can't do that kind of change from chat yet", self.asked("colour", _ops(("product.colour", {"id": "photo-product-001"}))))
+        self.assertIn("I can't do that kind of change from chat yet", self.asked("edit", _ops(("product.edit", {"id": "photo-product-001",
                                                                                          "colour": "green"}))))
         self.assertIn("I need the guest limit as a whole number",
                       self.asked("cap", _ops(("hike.update", {"id": "h1", "capacity": "ten"}))))
@@ -140,7 +140,7 @@ class FixtureConversationTests(ConversationTestCase):
     def test_test_registry_is_the_one_checked(self):
         self.interp.mapping["prod"] = _ops(("product.edit", {"id": "photo-product-001", "name": "Hass"}))
         self.assertEqual(self.say("prod"), "question")
-        self.assertIn("I can't do that kind of change yet. You can ask Graham.", self.replies()[0])
+        self.assertIn("I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change.", self.replies()[0])
 
 
 if __name__ == "__main__":

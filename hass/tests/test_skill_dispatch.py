@@ -183,9 +183,14 @@ class SetPhrasesTests(SkillCase):
         self.registry = registry_of(toy("hike.add", "add a hike", slots, _plan_hike, **kw))
         self.conv = self.open()
 
-    def tearDown(self):
+    def setUp(self):
+        super().setUp()
+        # restore the hikes module's own wording afterwards: popping it for good made later modules in the same process
+        # (test_skill_hidden_route) see the generic "signup: False" line
+        patched = mock.patch.dict(dispatch.SET_PHRASES)
+        patched.start()
+        self.addCleanup(patched.stop)
         dispatch.SET_PHRASES.pop("hike.add", None)
-        super().tearDown()
 
     def propose_mill(self, **extra):
         slots = {k: v for k, v in MILL.items() if k != "difficulty"}
@@ -621,6 +626,22 @@ class OnlyTheOwnerTests(SkillCase):
 class QueuedCallsTests(SkillCase):
     """RETURN item 2: calls the owner has not finished are kept and asked one at a time, across answers, approvals and restarts."""
     THREE = "add the Mill hike, the Pine hike and the Ocean hike on Saturday"
+
+    def test_a_plain_read_only_skill_keeps_the_old_paths(self):  # AV1109-06: only READ_ONLY_LONG skills get the caption paths
+        look = toy("shop.look", "look at the shop", (), lambda s, c: [], edits=(), preview="none", approval="none",
+                   live_class="read-only", undo=Undo("none", "none"))
+        self.conv.dispatch.registry = registry_of(HIKE_ADD, look)
+        self.script("look and add", {"calls": [{"skill": "shop.look", "slots": {}}, {"skill": "hike.add", "slots": MILL}], "revises": None})
+        self.assertEqual(self.say("look and add"), "backlog")  # a read-only call in a batch is written down, as before
+        self.assertEqual(self.drafts(), [])
+        self.assertNotIn("shop.look", dispatch.READ_ONLY_LONG)
+        with mock.patch.dict(dispatch.READ_ONLY, {"shop.look": lambda s, c: "x" * 700}):
+            self.script("look", skill_reply("shop.look"))
+            with self.assertRaisesRegex(voice.VoiceError, "too long for one message"):  # an everyday answer may not run long
+                self.say("look")
+        self.assertIsNone(dispatch.Ctx(None, None, {}, [], None).site_dir)  # the old constructor still works
+        self.assertEqual(self.conv.dispatch._ctx(self.now, []).site_dir, self.repo.wt / "storefront-mockup")
+        self.nothing_written()
 
     def three(self):
         calls = [{"skill": "hike.add", "slots": {"title": f"{n} hike", "place": n, "day": SATURDAY}} for n in ("Mill", "Pine", "Ocean")]

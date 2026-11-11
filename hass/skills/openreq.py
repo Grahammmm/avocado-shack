@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from hass import nl_prep
 
@@ -50,6 +50,24 @@ ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth
 
 def _iso(dt: datetime) -> str:
     return dt.isoformat()
+
+
+def _instant(text):
+    """The stored timestamp as an aware UTC datetime, or None when it is not text or not an aware ISO time."""
+    if not isinstance(text, str):
+        return None
+    try:
+        when = datetime.fromisoformat(text)
+        return when.astimezone(timezone.utc) if when.utcoffset() is not None else None
+    except (ValueError, OverflowError):
+        return None
+
+
+def _idle_deadline(now: datetime) -> datetime:
+    # Add on the timeline, not the repeated/skipped wall-clock hour. Keep naive semantics.
+    if now.utcoffset() is None:
+        return now + timedelta(minutes=TTL_MINUTES)
+    return (now.astimezone(timezone.utc) + timedelta(minutes=TTL_MINUTES)).astimezone(now.tzinfo)
 
 
 def bound_texts(texts, *, turns=None, per=MAX_OWNER_TEXT, total=MAX_TOTAL_TEXT) -> list:
@@ -184,6 +202,10 @@ class OpenRequests:
         """Write the owner's request. With ``request_id`` that row is updated (its first-message time and 2 hour limit are
         kept); without, any live row of this owner is erased/closed first and a new one is made. ``legacy`` rows (the
         old question-and-texts requests) renew their 30 minutes on every write, as the old table did."""
+        try:
+            idle = _idle_deadline(now)  # refuse an unrepresentable deadline before any write
+        except OverflowError:
+            raise ValueError("request expiry is outside the supported date range") from None
         self.ensure(owner)
         kept = json.dumps(bound_texts(texts, turns=turns, per=per, total=total), ensure_ascii=False)
         fields = dict(provider_id=provider_id, state=state, skill=skill, slots_json=json.dumps(slots or {}, sort_keys=True),
@@ -197,15 +219,18 @@ class OpenRequests:
                                   (request_id, owner)).fetchone()
             if row is not None:
                 created = datetime.fromisoformat(row["created_at"])
-                expires = now + timedelta(minutes=TTL_MINUTES)
+                expires = idle
                 if not legacy:
-                    expires = min(expires, created + timedelta(minutes=MAX_MINUTES))
+                    try:
+                        expires = min(expires, created + timedelta(minutes=MAX_MINUTES))
+                    except OverflowError:
+                        pass  # a cap past the calendar end cannot tighten a representable idle deadline
                 fields["expires_at"] = _iso(expires)
                 sets = ", ".join(f"{k} = ?" for k in fields)
                 self.db.execute(f"UPDATE open_requests SET {sets} WHERE request_id = ?", (*fields.values(), request_id))
                 return request_id
         self.close_live(owner, now, "superseded" if skill is not None and not legacy else "closed")
-        fields.update(owner=owner, created_at=_iso(now), expires_at=_iso(now + timedelta(minutes=TTL_MINUTES)))
+        fields.update(owner=owner, created_at=_iso(now), expires_at=_iso(idle))
         cur = self.db.execute(f"INSERT INTO open_requests({', '.join(fields)}) VALUES ({', '.join('?' * len(fields))})",
                               tuple(fields.values()))
         return cur.lastrowid
@@ -252,6 +277,8 @@ class OpenRequests:
         closed request more than RETENTION_HOURS old, text and all."""
         if not self.exists():
             return
+        if not isinstance(now, datetime) or now.utcoffset() is None:
+            raise ValueError("retention requires an aware clock")
         for row in self.db.execute("SELECT request_id, expires_at FROM open_requests WHERE state IN ('open','drafted')").fetchall():
             try:
                 due = now > datetime.fromisoformat(row["expires_at"])
@@ -259,9 +286,15 @@ class OpenRequests:
                 due = True
             if due:
                 self.mark(row["request_id"], "expired", now)
-        cutoff = _iso(now - timedelta(hours=RETENTION_HOURS))
-        self.db.execute("DELETE FROM open_requests WHERE state IN ('closed','expired','cancelled','superseded')"
-                        " AND closed_at IS NOT NULL AND closed_at < ?", (cutoff,))
+        # Age is the instant closed_at names, not its text: rows stamped with another UTC offset are compared as instants.
+        cutoff = now.astimezone(timezone.utc) - timedelta(hours=RETENTION_HOURS)
+        for row in self.db.execute("SELECT request_id, closed_at FROM open_requests WHERE state IN ('closed','expired','cancelled',"
+                                   "'superseded') AND closed_at IS NOT NULL").fetchall():
+            closed = _instant(row["closed_at"])
+            # A closed_at that is not a readable aware timestamp has an unknown age: the row is held, never read as ancient.
+            if closed is not None and closed < cutoff:
+                self.db.execute("DELETE FROM open_requests WHERE request_id = ? AND closed_at = ?"
+                                " AND state IN ('closed','expired','cancelled','superseded')", (row["request_id"], row["closed_at"]))
 
     # -- the owner's photo (spec 2.7) -------------------------------------------------------------------------
     def bind_attachment(self, owner: str, provider_id: str, sha: str, now: datetime, registry=None):
@@ -326,11 +359,12 @@ def pick_candidate(text: str, ask: dict):
     ids, names = ask.get("ids") or [], ask.get("names") or []
     if not ids or len(ids) != len(names):
         return None
-    words = re.findall(r"[a-z0-9]+", (text or "").lower())
-    for w in words:
-        n = int(w) if w.isdigit() else ORDINALS.get(w)
-        if n is not None and not len(words) > 4:
-            return ids[n - 1] if 1 <= n <= len(ids) else None
+    choice = re.fullmatch(r"\s*(?:the\s+)?([0-9]+|" + "|".join(ORDINALS) +
+                          r")(?:\s+one)?(?:\s+please)?[.!?,;:]*\s*", (text or "").lower())
+    if choice:
+        word = choice.group(1)
+        n = int(word) if word.isdigit() else ORDINALS[word]
+        return ids[n - 1] if 1 <= n <= len(ids) else None
     wanted = _tokens(text)
     if not wanted:
         return None

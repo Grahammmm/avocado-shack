@@ -28,41 +28,45 @@ def _edit(field, before, after):
 class ProposalHikeTimeTests(unittest.TestCase):
     def test_edit_shows_both_sides_with_weekday(self):
         self.assertEqual(_edit("startsAt", "2026-11-07T09:00:00-08:00", "2026-11-14T10:30:00-08:00"),
-                         ["Here's the change I'd make:", 'this, the start time: from Saturday, Nov 7 at 9 am to Saturday, Nov 14 at 10:30 am']
+                         ["Here's the change I'd make:", 'this, the start time:', '  was: Saturday, Nov 7 at 9 am (Pacific time)', '  now: Saturday, Nov 14 at 10:30 am (Pacific time)']
                          + TAIL)
 
     def test_dst_fall_back_hour_keeps_its_zone(self):
         self.assertEqual(conversation._hike_time("2026-11-01T01:30:00-07:00"), "Sun 2026-11-01 01:30 PDT")
         self.assertEqual(conversation._hike_time("2026-11-01T01:30:00-08:00"), "Sun 2026-11-01 01:30 PST")
         line = _edit("startsAt", "2026-11-01T01:30:00-07:00", "2026-11-01T01:30:00-08:00")[1]
-        self.assertEqual(line, "this, the start time: from Sunday, Nov 1 at 1:30 am to Sunday, Nov 1 at 1:30 am")
+        self.assertEqual(_edit("startsAt", "2026-11-01T01:30:00-07:00", "2026-11-01T01:30:00-08:00")[1:4],
+                         [line, "  was: Sunday, Nov 1 at 1:30 am (Pacific time)", "  now: Sunday, Nov 1 at 1:30 am (Pacific time)"])
+        self.assertEqual(line, "this, the start time:")
 
     def test_utc_value_reads_pacific(self):
         self.assertEqual(_edit("startsAt", "2026-07-04T16:00:00+00:00", "2026-07-04T17:00:00Z")[1],
-                         "this, the start time: from Saturday, Jul 4 at 9 am to Saturday, Jul 4 at 10 am")
+                         "this, the start time:")
+        self.assertEqual(_edit("startsAt", "2026-07-04T16:00:00+00:00", "2026-07-04T17:00:00Z")[2:4],
+                         ["  was: Saturday, Jul 4 at 9 am (Pacific time)", "  now: Saturday, Jul 4 at 10 am (Pacific time)"])
 
     def test_naive_or_garbage_shown_raw_and_proposal_complete(self):
         for bad in ("soon", "2026-11-07T09:00", "", "2026-13-40T09:00:00-08:00"):
             with self.subTest(bad=bad):
                 self.assertEqual(conversation._hike_time(bad), bad)
                 self.assertEqual(_edit("startsAt", "2026-11-07T09:00:00-08:00", bad),
-                                 ["Here's the change I'd make:", "this, the start time: from Saturday, Nov 7 at 9 am to at a time I can't read"]
+                                 ["Here's the change I'd make:", "this, the start time: from Saturday, Nov 7 at 9 am (Pacific time) to at a time I can't read"]
                                  + TAIL)
         for odd in (None, 5, ["2026-11-07T09:00:00-08:00"]):  # not a string: returned unchanged, no exception
             self.assertIs(conversation._hike_time(odd), odd)
-        self.assertEqual(_edit("startsAt", 900, "soon")[1], "this, the start time: from 900 to at a time I can't read")
+        self.assertEqual(_edit("startsAt", 900, "soon")[1], "this, the start time: from 900 to at a time I can't read")  # no zone is named for a time that cannot be read
 
     def test_added_from_none(self):
         self.assertEqual(_edit("startsAt", None, "2026-11-07T09:00:00-08:00")[1],
-                         "this, the start time: from nothing to Saturday, Nov 7 at 9 am")
+                         "this, the start time: from nothing to Saturday, Nov 7 at 9 am (Pacific time)")
         self.assertEqual(_edit("startsAt", "2026-11-07T09:00:00-08:00", None)[1],
-                         'this, the start time: from Saturday, Nov 7 at 9 am to nothing')
+                         'this, the start time: from Saturday, Nov 7 at 9 am (Pacific time) to nothing')
 
     def test_added_hike_field_line(self):
         after = {"id": "h1", "startsAt": "2026-11-07T09:00:00-08:00", "title": "Ridge walk"}
         self.assertEqual(_lines(("events", "h1", None, after)),
-                         ["Here's the change I'd make:", "A new hike: Ridge walk", "  the start time: Saturday, Nov 7 at 9 am",
-                          "  the title: Ridge walk"] + TAIL)
+                         ["Here's the change I'd make:", "A new hike: Ridge walk", "  the title: Ridge walk",
+                          "  the start time: Saturday, Nov 7 at 9 am (Pacific time)"] + TAIL)
         self.assertIn("  the start time: at a time I can't read", _lines(("events", "h1", None, {**after, "startsAt": "soon"})))
 
     def test_other_date_like_fields_untouched(self):

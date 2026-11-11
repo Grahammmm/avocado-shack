@@ -1,0 +1,25 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": "12 people, great morning",
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-01-point-buchon].recap"
+    },
+    {
+      "after": "completed",
+      "before": "scheduled",
+      "file": "hass/content/community.json",
+      "path": "events[hike-2026-11-01-point-buchon].status"
+    }
+  ],
+  "files": [
+    "hass/content/community.json",
+    "storefront-mockup/community.json"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

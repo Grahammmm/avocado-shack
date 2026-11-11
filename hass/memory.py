@@ -99,10 +99,11 @@ class Memory:
         self.db.execute("SAVEPOINT memory_op" if nested else "BEGIN IMMEDIATE")
         try:
             yield
+            self.db.execute("RELEASE memory_op" if nested else "COMMIT")  # a failed finalization is undone like a failed body
         except BaseException:
-            for sql in ("ROLLBACK TO memory_op", "RELEASE memory_op") if nested else ("ROLLBACK",): self.db.execute(sql)
+            if nested or self.db.in_transaction:  # a commit SQLite already rolled back leaves nothing to undo
+                for sql in ("ROLLBACK TO memory_op", "RELEASE memory_op") if nested else ("ROLLBACK",): self.db.execute(sql)
             raise
-        self.db.execute("RELEASE memory_op" if nested else "COMMIT")
 
     def _active(self, key):
         return self.db.execute(f"SELECT * FROM memory WHERE key = ? AND {ACTIVE}", (key,)).fetchone()

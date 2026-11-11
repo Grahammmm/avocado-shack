@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/store.json",
+      "path": "hours",
+      "before": [
+        "Monday–Thursday 9am–6pm",
+        "Friday 9am–7pm",
+        "Saturday 9am–5pm · Closed Sunday"
+      ],
+      "after": [
+        "Monday–Friday 9am–6pm",
+        "Saturday 9am–5pm · Closed Sunday"
+      ]
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/index.html"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}

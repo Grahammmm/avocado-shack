@@ -46,7 +46,7 @@ def _by_id(content, pid):
     return next((p for p in content.products if p.get("id") == pid), None)
 
 
-def product_ref(content, query, aliases=None) -> Resolved:
+def product_ref(content, query, aliases=None, *, include_hidden=False) -> Resolved:
     """One product the query names. Held: refused naming the state. Hidden: 'restore it first'. Several: a question."""
     if not isinstance(query, str) or not query.strip():
         return Resolved("none", reply="Which product do you mean?")
@@ -56,13 +56,13 @@ def product_ref(content, query, aliases=None) -> Resolved:
         name = product["name"]
         if product.get("status") == "held":
             return Resolved("held", reply=f"I can't change {name} right now. It is on hold until someone has looked at it.")
-        if product.get("status") != "active":
+        if product.get("status") != "active" and not (include_hidden and product.get("status") == "hidden"):
             return Resolved("hidden", reply=f"{name} is hidden. Do you want me to bring it back first?")
         return Resolved("one", value=found["match"], via=found.get("via", ""))
     cands = found["candidates"]
     if not cands:
         return Resolved("none", reply="I don't know a product called that. What is it called on the site?")
-    usable = [c for c in cands if c["status"] == "active"]
+    usable = [c for c in cands if c["status"] == "active" or (include_hidden and c["status"] == "hidden")]
     if len(usable) == 1 and len(cands) == 1:
         return Resolved("one", value=usable[0]["id"])
     if not usable:
@@ -96,11 +96,20 @@ def maker_ref(content, query, aliases=None) -> Resolved:
                     reply=f"Which maker do you mean: {_names_line(names)}?")
 
 
+def _has_run(words, needle) -> bool:
+    n = len(needle)
+    return any(words[i:i + n] == needle for i in range(len(words) - n + 1))
+
+
 def _titled(records, query, label):
-    needle = " ".join(nl_prep.tokens(query))
+    """Records whose title holds the query's normalized words as a contiguous run of whole words.
+
+    Whole words only (RF0834-10): 'ridge' must not pick 'Bridge Walk' just because one spelling sits inside the other.
+    """
+    needle = nl_prep.tokens(query)
     if not needle:
         return Resolved("none", reply=f"Which {label} do you mean?")
-    hits = [r for r in records if needle in " ".join(nl_prep.tokens(str(r.get("title", ""))))]
+    hits = [r for r in records if _has_run(nl_prep.tokens(str(r.get("title", ""))), needle)]
     if len(hits) == 1:
         return Resolved("one", value=hits[0]["id"])
     if not hits:
@@ -119,7 +128,13 @@ def hike_ref(content, query) -> Resolved:
 
 def route_ref(content, query) -> Resolved:
     routes = [r for r in content.community.get("routeIdeas", []) if isinstance(r, dict) and "id" in r]
-    return _titled(routes, query, "trail")
+    found = _titled(routes, query, "trail")
+    if found.status != "one":
+        return found
+    route = next((r for r in routes if r["id"] == found.value), {})
+    if route.get("status") == "hidden":  # RF1925-12: a hidden trail is never a link target; ask to restore it first
+        return Resolved("hidden", reply=f"{route.get('title')} is hidden. Do you want me to bring it back first?")
+    return found
 
 
 def shelf(text) -> Resolved:
@@ -140,11 +155,11 @@ def availability(text) -> Resolved:
     t = " " + " ".join(re.findall(r"[a-z']+", nl_prep.fold(text or ""))) + " "
     if (text or "").strip() in AVAILABILITY:
         return Resolved("one", value=text.strip())
-    found = {k for k, words in WORDS_FOR_AVAILABILITY.items() if any(f" {w} " in t for w in words)}
+    # 'almost out' is one limited phrase: its own 'out' must not also read as sold out, but any other occurrence still does
+    t_no = re.sub(r"(?<= )almost out(?= )", "_", t)
+    found = {k for k, words in WORDS_FOR_AVAILABILITY.items() if any(f" {w} " in (t_no if k == "no" else t) for w in words)}
     if found and NEGATION.search(t):  # 'not available', 'not out': never assert the opposite stock state, ask
         return Resolved("none", reply="Is it in stock, running low, or sold out?")
-    if "limited" in found and "no" in found and "almost out" in t:
-        found.discard("no")
     if "no" in found and " no more " in t:
         found.discard("yes")
     if len(found) == 1:

@@ -29,6 +29,7 @@ URL = 'https://theavocadoman.com'
 PACIFIC = ZoneInfo('America/Los_Angeles')
 LOG = logging.getLogger('hass.release')
 BOOK_REASON = 'the website record needs G to check it'
+UNDO_NOT_LIVE = 'that undo takes back a change that never went on the website from chat'  # HASS-SEC-2 (M1)
 # The publish screen's email shape (stricter than live_policy.EMAIL, which checks typed owner text): a local part of 2 or more
 # characters that begins and ends with a letter or digit, a domain whose labels begin and end with one, a final label of 2 or
 # more letters, and no letter or digit touching either end. Random image bytes such as 'w@J.Wa' and '.@0y.Ty' do not fit.
@@ -79,11 +80,38 @@ def is_binary(text, path=''):
 
 
 def pattern_hits(name, rx, text, path=''):
+    if name == 'phone' and is_binary(text, path): rx = live_policy.PHONE_STRICT  # HASS-SEC-2 (M3): image bytes keep the strict shape
     hits = {m.group() for m in rx.finditer(text)}
     if name != 'email': return hits
     binary = is_binary(text, path)
     return {h for h in hits if not reserved_address(h) and (not binary or (
         len(h.partition('@')[0]) >= 3 and h.rpartition('.')[2].lower() in BINARY_TLDS))}
+
+
+# HASS-SEC-2 (M3): an owner number is found in any format: every run of digits (with spaces, dots, dashes, brackets, slashes or
+# a + between them) is read as its digits, and holds the number when it holds its last 10 digits (all of a shorter one).
+DIGIT_RUN = re.compile(r'\d(?:[ \t.\-()/+]{0,3}\d)*')
+
+
+def owner_needles(forbidden):
+    """(exact values, owner numbers as digits, owner email addresses casefolded) for the owner addresses and chat ids."""
+    exact, digits, emails = [], set(), set()
+    for value in forbidden:
+        if not value: continue
+        exact.append(value)
+        key = conversation.sender_key(value.rpartition(';-;')[2])  # a chat id names its address after ;-;
+        if key and key.startswith('+'): digits.add(key[1:][-10:])
+        elif key: emails.add(key)
+    return exact, digits, emails
+
+
+def owner_found(data, needles):
+    exact, digits, emails = needles
+    if any(value.encode() in data for value in exact): return True
+    if not (digits or emails): return False
+    text = data.decode('latin1')
+    if emails and any(e in text.casefold() for e in emails): return True
+    return bool(digits) and any(d in re.sub(r'\D', '', m.group()) for m in DIGIT_RUN.finditer(text) for d in digits)
 
 
 def privacy(files, baseline, message, forbidden=()):
@@ -94,9 +122,9 @@ def privacy(files, baseline, message, forbidden=()):
         text, old = data.decode('latin1'), baseline.get(path, b'').decode('latin1') if path != '<commit>' else ''
         for name, rx in PATTERNS.items():
             if pattern_hits(name, rx, text, path) - pattern_hits(name, rx, old, path): found.add(name)
-    # Owner identity is prohibited even in an unchanged, grandfathered file.
-    for value in forbidden:
-        if value and any(value.encode() in data for data in [*files.values(), message.encode()]): found.add('owner')
+    # Owner identity is prohibited even in an unchanged, grandfathered file, in any format (HASS-SEC-2, M3).
+    needles = owner_needles(forbidden)
+    if any(owner_found(data, needles) for data in [*files.values(), message.encode()]): found.add('owner')
     return sorted(found)
 
 
@@ -140,7 +168,7 @@ class LiveEditor(conversation.Editor):
     def private_values(self):
         """Every owner address and chat id (Mike's and, with gIsOwner, G's): none may appear in a published file."""
         st = self.settings
-        return (*st['ownerSenders'], st['ownerChat'], *st.get('gSenders', ()), st.get('gChat'))
+        return (*st['ownerSenders'], st['ownerChat'], *st.get('ownerChats', ()), *st.get('gSenders', ()), st.get('gChat'))
 
     def alert(self, code):
         if code not in self.alerts:
@@ -212,9 +240,38 @@ class LiveEditor(conversation.Editor):
         before this field, or Graham's one-command revert) goes to ownerChat."""
         return j.get('chat') or self.settings['ownerChat']
 
+    def open_release(self):
+        """HASS-OWNERS-2: the owner chat whose release has not settled (any journal entry not closed), or None. An unreadable book\n        says None here: apply() refuses on it anyway, in plain words."""
+        try: _books, entries = self.load()
+        except (journal.BooksError, OSError, ValueError): return None
+        return next((self._asker(j) for j in entries if j['state'] not in journal.CLOSED), None)
+
     def _has_draft(self, cid):
         db = getattr(self.conv, 'db', None)
         return bool(db and db.execute('SELECT 1 FROM drafts WHERE change_id = ?', (cid,)).fetchone())
+
+    @staticmethod
+    def _landed_change(entries, cid):
+        return any(j['change_id'] == cid and j['kind'] == 'change' and j['state'] in journal.LANDED for j in entries)
+
+    def went_live(self, change_id):
+        """HASS-SEC-2 (M1): True only when the change went on the website through this engine (a change entry that landed).
+        A change saved in private mode before live, one whose release failed, and an unreadable book are all False."""
+        try: _books, entries = self.load()
+        except (journal.BooksError, OSError, ValueError): return False
+        return self._landed_change(entries, change_id)
+
+    def _original_owner(self, j):
+        """HASS-SEC-2 (L6): for an undo, the owner chat whose change it takes back (as recorded when that change went live), else None."""
+        if j['kind'] != 'undo' or not j.get('orig'): return None
+        orig = next((e for e in self.books.journals() if e['change_id'] == j['orig'] and e['kind'] == 'change'), None)
+        return (self._asker(orig),) if orig else None
+
+    def _summary(self, cid):
+        """The chat summary of a change (what the owner was shown), or None."""
+        db = getattr(self.conv, 'db', None)
+        row = db.execute('SELECT summary FROM drafts WHERE change_id = ? ORDER BY row_id DESC LIMIT 1', (cid,)).fetchone() if db else None
+        return row[0] if row else None
 
     def _code(self, cid):
         if self.conv:
@@ -239,6 +296,9 @@ class LiveEditor(conversation.Editor):
             draft = shown.get('draft')
             if not draft or draft.get('draft_hash') != draft_hash: return self.refuse('the draft no longer matches')
             undo = bool(draft['ops']) and all(c['op'] == 'history.revert' for c in draft['ops'])
+            # HASS-SEC-2 (M1): an undo may only take back a change that went live through this engine; a change saved in private
+            # mode before live never passed the live gate, and its undo would publish the content it replaced, unchecked.
+            if undo and not all(self._landed_change(entries, cid) for cid in live_policy.undone(draft)): return self.refuse(UNDO_NOT_LIVE)
             used = self.cap_used(books)
             if used >= self.cfg['dailyCap'] and not undo: return self.refuse(f"today's limit of {self.cfg['dailyCap']} live changes is reached; send it again tomorrow")
             self.interval(books)
@@ -416,21 +476,27 @@ class LiveEditor(conversation.Editor):
     def notify(self, j):
         state = j['state']
         if not self.conv or state in j['notified']: return
-        attachments = []
+        attachments, extra = [], None
+        chat = self._asker(j)
+        original = self._original_owner(j) if state == 'live' else None  # HASS-SEC-2 (L6): (owner chat, code) of the change undone
         if state == 'live' and j['kind'] == 'undo' and not self._has_draft(j['change_id']):
             text = owner_answers.LIVE_TAKEN_BACK  # Graham's one-command revert: there is no chat draft to point at
+            if original: chat = original[0]  # ... told to the owner whose change it took back
         elif state == 'live':
             shot = self.conv.screenshot(j['change_id'])
             attachments = [shot] if shot else []
             text = owner_answers.LIVE_SHOWN.format()
             text += ' ' + (owner_answers.LIVE_PICTURE if shot else owner_answers.LIVE_NO_PICTURE)
+            if original and original[0] != chat:  # another owner's undo went live: the owner whose change it was is told too
+                who = getattr(self.conv, '_who', lambda _chat: 'the owner')(chat)
+                extra = (original[0], owner_answers.undone_by_other(who, self._summary(j['orig'])))
         elif state == 'not-published': text = owner_answers.LIVE_NOT_PUBLISHED.format(code=j['code'], reason=owner_answers.live_reason(j.get('reason')))
         elif state == 'unknown': text = owner_answers.LIVE_UNKNOWN.format(code=j['code'])
         elif state == 'unconfirmed': text = owner_answers.LIVE_UNCONFIRMED.format(code=j['code'])
         else: return
-        chat = self._asker(j)
-        if chat != self.settings['ownerChat']: attachments = []  # G's chat is text only
+        if chat not in self.settings.get('ownerChats', (self.settings['ownerChat'],)): attachments = []  # G's chat is text only; every owner chat gets the picture
         self.conv.outbox.add(chat, text, attachments)
+        if extra: self.conv.outbox.add(*extra, [])
         self.books.write(j, notified=[*j['notified'], state])
 
     def reconcile(self):

@@ -81,6 +81,92 @@ class QaEnvTest(unittest.TestCase):
             self.assertEqual((r.returncode, r.stderr, json.loads(r.stdout or "null")), (0, "", {"out": want, "base": base}))
         self.assertFalse(os.path.exists(sib))
 
+    def synthetic(self):
+        """Byte-identical copies of the real guard and driver in a disposable checkout-shaped tree, so TMPDIR
+        can point into "the repository" without ever touching the real clone. Returns (root, box)."""
+        box = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, box)
+        root, src = os.path.join(box, "repo"), DRIVER.read_text()
+        self.assertIn("preview:true", src)
+        fixtures = os.path.join(root, "hass", "tests", "fixtures")
+        os.makedirs(fixtures), os.makedirs(os.path.join(root, "storefront-mockup"))
+        shutil.copyfile(SITE / "qa-env.cjs", os.path.join(root, "storefront-mockup", "qa-env.cjs"))
+        shutil.copyfile(DRIVER, os.path.join(fixtures, "qa_env_driver.cjs"))
+        Path(fixtures, "qa_env_nopreview.cjs").write_text(src.replace("preview:true", "preview:false"))
+        return root, box
+
+    def drive(self, root, tmpdir, preview, **extra):
+        url = {"PREVIEW_URL": "http://127.0.0.1:4173"} if preview else {}
+        env = {"PATH": os.environ.get("PATH", ""), "TMPDIR": tmpdir, **url, **extra}
+        name = "qa_env_driver.cjs" if preview else "qa_env_nopreview.cjs"
+        cmd = [NODE, os.path.join(root, "hass", "tests", "fixtures", name)]
+        return subprocess.run(cmd, cwd=os.path.dirname(root), env=env, capture_output=True, text=True, timeout=5)
+
+    @staticmethod
+    def snapshot(root):  # every path in the synthetic tree, with file bytes
+        snap = {}
+        for d, dirs, files in os.walk(root):
+            snap.update({os.path.join(d, n): None for n in dirs})
+            snap.update({os.path.join(d, n): Path(d, n).read_bytes() for n in files})
+        return snap
+
+    def syn_refused(self, root, tmpdir):
+        for preview in (True, False):
+            with self.subTest(tmpdir=tmpdir, preview=preview):
+                before = self.snapshot(root)
+                r = self.drive(root, tmpdir, preview)
+                self.assertEqual((r.returncode, r.stderr, r.stdout), (2, DIR_REFUSAL + "\n", ""))
+                self.assertEqual(self.snapshot(root), before)  # no temp child, no evidence, sources unchanged
+
+    def test_default_tmpdir_in_repository_refused_before_creation(self):
+        root, _ = self.synthetic()
+        for tmpdir in (root, os.path.join(root, "hass", "tests"), root + "/storefront-mockup/"):
+            self.syn_refused(root, tmpdir)
+
+    def test_default_tmpdir_symlink_into_repository_refused(self):
+        root, _ = self.synthetic()
+        Path(self.other, "canary").write_text("unrelated")
+        os.symlink(root, os.path.join(self.other, "to-root"))
+        os.symlink(os.path.join(root, "hass"), os.path.join(self.other, "to-hass"))
+        outside_before = sorted(os.listdir(self.other))
+        for tmpdir in ("to-root", "to-hass", "to-hass/.."):  # to-hass/.. is the repository root on disk
+            self.syn_refused(root, os.path.join(self.other, tmpdir))
+        self.assertEqual(sorted(os.listdir(self.other)), outside_before)
+        self.assertEqual(Path(self.other, "canary").read_text(), "unrelated")
+
+    def test_default_tmpdir_outside_repository_stays_fresh(self):
+        root, box = self.synthetic()
+        os.mkdir(os.path.join(box, "sibling"))
+        for tmpdir in (os.path.join(box, "sibling"), box, self.tmp):  # sibling, ancestor, ordinary temp base
+            for preview in (True, False):
+                with self.subTest(tmpdir=tmpdir, preview=preview):
+                    before, seen = self.snapshot(root), set()
+                    for _ in range(2):
+                        r = self.drive(root, tmpdir, preview)
+                        self.assertEqual(r.returncode, 0, r.stderr)
+                        got = json.loads(r.stdout)
+                        self.assertEqual(r.stderr, "QA_OUT_DIR=" + got["out"] + "\n")
+                        self.assertEqual(got.get("base"), "http://127.0.0.1:4173" if preview else None)
+                        self.assertTrue(os.path.isdir(got["out"]))
+                        self.assertEqual(os.path.dirname(got["out"]), os.path.realpath(tmpdir))
+                        self.assertTrue(os.path.basename(got["out"]).startswith("avoshack-qa-"))
+                        seen.add(got["out"])
+                    self.assertEqual(len(seen), 2)
+                    self.assertEqual(self.snapshot(root), before)
+
+    def test_explicit_safe_output_ignores_unsafe_default_tmpdir(self):
+        root, _ = self.synthetic()
+        os.symlink(root, os.path.join(self.other, "to-root"))
+        for tmpdir in (root, os.path.join(root, "hass"), os.path.join(self.other, "to-root")):
+            for preview in (True, False):
+                with self.subTest(tmpdir=tmpdir, preview=preview):
+                    before = self.snapshot(root)
+                    r = self.drive(root, tmpdir, preview, QA_OUT_DIR=self.tmp)
+                    want = {"out": os.path.realpath(self.tmp), **({"base": "http://127.0.0.1:4173"} if preview else {})}
+                    self.assertEqual((r.returncode, r.stderr, json.loads(r.stdout or "null")), (0, "", want))
+                    self.assertEqual(self.snapshot(root), before)
+                    self.assertEqual(os.listdir(self.tmp), [])
+
     def test_community_qa_refuses_before_its_server_starts(self):  # :80 passes its URL check, then the dir is refused
         for extra in ({}, {"PREVIEW_URL": "http://localhost:80", "QA_OUT_DIR": str(SITE)}):
             start = time.monotonic()

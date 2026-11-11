@@ -89,14 +89,14 @@ def _dates_problem(start, end, today, content, *, own=None):
     return None
 
 
-def _save(content, specials, before):
+def _save(content, specials, before, *, today):
     """Write the list (the key is dropped when empty, so the saved file matches a site that never had specials)."""
     if specials:
         content.store["specials"] = specials
     else:
         content.store.pop("specials", None)
     problems = []
-    validate_specials(problems, content.store.get("specials", []), {p["id"] for p in content.products}, shop_today())
+    validate_specials(problems, content.store.get("specials", []), {p["id"] for p in content.products}, today)
     if problems:
         return Refused(problems[0])
     return _touch(before, content.store)
@@ -133,7 +133,7 @@ def _add(content, args, ctx):
         if args.get("picture"):
             special["picture"] = True
     before = copy.deepcopy(content.store)
-    return _save(content, [*specials, special], before)
+    return _save(content, [*specials, special], before, today=today)
 
 
 def _edit(content, args, ctx):
@@ -179,7 +179,7 @@ def _edit(content, args, ctx):
             {k: _spaced(v) if isinstance(v, str) else v for k, v in sp.items()}:
         return Refused("that special already says that")
     before = copy.deepcopy(content.store)
-    return _save(content, [new if s["id"] == sp["id"] else copy.deepcopy(s) for s in _list(content)], before)
+    return _save(content, [new if s["id"] == sp["id"] else copy.deepcopy(s) for s in _list(content)], before, today=today)
 
 
 def _remove(content, args, ctx):
@@ -187,7 +187,7 @@ def _remove(content, args, ctx):
     if sp is None:
         return Refused(f"there is no special {args['id']}")
     before = copy.deepcopy(content.store)
-    return _save(content, [copy.deepcopy(s) for s in _list(content) if s["id"] != sp["id"]], before)
+    return _save(content, [copy.deepcopy(s) for s in _list(content) if s["id"] != sp["id"]], before, today=shop_today(ctx.now))
 
 
 def _clear_expired(content, args, ctx):
@@ -196,7 +196,7 @@ def _clear_expired(content, args, ctx):
     if len(kept) == len(_list(content)):
         return Refused("there are no finished specials to clear")
     before = copy.deepcopy(content.store)
-    return _save(content, kept, before)
+    return _save(content, kept, before, today=today)
 
 
 OPS = (

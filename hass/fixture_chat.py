@@ -32,7 +32,7 @@ from hass.preview import Previewer  # noqa: E402
 def _row(n, line, photos=None, names=None) -> Inbound:  # every check names line n and the field, never the value
     def bad(what): raise ValueError(f"fixture line {n}: {what}")
     try: r = json.loads(line)
-    except ValueError: bad("not JSON")
+    except (ValueError, RecursionError): bad("not JSON")
     if not isinstance(r, dict): bad("row must be a JSON object")
     if type(r.get("id")) not in (int, str) or r.get("id") == "": bad("id must be a non-empty string or an integer")
     for field in ("chat", "sender", "text"):
@@ -102,7 +102,7 @@ def _load_interpreter(path) -> FixtureInterpreter:  # H09: a failure names the f
     try: text = Path(path).read_text("utf-8")
     except (OSError, UnicodeDecodeError): raise ValueError("--interpreter: unreadable") from None
     try: mapping = json.loads(text)
-    except ValueError: raise ValueError("--interpreter: not JSON") from None
+    except (ValueError, RecursionError): raise ValueError("--interpreter: not JSON") from None
     if not isinstance(mapping, dict): raise ValueError("--interpreter: not a JSON object")
     return FixtureInterpreter(mapping)
 

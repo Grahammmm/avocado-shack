@@ -2111,3 +2111,60 @@ Checks at PR head: `python3 -B -m unittest hass.tests.test_health_backup_content
 Limits: Info only, with no path or commit in the detail; older backups are ignored and ok, notify and exit status are unchanged.
 
 AVO-SPECIALS-1 (branch rb/avo-specials-1): weekly specials. Additive `store.specials` list (content_model.py), a "This week's specials" section at the top of the home/shop page rendered only for specials active on the Pacific date plus a small client-side date check (hass/specials.py), and the editor ops specials.add, specials.edit, specials.remove, specials.clear_expired (hass/ops/specials.py) with undo, preview target and the normal approval flow. No price field; the site shows no prices anywhere except inside an owner-written deal line. Tests: hass/tests/test_specials.py (browser tests need PLAYWRIGHT_MODULE). The Hass chat skill is the separate SKILLS-SPECIALS-1 card.
+
+## RF0844-13: trail map recovers from a failed Topo image — November 9, 2026
+
+Branch rb/rf0844-13. trail-explorer.js: the existing basemap image-error recovery (official-guide fallback, one `Try loading the map again` button, enlarged-dialog cleanup with exact overflow restore) now admits the Topo image as well as the aerial one; the old check ignored any error whose href was not aerial. Retry still starts from the aerial default. trail-map-retry-qa.cjs gains five cases (Topo 404, 404 while enlarged with a non-empty previous overflow, undecodable and aborted Topo image, detached/replaced wrapper ignored, supported layers and single-flight retries), each waiting for a real image error event at 390 and 1440 px.
+
+Checks: `node storefront-mockup/trail-map-retry-qa.cjs storefront-mockup` (local Chromium, loopback only) passed 20 checks on the builder's clone; the new Topo cases failed before the fix. Not deployed; no physical-device or Safari check.
+
+## RF0844-12: community email refuses ASCII controls — November 9, 2026
+
+Branch rb/rf0844-12. storefront-mockup/community-server.py: `email_address` now refuses any remaining U+0000–U+001F or U+007F after the existing strip/lower step with the existing 'Please enter a valid email address.' error (never stripped into a different address), so subscriptions no longer save and RSVPs no longer claim places for addresses with an embedded NUL, SOH, ESC or DEL. Order, 409 precedence, length/shape checks and consent merging are unchanged. New hass/tests/test_community_email_controls.py runs the real handler on a loopback port with a scratch config and database and compares full row snapshots.
+
+Checks: `python3 -B -m unittest hass.tests.test_community_email_controls -v` ran 5 tests, OK on the builder's clone (failed before the fix). Not deployed; no email is sent and no historical row is cleaned.
+
+## RF0854-12: shared dialogs stay open for clicks inside their padding — November 9, 2026
+
+Branch rb/rf0854-12. script.js: the shared Privacy/RSVP `<dialog>` used to close on every click whose target was the dialog itself, and a click on its own padding or border has that target too. It now closes only when the pointer lies outside the dialog's rectangle, measured at click time; child clicks, the Close button and native Escape are unchanged. static-site-qa.cjs gains real mouse-coordinate checks at 390 and 1440 px (each point confirmed by elementFromPoint and the rectangle before the click): padding clicks keep Privacy open (also after a resize) and keep the real RSVP form open with its typed synthetic values, while a backdrop click, Close and Escape still close it and return focus; nothing is posted or stored.
+
+Checks: `node storefront-mockup/static-site-qa.cjs DIR` on a fresh `hass/sitegen.py --publish` folder outside the repo (local Chromium, loopback only) passed on the builder's clone; the new padding check failed before the fix. Not deployed; no physical-device or Safari check.
+
+## RF0854-13: stale Available today filter retires at the next catalog render — November 9, 2026
+
+Branch rb/rf0854-13. shop.js: right after renderCatalog's existing refreshFreshness(), retireStaleAvail() checks the whole catalog; when no product still carries a current word (an open page aged its shelf check from seven to eight days), the Available today checkbox is unchecked and removed, and only ?avail is dropped with replaceState (other params, duplicates, hash, item and status line untouched; no history write when avail is absent). The render then continues with the other filters and repaints in full. Before the fix, the same page kept avail=1 and showed 0 selections while a reload showed the full list. catalog-only-qa.cjs gains fixed-clock cases (Pacific Nov 7 = age seven, Nov 8 = age eight): checked control on search/view/shelf renders with reload equivalence, unchecked control on load more with no history write, paginated repaint without duplicates, preserved view/shelf/search/maker/from/item/status/focus/scroll, and current words outside the results (Sold out included) keeping the control.
+
+Checks: `node storefront-mockup/catalog-only-qa.cjs` against an isolated loopback static server over a fresh `python3 -B hass/sitegen.py --publish` build passed on the builder's clone; the new cases failed on main's shop.js. Not deployed; no physical-device or Safari check.
+
+MAIN-RED fix (statebackup bundle determinism): `git bundle create` in statebackup.create now runs with `-c pack.threads=1`. With the default thread count Git delta-packs the same HEAD differently from run to run (probe: 25 bundles of one fixture commit gave 3 distinct hashes; with one thread, 1), so two backups of an unchanged commit carried different content.bundle hashes and test_statebackup_diff (identical backups differ in nothing; added/removed/changed) failed intermittently on main since run 42743080672 and locally on 330191b too. Not a clock or environment change; no merged PR reverted.
+
+## RF1915-13: closed open-requests age by instant, not by timestamp spelling — November 10, 2026
+
+Branch rb/rf1915-13. openreq.py: `OpenRequests.sweep` compared `closed_at` text with the cutoff text, so a row stamped with another UTC offset was erased up to hours late (+02:00) or early (-07:00, even exactly at the cutoff). The closed-row phase now parses each stored `closed_at` as an aware instant (offsets and Z), converts to UTC, and erases only an instant strictly earlier than now minus the unchanged 24 hours, measured in elapsed time across DST. A `closed_at` that is NULL, not text, zone-less or unparseable has unknown age and is held untouched. A naive or non-datetime clock raises `ValueError("retention requires an aware clock")` before any write (no table yet stays lazy). Live-request expiry, the immediate erasure of legacy-kind rows, retained rows and the schema are unchanged. test_open_requests.py gains six real-store cases: mixed offsets for every closed state, microsecond cutoff, DST, held unknown-age rows, live and other data untouched, naive clock.
+
+Checks: `python3 -B -m unittest hass.tests.test_open_requests` ran 33 tests, OK on the builder's clone; the six new cases failed on main's openreq.py. Not deployed; no backup-erasure claim.
+
+## RF1915-11: correspondence prune skips impossible calendar-named files — November 10, 2026
+
+Branch rb/rf1915-11. hass/corrlog.py: CorrLog.prune() parsed every regular, non-symlink file named like a day with strptime inside one loop, so a stray file named like 2026-02-30.jsonl raised ValueError, which record() swallowed before opening today's file: the first correspondence row of the day was lost (a second record in the same instance worked) and the prune command died with a traceback. The date is now parsed per candidate; a ValueError means an unknown file, left untouched (name, bytes, mode), and the scan continues, so valid expired days are still deleted whole at the unchanged 90-day UTC cutoff. OSError handling, the once-a-day scan, the count and the CLI wording are unchanged. test_corrlog.py (Retention) gains four regressions on synthetic temporary state: impossible names skipped while a valid expired file is deleted, the first and second record of a day both written (also on the next UTC day), cutoff and leap-day boundaries, and the CLI printing `Deleted 1 old day files.` then `Deleted 0 old day files.` with empty stderr.
+
+Checks: `python3 -B -m unittest hass.tests.test_corrlog` ran 68 tests, OK on the builder's clone; the four new tests failed (3 errors, 1 failure) with the fix removed. Not deployed or merged; no live state touched.
+
+
+## RF1915-10: require both sides of new-item comparison evidence
+
+Branch rb/rf1915-10. Actual builder: sol-reviewer (gpt-6.1-sol). The offline preview command now returns 1 if any BEFORE or AFTER result fails, after collecting all three cases and writing the existing preview.json. Capture order, diagnostics, JSON schema/format and missing-PLAYWRIGHT_MODULE exit 2 are unchanged. No renderer, product, published content or committed preview artifact changed.
+
+Builder checks: the new BEFORE-only regression failed on the old predicate in all three subcases (first, last and all BEFORE failures returned 0 instead of 1). After repair, `python3 -B -m unittest hass.tests.test_newitem` ran 53 tests, `python3 -B -m unittest hass.tests.test_ledger_rf1120` ran 3, and `python3 -B -m unittest hass.tests.test_ci_shards` ran 25: all OK under the host memcap wrapper. Five new main-level tests cover BEFORE-only, AFTER/both-side, all-pass, complete retained diagnostics/JSON after early failure, and missing Playwright with no output side effects. These aggregation tests use synthetic capture/photo dependencies and external temporary output; they do not prove Chromium ran or establish fresh rendering quality. No server, live operation, publication or send was performed.
+
+## RF1635-7: backlog purge compares timestamp instants — November 10, 2026
+
+Branch rb/rf1635-7. hass/skills/backlog.py: Backlog.purge() compared received_at to the cutoff as strings, so an offset-stamped row could be kept up to hours too long (+02:00) or deleted early (-07:00, including at exactly 90 days). It now converts the clock (UTC, before subtracting the days) and each stored stamp to UTC instants and deletes only rows strictly older than the cutoff, open or closed, per row by id and original stamp. Unparseable, date-only or zone-less stamps have unknown age and are kept; a naive clock raises a fixed ValueError before any delete. record(), stored bytes, the CLI wording and the 90-day period are unchanged.
+
+Checks: `python3 -B -m unittest hass.tests.test_skills_backlog` on the builder clone (new offset, microsecond, DST, legacy-row, unknown-age and CLI tests). Not deployed; no live state touched; old backups are not erased.
+
+Review fix (same branch): stored stamps are now compared to the cutoff as aware instants without converting them to UTC, so valid range-edge stamps such as `0001-01-01T00:00:00+02:00` or `9999-12-31T23:59:59.999999-02:00` no longer raise OverflowError and abort the purge; later expired rows are still deleted. New test `test_purge_survives_range_edge_stamps_and_continues`.
+
+Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it actually read (0 < length <= MAX_PHOTO) and raises the existing fixed refusal when a file shrank to empty or grew past the cap after fstat; live() still checks every photo before any transport call and writes nothing on refusal. A file shrinking to a nonempty allowed length is still admitted; no snapshot guarantee. Valid input and output are byte-identical.
+
+Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.

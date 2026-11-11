@@ -32,7 +32,7 @@ REPLIES = {
     "unsupported-type": "I can't use that kind of photo, so nothing was saved. Could you send a screenshot of it instead? "
                         "On an iPhone you can also set Camera, then Formats, to Most Compatible.",
     "truncated": "That photo only came through partly. Could you send it again?",
-    "corrupt-store": "I couldn't save that photo safely, so nothing changed. Please ask Graham to take a look.",
+    "corrupt-store": "I couldn't save that photo safely, so nothing changed. Please send it again in a few minutes.",
     "not-found": "I can't find that photo any more, so nothing changed. Could you send it again?",
     "unreadable": "I couldn't read that photo safely, so nothing changed. Could you send it again as a screenshot?",
     "needs-rotation": "That photo is sideways and I can't turn it, so nothing changed. Could you send it again as a screenshot?",

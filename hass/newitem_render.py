@@ -65,20 +65,26 @@ def _resample(Image, name):
 
 
 def _bg_plane(px, w, h, ring):
-    """Per-side median colours of the border ring, as a function (x, y) -> (r, g, b): the mean of a left-right and a
-    top-bottom linear blend, so an even gradient across the sheet is background, not subject. Also the border noise."""
+    """Per-side median colours of the border ring, fitted as ONE additive affine plane (x, y) -> (r, g, b) through the
+    ring centroids, so a smooth light gradient is background, not subject. Also the border noise: the mean largest
+    channel residual of the sampled outer border against that plane (unexplained texture, not explained illumination)."""
     side = lambda pts: tuple(int(statistics.median(p[i] for p in pts)) for i in range(3))  # noqa: E731
     top = side([px[y * w + x] for y in range(ring) for x in range(w)])
     bottom = side([px[y * w + x] for y in range(h - ring, h) for x in range(w)])
     left = side([px[y * w + x] for y in range(h) for x in range(ring)])
     right = side([px[y * w + x] for y in range(h) for x in range(w - ring, w)])
-    edge = ([(0, x, top) for x in range(0, w, 2)] + [(h - 1, x, bottom) for x in range(0, w, 2)]
-            + [(y, 0, left) for y in range(0, h, 2)] + [(y, w - 1, right) for y in range(0, h, 2)])
-    mad = statistics.fmean(max(abs(px[y * w + x][i] - ref[i]) for i in range(3)) for y, x, ref in edge)
+    cx, cy = (w - 1) / 2, (h - 1) / 2
+    xl, yt = (ring - 1) / 2, (ring - 1) / 2
+    xr, yb = w - 1 - xl, h - 1 - yt
+    gx = [(right[i] - left[i]) / (xr - xl) for i in range(3)]
+    gy = [(bottom[i] - top[i]) / (yb - yt) for i in range(3)]
+    mid = [(left[i] + right[i] + top[i] + bottom[i]) / 4 for i in range(3)]
 
     def plane(x, y):
-        fx, fy = x / max(1, w - 1), y / max(1, h - 1)
-        return tuple((left[i] * (1 - fx) + right[i] * fx + top[i] * (1 - fy) + bottom[i] * fy) / 2 for i in range(3))
+        return tuple(mid[i] + gx[i] * (x - cx) + gy[i] * (y - cy) for i in range(3))
+    edge = ([(0, x) for x in range(0, w, 2)] + [(h - 1, x) for x in range(0, w, 2)]
+            + [(y, 0) for y in range(0, h, 2)] + [(y, w - 1) for y in range(0, h, 2)])
+    mad = statistics.fmean(max(abs(px[y * w + x][i] - r[i]) for i in range(3)) for y, x in edge for r in (plane(x, y),))
     return plane, mad
 
 
@@ -114,10 +120,22 @@ def _too_thin(size) -> bool:
     return round(min(size) * ANALYSIS / max(size)) < MIN_WORKING
 
 
+def _fill_holes(m):
+    """Binary L mask with its enclosed holes filled: background (0) that no four-neighbour path reaches from ANY border
+    cell is the subject. Every border-connected background region stays background, however many there are."""
+    _, _, ImageChops, ImageDraw, _, _ = _modules()
+    inv = ImageChops.invert(m)
+    w, h = inv.size
+    border = [(x, y) for x in range(w) for y in (0, h - 1)] + [(x, y) for y in range(1, h - 1) for x in (0, w - 1)]
+    for seed in border:  # a region already flooded (128) is skipped, so each is traversed once
+        if inv.getpixel(seed) == 255: ImageDraw.floodfill(inv, seed, 128)
+    return inv.point(lambda v: 0 if v == 128 else 255)
+
+
 def _coarse(img):
     """(coarse L mask, plane image, cast-shadow L mask, (w, h), delta, report) at analysis size, or (None, ..., report).
     Raises Refused("too-narrow") for a strip (a 1000x1 image has no border ring to measure)."""
-    Image, _, ImageChops, ImageDraw, _, ImageFilter = _modules()
+    Image, _, _, _, _, ImageFilter = _modules()
     if _too_thin(img.size): raise Refused("too-narrow")
     scale = ANALYSIS / max(img.size)
     small = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), _resample(Image, "BOX"))
@@ -150,10 +168,7 @@ def _coarse(img):
     for _size, cells in keep:
         for i in cells: flat[i] = 255
     m = Image.frombytes("L", (w, h), bytes(flat)).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.MinFilter(5))  # close pin-holes
-    inv = ImageChops.invert(m)
-    if inv.getpixel((0, 0)) == 255:  # fill enclosed holes: whatever the border cannot reach is the subject
-        ImageDraw.floodfill(inv, (0, 0), 128)
-        m = inv.point(lambda v: 0 if v == 128 else 255)
+    m = _fill_holes(m)
     data = list(m.getdata())
     area = sum(1 for v in data if v) / (w * h)
     sides = ([data[x] for x in range(w)], [data[(h - 1) * w + x] for x in range(w)], [data[y * w] for y in range(h)], [data[y * w + w - 1] for y in range(h)])
@@ -238,12 +253,33 @@ def _decode(data):
     return im
 
 
+GRAY16_MODES = ("I", "I;16", "I;16L", "I;16B", "I;16N")  # how Pillow versions decode a 16-bit grayscale PNG
+
+
+def _gray16(im, key):
+    """PNG unsigned 16-bit grayscale only: (RGB, alpha or None). Each sample s (0..65535) becomes the fixed full-range gray
+    (s*255+32767)//65535 repeated in RGB: no clipping, no per-image stretch. A tRNS key makes alpha 0 exactly where the ORIGINAL
+    16-bit sample equals it (not the rounded gray), 255 elsewhere; no match means None."""
+    Image, *_ = _modules()
+    lut = bytes((s * 255 + 32767) // 65535 for s in range(65536))
+    gray = Image.frombytes("L", im.size, bytes(lut[s] for s in im.getdata()))
+    alpha = None
+    if isinstance(key, int):
+        cover = bytes(0 if s == key else 255 for s in im.getdata())
+        if min(cover) == 0: alpha = Image.frombytes("L", im.size, cover)
+    return gray.convert("RGB"), alpha
+
+
 def _upright(data):
     """(RGB image with the EXIF rotation applied to the pixels, alpha channel or None, whether a rotation tag was present)."""
     _, ImageOps, *_ = _modules()
     im = _decode(data)
     turned = im.getexif().get(0x0112, 1) not in (None, 1)
+    high, key = im.format == "PNG" and im.mode in GRAY16_MODES, im.info.get("transparency")
     im = ImageOps.exif_transpose(im)
+    if high:
+        rgb, alpha = _gray16(im, key)
+        return rgb, alpha, turned
     alpha = None
     if im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info:
         alpha = im.convert("RGBA").getchannel("A")
@@ -262,7 +298,9 @@ def render(data: bytes, spec=None) -> dict:
     if _too_thin(img.size): raise Refused("too-narrow")  # also a supplied cut-out: the straightening maths needs width and height
     report = {"input": f"{img.width}x{img.height}", "rotation_applied": turned}
     if alpha is not None:
-        mask, found = alpha.filter(ImageFilter.GaussianBlur(.9)), {"isolation": "cutout", "source": "alpha channel"}
+        # supplied coverage stays coupled to colour: premultiplied RGB, so invisible pixels' RGB never reaches a visible sample
+        mask, found = alpha, {"isolation": "cutout", "source": "alpha channel"}
+        img = Image.merge("RGB", [ImageChops.multiply(band, alpha) for band in img.split()])
     else:
         mask, found = isolate(img)
     report.update(found)
@@ -276,7 +314,7 @@ def render(data: bytes, spec=None) -> dict:
     else:
         lean = _lean(mask)
         if lean is not None:  # straighten a leaning product; the corners the turn opens are never inside the mask
-            img = img.rotate(lean, resample=_resample(Image, "BICUBIC"), expand=True, fillcolor=img.getpixel((0, 0)))
+            img = img.rotate(lean, resample=_resample(Image, "BICUBIC"), expand=True, fillcolor=(0, 0, 0) if alpha is not None else img.getpixel((0, 0)))
             mask = mask.rotate(lean, resample=_resample(Image, "BICUBIC"), expand=True, fillcolor=0)
             report["straightened_degrees"] = round(lean, 1)
         box = mask.point(lambda v: 255 if v > 100 else 0).getbbox()
@@ -286,12 +324,14 @@ def render(data: bytes, spec=None) -> dict:
         subject, cut = img.crop(box), mask.crop(box)
         target = min(stats["fill_max"]["p50"], .90) * SIZE
         factor = target / max(subject.size)
-        report["scale"] = round(factor, 3)
+        report["scale"] = round(factor, 3)  # the REQUESTED frame-filling factor, before the cap: ops/photos.py and house_render read it for the small retake
         if factor > MAX_UPSCALE:
-            review.append(f"The photo is small (product only {max(subject.size)} px); enlarged {factor:.1f} times it will look soft.")
+            review.append(f"The photo is small (product only {max(subject.size)} px); filling the frame would need {factor:.1f} times enlargement. I limited it to {MAX_UPSCALE:.1f} times; it may still look soft.")
             factor = MAX_UPSCALE
         size = (max(1, round(subject.width * factor)), max(1, round(subject.height * factor)))
         subject, cut = subject.resize(size, lanczos), cut.resize(size, lanczos)
+        if alpha is not None:  # back to straight colour for the final source-over paste
+            subject = Image.frombytes("RGBa", size, Image.merge("RGBA", (*subject.split(), cut)).tobytes()).convert("RGBA").convert("RGB")
         solid = [v for v, m in zip(subject.convert("L").getdata(), cut.getdata()) if m > 200]
         luma = statistics.fmean(solid) if solid else 128
         lo, hi = stats["subject_luma"]["p05"], stats["subject_luma"]["p95"]

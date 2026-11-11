@@ -11,7 +11,7 @@
 Exit 0 ok, 2 config / secret / start point / runtime refused (one JSON line, field names only), 1 any other error.
 Nothing prints message text, a sender, a chat id, a URL, a secret or a path.
 """
-import argparse, base64, collections, contextlib, ipaddress, json, logging, os, secrets, signal, socket, socketserver, sqlite3, stat, subprocess, sys, threading  # noqa: E401
+import argparse, base64, collections, contextlib, ipaddress, json, logging, os, secrets, signal, socket, socketserver, sqlite3, stat, subprocess, sys, threading, time  # noqa: E401
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -278,12 +278,18 @@ class _Timed:
     def __getattr__(self, name): return getattr(self._inner, name)
 
 
+def owner_chat_order(settings) -> tuple:
+    """HASS-OWNERS-2: every owner chat, the configured main `ownerChat` first (it need not be first in `ownerChats`), then the others in
+    config order. Without `ownerChats` it is the one chat, as before."""
+    main = settings["ownerChat"]
+    return (main, *(c for c in settings.get("ownerChats", ()) if c != main))
+
+
 class Worker:
     def __init__(self, conv, rx, store, worktree, build, clock=_now, shots_dir=None, stage=stagelog.off):
         self.conv, self.rx, self.worktree, self.build, self.clock = conv, rx, Path(worktree), build, clock
         self.stage, self.current = stage, ""  # HASS-FAST-1: `current` is the message being handled (stage log only)
-        self.sender = relay.RelaySender(store, conv.settings["ownerChat"], lambda: int(clock().timestamp()), shots_dir,
-                                         conv.settings.get("gChat"))
+        self.sender = relay.RelaySender(store, owner_chat_order(conv.settings), lambda: int(clock().timestamp()), shots_dir, conv.settings.get("gChat"))
         self.rev = editor_mod.content_revision(self.worktree)
         conv.interpreter = _Timed(conv.interpreter, self)
         raw_send = self.sender.send
@@ -313,11 +319,28 @@ class Worker:
             self.conv.interpreter, self.rev = _Timed(self.build(), self), rev
 
     def cycle(self):
-        """Rebuild the interpreter prompt when the content changed (before every message), drain the inbox, queue the replies."""
+        """Rebuild the interpreter prompt when the content changed (before every message), drain the inbox, queue the replies.
+        HASS-CHAT-1: a store that is busy (sqlite "database is locked": another process, such as the 5-minute health check or
+        the receiver, held a lock longer than the busy timeout, as at 19:50:01 on 2026-11-09 under load 44) is retried here with
+        backoff (BUSY_WAITS) instead of failing the cycle; any other error, or still busy after the last wait, is raised as
+        before (run() logs it and backs off). Retrying is safe: a message whose answer was not committed is still pending, and
+        one that was is a duplicate."""
+        for wait in (*BUSY_WAITS, None):
+            try:
+                return self._cycle_once()
+            except sqlite3.OperationalError as exc:
+                if wait is None or not is_busy(exc): raise
+                LOG.warning("store busy, retrying the cycle in %.1f s", wait)
+                self.sleep(wait)
+
+    def _cycle_once(self):
         self._refresh()
         self.rx.drain()
         if hasattr(self.conv.editor, "reconcile"): self.conv.editor.reconcile()
+        if hasattr(self.conv, "retry_previews"): self.conv.retry_previews()  # HASS-CHAT-1: a picture that failed 30 s ago
         self.conv.flush(self.sender)
+
+    sleep = staticmethod(time.sleep)  # tests replace it
 
     def run(self, stop):
         wait = 1
@@ -326,9 +349,18 @@ class Worker:
                 self.cycle()
                 wait = 1
             except Exception as exc:  # noqa: BLE001 - class name only; the message stays pending (health: inbox-stuck)
-                LOG.error("cycle failed: %s", type(exc).__name__)
+                # HASS-CHAT-1: sqlite's own message ("database is locked", "disk I/O error") names the cause and holds no owner text
+                LOG.error("cycle failed: %s%s", type(exc).__name__, f": {str(exc)[:80]}" if isinstance(exc, sqlite3.Error) else "")
                 wait = min(60, wait * 2)
             stop.wait(wait)
+
+
+BUSY_WAITS = (0.5, 1.0, 2.0, 4.0, 8.0)  # HASS-CHAT-1: about 15 s in all, on top of each connection's own busy timeout
+
+
+def is_busy(exc) -> bool:
+    """True for sqlite's "database is locked" / "database table is locked" / busy errors, which clear when the other holder lets go."""
+    return isinstance(exc, sqlite3.OperationalError) and any(w in str(exc).lower() for w in ("locked", "busy"))
 
 
 def interpreter_builder(cfg, worktree):

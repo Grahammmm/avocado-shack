@@ -1,0 +1,135 @@
+rehearsal: two synthetic owners, checkout wt - owner chats: Mike, G
+
+> Mike  [Mike's chat] 'status'  ->  status
+    reply to Mike's chat: Everything is ready.
+        Nothing is waiting for your yes.
+        I still need your shelf check.
+
+> G     [G's chat] 'status'  ->  status
+    reply to G's chat: Everything is ready.
+        Nothing is waiting for your yes.
+        I still need your shelf check.
+
+> Mike  [Mike's chat] 'set the hours'  ->  proposed
+    reply to Mike's chat + 1 picture: Here's the change I'd make:
+        Avocado Shack, the opening hours:
+          was: Monday–Friday 9am–6pm; Saturday 9am–5pm · Closed Sunday
+          now: Monday–Saturday 9am–6pm; Closed Sunday
+        I'll hold this for you until today at 9:10 am.
+        Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
+
+> G     [G's chat] 'set the hours'  ->  writer-busy
+    reply to G's chat: Mike has a change waiting, so I haven't started yours. Please ask me again once it's saved or cancelled.
+
+> G     [G's chat] 'yes b299'  ->  no-target
+    reply to G's chat: That change belongs to Mike, so I can't save it or cancel it for you. Nothing changed.
+
+> G     [G's chat] 'no b299'  ->  no-target
+    reply to G's chat: That change belongs to Mike, so I can't save it or cancel it for you. Nothing changed.
+
+> G     [G's chat] 'yes'  ->  no-target
+    reply to G's chat: Nothing is waiting for your yes.
+
+> G     [Mike's chat] 'set the hours'  ->  ignored
+    (no reply)
+
+> Mike  [G's chat] 'set the hours'  ->  ignored
+    (no reply)
+
+> Mike  [Mike's chat] 'yes b299'  ->  approved
+    reply to Mike's chat + 1 picture: Saved and checked: the opening hours for Avocado Shack
+        It's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.
+
+> G     [G's chat] 'better description'  ->  proposed
+    reply to G's chat + 1 picture: Here's the change I'd make:
+        Hass avocado, the description:
+          was: Creamy flesh, a little lime, enough salt. Mash it onto toast or cut it into a bowl of something bright and crunchy. A...
+          now: Ripe and creamy.
+        I'll hold this for you until today at 9:10 am.
+        Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
+
+> Mike  [Mike's chat] 'yes 1915'  ->  no-target
+    reply to Mike's chat: That change belongs to G, so I can't save it or cancel it for you. Nothing changed.
+
+> Mike  [Mike's chat] 'undo'  ->  writer-busy
+    reply to Mike's chat: G has a change waiting, so I haven't started yours. Please ask me again once it's saved or cancelled.
+
+> G     [G's chat] 'yes'  ->  approved
+    reply to G's chat + 1 picture: Saved and checked: the description for Hass avocado
+        It's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.
+
+> Mike  [Mike's chat] 'undo'  ->  undo-other
+    reply to Mike's chat: The last change on the website was G's change: the description for Hass avocado. I haven't undone anything. If you do want it undone, say undo 1915.
+
+> Mike  [Mike's chat] 'history'  ->  history
+    reply to Mike's chat: Here's what we changed lately:
+        - G's change, the description for Hass avocado: saved, but I'm not sure it's on the website
+        - Your change, the opening hours for Avocado Shack: saved, but I'm not sure it's on the website
+
+> G     [G's chat] 'status'  ->  status
+    reply to G's chat: Everything is ready.
+        Nothing is waiting for your yes.
+        I still need your shelf check.
+        Last change: the description for Hass avocado. It's saved, but I'm not sure it's on the website. Copying it to the website hasn't been done, or didn't finish. If copying it started and stopped partway, some pages may already show it. Please ask Graham to copy it to the website again, which puts every page in place.
+
+> G     [G's chat] 'undo'  ->  proposed
+    reply to G's chat + 1 picture: To undo that, I'd change it back:
+        Here's the change I'd make:
+        Hass avocado, the description:
+          was: Ripe and creamy.
+          now: Creamy flesh, a little lime, enough salt. Mash it onto toast or cut it into a bowl of something bright and crunchy. A good avocado hardly needs a recipe.
+        I'll hold this for you until today at 9:10 am.
+        Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
+
+> G     [G's chat] 'no'  ->  rejected
+    reply to G's chat: Okay, I've cancelled that. Nothing changed.
+
+> Mike  [Mike's chat] 'undo b299'  ->  proposed
+    reply to Mike's chat + 1 picture: To undo that, I'd change it back:
+        Here's the change I'd make:
+        Avocado Shack, the opening hours:
+          was: Monday–Saturday 9am–6pm; Closed Sunday
+          now: Monday–Friday 9am–6pm; Saturday 9am–5pm · Closed Sunday
+        I'll hold this for you until today at 9:10 am.
+        Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
+
+> Mike  [Mike's chat] 'no'  ->  rejected
+    reply to Mike's chat: Okay, I've cancelled that. Nothing changed.
+
+> G     [G's chat] 'undo b299'  ->  proposed
+    reply to G's chat + 1 picture: To undo Mike's change, I'd change it back:
+        Here's the change I'd make:
+        Avocado Shack, the opening hours:
+          was: Monday–Saturday 9am–6pm; Closed Sunday
+          now: Monday–Friday 9am–6pm; Saturday 9am–5pm · Closed Sunday
+        I'll hold this for you until today at 9:10 am.
+        Reply yes 4018ef to save it, or no to cancel. If something's wrong, tell me what to fix.
+
+> Mike  [Mike's chat] 'yes 4018ef'  ->  no-target
+    reply to Mike's chat: That change belongs to G, so I can't save it or cancel it for you. Nothing changed.
+
+> G     [G's chat] 'no'  ->  rejected
+    reply to G's chat: Okay, I've cancelled that. Nothing changed.
+
+--- migration: one shared chat, a draft by G kept, then ownerChats is switched on ---
+
+> G     [Mike's chat] 'set the hours'  ->  proposed
+    reply to Mike's chat + 1 picture: Here's the change I'd make:
+        Avocado Shack, the opening hours:
+          was: Monday–Friday 9am–6pm; Saturday 9am–5pm · Closed Sunday
+          now: Monday–Saturday 9am–6pm; Closed Sunday
+        I'll hold this for you until today at 9:10 am.
+        Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
+
+> Mike  [Mike's chat] 'yes b299'  ->  no-target
+    reply to Mike's chat: That change belongs to someone else, so I can't save it or cancel it for you. Nothing changed.
+
+> Mike  [Mike's chat] 'no'  ->  no-target
+    reply to Mike's chat: Nothing is waiting for your yes.
+
+> G     [G's chat] 'yes b299'  ->  no-target
+    reply to G's chat: That change belongs to Mike, so I can't save it or cancel it for you. Nothing changed.
+
+    approvals recorded after the move: 0
+
+rows out of line: none

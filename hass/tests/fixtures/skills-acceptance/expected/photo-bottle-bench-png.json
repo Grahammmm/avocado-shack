@@ -1,0 +1,63 @@
+{
+  "assets": {
+    "storefront-mockup/assets/products/photo-6195ddbc540266a2.jpg": "fdf1dcc15c8fd4eea9e0e68cf84c2ef54265647bf7aebf0041aa47df7962abe6"
+  },
+  "diff": [
+    {
+      "after": {
+        "addedOn": "2026-11-08",
+        "available": "yes",
+        "available_on": "2026-11-08",
+        "brand": "Cal Poly",
+        "category": "pantry",
+        "description": "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.",
+        "displayBrand": "Cal Poly",
+        "id": "photo-product-175",
+        "image": "assets/products/photo-6195ddbc540266a2.jpg",
+        "imageAlt": "Cal Poly honey",
+        "name": "Cal Poly honey",
+        "producerKey": "Cal Poly",
+        "status": "active"
+      },
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175]"
+    },
+    {
+      "after": "2026-11-08",
+      "file": "hass/content/store.json",
+      "path": "selection_checked_on"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "hass/content/store.json",
+    "storefront-mockup/assets/products/photo-6195ddbc540266a2.jpg",
+    "storefront-mockup/catalog-products.js",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {
+      "storefront-mockup/assets/products/photo-6195ddbc540266a2.jpg": "fdf1dcc15c8fd4eea9e0e68cf84c2ef54265647bf7aebf0041aa47df7962abe6"
+    },
+    "content": [
+      {
+        "after": {
+          "addedOn": "2026-11-08",
+          "brand": "Cal Poly",
+          "category": "pantry",
+          "description": "Honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.",
+          "displayBrand": "Cal Poly",
+          "id": "photo-product-175",
+          "image": "assets/products/photo-6195ddbc540266a2.jpg",
+          "imageAlt": "Cal Poly honey",
+          "name": "Cal Poly honey",
+          "producerKey": "Cal Poly",
+          "status": "hidden"
+        },
+        "file": "hass/content/products.json",
+        "path": "products[photo-product-175]"
+      }
+    ]
+  },
+  "schema_version": 1
+}

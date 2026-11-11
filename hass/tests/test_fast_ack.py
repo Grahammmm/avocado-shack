@@ -876,6 +876,7 @@ class EndToEnd(host_tests.HostCase):
         proxy = mock.Mock(wraps=sqlite3)
         proxy.connect = lambda *a, **kw: Hooked(sqlite3.connect(*a, **kw))
         proxy.Error, proxy.Row = sqlite3.Error, sqlite3.Row
+        proxy.OperationalError = sqlite3.OperationalError  # HASS-CHAT-1: Worker.cycle now catches it, so it must be a real exception class
         return mock.patch.object(host, "sqlite3", proxy), fired
 
     def test_a_pause_moved_from_the_queue_to_the_flag_between_the_reads_is_never_reported_unpaused(self):
@@ -1324,6 +1325,72 @@ class StageLog(unittest.TestCase):
         self.assertEqual(ident, stagelog.short(m))
         self.assertEqual(stages, {"webhook-in": 0.0, "accepted": 0.1, "ack-end": 0.4, "worker-pickup": 1.0, "reply-queued": 60.0,
                                   "reply-pulled": 61.0, "bb-send-end": 62.5})
+
+    @staticmethod
+    def deep_json_lines():
+        # Real decoder failures at the unchanged recursion limit, not mocked exceptions.
+        return ("[" * 20000 + '"REJECTED-CANARY"' + "]" * 20000,
+                '{"nested":' * 20000 + '"REJECTED-CANARY"' + "}" * 20000)
+
+    def stage_cli(self, *paths):
+        import subprocess
+        import sys
+        return subprocess.run([sys.executable, "-B", str(Path(stagelog.__file__).resolve()),
+                               *map(str, paths)], capture_output=True, text=True, timeout=10)
+
+    def test_read_skips_overdeep_json_between_valid_rows(self):
+        rows = [dict(t=1, stage="accepted", id="x"), dict(t=2, stage="handled", id="x")]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "s.jsonl"
+            for deep in self.deep_json_lines():
+                with self.subTest(kind=deep[0]):
+                    with self.assertRaises(RecursionError):
+                        json.loads(deep)
+                    raw = (json.dumps(rows[0]) + "\nnot json\n[1]\n" + deep + "\n"
+                           + json.dumps(rows[1]) + '\n{"t":"x"}\n').encode()
+                    path.write_bytes(raw)
+                    self.assertEqual(stagelog.read(path), rows)
+                    self.assertEqual(path.read_bytes(), raw)
+
+    def test_cli_keeps_valid_stages_around_deep_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "s.jsonl"
+            for deep in self.deep_json_lines():
+                with self.subTest(kind=deep[0]):
+                    raw = ('{"t":1,"stage":"accepted","id":"x"}\n' + deep
+                           + '\n{"t":2,"stage":"handled","id":"x"}\n').encode()
+                    path.write_bytes(raw)
+                    result = self.stage_cli(path)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (0, "x accepted=0 handled=1\n", ""))
+                    self.assertEqual(path.read_bytes(), raw)
+
+    def test_cli_merges_healthy_second_file_after_bad_first_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            first, second = Path(d) / "first.jsonl", Path(d) / "second.jsonl"
+            raw_first = ('{"t":1,"stage":"accepted","id":"x"}\n'
+                         + self.deep_json_lines()[0] + "\n").encode()
+            raw_second = (b'{"t":2,"stage":"handled","id":"x"}\n'
+                          b'{"t":4,"stage":"reply-queued","id":"x","rid":"r"}\n'
+                          b'{"t":6,"stage":"reply-pulled","id":"r"}\n')
+            first.write_bytes(raw_first)
+            second.write_bytes(raw_second)
+            result = self.stage_cli(first, second)
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (0, "x accepted=0 handled=1 reply-queued=3 reply-pulled=5\n", ""))
+            self.assertEqual(first.read_bytes(), raw_first)
+            self.assertEqual(second.read_bytes(), raw_second)
+
+    def test_deep_only_log_remains_successfully_empty(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "s.jsonl"
+            raw = ("\n".join(self.deep_json_lines()) + "\n").encode()
+            path.write_bytes(raw)
+            self.assertEqual(stagelog.read(path), [])
+            result = self.stage_cli(path)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+            self.assertEqual(path.read_bytes(), raw)
+            self.assertEqual(list(Path(d).iterdir()), [path])
 
     def test_read_skips_junk_lines(self):
         with tempfile.TemporaryDirectory() as d:

@@ -198,6 +198,13 @@ class Inbox:
         row = self.db.execute("SELECT state FROM inbound WHERE provider_id = ?", (provider_id,)).fetchone()
         return None if row is None else row["state"]
 
+    def forwarded_at(self, provider_id: str):
+        """HASS-SEC-2 (L5): when the message reached this inbox (its enqueue time, within the envelope's 300 s clock window of
+        the forwarder's send), or None when it is not here or the time cannot be read."""
+        row = self.db.execute("SELECT enqueued_at FROM inbound WHERE provider_id = ?", (provider_id,)).fetchone()
+        try: return None if row is None else parse_aware(row["enqueued_at"], "enqueued_at")
+        except ValueError: return None
+
     def seen(self) -> Nonces:
         return Nonces(self)
 

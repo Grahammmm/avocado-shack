@@ -1,0 +1,24 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "before": "no",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-024].available"
+    },
+    {
+      "before": "2026-11-08",
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-024].available_on"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "storefront-mockup/catalog-products.js"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

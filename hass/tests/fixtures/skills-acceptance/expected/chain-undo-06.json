@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175].image",
+      "before": "assets/products/photo-91c700264e60552f.jpg",
+      "after": "assets/products/photo-2cec1911a5900242.jpg"
+    },
+    {
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175].imageAlt",
+      "before": "Pebble jam",
+      "after": "Pebble jam in a jar"
+    }
+  ],
+  "files": [
+    "hass/content/products.json",
+    "storefront-mockup/catalog-products.js"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}

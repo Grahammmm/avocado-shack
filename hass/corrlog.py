@@ -102,9 +102,9 @@ class CorrLog:
     def rows(self, days=RETENTION_DAYS) -> list:
         """Valid rows from the last `days` days, oldest first. Unreadable lines and files are skipped."""
         out, cutoff = [], self.clock().astimezone(timezone.utc) - timedelta(days=days)
-        if not self._real_directory(): return out
+        if not self._real_directory(): return []
         try: files = sorted(p for p in self.dir.iterdir() if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.jsonl", p.name))
-        except OSError: return out
+        except OSError: return []
         for path in files:
             try:
                 fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -117,11 +117,12 @@ class CorrLog:
             for raw in text.splitlines():
                 try: row = json.loads(raw)
                 except ValueError: continue
-                if isinstance(row, dict) and row.get("kind") in KINDS and isinstance(row.get("at"), str):
+                if isinstance(row, dict) and isinstance(row.get("kind"), str) and row["kind"] in KINDS and isinstance(row.get("at"), str):
                     try: at = datetime.fromisoformat(row["at"])
                     except ValueError: continue
-                    if at.tzinfo is not None and at >= cutoff: out.append(row)
-        return out
+                    if at.tzinfo is not None and at >= cutoff: out.append((at, row))
+        out.sort(key=lambda pair: pair[0])  # stable: by real instant, equal instants keep scan order
+        return [row for _, row in out]
 
     def prune(self) -> int:
         """Delete whole day files older than RETENTION_DAYS. Returns how many were deleted. Never raises."""
@@ -130,7 +131,10 @@ class CorrLog:
         try:
             for path in self.dir.iterdir():
                 m = re.fullmatch(r"(\d{4}-\d{2}-\d{2})\.jsonl", path.name)
-                if m and path.is_file() and not path.is_symlink() and datetime.strptime(m[1], "%Y-%m-%d").date() < cutoff:
+                if not (m and path.is_file() and not path.is_symlink()): continue
+                try: day = datetime.strptime(m[1], "%Y-%m-%d").date()
+                except ValueError: continue  # named like a day but not a real date (2026-02-30): not ours, left untouched
+                if day < cutoff:
                     path.unlink()
                     removed += 1
         except OSError:
