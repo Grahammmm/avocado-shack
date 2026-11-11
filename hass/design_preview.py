@@ -85,17 +85,36 @@ def prepare_out(out: str, top: str) -> Path:
         raise Usage("--out is not usable") from None
 
 
+def _walk_out(out: str) -> Path:
+    """Normalized absolute --out, after lstat of every component of the ORIGINAL spelling (cwd ancestry included), so a
+    link hidden by ``link/..`` is refused, not cancelled. A missing last component is allowed; a missing or non-folder
+    intermediate one is not. Static check only."""
+    parts = Path(out).parts
+    if not os.path.isabs(out):
+        parts = Path(os.getcwd()).parts + parts
+    cur, last = Path(parts[0]), len(parts) - 1
+    for index, name in enumerate(parts[1:], 1):
+        if name == "..":
+            cur = cur.parent
+            continue
+        cur = cur / name
+        try:
+            info = os.lstat(cur)
+        except FileNotFoundError:
+            if index == last:
+                break
+            raise Usage("--out is not usable") from None
+        if stat.S_ISLNK(info.st_mode):
+            raise Usage("--out has a symlink on its path")
+        if index != last and not stat.S_ISDIR(info.st_mode):
+            raise Usage("--out is not usable")
+    return cur
+
+
 def _prepare_out(out: str, top: str) -> Path:
     if not out or "\0" in out:
         raise Usage("bad --out")
-    path = Path(os.path.abspath(out))
-    probe = path
-    while True:
-        if os.path.islink(probe):
-            raise Usage("--out has a symlink on its path")
-        if probe.parent == probe:
-            break
-        probe = probe.parent
+    path = _walk_out(out)
     resolved = path.resolve()
     for guarded in [Path(top).resolve(), *_git_dirs(top)]:
         if resolved == guarded or guarded in resolved.parents:

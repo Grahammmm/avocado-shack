@@ -342,6 +342,99 @@ class OutputTests(RepoCase):
         self.assertEqual((proc.returncode, proc.stdout), (2, json.dumps({"result": "usage"}) + "\n"))
         self.assertEqual(proc.stderr, "design_preview: --out is not usable\n")
 
+    def link_fixture(self):
+        """tmp/elsewhere/child (real, with a sentinel) and tmp/linked -> elsewhere/child; returns the sentinel."""
+        child = self.tmp / "elsewhere" / "child"
+        child.mkdir(parents=True)
+        sentinel = child / "sentinel.txt"
+        sentinel.write_text("keep")
+        os.symlink(child, self.tmp / "linked")
+        return sentinel
+
+    def assert_no_output(self, name):
+        self.assertFalse((self.tmp / name).exists())  # where the cancelled spelling lands
+        self.assertFalse((self.tmp / "elsewhere" / name).exists())  # where the link traversal would land
+
+    def test_output_link_cancelled_by_parent_is_usage(self):
+        sentinel = self.link_fixture()
+        with self.assertRaises(Usage) as ctx:
+            self.prepare(self.tmp / "linked" / ".." / "shots")
+        self.assertEqual(str(ctx.exception), "--out has a symlink on its path")
+        self.assert_no_output("shots")
+        self.assertEqual(sentinel.read_text(), "keep")
+        with self.assertRaises(Usage):  # the direct link stays refused
+            self.prepare(self.tmp / "linked" / "shots")
+
+    def test_cancelled_links_at_multiple_depths_and_relative_paths(self):
+        sentinel = self.link_fixture()
+        os.symlink(self.tmp / "nowhere", self.tmp / "dangling")
+        os.symlink(self.tmp / "elsewhere", self.tmp / "top")
+        spellings = [self.tmp / "top" / "child" / ".." / ".." / "shots", self.tmp / "linked" / ".." / ".." / "shots",
+                     self.tmp / "dangling" / ".." / "shots", self.tmp / "linked" / ".." / "linked" / ".." / "shots",
+                     self.tmp / "linked" / ".." / "." / "shots", f"{self.tmp}//linked//..//shots"]
+        for spelling in spellings:
+            with self.assertRaises(Usage, msg=str(spelling)) as ctx:
+                self.prepare(spelling)
+            self.assertEqual(str(ctx.exception), "--out has a symlink on its path")
+        os.chdir(self.tmp)
+        for spelling in ("linked/../shots", "./linked/../shots"):
+            with self.assertRaises(Usage, msg=spelling):
+                dp.prepare_out(spelling, str(self.repo))
+        self.assert_no_output("shots")
+        self.assertFalse((self.tmp / "nowhere").exists())
+        self.assertEqual(sentinel.read_text(), "keep")
+        self.assertEqual(os.listdir(sentinel.parent), ["sentinel.txt"])
+
+    def test_link_free_parent_components_remain_valid(self):
+        base = self.tmp / "sp ace é"
+        (base / "child").mkdir(parents=True)
+        for spelling, expected in ((base / "child" / ".." / "shots", base / "shots"),
+                                   (f"{base}//child/./../shots2", base / "shots2")):
+            got = self.prepare(spelling)
+            self.assertEqual(got, expected)
+            self.assertEqual(oct(os.stat(got).st_mode & 0o777), "0o700")
+        (base / "rel").mkdir()
+        os.chdir(base / "child")
+        got = dp.prepare_out("../rel/./shots", str(self.repo))  # relative spelling from a real cwd
+        self.assertEqual((got, oct(os.stat(got).st_mode & 0o777)), (base / "rel" / "shots", "0o700"))
+
+    def test_non_directory_or_missing_component_cannot_be_cancelled(self):
+        (self.tmp / "file").write_text("x")
+        for spelling in (self.tmp / "file" / ".." / "shots", self.tmp / "absent" / ".." / "shots", self.tmp / "file" / "shots"):
+            with self.assertRaises(Usage, msg=str(spelling)) as ctx:
+                self.prepare(spelling)
+            self.assertEqual(str(ctx.exception), "--out is not usable")
+        self.assert_no_output("shots")
+        self.assertFalse((self.tmp / "absent").exists())
+        self.assertEqual(self.prepare(self.tmp / "real-parent-missing-final"), self.tmp / "real-parent-missing-final")
+
+    def test_cancelled_link_main_refuses_before_previewer(self):
+        self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
+        os.makedirs(self.tmp / "CANARY-target" / "child")
+        os.symlink(self.tmp / "CANARY-target" / "child", self.tmp / "CANARY-link")
+        before = self.snapshot()
+        out, err, previewer = io.StringIO(), io.StringIO(), mock.Mock()
+        os.chdir(self.repo)
+        with mock.patch.object(dp, "Previewer", previewer), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = dp.main(["--base", "main", "--head", "feature", "--out", f"{self.tmp}/CANARY-link/../shots"])
+        self.assertEqual(code, 2)
+        self.assertEqual(out.getvalue(), json.dumps({"result": "usage"}) + "\n")
+        self.assertEqual(err.getvalue(), "design_preview: --out has a symlink on its path\n")
+        previewer.assert_not_called()
+        self.assertEqual(previewer.mock_calls, [])
+        self.assert_no_output("shots")
+        self.assertFalse((self.tmp / "CANARY-target" / "shots").exists())
+        self.assertEqual(self.snapshot(), before)
+
+    def test_scope_outside_still_precedes_output_traversal(self):
+        self.link_fixture()
+        self.branch("feature", {"hass/evil.py": "x=1", "storefront-mockup/style.css": "body{color:red}"})
+        os.chdir(self.repo)
+        with mock.patch.object(dp, "prepare_out", side_effect=AssertionError("called")):
+            code, doc = dp.run("main", "feature", str(self.tmp / "linked" / ".." / "shots"))
+        self.assertEqual((code, doc["result"]), (1, "outside"))
+        self.assert_no_output("shots")
+
     def test_outside_scope_still_wins_before_preflight(self):
         self.branch("feature", {"hass/evil.py": "x=1", "storefront-mockup/style.css": "body{color:red}"})
         os.chdir(self.repo)
