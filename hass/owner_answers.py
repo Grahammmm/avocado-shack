@@ -44,6 +44,16 @@ LIVE_SHOWN = "Your change is on the website now."
 LIVE_PICTURE = "The picture is Hass's own view of the published page."
 LIVE_NO_PICTURE = "No picture this time."
 LIVE_TAKEN_BACK = "Graham took your last change off the website. The website is back as it was before that change."
+# HASS-SEC-2 (L6): told to the owner whose change another owner's undo took off the website.
+LIVE_UNDONE_BY_OTHER = "{who} took your change back off the website{what}. The website is back as it was before that change."
+
+
+def undone_by_other(who, summary=None) -> str:
+    """LIVE_UNDONE_BY_OTHER for the owner named `who` (a first name, or "the owner"), with the change's summary when known."""
+    from hass.voice import quote
+    return LIVE_UNDONE_BY_OTHER.format(who=who[:1].upper() + who[1:], what=f": {quote(summary)}" if summary else "")
+
+
 LIVE_NOT_PUBLISHED = "That change is saved on my side but did not go on the website: {reason}. The website is unchanged. Graham has been told."
 LIVE_REASONS = {"the release was interrupted": "it was interrupted"}  # the only reason text the release books write today
 
@@ -62,6 +72,8 @@ LIVE_REFUSED = (
     ("needs g to check", "Graham needs to check something before I can change the website. He has been told."),
     ("already has a release record", "That change was already sent."),
     ("draft no longer matches", "That change was out of date. Please ask me again."),
+    ("never went on the website", "That change never went on the website from chat, so I can't take it back from chat. "
+                                  "Graham can do it by hand."),  # HASS-SEC-2 (M1)
 )
 
 

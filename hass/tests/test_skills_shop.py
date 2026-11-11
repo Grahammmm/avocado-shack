@@ -426,7 +426,14 @@ class LiveClass(unittest.TestCase):
 
     def test_contact_is_protected_because_of_its_operations(self):
         ops = shop.plan_contact({"phone": "805 555 0123", "street_address": "1023 Example Street"}, None)
-        self.assertEqual(self.reasons(ops), ["protected operation: store.set_address", "protected operation: store.set_phone"])
+        reasons = self.reasons(ops)
+        # The operation reasons must stay; the stricter claim gate (HASS-SEC-2 H1) may add the
+        # contact-sentence reason for the phone number, and nothing else.
+        for needed in ("protected operation: store.set_address", "protected operation: store.set_phone"):
+            self.assertIn(needed, reasons)
+        self.assertLessEqual(set(reasons), {"protected operation: store.set_address",
+                                            "protected operation: store.set_phone",
+                                            "protected sentences: contact"})
 
     def test_a_notice_with_a_phone_number_or_a_claim_is_drafted_but_not_for_a_live_release(self):
         until = (shop_today() + timedelta(days=5)).isoformat()
