@@ -143,6 +143,22 @@ def _text(value):
     return value.strip() if isinstance(value, str) else value
 
 
+def _owner_case(value, ctx):
+    """RF2345-9: the difficulty as the owner wrote it. The interpreter may have capitalised it (``EASY``); when the same phrase
+    (case and ordinary whitespace aside, whole words only) is in the owner's own texts, return his spelling of it: the last
+    occurrence in the latest message that has one. Otherwise ``value`` unchanged."""
+    words = value.split() if isinstance(value, str) else []
+    if not words:
+        return value
+    pattern = re.compile(r"(?<!\w)" + r"\s+".join(re.escape(w) for w in words) + r"(?!\w)", re.IGNORECASE)
+    for text in reversed(list(getattr(ctx, "texts", ()) or ())):
+        if isinstance(text, str):
+            hits = list(pattern.finditer(text))
+            if hits:
+                return re.sub(r"\s+", " ", hits[-1].group(0))
+    return value
+
+
 def _given(slots, name):
     value = slots.get(name)
     return value if isinstance(value, str) and value.strip() else None
@@ -553,6 +569,8 @@ def plan_add(slots, ctx):
     if _given(slots, "trail"):
         args["trailId"] = slots["trail"]
     args.update({ARG.get(f, f): _text(slots[f]) for f in TEXT_SLOTS if _given(slots, f)})
+    if "difficulty" in args:
+        args["difficulty"] = _owner_case(args["difficulty"], ctx)
     return [{"op": "hike.create", "args": args}]
 
 
@@ -562,6 +580,8 @@ def plan_edit(slots, ctx):
     slots = _with_default(slots, ctx)
     args = {"id": slots["hike"]}
     args.update({ARG.get(f, f): _text(slots[f]) for f in EDIT_TEXT_SLOTS if _given(slots, f)})
+    if "difficulty" in args:
+        args["difficulty"] = _owner_case(args["difficulty"], ctx)
     if isinstance(slots.get("signup"), bool):
         args["rsvpEnabled"] = slots["signup"]
     if isinstance(slots.get("capacity"), int) and not isinstance(slots.get("capacity"), bool):
