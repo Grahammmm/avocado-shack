@@ -187,6 +187,35 @@ class HintTests(unittest.TestCase):
         for text in ("Monday 9 to 6 and Tuesday closed", "Tuesday closed and Monday 9 to 6", "Monday 9 to 6, Tuesday off", "Saturday 9 to 5 and closed Sunday", "Saturday 9 to 5 and Wednesday from 10", "Monday 9 to 6 and Tuesday opens at 10am", "Monday 9 to 6 and Tuesday moves to later"):
             self.assertNotIn("alreadyTrue", self.ask(text), text)
 
+    def test_weekday_range_never_claims_endpoints_cover_the_interior(self):
+        hours = ("Monday 9am–5pm · Tuesday 10am–4pm · Wednesday 9am–5pm · Thursday 9am–5pm · Friday 9am–5pm",)
+        hint = nl_prep.make_hinter(tiny(hours=hours))
+        for text in ("Monday-Friday 9 to 5", "Monday\u2013Friday 9 to 5", "Monday through Friday 9 to 5"):
+            self.assertNotIn("alreadyTrue", hint(text, MONDAY), text)
+            self.assertIsNone(nl_prep.hours_hints(text, nl_prep._Index(tiny(hours=hours))), text)
+        self.assertEqual(hint("Monday and Friday 9 to 5", MONDAY)["alreadyTrue"], ["Monday already 9am–5pm", "Friday already 9am–5pm"])
+
+    def test_every_weekday_range_form_omits_the_hours_hint_even_when_true(self):
+        uniform = nl_prep._Index(tiny(hours=("Monday–Friday 9am–5pm",)))
+        for text in ("Monday-Friday 9 to 5", "Mon - Fri 9 to 5", "Monday \u2014 Friday 9 to 5", "Monday to Friday 9 to 5", "Monday until Friday 9 to 5",
+                     "Mondays-Fridays 9 to 5", "Friday-Monday 9 to 5", "Monday-Monday 9 to 5", "Monday-Wednesday and Friday 9 to 5"):
+            self.assertIsNone(nl_prep.hours_hints(text, uniform), text)
+        for text, want in (("Monday, Friday 9 to 5", ["Monday already 9am–5pm", "Friday already 9am–5pm"]), ("Saturday 9-5", None)):
+            self.assertEqual(nl_prep.hours_hints(text, uniform), want, text)
+        self.assertEqual(nl_prep.hours_hints("Monday and Friday 9 to 5", uniform), ["Monday already 9am–5pm", "Friday already 9am–5pm"])
+
+    def test_range_omission_keeps_unrelated_hints_and_the_request(self):
+        seen = []
+        hours = ("Monday 9am–5pm · Tuesday 10am–4pm · Wednesday 9am–5pm",)
+        interp = LocalInterpreter(URL, "m", "SYSTEM", transport=RequestTests.fake(None, seen), clock=lambda: datetime(2026, 11, 9, 17, 40, tzinfo=timezone.utc),
+                                  hinter=nl_prep.make_hinter(tiny(hours=hours)))
+        text = "lemons are out, Monday-Wednesday 9 to 5"
+        interp.interpret(text, [])
+        user = json.loads(seen[-1]["messages"][1]["content"])
+        self.assertEqual(user["message"], text)
+        self.assertNotIn("alreadyTrue", user["hints"])
+        self.assertEqual(user["hints"]["products"][0]["is"]["id"], "photo-product-002")
+
     def test_a_shared_prefix_is_not_resolved_to_one_product(self):
         hint = nl_prep.make_hinter(SimpleNamespace(products=[product(1, "Lemons"), product(2, "Lemonade", "drinks")], makers={},
                                                    community={}, store={"hours": []}))
