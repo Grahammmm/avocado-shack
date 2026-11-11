@@ -540,6 +540,62 @@ class QuotedYearTests(unittest.TestCase):
                 self.assertEqual(user["hints"]["times"], [{"said": "9am", "time": "09:00"}])
 
 
+class RouteTitleHintTests(unittest.TestCase):
+    """A route idea whose title carries hike/walk is named by its distinctive tokens, like the event branch."""
+
+    def idx(self, titles, events=()):
+        ideas = [{"id": f"idea-{i}", "title": t} for i, t in enumerate(titles)]
+        return SimpleNamespace(products=[], makers={}, community={"events": list(events), "routeIdeas": ideas}, store={"hours": []})
+
+    def named(self, titles, text, events=()):
+        return nl_prep.make_hinter(self.idx(titles, events))(text, MONDAY, None).get("hikes", {}).get("named", [])
+
+    def test_route_name_with_hike_or_walk_suffix_is_recognized(self):
+        for title in ("Morro Rock hike", "Morro Rock walk", "Morro Rock hikes", "Morro Rock walks", "Hike Morro Rock"):
+            for text in (title, "plan the MORRO rock please", "Morró Rock hike"):
+                self.assertEqual(self.named([title], text), [{"routeIdea": "idea-0", "title": title}], (title, text))
+
+    def test_generic_only_route_title_never_names_a_route(self):
+        for title in ("hike", "Walks", "hike walk", "", "the"):
+            self.assertEqual(self.named([title], "any hike or walk on saturday please"), [], title)
+
+    def test_route_requires_every_distinctive_whole_token(self):
+        for text in ("morro hike", "rock walk", "the morrow rocks hike", "morrorock hike"):
+            self.assertEqual(self.named(["Morro Rock hike"], text), [], text)
+        self.assertEqual(len(self.named(["Morro Rock hike"], "rock then morro")), 1)
+
+    def test_named_routes_preserve_order_shape_and_cap(self):
+        event = {"id": "ev-1", "title": "Morro Rock hike", "startsAt": None, "status": None}
+        out = self.named(["Morro Rock walk", "Rock hike"], "morro rock hike", [event])
+        self.assertEqual([r.get("hike") or r.get("routeIdea") for r in out], ["ev-1", "idea-0", "idea-1"])
+        self.assertEqual(out[1], {"routeIdea": "idea-0", "title": "Morro Rock walk"})
+        many = [f"Rock hike {i}" for i in range(12)]
+        self.assertEqual(len(self.named(many, "rock hike " + " ".join(str(i) for i in range(12)))), nl_prep.MAX_LIST)
+
+    def test_route_matching_preserves_other_hints_and_inputs(self):
+        idx = self.idx(["Morro Rock hike"])
+        idx.products = [product(1, "Lemons")]
+        before = json.dumps(idx.community, sort_keys=True)
+        hint = nl_prep.make_hinter(idx)
+        first = hint("morro rock hike and lemons at 9am", MONDAY, None)
+        self.assertEqual(first["times"], [{"said": "9am", "time": "09:00"}])
+        self.assertEqual(first["hikes"]["named"], [{"routeIdea": "idea-0", "title": "Morro Rock hike"}])
+        self.assertEqual(first["products"][0]["is"]["id"], "photo-product-001")
+        self.assertEqual(hint("morro rock hike and lemons at 9am", MONDAY, None), first)
+        self.assertEqual(json.dumps(idx.community, sort_keys=True), before)
+
+    def test_fake_request_contains_named_suffix_route(self):
+        seen = []
+        req = RequestTests()
+        interp = req.make(seen, hinter=nl_prep.make_hinter(self.idx(["Morro Rock hike"])))
+        interp.interpret("plan the Morro Rock hike at 9am", [])
+        user = req.user(seen)
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(user["message"], "plan the Morro Rock hike at 9am")
+        self.assertEqual(user["hints"]["hikes"]["named"], [{"routeIdea": "idea-0", "title": "Morro Rock hike"}])
+        self.assertEqual(user["hints"]["times"], [{"said": "9am", "time": "09:00"}])
+
+
 class GuideTests(unittest.TestCase):
     """docs/hass/NATURAL_LANGUAGE.md says the same numbers and commands the code uses."""
     DOCS = Path(__file__).resolve().parents[2] / "docs" / "hass"

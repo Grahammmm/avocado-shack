@@ -249,7 +249,10 @@ def hike_hints(text, index, today: date, weekday_hits) -> dict:
         title = set(tokens(e.get("title") or "")) - {"walk", "hike"}
         if title and title <= words:
             out.append({"hike": e["id"], "title": e.get("title"), "startsAt": e.get("startsAt"), "status": e.get("status")})
-    ideas = [{"routeIdea": r["id"], "title": r.get("title")} for r in index.ideas if (set(tokens(r.get("title") or "")) - {"walk", "hike"}) and set(tokens(r.get("title") or "")) <= words]
+    ideas = []
+    for r in index.ideas:
+        title = set(tokens(r.get("title") or "")) - {"walk", "hike"}  # same reduced set for both tests, like events
+        if title and title <= words: ideas.append({"routeIdea": r["id"], "title": r.get("title")})
     rows = []
     for name, wd in weekday_hits if HIKE_WORD_RE.search(fold(text)) or out or ideas else ():  # a weekday alone is not about hikes
         on = [e for e in index.hikes if e.get("status") == "scheduled" and _weekday_of(e.get("startsAt")) == wd]
