@@ -237,6 +237,8 @@ class FallbackInterpreter:
     def __init__(self, primary, fallback, valid):
         if not (callable(valid) and hasattr(primary, "interpret") and hasattr(fallback, "interpret")):
             raise ValueError("primary and fallback must interpret and valid must be callable")
+        if isinstance(primary, FallbackInterpreter) or isinstance(fallback, FallbackInterpreter):  # nested wrapper = 3+ attempts
+            raise ValueError("interpreters must not have a fallback of their own")
         self.primary, self.fallback, self.valid = primary, fallback, valid
         self.last_error, self.last_backend, self.last_fallback, self.last_primary_error, self.last_seconds = None, None, False, None, None
 
