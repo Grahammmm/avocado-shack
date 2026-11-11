@@ -77,7 +77,14 @@ def _git_dirs(top: str) -> list[Path]:
 
 def prepare_out(out: str, top: str) -> Path:
     """The private output folder: outside the repository and its Git folders, no link anywhere on the way, new (0700)
-    or an existing real empty 0700 folder. Raises Usage."""
+    or an existing real empty 0700 folder. Raises Usage; a filesystem error becomes a fixed path-free Usage."""
+    try:
+        return _prepare_out(out, top)
+    except OSError:
+        raise Usage("--out is not usable") from None
+
+
+def _prepare_out(out: str, top: str) -> Path:
     if not out or "\0" in out:
         raise Usage("bad --out")
     path = Path(os.path.abspath(out))
