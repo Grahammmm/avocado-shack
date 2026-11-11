@@ -8,7 +8,8 @@ A check is hard (a failure fails the item whatever the score) or soft (it only l
 
 Text, record and spec code is standard library only. Reading or measuring a picture needs Pillow (already used by
 inventory-intake/import_photos.py and the logo steps in storefront-mockup/README.md); without it the image functions raise
-``PillowMissing`` and nothing else is affected. Reads only; the one write is ``measure --out FILE`` on request.
+``PillowMissing`` and nothing else is affected. ``check-image FILE`` exits 0/1 on a scored pass/fail, and 2 with one fixed path-free stderr line when the picture cannot
+be read, decoded or assessed (no Pillow). Reads only; the one write is ``measure --out FILE`` on request.
 """
 from __future__ import annotations
 
@@ -442,7 +443,13 @@ def main(argv=None) -> int:
         same = _dump(build_spec()) == SPEC_PATH.read_text("utf-8")
         print("house-style.json matches the content" if same else "house-style.json is out of date: run measure --out")
         return 0 if same else 1
-    out = check_image(Path(a.file).read_bytes()) if a.cmd == "check-image" else check_description(a.text, owner_text=a.owner)
+    if a.cmd == "check-image":
+        try: out = check_image(Path(a.file).read_bytes())
+        except (OSError, PillowMissing):  # unreadable/undecodable picture or no Pillow: fixed, path-free, no score
+            sys.stderr.write("house_style: image could not be checked\n")
+            return 2
+    else:
+        out = check_description(a.text, owner_text=a.owner)
     print(json.dumps(out, indent=1, ensure_ascii=False))
     return 0 if out["pass"] else 1
 
