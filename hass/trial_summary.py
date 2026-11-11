@@ -69,9 +69,21 @@ def _add(into, other):
     into["interpreterCalls"] += other["interpreterCalls"]
 
 
+def _check_links(state_dir):
+    """Static admission: lstat each component from the anchor; a symlink at any depth (even dangling) is refused. `..` only
+    follows an already-checked real directory, so `link/../x` is refused at `link`. Not race-free."""
+    cur = os.sep
+    for part in os.path.join(os.getcwd(), os.fspath(state_dir)).split(os.sep):
+        if part in ("", "."): continue
+        cur = os.path.dirname(cur) if part == ".." else os.path.join(cur, part)
+        if part != ".." and not stat.S_ISDIR(os.lstat(cur).st_mode): raise Unreadable  # S_ISDIR is false for a link
+
+
 def _check_store(state_dir):
+    """The store file path; the state directory must be real, with no symlink anywhere in its traversal."""
     sdir = Path(state_dir)
     try:
+        _check_links(state_dir)
         if sdir.is_symlink() or not sdir.is_dir(): raise Unreadable
         mode = os.lstat(path := sdir / "conversation.sqlite3").st_mode  # lstat: a dangling link is seen
     except OSError: raise Unreadable from None
