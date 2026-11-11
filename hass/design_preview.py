@@ -114,15 +114,28 @@ def _prepare_out(out: str, top: str) -> Path:
     return path
 
 
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
 def _private_png(value, expected: Path | None) -> str | None:
     """The expected path when value names it exactly and it is a regular 0600 file; else None."""
     if expected is None or not isinstance(value, str) or value != str(expected):
         return None
     try:
         info = os.lstat(value)
+        if not (stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600):
+            return None
+        fd = os.open(value, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            opened = os.fstat(fd)
+            if not (stat.S_ISREG(opened.st_mode) and stat.S_IMODE(opened.st_mode) == 0o600):
+                return None
+            # Format identification only: the eight-byte signature, not CRC, size or pixel validity.
+            return value if os.read(fd, 8) == PNG_SIGNATURE else None
+        finally:
+            os.close(fd)
     except OSError:
         return None
-    return value if info and stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600 else None
 
 
 def _entry(side: str, page: str, result: dict, expected: Path | None = None) -> dict:
