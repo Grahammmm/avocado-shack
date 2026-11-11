@@ -69,8 +69,10 @@ def load_corpus(path=CORPUS) -> list:
         if row["intent"] not in INTENTS: raise bad("unknown intent")
         if not (isinstance(row["pending"], list) and all(isinstance(p, dict) for p in row["pending"])): raise bad("bad pending")
         codes = ie._pending_codes(row["pending"], n)
-        expects = [row["expect"], *row.get("also", [])]
-        if not isinstance(row.get("also", []), list) or not all(ie._expect_ok(e) for e in expects): raise bad("bad expect")
+        also = row.get("also", [])
+        if not isinstance(also, list): raise bad("bad expect")
+        expects = [row["expect"], *also]
+        if not all(ie._expect_ok(e) for e in expects): raise bad("bad expect")
         if any("ops" in e and e["revises"] not in (None, *codes) for e in expects): raise bad("revises names no pending draft")
         if row["ask"] is not ("question" in row["expect"]) or row["refuse"] is not ("unsupported" in row["expect"]): raise bad("ask/refuse disagree with expect")
         if "notes" in row and not ie._notes_ok(row["notes"]): raise bad("bad notes")

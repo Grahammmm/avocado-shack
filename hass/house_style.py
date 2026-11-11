@@ -8,7 +8,8 @@ A check is hard (a failure fails the item whatever the score) or soft (it only l
 
 Text, record and spec code is standard library only. Reading or measuring a picture needs Pillow (already used by
 inventory-intake/import_photos.py and the logo steps in storefront-mockup/README.md); without it the image functions raise
-``PillowMissing`` and nothing else is affected. Reads only; the one write is ``measure --out FILE`` on request.
+``PillowMissing`` and nothing else is affected. ``check-image FILE`` exits 0/1 on a scored pass/fail, and 2 with one fixed path-free stderr line when the picture cannot
+be read, decoded or assessed (no Pillow). Reads only; the one write is ``measure --out FILE`` on request.
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 from hass import claims  # noqa: E402
 from hass.content_model import (CATEGORIES, FORBIDDEN_TEXT, MAKER_FIELDS, PRODUCT_INTERNAL_FIELDS,  # noqa: E402
                                 PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, SHELF_LABELS, TEXT_LIMITS,
-                                load_content)
+                                _https, load_content)
 
 SPEC_PATH = REPO_ROOT / "hass" / "style" / "house-style.json"
 SITE = REPO_ROOT / "storefront-mockup"
@@ -390,10 +391,13 @@ def check_maker(rec: dict, spec=None, *, key=None) -> dict:
     fields_ok = set(rec) - {"hidden"} <= set(MAKER_FIELDS) and {"name", "place", "story"} <= set(rec)
     bad = [b for b in FORBIDDEN_TEXT if any(b in str(rec.get(f, "")) for f in ("name", "place", "story"))]
     url = rec.get("url")
+    url_problems: list = []  # absent is fine; a present value (even null) gets the content validator's full public-https test
+    if "url" in rec:
+        _https(url_problems, "url", url)
     checks = [_c("fields name, place, story (+url)", fields_ok, sorted(rec), 3, True),
               _c("plain text", not bad, f"{bad}" if bad else "ok", 2, True),
               _c("limits", len(rec.get("name", "")) <= 80 and len(rec.get("place", "")) <= 60 and m["chars"] <= 600, f"story {m['chars']} chars", 2, True),
-              _c("url is public https or absent", url is None or str(url).startswith("https://"), str(url), 2, True),
+              _c("url is public https or absent", not url_problems, str(url), 2, True),
               _c("place like 'Town, California'", bool(MAKER_PLACE_RE.fullmatch(rec.get("place", ""))), rec.get("place", ""), 2),
               _c("key equals name", key is None or key == rec.get("name"), str(key), 1),
               _c("story length like the others", mk["chars"]["p05"] * .35 <= m["chars"] <= mk["chars"]["p95"] * 1.25,
@@ -442,7 +446,13 @@ def main(argv=None) -> int:
         same = _dump(build_spec()) == SPEC_PATH.read_text("utf-8")
         print("house-style.json matches the content" if same else "house-style.json is out of date: run measure --out")
         return 0 if same else 1
-    out = check_image(Path(a.file).read_bytes()) if a.cmd == "check-image" else check_description(a.text, owner_text=a.owner)
+    if a.cmd == "check-image":
+        try: out = check_image(Path(a.file).read_bytes())
+        except (OSError, PillowMissing):  # unreadable/undecodable picture or no Pillow: fixed, path-free, no score
+            sys.stderr.write("house_style: image could not be checked\n")
+            return 2
+    else:
+        out = check_description(a.text, owner_text=a.owner)
     print(json.dumps(out, indent=1, ensure_ascii=False))
     return 0 if out["pass"] else 1
 

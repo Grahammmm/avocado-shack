@@ -18,10 +18,12 @@ import unittest
 from datetime import date, timedelta
 from unittest import mock
 
-from hass import editor, interpret_check, live_policy, sitegen, skills, voice
-from hass.content_model import REPO_ROOT, load_and_validate, shop_today
+from hass import editor, interpret_check, live_policy, morning_report, sitegen, skills, voice
+from hass.content_model import REPO_ROOT, load_and_validate, load_content, shop_today
 from hass.ops import load_registry
-from hass.skills import kinds, model, specials as sp, testkit
+from hass.skills import dispatch, kinds, model, reports, specials as sp, testkit
+from hass.tests import test_skill_dispatch as base
+from hass.tests.test_conversation import T0
 from hass.tests.test_store_ops import StoreTestCase, _req
 
 FIXTURES = REPO_ROOT / "hass" / "tests" / "fixtures"
@@ -748,11 +750,12 @@ class LiveBoundaryTests(StoreTestCase):
 class DispatcherHookTests(unittest.TestCase):
     def test_rules_and_the_read_only_answer_are_handed_to_the_dispatcher_when_it_exists(self):
         fake = types.ModuleType("hass.skills.dispatch")
-        fake.RULES, fake.READ_ONLY = {"no-price": object()}, {}
+        fake.RULES, fake.READ_ONLY, fake.READ_ONLY_LONG = {"no-price": object()}, {}, set()
         with mock.patch.dict(sys.modules, {"hass.skills.dispatch": fake}), mock.patch.object(skills, "dispatch", fake, create=True):
             sp._register()
         self.assertEqual(set(fake.RULES) - {"no-price"}, set(sp.RULES))
         self.assertIs(fake.READ_ONLY["specials.show"], sp.show_reply)
+        self.assertEqual(fake.READ_ONLY_LONG, {"specials.show"})
         self.assertIsNot(fake.RULES["no-price"], sp.RULES.get("no-price"))  # another group's rule is never replaced
 
     def test_without_the_dispatcher_nothing_happens(self):
@@ -769,6 +772,119 @@ class DispatcherHookTests(unittest.TestCase):
             hit = rule({"title": "Eggs $3", "deal": "<b>", "end": None, "special": "zzz"}, ["x"], ctx())
             self.assertTrue(hit is None or (isinstance(hit, tuple) and len(hit) == 2 and isinstance(hit[0], str)
                                             and hit[1] in ("unknown-skill", "policy", "unsupported-page", "stuck", "price", "other")))
+
+
+class LongListTests(base.SkillCase):
+    """RF0325-11: the whole specials list reaches the owner through the real Dispatcher and the strict voice check, even past the
+    everyday 600 characters; nothing is cut, and nothing else about the strict check is relaxed."""
+    SKILLS = (sp.SPECIALS_SHOW, reports.REPORT_SHELF, reports.ANSWER_SITE, base.DESCRIBE)
+    DEAL = "Buy two jars and share one with a friend this weekend at the picnic"
+
+    def seed(self, rows):
+        path = self.repo.wt / "hass" / "content" / "store.json"
+        doc = json.loads(path.read_text("utf-8"))
+        doc["specials"] = rows
+        path.write_text(json.dumps(doc), "utf-8")
+
+    def six(self):
+        today = shop_today(T0)
+        return [special(f"sharing-offer-{c.lower()}", f"Sharing offer {c}", start=(today - TODAY).days, end=(today - TODAY).days + 4,
+                        deal=self.DEAL, order=n) for n, c in enumerate("ABCDEF")]
+
+    def expected(self, *, today=None):
+        return voice.plain(sp.show_reply({}, types.SimpleNamespace(
+            today=today or shop_today(T0), content=load_content(self.repo.wt / "hass" / "content"))))
+
+    def say_replies(self, text, reply):
+        self.script(text, reply)
+        return self.say(text), self.replies()
+
+    def untouched_since(self, before):
+        self.assertEqual(self.snapshot(), before)
+        self.nothing_written()
+        self.assertEqual(self.drafts(), [])
+
+    def snapshot(self):
+        return {p.name: p.read_bytes() for p in sorted((self.repo.wt / "hass" / "content").iterdir()) if p.is_file()}
+
+    def test_six_specials_list_delivered_complete_under_strict_voice(self):
+        self.seed(self.six())
+        before = self.snapshot()
+        want = self.expected()
+        self.assertGreater(len(want), voice.LONG_AFTER)
+        for n in "ABCDEF":
+            self.assertIn(f"Sharing offer {n}: {self.DEAL},", want)
+        self.assertEqual(self.say_replies("what are this week's specials", base.skill_reply("specials.show")), ("answer", [want]))
+        self.untouched_since(before)
+        # without the registration (the old behaviour) the strict voice rule refuses the same list: nothing is truncated
+        with mock.patch.object(dispatch, "READ_ONLY_LONG", set()):
+            with self.assertRaises(voice.VoiceError):
+                self.say_replies("what are this week's specials", base.skill_reply("specials.show"))
+
+    def test_specials_long_registration_idempotent_and_narrow(self):
+        handler = dispatch.READ_ONLY["specials.show"]
+        sp._register()
+        sp._register()
+        self.assertIs(dispatch.READ_ONLY["specials.show"], handler)
+        self.assertIs(handler, sp.show_reply)
+        self.assertIn("specials.show", dispatch.READ_ONLY_LONG)
+        self.assertNotIn("answer.site", dispatch.READ_ONLY_LONG)
+        # an unrelated read-only skill that is not registered as long still has the everyday limit
+        self.registry = base.registry_of(reports.ANSWER_SITE)
+        self.conv = self.open()
+        with mock.patch.dict(dispatch.READ_ONLY, {"answer.site": lambda slots, ctx: "That is fine. " * 60}):
+            with mock.patch.object(self.conv, "_reply", wraps=self.conv._reply) as reply:
+                with self.assertRaises(voice.VoiceError):
+                    self.say_replies("what time do we close", base.skill_reply("answer.site", kind="hours"))
+        self.assertEqual(reply.call_args.kwargs, {"long_ok": False})
+        # the long allowance lifts only the length rule: an emoji in a long specials list is still refused
+        self.seed(self.six())
+        self.registry = base.registry_of(sp.SPECIALS_SHOW)
+        self.conv = self.open()
+        with mock.patch.dict(dispatch.READ_ONLY, {"specials.show": lambda slots, ctx: self.expected() + " \U0001F600"}):
+            with self.assertRaises(voice.VoiceError):
+                self.say_replies("what are this week's specials", base.skill_reply("specials.show"))
+
+    def test_coming_and_empty_specials_keep_exact_output(self):
+        today = shop_today(T0)
+        gap = (today - TODAY).days
+        coming = [special(f"coming-{n}", f"Later {n}", start=gap + 2 + n, end=gap + 9, deal=f"deal {n}", order=10 + n) for n in range(5)]
+        rows = [*self.six()[:2], special("ended", "Ended eggs", start=gap - 9, end=gap - 3, order=20), *coming]
+        self.seed(rows)
+        want = self.expected()
+        self.assertEqual(want.splitlines()[0], "On now:")
+        self.assertEqual([ln.split(":")[0] for ln in want.splitlines() if ln.startswith("Later ")], ["Later 0", "Later 1", "Later 2"])
+        self.assertNotIn("Ended eggs", want)
+        self.assertEqual(self.say_replies("what are this week's specials", base.skill_reply("specials.show")), ("answer", [want]))
+        self.seed([])
+        self.assertEqual(self.say_replies("any specials today", base.skill_reply("specials.show")), ("answer", [sp.NO_SPECIALS_NOW]))
+        self.seed([special("ended", "Ended eggs", start=gap - 9, end=gap - 3)])
+        self.assertEqual(self.say_replies("specials now", base.skill_reply("specials.show")), ("answer", [sp.NO_SPECIALS_NOW]))
+
+    def test_specials_read_only_batch_preserves_order_and_no_edits(self):
+        self.seed(self.six())
+        before = self.snapshot()
+        today = shop_today(T0)
+        shelf = voice.plain(morning_report.render(morning_report.facts(load_content(self.repo.wt / "hass" / "content"), today)))
+        show = {"skill": "specials.show", "slots": {}}
+        two = {"calls": [show, {"skill": "report.shelf", "slots": {}}, show], "revises": None}  # the repeated ask is answered once
+        self.assertEqual(self.say_replies("specials and the shelf report", two), ("answer", [self.expected(), shelf]))
+        self.untouched_since(before)
+        flipped = {"calls": [{"skill": "report.shelf", "slots": {}}, show], "revises": None}
+        self.assertEqual(self.say_replies("shelf report then specials", flipped), ("answer", [shelf, self.expected()]))
+        self.untouched_since(before)
+        # a change in the same message: neither is answered nor drafted
+        mixed = {"calls": [show, {"skill": "item.describe", "slots": {"product": "Hass avocado", "description": "Ripe and creamy"}}], "revises": None}
+        self.assertEqual(self.say_replies("specials and make the avocado ripe", mixed), ("refused", [dispatch.MIXED]))
+        self.untouched_since(before)
+        # an unknown sibling skill is not answered as a list either: written down, nothing edited
+        unknown = {"calls": [show, {"skill": "no.such.skill", "slots": {}}], "revises": None}
+        status, [said] = self.say_replies("specials and something odd", unknown)
+        self.assertEqual(status, "backlog")
+        self.assertNotIn("On now:", said)
+        self.assertEqual(self.snapshot(), before)
+        self.nothing_written()
+        self.assertEqual(self.drafts(), [])
 
 
 class OutsideAssumptionTests(unittest.TestCase):
