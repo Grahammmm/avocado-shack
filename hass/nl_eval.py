@@ -66,7 +66,7 @@ def load_corpus(path=CORPUS) -> list:
             raise EvalError(f"corpus line {n}: not a case")
         bad = lambda why: EvalError(f"corpus line {n}: {why}")  # noqa: E731
         if not (isinstance(row["text"], str) and row["text"].strip() and len(row["text"]) <= 4000): raise bad("bad text")
-        if row["intent"] not in INTENTS: raise bad("unknown intent")
+        if not (isinstance(row["intent"], str) and row["intent"] in INTENTS): raise bad("unknown intent")
         if not (isinstance(row["pending"], list) and all(isinstance(p, dict) for p in row["pending"])): raise bad("bad pending")
         codes = ie._pending_codes(row["pending"], n)
         also = row.get("also", [])
