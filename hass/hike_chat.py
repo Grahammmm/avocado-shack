@@ -202,6 +202,10 @@ def _signup_offer(ops, events):
     old = LIMIT_SENTENCE.sub(" ", rest.get("description", event.get("description") or "")).strip()
     sentence = limit_sentence(cap)
     rest["description"] = f"{old} {sentence}".strip()
+    if len(rest["description"]) > DESCRIPTION_LIMIT:  # the yes would only dead-end in a length refusal: explain now, offer nothing
+        return Shaped(ops, ask={"kind": "offer", "suggest": None, "ops": None, "question": (
+            f"{SIGNUP_TRUTH}, and the description is too full to add the guest limit. Nothing changed. "
+            "Send a shorter description with the guest limit, and I can try again.")})
     question = (f"{SIGNUP_TRUTH}, so I can't turn sign-up on for {name}. I can add {voice.quote(sentence)} to its description "
                 "instead, so people ask you at the shop. Want that? Reply yes or no.")
     return Shaped(ops, ask={"kind": "offer", "question": question, "suggest": None, "ops": [{"op": "hike.update", "args": rest}]})
