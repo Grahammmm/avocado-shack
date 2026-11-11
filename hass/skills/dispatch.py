@@ -458,9 +458,16 @@ class Dispatcher:
         return "Do you want to " + ", or ".join(labels) + "?", offered
 
     # entry points --------------------------------------------------------------------------------------------
+    def _explicit_page(self, msg) -> bool:
+        from hass.skills.backlog import explicit_page_request
+        return self.registry.get("page.faq") is not None and explicit_page_request(msg.text)
+
     def cheap(self, msg, now):
         """A short answer to the asked slot read by code alone (no model call). The disposition, or None to let the model read it."""
         req = self.conv.requests.get(self._owner(), now)
+        if req is None and self._explicit_page(msg):  # RF2345-12: an unmistakable fresh FAQ-page ask is refused by code, no model
+            from hass.skills.backlog import NO_FAQ
+            return self._backlog(msg, now, None, "", "unsupported-page", reply=NO_FAQ, texts=[msg.text])
         if req is None or not req["skill"] or not req["asked_slot"]:
             return None
         skill = self.registry.get(req["skill"])

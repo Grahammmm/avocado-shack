@@ -201,3 +201,22 @@ def _main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(_main())
+
+
+# RF2345-12 (SKILLS-SPEC 3.26): the finite, explicit fresh-request grammar that code sends to the page.faq refusal before any model.
+_PAGE_FORMS = frozenset({"faq", "add an faq", "add a faq", "frequently asked questions", "add a frequently asked questions page",
+                         "add a questions page", "add a delivery policy page"})
+_FAQ_PAYLOAD = re.compile(r"faq:\s*\S")
+
+
+def explicit_page_request(text) -> bool:
+    """True only for the listed unmistakable fresh FAQ / delivery-policy page requests. Pure; anything else (including
+    negations, quotes, questions and compound messages) is False and keeps its normal route."""
+    if not isinstance(text, str):
+        return False
+    t = re.sub(r"\s+", " ", text.strip().lower())
+    if t.startswith("please "):
+        t = t[len("please "):].lstrip()
+    if _FAQ_PAYLOAD.match(t):
+        return True
+    return t.rstrip(".?!").strip() in _PAGE_FORMS
