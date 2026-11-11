@@ -108,7 +108,7 @@ def make_photo(product="jar", background="white-sheet", size=(1200, 900), angle=
         gps[1], gps[2], gps[3], gps[4] = "N", (35.0, 22.0, 0.0), "W", (120.0, 51.0, 0.0)
     out = io.BytesIO()
     if fmt == "PNG":
-        stored.save(out, "PNG")
+        stored.save(out, "PNG", **({"exif": exif} if exif is not None else {}))
     else:
         stored.convert("RGB").save(out, "JPEG", quality=84, **({"exif": exif} if exif is not None else {}))
     return out.getvalue()
