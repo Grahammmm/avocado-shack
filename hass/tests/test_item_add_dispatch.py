@@ -253,6 +253,28 @@ class RealDispatcher(unittest.TestCase):
         self.assertEqual(len(drafts), 1)  # one change, one product
         self.assertEqual(json.dumps(drafts[0]).count("Plum jam"), 0)
 
+    def test_real_add_bare_list_photo_is_retained_without_draft(self):
+        for first in ("add lemon curd and plum jam from Cal Poly, in stock", "add lemon curd, plum jam from Cal Poly, in stock"):
+            with self.subTest(first=first):
+                chat = self.open(JAR)
+                chat.script(first, reply(name="Lemon curd", maker="Cal Poly", shelf="pantry", availability="yes"))
+                d1, r1 = chat.say(first, JAR)
+                self.assertEqual((d1, r1), ("question", [ia.ONE_PHOTO]))
+                live = chat.live()
+                self.assertEqual((live["skill"], live["state"]) if live else None, ("item.add", "open"))  # kept, with its photo and text
+                self.assertEqual(chat.drafts(), [])  # no partial draft from the crowded message
+                self.assertEqual(chat.commits(), 0)
+                chat.script("the lemon curd only please", reply(name="Lemon curd"))
+                d3, r3 = chat.say("the lemon curd only please")
+                self.assertEqual(d3, "proposed")
+                text = "\n".join(r3)
+                self.assertIn("A new product: Lemon curd", text)
+                self.assertNotIn("Plum jam", text)
+                self.assertIn("Reply yes to save it", text)
+                self.assertEqual(chat.commits(), 0)  # only his coded yes writes
+                self.assertEqual(len(chat.drafts()), 1)
+                self.assertEqual(json.dumps(chat.drafts()[0]).count("Plum jam"), 0)
+
     def test_a_photo_alone_asks_what_it_is_for_instead_of_guessing(self):
         chat = self.open(JAR)
         (disposition, replies), = self.say_all(chat, [("", None)], JAR)

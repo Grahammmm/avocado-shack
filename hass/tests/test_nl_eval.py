@@ -283,6 +283,35 @@ class CliTests(unittest.TestCase):
             code, out, err = run("score", "--corpus", path, "--replies", self.tmp / "missing.jsonl")
             self.assertEqual((code, out, err), (2, "", "corpus line 1: bad expect"))
 
+    def corpus_with_intent(self, value, at=0):
+        lines = CORPUS.read_text("utf-8").splitlines()
+        lines[at] = json.dumps({**json.loads(lines[at]), "intent": value})
+        path = self.tmp / "intent.jsonl"
+        path.write_text("\n".join(lines) + "\n", "utf-8")
+        return path
+
+    def test_non_string_and_unknown_intents_refuse_with_the_line_number_never_type_error(self):
+        canary = "private-canary"
+        for value in ([], {}, ["availability"], {canary: 1}, [[canary]], None, True, False, 7, 1.5, "", canary, "Availability", " availability"):
+            for at in (0, 5):
+                with self.assertRaises(nl.EvalError) as ctx: nl.load_corpus(self.corpus_with_intent(value, at))
+                self.assertEqual(str(ctx.exception), f"corpus line {at + 1}: unknown intent")
+
+    def test_cli_container_intent_exits_2_before_replies_are_read(self):
+        for value in ([], {}, ["availability"]):
+            code, out, err = run("score", "--corpus", self.corpus_with_intent(value), "--replies", self.tmp / "missing.jsonl")
+            self.assertEqual((code, out, err), (2, "", "corpus line 1: unknown intent"))
+
+    def test_intent_precedence_and_allowed_values_preserved(self):
+        lines = CORPUS.read_text("utf-8").splitlines()
+        row = json.loads(lines[0])
+        for change, message in (({"intent": [], "text": " "}, "bad text"), ({"intent": [], "pending": 1}, "unknown intent")):
+            path = self.tmp / "p.jsonl"
+            path.write_text(json.dumps({**row, **change}) + "\n" + "\n".join(lines[1:]) + "\n", "utf-8")
+            with self.assertRaises(nl.EvalError) as ctx: nl.load_corpus(path)
+            self.assertEqual(str(ctx.exception), f"corpus line 1: {message}")
+        for intent in nl.INTENTS: self.assertEqual(nl.load_corpus(self.corpus_with_intent(intent))[0]["intent"], intent)
+
 
 def fake_model(seen=None):
     """A transport that answers each corpus text with its ideal reply (looked up by the owner text in the request)."""

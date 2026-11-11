@@ -262,7 +262,9 @@ def render(data: bytes, spec=None) -> dict:
     if _too_thin(img.size): raise Refused("too-narrow")  # also a supplied cut-out: the straightening maths needs width and height
     report = {"input": f"{img.width}x{img.height}", "rotation_applied": turned}
     if alpha is not None:
-        mask, found = alpha.filter(ImageFilter.GaussianBlur(.9)), {"isolation": "cutout", "source": "alpha channel"}
+        # supplied coverage stays coupled to colour: premultiplied RGB, so invisible pixels' RGB never reaches a visible sample
+        mask, found = alpha, {"isolation": "cutout", "source": "alpha channel"}
+        img = Image.merge("RGB", [ImageChops.multiply(band, alpha) for band in img.split()])
     else:
         mask, found = isolate(img)
     report.update(found)
@@ -276,7 +278,7 @@ def render(data: bytes, spec=None) -> dict:
     else:
         lean = _lean(mask)
         if lean is not None:  # straighten a leaning product; the corners the turn opens are never inside the mask
-            img = img.rotate(lean, resample=_resample(Image, "BICUBIC"), expand=True, fillcolor=img.getpixel((0, 0)))
+            img = img.rotate(lean, resample=_resample(Image, "BICUBIC"), expand=True, fillcolor=(0, 0, 0) if alpha is not None else img.getpixel((0, 0)))
             mask = mask.rotate(lean, resample=_resample(Image, "BICUBIC"), expand=True, fillcolor=0)
             report["straightened_degrees"] = round(lean, 1)
         box = mask.point(lambda v: 255 if v > 100 else 0).getbbox()
@@ -292,6 +294,8 @@ def render(data: bytes, spec=None) -> dict:
             factor = MAX_UPSCALE
         size = (max(1, round(subject.width * factor)), max(1, round(subject.height * factor)))
         subject, cut = subject.resize(size, lanczos), cut.resize(size, lanczos)
+        if alpha is not None:  # back to straight colour for the final source-over paste
+            subject = Image.frombytes("RGBa", size, Image.merge("RGBA", (*subject.split(), cut)).tobytes()).convert("RGBA").convert("RGB")
         solid = [v for v, m in zip(subject.convert("L").getdata(), cut.getdata()) if m > 200]
         luma = statistics.fmean(solid) if solid else 128
         lo, hi = stats["subject_luma"]["p05"], stats["subject_luma"]["p95"]

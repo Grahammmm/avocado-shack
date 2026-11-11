@@ -75,16 +75,24 @@ def table(rows) -> list:
             for i, st in seen.items() if "accepted" in st or "webhook-in" in st]
 
 
+def _display(token: str) -> str:
+    """CLI-only form of an id or stage name: a token with whitespace or a non-printable character (controls, ESC, line
+    separators, lone surrogates) is shown as a quoted ASCII JSON string; everything else is unchanged. Keys are never altered."""
+    if any(c.isspace() or not c.isprintable() for c in token): return json.dumps(token, ensure_ascii=True)
+    return token
+
+
 def main(argv=None) -> int:
     """`python3 hass/stagelog.py LOG [LOG ...]`: read-only; prints one line per message, seconds after its first stage, for the
-    Mac log (spool dir `stages.jsonl`) and the host log (host dir `stages.jsonl`) together. Both machines' clocks should be in step."""
+    Mac log (spool dir `stages.jsonl`) and the host log (host dir `stages.jsonl`) together. Both machines' clocks should be in step.
+    Unsafe ids/stage names (control characters, surrogates) are printed as quoted JSON escapes, never raw."""
     import sys
     args = sys.argv[1:] if argv is None else argv
     if not args:
         print(main.__doc__)
         return 2
     for ident, stages in table([r for path in args for r in read(path)]):
-        print(ident, " ".join(f"{s}={t}" for s, t in stages.items()))
+        print(_display(ident), " ".join(f"{_display(s)}={t}" for s, t in stages.items()))
     return 0
 
 

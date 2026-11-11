@@ -126,6 +126,26 @@ _NOUN = r"[\w'\u2019-]+(?:\s+[\w'\u2019-]+){0,3}?"
 TWO_IN_MESSAGE = re.compile(rf"\b(?:add|adding|got(?:\s+in)?|have|new)\s+(?:the|a|an|some)\s+{_NOUN}\s+and\s+(?:the|a|an|some)\s+\w",
                             re.IGNORECASE)
 TWO_IN_NAME = re.compile(r"\band\s+(?:the|a|an|some|another|their)\s+\w|\s[&+]\s|,\s+and\s|\bplus\s+(?:the|a|an|some)\s+\w", re.IGNORECASE)
+# A bare list in his add phrase ("add lemon curd and plum jam", "add lemon curd, plum jam"): the product the model chose sits
+# next to a list sign and another product phrase. The chosen name is taken out whole first, so "Salt and vinegar chips" is one
+# product; a phrase that opens with a preposition, a stock or photo word or a describing word, or is a maker or a place, is an
+# aside and not a second product.
+ADD_PHRASE = re.compile(r"\b(?:add|adding|got(?:\s+in)?|have|new)\s+([^.!?\n]+)", re.IGNORECASE)
+_SIGN = r"(?:\s*,\s*(?:and\s+)?|\s+and\s+|\s+plus\s+)"
+_ASIDE_WORDS = frozenset(
+    "in on at from by with for of to into please thanks thank both all also too it its it's that which this these those "
+    "photo picture pic image caption stock today now is are was were goes go put sold size price made make makes "
+    "taste flavor flavour texture stuff i we he she they and or but so yes no ok okay".split())
+# Describing words that open a product phrase ("sweet corn", "organic raspberry jam") but are only an aside when nothing that
+# names a product follows them ("great on toast", "fresh from the farm", "tasty").
+_DESCRIBING_WORDS = frozenset(
+    "great good nice lovely perfect tasty delicious sweet tart fresh packaged organic local homemade handmade new".split())
+_MAKER_WORDS = frozenset("farm farms ranch orchard orchards kitchen kitchens bakery creamery dairy company co inc llc apiary "
+                         "vineyard winery mill foods garden gardens".split())
+_STATES = frozenset(
+    "alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii idaho illinois indiana iowa "
+    "kansas kentucky louisiana maine maryland massachusetts michigan minnesota mississippi missouri montana nebraska nevada "
+    "ohio oklahoma oregon pennsylvania tennessee texas utah vermont virginia washington wisconsin wyoming".split())
 BOTH_WORD = re.compile(r"\b(?:both|each\s+of\s+them|two\s+(?:new\s+)?(?:items|products|things))\b", re.IGNORECASE)
 
 
@@ -495,11 +515,60 @@ def _next_id(ctx, content):
 
 
 # -- one photo, one product -------------------------------------------------------------------------------------------
+def _norm(text) -> str:
+    text = (text or "").lower().replace("\u2019", "'")
+    return " ".join(re.sub(r"\s[&+]\s", " and ", text).split())
+
+
+def _is_product_phrase(chunk, *, after="") -> bool:
+    """True when ``chunk`` (the words beside the chosen name in a list) reads as another product and not an aside."""
+    words = chunk.split()
+    while words and words[0] in ("the", "a", "an", "some", "another"):
+        words = words[1:]
+    while words and words[0] in _DESCRIBING_WORDS:  # "sweet corn" opens with a describing word but still names a product
+        words = words[1:]
+    if not words or words[0] in _ASIDE_WORDS or not words[0][0].isalpha():
+        return False
+    for i, word in enumerate(words):
+        if word in _ASIDE_WORDS:
+            words = words[:i]
+            break
+    if not words or len(words) > 4 or any(w.strip(".,") in _MAKER_WORDS for w in words):
+        return False
+    nxt = re.match(r"\s*,\s*([a-z]+)", after)
+    return not (nxt and nxt.group(1) in _STATES)  # "Smith Farm, Oregon" is a maker and its place
+
+
+def _bare_list(name, turn) -> bool:
+    """True when this text lists another product right beside the one the model named: ``add lemon curd and plum jam`` or
+    ``add lemon curd, plum jam``. The name is taken out whole, so ``Salt and vinegar chips`` is one product."""
+    name = _norm(_clean(name))
+    if not name:
+        return False
+    find = re.compile(r"(?<![\w'])" + r"\s+".join(re.escape(t) for t in name.split()) + r"(?![\w'])")
+    for phrase in ADD_PHRASE.finditer(_norm(turn)):
+        listed = phrase.group(1)
+        hit = find.search(listed)
+        if not hit:
+            continue
+        left, right = listed[:hit.start()], listed[hit.end():]
+        beside = re.match(_SIGN + r"(.+)", right)
+        if beside:
+            tail = beside.group(1)
+            other = re.split(r",|\s+and\s+|\s+plus\s+", tail)[0]
+            if _is_product_phrase(other, after=tail[len(other):]):
+                return True
+        before = re.search(r"^(.*?)" + _SIGN + r"(?:(?:the|a|an|some|another)\s+)?$", left)
+        if before and _is_product_phrase(re.split(_SIGN, before.group(1))[-1]):
+            return True
+    return False
+
+
 def _two_in_turn(name, turn) -> bool:
     """True when this one text of his (with the name the model gave) puts two products on the photo."""
     if name and re.search(r"\band\b", name, re.IGNORECASE) and BOTH_WORD.search(turn):
         return True
-    return bool(TWO_IN_MESSAGE.search(turn))
+    return bool(TWO_IN_MESSAGE.search(turn)) or _bare_list(name, turn)
 
 
 def several_products(raw_name, message) -> bool:
@@ -857,7 +926,7 @@ SKILL_SLOTS = (
 )
 
 ITEM_ADD = Skill(
-    name="item.add", label="add a new product", version=1,
+    name="item.add", label="add a new product", version=2,
     summary="Add a new product from a photo and a few words: its maker if new, the picture, and whether it is in stock.",
     triggers=(
         Trigger("new honey from Cal Poly, goes on the pantry shelf"),

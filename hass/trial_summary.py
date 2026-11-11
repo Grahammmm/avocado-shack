@@ -19,7 +19,8 @@ MESSAGE_KEYS = ("approved", "rejected", "near-approval", "no-target", "needs-det
                 "photo-on-product", "photo-draft", "photo-refused", "other")
 COMMANDS = frozenset({"status", "pause", "resume", "help", "history", "find", "show", "report", "post", "margin", "hidden",
                       "listing", "undo", "memory-list", "memory-none", "memory-forgot", "memory-saved", "memory-updated",
-                      "memory-unchanged", "memory-invalid"})
+                      "memory-unchanged", "memory-invalid", "memory-ambiguous", "backlog-forgot", "backlog-none"})
+# `backlog` itself stays other: it also records declined/unknown skill requests, so it cannot be told from a command
 # keys of media.REPLIES (a test keeps this equal); only these suffixes of `photo-refused:` count as photo-refused
 PHOTO_REFUSED = frozenset({"empty", "too-large", "unsupported-type", "truncated", "corrupt-store", "not-found", "unreadable",
                            "needs-rotation", "many", "audio"})
@@ -79,12 +80,12 @@ def _check_store(state_dir):
 
 
 def _rows(db, tables, table, wanted, optional):
-    """Rows of `wanted` columns (required) plus `optional` ones (NULL when the old table lacks them); [] without the table."""
+    """Rows of `wanted` columns (required) plus `optional` ones (NULL when the old table lacks them); [] without the table; a lazy cursor, consumed before the connection closes."""
     if table not in tables: return []
     have = {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
     if not set(wanted) <= have: raise Unreadable
     cols = [*wanted, *(c if c in have else "NULL" for c in optional)]
-    return db.execute(f"SELECT {', '.join(cols)} FROM {table}").fetchall()
+    return db.execute(f"SELECT {', '.join(cols)} FROM {table}")
 
 
 def summarize(state_dir, start, days):
