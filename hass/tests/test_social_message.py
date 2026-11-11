@@ -61,6 +61,30 @@ class ClassifierTests(unittest.TestCase):
         self.assertEqual(classify_social(THUMB * 20000), "near")
 
 
+def _flag(payload, end="\U000E007F"):
+    return "\U0001F3F4" + "".join(chr(0xE0000 + ord(c)) for c in payload) + end
+
+
+SCOT, WALES = "\U0001F3F4\U000E0067\U000E0062\U000E0073\U000E0063\U000E0074\U000E007F", \
+    "\U0001F3F4\U000E0067\U000E0062\U000E0077\U000E006C\U000E0073\U000E007F"
+UNKNOWN_TAGS = (_flag("!"), _flag("123"), _flag(" "), _flag("GBENG"), _flag("gb!eng"), _flag("gbxyz"), _flag("gbeng" * 2),
+                _flag(""), _flag("gbeng", ""), _flag("gbeng") + "\U000E007F", _flag("gbeng") + "\U000E0067",
+                _flag("gbeng") + _flag("gb!eng"), _flag("gbeng") + "x", "\U000E0067" + _flag("gbeng"),
+                _flag("gbeng" + "a" * 5000))
+
+
+class FlagTagTests(unittest.TestCase):
+    def test_supported_subdivision_flags_are_social(self):
+        for text in (FLAG_ENG, SCOT, WALES, FLAG_ENG + SCOT + " " + WALES, AVOCADO + FLAG_ENG + " " + HEART, "\U0001F3F4"):
+            with self.subTest(text=text):
+                self.assertEqual(classify_social(text), "social")
+
+    def test_unknown_or_incomplete_tag_runs_fall_through(self):
+        for text in UNKNOWN_TAGS + (AVOCADO + _flag("!"), "hi " + FLAG_ENG):
+            with self.subTest(text=text[:12]):
+                self.assertIsNone(classify_social(text))
+
+
 class SocialConversationTests(H06TestCase):
     FIXED = "Nothing changed. Tell me what you'd like to change, or say help."
     def setUp(self):
@@ -112,6 +136,17 @@ class SocialConversationTests(H06TestCase):
         self.assertEqual(self.say(THUMB), "near-approval")  # the normal sweep expires both; nothing is renewed or applied
         self.assertEqual(self.replies(), ["Nothing is waiting for your yes."])
         self.assertEqual(({d["state"] for d in self.drafts()}, self.approvals(), self.interp.texts), ({"expired"}, 0, []))
+
+    def test_unknown_flag_reaches_interpreter_unchanged_known_flag_does_not(self):
+        self.social(FLAG_ENG)
+        for text in (_flag("!"), _flag("gbeng", "")):
+            with self.subTest(text=text[:6]):
+                self.interp.texts.clear()
+                drafts = self.drafts()
+                self.assertNotEqual(self.say(text), "social")
+                self.replies()
+                self.assertEqual(self.interp.texts, [text])
+                self.assertEqual((self.approvals(), self.commits(), self.drafts()), (0, 0, drafts))
 
     def test_duplicate_gets_one_reply_and_mixed_words_still_interpreted(self):
         self.assertEqual(self.say("thanks", pid="dup1"), "social")

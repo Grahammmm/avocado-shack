@@ -58,6 +58,8 @@ EMOJI_MODIFIER_BASE_RANGES = (
     (0x1F9BB, 0x1F9BB), (0x1F9CD, 0x1F9CF), (0x1F9D1, 0x1F9DD), (0x1FAC3, 0x1FAC5), (0x1FAF0, 0x1FAF8),
 )
 _VS16, _ZWJ, _KEYCAP, _BLACK_FLAG, _CANCEL_TAG = 0xFE0F, 0x200D, 0x20E3, 0x1F3F4, 0xE007F
+# Unicode 16.0 emoji-sequences.txt RGI_Emoji_Tag_Sequence: England, Scotland, Wales. Other tag runs fall through.
+_FLAG_TAGS = frozenset({"gbeng", "gbsct", "gbwls"})
 _BASE_STARTS = [lo for lo, _ in EMOJI_BASE_RANGES]
 _MOD_STARTS = [lo for lo, _ in EMOJI_MODIFIER_BASE_RANGES]
 
@@ -78,7 +80,8 @@ def _element(cps: list, i: int):
     if cp == _BLACK_FLAG and i + 1 < n and 0xE0020 <= cps[i + 1] <= 0xE007E:  # subdivision flag
         j = i + 1
         while j < n and 0xE0020 <= cps[j] <= 0xE007E: j += 1
-        return (j + 1, None) if j < n and cps[j] == _CANCEL_TAG else None
+        payload = "".join(chr(c - 0xE0000) for c in cps[i + 1:j])
+        return (j + 1, None) if j < n and cps[j] == _CANCEL_TAG and payload in _FLAG_TAGS else None
     if cp in range(0x1F3FB, 0x1F400) or not _in(EMOJI_BASE_RANGES, _BASE_STARTS, cp):  # skin modifiers are not bases
         return None
     j = i + 1
