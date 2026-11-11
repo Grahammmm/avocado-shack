@@ -183,6 +183,8 @@ def _load(path: Path, key: str, kind: type):
     try:
         raw = path.read_bytes()
         data = json.loads(raw.decode("utf-8"))
+    except RecursionError:
+        raise ReportError(f"cannot read {path}: JSON nesting is too deep") from None
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise ReportError(f"cannot read {path}: {exc}") from None
     if not isinstance(data, dict) or data.get("schemaVersion") != 1 or not isinstance(data.get(key), kind):
