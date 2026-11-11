@@ -21,7 +21,8 @@ FILES = {"hass/templates/index.html": SHELL, "hass/templates/hike/index.html": S
          "storefront-mockup/trail-explorer.css": "p{color:black}"}
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
 OK_CHECKS = {"pageLoaded": True, "noHorizontalOverflow": True, "noPageErrors": True, "noPosts": True,
-             "desktop:pageLoaded": True}
+             "desktop:pageLoaded": True, "desktop:noHorizontalOverflow": True, "desktop:noPageErrors": True,
+             "desktop:noPosts": True}
 GIT_ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
            "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
 
@@ -102,6 +103,13 @@ class FakePreviewer:
             Path(out_png).write_bytes(PNG)
             os.chmod(out_png, 0o600)
             return {"ok": False, "png": str(out_png), "checks": {**OK_CHECKS, "noHorizontalOverflow": False}}
+        if isinstance(override, dict):
+            Path(out_png).write_bytes(PNG)
+            os.chmod(out_png, 0o600)
+            desktop = Path(out_png).with_name(Path(out_png).stem + "-desktop.png")
+            desktop.write_bytes(PNG)
+            os.chmod(desktop, 0o600)
+            return {"ok": True, "png": str(out_png), "checks": override, "desktopPng": str(desktop)}
         if override == "bad-checks":
             Path(out_png).write_bytes(PNG)
             os.chmod(out_png, 0o600)
@@ -371,6 +379,37 @@ class OutputTests(RepoCase):
         fake = FakePreviewer({0: "bad-checks"})
         code, doc = self.run_fake(fake, out=self.tmp / "again")
         self.assertEqual((code, doc["captures"][0]["error"]), (1, "bad checks"))
+
+    def test_each_required_design_check_is_mandatory(self):
+        self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
+        n = 0
+        for key in OK_CHECKS:
+            for pos in range(4):
+                n += 1
+                fake = FakePreviewer({pos: {k: v for k, v in OK_CHECKS.items() if k != key}})
+                code, doc = self.run_fake(fake, out=self.tmp / f"o{n}")
+                self.assertEqual((code, doc["result"], len(fake.calls)), (1, "preview-failed", 4))
+                self.assertEqual([c["error"] for c in doc["captures"]],
+                                 ["bad checks" if i == pos else None for i in range(4)])
+                self.assertTrue(all(c["png"] and c["desktopPng"] for c in doc["captures"]))
+
+    def test_partial_or_unrelated_checks_are_not_success(self):
+        phone = {k: True for k in OK_CHECKS if not k.startswith("desktop:")}
+        desktop = {k: True for k in OK_CHECKS if k.startswith("desktop:")}
+        for checks in ({"other": True}, phone, desktop):
+            self.assertEqual(dp._entry("base", "home", self.result_for(checks))["error"], "bad checks")
+        self.assertIsNone(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": True}))["error"])
+        self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": False}))["error"], "check failed: extra")
+        self.assertEqual(dp._entry("base", "home", self.result_for(phone | {"noPosts": False}))["error"], "check failed: noPosts")
+        for bad in (None, "true", 1):
+            self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "noPosts": bad}))["error"], "bad checks")
+
+    def result_for(self, checks):
+        png, desk = self.tmp / "x.png", self.tmp / "x-desktop.png"
+        for p in (png, desk):
+            p.write_bytes(PNG)
+            os.chmod(p, 0o600)
+        return {"ok": True, "png": str(png), "desktopPng": str(desk), "checks": checks}
 
     def test_main_prints_exactly_one_json_line_and_leaves_git_alone(self):
         self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
