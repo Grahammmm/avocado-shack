@@ -809,7 +809,9 @@ def _seed(scratch, specials):
     data["specials"] = specials
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n", "utf-8")
     content = load_and_validate(scratch.wt / "hass" / "content", scratch.wt / "storefront-mockup")
-    sitegen.write_files(sitegen.render(content, scratch.wt / "hass" / "templates"), scratch.wt)
+    # Render on the kit's day, the day the rows' {d+N} dates are built from, never the real day (MAIN-RED-AVO-2: with the real day
+    # a seeded special that ended before it was left off the page, so the seed page differed from the page the row later saved).
+    sitegen.write_files(sitegen.render(content, scratch.wt / "hass" / "templates", today=shop_today(scratch._clock())), scratch.wt)
     testkit._git(scratch.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-a", "-m", "seed specials")
 
 

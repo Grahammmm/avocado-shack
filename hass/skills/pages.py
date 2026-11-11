@@ -84,7 +84,7 @@ def _said_affirmed(claim: str, texts) -> bool:
         for clause in _CLAUSE.split(fold(text)):
             if not rx.search(clause):
                 continue
-            if any(_negator(w.strip(",\"'()")) for w in clause.split()) or _REMOVAL.search(clause):
+            if any(_negator(w.strip(",\"'()")) for w in clause.replace("-", " ").split()) or _REMOVAL.search(clause):
                 continue
             return True
     return False

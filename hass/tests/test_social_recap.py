@@ -247,6 +247,46 @@ class SkillTests(RecapCase):
                 self.assertEqual(social._counts(said), counted)
         self.assert_untouched(before)
 
+    def test_compound_attendance_counts_are_complete(self):
+        for said, counted in (("Twenty one people came.", {21}), ("twenty-one people came.", {21}), ("THIRTY ONE guests came.", {31}),
+                              ("Ninety-nine people came.", {99}), ("Attendance was twenty one.", {21}), ("Turnout was forty-two", {42}),
+                              ("Twenty people came.", {20}), ("twenty  one hikers came", {21}), ("Twenty-one people and 12 guests came.", {21, 12})):
+            with self.subTest(said):
+                self.assertEqual(social._counts(said), counted)
+
+    def test_compound_distance_date_and_money_controls(self):
+        for said in ("We walked twenty one miles with friends.", "We walked twenty-one miles with friends.", "On Nov twenty one friends joined.",
+                     "Attendance was twenty-one miles", "mile twenty one hikers waited"):
+            with self.subTest(said):
+                self.assertEqual(social._counts(said), set())
+
+    def _with_recaps(self, **recaps):
+        path = self.content_dir / "community.json"
+        doc = json.loads(path.read_text("utf-8"))
+        doc["events"] = [hike(f"c-{i}", title, text) for i, (title, text) in enumerate(recaps.items())]
+        path.write_text(json.dumps(doc), "utf-8")
+
+    def test_digit_and_compound_attendance_equivalence(self):
+        self._with_recaps(**{"Bluff Walk": "21 people came.", "Cove Walk": "Twenty-one people came.", "Pier Walk": "Thirty one people came."})
+        before = self.snapshot()
+        for title, text in (("Bluff Walk", "bluff walk caption, say twenty one people came"), ("Bluff Walk", "bluff walk caption, say twenty-one people came"),
+                            ("Cove Walk", "cove walk caption, say 21 people came"), ("Cove Walk", "cove walk caption, say twenty one people came")):
+            with self.subTest(text):
+                saved = "21 people came." if title == "Bluff Walk" else "Twenty-one people came."
+                self.assertEqual(self.recap(text, title), ("answer", [self.want(title, saved)]))
+        self.assert_untouched(before)
+
+    def test_distinct_compounds_cannot_share_a_component(self):
+        self._with_recaps(**{"Bluff Walk": "Thirty-one people came.", "Cove Walk": "Twenty people came.", "Pier Walk": "Twenty-one people came."})
+        before = self.snapshot()
+        for title, text in (("Bluff Walk", "bluff walk caption, say twenty-one people came"), ("Bluff Walk", "bluff walk caption, say twenty one people came"),
+                            ("Cove Walk", "cove walk caption, say twenty-one people came"), ("Cove Walk", "cove walk caption, say twenty one people came"),
+                            ("Pier Walk", "pier walk caption, say twenty people came"), ("Pier Walk", "pier walk caption, say one person came and twenty-one people came"),
+                            ("Pier Walk", "pier walk caption, say 1 people came")):
+            with self.subTest(text):
+                self.assertEqual(self.recap(text, title), ("refused", [social.ADD_TO_RECAP]))
+        self.assert_untouched(before)
+
     def test_tag_partners_and_publish_are_refused(self):
         before = self.snapshot()
         for text in ("bluff walk caption and tag the partners", "post about the bluff walk with the hashtag #hikingfun", "caption, thank @trailcrew please",
