@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -125,7 +125,7 @@ def _plan(slots, ctx=None) -> list:
         raise Refusal(ASK_DAY, "question")
     if when < today:
         raise Refusal(PAST.format(when=restock_day(when)))
-    if when > today + timedelta(days=MAX_AHEAD):
+    if (when - today).days > MAX_AHEAD:
         raise Refusal(TOO_FAR)
     if product is not None and product.get(FIELD) == when.isoformat():
         raise Refusal(ALREADY.format(name=name, when=restock_day(when)))
@@ -157,7 +157,7 @@ def notes(name, slots, ctx) -> dict:
 _PRODUCTS = "hass/content/products.json"
 
 STOCK_RESTOCK = Skill(
-    name="stock.restock", label="record when more is coming", version=1,
+    name="stock.restock", label="record when more is coming", version=2,
     summary="Note the day more of one product is expected. A day only; never a count, never the shelf word.",
     triggers=(
         Trigger("more honey coming Thursday"),

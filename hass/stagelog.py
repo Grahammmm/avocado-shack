@@ -5,7 +5,7 @@ missing directory or a bad path just means no line. The file stops growing at MA
 `table()` joins the Mac log and the host log into the stage table (offsets from the first stage of each message).
 Nothing here reads a clock the callers do not pass in, opens a socket or changes any state.
 """
-import hashlib, json, os, time  # noqa: E401
+import hashlib, json, math, os, time  # noqa: E401
 from pathlib import Path
 
 MAX_BYTES = 512 * 1024
@@ -41,6 +41,13 @@ class StageLog:
 def off(stage, ident, **extra): return None  # noqa: E704 - the no-op stand-in
 
 
+def _usable(t) -> bool:
+    """True for a finite int/float timestamp (not bool; huge ints that cannot become a float are unusable)."""
+    if type(t) not in (int, float): return False
+    try: return math.isfinite(t)
+    except OverflowError: return False
+
+
 def read(path) -> list:
     """The valid lines of one stage log, in file order; unreadable or malformed lines are skipped."""
     out = []
@@ -50,7 +57,7 @@ def read(path) -> list:
         try: row = json.loads(raw)
         # Excessive nesting is malformed diagnostic input too; skip only this line.
         except (ValueError, RecursionError): continue
-        if type(row) is dict and type(row.get("t")) in (int, float) and type(row.get("stage")) is str and type(row.get("id")) is str:
+        if type(row) is dict and _usable(row.get("t")) and type(row.get("stage")) is str and type(row.get("id")) is str:
             out.append(row)
     return out
 
