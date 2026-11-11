@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/store.json",
+      "path": "notice",
+      "after": {
+        "text": "We're closed Thanksgiving, back Friday.",
+        "until": "2026-11-27"
+      }
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/index.html"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}

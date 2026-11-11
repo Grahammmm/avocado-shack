@@ -46,7 +46,7 @@ def _by_id(content, pid):
     return next((p for p in content.products if p.get("id") == pid), None)
 
 
-def product_ref(content, query, aliases=None) -> Resolved:
+def product_ref(content, query, aliases=None, *, include_hidden=False) -> Resolved:
     """One product the query names. Held: refused naming the state. Hidden: 'restore it first'. Several: a question."""
     if not isinstance(query, str) or not query.strip():
         return Resolved("none", reply="Which product do you mean?")
@@ -56,13 +56,13 @@ def product_ref(content, query, aliases=None) -> Resolved:
         name = product["name"]
         if product.get("status") == "held":
             return Resolved("held", reply=f"I can't change {name} right now. It is on hold until someone has looked at it.")
-        if product.get("status") != "active":
+        if product.get("status") != "active" and not (include_hidden and product.get("status") == "hidden"):
             return Resolved("hidden", reply=f"{name} is hidden. Do you want me to bring it back first?")
         return Resolved("one", value=found["match"], via=found.get("via", ""))
     cands = found["candidates"]
     if not cands:
         return Resolved("none", reply="I don't know a product called that. What is it called on the site?")
-    usable = [c for c in cands if c["status"] == "active"]
+    usable = [c for c in cands if c["status"] == "active" or (include_hidden and c["status"] == "hidden")]
     if len(usable) == 1 and len(cands) == 1:
         return Resolved("one", value=usable[0]["id"])
     if not usable:
