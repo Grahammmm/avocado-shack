@@ -310,7 +310,7 @@ class Substitution(unittest.TestCase):
                 done.append(1)
                 folder.rename(base / "moved")
                 folder.symlink_to(target)
-            return real(path, dir_fd=dir_fd)
+            return real(path, **({} if dir_fd is None else {"dir_fd": dir_fd}))
         return read
 
     def _assert_replacement_not_read(self, replacement_in_repo, extra):
@@ -371,7 +371,7 @@ class Substitution(unittest.TestCase):
             def read(path, dir_fd=None):
                 (folder / name).unlink()
                 (folder / name).symlink_to(canary)
-                return real(path, dir_fd=dir_fd)
+                return real(path, **({} if dir_fd is None else {"dir_fd": dir_fd}))
             with mock.patch.object(photo_trial, "_read_photo", read), mock.patch.object(photo_trial, "assess_photo") as assess:
                 code, out, err = _run([str(folder), "--json"])
             self.assertEqual((code, out), (2, ""), name)
