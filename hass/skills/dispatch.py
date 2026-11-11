@@ -89,6 +89,7 @@ class Ctx:
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
         self.guest_counts_db = guest_counts_db
+        self.multi_call = False  # True while the owner's texts are shared by several calls of one message (a skill cannot tie a loose word to one call)
         self.site_dir = site_dir  # the writer's storefront-mockup folder (the same checkout the content was read from), or None
 
 
@@ -528,6 +529,7 @@ class Dispatcher:
         attachments = (base["attachments"] if base else [])
         ctx = ctx or self._ctx(now, texts)
         ctx.texts = texts
+        ctx.multi_call = ctx.multi_call or bool(req and req["calls"])  # a queued call of a several-ask message shares its texts
         said = self._read_only_hook(skill, "preflight", ctx)  # a caption skill: an ask to post, send or schedule is answered first
         if said:
             conv.requests.mark(req["request_id"], "closed", now) if req else None
@@ -727,6 +729,7 @@ class Dispatcher:
                 return "refused"
             return self._read_only_calls(msg, now, result["calls"], req, texts, attachments)
         ctx = self._ctx(now, texts)
+        ctx.multi_call = len(result["calls"]) > 1
         ops, left, waiting, parts, stopped = [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
