@@ -8,7 +8,7 @@ products are refused, as is a request that changes nothing. Undo is the existing
 from __future__ import annotations
 
 import copy
-from datetime import date, timedelta
+from datetime import date
 
 from hass.content_model import shop_today
 from hass.ops import Arg, NeedsDetails, Op, Refused
@@ -34,7 +34,7 @@ def _set_restock(content, args, ctx):
         when, today = date.fromisoformat(day), shop_today(ctx.now)  # check_args already proved a real YYYY-MM-DD
         if when < today:
             return Refused(f"{day} is in the past; give a day from today on")
-        if when > today + timedelta(days=MAX_AHEAD):
+        if (when - today).days > MAX_AHEAD:
             return Refused(f"{day} is more than {MAX_AHEAD} days ahead")
         if product.get(FIELD) == day:
             return Refused(f"{product['id']} already has restock day {day}; nothing to change")

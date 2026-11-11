@@ -148,6 +148,47 @@ class DirectOpTests(unittest.TestCase):
                          NotFound("no-such-product"))
 
 
+    def test_operation_calendar_end_matches_skill(self):
+        for today, day in ((date(9999, 12, 1), "9999-12-31"), (date(9999, 12, 31), "9999-12-31")):
+            with self.subTest(today=today, day=day):
+                self.content = load_content()
+                store = copy.deepcopy(self.content.store)
+                [touched] = self.call(_midday(today), restock_on=day)
+                self.assertEqual((touched.collection, touched.key, touched.after["restock_on"]), ("products", self.pid, day))
+                self.assertEqual(self.content.store, store)
+        self.content = load_content()
+        past = self.call(_midday(date(9999, 12, 31)), restock_on="9999-12-30")
+        self.assertIsInstance(past, Refused)
+        self.assertIn("in the past", past.reason)
+        self.assertNotIn("restock_on", self.product())
+
+    def test_sixty_and_sixty_one_day_boundaries_unchanged(self):
+        now = _midday(date(2027, 12, 31))  # leap-year window ends 2028-02-29
+        [ok] = self.call(now, restock_on="2028-02-29")
+        self.assertEqual(ok.after["restock_on"], "2028-02-29")
+        self.content = load_content()
+        far = self.call(now, restock_on="2028-03-01")
+        self.assertIsInstance(far, Refused)
+        self.assertIn("more than 60 days ahead", far.reason)
+        self.assertNotIn("restock_on", self.product())
+        self.product()["restock_on"] = "9999-12-31"
+        same = self.call(_midday(date(9999, 12, 31)), restock_on="9999-12-31")
+        self.assertIsInstance(same, Refused)
+        self.assertIn("nothing to change", same.reason)
+
+    def test_calendar_end_clear_and_refusals_preserve_state(self):
+        now = _midday(date(9999, 12, 31))
+        nothing = self.call(now, clear=True)
+        self.assertIsInstance(nothing, Refused)
+        self.product()["restock_on"] = "9999-12-31"
+        [cleared] = self.call(now, clear=True)
+        self.assertEqual(cleared.before["restock_on"], "9999-12-31")
+        self.assertNotIn("restock_on", self.product())
+        self.product()["status"] = "hidden"
+        self.assertIsInstance(self.call(now, restock_on="9999-12-31"), Refused)
+        self.assertEqual(self.op.apply(self.content, {"id": "no-such-product", "restock_on": "9999-12-31"}, _ctx(now)), NotFound("no-such-product"))
+
+
 class EditorTests(CatalogTestCase):
     def setUp(self):
         self.r = DatedRepo()
