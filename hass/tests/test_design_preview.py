@@ -268,6 +268,79 @@ class OutputTests(RepoCase):
         with self.assertRaises(Usage):
             dp.prepare_out(str(self.repo / ".git" / "worktrees" / "x"), str(linked))
 
+    def assert_unusable(self, exc):
+        self.assertEqual(str(exc), "--out is not usable")
+        self.assertTrue(exc.__suppress_context__)
+        self.assertIsNone(exc.__cause__)
+
+    def test_prepare_out_inspection_oserror_is_safe_usage(self):
+        full = self.tmp / "CANARY-full"
+        full.mkdir(mode=0o700)
+        with mock.patch.object(dp.os, "lstat", side_effect=PermissionError(13, "denied", str(full))):
+            with self.assertRaises(Usage) as ctx:
+                self.prepare(full)
+        self.assert_unusable(ctx.exception)
+        with self.assertRaises(Usage) as ctx:  # explicit refusals keep their own text
+            self.prepare(self.repo / "shots")
+        self.assertEqual(str(ctx.exception), "--out is inside the repository")
+
+    def test_prepare_out_creation_oserror_is_safe_usage(self):
+        import errno
+        for code in (errno.EACCES, errno.ENAMETOOLONG, errno.ENOSPC):
+            target = self.tmp / "CANARY-new"
+            with mock.patch.object(Path, "mkdir", side_effect=OSError(code, "boom", str(target))):
+                with self.assertRaises(Usage) as ctx:
+                    self.prepare(target)
+            self.assert_unusable(ctx.exception)
+            self.assertFalse(target.exists())
+
+    def test_prepare_out_chmod_failure_keeps_created_folder(self):
+        target = self.tmp / "CANARY-chmod"
+        with mock.patch.object(dp.os, "chmod", side_effect=PermissionError(13, "denied", str(target))):
+            with self.assertRaises(Usage) as ctx:
+                self.prepare(target)
+        self.assert_unusable(ctx.exception)
+        self.assertTrue(target.is_dir())
+        self.assertEqual(list(target.iterdir()), [])
+
+    def test_cli_output_oserror_has_single_private_usage_line(self):
+        self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
+        os.chdir(self.repo)
+        for name, seam in (("lstat", mock.patch.object(dp.os, "lstat", side_effect=PermissionError(13, "x", "CANARY"))),
+                           ("mkdir", mock.patch.object(Path, "mkdir", side_effect=PermissionError(13, "x", "CANARY"))),
+                           ("chmod", mock.patch.object(dp.os, "chmod", side_effect=PermissionError(13, "x", "CANARY")))):
+            target = self.tmp / ("CANARY-" + name)
+            if name == "lstat":
+                target.mkdir(mode=0o700)
+            out, err = io.StringIO(), io.StringIO()
+            previewer = mock.Mock()
+            with seam, mock.patch.object(dp, "Previewer", previewer), \
+                    contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = dp.main(["--base", "main", "--head", "feature", "--out", str(target)])
+            self.assertEqual(code, 2, name)
+            self.assertEqual(out.getvalue(), json.dumps({"result": "usage"}) + "\n")
+            self.assertEqual(err.getvalue(), "design_preview: --out is not usable\n")
+            previewer.assert_not_called()
+
+    def test_real_overlong_output_component_is_usage(self):
+        limit = os.pathconf(self.tmp, "PC_NAME_MAX")
+        if not 0 < limit < 100000:
+            self.skipTest("no finite component limit")
+        self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
+        target = self.tmp / ("CANARY" + "x" * limit)
+        proc = subprocess.run([sys.executable, "-B", str(SCRIPT), "--base", "main", "--head", "feature",
+                               "--out", str(target)], capture_output=True, text=True, cwd=self.repo,
+                              env={**GIT_ENV, "PYTHONDONTWRITEBYTECODE": "1", "PLAYWRIGHT_MODULE": ""})
+        self.assertEqual((proc.returncode, proc.stdout), (2, json.dumps({"result": "usage"}) + "\n"))
+        self.assertEqual(proc.stderr, "design_preview: --out is not usable\n")
+
+    def test_outside_scope_still_wins_before_preflight(self):
+        self.branch("feature", {"hass/evil.py": "x=1", "storefront-mockup/style.css": "body{color:red}"})
+        os.chdir(self.repo)
+        with mock.patch.object(dp, "prepare_out", side_effect=AssertionError("called")):
+            code, doc = dp.run("main", "feature", str(self.tmp / ("CANARY-" + "x" * 400)))
+        self.assertEqual((code, doc["result"]), (1, "outside"))
+
     def test_capture_order_names_checks_and_partial_failures(self):
         self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
         fake = FakePreviewer()
