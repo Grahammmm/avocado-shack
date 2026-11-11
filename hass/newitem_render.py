@@ -253,12 +253,33 @@ def _decode(data):
     return im
 
 
+GRAY16_MODES = ("I", "I;16", "I;16L", "I;16B", "I;16N")  # how Pillow versions decode a 16-bit grayscale PNG
+
+
+def _gray16(im, key):
+    """PNG unsigned 16-bit grayscale only: (RGB, alpha or None). Each sample s (0..65535) becomes the fixed full-range gray
+    (s*255+32767)//65535 repeated in RGB: no clipping, no per-image stretch. A tRNS key makes alpha 0 exactly where the ORIGINAL
+    16-bit sample equals it (not the rounded gray), 255 elsewhere; no match means None."""
+    Image, *_ = _modules()
+    lut = bytes((s * 255 + 32767) // 65535 for s in range(65536))
+    gray = Image.frombytes("L", im.size, bytes(lut[s] for s in im.getdata()))
+    alpha = None
+    if isinstance(key, int):
+        cover = bytes(0 if s == key else 255 for s in im.getdata())
+        if min(cover) == 0: alpha = Image.frombytes("L", im.size, cover)
+    return gray.convert("RGB"), alpha
+
+
 def _upright(data):
     """(RGB image with the EXIF rotation applied to the pixels, alpha channel or None, whether a rotation tag was present)."""
     _, ImageOps, *_ = _modules()
     im = _decode(data)
     turned = im.getexif().get(0x0112, 1) not in (None, 1)
+    high, key = im.format == "PNG" and im.mode in GRAY16_MODES, im.info.get("transparency")
     im = ImageOps.exif_transpose(im)
+    if high:
+        rgb, alpha = _gray16(im, key)
+        return rgb, alpha, turned
     alpha = None
     if im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info:
         alpha = im.convert("RGBA").getchannel("A")
