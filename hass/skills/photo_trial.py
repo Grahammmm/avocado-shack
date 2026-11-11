@@ -9,7 +9,8 @@ retake advice item.picture gives (``hass.skills.item_picture.picture_review``), 
     Photo<TAB>Result<TAB>Failing checks<TAB>Retake advice        (text; ``--json``: one JSON array of the same rows)
 
 ``Result`` is ``pass`` or ``warn``. A photo warns when a house-style check fails, the render has a warning, or the advice
-has a retake sentence; a clean pass has no advice. The advice is item.picture's own wording, never a copy.
+has a retake sentence; a clean pass has no advice. A photo above the house source ceiling (``hass.media.MAX_BYTES``,
+20 MiB) is a ``too-large`` warn row with media's own reply; at most that ceiling plus one byte is read and it is never rendered. The advice is item.picture's own wording, never a copy.
 
 Read-only and external-only:
 * DIR must be an existing directory OUTSIDE this repository, not a symlink and not reached through a symlink. It is
@@ -148,13 +149,25 @@ def sink_problem(stream) -> str:
     return "The output is going to a file inside the repository. Send it to a file outside the repository." if _inside_repo(target) else ""
 
 
+class _TooLarge(Exception):
+    """A source photo above the house photo byte ceiling; its bytes were never handed on."""
+
+
 def _read_photo(path: Path, dir_fd=None) -> bytes:
+    from hass import media  # noqa: PLC0415 - lazy: importing this file stays inert
+    limit = media.MAX_BYTES
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
             raise OSError("not a regular file")
+        if info.st_size > limit:
+            raise _TooLarge  # refused before any payload read
         with os.fdopen(fd, "rb", closefd=False) as handle:
-            return handle.read()
+            data = handle.read(limit + 1)  # a file that grew after fstat still stops one byte past the ceiling
+        if len(data) > limit:
+            raise _TooLarge
+        return data
     finally:
         os.close(fd)
 
@@ -202,6 +215,10 @@ def trial_directory(directory) -> list:
     for name, path in candidates(directory):
         try:
             data = _read_photo(path, dir_fd=directory)
+        except _TooLarge:
+            from hass import media  # noqa: PLC0415
+            rows.append(_row(name, "warn", ["too-large"], [media.REPLIES["too-large"]]))
+            continue
         except OSError:
             try:
                 is_link = stat.S_ISLNK(os.stat(name, dir_fd=directory, follow_symlinks=False).st_mode)
