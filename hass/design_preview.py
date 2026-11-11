@@ -114,20 +114,23 @@ def _prepare_out(out: str, top: str) -> Path:
     return path
 
 
-def _private_png(value) -> str | None:
-    """The path when it is a regular file with mode 0600; else None."""
+def _private_png(value, expected: Path) -> str | None:
+    """The expected path when value names it exactly and it is a regular 0600 file; else None."""
+    if not isinstance(value, str) or value != str(expected):
+        return None
     try:
-        info = os.lstat(value) if isinstance(value, str) else None
+        info = os.lstat(value)
     except OSError:
         return None
     return value if info and stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600 else None
 
 
-def _entry(side: str, page: str, result: dict) -> dict:
+def _entry(side: str, page: str, result: dict, expected: Path) -> dict:
     raw = result.get("checks")
     raw = raw if isinstance(raw, dict) else {}
     checks = {k: v for k, v in raw.items() if isinstance(k, str) and type(v) is bool}
-    png, desktop = _private_png(result.get("png")), _private_png(result.get("desktopPng"))
+    desktop_path = expected.with_name(expected.stem + "-desktop.png")
+    png, desktop = _private_png(result.get("png"), expected), _private_png(result.get("desktopPng"), desktop_path)
     failed = sorted(k for k, v in checks.items() if not v)
     if not checks or len(checks) != len(raw):
         error = "capture failed" if png is None else "bad checks"
@@ -161,9 +164,9 @@ def run(base: str, head: str, out: str, previewer=None) -> tuple[int, dict]:
     previewer = previewer or Previewer(top)
     for side in ("base", "head"):
         for page in PAGES:
-            result = previewer.capture(overlays[side], {"kind": "design", "page": page},
-                                       folder / f"{side}-{page}-phone.png")
-            doc["captures"].append(_entry(side, page, result if isinstance(result, dict) else {}))
+            expected = folder / f"{side}-{page}-phone.png"
+            result = previewer.capture(overlays[side], {"kind": "design", "page": page}, expected)
+            doc["captures"].append(_entry(side, page, result if isinstance(result, dict) else {}, expected))
     good = all(c["error"] is None for c in doc["captures"])
     doc["result"] = "ok" if good else "preview-failed"
     return (0 if good else 1), doc
