@@ -120,10 +120,22 @@ def _too_thin(size) -> bool:
     return round(min(size) * ANALYSIS / max(size)) < MIN_WORKING
 
 
+def _fill_holes(m):
+    """Binary L mask with its enclosed holes filled: background (0) that no four-neighbour path reaches from ANY border
+    cell is the subject. Every border-connected background region stays background, however many there are."""
+    _, _, ImageChops, ImageDraw, _, _ = _modules()
+    inv = ImageChops.invert(m)
+    w, h = inv.size
+    border = [(x, y) for x in range(w) for y in (0, h - 1)] + [(x, y) for y in range(1, h - 1) for x in (0, w - 1)]
+    for seed in border:  # a region already flooded (128) is skipped, so each is traversed once
+        if inv.getpixel(seed) == 255: ImageDraw.floodfill(inv, seed, 128)
+    return inv.point(lambda v: 0 if v == 128 else 255)
+
+
 def _coarse(img):
     """(coarse L mask, plane image, cast-shadow L mask, (w, h), delta, report) at analysis size, or (None, ..., report).
     Raises Refused("too-narrow") for a strip (a 1000x1 image has no border ring to measure)."""
-    Image, _, ImageChops, ImageDraw, _, ImageFilter = _modules()
+    Image, _, _, _, _, ImageFilter = _modules()
     if _too_thin(img.size): raise Refused("too-narrow")
     scale = ANALYSIS / max(img.size)
     small = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))), _resample(Image, "BOX"))
@@ -156,10 +168,7 @@ def _coarse(img):
     for _size, cells in keep:
         for i in cells: flat[i] = 255
     m = Image.frombytes("L", (w, h), bytes(flat)).filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.MinFilter(5))  # close pin-holes
-    inv = ImageChops.invert(m)
-    if inv.getpixel((0, 0)) == 255:  # fill enclosed holes: whatever the border cannot reach is the subject
-        ImageDraw.floodfill(inv, (0, 0), 128)
-        m = inv.point(lambda v: 0 if v == 128 else 255)
+    m = _fill_holes(m)
     data = list(m.getdata())
     area = sum(1 for v in data if v) / (w * h)
     sides = ([data[x] for x in range(w)], [data[(h - 1) * w + x] for x in range(w)], [data[y * w] for y in range(h)], [data[y * w + w - 1] for y in range(h)])
