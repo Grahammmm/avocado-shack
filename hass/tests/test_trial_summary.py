@@ -6,6 +6,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from hass import conversation, media, trial_summary as ts  # noqa: E402
+from hass.tests import test_skill_dispatch as tsd  # noqa: E402  (harness only: its SkillCase/ConversationTestCase hold no tests)
 
 CANARY = "CANARY-7f3a91"
 SCRIPT = ROOT / "hass" / "trial_summary.py"
@@ -269,6 +270,78 @@ class TrialSummaryTest(unittest.TestCase):
         for needle in ("hass/trial_summary.py --state", "--json", "Pacific", "day unknown", "interpreterDailyCap",
                        "not H18 completion"):
             self.assertIn(needle, section)
+
+
+FORGET = ("memory-ambiguous", "backlog-forgot", "backlog-none")  # RF0115-12: written literally, not read from ts.COMMANDS
+IN_WINDOW, OUT_OF_WINDOW = "2026-11-02T10:00:00-08:00", "2026-12-25T10:00:00-08:00"
+
+
+class ForgetDispositionTest(unittest.TestCase):
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory(); self.addCleanup(self._t.cleanup); self.tmp = self._t.name
+
+    def test_explicit_forget_dispositions_are_commands(self):
+        for d in FORGET + ("status", "memory-forgot"): self.assertEqual(ts._bucket(d), "commands", d)
+        self.assertEqual([k for k in ts.MESSAGE_KEYS if k in FORGET], [])
+
+    def test_forget_dispositions_count_on_selected_day_and_unknown(self):
+        rows = [(d, at) for d in FORGET for at in (IN_WINDOW, OUT_OF_WINDOW, None)] + [("approved", IN_WINDOW)]
+        make_state(self.tmp, messages=rows, drafts=[("applied", IN_WINDOW)], approvals=[IN_WINDOW], usage=[("2026-11-02", 2)])
+        r = report(self.tmp)
+        day = r["daysSummary"][1]
+        self.assertEqual((day["day"], day["messages"]["commands"], day["messages"]["other"]), ("2026-11-02", 3, 0))
+        self.assertEqual((r["unknown"]["messages"]["commands"], r["unknown"]["messages"]["other"]), (3, 0))
+        self.assertEqual((r["totals"]["messages"]["commands"], r["totals"]["messages"]["other"]), (6, 0))
+        self.assertEqual(sum(r["totals"]["messages"].values()), 7)  # 3 in window + 3 undated + 1 approved; out of window excluded
+        self.assertEqual((day["drafts"]["applied"], day["approvals"], day["interpreterCalls"]), (1, 1, 2))
+
+    def test_mixed_backlog_and_unknown_prefixes_stay_other(self):
+        odd = ["backlog", "undo-other", "memory-evil", "backlog-evil", "backlog-forgot:1", "memory-ambiguous ", "Backlog-none",
+               CANARY, b"\x00\x01", 7]
+        make_state(self.tmp, messages=[(d, IN_WINDOW) for d in odd] + [(d, IN_WINDOW) for d in FORGET])
+        m = report(self.tmp)["totals"]["messages"]
+        self.assertEqual((m["commands"], m["other"]), (3, len(odd)))
+        for text in (json.dumps(report(self.tmp)), run("--state", self.tmp, "--from", "2026-11-01")[1]):
+            for d in odd[:8]: self.assertNotIn(d, text)
+
+    def test_command_bucket_parity_and_read_only(self):
+        make_state(self.tmp, messages=[(d, IN_WINDOW) for d in FORGET] + [("backlog", IN_WINDOW), ("status", IN_WINDOW)])
+        d = Path(self.tmp)
+        before = {p.name: p.read_bytes() for p in sorted(d.iterdir())}
+        r = report(self.tmp)
+        self.assertEqual(list(r["totals"]["messages"]), list(ts.MESSAGE_KEYS)); self.assertEqual(len(ts.MESSAGE_KEYS), 24)
+        self.assertEqual(set(r), {"result", "from", "days", "timezone", "daysSummary", "unknown", "totals"})
+        text = run("--state", self.tmp, "--from", "2026-11-01")[1].splitlines()
+        pairs = re.findall(r"[\[\s]([^\s\[\]=]+)=(\d+)", text[8])  # messages come first; drafts also have an `other`
+        totals = dict(reversed(pairs))
+        self.assertEqual((totals["commands"], totals["other"]), ("4", "1"))
+        self.assertEqual((r["totals"]["messages"]["commands"], r["totals"]["messages"]["other"]), (4, 1))
+        for word in FORGET: self.assertNotIn(word, "\n".join(text))
+        self.assertEqual({p.name: p.read_bytes() for p in sorted(d.iterdir())}, before)
+
+
+class AmbiguousAliasConversationTest(tsd.ConversationTestCase):
+    def test_ambiguous_alias_forget_real_conversation_is_counted(self):
+        for text, want in (("alias green jam: photo-product-001", "memory-saved"), ("remember alias green jam: note", "memory-saved"),
+                           ("forget alias green jam", "memory-ambiguous")):
+            self.assertEqual(self.say(text), want)
+        self.assertEqual(self.conv.db.execute("SELECT COUNT(*) FROM memory").fetchone()[0], 2)  # both facts preserved
+        self.assertEqual(self.editor.applies, 0)
+        m = report(self.repo.state)["totals"]["messages"]
+        self.assertEqual((m["commands"], m["other"]), (3, 0))
+
+
+class BacklogForgetConversationTest(tsd.SkillCase):
+    def test_backlog_forget_real_conversation_is_counted(self):
+        for n in (1, 2):
+            self.script(f"ask {n}", {"skill": "none", "summary": f"ask {n}"})
+            self.assertEqual(self.say(f"ask {n}"), "backlog")
+        for text, want in (("forget backlog.1", "backlog-forgot"), ("forget backlog.1", "backlog-none"),
+                           ("forget backlog.7", "backlog-none")):
+            self.assertEqual(self.say(text), want)
+        m = report(self.repo.state)["totals"]["messages"]
+        self.assertEqual((m["commands"], m["other"]), (3, 2))  # declined requests stay other
+        self.assertEqual(sum(m.values()), 5)
 
 
 class _Cur:

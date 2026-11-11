@@ -19,7 +19,8 @@ MESSAGE_KEYS = ("approved", "rejected", "near-approval", "no-target", "needs-det
                 "photo-on-product", "photo-draft", "photo-refused", "other")
 COMMANDS = frozenset({"status", "pause", "resume", "help", "history", "find", "show", "report", "post", "margin", "hidden",
                       "listing", "undo", "memory-list", "memory-none", "memory-forgot", "memory-saved", "memory-updated",
-                      "memory-unchanged", "memory-invalid"})
+                      "memory-unchanged", "memory-invalid", "memory-ambiguous", "backlog-forgot", "backlog-none"})
+# `backlog` itself stays other: it also records declined/unknown skill requests, so it cannot be told from a command
 # keys of media.REPLIES (a test keeps this equal); only these suffixes of `photo-refused:` count as photo-refused
 PHOTO_REFUSED = frozenset({"empty", "too-large", "unsupported-type", "truncated", "corrupt-store", "not-found", "unreadable",
                            "needs-rotation", "many", "audio"})
