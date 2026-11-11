@@ -2,9 +2,16 @@
 import io
 import unittest
 
-from PIL import Image, ImageChops, ImageOps
-
 from hass import media, newitem_synthetic as ns
+
+# Guarded like test_newitem.py: the CI planner counts tests before Pillow is installed, and a top-level import error
+# would count this module as one test there but six when it runs (the shard verifier then fails on the mismatch).
+# Pillow is installed and pinned in CI (tests/test_pillow_ci.py fails, never skips, without it).
+try:
+    from PIL import Image, ImageChops, ImageOps
+    HAVE_PIL = True
+except ImportError:
+    HAVE_PIL = False
 
 KW = dict(product="jar", background="white-sheet", seed=7)
 SCENE = (400, 300)  # the scene as stored sideways; upright is (300, 400)
@@ -14,6 +21,7 @@ def _open(data):
     return Image.open(io.BytesIO(data))
 
 
+@unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
 class SidewaysPng(unittest.TestCase):
     def test_png_phone_6_and_8_carry_exact_requested_orientation(self):
         for o in (6, 8):
