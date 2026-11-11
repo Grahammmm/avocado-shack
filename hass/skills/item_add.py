@@ -109,8 +109,11 @@ _SIGN = r"(?:\s*,\s*(?:and\s+)?|\s+and\s+|\s+plus\s+)"
 _ASIDE_WORDS = frozenset(
     "in on at from by with for of to into please thanks thank both all also too it its it's that which this these those "
     "photo picture pic image caption stock today now is are was were goes go put sold size price made make makes "
-    "great good nice lovely perfect tasty delicious sweet tart fresh packaged organic local homemade handmade new i we he "
-    "she they and or but so yes no ok okay".split())
+    "taste flavor flavour texture stuff i we he she they and or but so yes no ok okay".split())
+# Describing words that open a product phrase ("sweet corn", "organic raspberry jam") but are only an aside when nothing that
+# names a product follows them ("great on toast", "fresh from the farm", "tasty").
+_DESCRIBING_WORDS = frozenset(
+    "great good nice lovely perfect tasty delicious sweet tart fresh packaged organic local homemade handmade new".split())
 _MAKER_WORDS = frozenset("farm farms ranch orchard orchards kitchen kitchens bakery creamery dairy company co inc llc apiary "
                          "vineyard winery mill foods garden gardens".split())
 _STATES = frozenset(
@@ -442,6 +445,8 @@ def _is_product_phrase(chunk, *, after="") -> bool:
     words = chunk.split()
     while words and words[0] in ("the", "a", "an", "some", "another"):
         words = words[1:]
+    while words and words[0] in _DESCRIBING_WORDS:  # "sweet corn" opens with a describing word but still names a product
+        words = words[1:]
     if not words or words[0] in _ASIDE_WORDS or not words[0][0].isalpha():
         return False
     for i, word in enumerate(words):
@@ -473,7 +478,7 @@ def _bare_list(name, turn) -> bool:
             other = re.split(r",|\s+and\s+|\s+plus\s+", tail)[0]
             if _is_product_phrase(other, after=tail[len(other):]):
                 return True
-        before = re.search(r"^(.*?)" + _SIGN + r"$", left)
+        before = re.search(r"^(.*?)" + _SIGN + r"(?:(?:the|a|an|some|another)\s+)?$", left)
         if before and _is_product_phrase(re.split(_SIGN, before.group(1))[-1]):
             return True
     return False

@@ -260,6 +260,28 @@ class OnePhotoOneProduct(unittest.TestCase):
                     with self.assertRaises(ia.Refusal):
                         ia.plan_add(copy.deepcopy(slots), ctx(text))  # no ops at all
 
+    def test_add_lists_with_a_describing_word_ask_before_any_plan(self):
+        # sweet / organic open a product phrase ("sweet corn"), so they are not asides; the question comes whichever name was chosen
+        for text, names in (("add lemon curd and sweet corn", ("Lemon curd", "Sweet corn")),
+                            ("add lemon curd, organic raspberry jam", ("Lemon curd", "Organic raspberry jam")),
+                            ("add sweet corn and lemon curd", ("Lemon curd", "Sweet corn")),
+                            ("add organic raspberry jam, lemon curd", ("Lemon curd", "Organic raspberry jam")),
+                            ("add lemon curd and the fresh local plum jam", ("Lemon curd", "Fresh local plum jam"))):
+            for name in names:
+                with self.subTest(text=text, name=name):
+                    slots = {**FULL, "name": name, "maker": "Linn's", "shelf": "pantry"}
+                    self.assertEqual(refusal(slots, text).reply, ia.ONE_PHOTO)
+                    with self.assertRaises(ia.Refusal):
+                        ia.plan_add(copy.deepcopy(slots), ctx(text))
+
+    def test_add_describing_words_alone_are_still_asides(self):
+        for text in ("add lemon curd, sweet", "add lemon curd, organic", "add lemon curd, fresh from the farm",
+                     "add lemon curd, tasty on toast", "add lemon curd, sweet and tart", "add lemon curd and great photo",
+                     "add lemon curd, fresh packaged in a jar", "add lemon curd, organic, in stock"):
+            with self.subTest(text=text):
+                done = ia.describe_add({**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}, ctx(text))
+                self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+
     def test_add_compound_name_and_caption_are_not_lists(self):
         for name, text in (("Salt and vinegar chips", "add salt and vinegar chips"),
                            ("Cookies and Cream chocolate", "Add Cookies and Cream chocolate from Linn's"),
