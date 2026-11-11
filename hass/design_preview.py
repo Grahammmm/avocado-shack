@@ -32,6 +32,7 @@ PAGES = ("home", "hike")
 REQUIRED = ("storefront-mockup/index.html", "storefront-mockup/hike/index.html")
 SITE_PREFIX = "storefront-mockup/"  # templates (hass/templates) are validated, never served or overlaid
 NAME_OK = re.compile(r"[A-Za-z0-9:]+")
+REQUIRED_CHECKS = frozenset(n for b in ("pageLoaded", "noHorizontalOverflow", "noPageErrors", "noPosts") for n in (b, "desktop:" + b))
 
 
 def _read_blob(sha: str, path: str, top: str) -> bytes:
@@ -136,6 +137,8 @@ def _entry(side: str, page: str, result: dict) -> dict:
         error = "missing png"
     elif desktop is None:
         error = "missing desktop png"
+    elif not REQUIRED_CHECKS <= checks.keys():
+        error = "bad checks"
     elif result.get("ok") is not True:
         error = "capture failed"
     else:
