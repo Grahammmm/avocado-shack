@@ -109,8 +109,7 @@ def make_photo(product="jar", background="white-sheet", size=(1200, 900), angle=
         stored = scene.transpose(Image.Transpose.ROTATE_90 if phone_orientation == 6 else Image.Transpose.ROTATE_270)  # sideways pixels
         exif = Image.Exif()
         exif[0x010F], exif[0x0110], exif[0x0132], exif[0x0112] = "SyntheticCo", "Phone 0", "2026:11:07 09:30:00", phone_orientation
-        gps = exif.get_ifd(0x8825)
-        gps[1], gps[2], gps[3], gps[4] = "N", (35.0, 22.0, 0.0), "W", (120.0, 51.0, 0.0)
+        exif[0x8825] = {1: "N", 2: (35.0, 22.0, 0.0), 3: "W", 4: (120.0, 51.0, 0.0)}  # assigned, so GPSInfo is really serialized
     out = io.BytesIO()
     if fmt == "PNG":
         stored.save(out, "PNG", **({"exif": exif} if exif is not None else {}))
