@@ -102,11 +102,20 @@ def _image_present(repo: Path, image) -> bool:
         return False
 
 
+def _read_aux_json(path: Path):
+    """Decode an auxiliary JSON file; decoder recursion overflow becomes a ValueError (private exit 2)."""
+    text = path.read_text("utf-8")
+    try:
+        return json.loads(text)
+    except RecursionError:
+        raise ValueError("JSON nested too deeply") from None
+
+
 def run_checks(repo: Path) -> tuple[list[str], dict]:
     """Return (failures, report). No files are written."""
     repo = Path(repo)
     failures: list[str] = []
-    baseline = json.loads((repo / "hass" / "content" / "migration-baseline.json").read_text("utf-8"))
+    baseline = _read_aux_json(repo / "hass" / "content" / "migration-baseline.json")
     if (why := _baseline_problem(baseline)):
         return [why], {}
     try:
@@ -161,7 +170,7 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
     held = baseline["held"]
     catalog_js = files[SITE_PREFIX + "catalog-products.js"].decode("utf-8")
     catalog_ids = {r["id"] for r in json.loads(catalog_js.split("\n", 1)[0][len("const catalog="):].rstrip(";"))}
-    held_file = json.loads((repo / "storefront-mockup" / "held-products.json").read_text("utf-8"))
+    held_file = _read_aux_json(repo / "storefront-mockup" / "held-products.json")
     held_file_ids = _held_ids(held_file)
     if isinstance(held_file_ids, str):
         failures.append(f"storefront-mockup/held-products.json is misshaped: {held_file_ids}")
@@ -181,7 +190,7 @@ def run_checks(repo: Path) -> tuple[list[str], dict]:
     # Events vs samples.
     preview_path = repo / "storefront-mockup" / "hiking-preview.json"
     if preview_path.is_file():
-        preview = json.loads(preview_path.read_text("utf-8"))
+        preview = _read_aux_json(preview_path)
         sample_ids = _sample_ids(preview)
         event_ids = {e["id"] for e in content.community["events"]}
         if isinstance(sample_ids, str):
