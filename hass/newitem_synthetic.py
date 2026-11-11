@@ -83,7 +83,10 @@ def _product(Image, ImageDraw, ImageFont, kind, height):
 def make_photo(product="jar", background="white-sheet", size=(1200, 900), angle=0, share=.62, seed=1, phone_orientation=None,
                fmt="JPEG", alpha=False) -> bytes:
     """Photo bytes. `share` is the product's height as a share of the picture; `angle` tilts it in degrees;
-    `phone_orientation` (6 or 8) stores the picture sideways with that EXIF tag, as a phone does, plus fake GPS/device data."""
+    `phone_orientation` (6 or 8) stores the picture sideways with that EXIF tag, as a phone does, plus fake GPS/device data.
+    Anything but None or the int 6 or 8 raises ValueError before any drawing."""
+    if phone_orientation is not None and not (type(phone_orientation) is int and phone_orientation in (6, 8)):
+        raise ValueError("phone_orientation must be None, 6 or 8")
     from PIL import Image, ImageDraw, ImageFilter, ImageFont  # noqa: PLC0415
     rng = random.Random(seed)
     upright = (size[1], size[0]) if phone_orientation else size  # the scene as seen; stored sideways later
