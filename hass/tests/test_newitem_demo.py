@@ -6,11 +6,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from PIL import Image, ImageChops
+# Guarded like test_newitem_synthetic.py: Pillow is pinned in CI; the CI planner counts tests before it is installed,
+# so an unguarded top-level import would be counted as one failed import there but run as seven tests later.
+try:
+    from PIL import Image, ImageChops
+    from hass import newitem_demo as demo
+    HAVE_PIL = True
+except ImportError:  # pragma: no cover
+    HAVE_PIL = False
 
-from hass import newitem_demo as demo
-
-T, ROW = demo.TILE, demo.TILE + 22
+if HAVE_PIL:
+    T, ROW = demo.TILE, demo.TILE + 22
 CASE = ("jar-dark-wood", dict(product="jar", background="dark-wood", size=(300, 240), seed=7))
 CASE2 = ("bag-red-cloth", dict(product="bag", background="red-cloth", size=(300, 240), seed=8))
 COLORS = [(200, 30, 30), (30, 200, 30), (30, 30, 200)]
@@ -21,6 +27,7 @@ class Content:
     def active_products(self): return self.products
 
 
+@unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
 class MontageTest(unittest.TestCase):
     def run_demo(self, products, cases=(CASE,), show=("jar-dark-wood", "bag-red-cloth")):
         tmp = tempfile.TemporaryDirectory()
