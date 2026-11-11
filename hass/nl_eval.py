@@ -116,6 +116,27 @@ def _ordered(reply):
     return {**reply, "ops": _order(reply["ops"])} if isinstance(reply, dict) and isinstance(reply.get("ops"), list) else reply
 
 
+def _matched(wanted, got, registry, tally=None):
+    """True when every expected call pairs with its own already-checked actual call under the interpreter_eval rules (the sort key
+    can tie, so positional comparison alone would report a harmless permutation as a wrong draft). Augmenting-path matching."""
+    want, have = wanted["expect"]["ops"], got["ops"]
+    if len(want) != len(have): return False
+    def fits(w, h):
+        if tally is not None: tally.append(1)
+        return ie._why({**wanted, "expect": {**wanted["expect"], "ops": [w]}}, {**got, "ops": [h]}, registry) is None
+    edges = [[j for j, h in enumerate(have) if fits(w, h)] for w in want]
+    owner = {}
+    def claim(i, seen):
+        for j in edges[i]:
+            if j in seen: continue
+            seen.add(j)
+            if j not in owner or claim(owner[j], seen):
+                owner[j] = i
+                return True
+        return False
+    return all(claim(i, set()) for i in range(len(want)))
+
+
 def _text_of(got) -> str:
     kind = ie._kind(got)
     return json.dumps(got["ops"], ensure_ascii=False).lower() if kind == "ops" else str(got.get(kind, "")).lower()
@@ -135,6 +156,7 @@ def judge(case, record, registry) -> dict:
         if ie._kind(expect) != kind: continue
         wanted = {**case, "expect": {**expect, "ops": _order(expect["ops"])} if "ops" in expect else expect}
         why = ie._why(wanted, got, registry)
+        if why and kind == "ops" and _matched(wanted, got, registry): why = None  # same sort key, different order: still one-to-one
         if kind == "ops":
             names = [c["op"] for c in got["ops"]]
             intent_ok = intent_ok or (names == [c["op"] for c in wanted["expect"]["ops"]] and got["revises"] == expect["revises"])
