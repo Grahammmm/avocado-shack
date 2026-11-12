@@ -176,8 +176,8 @@ class RootAncestorsTest(unittest.TestCase):
         self.assertEqual(self.cli("--state", str(self.state))[0], 0)
         self.assertEqual(snapshot(self.tmp), before)
         # cutoff usage error keeps precedence over a linked root
-        code, out, err = self.cli("--state", str(self.tmp / "bridge" / "a" / "b" / "state"), "--now", "0001-01-02T00:00:00+00:00",
-                                  "--days", "36500")
+        code, out, err = self.cli("--state", str(self.tmp / "bridge" / "a" / "b" / "state"),
+                                  "--now", "0001-01-02T00:00:00+00:00", "--days", "36500")
         self.assertEqual((code, out, "--days reaches" in err), (2, "", True), err)
         # database leaf guards run after the roots and keep their own diagnostic
         db = self.state / "inbox.sqlite3"

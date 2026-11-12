@@ -10,7 +10,8 @@ webOrphans: web copies whose original is gone (counted, never dated).
 Zone-less or malformed times, and backup stamps that are no real calendar time, count nowhere. No ids, text or file
 names print. SQLite opens mode=ro; nothing is created or written; the owner picks the period (owner action 4). Exit 1:
 a store is missing or unreadable (its keys say "unavailable"); exit 2, before anything opens: bad usage (incl. a
---days reaching before year 1 from --now), or a missing dir, a dir that is or sits below a symlink, or a symlinked or non-regular database; else 0.
+--days reaching before year 1 from --now), a missing dir, a dir that is or sits below a symlink, or a symlinked or
+non-regular database; else 0.
 """
 import argparse, contextlib, json, os, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timedelta, timezone
