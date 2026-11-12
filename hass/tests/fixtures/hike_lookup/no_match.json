@@ -1,0 +1,54 @@
+{
+"meta": {
+"name": "Mount Doom Trail",
+"note": "no such trail",
+"provenance": "recorded live",
+"recorded": "2026-11-09",
+"status": "none",
+"tool": "scripts/hike_lookup_manual.py"
+},
+"responses": {
+"nominatim_search:3988f62a4ba79f65": {
+"body": [
+{
+"addresstype": "cliff",
+"boundingbox": [
+"35.1121146",
+"35.1131356",
+"-120.1222279",
+"-120.1215124"
+],
+"category": "natural",
+"display_name": "Twin Rocks, San Luis Obispo County, California, United States",
+"importance": 0.10667666666666664,
+"lat": "35.1126052",
+"licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+"lon": "-120.1217326",
+"name": "Twin Rocks",
+"osm_id": 1111245434,
+"osm_type": "way",
+"place_id": 314824931,
+"place_rank": 22,
+"type": "cliff"
+}
+],
+"request": {
+"bounded": 1,
+"countrycodes": "us",
+"limit": 10,
+"q": "mount doom",
+"viewbox": "-124.5,42.1,-114.1,32.5"
+},
+"retrieved": "2026-11-09"
+},
+"overpass:4ecab6239828d786": {
+"body": {
+"elements": []
+},
+"request": {
+"query": "[out:json][timeout:40];\n(\n relation[\"route\"~\"^(hiking|foot)$\"][\"name\"~\"moun.*doom\",i](34.9,-121.45,35.8,-119.4);\n way[\"highway\"~\"^(path|footway|track|bridleway|steps)$\"][\"name\"~\"moun.*doom\",i](34.9,-121.45,35.8,-119.4);\n node[\"natural\"=\"peak\"][\"name\"~\"moun.*doom\",i](34.9,-121.45,35.8,-119.4);\n);\nout tags geom;"
+},
+"retrieved": "2026-11-09"
+}
+}
+}
