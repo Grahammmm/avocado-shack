@@ -39,7 +39,7 @@ UNKNOWN_BRAND, UNKNOWN_SHOWN = "Producer not identified", "From the market"  # t
 _NUM = (r"(?:\d+(?:[.,]\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|"
         r"forty|fifty|hundred)")
 PRICE_TEXT = re.compile(
-    r"\$|\bper (?:lb|pound|ounce|oz|dozen|each)\b|\bcents?\b|\bdollars?\b|\d\s?¢"
+    r"\$|\bper +(?:lb|pound|ounce|oz|dozen|each)\b|\bcents?\b|\bdollars?\b|\d\s?¢"
     + rf"|\b{_NUM}\s+for\s+{_NUM}(?=\s*(?:[.,;:!?)]|$|\s(?:each|a piece|apiece|ea|bucks?|and|or)\b))"  # 'two for five.', '2 for 5.'
     + rf"|\b(?:a|an|{_NUM})\s+bucks?\b"  # 'five bucks each', 'a buck'
     + rf"|\b{_NUM}\s+(?:a|the)\s+(?:pound|lb|dozen|ounce|oz)\b",  # '5 a pound'
