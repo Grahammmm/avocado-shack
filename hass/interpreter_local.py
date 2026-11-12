@@ -80,7 +80,18 @@ def _number(token):  # RF0755-13: a number token that converts to infinity (1e99
     return value
 
 
-def _strict(text): return json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant, parse_float=_number)  # noqa: E704
+def _strict(text):
+    """Decode one JSON layer. RF0421-13: after escape decoding, every string (keys too) must encode as UTF-8, so an
+    unpaired surrogate is refused (ValueError) here, never returned to crash later persistence. Iterative: no new depth limit."""
+    tree = json.loads(text, object_pairs_hook=_pairs, parse_constant=_constant, parse_float=_number)
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str): node.encode("utf-8")
+        elif isinstance(node, dict):
+            for key, value in node.items(): stack += (key, value)
+        elif isinstance(node, list): stack += node
+    return tree
 
 
 def strip_reasoning(text) -> str:
