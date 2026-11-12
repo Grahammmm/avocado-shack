@@ -37,7 +37,10 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
   public name, the site's `robots.txt` obeyed, one request per site every 2 seconds, no accounts, keys, cookies or proxy,
   same-site redirects only (each hop checked like the first request), the whole read at most 8 seconds, 640 KB and 6
   requests, and done before the conversation's write transaction). No page sentence is copied: only what they make, since
-  which year, and the town Mike confirmed, never a claim, contact, price, third party or instruction. Mike sees it as "The
+  which year, and the town Mike confirmed, never a claim, contact, price, third party or instruction. What they make is
+  written only with plain product words, so a claim joined to a product ("makes jam and relieves migraines") leaves that
+  page sentence out, and the year and the town are taken only from a sentence that says them of the maker, with no
+  negation (HASS-559-FIX). Mike sees it as "The
   maker's own site says: ... (source: <address>, read on <day>)" and it goes live only with his `yes <code>` to that draft
   (HASS-SEC-3). A site that cannot be read, or not in time, gets "I could not read their site; tell me about them in a
   sentence." With no words and no address Hass asks once: "What should we say about <Maker>? A sentence is enough." and

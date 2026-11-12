@@ -88,6 +88,9 @@ imported import call calls phone text texts email mail contact visit order order
 cost costs dollar dollars cent cents usd eur euro bucks sale sales discount deal wholesale subscribe follow click link
 website site page online instagram facebook hass assistant bot ai model prompt instruction instructions ignore approve
 approval publish post tell ask asks asked please must should reader readers
+safe safely safety relieve relieves relief soothe soothes soothing treat treats treatment prevent prevents protect protects
+therapy therapeutic medical clinical disease diseases pain symptom symptoms anxiety allergy allergies allergen allergens
+hypoallergenic sterile fda approved tested lab
 """.split())
 DROP = re.compile(r"(?<![\w-])(?:" + "|".join(sorted(map(re.escape, DROP_WORDS), key=len, reverse=True)) + r")(?![\w-])",
                   re.IGNORECASE)
@@ -102,9 +105,30 @@ here every each all only just also now still
 """.split())
 BAD_FIRST = frozenset({"every", "each", "all", "no", "any", "some", "more", "most", "many", "few", "one", "two"})
 NP_WORD = re.compile(r"[a-z]+(?:-[a-z]+)*,?")
-STARTED = re.compile(r"\b(?:started|began|founded|opened|established|launched)\b[^.]*?\bin\s+((?:18|19|20)\d{2})\b|\bsince\s+((?:18|19|20)\d{2})\b",
-                     re.IGNORECASE)
 NP_WORDS, NP_CHARS = 8, 60
+# HASS-559-FIX (H2, Sol RETURN t_2c550041): what they make is written ONLY with these plain product words (a plural or a
+# hyphenated pair of them counts). Any other word after the verb ("and relieves migraines", "and soothes sore throats")
+# leaves the whole sentence out, so a health, safety, certification or medical claim joined to a product with "and" can
+# never become part of the story; a product not in this list means he is asked for a sentence instead. No claim, hype or
+# DROP word is ever in it (subtracted below, and tested).
+THING_WORDS = frozenset("""
+jam jelly preserve marmalade curd butter spread chutney relish compote conserve pickle sauerkraut kimchi salsa sauce
+mustard ketchup dressing vinegar oil syrup honey honeycomb molasses pesto dip hummus guacamole tapenade paste
+bread loaf loaves rye sourdough baguette roll bun bagel biscuit cracker cookie brownie cake cupcake pie tart pastry croissant
+muffin scone granola muesli cereal flour tortilla pasta noodle dumpling pretzel waffle focaccia bar chip toffee fudge candy
+caramel chocolate truffle brittle
+coffee bean tea chai kombucha cider juice lemonade soda wine beer ale mead kefir milk cream yogurt cheese ghee egg
+fruit vegetable veggie avocado lemon lime orange grapefruit mandarin tangerine apple pear peach plum apricot cherry berry
+strawberry raspberry blueberry blackberry boysenberry olallieberry fig grape melon watermelon cantaloupe mango persimmon
+pomegranate kiwi tomato pepper chile chili jalapeno potato onion garlic shallot leek carrot beet radish turnip cabbage kale
+chard lettuce arugula spinach green herb basil cilantro parsley rosemary thyme mint sage dill lavender microgreen sprout pea
+corn squash zucchini pumpkin cucumber eggplant broccoli cauliflower celery fennel artichoke asparagus mushroom almond
+walnut pistachio pecan cashew hazelnut peanut nut seed grain rice oat wheat lentil chickpea quinoa flower bouquet
+sausage jerky salami bacon soap candle beeswax
+small batch whole sweet savory spicy hot mild smoked dried roasted toasted salted pickled fermented baked sparkling dark
+white red yellow black golden purple seasonal mixed sliced ground vanilla cinnamon ginger turmeric maple citrus sea salt
+chipotle habanero
+""".split()) - DROP_WORDS - {w for w in hs.HYPE_SEED}
 
 CODES = {  # PageError.code -> what Mike is told (plain words, VOICE.md)
     "address": "That doesn't look like a website address I can read. Could you send it like https://example.com?",
@@ -393,8 +417,12 @@ def _site(host) -> str:
 
 def _hop(url: str, location: str) -> str:
     """Where a redirect from ``url`` may go: https on the same site (www. or not), no login or odd port, else PageError."""
-    new = urljoin(url, location)
-    if _site(urlsplit(new).hostname) != _site(urlsplit(url).hostname):
+    try:  # HASS-559-FIX: a Location that will not parse ("https://[broken/x") is the plain error, never a ValueError
+        new = urljoin(url, location)
+        same = _site(urlsplit(new).hostname) == _site(urlsplit(url).hostname)
+    except ValueError as exc:
+        raise PageError("unreachable") from exc
+    if not same:
         raise PageError("unreachable")
     try:
         return check_address(new)
@@ -629,9 +657,18 @@ def source_ok(sentence: str, name: str, town: str = ""):
     return s
 
 
+def _thing_word(word: str) -> bool:
+    """A plain product word (THING_WORDS), its plural, or a hyphenated pair of them ("small-batch")."""
+    def known(w):
+        return any(f in THING_WORDS for f in {w, w[:-1] if w.endswith("s") else w, w[:-2] if w.endswith("es") else w,
+                                              w[:-3] + "y" if w.endswith("ies") else w})
+    word = word.rstrip(",").lower()
+    return known(word) or ("-" in word and all(part and known(part) for part in word.split("-")))
+
+
 def _things(rest: str):
     """The plain things a maker makes, from the words after the verb: cut before a place, purpose or manner word; None
-    when what is left is not a short run of plain lower-case words."""
+    when what is left is not a short run of plain product words (THING_WORDS) joined by commas, "and" or "or"."""
     words = []
     for word in rest.rstrip(".").split():
         if word.rstrip(",").lower() in CUT_WORDS:
@@ -645,12 +682,80 @@ def _things(rest: str):
     if (not words or len(words) > NP_WORDS or len(text) > NP_CHARS or words[0] in BAD_FIRST
             or not all(NP_WORD.fullmatch(w) for w in words) or DROP.search(text)):
         return None
+    joins = [w.rstrip(",") in ("and", "or") for w in words]
+    if joins[0] or any(a and b for a, b in zip(joins, joins[1:])):
+        return None
+    if not all(j or _thing_word(w) for w, j in zip(words, joins)):  # HASS-559-FIX H2: "and relieves migraines"
+        return None
     return text
+
+
+def _exact_things(text: str) -> bool:
+    """True when the whole of ``text`` is plain things (nothing was cut off)."""
+    plain = " ".join(text.split()).rstrip(",")
+    return _things(plain) == plain
+
+
+# HASS-559-FIX (M, Sol RETURN t_2c550041): the founding year and the town are taken only from a sentence that says it of the
+# maker, affirmatively, in one of the shapes below; a negation, a turn ("but", "until") or any other clause leaves it out.
+NOT_SAID = frozenset(claims.NEGATORS) | frozenset("""
+but until except formerly former previously once used moved closed close closing sold left longer anymore ago
+""".split())
+_FOUNDED = r"(?:started|founded|opened|established|launched|began)"
+_ING = "|".join(sorted({(b[:-1] if b.endswith("e") else b) + "ing" for b in MAKES}, key=len, reverse=True))
+_YEAR = r"((?:18|19|20)\d{2})"
+_PLACE_WORDS = frozenset({"a", "an", "the"})
+
+
+def _affirmative(s: str) -> bool:
+    return not any(w.strip(",").lower() in NOT_SAID for w in s.split())
+
+
+def _since(s: str, name: str) -> int:
+    """The year the maker started, when ``s`` says so of the maker: "<Name> (was) founded in 1998 ...", "We started <Name>
+    in 2019 ...", "<Name> has been making jam since 2010."; 0 otherwise."""
+    if not _affirmative(s):
+        return 0
+    who = r"(?:" + _name_re(name) + r"|We)"
+    for shape in (rf"^{who}\s+(?:was\s+|were\s+)?{_FOUNDED}\s+in\s+{_YEAR}\b",
+                  rf"^We\s+{_FOUNDED}\s+{_name_re(name)}\s+in\s+{_YEAR}\b"):
+        if m := re.match(shape, s, re.IGNORECASE):
+            return int(m.group(1))
+    m = re.match(rf"^{who}\s+(?:has|have)\s+been\s+(?:open|in\s+business|(?:{_ING})(?:\s+(.+?))?)\s+since\s+{_YEAR}\.$", s,
+                 re.IGNORECASE)
+    if m and (m.group(1) is None or _exact_things(m.group(1))):
+        return int(m.group(2))
+    return 0
+
+
+def _based(s: str, name: str, town: str) -> bool:
+    """True when ``s`` says the maker is in the town he confirmed: "<Name> is based in <Town>." or "<Name> makes jam (in a
+    shared kitchen) in <Town>." (the town last, nothing about anyone else in between)."""
+    if not (town and _affirmative(s)):
+        return False
+    who, at = r"(?:" + _name_re(name) + r"|We)", r"in\s+" + _name_re(town) + r"\.$"
+    if re.match(rf"^{who}\s+(?:is|are)\s+(?:based|located)\s+{at}", s, re.IGNORECASE):
+        return True
+    m = re.match(rf"^{who}\s+(?:also\s+|now\s+|still\s+)?(?:{_VERB})\s+(.*?)\s*{at}", s, re.IGNORECASE)
+    if not m:
+        return False
+    words = m.group(1).split()
+    things = words[:words.index("in")] if "in" in words else words
+    room = words[len(things):]
+    if things and not _exact_things(" ".join(things)):
+        return False
+    if room:  # one "in a/an/the <up to 3 plain words>" before the town, e.g. "in a shared kitchen"
+        if not (2 <= len(room) - 1 <= 4 and room[0] == "in" and room[1].lower() in _PLACE_WORDS
+                and all(re.fullmatch(r"[a-z]+(?:-[a-z]+)*", w) and w not in CUT_WORDS and w not in NOT_SAID
+                        and w not in ("is", "are", "was", "were", "be", "been") for w in room[2:])):
+            return False
+    return True
 
 
 def facts(name: str, page: dict, *, town: str = "", today=None) -> dict:
     """{"makes": (verb, things, source), "since": (year, source), "town": (town, source)} found on the page, each from the
-    first page sentence that passes ``source_ok`` and has that fact; a fact not found is missing."""
+    first page sentence that passes ``source_ok`` and says that fact of the maker (``_since``, ``_based``); a fact not
+    found is missing."""
     year_now = (today or date.today()).year
     head = r"^(?:" + _name_re(name) + r"|We)\s+(?:also\s+|now\s+|still\s+)?(" + _VERB + r")\s+(.+)$"
     found: dict = {}
@@ -664,12 +769,9 @@ def facts(name: str, page: dict, *, town: str = "", today=None) -> dict:
                 things = _things(m.group(2))
                 if things:
                     found["makes"] = (_THIRD.get(verb, verb), things, sentence)
-            if "since" not in found and re.match(r"(?:" + _name_re(name) + r"|We|Our)\b", s, re.IGNORECASE):
-                hit = STARTED.search(s)
-                year = int(hit.group(1) or hit.group(2)) if hit else 0
-                if 1800 <= year <= year_now:
-                    found["since"] = (year, sentence)
-            if town and "town" not in found and re.search(_name_re(town), s, re.IGNORECASE):
+            if "since" not in found and 1800 <= (year := _since(s, name)) <= year_now:
+                found["since"] = (year, sentence)
+            if town and "town" not in found and _based(s, name, town):
                 found["town"] = (town, sentence)
     return found
 

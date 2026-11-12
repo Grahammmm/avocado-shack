@@ -153,6 +153,104 @@ class H2TheStoryIsWrittenFromFacts(unittest.TestCase):
         self.assertEqual(ms.record(page, story), {"source": ADDRESS, "retrieved": "2026-11-09", "from": SOURCES, "story": SUMMARY})
 
 
+class H2TheReturnAtF82c6eba(unittest.TestCase):
+    """HASS-559-FIX (Sol RETURN t_2c550041 at 63dc8a1f). 1 (H2): a page word that is not a plain product word never reaches
+    the story, so a claim joined to the product with "and" ("makes jam and relieves migraines") leaves the sentence out
+    whole. 2 (M): the founding year and the town are taken only from an affirmative clause whose subject is the maker."""
+
+    HEALTH = ["Harbor Lane makes jam and relieves migraines.", "Harbor Lane makes jam and reverses dementia.",
+              "Harbor Lane makes jam and alleviates arthritis.", "Harbor Lane makes jam and soothes sore throats.",
+              "Harbor Lane makes jam and relish and eases anxiety.", "Harbor Lane makes jam, relish and calms nerves.",
+              "Harbor Lane bakes rye bread and protects your skin.", "Harbor Lane makes jam that is safe for babies.",
+              "Harbor Lane makes jam and sends unsolicited messages.", "Harbor Lane makes jam and tonic for joint pain."]
+
+    def test_a_claim_joined_to_the_product_never_reaches_the_story(self):
+        for sentence in self.HEALTH:
+            with self.subTest(sentence=sentence):
+                story = ms.draft_story("Harbor Lane", page_of(sentence), town="Morro Bay", today=DAY)
+                self.assertIsNone(story)  # nothing is left that says what they make: he is asked instead
+                facts = ms.facts("Harbor Lane", page_of(sentence), town="Morro Bay", today=DAY)
+                self.assertNotIn("makes", facts)
+
+    def test_plain_product_words_still_give_the_story(self):
+        cases = {"Harbor Lane makes jam and relish in small copper pots.": "Harbor Lane makes jam and relish.",
+                 "Harbor Lane makes strawberry jam, lemon curd and pickles.": "Harbor Lane makes strawberry jam, lemon curd and pickles.",
+                 "Harbor Lane roasts coffee beans in a small roastery by the sea.": "Harbor Lane roasts coffee beans.",
+                 "Harbor Lane grows avocados and lemons on a hillside.": "Harbor Lane grows avocados and lemons.",
+                 "Harbor Lane bakes sourdough loaves and rye bread at dawn.": "Harbor Lane bakes sourdough loaves and rye bread."}
+        for sentence, want in cases.items():
+            with self.subTest(sentence=sentence):
+                self.assertEqual(ms.draft_story("Harbor Lane", page_of(sentence), today=DAY)["sentences"], [want])
+
+    def test_the_product_words_hold_no_claim_or_hype_word(self):
+        words = set(ms.THING_WORDS)
+        self.assertFalse(words & ms.DROP_WORDS)
+        for term in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS:  # no claim term can be built from them
+            self.assertFalse(all(w in words for w in re.split(r"[-\s]+", term)), term)
+        self.assertFalse([w for w in words if ms.HYPE.search(w)])
+        for word in ("safe", "clean", "pure", "raw", "wild", "treat", "tonic", "remedy", "relief", "calm", "help", "healthy"):
+            self.assertNotIn(word, words)
+
+    def test_the_founding_year_is_taken_only_from_an_affirmative_clause_about_the_maker(self):
+        jam = "Harbor Lane makes jam in small copper pots."
+        cases = {
+            ("Harbor Lane makes jam in a kitchen that was founded in 1998.",): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane was not founded in 1998 by a baker."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane never started in 1998 as a bakery."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane bought an old farm that was established in 1950."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane sells to a market that opened in 2001 by the pier."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane was founded in 1998 but closed for a long while."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane has been closed since 2010 for the winter."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane was founded in 1998 by two sisters."): ["Harbor Lane makes jam.", "Harbor Lane started in 1998."],
+            (jam, "We started Harbor Lane in 2019 with one pot of fruit."): ["Harbor Lane makes jam.", "Harbor Lane started in 2019."],
+            (jam, "Harbor Lane has been making jam and relish since 2010."): ["Harbor Lane makes jam.", "Harbor Lane started in 2010."],
+        }
+        for blocks, want in cases.items():
+            with self.subTest(blocks=blocks):
+                story = ms.draft_story("Harbor Lane", page_of(*blocks), today=DAY)
+                self.assertEqual(story["sentences"], want)
+
+    def test_the_town_is_taken_only_from_an_affirmative_clause_about_the_maker(self):
+        jam = "Harbor Lane makes jam in small copper pots."
+        cases = {
+            (jam, "Harbor Lane has never been based in Morro Bay."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane is not based anywhere near Morro Bay."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane sells its jam to shops in Morro Bay."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane makes jam for a market that is in Morro Bay."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane cooks in a kitchen that was in Morro Bay."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane moved away from Morro Bay a while back."): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane cooks in a shared kitchen in Morro Bay."): ["Harbor Lane makes jam.", "Harbor Lane is based in Morro Bay."],
+            ("Harbor Lane makes jam and relish in a shared kitchen in Morro Bay.",):
+                ["Harbor Lane makes jam and relish.", "Harbor Lane is based in Morro Bay."],
+        }
+        for blocks, want in cases.items():
+            with self.subTest(blocks=blocks):
+                story = ms.draft_story("Harbor Lane", page_of(*blocks), town="Morro Bay", today=DAY)
+                self.assertEqual(story["sentences"], want)
+
+    def test_the_owner_label_names_the_source_of_the_year(self):
+        out = ia.describe_add(dict(SLOTS), plan_ctx(lambda url: page_of("Harbor Lane makes jam in small copper pots.",
+                                                                       "Harbor Lane was founded in 1998 by two sisters.")))
+        maker = next(op for op in out.ops if op["op"] == "maker.add")
+        self.assertEqual(maker["args"]["story"], "Harbor Lane makes jam. Harbor Lane started in 1998.")
+        label = [voice.plain(line) for line in out.say if line.startswith("The maker's own site says: ")]
+        self.assertEqual(len(label), 1)
+        self.assertIn("started in 1998. (source: https://harborlane.example/about, read on Nov 9, 2026)", label[0])
+
+    def test_a_health_claim_page_asks_him_in_the_planner(self):
+        for sentence in self.HEALTH[:2]:
+            with self.subTest(sentence=sentence), self.assertRaises(ia.Refusal) as caught:
+                ia.describe_add(dict(SLOTS), plan_ctx(lambda url: page_of(sentence)))
+            self.assertEqual(caught.exception.kind, "question")
+            self.assertIn("What should we say about Harbor Lane?", caught.exception.reply)
+
+    def test_a_malformed_redirect_is_the_plain_unreachable_error(self):
+        for location in ("https://[broken/x", "https://harborlane.example:bad/x", "//[::1/x"):
+            with self.subTest(location=location), self.assertRaises(ms.PageError) as caught:
+                ms._hop(ADDRESS, location)
+            self.assertEqual(caught.exception.code, "unreachable")
+
+
 def plan_ctx(reader, texts=None):
     return types.SimpleNamespace(content=None, today="2026-11-09", live=True, next_product_id="photo-product-175",
                                  selection_checked_today=False, maker_page=reader,
@@ -432,6 +530,33 @@ class InTheConversation(unittest.TestCase):
         self.assertEqual(self.chat.commits(), 1)
         makers = json.loads((self.chat.kit.wt / "hass/content/makers.json").read_text("utf-8"))["makers"]
         self.assertEqual(makers["Harbor Lane"]["story"], SUMMARY)
+
+    def test_559fix_a_health_claim_on_the_site_is_never_proposed_as_the_story(self):
+        from hass.tests import test_item_add_dispatch as tid
+        for blocks in (["Harbor Lane makes jam and relieves migraines."], ["Harbor Lane makes jam and reverses dementia."]):
+            with self.subTest(blocks=blocks), mock.patch.object(ms, "fetch", self.recorded_fetch(page_of(*blocks))):
+                disposition, replies = self.chat.say(self.TEXT, tid.JAR)
+                self.assertEqual(disposition, "question")
+                self.assertIn("What should we say about Harbor Lane?", "\n".join(replies))
+                self.assertNotIn("migraines", "\n".join(replies))
+                self.assertNotIn("dementia", "\n".join(replies))
+                self.assertEqual(self.chat.drafts(), [])
+                ms._CACHE.clear()
+
+    def test_559fix_an_unrelated_or_negated_year_is_never_proposed_as_the_story(self):
+        from hass.tests import test_item_add_dispatch as tid
+        cases = [["Harbor Lane makes jam in a kitchen that was founded in 1998."],
+                 ["Harbor Lane makes jam in small copper pots.", "Harbor Lane was not founded in 1998 by a baker."]]
+        for blocks in cases:
+            with self.subTest(blocks=blocks), mock.patch.object(ms, "fetch", self.recorded_fetch(page_of(*blocks))):
+                disposition, replies = self.chat.say(self.TEXT, tid.JAR)
+                self.assertEqual(disposition, "proposed")
+                draft = self.chat.drafts()[-1]
+                story = next(op for op in json.loads(draft["ops_json"]) if op["op"] == "maker.add")["args"]["story"]
+                self.assertEqual(story, "Harbor Lane makes jam.")
+                self.assertNotIn("1998", "\n".join(replies))
+                self.chat.say("no")
+                ms._CACHE.clear()
 
     def test_a_site_that_cannot_be_read_is_one_plain_question_and_nothing_is_drafted(self):
         from hass.tests import test_item_add_dispatch as tid
