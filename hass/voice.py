@@ -61,8 +61,10 @@ _PHONE_OR_NUMBER = re.compile(r"\d")
 
 
 def quote(text) -> str:
-    """Mark words that are Mike's own (shown as he wrote them, never judged)."""
-    text = str(text)
+    """Mark words that are Mike's own (shown as he wrote them, never judged).
+
+    The two marks are reserved: any already inside the words are dropped so he cannot open or close the wrapper."""
+    text = plain(str(text))
     return OPEN + text + CLOSE if text else text
 
 
@@ -95,7 +97,7 @@ def check(text, *, emoji_ok=False, long_ok=False, ids_ok=False) -> list:
 
     emoji_ok: Mike used an emoji first. long_ok: he asked for a list, or it is a draft he must read in full.
     ids_ok: the message teaches a command whose answer is an id he has to type (find, listing, post, alias)."""
-    if not isinstance(text, str) or not text.strip(): return ["empty"]
+    if not isinstance(text, str) or not plain(text).strip(): return ["empty"]  # empty = blank once the marks are gone (what Mike would see)
     ours = _ours(text)
     broken = []
     for hit in _WORD_RE.finditer(ours):
@@ -177,8 +179,10 @@ def natural(at, now=None) -> str:
     """A time as a person says it: `today at 2:05 pm`, `tomorrow at 9 am`, `Monday at 9 am`, `Saturday, Nov 14 at 9 am`.
     A time without a zone, or one that cannot be read, is `at a time I can't read`."""
     if not isinstance(at, datetime) or at.tzinfo is None: return "at a time I can't read"
-    at = at.astimezone(LOCAL_TZ)
-    base = now.astimezone(LOCAL_TZ) if isinstance(now, datetime) and now.tzinfo else None
+    try:  # RF0111-13: a real time at the calendar's edge may not exist in Pacific time; never guess a date for it
+        at = at.astimezone(LOCAL_TZ)
+        base = now.astimezone(LOCAL_TZ) if isinstance(now, datetime) and now.tzinfo else None
+    except (OverflowError, ValueError): return "at a time I can't read"
     if base is not None:
         days = (at.date() - base.date()).days
         if days == 0: return f"today at {clock_words(at)}"

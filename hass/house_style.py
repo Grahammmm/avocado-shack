@@ -361,7 +361,7 @@ def check_description(text: str, spec=None, *, name=None, maker_name=None, owner
     spec = spec or load_spec()
     d = spec["descriptions"]
     m = description_metrics(text)
-    owner = claims.fold(owner_text or "")
+    owner = "\n".join(claims.fold(line) for line in str(owner_text or "").splitlines())  # same projection as claims.unstated: fold() collapses newlines, which are clause breaks
     terms = [t for t in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS if _has_term(text, t) and not claims._affirmed(claims._pattern(t), owner)]
     hype = [w for w in d["hype_words_absent"] if re.search(rf"(?<!\w){re.escape(w)}(?!\w)", claims.fold(text))]
     bad_text = [b for b in FORBIDDEN_TEXT if b in text]

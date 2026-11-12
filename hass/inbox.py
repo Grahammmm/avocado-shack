@@ -114,6 +114,8 @@ class Inbox:
                 if wanted is None: raise ValueError("start point required")
                 self.db.execute("INSERT INTO meta(name, value) VALUES ('start_at', ?)", (wanted,))
                 return wanted
+            try: parse_aware(row["value"], "start_at")  # RF0440-12: a damaged recorded cutoff is refused, never echoed
+            except ValueError: raise ValueError("recorded start point is unreadable") from None
             if wanted is not None and wanted != row["value"]:
                 raise ValueError(f"start point already recorded as {row['value']}")
             return row["value"]
@@ -223,6 +225,7 @@ def status(state_dir, now=None):
     if not stat.S_ISREG(mode): return {"result": "unsafe", "reason": "inbox file is a link or not a regular file"}, 2
     try:
         with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
+            db.execute("BEGIN")  # one deferred read snapshot: counts, dispositions, ages and nonces agree; close() ends it
             if db.execute("PRAGMA quick_check").fetchone()[0] != "ok": return {"result": "unreadable"}, 1
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             rows = lambda table, sql: db.execute(sql).fetchall() if table in tables else []  # noqa: E731

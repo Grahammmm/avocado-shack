@@ -66,6 +66,33 @@ class QuestionWordsTests(HikeTestCase):
         self.assertEqual(result["missing"], ["story"])
         self.assertEqual(result["question"], "Please provide: the story")
 
+    def assertSurvivesGuard(self, question, expected):
+        self.assertEqual(question, expected)
+        self.assertEqual(voice.check(question), [])
+        self.assertEqual(voice.guard(question), (expected, []))  # not replaced by the voice fallback
+
+    def test_missing_product_and_hike_target_survive_voice_guard(self):
+        repo = self.repo()
+        for op in ("product.hide", "hike.cancel"):
+            with self.subTest(op=op):
+                missing, question = self.missing_of(repo, op, {})
+                self.assertEqual(missing, ["id"])
+                self.assertSurvivesGuard(question, "Please provide: which one you mean")
+
+    def test_missing_undo_target_survives_voice_guard(self):
+        repo = self.repo()
+        missing, question = self.missing_of(repo, "history.revert", {})
+        self.assertEqual(missing, ["changeId"])
+        self.assertSurvivesGuard(question, "Please provide: the change to undo")
+
+    def test_mixed_missing_targets_keep_order_and_machine_names(self):
+        repo = self.repo()
+        result = self.assertRejected(repo, "needs-details", ("hike.cancel", {}), ("product.hide", {}),
+                                     ("product.set_photo", {"id": PID, "photo": pd.SHA}), ("history.revert", {}))
+        self.assertEqual(result["missing"], ["id", "imageAlt", "changeId"])  # ordered, deduplicated, real ids
+        self.assertSurvivesGuard(result["question"], f"Please provide: which one you mean, {ALT_WORDS}, the change to undo")
+        self.assertEqual(set(result), {"result", "missing", "question"})  # no draft or change produced
+
     def test_no_photo_guides_caption_without_writes(self):
         repo = self.repo()
         fields = {k: v for k, v in NEW.items() if k != "image"}

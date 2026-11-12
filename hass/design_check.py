@@ -8,7 +8,7 @@ naming each change the head made since its merge base with --base (none when
 surface, a deletion, a symlink, submodule or non-plain (e.g. executable) file,
 or a template changed without its generated page (or the reverse). Paths only,
 never contents. Exit 0 ok,
-1 outside, 2 usage (bad refs, no common history, or not inside a git work tree). Read-only git at the
+1 outside, 2 usage (bad refs, no common history, several equally best merge bases, or not inside a git work tree). Read-only git at the
 repository top level (any folder inside it; `diff.relative` and any submodule-ignore setting are ignored);
 nothing is written.
 """
@@ -40,7 +40,10 @@ class Parser(argparse.ArgumentParser):
 
 def git(*args: str, empty_ok: bool = False, cwd: str | None = None) -> str:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
-    out = subprocess.run(["git", "--literal-pathspecs", *args], capture_output=True, env=env, cwd=cwd)
+    try:
+        out = subprocess.run(["git", "--literal-pathspecs", *args], capture_output=True, env=env, cwd=cwd)
+    except OSError:  # Git cannot be launched (missing, not executable, E2BIG): same usage result, no detail
+        raise Usage(f"git {args[0]} failed") from None
     if out.returncode and not (empty_ok and out.returncode == 1 and not out.stdout.strip()):
         raise Usage(f"git {args[0]} failed")
     return out.stdout.decode("utf-8", "surrogateescape")
@@ -63,10 +66,12 @@ def commit(ref: str, top: str) -> str:
 
 
 def merge_base(base: str, head: str, top: str) -> str:
-    found = git("merge-base", base, head, empty_ok=True, cwd=top).strip()  # exit 1, no output: unrelated
+    found = git("merge-base", "--all", base, head, empty_ok=True, cwd=top).split()  # exit 1, no output: unrelated
     if not found:
         raise Usage("no common history between --base and --head")
-    return found
+    if len(found) > 1:  # criss-cross history: no single base is authoritative, so certify none
+        raise Usage("multiple merge bases between --base and --head")
+    return found[0]
 
 
 def check(base: str, head: str, top: str) -> tuple[int, list[str]]:

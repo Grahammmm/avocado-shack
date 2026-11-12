@@ -208,6 +208,69 @@ class NeverRaises(LogCase):
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(sorted(p.name for p in self.state.rglob("*")), members)
 
+    DEEP_ARRAY = "[" * 100000 + "0" + "]" * 100000
+    DEEP_OBJECT = '{"a":' * 100000 + "0" + "}" * 100000
+
+    def _deep_file(self, when, lines):
+        day = self.state / corrlog.FOLDER
+        day.mkdir(exist_ok=True)
+        path = day / f"{when:%Y-%m-%d}.jsonl"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+    def test_decoder_excessive_lines_skip_and_continue_across_files(self):
+        good = lambda when, reason: json.dumps({"at": when.isoformat(), "kind": "error", "reason": reason})
+        yesterday = self.now - timedelta(days=1)
+        p1 = self._deep_file(yesterday, [good(yesterday, "first"), self.DEEP_ARRAY, good(yesterday, "second")])
+        p2 = self._deep_file(self.now, [self.DEEP_OBJECT, good(self.now, "last")])
+        before = (p1.read_bytes(), p2.read_bytes())
+        self.assertEqual([r["reason"] for r in self.log.rows()], ["first", "second", "last"])
+        self.assertEqual(self.log.last()[0]["reason"], "last")
+        self.assertTrue(self.log.top())
+        self.assertEqual((p1.read_bytes(), p2.read_bytes()), before)
+
+    def test_decoder_excessive_input_formatters_match_accepted_only(self):
+        at = self.now.isoformat()
+        row = json.dumps({"at": at, "kind": "error", "reason": "good"})
+        self._deep_file(self.now, [row, self.DEEP_ARRAY, row])
+        ref = self.state / "ref"
+        (ref / corrlog.FOLDER).mkdir(parents=True)
+        (ref / corrlog.FOLDER / f"{self.now:%Y-%m-%d}.jsonl").write_text(row + "\n" + row + "\n", encoding="utf-8")
+        other = corrlog.CorrLog(ref, lambda: NOW)
+        for fn in (corrlog.problems_text, corrlog.weekly_line):
+            self.assertEqual(fn(self.log), fn(other))
+        self.assertIn("good", corrlog.problems_text(self.log))
+
+    def test_cli_survives_decoder_excessive_input(self):
+        now = datetime.now(timezone.utc)
+        row = json.dumps({"at": now.isoformat(), "kind": "error", "reason": "good"})
+        path = self._deep_file(now, [row, self.DEEP_ARRAY, row])
+        before = path.read_bytes()
+        for what in ("problems", "weekly"):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                self.assertEqual(corrlog.main([what, "--state", str(self.state)]), 0)
+            self.assertEqual(err.getvalue(), "")
+            self.assertNotIn("No problems", out.getvalue())
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_only_decoder_recursion_is_caught(self):
+        at = self.now.isoformat()
+        row = json.dumps({"at": at, "kind": "error", "reason": "good", "extra": {"n": [[1]]}})
+        self._deep_file(self.now, [row, "BOOM", row])
+        real = json.loads
+        def fake(raw, *a, **k):
+            if raw == "BOOM": raise RecursionError
+            return real(raw, *a, **k)
+        with mock.patch.object(corrlog.json, "loads", fake):
+            rows = self.log.rows()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["extra"], {"n": [[1]]})
+        def boom(raw, *a, **k): raise RuntimeError("other")
+        with mock.patch.object(corrlog.json, "loads", boom):
+            with self.assertRaises(RuntimeError):
+                self.log.rows()
+
 
 class PathAdmission(LogCase):
     def bounded(self, operation):

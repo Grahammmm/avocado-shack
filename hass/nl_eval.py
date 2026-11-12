@@ -74,6 +74,8 @@ def load_corpus(path=CORPUS) -> list:
         expects = [row["expect"], *also]
         if not all(ie._expect_ok(e) for e in expects): raise bad("bad expect")
         if any("ops" in e and e["revises"] not in (None, *codes) for e in expects): raise bad("revises names no pending draft")
+        # RF1900-10: the runtime check turns a longer draft into a question, so such an expectation could never be met
+        if any(len(e.get("ops", ())) > interpret_check.MAX_OPS for e in expects): raise bad(f"more than {interpret_check.MAX_OPS} expected ops")
         if row["ask"] is not ("question" in row["expect"]) or row["refuse"] is not ("unsupported" in row["expect"]): raise bad("ask/refuse disagree with expect")
         if "notes" in row and not ie._notes_ok(row["notes"]): raise bad("bad notes")
         if "aliases" in row and not (isinstance(row["aliases"], list) and all(isinstance(a, dict) and set(a) == {"name", "kind", "id"}
@@ -154,10 +156,18 @@ def _texts_of(got) -> list:
     return [t for call in got["ops"] for t in _leaves(call["args"])] if kind == "ops" else [str(got.get(kind, "")).lower()]
 
 
+_FAIL_CODES = frozenset({"clock", "request", "timeout", "connect", "shape", "not-json", "too-large", "unknown", "error", "contract"})
+
+
+def _fail_code(failed) -> str:
+    """The displayable form of a recorded failure: a known code or http-NNN as is, anything else the fixed `unknown` (never the text)."""
+    return failed if failed in _FAIL_CODES or re.fullmatch(r"http-[0-9]{3}", failed, re.ASCII) else "unknown"
+
+
 def judge(case, record, registry) -> dict:
     """{"verdict", "kind", "intent": bool, "why"} for one case and its recorded reply row."""
     codes = {p.get("code") for p in case["pending"]}
-    if record.get("failed"): return {"verdict": "call-failed", "kind": "none", "intent": False, "why": f"call failed: {record['failed']}"}
+    if record.get("failed"): return {"verdict": "call-failed", "kind": "none", "intent": False, "why": f"call failed: {_fail_code(record['failed'])}"}
     got = interpret_check.check(_checked(_ordered(record["reply"])), registry, codes)
     kind = ie._kind(got)
     expects = [case["expect"], *case.get("also", [])]

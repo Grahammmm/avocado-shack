@@ -187,7 +187,8 @@ def _load(path: Path, key: str, kind: type):
         raise ReportError(f"cannot read {path}: JSON nesting is too deep") from None
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise ReportError(f"cannot read {path}: {exc}") from None
-    if not isinstance(data, dict) or data.get("schemaVersion") != 1 or not isinstance(data.get(key), kind):
+    if (not isinstance(data, dict) or type(data.get("schemaVersion")) is not int or data["schemaVersion"] != 1
+            or not isinstance(data.get(key), kind)):
         raise ReportError(f"{path}: expected {{\"schemaVersion\": 1, \"{key}\": {kind.__name__}}}")
     return data[key], hashlib.sha256(raw).hexdigest()
 

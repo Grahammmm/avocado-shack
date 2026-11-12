@@ -8,7 +8,7 @@ import html
 from datetime import date
 from pathlib import Path
 
-from hass.content_model import shop_today
+from hass.content_model import iso_day, shop_today
 
 NOTICE_JS = ("<script>(()=>{const expire=()=>document.querySelectorAll('.home-notice').forEach(n=>{"
              "if(new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})>n.dataset.until)n.hidden=true});"
@@ -37,8 +37,12 @@ def stale_paths(content, root: Path) -> list[str]:
 
     Writes and publishing continue using the current render, removing expired notices and specials.
     The notice and specials clock overrides do not change the selection freshness clock. A path is stale only when
-    it differs from the current render and from every earlier-day render the content allows (the day a notice's
-    last day was, and each day the set of active specials changed).
+    it differs from the current render and from every earlier-day render the content allows. Both dated sections
+    always use the SAME earlier day (a notice's last day and the day after, each day the set of active specials
+    changed), so a mix no real day could produce, such as an expired notice with a later special, stays stale.
+
+    A special also adds the day before its start: a page generated then correctly omits it, and once its first
+    day arrives that unchanged page is still an earlier exact render (``specials.change_days`` has no such day).
     """
     from hass.sitegen import diff_paths, render, shop_today
     from hass.specials import change_days
@@ -46,15 +50,20 @@ def stale_paths(content, root: Path) -> list[str]:
     today = shop_today()
     templates = Path(root) / "hass" / "templates"
     stale = diff_paths(render(content, templates, today=today), root)
+    days = set(change_days(content.store, today))
+    for sp in content.store.get("specials") or []:
+        start = iso_day(sp.get("start")) if isinstance(sp, dict) else None
+        if start is not None and date.min < start <= today:
+            days.add(date.fromordinal(start.toordinal() - 1))
     notice = content.store.get("notice")
-    notice_days = [date.fromisoformat(notice["until"])] if notice and notice["until"] < today.isoformat() else []
-    for notice_day in [None, *notice_days]:
-        for special_day in [None, *change_days(content.store, today)]:
-            if not stale:
-                return stale
-            if notice_day is None and special_day is None:
-                continue
-            before = diff_paths(render(content, templates, today=today, notice_today=notice_day,
-                                       specials_today=special_day), root)
-            stale = [rel for rel in stale if rel in before]
+    last = iso_day(notice.get("until")) if isinstance(notice, dict) else None
+    if last is not None and last < today:
+        days.add(last)
+        if last < date.max:
+            days.add(date.fromordinal(last.toordinal() + 1))
+    for day in sorted(d for d in days if d < today):
+        if not stale:
+            return stale
+        before = diff_paths(render(content, templates, today=today, notice_today=day, specials_today=day), root)
+        stale = [rel for rel in stale if rel in before]
     return stale

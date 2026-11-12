@@ -125,11 +125,20 @@ def init(state, worktree) -> dict:
     _write_json(sdir / "config.json", {"worktree": str(wt), "settings": {}})
     return {"result": "ok", "worktree": str(wt)}
 
+def _unique_members(pairs):
+    """RF0540-10: a repeated member in any request object (equal, conflicting or escaped alike) is ambiguous: refuse it,
+    never draft last-key-wins. Fixed text only; the offending key and value are not echoed."""
+    out = {}
+    for key, value in pairs:
+        if key in out: raise ValueError("duplicate JSON member")
+        out[key] = value
+    return out
+
 def _parse_request(request):
     try:
         raw = request if isinstance(request, (bytes, str)) else json.dumps(request, ensure_ascii=False)
         raw = raw.encode("utf-8") if isinstance(raw, str) else raw
-        doc = json.loads(raw.decode("utf-8")) if len(raw) <= MAX_REQUEST else None
+        doc = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_members) if len(raw) <= MAX_REQUEST else None
         json.dumps(doc, ensure_ascii=False).encode("utf-8")  # escaped lone surrogates cannot be stored or rendered
     except (ValueError, RecursionError) as exc:  # RF1920-5: nested too deep is not valid JSON, never a traceback
         return None, ["request has unpaired surrogate characters" if isinstance(exc, UnicodeEncodeError)
