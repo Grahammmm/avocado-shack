@@ -313,5 +313,64 @@ class UnexpectedSuccessTest(unittest.TestCase):
             self.assertNotIn("LEAK-MARKER", "".join(lines))
 
 
+class SelectedMissingTest(unittest.TestCase):
+    def _main_map(self, argv, map_, n, d):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = acceptance.main(argv, map_=map_, tests_pkg=n, tests_dir=d)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_selected_missing_id_returns_bad_map_not_keyerror(self):
+        with temp_pkg({"test_counter.py": COUNTER}) as (n, d):
+            m = {"H02": ("test_counter",)}
+            self.assertEqual(self._main_map(["--only", "H01"], m, n, d),
+                             (2, "map: H01\n", ""))
+            self.assertEqual(m, {"H02": ("test_counter",)})
+            self.assertNotIn(n + ".test_counter", sys.modules)
+
+    def test_missing_selected_id_blocks_valid_counter_prefix(self):
+        with temp_pkg({"test_counter.py": COUNTER}) as (n, d):
+            m = {"H02": ("test_counter",)}
+            self.assertEqual(self._main_map(["--only", "H02,H01"], m, n, d),
+                             (2, "map: H01\n", ""))
+            self.assertNotIn(n + ".test_counter", sys.modules)
+            self.assertEqual(importlib.import_module(n + ".test_counter").RAN, [])
+
+    def test_multiple_missing_selected_ids_keep_requested_order(self):
+        with temp_pkg({"test_counter.py": COUNTER}) as (n, d):
+            m = {"H02": ("test_counter",)}
+            code, out, err = self._main_map(["--only", "H03,H01,H02"], m, n, d)
+            self.assertEqual((code, out, err), (2, "map: H03\nmap: H01\n", ""))
+            self.assertNotIn(n + ".test_counter", sys.modules)
+
+    def test_partial_map_with_complete_selection_remains_valid(self):
+        with temp_pkg({"test_ok.py": OK}) as (n, d):
+            code, out, err = self._main_map(["--only", "H01"], {"H01": ("test_ok",)}, n, d)
+            self.assertEqual((code, err), (0, ""))
+            lines = out.splitlines()
+            self.assertEqual(json.loads(lines[0]), {"id": "H01", "result": "pass",
+                             "tests": 2, "failures": 0, "note": ""})
+            self.assertEqual(json.loads(lines[1])["summary"],
+                             {"ids": 1, "pass": 1, "fail": 0, "not covered": 0})
+
+    def test_unknown_id_precedes_missing_map_validation(self):
+        with temp_pkg({"test_counter.py": COUNTER}) as (n, d):
+            m = {"H02": ("test_counter",)}
+            self.assertEqual(self._main_map(["--only", "H01,H99"], m, n, d),
+                             (2, "map: H99\n", ""))
+            self.assertNotIn(n + ".test_counter", sys.modules)
+
+    def test_full_map_and_runtime_failure_semantics_unchanged(self):
+        with temp_pkg({"test_bad.py": BAD, "test_ok.py": OK}) as (n, d):
+            m = {i: ("test_ok",) for i in acceptance.ALL_IDS if i != "H05"}
+            code, out, _ = self._main_map([], m, n, d)
+            self.assertEqual((code, out), (2, "map: H05\n"))
+            m = {"H01": ("test_bad",)}
+            code, out, _ = self._main_map(["--only", "H01"], m, n, d)
+            self.assertEqual(code, 1)
+            self.assertEqual(json.loads(out.splitlines()[0])["result"], "fail")
+            self.assertEqual(m, {"H01": ("test_bad",)})
+
+
 if __name__ == "__main__":
     unittest.main()
