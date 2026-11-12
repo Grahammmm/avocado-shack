@@ -741,6 +741,7 @@ def _register() -> None:
     for rule_id, fn in RULES.items():
         dispatch.RULES.setdefault(rule_id, fn)
     dispatch.READ_ONLY.setdefault("specials.show", show_reply)
+    dispatch.READ_ONLY_LONG.add("specials.show")  # the complete list may run past the everyday length: nothing is cut or dropped
 
 
 _register()

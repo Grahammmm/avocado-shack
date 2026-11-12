@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from hass import house_style, newitem_synthetic, skills
+from hass import house_style, media, newitem_synthetic, skills
 from hass.skills import item_picture, photo_trial
 
 REPO = photo_trial.REPO_ROOT
@@ -194,9 +194,7 @@ class Folders(unittest.TestCase):
         boom = PermissionError(13, "Permission denied", str(folder))
         with mock.patch.object(photo_trial.os, "scandir", side_effect=boom):
             self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
-        with mock.patch.object(photo_trial.Path, "exists", side_effect=boom):
-            self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
-        with mock.patch.object(photo_trial.Path, "is_symlink", side_effect=OSError(5, "I/O error", str(folder))):
+        with mock.patch.object(photo_trial.os, "open", side_effect=boom):
             self._assert_path_free_refusal(*_run([str(folder)]), str(folder.name))
 
     def test_flat_sorted_case_insensitive_candidates(self):
@@ -252,10 +250,10 @@ class Failures(unittest.TestCase):
                                 "c-gone.png": _PHOTOS["bottle-bench-png.png"], "d-ok.jpg": _PHOTOS["jar-phone-rotated.jpg"]})
         real = photo_trial._read_photo
 
-        def read(path):
+        def read(path, dir_fd=None):
             if path.name == "c-gone.png":
                 raise OSError("secret path /nope")
-            return real(path)
+            return real(path, dir_fd=dir_fd)
         with mock.patch.object(photo_trial, "_read_photo", read):
             code, out, err = _run([str(folder), "--json"])
         self.assertEqual((code, err), (1, ""))
@@ -284,6 +282,225 @@ class Failures(unittest.TestCase):
         with mock.patch.object(item_picture, "picture_review", return_value=((), ())):
             code, out, err = _run([str(folder)])
         self.assertEqual((code, out), (2, ""))
+
+
+class Substitution(unittest.TestCase):
+    """The admitted folder is held by descriptor: replacing its name or a photo's name afterwards must not redirect reads."""
+    ORIGINAL, CANARY = b"ORIGINAL-EXTERNAL-BYTES", b"FAKE-REPOSITORY-CANARY"
+
+    def _world(self, replacement_in_repo=True):
+        base = _tmp(self)
+        fake = base / "repo"
+        (fake / "inside").mkdir(parents=True)
+        other = base / "other"
+        other.mkdir()
+        target = fake / "inside" if replacement_in_repo else other
+        folder = base / "photos"
+        folder.mkdir()
+        for place in (folder, target):
+            (place / "probe.jpg").write_bytes(self.ORIGINAL if place == folder else self.CANARY)
+        return base, fake, folder, target
+
+    def _swap_folder(self, base, folder, target):
+        real = photo_trial._read_photo
+        done = []
+
+        def read(path, dir_fd=None):
+            if not done:  # after the listing, immediately before the real reader
+                done.append(1)
+                folder.rename(base / "moved")
+                folder.symlink_to(target)
+            return real(path, **({} if dir_fd is None else {"dir_fd": dir_fd}))
+        return read
+
+    def _assert_replacement_not_read(self, replacement_in_repo, extra):
+        base, fake, folder, target = self._world(replacement_in_repo)
+        seen = []
+
+        def assess(name, data):
+            seen.append(data)
+            return photo_trial._row(name, "pass", [], [])
+        with mock.patch.object(photo_trial, "REPO_ROOT", fake), mock.patch.object(photo_trial, "assess_photo", assess), \
+                mock.patch.object(photo_trial, "_read_photo", self._swap_folder(base, folder, target)):
+            code, out, err = _run([str(folder), *extra])
+        self.assertTrue(folder.is_symlink())  # the swap really happened
+        self.assertNotIn(self.CANARY, seen)
+        if code == 0:  # original bytes through the pinned descriptor, or a fixed refusal
+            self.assertEqual(seen, [self.ORIGINAL])
+        else:
+            self.assertEqual((code, out, seen), (2, "", []))
+            self.assertNotIn(str(base), err)
+
+    def test_parent_swap_after_listing_never_reads_replacement(self):
+        for extra in ((), ("--json",)):
+            self._assert_replacement_not_read(True, extra)
+
+    def test_parent_swap_to_other_external_directory_is_not_a_new_input(self):
+        for extra in ((), ("--json",)):
+            self._assert_replacement_not_read(False, extra)
+
+    def test_component_swap_during_directory_open_refuses_without_reads(self):
+        base, fake, folder, target = self._world()
+        real_open = os.open
+        swapped = []
+
+        def opener(path, flags, *args, **kw):
+            if path == "photos" and not swapped:  # the component changes after the preliminary look
+                swapped.append(1)
+                folder.rename(base / "moved")
+                folder.symlink_to(target)
+            return real_open(path, flags, *args, **kw)
+        with mock.patch.object(photo_trial, "REPO_ROOT", fake), mock.patch.object(photo_trial.os, "open", opener), \
+                mock.patch.object(photo_trial, "_read_photo") as read, mock.patch.object(photo_trial, "assess_photo") as assess:
+            code, out, err = _run([str(folder)])
+        self.assertTrue(swapped)
+        self.assertEqual((code, out), (2, ""))
+        self.assertFalse(read.called or assess.called)
+        self.assertIn("symbolic link", err)
+        self.assertNotIn(str(base), err)
+
+    def test_leaf_swap_after_enumeration_never_follows_link(self):
+        for name in ("probe.jpg", "probe.PNG"):
+            folder = _tmp(self) / "photos"
+            folder.mkdir()
+            (folder / name).write_bytes(self.ORIGINAL)
+            canary = folder.parent / "canary.bin"
+            canary.write_bytes(self.CANARY)
+            real = photo_trial._read_photo
+
+            def read(path, dir_fd=None):
+                (folder / name).unlink()
+                (folder / name).symlink_to(canary)
+                return real(path, **({} if dir_fd is None else {"dir_fd": dir_fd}))
+            with mock.patch.object(photo_trial, "_read_photo", read), mock.patch.object(photo_trial, "assess_photo") as assess:
+                code, out, err = _run([str(folder), "--json"])
+            self.assertEqual((code, out), (2, ""), name)
+            self.assertFalse(assess.called)
+            self.assertIn("symbolic link", err)
+            self.assertNotIn(str(folder), err)
+
+    def test_input_descriptors_close_on_every_exit(self):
+        def count():
+            return len(os.listdir("/proc/self/fd"))
+        folder = _folder(self, {"a.jpg": _PHOTOS["jar-white-sheet.jpg"]})
+        missing = folder.parent / "missing"
+        passed = lambda name, data: photo_trial._row(name, "pass", [], [])  # noqa: E731
+        before = count()
+        with mock.patch.object(photo_trial, "assess_photo", passed):
+            self.assertEqual(_run([str(folder)])[0], 0)  # success
+        self.assertEqual(_run([str(missing)])[0], 2)  # path refusal
+        self.assertEqual(_run([str(folder / "a.jpg")])[0], 2)  # not a folder
+        with mock.patch.object(photo_trial, "_read_photo", side_effect=OSError("gone")):
+            self.assertEqual(_run([str(folder)])[0], 1)  # file read failure
+        with mock.patch.object(photo_trial, "_tools", side_effect=ImportError("x")):
+            self.assertEqual(_run([str(folder)])[0], 2)  # setup failure
+        with mock.patch.object(photo_trial, "assess_photo", side_effect=RuntimeError("render blew up")):
+            with self.assertRaises(RuntimeError):
+                _run([str(folder)])
+        self.assertEqual(count(), before)
+
+
+class SourceBound(unittest.TestCase):
+    """Source reads stop at hass.media.MAX_BYTES before assessment (RF0445-9)."""
+
+    def _sized(self, size):
+        folder = _tmp(self) / "photos"
+        folder.mkdir()
+        path = folder / "big.jpg"
+        with open(path, "wb") as handle:
+            handle.truncate(size)  # sparse synthetic file
+        return folder, path
+
+    def _watch(self):
+        """Record read() requests on the opened photo handle and every assess_photo payload length."""
+        reads, assessed = [], []
+
+        class Spy:
+            def __init__(self, handle):
+                self.handle = handle
+
+            def read(self, *args):
+                reads.append(args)
+                return self.handle.read(*args)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return self.handle.__exit__(*exc)
+        real_fdopen = os.fdopen
+        patches = [mock.patch.object(os, "fdopen", lambda *a, **k: Spy(real_fdopen(*a, **k))),
+                   mock.patch.object(photo_trial, "assess_photo",
+                                     lambda name, data: assessed.append(len(data)) or photo_trial._row(name, "pass", [], []))]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        return reads, assessed
+
+    def _tooLarge(self, row):
+        self.assertEqual((row["status"], row["failed_checks"], row["advice"]),
+                         ("warn", ["too-large"], [media.REPLIES["too-large"]]))
+
+    def test_oversized_trial_photo_refused_before_payload_read(self):
+        folder, path = self._sized(media.MAX_BYTES + 1)
+        reads, assessed = self._watch()
+        rows = photo_trial.trial_directory(folder)
+        self.assertEqual((reads, assessed, path.stat().st_size), ([], [], media.MAX_BYTES + 1))
+        self._tooLarge(rows[0])
+
+    def test_trial_photo_growth_after_fstat_is_refused(self):
+        folder, path = self._sized(1000)
+        reads, assessed = self._watch()
+        real_fstat, done = os.fstat, []
+
+        def fstat(fd):
+            info = real_fstat(fd)  # a real, admitted result ...
+            if not done:
+                done.append(1)
+                os.truncate(path, media.MAX_BYTES + 1)  # ... then the same file grows before it is read
+            return info
+        before = len(os.listdir("/proc/self/fd"))
+        with mock.patch.object(os, "fstat", fstat):
+            rows = photo_trial.trial_directory(folder)
+        self.assertEqual((reads, assessed), ([(media.MAX_BYTES + 1,)], []))
+        self._tooLarge(rows[0])
+        self.assertEqual(len(os.listdir("/proc/self/fd")), before)
+
+    def test_trial_photo_at_and_below_limit_is_admitted(self):
+        for size in (media.MAX_BYTES, media.MAX_BYTES - 1, 10):
+            folder, _ = self._sized(size)
+            reads, assessed = self._watch()
+            rows = photo_trial.trial_directory(folder)
+            self.assertEqual((assessed, rows[0]["status"]), ([size], "pass"), size)
+
+    def test_oversized_photo_warns_and_later_good_photo_is_assessed(self):
+        folder = _folder(self, {"a-ok.jpg": _PHOTOS["jar-white-sheet.jpg"], "c-ok.png": _PHOTOS["bottle-bench-png.png"]})
+        with open(folder / "b-big.jpg", "wb") as handle:
+            handle.truncate(media.MAX_BYTES + 1)
+        for extra in ((), ("--json",)):
+            code, out, err = _run([str(folder), *extra])
+            self.assertEqual((code, err), (1, ""))
+            self.assertNotIn(str(folder), out)
+            names = [r["file"] for r in json.loads(out)] if extra else [line.split("\t")[0] for line in out.splitlines()[1:]]
+            self.assertEqual(names, ["a-ok.jpg", "b-big.jpg", "c-ok.png"])
+            self.assertIn("too-large", out)
+        rows = json.loads(_run([str(folder), "--json"])[1])
+        self._tooLarge(rows[1])
+        self.assertEqual((rows[0]["status"], rows[2]["status"]), ("pass", "pass"))
+
+    def test_bounded_reader_preserves_corrupt_empty_and_read_errors(self):
+        folder = _folder(self, {"a-empty.jpg": b"", "b-bad.jpg": b"not an image", "c-ok.jpg": _PHOTOS["jar-white-sheet.jpg"]})
+        rows = photo_trial.trial_directory(folder)
+        self.assertEqual([(r["file"], r["status"], r["failed_checks"]) for r in rows],
+                         [("a-empty.jpg", "warn", ["cannot-render"]), ("b-bad.jpg", "warn", ["cannot-render"]),
+                          ("c-ok.jpg", "pass", [])])
+        before = len(os.listdir("/proc/self/fd"))
+        with mock.patch.object(os, "fstat", side_effect=OSError("gone")):
+            rows = photo_trial.trial_directory(folder)
+        self.assertEqual({r["failed_checks"][0] for r in rows}, {"unreadable-photo"})
+        big, _ = self._sized(media.MAX_BYTES + 1)
+        photo_trial.trial_directory(big)
+        self.assertEqual(len(os.listdir("/proc/self/fd")), before)
 
 
 class Privacy(unittest.TestCase):

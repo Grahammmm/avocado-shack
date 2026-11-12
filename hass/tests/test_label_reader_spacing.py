@@ -7,6 +7,7 @@ import unittest
 
 from hass.content_model import TEXT_LIMITS
 from hass.label_reader import keep
+from hass.tests.test_photo_draft import JPG
 
 CATS = ["fruit", "honey", "tea"]
 
@@ -63,3 +64,35 @@ class SpacingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpacedClaimTests(unittest.TestCase):
+    DASHES = ("-", " - ", " -", "- ", "--", " -- ", "\u2011", " \u2013 ", "\t-\u00a0", "\u2013\u2013")
+
+    def test_spaced_dashes_do_not_hide_label_claims(self):
+        for left, right in (("Gluten", "Free Oats"), ("Cage", "Free Eggs"), ("Award", "Winning Tea"),
+                            ("Made", "In France Salt"), ("Non", "GMO Tea")):
+            for dash in self.DASHES:
+                with self.subTest(value=repr(left + dash + right)):
+                    self.assertEqual(keep({"name": left + dash + right, "brand": "Etto"}, CATS), {"brand": "Etto"})
+
+    def test_claim_drop_is_field_local(self):
+        claim = "Gluten - Free"
+        self.assertEqual(keep({"name": claim, "brand": "Etto", "category": "tea"}, CATS), {"brand": "Etto", "category": "tea"})
+        self.assertEqual(keep({"name": "Oats", "brand": claim, "category": "tea"}, CATS), {"name": "Oats", "category": "tea"})
+        self.assertEqual(keep({"name": "Oats", "brand": "Etto", "category": claim}, ["tea", claim]),
+                         {"name": "Oats", "brand": "Etto"})
+        self.assertEqual(keep({"name": claim, "brand": "Cage - Free", "category": "x"}, CATS), {})
+
+    def test_claim_comparison_does_not_rewrite_safe_label_text(self):
+        self.assertEqual(keep({"name": "Plain  -  Oats", "brand": "Big - Sur"}, CATS),
+                         {"name": "Plain - Oats", "brand": "Big - Sur"})
+
+
+class SpacedClaimReaderTests(unittest.TestCase):
+    def test_spaced_claim_through_fake_reader(self):
+        from hass.tests.test_label_reader import reader, recorded
+        labels, transport = reader(recorded({"name": "Gluten - Free Oats", "brand": "Etto", "category": "tea"}))
+        self.assertEqual(labels.read(JPG, CATS),
+                         {"brand": "Etto", "category": "tea"})
+        self.assertEqual((len(transport.calls), labels.last_error), (1, None))

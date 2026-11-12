@@ -52,7 +52,8 @@ def _id(row, n, label, seen):
 
 
 def _expect_ok(expect) -> bool:
-    if expect in ({"question": True}, {"unsupported": True}): return True
+    # RF1155-12: the no-draft sentinel is literal JSON true; == would also admit 1 and 1.0
+    if isinstance(expect, dict) and len(expect) == 1 and expect.get("question", expect.get("unsupported")) is True: return True
     if not (isinstance(expect, dict) and set(expect) == {"ops", "revises"}): return False
     return (isinstance(expect["ops"], list) and bool(expect["ops"]) and isinstance(expect["revises"], (str, type(None)))
             and all(isinstance(c, dict) and set(c) == {"op", "args"} and isinstance(c["op"], str)
@@ -108,6 +109,10 @@ def _why(case, reply, registry):
     expect, same = case["expect"], lambda a, b: json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
     if _kind(got) != _kind(expect): return f"expected {_kind(expect)}, got {_kind(got)}"
     if "ops" not in expect: return None
+    for call in expect["ops"]:  # RF2210-12: expected names are case data; never format an unregistered one into a reason
+        op = registry.get(call["op"])
+        if op is None: return "expected op is not registered"
+        if any(k not in op.args for k in call["args"]): return "expected arg is not registered"
     names, wanted = [c["op"] for c in got["ops"]], [c["op"] for c in expect["ops"]]
     if names != wanted: return f"ops {','.join(names)} but expected {','.join(wanted)}"
     for n, (have, call) in enumerate(zip(got["ops"], expect["ops"]), 1):

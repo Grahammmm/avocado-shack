@@ -45,6 +45,30 @@ PRICE_TEXT = re.compile(
     + rf"|\b{_NUM}\s+(?:a|the)\s+(?:pound|lb|dozen|ounce|oz)\b",  # '5 a pound'
     re.IGNORECASE)
 FOREVER = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?|erase|wipe)\b", re.IGNORECASE)
+DELETE_WORD = re.compile(r"\b(?:delet(?:e|ing)|erase|wipe)\b")
+PERMANENT_WORD = re.compile(r"\b(?:for ever|forever|for good|permanent(?:ly)?)\b")
+NEGATED_DELETE = re.compile(r"\b(?:do not|does not|never|not|no|without)\b[^.]*\b(?:delet(?:e|ing)|erase|wipe)\b")
+HIDE_INSTEAD = re.compile(r"\bjust hide\b|\bhide\b[^.]*\binstead\b|\binstead\b[^.]*\bhide\b")
+REJECTS_HIDE = re.compile(r"\b(?:not|rather than|instead of)\s+(?:to\s+)?(?:just\s+)?hid(?:e|ing)\b")
+REFERS_BACK = re.compile(r"\b(?:it|them|that|this|those|these|everything|anything|all|one|ones)\b")  # points at what was just asked for
+_DELETING = r"(?:delet(?:e|ing)|erase|wipe)"
+CLAUSE_SPLIT = re.compile(  # marks, commas, dashes, colons, ' / ', 'but', and an 'and' that starts a new instruction
+    r"[.;!?\n,:\u2014\u2013]|\s/\s|\s-+\s|--+|\bbut\b|\band then\b|"
+    rf"\band\b(?=\s+(?:(?:do not|does not|never|not|no|without)\b[^.]*\b{_DELETING}\b|just hide\b|{_DELETING}\b))")
+INSTRUCTION = re.compile(  # where one delete/hide instruction starts, lead-in words included
+    rf"\b(?:(?:and|or|do not|does not|never|not|no|without|just|instead of|instead|rather than)\s+)*\b(?:{_DELETING}|hid(?:e|ing)?)\b")
+NOT_A_THING = frozenset(  # clause words that name no product: verbs, negations, fillers and the 'forever' words
+    "a an and the my our your please pls actually just instead of to for on in at me us i you do does did not no never without "
+    "dont don't yes yeah ok okay now then also still really delete deleting deletes erase erasing wipe wiping hide hiding hid "
+    "ever forever good permanent permanently or rather than want need like would should can could will".split())
+
+
+def _things(clause) -> frozenset:
+    """The product words of one clause, plural folded, so a prohibition can be matched to the request it withdraws."""
+    words = (w for w in re.findall(r"[a-z0-9']+", clause) if w not in NOT_A_THING and not REFERS_BACK.fullmatch(w))
+    return frozenset(w[:-1] if len(w) > 3 and w.endswith("s") else w for w in words)
+
+
 FIELD_WORDS = {"name": "name", "description": "description", "displayBrand": "maker line", "imageAlt": "picture caption"}
 SLOT_OF = {"displayBrand": "display_brand", "imageAlt": "image_alt"}  # slot names are lower case; the op arguments keep their camel case
 
@@ -138,10 +162,66 @@ def rule_whole_shelf(ids):
     _too_many(ids, "I hide")
 
 
-def rule_no_permanent_delete(slots):
+def owner_asks_permanent_delete(texts, content=None) -> bool:
+    """True when this request's owner texts, oldest first, end on an explicit permanent-deletion instruction: a deletion word
+    and a 'forever' word in one clause. A negated one, or a later 'just hide it instead', withdraws it, but only the
+    instruction it is about: 'delete the cashews forever, never delete the plums' still asks for the cashews."""
+    names = [n.casefold() for p in getattr(content, "products", None) or [] if isinstance(n := p.get("name"), str)
+             and PERMANENT_WORD.search(n.casefold())]
+    asked = []  # the product words of each standing deletion instruction (empty: it only said 'it' or 'them')
+    for text in texts or ():
+        if not isinstance(text, str):
+            continue
+        text = text.casefold().replace("\u2019", "'").replace("n't", " not")
+        for name in names:
+            text = text.replace(name, " ")
+        for clause in CLAUSE_SPLIT.split(" ".join(text.split())):
+            for part in _instructions(clause):
+                kind = _kind(part)
+                if kind == "ask":  # "..., not just hide it" rejects hiding; it never withdraws a deletion request
+                    asked.append(_things(part))
+                elif kind == "withdraw":
+                    things = _things(part)
+                    if not things:
+                        asked = []  # 'don't', 'just hide it instead', 'never delete them': names no product, so it is about the request just made
+                    else:  # it names products: it withdraws only the instructions about those products
+                        kept = [a if not a else a - things for a in asked]  # 'it' requests stay; the rest lose only the products named
+                        asked = [a for a, was in zip(kept, asked) if a or not was]
+    return bool(asked)
+
+
+def _kind(part):
+    """'ask' (a permanent-deletion instruction, even one that also rejects hiding), 'withdraw' (a negated delete or a hide
+    instead) or None for a fragment that is neither."""
+    wants = bool(DELETE_WORD.search(part) and PERMANENT_WORD.search(part))
+    if REJECTS_HIDE.search(part):
+        return "ask" if wants else None
+    if NEGATED_DELETE.search(part) or HIDE_INSTEAD.search(part):
+        return "withdraw"
+    return "ask" if wants else None
+
+
+def _instructions(clause) -> list:
+    """One clause as its separate instructions, cut where a delete/hide verb (with its 'never', 'without', 'just', 'instead',
+    'and', 'or' lead-in) starts, so a request and an unrelated prohibition in one run-on sentence are judged apart. A fragment
+    that is neither a request nor a withdrawal stays with the instruction before it ('delete the cashews and hide the plums forever')."""
+    cuts = sorted({0, *(m.start() for m in INSTRUCTION.finditer(clause))})
+    parts = []
+    for a, b in zip(cuts, cuts[1:] + [len(clause)]):
+        if parts and _kind(clause[a:b]) is None:
+            parts[-1] += " " + clause[a:b]
+        else:
+            parts.append(clause[a:b])
+    return parts
+
+
+
+def rule_no_permanent_delete(slots, ctx=None):
     """no-permanent-delete: 'delete it for good' is answered with the hide explanation and a backlog row."""
     reason = slots.get("reason")
     if isinstance(reason, str) and FOREVER.search(reason):
+        raise Refusal(NOT_DELETED, backlog="policy")
+    if owner_asks_permanent_delete(getattr(ctx, "texts", None), _content(ctx)):
         raise Refusal(NOT_DELETED, backlog="policy")
 
 
@@ -165,7 +245,7 @@ def rule_already_hidden(content, ids):
 
 def plan_hide(slots, ctx) -> list:
     _only(slots, ("items", "reason"))
-    rule_no_permanent_delete(slots)
+    rule_no_permanent_delete(slots, ctx)
     ids = _items(slots, NO_ITEMS_HIDE)
     rule_whole_shelf(ids)
     if (content := _content(ctx)) is not None:
@@ -213,7 +293,7 @@ def rule_image_missing(ctx, content, ids):
         image = product.get("image")
         if not isinstance(image, str) or _image_file_problem(site_dir, image):
             raise Refusal(f"I can't bring {_quoted(product)} back because its picture is missing. "
-                          "Nothing changed. You can ask Graham.")
+                          "Nothing changed. Its picture has to be put back by hand first.")
 
 
 def plan_restore(slots, ctx) -> list:
@@ -447,7 +527,7 @@ ITEM_RESTORE = Skill(
     refuse=(("the product is already on the website", "I already have it on the website. Nothing changed."),
             ("the product is on hold", "I can't change it right now. It is on hold until someone has looked at it."),
             ("the maker is hidden", "Its maker is hidden. Bring the maker back first."),
-            ("the picture file is missing", "I can't bring it back because its picture is missing. Nothing changed. You can ask Graham.")),
+            ("the picture file is missing", "I can't bring it back because its picture is missing. Nothing changed. Its picture has to be put back by hand first.")),
     cases=_CASES.format("item.restore"), version=1)
 
 ITEM_EDIT = Skill(

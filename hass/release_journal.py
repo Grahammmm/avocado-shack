@@ -66,12 +66,25 @@ def _pairs(items):
     return out
 
 
+def _admitted(st):
+    return stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid() and stat.S_IMODE(st.st_mode) == 0o600 and st.st_size <= 1048576
+
+
 def read(path):
     try:
-        st = path.lstat()
-        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) != 0o600 or st.st_size > 1048576:
-            raise BooksError('release-books')
-        with path.open('rb') as stream: data = json.load(stream, object_pairs_hook=_pairs)
+        pre = path.lstat()
+        if not _admitted(pre): raise BooksError('release-books')
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            st = os.fstat(fd)
+            if not _admitted(st) or (st.st_dev, st.st_ino) != (pre.st_dev, pre.st_ino): raise BooksError('release-books')
+            stream = os.fdopen(fd, 'rb')
+        except BaseException:
+            os.close(fd)
+            raise
+        with stream: raw = stream.read(1048576 + 1)
+        if len(raw) > 1048576: raise BooksError('release-books')
+        data = json.loads(raw, object_pairs_hook=_pairs)
         if not isinstance(data, dict): raise BooksError('release-books')
         return data
     except (OSError, ValueError, RecursionError): raise BooksError('release-books; run adopt if missing') from None

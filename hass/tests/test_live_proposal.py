@@ -33,8 +33,8 @@ class LiveProposalTests(ConversationTestCase):
     def test_protected_proposal_says_cannot_go_live(self):
         draft = edit("Organic fruit", "Not organic fruit")
         text = conv.proposal_text("a1b2", draft, "2026-11-02T17:10:00+00:00", live_site=SITE)
-        self.assertIn("I can't put this on the website from chat: it touches where the food comes from or whether it is organic.", text)
-        self.assertIn("Nothing will be published. I've saved it for Graham to look at, and he can do it by hand.", text)
+        self.assertIn("I can't put this on the website from chat, because it mentions where the food comes from or whether it is organic", text)
+        self.assertIn("Nothing will be published. Send it again without that part, and I can put the rest on the website. I've kept it on the list of changes to make by hand", text)
         self.assertNotIn("Reply yes", text)
         # Even an explicitly named yes cannot bypass the content boundary.
 

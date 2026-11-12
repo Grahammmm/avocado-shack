@@ -761,6 +761,66 @@ class MikesReport(unittest.TestCase):
         self.assertNotIn("weekly_line", source.split("def _for_g")[0])
 
 
+class EventTimeOrder(LogCase):
+    def put(self, name, *items):
+        folder = self.state / corrlog.FOLDER
+        folder.mkdir(mode=0o700, exist_ok=True)
+        with open(folder / name, "a", encoding="utf-8") as f:
+            for at, reason in items: f.write(json.dumps({"at": at, "kind": "error", "reason": reason}) + "\n")
+
+    def reasons(self, rows): return [r["reason"] for r in rows]
+
+    def test_clock_rollback_does_not_displace_latest_problem(self):
+        self.now = datetime(2026, 11, 8, 12, 0, tzinfo=timezone.utc)
+        self.log.record("error", "later")
+        self.now = datetime(2026, 11, 8, 10, 0, tzinfo=timezone.utc)
+        self.log.record("error", "earlier")
+        self.now = NOW
+        self.assertEqual(self.reasons(self.log.rows()), ["earlier", "later"])
+        self.assertEqual(self.reasons(self.log.last(1)), ["later"])
+        text = corrlog.problems_text(self.log, 1)
+        self.assertIn("(later)", text)
+        self.assertNotIn("(earlier)", text)
+
+    def test_rows_sort_instants_across_files_and_offsets(self):
+        self.put("2026-11-07.jsonl", ("2026-11-08T09:30:00+00:00", "b"))
+        self.put("2026-11-08.jsonl", ("2026-11-08T10:00:00+01:00", "a"), ("2026-11-07T20:00:00+00:00", "z"), ("2026-11-08T11:00:00+00:00", "c"))
+        rows = self.log.rows()
+        self.assertEqual(self.reasons(rows), ["z", "a", "b", "c"])
+        self.assertEqual(rows[1]["at"], "2026-11-08T10:00:00+01:00")  # spelling untouched
+        self.assertEqual(self.reasons(self.log.last(2)), ["c", "b"])
+
+    def test_equal_instants_preserve_scan_ties(self):
+        self.put("2026-11-08.jsonl", ("2026-11-08T10:00:00+00:00", "one"), ("2026-11-08T11:00:00+01:00", "two"))
+        self.put("2026-11-09.jsonl", ("2026-11-08T10:00:00Z", "three"), ("2026-11-08T09:00:00+00:00", "first"))
+        self.assertEqual(self.reasons(self.log.rows()), ["first", "one", "two", "three"])
+        self.assertEqual(self.reasons(self.log.last(4)), ["three", "two", "one", "first"])
+
+    def test_cli_problems_is_newest_first_without_rewriting(self):
+        now = datetime.now(timezone.utc)
+        self.put("x.jsonl")  # stray file, ignored
+        self.put(now.strftime("%Y-%m-%d") + ".jsonl",
+                 ((now - timedelta(minutes=10)).isoformat(), "newer"), ((now - timedelta(minutes=50)).isoformat(), "older"),
+                 ((now - timedelta(minutes=30)).isoformat(), "mid"))
+        path = self.state / corrlog.FOLDER / (now.strftime("%Y-%m-%d") + ".jsonl")
+        before = path.read_bytes()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(corrlog.main(["problems", "--state", str(self.state)], out=out), 0)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(lines[0], "The last 3 problems, newest first:")
+        self.assertEqual([l.rsplit("(", 1)[1][:-2] for l in lines[1:]], ["newer", "mid", "older"])
+        self.assertEqual(err.getvalue(), "")
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.log.top(7, 3), [("error", 3)])
+
+    def test_filtering_precedes_sort_and_empty_behavior_stays(self):
+        self.assertEqual(corrlog.problems_text(self.log), "No problems have been logged lately.")
+        self.put("2026-11-08.jsonl", ("2026-11-08T12:00:00", "naive"), ("garbage", "bad"), ("2026-11-08T12:00:00+00:00", "ok"))
+        self.put("2026-05-01.jsonl", ("2026-05-01T12:00:00+00:00", "old"))
+        self.assertEqual(self.reasons(self.log.rows()), ["ok"])
+
+
 class SafeFolder(unittest.TestCase):
     def test_the_state_backup_does_not_take_the_log(self):
         from hass import statebackup

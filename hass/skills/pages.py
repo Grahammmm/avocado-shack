@@ -45,6 +45,7 @@ PHOTO_ASK = "Send me the photo you want on the home page."
 ALT_ASK = "What does the photo show?"
 ALT_REPLY = "Tell me what the photo shows, in a few words, like “the shop front on a sunny morning”."
 NO_OWN_PHOTO = "There is no photo of yours on the home page, so there is nothing to put back."
+PHOTO_DESTINATION = "Is it for the home page or for a product?"
 PHOTO_OR_RESET = "Do you want the home page photo changed, or put back the way it was? I can only do one."
 
 
@@ -83,7 +84,7 @@ def _said_affirmed(claim: str, texts) -> bool:
         for clause in _CLAUSE.split(fold(text)):
             if not rx.search(clause):
                 continue
-            if any(_negator(w.strip(",\"'()")) for w in clause.split()) or _REMOVAL.search(clause):
+            if any(_negator(w.strip(",\"'()")) for w in clause.replace("-", " ").split()) or _REMOVAL.search(clause):
                 continue
             return True
     return False
@@ -253,6 +254,54 @@ def check_photo_alt(slots, texts, ctx):
 PHOTO_CHECKS = {"alt-says-what-it-shows": check_photo_alt}
 
 
+_MAIN_PICTURE = re.compile(r"\bmain\s+(?:picture|photo)\b", re.I)
+_HOME_PAGE = re.compile(r"\bhome\s*page\b", re.I)
+_PRODUCT = re.compile(r"\bproducts?\b", re.I)
+
+
+_DENIES = re.compile(r"\b(?:no|not|never|without|none|nothing|neither|nor|cannot|skip|except|besides|instead\s+of|rather\s+than|other\s+than"
+                     r"|(?:any|every)(?:where|thing)\s+but|(?:dont|doesnt|didnt|wont|isnt|arent|wasnt|cant))\b|n't\b", re.I)
+_CLAUSE_END = re.compile(r"[,;:.!?\n\u2013\u2014]|\s-+\s|\b(?:and|then)\b|(?<!anywhere )(?<!anything )(?<!everywhere )(?<!everything )\bbut\b", re.I)
+
+
+# A refusal AFTER the home-page mention in the same clause ("the home page is not where I want it"). "without"/"except"
+# are left out here: "the home page without a caption" is still a home-page choice.
+_DENIES_AFTER = re.compile(r"\b(?:no|nope|not|never|nowhere|cannot)\b|n't\b|\b(?:dont|doesnt|didnt|wont|isnt|arent|wasnt|cant)\b", re.I)
+_APOSTROPHES = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'", "\u2032": "'", "\u00b4": "'", "`": "'", "\uff07": "'"})
+
+
+def _chose_home(text) -> bool:
+    """True when the text names the home page as the destination: affirmatively (not "not the home page", "don't put it on
+    the home page", "the home page is not where I want it"), and not a product."""
+    text = str(text or "").translate(_APOSTROPHES)  # curly apostrophes spell the same refusal as the straight one
+    if _PRODUCT.search(text):
+        return False
+    for hit in _HOME_PAGE.finditer(text):
+        before = _CLAUSE_END.split(text[:hit.start()])[-1]  # a denial only covers its own clause: "no, the home page" still chooses it
+        after = _CLAUSE_END.split(text[hit.end():])[0]
+        if not _DENIES.search(before) and not _DENIES_AFTER.search(after):
+            return True
+    return False
+
+
+def photo_destination_open(texts) -> bool:
+    """True when the owner's latest 'main picture' / 'main photo' request has not been given a home-page destination (RF2345-11).
+
+    Only the owner's request texts count, in order: a text that affirmatively names the home page (and not a product)
+    answers the question; a later main-picture text without it, or a refusal of the home page, opens it again; yes/no or
+    unrelated text never answers it. "not the home page" is a refusal, never a choice."""
+    open_, asked = False, False
+    for text in texts:
+        home = _chose_home(text)
+        if _MAIN_PICTURE.search(text):
+            open_, asked = not home, True
+        elif home:
+            open_ = False
+        elif asked and _HOME_PAGE.search(text) and not _PRODUCT.search(text):  # he turned the home page down
+            open_ = True
+    return open_
+
+
 def plan_photo(slots, ctx):
     store = store_of(ctx)
     photo, alt = slots.get("photo"), _clean(slots.get("image_alt"))
@@ -262,6 +311,8 @@ def plan_photo(slots, ctx):
         if store is not None and "homeImage" not in store:
             raise SkillStop(NO_OWN_PHOTO)
         return [{"op": "store.clear_home_image", "args": {}}]
+    if photo_destination_open(texts_of(ctx)):  # "make this the main picture": home page or a product? Never assume (RF2345-11)
+        raise SkillStop(PHOTO_DESTINATION, "question")
     if not photo:
         raise SkillStop(PHOTO_ASK, "question")
     if not alt:
@@ -348,6 +399,6 @@ PAGE_PHOTO = Skill(
     undo=Undo("revert", "The photo file stays in the site folder with nothing pointing at it; the page shows the shop's own photo again."),
     refuse=(("the description is a file or camera name", ALT_REPLY), ("there is no photo of his to put back", NO_OWN_PHOTO),
             ("the photo is sideways (a rotation tag)", media.REPLIES["needs-rotation"])),
-    cases=_CASES.format("page.photo"), version=1)
+    cases=_CASES.format("page.photo"), version=2)
 
 SKILLS = (PAGE_HOME, PAGE_ABOUT, PAGE_PHOTO)

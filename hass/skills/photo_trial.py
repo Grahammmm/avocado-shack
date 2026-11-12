@@ -9,11 +9,13 @@ retake advice item.picture gives (``hass.skills.item_picture.picture_review``), 
     Photo<TAB>Result<TAB>Failing checks<TAB>Retake advice        (text; ``--json``: one JSON array of the same rows)
 
 ``Result`` is ``pass`` or ``warn``. A photo warns when a house-style check fails, the render has a warning, or the advice
-has a retake sentence; a clean pass has no advice. The advice is item.picture's own wording, never a copy.
+has a retake sentence; a clean pass has no advice. A photo above the house source ceiling (``hass.media.MAX_BYTES``,
+20 MiB) is a ``too-large`` warn row with media's own reply; at most that ceiling plus one byte is read and it is never rendered. The advice is item.picture's own wording, never a copy.
 
 Read-only and external-only:
-* DIR must be an existing directory OUTSIDE this repository, not a symlink and not reached through a symlink. It is read
-  one level deep (no recursion); other files and subfolders are skipped. A symbolic-link photo refuses the whole run before
+* DIR must be an existing directory OUTSIDE this repository, not a symlink and not reached through a symlink. It is
+  opened once, component by component without following links, and that held descriptor serves the listing and every
+  photo read, so replacing the folder's name afterwards cannot redirect the trial. It is read one level deep (no recursion); other files and subfolders are skipped. A symbolic-link photo refuses the whole run before
   any file is read. A folder with no JPEG/PNG is a usage refusal, not a pass.
 * Output is stdout only. There is no output-file option. When stdout is a regular file inside the repository the run is
   refused before anything is written (a terminal, a pipe or an outside file is fine). A shell redirect opens and truncates
@@ -56,6 +58,19 @@ def _inside_repo(path: Path) -> bool:
 
 def checked_directory(arg: str) -> Path:
     """DIR as a symlink-free absolute path, or TrialError. Every component is checked on the way down."""
+    fd, path = _open_directory(arg)
+    os.close(fd)
+    return path
+
+
+_DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+_LINK_SAY = "The photo folder is a symbolic link, or is reached through one. Give the real folder."
+
+
+def _open_directory(arg: str) -> tuple:
+    """(directory descriptor, absolute path) of DIR. The descriptor is the admitted folder: later listing and reads go
+    through it, never through the pathname again, so renaming or replacing the name afterwards cannot redirect them.
+    The caller closes the descriptor. Raises TrialError (fixed, path-free sentences)."""
     if not arg:
         raise TrialError("Give the folder of photos to try.")
     try:
@@ -64,29 +79,43 @@ def checked_directory(arg: str) -> Path:
         raise TrialError(FOLDER_UNREADABLE) from None
 
 
-def _walk_directory(arg: str) -> Path:
+def _open_component(parent_fd: int, part: str) -> int:
+    try:
+        return os.open(part, _DIR_FLAGS, dir_fd=parent_fd)  # non-following: a link (even one swapped in just now) is refused
+    except OSError:
+        try:
+            kind = os.stat(part, dir_fd=parent_fd, follow_symlinks=False).st_mode
+        except FileNotFoundError:
+            raise TrialError("That folder does not exist.") from None
+        if stat.S_ISLNK(kind):
+            raise TrialError(_LINK_SAY) from None
+        if not stat.S_ISDIR(kind):
+            raise TrialError("That is not a folder.") from None
+        raise
+
+
+def _walk_directory(arg: str) -> tuple:
     raw = Path(arg)
-    cur = Path(raw.anchor) if raw.is_absolute() else Path(os.getcwd())  # the working directory is already a real path
-    for part in raw.parts[1:] if raw.is_absolute() else raw.parts:
-        if part == "..":
-            cur = cur.parent  # every earlier component was proven not to be a link, so this is the real parent
-            continue
-        if part == ".":
-            continue
-        cur = cur / part
-        if cur.is_symlink():
-            raise TrialError("The photo folder is a symbolic link, or is reached through one. Give the real folder.")
-    if not cur.exists():
-        raise TrialError("That folder does not exist.")
-    if not cur.is_dir():
-        raise TrialError("That is not a folder.")
-    if _inside_repo(cur.resolve()):
-        raise TrialError("The photo folder is inside the repository. Use a folder outside it.")
-    return cur
+    fd = os.open(raw.anchor if raw.is_absolute() else ".", _DIR_FLAGS)  # the working directory is already a real path
+    try:
+        for part in raw.parts[1:] if raw.is_absolute() else raw.parts:
+            if part == ".":
+                continue
+            nxt = _open_component(fd, part)  # ".." is the real parent: every earlier component is a held non-link directory
+            os.close(fd)
+            fd = nxt
+        cur = Path(os.readlink(f"/proc/self/fd/{fd}"))  # where the held descriptor really is, checked before any photo read
+        if _inside_repo(cur):
+            raise TrialError("The photo folder is inside the repository. Use a folder outside it.")
+        return fd, cur
+    except BaseException:
+        os.close(fd)
+        raise
 
 
-def candidates(directory: Path) -> list:
-    """Sorted (name, path) of the JPEG/PNG regular files directly in DIR. Refuses link candidates before any read."""
+def candidates(directory) -> list:
+    """Sorted (name, path) of the JPEG/PNG regular files directly in DIR (a path, or the held descriptor from
+    _open_directory). Refuses link candidates before any read."""
     found = []
     try:
         with os.scandir(directory) as entries:
@@ -96,7 +125,7 @@ def candidates(directory: Path) -> list:
                 if entry.is_symlink():
                     raise TrialError("A photo in the folder is a symbolic link. Nothing was read.")
                 if entry.is_file(follow_symlinks=False):
-                    found.append((entry.name, Path(entry.path)))
+                    found.append((entry.name, Path(entry.name) if isinstance(directory, int) else Path(entry.path)))
     except OSError:  # unreadable folder: a fixed refusal, never the system error that names the path
         raise TrialError(FOLDER_UNREADABLE) from None
     found.sort(key=lambda item: item[0])
@@ -120,13 +149,25 @@ def sink_problem(stream) -> str:
     return "The output is going to a file inside the repository. Send it to a file outside the repository." if _inside_repo(target) else ""
 
 
-def _read_photo(path: Path) -> bytes:
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+class _TooLarge(Exception):
+    """A source photo above the house photo byte ceiling; its bytes were never handed on."""
+
+
+def _read_photo(path: Path, dir_fd=None) -> bytes:
+    from hass import media  # noqa: PLC0415 - lazy: importing this file stays inert
+    limit = media.MAX_BYTES
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
     try:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
             raise OSError("not a regular file")
+        if info.st_size > limit:
+            raise _TooLarge  # refused before any payload read
         with os.fdopen(fd, "rb", closefd=False) as handle:
-            return handle.read()
+            data = handle.read(limit + 1)  # a file that grew after fstat still stops one byte past the ceiling
+        if len(data) > limit:
+            raise _TooLarge
+        return data
     finally:
         os.close(fd)
 
@@ -162,12 +203,29 @@ def assess_photo(name: str, data: bytes) -> dict:
 
 
 def trial_directory(directory) -> list:
-    """Rows for every candidate photo in an already-validated DIR, in filename order."""
-    rows = []
-    for name, path in candidates(Path(directory)):
+    """Rows for every candidate photo in DIR (the held descriptor from _open_directory, or a path that is admitted
+    again), in filename order. Photos are opened relative to the descriptor, never by rebuilt pathname."""
+    if not isinstance(directory, int):
+        fd, _ = _open_directory(str(directory))
         try:
-            data = _read_photo(path)
+            return trial_directory(fd)
+        finally:
+            os.close(fd)
+    rows = []
+    for name, path in candidates(directory):
+        try:
+            data = _read_photo(path, dir_fd=directory)
+        except _TooLarge:
+            from hass import media  # noqa: PLC0415
+            rows.append(_row(name, "warn", ["too-large"], [media.REPLIES["too-large"]]))
+            continue
         except OSError:
+            try:
+                is_link = stat.S_ISLNK(os.stat(name, dir_fd=directory, follow_symlinks=False).st_mode)
+            except OSError:
+                is_link = False
+            if is_link:  # swapped for a link after listing: refuse the whole run, nothing was printed yet
+                raise TrialError("A photo in the folder is a symbolic link. Nothing was read.") from None
             rows.append(_row(name, "warn", [UNREADABLE], [UNREADABLE_SAY]))
             continue
         rows.append(assess_photo(name, data))
@@ -210,16 +268,18 @@ def main(argv=None, stdout=None, stderr=None) -> int:
         problem = sink_problem(out)
         if problem:
             raise TrialError(problem)
-        directory = checked_directory(arg)
-        candidates(directory)  # refuse an empty folder or a link before any tool is imported or any file read
+        dir_fd, _ = _open_directory(arg)
         try:
-            rows = trial_directory(directory)
+            candidates(dir_fd)  # refuse an empty folder or a link before any tool is imported or any file read
+            rows = trial_directory(dir_fd)
         except ImportError:  # includes house_style.PillowMissing's siblings and a missing advice helper
             raise TrialError("The picture tools are not available here (Pillow or the item.picture helper), so I stopped.") from None
         except RuntimeError as exc:  # house_style.PillowMissing
             if type(exc).__name__ != "PillowMissing":
                 raise
             raise TrialError("Pillow is not installed here, so the pictures can't be checked.") from None
+        finally:
+            os.close(dir_fd)
     except TrialError as exc:
         print(f"photo_trial: {exc}", file=err)
         return 2

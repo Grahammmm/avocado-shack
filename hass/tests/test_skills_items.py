@@ -278,7 +278,7 @@ class ImageMissing(unittest.TestCase):
         with tempfile.TemporaryDirectory() as empty, self.assertRaises(it.Refusal) as caught:
             it.plan_restore({"items": [pid]}, ctx_for(content, site_dir=empty))
         self.assertIn("picture is missing", caught.exception.reply)
-        self.assertIn("Graham", caught.exception.reply)
+        self.assertIn("by hand", caught.exception.reply)  # HASS-CHAT-1: the one next step, never "ask Graham"
 
 
 class OwnerWords(unittest.TestCase):

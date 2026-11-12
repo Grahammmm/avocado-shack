@@ -89,6 +89,7 @@ class Ctx:
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
         self.guest_counts_db = guest_counts_db
+        self.multi_call = False  # True while the owner's texts are shared by several calls of one message (a skill cannot tie a loose word to one call)
         self.site_dir = site_dir  # the writer's storefront-mockup folder (the same checkout the content was read from), or None
 
 
@@ -265,7 +266,7 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
                 replaced.add(name)
             continue
         if slot.kind in kinds.RESOLVERS:
-            res = _resolve(slot, value, ctx)
+            res = _resolve(slot, value, ctx, include_hidden=skill.name == "item.restore")
             if res.status == "one":
                 out.slots[name] = res.value
                 replaced.add(name)
@@ -291,12 +292,14 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
     return out
 
 
-def _resolve(slot, value, ctx):
+def _resolve(slot, value, ctx, *, include_hidden=False):
     fn = kinds.RESOLVERS[slot.kind]
     if slot.kind == "attachment":
         return fn(value)
     if not isinstance(value, str) or not value.strip():
         return kinds.Resolved("invalid", reply=f"I can't use that for the {slot.name.replace('_', ' ')}.")
+    if slot.kind == "product_ref" and include_hidden:
+        return fn(ctx.content, value, ctx.aliases, include_hidden=True)
     if slot.kind in ("product_ref", "maker_ref"):
         return fn(ctx.content, value, ctx.aliases)
     if slot.kind in ("hike_ref", "route_ref"):
@@ -456,9 +459,16 @@ class Dispatcher:
         return "Do you want to " + ", or ".join(labels) + "?", offered
 
     # entry points --------------------------------------------------------------------------------------------
+    def _explicit_page(self, msg) -> bool:
+        from hass.skills.backlog import explicit_page_request
+        return self.registry.get("page.faq") is not None and explicit_page_request(msg.text)
+
     def cheap(self, msg, now):
         """A short answer to the asked slot read by code alone (no model call). The disposition, or None to let the model read it."""
         req = self.conv.requests.get(self._owner(), now)
+        if req is None and self._explicit_page(msg):  # RF2345-12: an unmistakable fresh FAQ-page ask is refused by code, no model
+            from hass.skills.backlog import NO_FAQ
+            return self._backlog(msg, now, None, "", "unsupported-page", reply=NO_FAQ, texts=[msg.text])
         if req is None or not req["skill"] or not req["asked_slot"]:
             return None
         skill = self.registry.get(req["skill"])
@@ -519,6 +529,7 @@ class Dispatcher:
         attachments = (base["attachments"] if base else [])
         ctx = ctx or self._ctx(now, texts)
         ctx.texts = texts
+        ctx.multi_call = ctx.multi_call or bool(req and req["calls"])  # a queued call of a several-ask message shares its texts
         said = self._read_only_hook(skill, "preflight", ctx)  # a caption skill: an ask to post, send or schedule is answered first
         if said:
             conv.requests.mark(req["request_id"], "closed", now) if req else None
@@ -718,6 +729,7 @@ class Dispatcher:
                 return "refused"
             return self._read_only_calls(msg, now, result["calls"], req, texts, attachments)
         ctx = self._ctx(now, texts)
+        ctx.multi_call = len(result["calls"]) > 1
         ops, left, waiting, parts, stopped = [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])

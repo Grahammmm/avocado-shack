@@ -17,7 +17,7 @@ from unittest import mock
 from hass import social_draft, skills, voice
 from hass.content_model import REPO_ROOT, load_content
 from hass.ops import load_registry
-from hass.skills import dispatch, model, social, testkit
+from hass.skills import dispatch, model, social, specials, testkit
 from hass.tests.test_conversation import CHAT, T0
 from hass.tests.test_skill_dispatch import DESCRIBE, SkillCase, skill_reply
 
@@ -139,7 +139,8 @@ class DeclarationTests(unittest.TestCase):
                 self.assertGreaterEqual(len(got), model.MIN_CASE_ROWS)
                 self.assertGreaterEqual(sum(1 for r in got if r["kind"] == "refuse"), model.MIN_REFUSAL_ROWS)
                 self.assertTrue(all(r["version"] == 1 and "undo" not in r and r["kind"] != "undo" for r in got))
-        self.assertEqual(dispatch.READ_ONLY_LONG & {"specials.show"}, set())  # only the caption answers may run long
+        self.assertEqual(dispatch.READ_ONLY_LONG & {"specials.show", "answer.site"}, {"specials.show"})  # long: the captions, the specials list; not every read-only skill
+        self.assertIs(dispatch.READ_ONLY["specials.show"], specials.show_reply)
 
     def test_every_fixed_reply_passes_the_voice_rules(self):
         for text in (social.COPY_HEAD, social.PRODUCT_PHOTO, social.NO_PHOTO, social.NO_POSTING, social.CANT_READ, social.CANT_SEE_PHOTO,

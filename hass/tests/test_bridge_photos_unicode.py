@@ -10,7 +10,7 @@ from hass import bridge_photos
 from hass.tests.test_bridge_photos import JPG, PASSWORD, FakeTransport, PhotosTests, _meta
 
 MSG_TEXT = ("guid must be a non-empty str of at most 200 chars without control characters "
-            "or surrogate code points")
+            "or surrogate code points, and must not be '.' or '..'")
 SURROGATES = ("\ud800", "\udbff", "\udc00", "\udfff")
 
 

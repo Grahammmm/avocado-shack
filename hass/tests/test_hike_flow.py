@@ -93,7 +93,7 @@ class CompleteRequestTests(FlowCase):
     def test_create_a_new_hike_on_a_route_idea_is_a_new_hike_with_the_route_linked(self):
         draft, reply = self.propose(LIVE3)
         self.assertIn("A new hike: Fiscalini Ranch hike", reply)
-        self.assertIn("the route idea: idea-fiscalini-bluff", reply)
+        self.assertIn("the route idea: Fiscalini Ranch", reply)  # HASS-CHAT-1: a route link is the route's name, never its id
         self.assertIn("what to bring: Water", reply)
         self.nothing_written()
 
@@ -219,7 +219,7 @@ class EditAndCancelTests(FlowCase):
 
     def test_edit_a_hikes_time_is_a_one_line_draft(self):
         draft, reply = self.propose("push the Mill Creek hike to 10am")
-        self.assertIn("the start time: from Saturday, Nov 7 at 8 am to Saturday, Nov 7 at 10 am", reply)
+        self.assertIn("the start time:\n  was: Saturday, Nov 7 at 8 am (Pacific time)\n  now: Saturday, Nov 7 at 10 am (Pacific time)", reply)
         self.assertEqual(self.commits(), 0)
 
     def test_cancel_a_hike_is_a_draft_with_the_note(self):

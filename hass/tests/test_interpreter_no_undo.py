@@ -100,7 +100,7 @@ class CheckTests(unittest.TestCase):
         for name in ("history.revert2", "history.reverted", "History.revert", "history.revert "):
             with self.subTest(name=name):
                 question = self.check(result(call(name, changeId="c")))["question"]
-                self.assertIn("I can't do that kind of change yet.", question)
+                self.assertIn("I can't do that kind of change from chat yet,", question)
         self.assertEqual(self.check(result(edit(1), edit(1)))["question"].split(".")[0],
                          "Two of those changes are the same")
         self.assertIn("I can't find that change any more.", self.check(result(edit(1), revises="zzzz"))["question"])

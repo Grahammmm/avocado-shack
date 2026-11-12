@@ -5,7 +5,7 @@ missing directory or a bad path just means no line. The file stops growing at MA
 `table()` joins the Mac log and the host log into the stage table (offsets from the first stage of each message).
 Nothing here reads a clock the callers do not pass in, opens a socket or changes any state.
 """
-import hashlib, json, os, time  # noqa: E401
+import hashlib, json, math, os, time  # noqa: E401
 from pathlib import Path
 
 MAX_BYTES = 512 * 1024
@@ -41,6 +41,13 @@ class StageLog:
 def off(stage, ident, **extra): return None  # noqa: E704 - the no-op stand-in
 
 
+def _usable(t) -> bool:
+    """True for a finite int/float timestamp (not bool; huge ints that cannot become a float are unusable)."""
+    if type(t) not in (int, float): return False
+    try: return math.isfinite(t)
+    except OverflowError: return False
+
+
 def read(path) -> list:
     """The valid lines of one stage log, in file order; unreadable or malformed lines are skipped."""
     out = []
@@ -50,7 +57,7 @@ def read(path) -> list:
         try: row = json.loads(raw)
         # Excessive nesting is malformed diagnostic input too; skip only this line.
         except (ValueError, RecursionError): continue
-        if type(row) is dict and type(row.get("t")) in (int, float) and type(row.get("stage")) is str and type(row.get("id")) is str:
+        if type(row) is dict and _usable(row.get("t")) and type(row.get("stage")) is str and type(row.get("id")) is str:
             out.append(row)
     return out
 
@@ -68,16 +75,24 @@ def table(rows) -> list:
             for i, st in seen.items() if "accepted" in st or "webhook-in" in st]
 
 
+def _display(token: str) -> str:
+    """CLI-only form of an id or stage name: a token with whitespace or a non-printable character (controls, ESC, line
+    separators, lone surrogates) is shown as a quoted ASCII JSON string; everything else is unchanged. Keys are never altered."""
+    if any(c.isspace() or not c.isprintable() for c in token): return json.dumps(token, ensure_ascii=True)
+    return token
+
+
 def main(argv=None) -> int:
     """`python3 hass/stagelog.py LOG [LOG ...]`: read-only; prints one line per message, seconds after its first stage, for the
-    Mac log (spool dir `stages.jsonl`) and the host log (host dir `stages.jsonl`) together. Both machines' clocks should be in step."""
+    Mac log (spool dir `stages.jsonl`) and the host log (host dir `stages.jsonl`) together. Both machines' clocks should be in step.
+    Unsafe ids/stage names (control characters, surrogates) are printed as quoted JSON escapes, never raw."""
     import sys
     args = sys.argv[1:] if argv is None else argv
     if not args:
         print(main.__doc__)
         return 2
     for ident, stages in table([r for path in args for r in read(path)]):
-        print(ident, " ".join(f"{s}={t}" for s, t in stages.items()))
+        print(_display(ident), " ".join(f"{_display(s)}={t}" for s, t in stages.items()))
     return 0
 
 

@@ -79,6 +79,7 @@ INTENT = (
     re.compile(r"^\s*(?:please\s+)?(?:post|share)\b(?!\s+about\b).*\bnow\s*[.!]?\s*$"),
     re.compile(r"\b(?:send|email|text|message)\b.*\b(?:club|members|hikers|mailing list|everyone|followers)\b"),
     re.compile(r"\b(?:send|email|text)\s+" + _OBJ + r"\s+(?:out|to)\b"),
+    re.compile(r"^\s*(?:please\s+)?(?:send|email|text)\s+" + _OBJ + r"(?:\s+(?:now|please))*\s*[.!?]?\s*$"),  # a whole short imperative: "send it"
 )
 
 
@@ -92,7 +93,11 @@ _NUM_WORDS = {w: n for n, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen "
     "nineteen twenty".split())} | {"thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
                                     "hundred": 100, "dozen": 12}
-_NUM = r"(\d[\d,]*|" + "|".join(_NUM_WORDS) + r")"
+_TENS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
+_UNITS = "one|two|three|four|five|six|seven|eight|nine"
+_COMPOUND = r"(?:" + _TENS + r")(?:\s+|-)(?:" + _UNITS + r")"  # "twenty one", "twenty-one": one whole count
+_NUM = r"(\d[\d,]*|" + _COMPOUND + "|(?:" + _TENS + r")(?![\s-]+(?:" + _UNITS + r")\b)|" + "|".join(w for w in _NUM_WORDS if w not in _TENS.split("|")) + r")"
+_UNIT_OF_COMPOUND = re.compile(r"\b(?:" + _TENS + r")[\s-]+$")  # a unit word right after a tens word belongs to that compound
 _WHO = r"(?:people|persons?|folks|hikers|walkers|members|guests|attendees|participants|friends|locals|adults|kids|children|of us|" \
        r"showed up|turned out|came|joined|attended)"
 # Words that make a number a distance, a time, an amount or a joined idea: none may sit between the number and the word naming
@@ -117,8 +122,13 @@ def _counts(text) -> set:
         for m in rx.finditer(text.lower()):
             if _NOT_COUNT_BEFORE.search(text.lower()[:m.start(1)]):
                 continue  # "Nov 7 friends", "mile 6 hikers": a date or a place, not a head count
+            if _UNIT_OF_COMPOUND.search(text.lower()[:m.start(1)]):
+                continue  # the "one" of "twenty one" is not a count of its own
             n = m.group(1)
-            if n in _NUM_WORDS:
+            parts = re.split(r"[\s-]+", n)
+            if len(parts) == 2:
+                out.add(_NUM_WORDS[parts[0]] + _NUM_WORDS[parts[1]])
+            elif n in _NUM_WORDS:
                 out.add(_NUM_WORDS[n])
             elif n.replace(",", "").isdigit():
                 out.add(int(n.replace(",", "")))

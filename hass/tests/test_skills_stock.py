@@ -132,8 +132,7 @@ class PlanRules(unittest.TestCase):
             (stock.STOCK_SET, {"items": _items((EGGS, "no"))},
              _ctx([_product(available="no", available_on="2026-11-08")])),
             (stock.STOCK_CLEAR, {"items": [EGGS]}, ctx),
-            (stock.STOCK_CHECKED, {"in": [EGGS, EGGS]}, ctx),
-            (stock.STOCK_CHECKED, {"in": [EGGS], "out": [EGGS]}, ctx)]
+            (stock.STOCK_CHECKED, {"in": [EGGS, EGGS]}, ctx)]  # across lists is a question: test_stock_checked_conflict
         for skill, args, context in controls:
             with self.subTest(skill=skill.name, args=args, context=context):
                 before = copy.deepcopy((args, vars(context.content)))
@@ -525,8 +524,8 @@ class RealDispatcherStock(SkillCase):
             (_items(*((pid, "no") for pid in SIX), (LEMONS, "no")), stock.TOO_MANY.format(count=7)),
             (_items((HELD, "no")), stock.HELD.format(name="Raw milk white cheddar")),
             (_items((LEMONS, "no")), stock.HIDDEN.format(name="Lemons")),
-            # the editor's own already-so refusal: the dispatcher's ctx.today is a date, which the plan's ALREADY check skips
-            (_items((HONEY, "no")), "That's already how it is, so nothing changed."))
+            # RF0145-12: the dispatcher's ctx.today is a date, which the plan's ALREADY check now recognizes
+            (_items((HONEY, "no")), stock.ALREADY.format(name="Big Sur Honey Company honey", word="Sold out")))
         for i, (items, words) in enumerate(refusals):
             with self.subTest(refusal=words):
                 disposition, reply = self.set_items(f"refused stock change {i}", items)

@@ -240,6 +240,70 @@ class PictureAdvice(unittest.TestCase):
         self.assertEqual(ip.notes("item.picture", {"item": LEMONS, "photo": SHA[JAR]}, ctx())["warn"], [ip.NOT_CHECKED])
 
 
+class RejectedTarget(unittest.TestCase):
+    CROWDED = "photos for the lemons and the plums"
+    SLOTS = {"item": LEMONS, "photo": SHA[JAR]}
+
+    def asks(self, *answers):
+        try:
+            ip.plan_picture(self.SLOTS, ctx(self.CROWDED, *answers))
+        except ip.Refusal as caught:
+            self.assertEqual((caught.reply, caught.kind), (ip.ONE_AT_A_TIME, "question"))
+            return True
+        return False
+
+    def test_rejected_target_does_not_resolve_one_photo_question(self):
+        for answer in ("not the lemons", "not lemons", "anything but lemons", "Not the lemons, thanks", "it isn\u2019t the lemons"):
+            with self.subTest(answer=answer):
+                texts = [self.CROWDED, answer]
+                before = copy.deepcopy(texts)
+                self.assertTrue(self.asks(answer))
+                self.assertEqual(texts, before)
+        self.assertFalse(self.asks("the lemons please"))  # an affirmative mention still answers it
+        self.assertFalse(self.asks("lemons"))
+
+    def test_target_negation_is_clause_local(self):
+        self.assertFalse(self.asks("not the plums, the lemons"))
+        self.assertFalse(self.asks("not the plums but the lemons"))
+        self.assertTrue(self.asks("the plums, not the lemons"))
+        self.assertTrue(self.asks("not the lemons"))  # no guessing the plums from a rejected lemon
+        self.assertTrue(self.asks("not the lemons, the plums"))
+
+    def test_negation_after_the_product_rejects_it(self):
+        for answer in ("the lemons aren't the one", "the lemons are not the one", "the lemons isn\u2019t right", "the lemons were never it",
+                       "it's the lemons, the lemons are not what I meant"):
+            with self.subTest(answer=answer):
+                self.assertTrue(self.asks(answer))
+        self.assertTrue(self.asks("the lemons", "the lemons aren't the one"))  # a no can follow a yes
+        self.assertFalse(self.asks("the lemons aren't the one", "the lemons please"))  # and a yes a no
+        self.assertFalse(self.asks("the lemons not the plums"))  # a bare 'not' before another name still picks the lemons
+        self.assertFalse(self.asks("the plums aren't it but the lemons"))  # a negation after another name leaves the lemons picked
+
+    def test_an_adverb_between_the_verb_and_not_still_rejects_the_product(self):
+        # RF2315-10 return: "definitely" between the copula and "not" must not hide the rejection
+        for answer in ("the lemons are definitely not the one", "the lemons are really not what I meant", "the lemons is certainly not it",
+                       "the lemons were just never it", "the lemons are so not the one", "the lemons aren't definitely the one",
+                       "it's the lemons, the lemons are definitely not it"):
+            with self.subTest(answer=answer):
+                self.assertTrue(self.asks(answer))
+        self.assertTrue(self.asks("the lemons", "the lemons are definitely not the one"))  # a no can follow a yes
+        self.assertFalse(self.asks("the lemons are definitely not the one", "the lemons please"))  # and a yes a no
+        self.assertFalse(self.asks("the plums are definitely not it but the lemons"))  # another name's rejection leaves the lemons picked
+        self.assertFalse(self.asks("the lemons are what I want not the plums"))  # a negation that is not about the verb after the name
+        self.assertFalse(self.asks("the lemons definitely, not the plums"))
+
+    def test_latest_answer_can_correct_or_reject_choice(self):
+        self.assertFalse(self.asks("not the lemons", "sorry, the lemons"))
+        self.assertTrue(self.asks("the lemons", "actually not the lemons"))
+        self.assertTrue(self.asks("the lemons, not the lemons"))
+        out = ctx(self.CROWDED, "the lemons", "photos for the lemons and the plums", "not the lemons")  # a repeated request resets it
+        with self.assertRaises(ip.Refusal):
+            ip.plan_picture(self.SLOTS, out)
+        out = ctx("the lemons", self.CROWDED)
+        with self.assertRaises(ip.Refusal):
+            ip.plan_picture(self.SLOTS, out)
+
+
 # -- the real dispatcher, Conversation and Editor ------------------------------------------------------------------------
 class _Interp(conversation.FixtureInterpreter):
     def interpret(self, text, pending, notes=None, aliases=None, *, sent_at=None, recent=None):
@@ -313,6 +377,21 @@ class RealDispatcher(unittest.TestCase):
         self.assertLess(r2.index(item_add.AS_TAKEN), r2.index("Reply yes to save it"))  # D6: the warning comes before his yes
         self.assertEqual(chat.head(), chat.base)
         self.assertEqual(chat.kit.previewer.requests[-1]["kind"], "product")
+
+    def test_real_rejected_target_keeps_request_photo_and_writes_nothing(self):
+        chat = self.open(JAR)
+        d1, r1 = chat.say("photos for the lemons and the plums", {"item": "Lemons"}, JAR)
+        self.assertEqual((d1, r1), ("question", ip.ONE_AT_A_TIME))
+        d2, r2 = chat.say("not the lemons", {"item": "Lemons"})  # the scripted model keeps the wrong slot
+        self.assertEqual((d2, r2), ("question", ip.ONE_AT_A_TIME))
+        self.assertEqual((chat.drafts(), chat.head()), ([], chat.base))
+        d3, r3 = chat.say("the lemons please", {"item": "Lemons"})
+        self.assertEqual(d3, "proposed")
+        drafts = chat.drafts()
+        self.assertEqual(len(drafts), 1)
+        args = json.loads(drafts[0]["ops_json"])[0]["args"]
+        self.assertEqual((args["id"], args["photo"]), (LEMONS, SHA[JAR]))  # the photo of the first message is kept
+        self.assertEqual(chat.head(), chat.base)  # nothing is written before his yes
 
     def test_held_product_is_refused_by_name_and_no_draft(self):
         chat = self.open(JAR)

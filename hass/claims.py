@@ -42,6 +42,38 @@ def fold(text) -> str:
     return " ".join(plain.translate(_PUNCT).casefold().split())
 
 
+# HASS-SEC-2 (H1): the live claim gate reads text through skeleton(), so a claim word cannot hide behind a lookalike letter
+# or an invisible character. Lookalikes: one Latin letter per Cyrillic, Greek, Armenian or small-capital letter that looks the
+# same (Unicode TR39 confusables, the letters that matter for English words); a word still mixing scripts after this is caught
+# by live_policy's mixed-script rule.
+_LOOKALIKE = str.maketrans({pair[0]: pair[1] for pair in (
+    "аa АA вb ВB еe ЕE ёe Ёe кk КK мm МM нh НH оo ОO рp РP сc СC тt ТT уy УY хx ХX ѕs ЅS іi ІI їi ЇI јj ЈJ ԁd ԛq ԚQ ԝw ԜW "
+    "үy ҮY һh ҺH ӏl ӀI ьb Ьb ɡg "                                                     # Cyrillic (and Latin script g)
+    "αa ΑA βb ΒB γy εe ΕE ζz ΖZ ηn ΗH ιi ΙI κk ΚK μu ΜM νv ΝN οo ΟO ρp ΡP τt ΤT υu ΥY χx ΧX ωw ϲc ϹC ϳj "  # Greek
+    "օo Օo սu Սu ցg հh ոn ռn զq "                                                    # Armenian
+    "ıi ȷj ɩi ɑa ʏy ᴀa ʙb ᴄc ᴅd ᴇe ɢg ʜh ɪi ᴊj ᴋk ʟl ᴍm ɴn ᴏo ᴘp ʀr ꜱs ᴛt ᴜu ᴠv ᴡw ᴢz"  # Latin lookalikes, small capitals
+).split()})
+# Characters that show nothing (or nothing that changes a word) and are dropped before matching: every format character
+# (soft hyphen, zero-width space/joiners, word joiner, bidi marks, Mongolian vowel separator, tag characters), every
+# non-spacing or enclosing mark (accents, variation selectors), and the Hangul and Braille blanks.
+_BLANKS = frozenset("\u115f\u1160\u3164\uffa0\u2800")
+
+
+def _shown(c) -> bool:
+    return c not in _BLANKS and unicodedata.category(c) not in ("Cf", "Mn", "Me")
+
+
+def unhidden(text) -> str:
+    """NFKC, then every character that shows nothing dropped, then accents dropped (NFKD). Line breaks kept; letters as typed."""
+    plain = "".join(c for c in unicodedata.normalize("NFKC", str(text)) if _shown(c))
+    return "".join(c for c in unicodedata.normalize("NFKD", plain) if _shown(c) and not unicodedata.combining(c))
+
+
+def skeleton(text) -> str:
+    """unhidden(), lookalike letters made Latin, typographic marks ASCII, casefolded, spaces and line breaks collapsed. Pure."""
+    return " ".join(unhidden(text).translate(_LOOKALIKE).translate(_PUNCT).casefold().split())
+
+
 def _pattern(phrase: str):
     """Whole words; a space or hyphen between words matches either ("pesticide free" is "pesticide-free")."""
     words = re.split(r"[-\s]+", fold(phrase))
