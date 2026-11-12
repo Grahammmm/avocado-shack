@@ -25,9 +25,18 @@ MESSAGES = {"jar-white-sheet": "got in some Cal Poly honey, jar of 8oz, $9",
             "bag-bench-small": "got in some coffee from Roast Bros in Cambria, California"}
 
 
+def _on_page(img):
+    """EXIF-transpose, then composite any transparency once over PAGE (not hidden RGB); opaque images convert directly."""
+    img = ImageOps.exif_transpose(img)
+    if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
+        rgba = img.convert("RGBA")
+        return Image.alpha_composite(Image.new("RGBA", rgba.size, PAGE + (255,)), rgba).convert("RGB")
+    return img.convert("RGB")
+
+
 def tile(img, label):
     box = Image.new("RGB", (TILE, TILE + 22), PAGE)
-    img = ImageOps.exif_transpose(img).convert("RGB")
+    img = _on_page(img)
     img.thumbnail((TILE, TILE))
     box.paste(img, ((TILE - img.width) // 2, (TILE - img.height) // 2))
     ImageDraw.Draw(box).text((6, TILE + 6), label, fill=(60, 50, 40))
@@ -50,7 +59,7 @@ def main() -> int:
             drafts[name]["draft"] = {k: d[k] for k in ("status", "question", "ops", "left_off", "reply", "alt") if k in d}
         if name in SHOW:
             before = Image.new("RGB", (TILE, TILE), PAGE)  # the page box: square, contain
-            raw = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+            raw = _on_page(Image.open(io.BytesIO(data)))
             raw.thumbnail((TILE, TILE))
             before.paste(raw, ((TILE - raw.width) // 2, (TILE - raw.height) // 2))
             rows.append([tile(Image.open(hs.SITE / p["image"]), "catalog: " + p["name"][:26]) for p in catalog[:2]]

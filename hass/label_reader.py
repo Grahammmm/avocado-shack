@@ -27,7 +27,7 @@ PROMPT = ("Read the product label in this photo. Answer only with a JSON object 
 
 
 def _claim_key(value) -> str:
-    return " ".join(claims.fold(value).replace("-", " ").split())  # dashes and space runs of any width compare alike
+    return " ".join(claims.skeleton(value).replace("-", " ").split())  # RF2210-11: lookalike letters read as Latin (key only); dashes and space runs of any width compare alike
 
 
 _TERMS = tuple(_claim_key(term) for term in claims.TERMS + claims.FARM_TERMS + claims.HEALTH_AWARD_TERMS)

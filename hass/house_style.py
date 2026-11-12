@@ -386,19 +386,23 @@ def check_description(text: str, spec=None, *, name=None, maker_name=None, owner
 def check_maker(rec: dict, spec=None, *, key=None) -> dict:
     spec = spec or load_spec()
     mk = spec["makers"]
-    story = rec.get("story", "")
+    # Text fields are validated as the ORIGINAL values with the content validator (blank, outer space, control/invisible,
+    # forbidden text, over-limit, nonstring all fail); measurements use a local string, empty for a nonstring/missing value.
+    text_problems: list = []
+    for field in ("name", "place", "story"):
+        _text(text_problems, field, rec.get(field), limit=TEXT_LIMITS["maker"][field])
+    name, place, story = (rec[f] if isinstance(rec.get(f), str) else "" for f in ("name", "place", "story"))
     m = description_metrics(story) if story else {"sentences": 0, "chars": 0}
     fields_ok = set(rec) - {"hidden"} <= set(MAKER_FIELDS) and {"name", "place", "story"} <= set(rec)
-    bad = [b for b in FORBIDDEN_TEXT if any(b in str(rec.get(f, "")) for f in ("name", "place", "story"))]
     url = rec.get("url")
     url_problems: list = []  # absent is fine; a present value (even null) gets the content validator's full public-https test
     if "url" in rec:
         _https(url_problems, "url", url)
     checks = [_c("fields name, place, story (+url)", fields_ok, sorted(rec), 3, True),
-              _c("plain text", not bad, f"{bad}" if bad else "ok", 2, True),
-              _c("limits", len(rec.get("name", "")) <= 80 and len(rec.get("place", "")) <= 60 and m["chars"] <= 600, f"story {m['chars']} chars", 2, True),
+              _c("plain text", not text_problems, "invalid maker text" if text_problems else "ok", 2, True),
+              _c("limits", len(name) <= 80 and len(place) <= 60 and m["chars"] <= 600, f"story {m['chars']} chars", 2, True),
               _c("url is public https or absent", not url_problems, str(url), 2, True),
-              _c("place like 'Town, California'", bool(MAKER_PLACE_RE.fullmatch(rec.get("place", ""))), rec.get("place", ""), 2),
+              _c("place like 'Town, California'", bool(MAKER_PLACE_RE.fullmatch(place)), place, 2),
               _c("key equals name", key is None or key == rec.get("name"), str(key), 1),
               _c("story length like the others", mk["chars"]["p05"] * .35 <= m["chars"] <= mk["chars"]["p95"] * 1.25,
                  f"{m['chars']} chars (usual {mk['chars']['p05']:.0f}-{mk['chars']['p95']:.0f})", 1),

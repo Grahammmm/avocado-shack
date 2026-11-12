@@ -37,7 +37,10 @@ REQUIRED_CHECKS = frozenset(n for b in ("pageLoaded", "noHorizontalOverflow", "n
 
 def _read_blob(sha: str, path: str, top: str) -> bytes:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
-    out = subprocess.run(["git", "--literal-pathspecs", "show", f"{sha}:{path}"], capture_output=True, env=env, cwd=top)
+    try:
+        out = subprocess.run(["git", "--literal-pathspecs", "show", f"{sha}:{path}"], capture_output=True, env=env, cwd=top)
+    except OSError:  # launch failure: same fixed refusal, no errno/argv/path
+        raise Usage("git show failed") from None
     if out.returncode:
         raise Usage("git show failed")
     return out.stdout
@@ -85,17 +88,36 @@ def prepare_out(out: str, top: str) -> Path:
         raise Usage("--out is not usable") from None
 
 
+def _walk_out(out: str) -> Path:
+    """Normalized absolute --out, after lstat of every component of the ORIGINAL spelling (cwd ancestry included), so a
+    link hidden by ``link/..`` is refused, not cancelled. A missing last component is allowed; a missing or non-folder
+    intermediate one is not. Static check only."""
+    parts = Path(out).parts
+    if not os.path.isabs(out):
+        parts = Path(os.getcwd()).parts + parts
+    cur, last = Path(parts[0]), len(parts) - 1
+    for index, name in enumerate(parts[1:], 1):
+        if name == "..":
+            cur = cur.parent
+            continue
+        cur = cur / name
+        try:
+            info = os.lstat(cur)
+        except FileNotFoundError:
+            if index == last:
+                break
+            raise Usage("--out is not usable") from None
+        if stat.S_ISLNK(info.st_mode):
+            raise Usage("--out has a symlink on its path")
+        if index != last and not stat.S_ISDIR(info.st_mode):
+            raise Usage("--out is not usable")
+    return cur
+
+
 def _prepare_out(out: str, top: str) -> Path:
     if not out or "\0" in out:
         raise Usage("bad --out")
-    path = Path(os.path.abspath(out))
-    probe = path
-    while True:
-        if os.path.islink(probe):
-            raise Usage("--out has a symlink on its path")
-        if probe.parent == probe:
-            break
-        probe = probe.parent
+    path = _walk_out(out)
     resolved = path.resolve()
     for guarded in [Path(top).resolve(), *_git_dirs(top)]:
         if resolved == guarded or guarded in resolved.parents:
@@ -114,15 +136,28 @@ def _prepare_out(out: str, top: str) -> Path:
     return path
 
 
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
 def _private_png(value, expected: Path | None) -> str | None:
     """The expected path when value names it exactly and it is a regular 0600 file; else None."""
     if expected is None or not isinstance(value, str) or value != str(expected):
         return None
     try:
         info = os.lstat(value)
+        if not (stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600):
+            return None
+        fd = os.open(value, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            opened = os.fstat(fd)
+            if not (stat.S_ISREG(opened.st_mode) and stat.S_IMODE(opened.st_mode) == 0o600):
+                return None
+            # Format identification only: the eight-byte signature, not CRC, size or pixel validity.
+            return value if os.read(fd, 8) == PNG_SIGNATURE else None
+        finally:
+            os.close(fd)
     except OSError:
         return None
-    return value if info and stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600 else None
 
 
 def _entry(side: str, page: str, result: dict, expected: Path | None = None) -> dict:

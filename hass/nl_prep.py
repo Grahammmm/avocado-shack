@@ -117,7 +117,10 @@ class _Index:
             if len(longer) == 1: return longer[0], True
             if longer: return None, False  # several words start this way (lem: lemon, lemonade): the owner has not chosen, so no hint
         if len(token) >= FUZZY_MIN:
-            close = difflib.get_close_matches(token, self.vocab_list, n=1, cutoff=FUZZY_CUTOFF)
+            close = difflib.get_close_matches(token, self.vocab_list, n=2, cutoff=FUZZY_CUTOFF)
+            # two words equally close (peich: peach, perch) are a tie, not a unique correction: leave the token unresolved
+            if len(close) == 2 and difflib.SequenceMatcher(None, close[0], token).ratio() == difflib.SequenceMatcher(None, close[1], token).ratio():
+                return None, False
             if close: return close[0], True
         return None, False
 
