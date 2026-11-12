@@ -159,7 +159,8 @@ def _source_hit(field: str, new: str, owner: str) -> bool:
         host = _host(new)
         return not host or not re.search(r"(?<![\w.-])(?:www\.)?" + re.escape(host) + r"(?![\w-]|\.\w)", owner)
     words = _words(new)
-    return bool(words) and not words & set(re.findall(r"\w+", owner))
+    # RF0640-10: one significant word with an affirmed (not negated) whole-word occurrence backs the value
+    return bool(words) and not any(_affirmed(re.compile(r"(?<!\w)" + re.escape(w) + r"(?!\w)"), owner) for w in words)
 
 
 def _lines(value) -> bool:
