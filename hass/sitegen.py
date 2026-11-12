@@ -227,9 +227,15 @@ def diff_paths(files: dict[str, bytes], root: Path) -> list[str]:
     changed = []
     for rel, data in files.items():
         target = Path(root) / rel
-        if _linked(root, rel) or not target.is_file() or target.read_bytes() != data:
+        if _linked(root, rel) or not target.is_file() or _differs(target, data):
             changed.append(rel)
     return changed
+
+
+def _differs(target: Path, data: bytes) -> bool:
+    """Compare a regular file with expected bytes, reading at most len(data) + 1 bytes (extra byte = drift)."""
+    with target.open("rb") as handle:
+        return handle.read(len(data) + 1) != data
 
 
 
