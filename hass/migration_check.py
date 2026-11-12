@@ -65,6 +65,10 @@ def _baseline_problem(baseline) -> str | None:
             value = value.get(key)  # parents were already checked to be objects
         if not ok(value):
             return f"baseline {path} {what}"
+    try:  # an escaped lone surrogate decodes fine but cannot be printed in the report
+        baseline["baseCommit"].encode("utf-8")
+    except UnicodeEncodeError:
+        return "baseline baseCommit is not UTF-8 text"
     return None
 
 
