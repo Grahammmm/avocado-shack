@@ -96,9 +96,17 @@ def _later_installed(sdir: Path, wt: Path, change_id: str, commit: str) -> tuple
         inst = {} if rec.get("install") is None else rec["install"]
         if not isinstance(inst, dict) or inst.get("state") == "installed" and not isinstance(inst.get("commit"), str):
             return None, path.stem
-        other = inst.get("commit") if inst.get("state") == "installed" else None
-        if other and other != commit and editor._git(wt, "merge-base", "--is-ancestor", commit, other).returncode == 0:
-            return path.stem, None
+        if inst.get("state") != "installed": continue
+        other = inst["commit"]  # an installed record must name a full lower-case hex commit that Git can establish
+        try:
+            if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", other): return None, path.stem
+            kind = editor._git(wt, "cat-file", "-t", other)
+            if kind.returncode != 0 or kind.stdout.strip() != "commit": return None, path.stem
+            if other == commit: continue
+            status = editor._git(wt, "merge-base", "--is-ancestor", commit, other).returncode
+        except OSError: return None, path.stem
+        if status == 0: return path.stem, None
+        if status != 1: return None, path.stem
     return None, None
 
 def install(change_id, *, state=None, now=None) -> dict:

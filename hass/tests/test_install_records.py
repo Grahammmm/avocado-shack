@@ -7,9 +7,13 @@ import contextlib
 import io
 import json
 import unittest
+from unittest import mock
 
-from hass import editor
+from hass import editor, install
 from hass.tests import test_install
+from hass.tests.test_editor import git
+
+PREFIX = "storefront-mockup/"
 
 
 class InstallRecordsTest(test_install.InstallTest):
@@ -93,6 +97,88 @@ class InstallRecordsTest(test_install.InstallTest):
         self.assertEqual((code, len(lines)), (1, 1), lines)
         self.assertEqual(json.loads(lines[0]), {"result": "refused",
                                                 "reason": f"another change record is unreadable: {first}"})
+
+
+class UnreadableCommitIdentityTest(InstallRecordsTest):
+    """RF1550-10: an installed record whose commit cannot be established as a commit is unreadable, never 'no later install'."""
+    locals().update({n: None for n in dir(InstallRecordsTest) if n.startswith("test_")})
+
+    def damage(self, cid, commit):
+        rec = editor._read(self.path(cid))
+        editor._write_json(self.path(cid), {**rec, "install": {"state": "installed", "commit": commit}})
+
+    def refused(self, first, second, reason_stem=None):
+        self.assert_refused_untouched(second, f"another change record is unreadable: {reason_stem or first}")
+
+    def test_empty_or_malformed_installed_commit_refuses_without_writes(self):
+        first, second = self.two_changes()
+        self.assertEqual(self.install(first)["result"], "installed")
+        good = editor._read(self.path(first))["install"]["commit"]
+        for name, bad in (("empty", ""), ("space", " " + good), ("nul", "bad\x00value"), ("nonhex", "z" * 40),
+                          ("short", good[:12]), ("head", "HEAD"), ("upper", good.upper()), ("int", 7), ("none", None)):
+            with self.subTest(name), mock.patch.object(install, "_put") as put:
+                self.damage(first, bad)
+                self.refused(first, second)
+                put.assert_not_called()
+
+    def test_missing_or_noncommit_object_is_not_a_nonancestor(self):
+        first, second = self.two_changes()
+        wt = self.repo.wt
+        blob = git(wt, "rev-parse", "HEAD:" + PREFIX + "index.html")
+        tree = git(wt, "rev-parse", "HEAD^{tree}")
+        git(wt, "tag", "-a", "-m", "t", "rf1550tag", "HEAD")
+        tag = git(wt, "rev-parse", "rf1550tag")
+        for name, bad in (("absent", "1" * 40), ("blob", blob), ("tree", tree), ("tag", tag)):
+            with self.subTest(name):
+                self.damage(first, bad)
+                self.refused(first, second)
+
+    def test_ancestry_error_is_unreadable_but_status_one_is_not(self):
+        first, second = self.two_changes()
+        self.assertEqual(self.install(first)["result"], "installed")
+        real = editor._git
+        for name, fake in (("128", mock.Mock(returncode=128, stdout="", stderr="boom")), ("2", mock.Mock(returncode=2, stdout="", stderr=""))):
+            def patched(wt, *a, _f=fake): return _f if a[0] == "merge-base" else real(wt, *a)
+            with self.subTest(name), mock.patch.object(editor, "_git", patched):
+                self.refused(first, second)
+        def launch_fails(wt, *a):
+            if a[0] == "merge-base": raise OSError("no git")
+            return real(wt, *a)
+        with self.subTest("oserror"), mock.patch.object(editor, "_git", launch_fails):
+            self.refused(first, second)
+        # status 1 (established non-descendant) keeps the ordinary install of the next change
+        self.assertEqual(self.install(second)["result"], "installed")
+
+    def test_real_descendant_still_blocks_and_equal_commit_is_not_later(self):
+        first, second = self.two_changes()
+        c2 = editor._read(self.path(second))["commit"]
+        c1 = editor._read(self.path(first))["commit"]
+        self.assertEqual(self.install(second)["result"], "installed")
+        self.assertEqual(self.install(first), {"result": "refused", "reason": f"a later change is already installed: {second}"})
+        self.damage(first, c2)  # an existing equal commit is not a later install
+        self.assertEqual(install._later_installed(self.repo.state, self.repo.wt, second, c2), (None, None))
+        self.damage(first, "0" * 40)  # an absent identity is unreadable even though it is not the requested commit
+        self.assertEqual(install._later_installed(self.repo.state, self.repo.wt, second, "0" * 40), (None, first))
+        self.assertNotEqual(c1, c2)
+
+    def test_noninstalled_entries_with_garbage_commits_are_ignored(self):
+        first, second = self.two_changes()
+        for inst in ({"state": "failed", "commit": ""}, {"commit": "HEAD"}, {}, None):
+            with self.subTest(inst):
+                rec = {k: v for k, v in editor._read(self.path(first)).items() if k != "install"}
+                editor._write_json(self.path(first), rec if inst is None else {**rec, "install": inst})
+                self.assertEqual(self.install(second)["result"], "installed")
+                editor._write_json(self.path(second), {k: v for k, v in editor._read(self.path(second)).items() if k != "install"})
+
+    def test_cli_unreadable_commit_is_one_refused_line(self):
+        first, second = self.two_changes()
+        self.damage(first, "")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = editor.main(["install", second, "--state", str(self.repo.state)])
+        lines = buf.getvalue().splitlines()
+        self.assertEqual((code, len(lines)), (1, 1), lines)
+        self.assertEqual(json.loads(lines[0]), {"result": "refused", "reason": f"another change record is unreadable: {first}"})
 
 
 if __name__ == "__main__":
