@@ -188,7 +188,28 @@ def _cell(v, nullable=False):
     return v if isinstance(v, str) or (v is None and nullable) else "unreadable"
 
 
+def _check_state_path(state_dir) -> None:
+    """Static admission (RF1500-25): every component of the supplied state path, in order, must be a real directory.
+
+    Each component is lstat-ed before a later `..` may cancel it, so `link/../state` is refused at `link`; the supplied
+    path is never resolved or normalised first. A component that does not exist is not refused (nothing can be read
+    through it). Not TOCTOU protection: the state directory is assumed to be owned and not swapped during the call.
+    """
+    raw = os.fspath(state_dir)
+    cur = os.sep if os.path.isabs(raw) else os.getcwd()
+    for part in raw.split(os.sep):
+        if part in ("", "."): continue
+        if part == "..":  # `cur` was already inspected as a real directory, so its textual parent is its real parent
+            cur = os.path.dirname(cur)
+            continue
+        cur = os.path.join(cur, part)
+        try: mode = os.lstat(cur).st_mode
+        except FileNotFoundError: return
+        if not stat.S_ISDIR(mode): raise UnsafeFile("state path is a link or not a directory")
+
+
 def history(state_dir, key=None, values=False) -> dict:
+    _check_state_path(state_dir)
     path, rows, out = Path(state_dir) / "conversation.sqlite3", [], []
     try: mode = os.lstat(path).st_mode  # lstat: a link is never followed to another state's database
     except FileNotFoundError: mode = None
