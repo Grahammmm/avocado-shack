@@ -109,6 +109,10 @@ def _why(case, reply, registry):
     expect, same = case["expect"], lambda a, b: json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
     if _kind(got) != _kind(expect): return f"expected {_kind(expect)}, got {_kind(got)}"
     if "ops" not in expect: return None
+    for call in expect["ops"]:  # RF2210-12: expected names are case data; never format an unregistered one into a reason
+        op = registry.get(call["op"])
+        if op is None: return "expected op is not registered"
+        if any(k not in op.args for k in call["args"]): return "expected arg is not registered"
     names, wanted = [c["op"] for c in got["ops"]], [c["op"] for c in expect["ops"]]
     if names != wanted: return f"ops {','.join(names)} but expected {','.join(wanted)}"
     for n, (have, call) in enumerate(zip(got["ops"], expect["ops"]), 1):
@@ -200,6 +204,9 @@ def main(argv=None, transport=None) -> int:
     parser.add_argument("--live", action="store_true", help="operator only: record replies from the local model")
     for flag in ("--replies", "--url", "--model", "--out", "--before", "--after"): parser.add_argument(flag)
     args = parser.parse_args(argv)
+    # RF0300-12: score is stdout-only; recorder flags (even empty ones) would be silently ignored, so refuse them first
+    if args.command == "score" and any(v is not None for v in (args.url, args.model, args.out)):
+        parser.error("score takes only --replies and --cases")
     cmp_ = not args.live and args.command == "compare" and args.before and args.after
     if cmp_ and (args.replies or args.url or args.model or args.out):
         parser.error("compare takes only --before, --after and --cases")

@@ -32,7 +32,7 @@ from hass.preview import Previewer  # noqa: E402
 def _row(n, line, photos=None, names=None) -> Inbound:  # every check names line n and the field, never the value
     def bad(what): raise ValueError(f"fixture line {n}: {what}")
     try: r = json.loads(line)
-    except ValueError: bad("not JSON")
+    except (ValueError, RecursionError): bad("not JSON")
     if not isinstance(r, dict): bad("row must be a JSON object")
     if type(r.get("id")) not in (int, str) or r.get("id") == "": bad("id must be a non-empty string or an integer")
     for field in ("chat", "sender", "text"):
@@ -42,6 +42,8 @@ def _row(n, line, photos=None, names=None) -> Inbound:  # every check names line
     try: at = datetime.fromisoformat(r.get("at"))
     except (TypeError, ValueError): at = None
     if at is None or at.utcoffset() is None: bad("at must be an ISO time with a UTC offset")
+    try: at.astimezone(timezone.utc)  # RF0010-12: replay converts later; check it here, before any row runs
+    except (OverflowError, ValueError): bad("at must be representable in UTC")
     files = r.get("photos", []) if photos is not None else []  # NB-AV-13: plain names of regular files in --photos
     if not isinstance(files, list) or not all(isinstance(f, str) and f not in ("", ".", "..") and Path(f).name == f and
                                               not (q := Path(photos) / f).is_symlink() and q.is_file() for f in files):
@@ -102,7 +104,7 @@ def _load_interpreter(path) -> FixtureInterpreter:  # H09: a failure names the f
     try: text = Path(path).read_text("utf-8")
     except (OSError, UnicodeDecodeError): raise ValueError("--interpreter: unreadable") from None
     try: mapping = json.loads(text)
-    except ValueError: raise ValueError("--interpreter: not JSON") from None
+    except (ValueError, RecursionError): raise ValueError("--interpreter: not JSON") from None
     if not isinstance(mapping, dict): raise ValueError("--interpreter: not a JSON object")
     return FixtureInterpreter(mapping)
 

@@ -232,11 +232,14 @@ class FallbackInterpreter:
     """HASS-INTERP-OPENAI-1: interpret() as LocalInterpreter, but a first interpreter that failed (last_error), raised or
     answered outside the reply contract (`valid(result)` false) is followed by exactly one call to the second one.
     No third attempt, no loop. The answer is whichever interpreter's; `last_backend` names it ("openai" / "ollama"),
-    `last_fallback` says the second one was asked and `last_primary_error` keeps the first one's short reason code."""
+    `last_fallback` says the second one was asked and `last_primary_error` keeps the first one's short reason code.
+    A second one that raises answers {"unsupported": FAILED} with last_error "error"; every field describes this call."""
 
     def __init__(self, primary, fallback, valid):
         if not (callable(valid) and hasattr(primary, "interpret") and hasattr(fallback, "interpret")):
             raise ValueError("primary and fallback must interpret and valid must be callable")
+        if isinstance(primary, FallbackInterpreter) or isinstance(fallback, FallbackInterpreter):  # nested wrapper = 3+ attempts
+            raise ValueError("interpreters must not have a fallback of their own")
         self.primary, self.fallback, self.valid = primary, fallback, valid
         self.last_error, self.last_backend, self.last_fallback, self.last_primary_error, self.last_seconds = None, None, False, None, None
 
@@ -257,8 +260,11 @@ class FallbackInterpreter:
             self.last_error, self.last_backend = None, getattr(self.primary, "last_backend", None)
             self.last_fallback, self.last_primary_error = False, None
         else:
-            result = self.fallback.interpret(*args, **kw)  # the one retry; its failure is final
-            self.last_error = getattr(self.fallback, "last_error", None)
+            try:
+                result = self.fallback.interpret(*args, **kw)  # the one retry; its failure is final
+                self.last_error = getattr(self.fallback, "last_error", None)
+            except Exception:  # noqa: BLE001 - RF2340-12: a raising second one is the fixed failure, its text never kept
+                result, self.last_error = {"unsupported": FAILED}, "error"
             self.last_backend, self.last_fallback, self.last_primary_error = getattr(self.fallback, "last_backend", None), True, problem
         self.last_seconds = round(time.monotonic() - started, 3)
         return result

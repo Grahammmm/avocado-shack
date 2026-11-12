@@ -117,7 +117,10 @@ class _Index:
             if len(longer) == 1: return longer[0], True
             if longer: return None, False  # several words start this way (lem: lemon, lemonade): the owner has not chosen, so no hint
         if len(token) >= FUZZY_MIN:
-            close = difflib.get_close_matches(token, self.vocab_list, n=1, cutoff=FUZZY_CUTOFF)
+            close = difflib.get_close_matches(token, self.vocab_list, n=2, cutoff=FUZZY_CUTOFF)
+            # two words equally close (peich: peach, perch) are a tie, not a unique correction: leave the token unresolved
+            if len(close) == 2 and difflib.SequenceMatcher(None, close[0], token).ratio() == difflib.SequenceMatcher(None, close[1], token).ratio():
+                return None, False
             if close: return close[0], True
         return None, False
 
@@ -299,8 +302,11 @@ def _named_date(t, m, month, day, today, year=True):
         d = _safe_date(n, month, day) if 2000 <= n <= 2099 else None
         return (t[m.start():y.end()], d) if d is not None else None
     if year and BAD_YEAR_RE.match(t, m.end()): return None  # digits that look like a year but are not one (dec 5 202, 5 dec 20277): no hint
-    d = _safe_date(today.year, month, day)
-    if d is not None and d < today: d = _safe_date(today.year + 1, month, day)
+    # Earliest real occurrence on/after today; Feb 29 can be up to 8 years away (non-leap century), so search a bounded 9 years.
+    d = None
+    for yr in range(today.year, min(today.year + 8, date.max.year) + 1):
+        c = _safe_date(yr, month, day)
+        if c is not None and c >= today: d = c; break
     return (m.group(0), d) if d is not None else None
 
 

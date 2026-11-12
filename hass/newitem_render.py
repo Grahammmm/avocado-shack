@@ -253,17 +253,47 @@ def _decode(data):
     return im
 
 
+GRAY16_MODES = ("I", "I;16", "I;16L", "I;16B", "I;16N")  # how Pillow versions decode a 16-bit grayscale PNG
+
+
+def _gray16(im, key):
+    """PNG unsigned 16-bit grayscale only: (RGB, alpha or None). Each sample s (0..65535) becomes the fixed full-range gray
+    (s*255+32767)//65535 repeated in RGB: no clipping, no per-image stretch. A tRNS key makes alpha 0 exactly where the ORIGINAL
+    16-bit sample equals it (not the rounded gray), 255 elsewhere; no match means None."""
+    Image, *_ = _modules()
+    lut = bytes((s * 255 + 32767) // 65535 for s in range(65536))
+    gray = Image.frombytes("L", im.size, bytes(lut[s] for s in im.getdata()))
+    alpha = None
+    if isinstance(key, int):
+        cover = bytes(0 if s == key else 255 for s in im.getdata())
+        if min(cover) == 0: alpha = Image.frombytes("L", im.size, cover)
+    return gray.convert("RGB"), alpha
+
+
 def _upright(data):
     """(RGB image with the EXIF rotation applied to the pixels, alpha channel or None, whether a rotation tag was present)."""
     _, ImageOps, *_ = _modules()
     im = _decode(data)
     turned = im.getexif().get(0x0112, 1) not in (None, 1)
+    high, key = im.format == "PNG" and im.mode in GRAY16_MODES, im.info.get("transparency")
     im = ImageOps.exif_transpose(im)
+    if high:
+        rgb, alpha = _gray16(im, key)
+        return rgb, alpha, turned
     alpha = None
     if im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info:
         alpha = im.convert("RGBA").getchannel("A")
         if alpha.getextrema()[0] > 250: alpha = None  # fully opaque: no cutout supplied
     return im.convert("RGB"), alpha, turned
+
+
+def _visible_luma(gray, cover):
+    """Coverage-weighted mean grey of a cut-out with no nearly opaque pixel; nothing visible at all is a blank photo."""
+    total = weight = 0
+    for v, m in zip(gray, cover):
+        total, weight = total + v * m, weight + m
+    if not weight: raise Refused("blank")
+    return total / weight
 
 
 def render(data: bytes, spec=None) -> dict:
@@ -303,16 +333,17 @@ def render(data: bytes, spec=None) -> dict:
         subject, cut = img.crop(box), mask.crop(box)
         target = min(stats["fill_max"]["p50"], .90) * SIZE
         factor = target / max(subject.size)
-        report["scale"] = round(factor, 3)
+        report["scale"] = round(factor, 3)  # the REQUESTED frame-filling factor, before the cap: ops/photos.py and house_render read it for the small retake
         if factor > MAX_UPSCALE:
-            review.append(f"The photo is small (product only {max(subject.size)} px); enlarged {factor:.1f} times it will look soft.")
+            review.append(f"The photo is small (product only {max(subject.size)} px); filling the frame would need {factor:.1f} times enlargement. I limited it to {MAX_UPSCALE:.1f} times; it may still look soft.")
             factor = MAX_UPSCALE
         size = (max(1, round(subject.width * factor)), max(1, round(subject.height * factor)))
         subject, cut = subject.resize(size, lanczos), cut.resize(size, lanczos)
         if alpha is not None:  # back to straight colour for the final source-over paste
             subject = Image.frombytes("RGBa", size, Image.merge("RGBA", (*subject.split(), cut)).tobytes()).convert("RGBA").convert("RGB")
-        solid = [v for v, m in zip(subject.convert("L").getdata(), cut.getdata()) if m > 200]
-        luma = statistics.fmean(solid) if solid else 128
+        gray = subject.convert("L").getdata()
+        solid = [v for v, m in zip(gray, cut.getdata()) if m > 200]
+        luma = statistics.fmean(solid) if solid else _visible_luma(gray, cut.getdata())  # translucent all over: measure it, never a made-up grey
         lo, hi = stats["subject_luma"]["p05"], stats["subject_luma"]["p95"]
         if luma < lo or luma > hi:  # exposure only, within a gentle range: never recolour a label
             gain = max(.8, min(1.25, (lo if luma < lo else hi) / max(luma, 1.0)))  # a pure-black subject: the full lift, no zero divide

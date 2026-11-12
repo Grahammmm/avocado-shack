@@ -9,7 +9,7 @@ Exit 0 ok, 1 store missing/unreadable/unsafe, 2 invalid arguments.
 import argparse, contextlib, json, os, re, sqlite3, stat, sys  # noqa: E401
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 PACIFIC = "America/Los_Angeles"
 NOT_OWNER = ("ignored", "echo", "edited-ignored")  # stored with a NULL time; never an owner message
@@ -139,7 +139,7 @@ def summarize(state_dir, start, days):
                 if (b := where(_iso_day(day))) is not None: b["interpreterCalls"] += calls
             db.execute("COMMIT")
         _same_leaf(path, ident)
-    except (sqlite3.Error, OSError): raise Unreadable from None
+    except (sqlite3.Error, OSError, ZoneInfoNotFoundError): raise Unreadable from None  # missing tzdata: refuse whole
     totals = _blank()
     for d in window: _add(totals, buckets[d])
     _add(totals, unknown)

@@ -43,6 +43,7 @@ SIGNUP_TRUTH = "The website can't take sign-ups yet"
 NO_SIGNUP = SIGNUP_TRUTH + ", so there's no sign-up button"
 DESCRIPTION_LIMIT = 800  # content_model.TEXT_LIMITS["event"]["description"]
 TITLE_LIMIT = 80
+MEETING_LIMIT = 160  # content_model.TEXT_LIMITS["event"]["meetingPoint"]
 
 
 @dataclass
@@ -100,11 +101,13 @@ def only_a_trail(meeting_point, route) -> bool:
 
 
 def suggest_meeting(route) -> str | None:
-    """The suggested meeting place for a saved route: "<route title> trailhead, <town>"; None without a saved route."""
+    """The suggested meeting place for a saved route: "<route title> trailhead, <town>"; None without a saved route, or when
+    that place is too long for a hike's meeting place (a yes would only dead-end in a length refusal: he is asked where)."""
     if not isinstance(route, dict) or not isinstance(route.get("title"), str) or not route["title"].strip():
         return None
     place = route.get("place") if isinstance(route.get("place"), str) and route["place"].strip() else None
-    return f"{route['title'].strip()} trailhead" + (f", {place.strip()}" if place else "")
+    suggestion = f"{route['title'].strip()} trailhead" + (f", {place.strip()}" if place else "")
+    return suggestion if len(suggestion) <= MEETING_LIMIT else None
 
 
 def meeting_question(title, suggestion) -> str:
@@ -160,6 +163,9 @@ def shape(ops, routes=None, *, live=True, events=None) -> Shaped:
     out = Shaped(ops)
     if not live or not isinstance(ops, list):
         return out
+    if any(_capacity_conflict(call) for call in ops):  # one contradictory call: nothing in the batch is shaped or offered
+        out.ask = {"kind": "offer", "question": CAPACITY_CONFLICT, "suggest": None, "ops": None}
+        return out
     offer = _signup_offer(ops, events)
     if offer is not None:
         return offer
@@ -179,6 +185,17 @@ def shape(ops, routes=None, *, live=True, events=None) -> Shaped:
             # rediscover the route from an abbreviated place ("Fiscalini"); the question keeps the call's place in the list.
             out.ask = {"kind": "meet", "question": meeting_question(args.get("title"), suggestion), "suggest": suggestion, "index": index}
     return out
+
+
+CAPACITY_CONFLICT = "Please give either a guest limit or no limit, not both."
+
+
+def _capacity_conflict(call) -> bool:
+    """A hike.create/update that gives a positive guest limit and also says no limit."""
+    if not (isinstance(call, dict) and call.get("op") in ("hike.create", "hike.update") and isinstance(call.get("args"), dict)):
+        return False
+    cap = call["args"].get("capacity")
+    return isinstance(cap, int) and not isinstance(cap, bool) and cap > 0 and call["args"].get("noCapacityLimit") is True
 
 
 def _signup_offer(ops, events):
@@ -202,6 +219,10 @@ def _signup_offer(ops, events):
     old = LIMIT_SENTENCE.sub(" ", rest.get("description", event.get("description") or "")).strip()
     sentence = limit_sentence(cap)
     rest["description"] = f"{old} {sentence}".strip()
+    if len(rest["description"]) > DESCRIPTION_LIMIT:  # the yes would only dead-end in a length refusal: explain now, offer nothing
+        return Shaped(ops, ask={"kind": "offer", "suggest": None, "ops": None, "question": (
+            f"{SIGNUP_TRUTH}, and the description is too full to add the guest limit. Nothing changed. "
+            "Send a shorter description with the guest limit, and I can try again.")})
     question = (f"{SIGNUP_TRUTH}, so I can't turn sign-up on for {name}. I can add {voice.quote(sentence)} to its description "
                 "instead, so people ask you at the shop. Want that? Reply yes or no.")
     return Shaped(ops, ask={"kind": "offer", "question": question, "suggest": None, "ops": [{"op": "hike.update", "args": rest}]})

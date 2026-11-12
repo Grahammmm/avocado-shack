@@ -154,10 +154,18 @@ def _texts_of(got) -> list:
     return [t for call in got["ops"] for t in _leaves(call["args"])] if kind == "ops" else [str(got.get(kind, "")).lower()]
 
 
+_FAIL_CODES = frozenset({"clock", "request", "timeout", "connect", "shape", "not-json", "too-large", "unknown", "error", "contract"})
+
+
+def _fail_code(failed) -> str:
+    """The displayable form of a recorded failure: a known code or http-NNN as is, anything else the fixed `unknown` (never the text)."""
+    return failed if failed in _FAIL_CODES or re.fullmatch(r"http-[0-9]{3}", failed, re.ASCII) else "unknown"
+
+
 def judge(case, record, registry) -> dict:
     """{"verdict", "kind", "intent": bool, "why"} for one case and its recorded reply row."""
     codes = {p.get("code") for p in case["pending"]}
-    if record.get("failed"): return {"verdict": "call-failed", "kind": "none", "intent": False, "why": f"call failed: {record['failed']}"}
+    if record.get("failed"): return {"verdict": "call-failed", "kind": "none", "intent": False, "why": f"call failed: {_fail_code(record['failed'])}"}
     got = interpret_check.check(_checked(_ordered(record["reply"])), registry, codes)
     kind = ie._kind(got)
     expects = [case["expect"], *case.get("also", [])]
@@ -193,7 +201,9 @@ def _percentile(values, p):
 
 
 def score(corpus, replies, registry) -> dict:
-    """Metrics over the cases that have a reply row; ids and short reasons only."""
+    """Metrics over the cases that have a reply row; ids and short reasons only.
+
+    schemaValidRate counts nonfailed replies whose raw top-level envelope is one `_checked` admits; it is not registry validity."""
     done = [(c, judge(c, replies[c["id"]], registry)) for c in corpus if c["id"] in replies]
     n = len(done)
     count = lambda verdict: sum(j["verdict"] == verdict for _, j in done)  # noqa: E731
@@ -204,7 +214,7 @@ def score(corpus, replies, registry) -> dict:
     calls = [replies[c["id"]] for c, _ in done]
     ok_ms = [r.get("firstMs", r["ms"]) for r in calls if r.get("firstMs", r["ms"]) is not None and not r.get("firstFailed", r["failed"])]  # first attempts that finished in time
     raw_ok = [r for r in calls if not r["failed"] and isinstance(r["reply"], dict)]
-    schema_ok = [r for r in raw_ok if any(k in r["reply"] for k in ("ops", "question", "unsupported"))]
+    schema_ok = [r for r in raw_ok if _checked(r["reply"]) == r["reply"]]  # top-level envelope only; registry/op-member checks happen in judge
     per = {}
     for c, j in done:
         row = per.setdefault(c["intent"], {"cases": 0, "pass": 0, "wrongDraft": 0})
