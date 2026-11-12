@@ -139,14 +139,19 @@ def main(argv=None, transport=None) -> int:
     parser.add_argument("command", nargs="?", choices=("score",))
     parser.add_argument("--live", action="store_true", help="operator only: record replies from the loopback vision model")
     for flag in ("--cases", "--replies", "--url", "--model", "--photos", "--out"): parser.add_argument(flag)
-    parser.add_argument("--api", choices=("ollama", "openai"), default="ollama", help="live: Ollama /api/chat or OpenAI-style /v1/chat/completions")
+    parser.add_argument("--api", choices=("ollama", "openai"), help="live: Ollama /api/chat or OpenAI-style /v1/chat/completions")
     args = parser.parse_args(argv)
+    # Mode admission: options of the other mode are refused (presence, not truthiness) before any input is read.
+    if args.command == "score" and not args.live and any(v is not None for v in (args.url, args.model, args.photos, args.out, args.api)):
+        parser.error("score does not accept --url, --model, --photos, --out or --api")
+    if args.live and not args.command and args.replies is not None:
+        parser.error("--live does not accept --replies")
     if not (args.live and not args.command and args.url and args.model and args.photos and args.out
             or not args.live and args.command == "score" and args.replies):
         parser.error("use: score --cases C --replies R, or --live --url U --model M --photos DIR --out FILE --cases C")
     try:
         cases = load_cases(args.cases or CASES)
-        summary = (live(cases, args.url, args.model, args.photos, args.out, transport=transport, api=args.api) if args.live
+        summary = (live(cases, args.url, args.model, args.photos, args.out, transport=transport, api=args.api or "ollama") if args.live
                    else score(cases, load_replies(args.replies, cases), catalog_categories()))
     except EvalError as exc:
         print(f"label_eval: {exc}", file=sys.stderr)
