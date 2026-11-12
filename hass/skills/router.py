@@ -19,6 +19,8 @@ from __future__ import annotations
 import difflib
 import math
 from dataclasses import dataclass
+from decimal import Decimal
+from fractions import Fraction
 
 from hass import interpret_check, nl_prep
 from hass.skills import backlog as backlog_mod
@@ -26,6 +28,14 @@ from hass.skills.kinds import WORDS_FOR_AVAILABILITY
 
 TOP = 3
 NEAR_TIE = 0.10  # the model's pick scored within 10% of the leader: the two opinions are split
+
+
+def _within_near_tie(lead, other) -> bool:
+    """``lead - other <= NEAR_TIE * lead`` on the exposed (rounded) scores' decimal values, exact and inclusive."""
+    lead, other = Fraction(Decimal(str(lead))), Fraction(Decimal(str(other)))
+    return lead - other <= Fraction(Decimal(str(NEAR_TIE))) * lead
+
+
 HINT_BOOST, OPEN_BOOST = 1.5, 3.0
 FUZZY_MIN, FUZZY_CUTOFF = 5, 0.8
 STOP = frozenset("a an and at be but by do for from i in is it me my of on or our the to up we you your can could would please "
@@ -167,11 +177,11 @@ def route(reply, ranked, skills, *, text="", hints=None, store=None, pending_cod
         lead, score = ranked[0]
         called = {n for n, _s in calls}
         # leading pair ambiguous: ask unless the reply has a call for both of them (whatever else it holds)
-        if len(ranked) > 1 and (score - ranked[1][1]) <= NEAR_TIE * score and not {lead, ranked[1][0]} <= called:
+        if len(ranked) > 1 and _within_near_tie(score, ranked[1][1]) and not {lead, ranked[1][0]} <= called:
             return Route("ask", reply=_labels_question([skills.get(lead).label, skills.get(ranked[1][0]).label]))
         if len(calls) == 1:
             pick = dict(ranked)[calls[0][0]]
-            if calls[0][0] != lead and (score - pick) <= NEAR_TIE * score:
+            if calls[0][0] != lead and _within_near_tie(score, pick):
                 return Route("ask", reply=_labels_question([skills.get(lead).label, skills.get(calls[0][0]).label]))
 
     first = skills.get(calls[0][0])
