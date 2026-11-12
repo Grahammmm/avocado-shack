@@ -106,11 +106,21 @@ def _image_present(repo: Path, image) -> bool:
         return False
 
 
+def _no_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:  # decoded-key comparison; the message never echoes key or value
+            raise ValueError("duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def _read_aux_json(path: Path):
-    """Decode an auxiliary JSON file; decoder recursion overflow becomes a ValueError (private exit 2)."""
+    """Decode an auxiliary JSON file; a repeated object key at any depth is refused and
+    decoder recursion overflow becomes a ValueError (private exit 2)."""
     text = path.read_text("utf-8")
     try:
-        return json.loads(text)
+        return json.loads(text, object_pairs_hook=_no_duplicate_keys)
     except RecursionError:
         raise ValueError("JSON nested too deeply") from None
 
