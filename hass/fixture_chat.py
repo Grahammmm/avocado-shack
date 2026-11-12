@@ -63,7 +63,9 @@ class FixtureAdapter:
         self.path, self.fail_sends, self.sent, self.photos, self.names = path, fail_sends, [], photos, {}
 
     def inbound(self) -> list:
-        lines = Path(self.path).read_text("utf-8").splitlines()
+        # RF0640-13: split on LF only (read_text already folds CR/CRLF); splitlines() would cut a row at a literal
+        # U+0085/U+2028/U+2029, which are legal inside a JSON string and not JSONL record separators.
+        lines = Path(self.path).read_text("utf-8").split("\n")
         return [_row(n, s, self.photos, self.names) for n, s in enumerate(lines, 1) if s.strip()]  # n: physical lines
 
     def fetch(self, provider_id, count) -> list:  # NB-AV-13 photo source: that row's files, as checked by _row

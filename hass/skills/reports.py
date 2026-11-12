@@ -81,10 +81,14 @@ def count_query(text):
     found = _COUNT.search(_fold(text))
     if not found:
         return None
-    words = []
-    for word in found["rest"].split():
+    words, rest = [], found["rest"].split()
+    for i, word in enumerate(rest):
         if word in _COUNT_STOP:
-            break
+            # 'low' is a stock state ('how many eggs low'), but it is part of a name when a product word follows
+            # ('low fat milk'): one token of lookahead, no adjective list.
+            following = rest[i + 1] if i + 1 < len(rest) else None
+            if word != "low" or following is None or following in _COUNT_STOP or following in _FILLER:
+                break
         if words or word not in _FILLER:
             words.append(word)
     return "" if not words or all(w in _NOT_A_PRODUCT for w in words) else " ".join(words)

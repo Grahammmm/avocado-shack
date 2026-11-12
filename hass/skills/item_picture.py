@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import unicodedata
 
 from hass import media, voice
 from hass.content_model import FORBIDDEN_TEXT, INVISIBLE_RE
@@ -200,9 +201,22 @@ def _lists_two(turn, name, alt="") -> bool:
     return False
 
 
+# "not the home page" / "instead of the front page": this one mention of the destination is turned down, nothing else is
+_HOME_REJECTED = re.compile(rf"\b(?:not|instead\s+of)\s+(?:the\s+)?(?:{HOME_PAGE.pattern})", re.IGNORECASE)
+
+
+def _home_only_rejected(turn, name) -> bool:
+    """True when every home-page mention in his text is an explicit rejection and the same text affirmatively picks the saved
+    product (``_picks`` is True; None or False is not a choice). Any other home mention keeps the question."""
+    rest = _HOME_REJECTED.sub(" ", turn)
+    if HOME_PAGE.search(rest) or _HOME_REJECTED.search(turn) is None:
+        return False
+    return _picks(rest, _words(name)) is True
+
+
 def _crowded(turn, name="", alt="") -> str | None:
     """The question one text of his raises about where the photo goes, or None."""
-    if HOME_PAGE.search(turn):
+    if HOME_PAGE.search(turn) and not _home_only_rejected(turn, name):
         return ONE_PLACE
     if _lists_two(turn, name, alt) or BOTH.search(turn):
         return ONE_AT_A_TIME
@@ -221,26 +235,58 @@ _CLAUSE = re.compile(r"[,.;:!?\n]+|\s+(?:but|though|however)\s+", re.IGNORECASE)
 _ADVERBS = frozenset({"just", "also", "really", "simply", "quite", "so", "even", "still", "very", "surely", "clearly", "certainly"})
 
 
-def _picks(turn, want):
+_NAME_HIT = "\0name"  # stands for one whole occurrence of the saved name in a clause of his answer
+
+
+def _unicode_tokens(text) -> list:
+    """Whole lexical tokens of ``text`` (NFC, case-folded): runs of letters, digits and combining marks, with inner apostrophes.
+    Used only when the saved name has no ASCII selection word at all; nothing is stored or transliterated."""
+    out, cur = [], ""
+    for ch in unicodedata.normalize("NFC", (text or "").replace("\u2019", "'")).casefold():
+        if ch.isalnum() or unicodedata.category(ch).startswith("M") or (ch == "'" and cur):
+            cur += ch
+        else:
+            out.append(cur)
+            cur = ""
+    out.append(cur)
+    return [t.rstrip("'") for t in out if t.rstrip("'")]
+
+
+def _mark_name(tokens, name_tokens) -> list:
+    """``tokens`` with every whole, contiguous run of the name's tokens replaced by one _NAME_HIT."""
+    out, i, size = [], 0, len(name_tokens)
+    while i < len(tokens):
+        if tokens[i:i + size] == name_tokens:
+            out.append(_NAME_HIT)
+            i += size
+        else:
+            out.append(tokens[i])
+            i += 1
+    return out
+
+
+def _picks(turn, want, name=""):
     """True when his text affirmatively picks the product (its words, not negated); False when it only rejects it ('not the
     lemons', 'anything but lemons', 'the plums instead of the lemons'); None when it does not mention it. Each clause (bounded
     by a comma, a stop or 'but') is read on its own, so 'not the plums, the lemons' picks it and 'the plums, not the lemons'
     does not. Within a clause a negation covers the words after it, and a negated verb after the name ('the lemons aren't the
     one', 'the lemons are not it', 'the lemons are definitely not the one') rejects it, an adverb between the verb and the
     'not' ('definitely', 'really', any '-ly' word) not hiding the verb; the last mention in the text decides."""
-    if not want:
+    name_tokens = [] if want else _unicode_tokens(name)  # RF1721-11: a name with no ASCII selection word is matched whole
+    if not want and not name_tokens:
         return None
     text = _REJECT_FRAME.sub("not", (turn or "").replace("\u2019", "'"))
     verdict = None
     for clause in _CLAUSE.split(text):
         negated, named, verb = False, False, False  # verb: the last word was a verb, maybe followed by adverbs
-        for token in re.findall(r"[a-z0-9']+", clause.casefold()):
+        tokens = _mark_name(_unicode_tokens(clause), name_tokens) if name_tokens else re.findall(r"[a-z0-9']+", clause.casefold())
+        for token in tokens:
             if token in _NEGATORS or token.endswith("n't"):
                 negated = True
                 if named and (token.endswith("n't") or verb):
                     verdict = False  # 'the lemons aren't the one': a negated verb after the name rejects it
                 verb = False
-            elif _words(token) & want:
+            elif token == _NAME_HIT if name_tokens else _words(token) & want:
                 verdict, named, verb = not negated, True, False
             elif token in _COPULAS or token.endswith(("'s", "'re", "'m")):
                 verb = True
@@ -262,7 +308,7 @@ def one_place(texts, name="", alt="") -> str | None:
     want = _words(name)
     chosen = False
     for turn in turns[last + 1:]:  # his latest word on the product wins: a yes can follow a no, and a no can follow a yes
-        verdict = _picks(turn, want)
+        verdict = _picks(turn, want, name)
         if verdict is not None:
             chosen = verdict
     return None if chosen else question
