@@ -186,7 +186,9 @@ class Books:
 
     def journals(self):
         result = []
-        for path in sorted(self.directory.iterdir()):
+        try: paths = sorted(self.directory.iterdir())
+        except OSError: raise BooksError('release-books') from None
+        for path in paths:
             if path.name.startswith('.release-'): continue  # never-installed atomic temp
             j = validate(read(path))
             if path.name != j['change_id'] + '.json': raise BooksError('release-books')
