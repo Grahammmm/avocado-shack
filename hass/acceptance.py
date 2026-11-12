@@ -40,13 +40,18 @@ def _validate(map_, tests_dir, expected_ids):
         if not isinstance(entry, (tuple, list)):
             probs.append("map: %s" % id_)
             continue
+        if not entry:  # an empty covering tuple/list is evidence of nothing
+            probs.append("map: %s" % id_)
+            continue
         probs += ["missing module: %s" % m for m in entry
                   if not os.path.exists(os.path.join(tests_dir, m + ".py"))]
     return probs
 
 def _run_id(modules, loader, tests_pkg):
-    # -> (tests_run, failures, note); a failed import names itself, counts as one failure.
-    import_error = None
+    # -> (tests_run, failures, note); a failed import names itself, counts as one failure;
+    # an imported module that discovers no cases is no evidence: one failure each.
+    import_error = first_empty = None
+    empty = 0
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         suite = unittest.TestSuite()
@@ -57,11 +62,18 @@ def _run_id(modules, loader, tests_pkg):
             except Exception:
                 import_error = import_error or m
                 continue
-            suite.addTest(loader.loadTestsFromName(name))
+            mod_suite = loader.loadTestsFromName(name)
+            if mod_suite.countTestCases() == 0:
+                empty += 1
+                first_empty = first_empty or m
+                continue
+            suite.addTest(mod_suite)
         result = unittest.TextTestRunner(stream=buf, verbosity=0, buffer=True).run(suite)
-    failures = len(result.failures) + len(result.errors) + (import_error is not None)
-    return (result.testsRun, failures,
-            "import error: %s" % import_error if import_error else "")
+    failures = (len(result.failures) + len(result.errors)
+                + (import_error is not None) + empty)
+    note = ("import error: %s" % import_error if import_error
+            else "no tests: %s" % first_empty if first_empty else "")
+    return (result.testsRun, failures, note)
 
 def run(map_, loader, tests_pkg=TESTS_PKG, tests_dir=None, expected_ids=None):
     # Validate then run in-process; return (rows, code, problems).
