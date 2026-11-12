@@ -60,6 +60,17 @@ EMOJI_MODIFIER_BASE_RANGES = (
 _VS16, _ZWJ, _KEYCAP, _BLACK_FLAG, _CANCEL_TAG = 0xFE0F, 0x200D, 0x20E3, 0x1F3F4, 0xE007F
 # Unicode 16.0 emoji-sequences.txt RGI_Emoji_Tag_Sequence: England, Scotland, Wales. Other tag runs fall through.
 _FLAG_TAGS = frozenset({"gbeng", "gbsct", "gbwls"})
+# Unicode 16.0 emoji-sequences.txt RGI_Emoji_Flag_Sequence (259 region codes). Other regional-indicator pairs fall through.
+_FLAG_REGIONS = frozenset("""
+    AC AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV
+    BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CP CQ CR CU CV CW CX CY CZ DE DG DJ DK DM DO DZ EA EC EE EG
+    EH ER ES ET EU FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT
+    HU IC ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT
+    LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP
+    NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL
+    SM SN SO SR SS ST SV SX SY SZ TA TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM UN US UY UZ VA
+    VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW
+""".split())
 _BASE_STARTS = [lo for lo, _ in EMOJI_BASE_RANGES]
 _MOD_STARTS = [lo for lo, _ in EMOJI_MODIFIER_BASE_RANGES]
 
@@ -76,7 +87,9 @@ def _element(cps: list, i: int):
         j = i + 1 + (1 if i + 1 < n and cps[i + 1] == _VS16 else 0)
         return (j + 1, None) if j < n and cps[j] == _KEYCAP else None
     if 0x1F1E6 <= cp <= 0x1F1FF:  # regional indicators only in pairs
-        return (i + 2, None) if i + 1 < n and 0x1F1E6 <= cps[i + 1] <= 0x1F1FF else None
+        if i + 1 < n and 0x1F1E6 <= cps[i + 1] <= 0x1F1FF:
+            return (i + 2, None) if chr(cp - 0x1F1E6 + 65) + chr(cps[i + 1] - 0x1F1E6 + 65) in _FLAG_REGIONS else None
+        return None
     if cp == _BLACK_FLAG and i + 1 < n and 0xE0020 <= cps[i + 1] <= 0xE007E:  # subdivision flag
         j = i + 1
         while j < n and 0xE0020 <= cps[j] <= 0xE007E: j += 1
