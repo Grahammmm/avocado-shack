@@ -224,8 +224,8 @@ def check_address(url) -> str:
         raw = "https://" + raw if re.fullmatch(r"(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:/\S*)?", raw, re.IGNORECASE) else ""
     if not raw or len(raw) > 300 or not raw.isascii():
         raise PageError("address")
-    parts = urlsplit(raw)
-    try:
+    try:  # urlsplit itself raises ValueError on a broken bracket ("https://[broken/about"); .port on a bad port
+        parts = urlsplit(raw)
         port = parts.port
     except ValueError:
         raise PageError("address") from None

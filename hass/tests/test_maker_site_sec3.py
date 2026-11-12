@@ -343,6 +343,19 @@ class L1TheAddressCheck(SiteTestCase):
                 self.assertEqual(caught.exception.code, "address")
                 self.assertEqual(get.calls, [])
 
+    def test_unparseable_addresses_are_the_plain_address_error(self):
+        """Codex RETURN at 9f213272 item 2: urlsplit/port ValueError never escapes the PageError("address") path."""
+        for bad in ("https://example.com:bad/about", "https://[broken/about", "https://exa[mple.com/x", "harborlane.example:99999/x",
+                    "https://harborlane.example]/about"):
+            with self.subTest(address=bad):
+                with self.assertRaises(ms.PageError) as caught:
+                    ms.check_address(bad)
+                self.assertEqual(caught.exception.code, "address")
+                get = Recorded()
+                with self.assertRaises(ms.PageError):
+                    self.fetch(get, bad, cache=False)
+                self.assertEqual(get.calls, [])
+
     def test_ordinary_names_still_pass(self):
         for good, want in (("https://harborlane.example/about", ADDRESS), ("harborlane.example/about", ADDRESS),
                            ("https://www.harbor-lane.example/", "https://www.harbor-lane.example/"),

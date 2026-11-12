@@ -163,6 +163,17 @@ class Plan(unittest.TestCase):
         self.assertEqual(done.ops[2]["args"], {"yes": ["photo-product-175"]})
         self.assertIn(ia.STORE_LINE, done.say)  # D2
 
+    def test_a_skipped_story_stays_skipped_while_the_draft_is_revised(self):
+        """Codex RETURN at 9f213272 item 1: after 'skip', changing the description or caption revises the draft (D5 line only)."""
+        for later in ("make the description say Spoon it on toast", "the caption should be honey jar", "call it Clover honey"):
+            for skip in ("skip", "skip the story", "no"):
+                with self.subTest(skip=skip, later=later):
+                    done = ia.describe_add(dict(FULL), ctx("new wildflower honey from Bee Happy Farm in Atascadero, its in", skip, later))
+                    self.assertEqual(done.ops[0]["args"]["story"], "Bee Happy Farm is based in Atascadero, California.")
+        with self.assertRaises(ia.Refusal) as caught:  # no skip anywhere: still the one story question
+            ia.describe_add(dict(FULL), ctx("new wildflower honey from Bee Happy Farm in Atascadero, its in", "the caption should be honey jar"))
+        self.assertEqual(caught.exception.reply, ia.ASK_STORY.format(maker="Bee Happy Farm"))
+
     def test_check_already_recorded_today_sets_only_the_word(self):
         content = copy.deepcopy(CONTENT)
         content.store["selection_checked_on"] = "2026-11-08"

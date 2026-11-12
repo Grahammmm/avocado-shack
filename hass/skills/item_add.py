@@ -683,7 +683,9 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
         # his yes to this draft. With neither, one plain question; "skip" keeps only the D5 line. The address itself is not
         # kept on the maker (the website-link field is protected and is never published); it is the story's recorded source.
         mine = _clean(slots.get("story"))
-        skipped = len(_texts(ctx)) > 1 and bool(SKIP_STORY.search(_texts(ctx)[-1]))
+        # a skip given in any later text of this request holds for the rest of it, so revising the description or caption after
+        # a skipped story revises the draft instead of asking for the story again (Codex RETURN at 9f213272, item 1)
+        skipped = any(SKIP_STORY.search(t) for t in _texts(ctx)[1:])
         found = _site_story(choice["name"], slots.get("maker_url"), mine, ctx, answered=bool(mine) or skipped,
                             town=place.split(",")[0].strip())
         summary = " ".join(found["story"]["sentences"]) if found else ""
