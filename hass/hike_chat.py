@@ -43,6 +43,7 @@ SIGNUP_TRUTH = "The website can't take sign-ups yet"
 NO_SIGNUP = SIGNUP_TRUTH + ", so there's no sign-up button"
 DESCRIPTION_LIMIT = 800  # content_model.TEXT_LIMITS["event"]["description"]
 TITLE_LIMIT = 80
+MEETING_LIMIT = 160  # content_model.TEXT_LIMITS["event"]["meetingPoint"]
 
 
 @dataclass
@@ -100,11 +101,13 @@ def only_a_trail(meeting_point, route) -> bool:
 
 
 def suggest_meeting(route) -> str | None:
-    """The suggested meeting place for a saved route: "<route title> trailhead, <town>"; None without a saved route."""
+    """The suggested meeting place for a saved route: "<route title> trailhead, <town>"; None without a saved route, or when
+    that place is too long for a hike's meeting place (a yes would only dead-end in a length refusal: he is asked where)."""
     if not isinstance(route, dict) or not isinstance(route.get("title"), str) or not route["title"].strip():
         return None
     place = route.get("place") if isinstance(route.get("place"), str) and route["place"].strip() else None
-    return f"{route['title'].strip()} trailhead" + (f", {place.strip()}" if place else "")
+    suggestion = f"{route['title'].strip()} trailhead" + (f", {place.strip()}" if place else "")
+    return suggestion if len(suggestion) <= MEETING_LIMIT else None
 
 
 def meeting_question(title, suggestion) -> str:
