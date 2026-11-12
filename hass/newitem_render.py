@@ -115,6 +115,11 @@ def _shadowlike(c, ref) -> bool:
     return .35 < k < .98 and max(abs(c[i] - ref[i] * k) for i in range(3)) <= 12
 
 
+def _continues(c, body) -> bool:
+    """True when c is within 12 levels on every channel of the same column's body colour above it (None: no body)."""
+    return body is not None and max(abs(c[i] - body[i]) for i in range(3)) <= 12
+
+
 def _too_thin(size) -> bool:
     """True for a strip: scaled so its long side is ANALYSIS, its short side would be under MIN_WORKING px (over about 40:1)."""
     return round(min(size) * ANALYSIS / max(size)) < MIN_WORKING
@@ -156,9 +161,13 @@ def _coarse(img):
     shade = bytearray(w * h)
     if rows:  # the photo's own cast shadow: background-coloured but darker, in the foot of the subject only
         top, foot = rows[0], rows[-1]
-        for y in range(foot - max(2, round(.16 * (foot - top))), foot + 1):
+        start = foot - max(2, round(.16 * (foot - top)))
+        # each column's nearest ORIGINAL subject pixel above the foot band, taken before anything is removed: a foot
+        # pixel matching it is the product carrying on down (a grey body), not its shadow
+        body = [next((px[y * w + x] for y in range(start - 1, top - 1, -1) if mask[y * w + x]), None) for x in range(w)]
+        for y in range(start, foot + 1):
             for x in range(w):
-                if mask[y * w + x] and _shadowlike(px[y * w + x], refs[y * w + x]):
+                if mask[y * w + x] and _shadowlike(px[y * w + x], refs[y * w + x]) and not _continues(px[y * w + x], body[x]):
                     mask[y * w + x], shade[y * w + x] = 0, 255
     comps = _components(mask, w, h)
     if not comps:
@@ -287,6 +296,15 @@ def _upright(data):
     return im.convert("RGB"), alpha, turned
 
 
+def _visible_luma(gray, cover):
+    """Coverage-weighted mean grey of a cut-out with no nearly opaque pixel; nothing visible at all is a blank photo."""
+    total = weight = 0
+    for v, m in zip(gray, cover):
+        total, weight = total + v * m, weight + m
+    if not weight: raise Refused("blank")
+    return total / weight
+
+
 def render(data: bytes, spec=None) -> dict:
     """{"jpeg": bytes, "report": {...}, "check": house_style.check_image(...)} for one owner photo."""
     Image, _, ImageChops, ImageDraw, ImageEnhance, ImageFilter = _modules()
@@ -332,8 +350,9 @@ def render(data: bytes, spec=None) -> dict:
         subject, cut = subject.resize(size, lanczos), cut.resize(size, lanczos)
         if alpha is not None:  # back to straight colour for the final source-over paste
             subject = Image.frombytes("RGBa", size, Image.merge("RGBA", (*subject.split(), cut)).tobytes()).convert("RGBA").convert("RGB")
-        solid = [v for v, m in zip(subject.convert("L").getdata(), cut.getdata()) if m > 200]
-        luma = statistics.fmean(solid) if solid else 128
+        gray = subject.convert("L").getdata()
+        solid = [v for v, m in zip(gray, cut.getdata()) if m > 200]
+        luma = statistics.fmean(solid) if solid else _visible_luma(gray, cut.getdata())  # translucent all over: measure it, never a made-up grey
         lo, hi = stats["subject_luma"]["p05"], stats["subject_luma"]["p95"]
         if luma < lo or luma > hi:  # exposure only, within a gentle range: never recolour a label
             gain = max(.8, min(1.25, (lo if luma < lo else hi) / max(luma, 1.0)))  # a pure-black subject: the full lift, no zero divide

@@ -62,7 +62,9 @@ def main() -> int:
             raw = _on_page(Image.open(io.BytesIO(data)))
             raw.thumbnail((TILE, TILE))
             before.paste(raw, ((TILE - raw.width) // 2, (TILE - raw.height) // 2))
-            rows.append([tile(Image.open(hs.SITE / p["image"]), "catalog: " + p["name"][:26]) for p in catalog[:2]]
+            refs = [tile(Image.open(hs.SITE / p["image"]), "catalog: " + p["name"][:26]) for p in catalog[:2]]
+            refs += [tile(Image.new("RGB", (TILE, TILE), PAGE), "catalog: unavailable")] * (2 - len(refs))  # keep BEFORE/AFTER in columns 3/4
+            rows.append(refs
                         + [tile(before, f"BEFORE: {name[:24]}"), tile(Image.open(io.BytesIO(out["jpeg"])), f"AFTER ({out['report']['isolation']}, {out['check']['score']})")])
     sheet = Image.new("RGB", (4 * TILE, len(rows) * (TILE + 22)), (255, 255, 255))
     for r, row in enumerate(rows):
