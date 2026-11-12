@@ -311,7 +311,13 @@ def _bad(detail: str):
 
 def _number(value, what: str) -> float:
     """A finite JSON number (never a bool or a string), or the answer is unreadable."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _bad(what)
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:  # an integer too large for a float cannot be used in the distance maths
+        finite = False
+    if not finite:
         raise _bad(what)
     return value
 
