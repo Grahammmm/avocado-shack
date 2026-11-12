@@ -32,7 +32,7 @@ LOW = re.compile(r"(?:(?:what(?:'s| is| are) )?(?:the )?|(?:show|tell|give) (?:m
 HOW_MANY = re.compile(r"how (?:many|much) (?P<q>.+?)(?: (?:do we have(?: left)?|have we got(?: left)?|are there|are left|is left|left|in stock|"
                       r"on hand|in the till|on the till|we got|have we))?")
 COUNT_OF = re.compile(r"(?:what(?:'s| is) (?:the )?)?(?:count|stock count|stock level|stock) (?:of|for|on) (?P<q>.+?)")
-IN_STOCK = re.compile(r"(?:is|are) (?:there )?(?:any )?(?P<q>.+?) (?:in stock|sold out|left)(?: in the till| on the till)?"
+IN_STOCK = re.compile(r"(?:is|are) (?:there )?(?:any )?(?P<q>.+?) (?P<pred>in stock|sold out|left)(?: in the till| on the till)?"
                       r"|(?:do we have|have we got|we got) (?:any )?(?P<q2>.+?) (?:in stock|left)(?: in the till| on the till)?")
 PRICE_WRITE = re.compile(r"\b(?:change|set|update|raise|lower|increase|decrease|drop|cut|bump|adjust|edit|fix|mark (?:up|down))\b(?: \S+){0,4}? prices?\b"
                          r"|\bprices? (?:of|for|on) .+? (?:to|=) ?\$?\d|\bnew prices?\b")
@@ -67,7 +67,9 @@ class TillDesk:
         return "TillDesk(read-only)"
 
     def parse(self, text):
-        """("low",), ("how_many", query), ("in_stock", query), ("write",) or None (not a till message)."""
+        """("low",), ("how_many", query), ("in_stock", query), ("sold_out", query), ("write",) or None (not a till message).
+
+        "is <x> sold out" is ("sold_out", query), never ("in_stock", query): its yes/no is the opposite of "is <x> in stock"."""
         t = _clean(text)
         if not t or len(t) > 200 or "\n" in (text or "").strip():
             return None
@@ -77,6 +79,8 @@ class TillDesk:
             m = pattern.fullmatch(t)
             if m:
                 q = _query(m.group("q") or "") if "q2" not in m.re.groupindex else _query(m.group("q") or m.group("q2") or "")
+                if "pred" in m.re.groupindex and m.group("pred") == "sold out":
+                    kind = "sold_out"
                 return self._claim(t, kind, q)
         if not SITE_WORDS.search(t) and (PRICE_WRITE.search(t) or TILL_WRITE.search(t) or STOCK_WRITE.search(t)):
             return ("write",)
@@ -113,4 +117,6 @@ class TillDesk:
             return reads.low_stock(snapshot, now, self.config.low_stock_threshold, reachable, show=voice.quote)
         if intent[0] == "in_stock":
             return reads.in_stock(intent[1], snapshot, now, reachable, show=voice.quote)
+        if intent[0] == "sold_out":
+            return reads.in_stock(intent[1], snapshot, now, reachable, show=voice.quote, sold_out=True)
         return reads.how_many(intent[1], snapshot, now, reachable, show=voice.quote)

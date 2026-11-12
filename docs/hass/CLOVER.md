@@ -264,7 +264,7 @@ Facts: merchant id `W68KRZHTAH801` (an identifier, not a secret); environment `p
 5. **Timer:** `cp ~/.local/share/hass/runtime/deploy/hass/hass-clover-sync.{service,timer} ~/.config/systemd/user/`, `systemctl --user daemon-reload`,
    `systemctl --user enable --now hass-clover-sync.timer`. Exit 1 (Clover down this time) is recorded and is not a failed unit; exit 2 (config, token, state) is.
 6. **Chat:** `systemctl --user restart hass-worker` (the worker reads host.json at start; with the block it answers till questions). Owner smoke test:
-   `how many <item> do we have`, `low stock`, `is <item> in stock` answer from the cache; `change the price of <item> to 5` answers
+   `how many <item> do we have`, `low stock`, `is <item> in stock`, `is <item> sold out` answer from the cache; `change the price of <item> to 5` answers
    "I can read the till but I can't change it yet."; a hike or website question is unchanged.
 7. **Health:** `hass-health` now also reports `clover-token` (one word) and `clover-sync` (no good pull for over 2 h, with the last result word).
 8. **Turn it off:** `systemctl --user disable --now hass-clover-sync.timer`, remove the `clover` block, restart `hass-worker`. The cache may stay (private) or be

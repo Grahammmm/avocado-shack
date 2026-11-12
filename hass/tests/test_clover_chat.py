@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from datetime import timedelta
+from decimal import Decimal
 from pathlib import Path
 from unittest import mock
 
@@ -59,7 +60,7 @@ class ParseTests(DeskCase):
                              ("what's the count of sunshine olive oil", ("how_many", "sunshine olive oil")),
                              ("low stock", ("low",)), ("Low stock?", ("low",)), ("what's low", ("low",)), ("what are we running low on?", ("low",)),
                              ("anything sold out?", ("low",)),
-                             ("is Hass avocado in stock?", ("in_stock", "hass avocado")), ("are eggs, dozen sold out", ("in_stock", "eggs, dozen")),
+                             ("is Hass avocado in stock?", ("in_stock", "hass avocado")), ("are eggs, dozen sold out", ("sold_out", "eggs, dozen")),
                              ("do we have any sunshine olive oil left", ("in_stock", "sunshine olive oil")),
                              ("is the market special (ring up price) in stock", ("in_stock", "market special (ring up price)"))):
             with self.subTest(text=text):
@@ -114,6 +115,36 @@ class AnswerTests(DeskCase):
         self.assertEqual(self.ask("how many sunshine do we have"), "I can't find exactly that. The closest is Sunshine olive oil: 11 in the till.")
         self.assertEqual(self.ask("how many as-pan-sunshine-olive-oil-01 do we have"), "Sunshine olive oil: 11 in the till.")
         self.assertEqual(self.ask("low stock"), "Sold out: Eggs, dozen. 1 item(s) have no count in the till, so I can't tell.")
+
+    def test_sold_out_questions_keep_their_yes_and_no(self):
+        # RETURN f2af4214 item 1: "sold out?" was parsed as "in stock?", so its yes/no came out reversed.
+        seed(self.state)
+        self.assertEqual(self.ask("are eggs, dozen sold out"), "Yes, Eggs, dozen is sold out in the till.")              # count 0
+        self.assertEqual(self.ask("is sunshine olive oil sold out?"),
+                         "No, Sunshine olive oil is not sold out: 11 in the till.")                                      # count 11
+        self.assertEqual(self.ask("is market special (ring up price) sold out"),
+                         "The till keeps no count for Market special (ring up price), so I can't tell.")
+        # The "in stock" controls are unchanged.
+        self.assertEqual(self.ask("are eggs, dozen in stock"), "No, Eggs, dozen is sold out in the till.")
+        self.assertEqual(self.ask("is sunshine olive oil in stock"), "Yes, Sunshine olive oil: 11 in the till.")
+
+    def test_expanded_item_stock_is_kept_when_item_stocks_has_no_row(self):
+        # RETURN f2af4214 item 2: mapper.parse_item gives a Decimal, which the fallback turned into "no count".
+        item = {"id": "FAKEFALLBACK01", "name": "Fallback apples", "price": 200, "itemStock": {"quantity": 7, "modifiedTime": 100}}
+        rows, skipped = sync.rows([item], [])
+        self.assertEqual((rows[0]["stock"], rows[0]["stock_modified"], skipped), ("7", 100, 0))
+        self.assertEqual(sync.rows([item], [{"item": {"id": "FAKEFALLBACK01"}, "quantity": 7}])[0][0]["stock"], "7")
+        half = {**item, "itemStock": {"quantity": 1.5}}
+        self.assertEqual(sync.rows([half], [])[0][0]["stock"], "1.5")
+        pears = {"id": "FAKEFALLBACK02", "name": "Fallback pears", "price": 200, "itemStock": {"quantity": 1}}
+        rows += sync.rows([pears], [])[0]
+        cache.write_items(self.state, rows, T0)
+        self.assertEqual(self.ask("how many fallback apples do we have"), "Fallback apples: 7 in the till.")
+        self.assertIn("Fallback pears 1", self.ask("low stock"))   # a known low count is reported, not "no count"
+        # The numeric guards stay: non-finite and over-long Decimal values are still "no count".
+        for bad in ("NaN", "Infinity", "1" + "0" * 12):
+            with self.subTest(bad=bad):
+                self.assertIsNone(sync._stock_text(Decimal(bad)))
 
     def test_older_than_20_minutes_says_as_of(self):
         seed(self.state)

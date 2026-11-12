@@ -26,7 +26,7 @@ def _ids(raw, key):
 
 def _stock_text(value):
     """A Clover quantity as exact text ('12', '1.5'), or None for anything that is not a finite, sane number."""
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
         return None
     try:
         q = Decimal(str(value))

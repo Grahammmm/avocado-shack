@@ -103,16 +103,21 @@ def how_many(query, snapshot, now, reachable=True, show=_as_is):
     return _wrap(state, label, body)
 
 
-def _in_stock(i, show):
+def _in_stock(i, show, sold_out=False):
+    """The yes/no answers the question as asked: "in stock?" is yes at a count above 0, "sold out?" is yes at 0 or below."""
     if i.stock is None:
         return f"The till keeps no count for {show(i.name)}, so I can't tell."
     if i.stock <= 0:
-        return f"No, {show(i.name)} is sold out in the till."
+        return f"{'Yes' if sold_out else 'No'}, {show(i.name)} is sold out in the till."
+    if sold_out:
+        return f"No, {show(i.name)} is not sold out: {format_quantity(i.stock)} in the till."
     return f"Yes, {show(i.name)}: {format_quantity(i.stock)} in the till."
 
 
-def in_stock(query, snapshot, now, reachable=True, show=_as_is):
-    """HASS-CLOVER-2: 'is Sunshine olive oil in stock'. Yes with the count, no when it is at 0, or says the till keeps no count."""
+def in_stock(query, snapshot, now, reachable=True, show=_as_is, sold_out=False):
+    """HASS-CLOVER-2: 'is Sunshine olive oil in stock'. Yes with the count, no when it is at 0, or says the till keeps no count.
+
+    sold_out=True answers 'is Sunshine olive oil sold out' with the opposite yes/no and the same facts."""
     state, label = freshness(snapshot, now, reachable)
     if state == "too-old":
         return label
@@ -121,7 +126,7 @@ def in_stock(query, snapshot, now, reachable=True, show=_as_is):
         body = _several(visible, show)
     elif visible:
         i = visible[0]
-        body = _in_stock(i, show) + (" It is hidden on the till." if i.hidden else "")
+        body = _in_stock(i, show, sold_out) + (" It is hidden on the till." if i.hidden else "")
     else:
         body = _not_exact(query, snapshot, show)
     return _wrap(state, label, body)
