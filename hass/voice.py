@@ -61,8 +61,10 @@ _PHONE_OR_NUMBER = re.compile(r"\d")
 
 
 def quote(text) -> str:
-    """Mark words that are Mike's own (shown as he wrote them, never judged)."""
-    text = str(text)
+    """Mark words that are Mike's own (shown as he wrote them, never judged).
+
+    The two marks are reserved: any already inside the words are dropped so he cannot open or close the wrapper."""
+    text = plain(str(text))
     return OPEN + text + CLOSE if text else text
 
 
