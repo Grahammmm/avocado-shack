@@ -74,6 +74,8 @@ def load_corpus(path=CORPUS) -> list:
         expects = [row["expect"], *also]
         if not all(ie._expect_ok(e) for e in expects): raise bad("bad expect")
         if any("ops" in e and e["revises"] not in (None, *codes) for e in expects): raise bad("revises names no pending draft")
+        # RF1900-10: the runtime check turns a longer draft into a question, so such an expectation could never be met
+        if any(len(e.get("ops", ())) > interpret_check.MAX_OPS for e in expects): raise bad(f"more than {interpret_check.MAX_OPS} expected ops")
         if row["ask"] is not ("question" in row["expect"]) or row["refuse"] is not ("unsupported" in row["expect"]): raise bad("ask/refuse disagree with expect")
         if "notes" in row and not ie._notes_ok(row["notes"]): raise bad("bad notes")
         if "aliases" in row and not (isinstance(row["aliases"], list) and all(isinstance(a, dict) and set(a) == {"name", "kind", "id"}
