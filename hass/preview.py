@@ -32,7 +32,8 @@ def _readable(record) -> bool:
     if not isinstance(after, dict) or not isinstance(record.get("key"), (str, type(None))):
         return False
     collection = record.get("collection") if isinstance(record.get("collection"), str) else ""
-    if collection == "store" and not isinstance(record.get("before"), (dict, type(None))):
+    scheduled = collection == "events" and after.get("status") == "scheduled"  # RF0540-12: its target reads before
+    if (collection == "store" or scheduled) and not isinstance(record.get("before"), (dict, type(None))):
         return False
     hours = after.get("hours") if collection == "store" else None
     if not (hours is None or isinstance(hours, list) and all(isinstance(h, str) for h in hours)):
