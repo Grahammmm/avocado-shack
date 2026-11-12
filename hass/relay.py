@@ -57,7 +57,7 @@ def control_key(secret) -> bytes:
 
 def _shots(v) -> bool:
     return (type(v) is list and 1 <= len(v) <= MAX_SHOTS
-            and [s.get("idx") if type(s) is dict else None for s in v] == list(range(len(v)))
+            and [s.get("idx") if type(s) is dict and type(s.get("idx")) is int else None for s in v] == list(range(len(v)))  # exact ints: False/0.0 == 0 in Python but cannot form a picture request
             and all(set(s) == {"idx", "sha256", "size"} and type(s["sha256"]) is str and bridge.MAC_RE.fullmatch(s["sha256"])
                     and type(s["size"]) is int and 1 <= s["size"] <= MAX_PNG for s in v))
 
