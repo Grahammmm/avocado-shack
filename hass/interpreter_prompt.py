@@ -137,11 +137,11 @@ RULES = (
 
 
 def _q(value) -> str:
-    """A JSON string literal that always stays on one line."""
+    """A JSON string literal that always stays on one line and is strictly UTF-8 encodable."""
     text = json.dumps("" if value is None else str(value), ensure_ascii=False)
     for raw, escaped in _LINE_BREAKS.items():
         text = text.replace(raw, escaped)
-    return text
+    return "".join(f"\\u{ord(c):04x}" if "\ud800" <= c <= "\udfff" else c for c in text)  # RF0421-11: lone surrogates
 
 
 def _arg(name, arg) -> str:
