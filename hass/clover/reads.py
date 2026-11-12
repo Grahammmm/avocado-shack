@@ -1,10 +1,13 @@
-"""HASS-CLOVER-1: read-only answers from a snapshot of the till, with the staleness label and the unreachable behaviour.
+"""HASS-CLOVER-1/2: read-only answers from a snapshot of the till, with the staleness label and the unreachable behaviour.
 
 A Snapshot is the last items-and-stock pull plus when it was taken. Answers are plain text from fixed templates: no model writes or reads them.
-Nothing here asks Clover anything; the scheduler or an on-demand pull fills the snapshot (docs/hass/CLOVER.md, "Sync").
+Nothing here asks Clover anything; `hass/clover/cli.py sync` fills the private cache and `hass/clover/chat.py` reads it (docs/hass/CLOVER.md).
 
 Staleness (design question 6): a count under 20 minutes old is quoted as is; older gets "as of <time>"; when Clover cannot be reached the
 answer says so and quotes the last count labelled as old; a snapshot over 24 hours old is not quoted at all.
+
+`show` (HASS-CLOVER-2) formats an item name or SKU for the reply; the chat passes voice.quote, so a till name ("Eggs, dozen") or a SKU
+("AS-PAN-OIL-01") is shown as the till has it and never judged by the voice rules. The default shows the text as is.
 """
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -43,6 +46,10 @@ def freshness(snapshot, now, reachable=True):
     return "fresh", ""
 
 
+def _as_is(text):
+    return text
+
+
 def _count(item):
     return "the till keeps no count" if item.stock is None else f"{format_quantity(item.stock)} in the till"
 
@@ -55,31 +62,72 @@ def _wrap(state, label, body):
     return f"{body} {label}".strip()
 
 
-def how_many(query, snapshot, now, reachable=True):
+def exact(query, snapshot):
+    """The items `query` names exactly (name or SKU); visible ones first, hidden ones only when no visible item matches."""
+    hits = [i for i in snapshot.items if norm_name(i.name) == norm_name(query) or (i.sku and i.sku.casefold() == norm_name(query))]
+    return [i for i in hits if not i.hidden] or hits
+
+
+def names_something(query, snapshot):
+    """HASS-CLOVER-2: True when `query` names a till item exactly or as a 'did you mean'; the chat only claims such a question."""
+    return bool(exact(query, snapshot) or suggest(query, snapshot.items))
+
+
+def _several(items, show):
+    return "More than one item is called that: " + "; ".join(f"{show(i.name)} (SKU {show(i.sku) if i.sku else 'none'}): {_count(i)}"
+                                                             for i in items[:5]) + "."
+
+
+def _not_exact(query, snapshot, show):
+    near = suggest(query, snapshot.items)
+    if len(near) == 1:
+        return f"I can't find exactly that. The closest is {show(near[0].name)}: {_count(near[0])}."
+    if near:
+        return "I can't find exactly that. Did you mean " + ", ".join(show(i.name) for i in near) + "?"
+    return "I can't find anything like that in the till."
+
+
+def how_many(query, snapshot, now, reachable=True, show=_as_is):
     """'how many Sunshine olive oil do we have'."""
     state, label = freshness(snapshot, now, reachable)
     if state == "too-old":
         return label
-    exact = [i for i in snapshot.items if norm_name(i.name) == norm_name(query) or (i.sku and i.sku.casefold() == norm_name(query))]
-    visible = [i for i in exact if not i.hidden] or exact
+    visible = exact(query, snapshot)
     if len(visible) > 1:
-        body = "More than one item is called that: " + "; ".join(f"{i.name} (SKU {i.sku or 'none'}): {_count(i)}" for i in visible[:5]) + "."
+        body = _several(visible, show)
     elif visible:
         i = visible[0]
-        body = f"{i.name}: {_count(i)}." + (" It is hidden on the till." if i.hidden else "")
+        body = f"{show(i.name)}: {_count(i)}." + (" It is hidden on the till." if i.hidden else "")
     else:
-        near = suggest(query, snapshot.items)
-        if len(near) == 1:
-            i = near[0]
-            body = f"I can't find exactly that. The closest is {i.name}: {_count(i)}."
-        elif near:
-            body = "I can't find exactly that. Did you mean " + ", ".join(i.name for i in near) + "?"
-        else:
-            body = "I can't find anything like that in the till."
+        body = _not_exact(query, snapshot, show)
     return _wrap(state, label, body)
 
 
-def low_stock(snapshot, now, threshold, reachable=True):
+def _in_stock(i, show):
+    if i.stock is None:
+        return f"The till keeps no count for {show(i.name)}, so I can't tell."
+    if i.stock <= 0:
+        return f"No, {show(i.name)} is sold out in the till."
+    return f"Yes, {show(i.name)}: {format_quantity(i.stock)} in the till."
+
+
+def in_stock(query, snapshot, now, reachable=True, show=_as_is):
+    """HASS-CLOVER-2: 'is Sunshine olive oil in stock'. Yes with the count, no when it is at 0, or says the till keeps no count."""
+    state, label = freshness(snapshot, now, reachable)
+    if state == "too-old":
+        return label
+    visible = exact(query, snapshot)
+    if len(visible) > 1:
+        body = _several(visible, show)
+    elif visible:
+        i = visible[0]
+        body = _in_stock(i, show) + (" It is hidden on the till." if i.hidden else "")
+    else:
+        body = _not_exact(query, snapshot, show)
+    return _wrap(state, label, body)
+
+
+def low_stock(snapshot, now, threshold, reachable=True, show=_as_is):
     """'low stock': counted, visible items at or under `threshold`, sold out ones first."""
     state, label = freshness(snapshot, now, reachable)
     if state == "too-old":
@@ -91,9 +139,9 @@ def low_stock(snapshot, now, threshold, reachable=True):
     more = [i for i in low if i.stock > 0][:LIST_LIMIT - len(out)]
     parts = []
     if out:
-        parts.append("Sold out: " + ", ".join(i.name for i in out) + ".")
+        parts.append("Sold out: " + ", ".join(show(i.name) for i in out) + ".")
     if more:
-        parts.append(f"Low ({threshold} or fewer): " + ", ".join(f"{i.name} {format_quantity(i.stock)}" for i in more) + ".")
+        parts.append(f"Low ({threshold} or fewer): " + ", ".join(f"{show(i.name)} {format_quantity(i.stock)}" for i in more) + ".")
     omitted = len(low) - len(out) - len(more)
     if omitted:
         parts.append(f"And {omitted} more.")

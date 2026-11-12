@@ -22,7 +22,9 @@ or --backups filesystem has under that many MB free; `<store>: <n> MB free` in 5
 one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed). Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --host-dir DIR (HASS-SVC-1, read-only, no secret opened): relay-stuck,
-mac-silent, release-open, release-books, live-unconfirmed, host-config, publishing-stopped / stopped-long. --alert-log FILE
+mac-silent, release-open, release-books, live-unconfirmed, host-config, publishing-stopped / stopped-long; with a host.json `clover` block
+(HASS-CLOVER-2) also clover-token (one problem word for the token file, lstat only, never opened) and clover-sync (no good till pull for
+over 2 h). --alert-log FILE
 appends `<UTC> HASS-HEALTH <fp12> <check ids>` when notify and problems. --seen FILE (outside the repo and state dir, not a symlink) keeps the last
 fingerprint; notify only when it changed (else notify = not ok). No send; the only network use is --model's loopback
 GET. Exit 0 ok, 1 problems, 2 unsafe.
@@ -220,6 +222,25 @@ def _release_checks(hdir: Path, now: datetime, problems: list) -> None:  # state
     if open_states: problems.append(_problem("release-open", ",".join(sorted(open_states))))
     if n := sum(j["state"] in ("unconfirmed", "unknown") for j in entries): problems.append(_problem("live-unconfirmed", str(n)))
 
+CLOVER_STALE_HOURS = 2  # HASS-CLOVER-2: the 15-minute sync has not worked for this long
+
+
+def _clover_checks(cfg, now: datetime, problems: list) -> None:
+    """HASS-CLOVER-2 (only with a `clover` block): clover-token = one credential.REASONS word for the token file (lstat only, never
+    opened, never the path); clover-sync = the private till cache's last good pull is over CLOVER_STALE_HOURS old, or the pulls are
+    failing (the fixed result word). No cache yet = no problem (the timer may not have run)."""
+    from hass.clover import cache as clover_cache
+    from hass.clover.credential import inspect
+    if (word := inspect(cfg["clover"].get("tokenFile", ""))): problems.append(_problem("clover-token", word))
+    try: facts = clover_cache.facts(cfg["state"])
+    except (clover_cache.CacheUnsafe, OSError, sqlite3.Error): return problems.append(_problem("clover-sync", "cache not private or unreadable"))
+    if not facts: return
+    as_of = clover_cache._parse_iso(facts["asOf"])
+    if as_of is None or now - as_of > timedelta(hours=CLOVER_STALE_HOURS):
+        last = facts["lastResult"] if facts["lastResult"] in clover_cache.RESULTS else "unknown"
+        problems.append(_problem("clover-sync", f"no good pull for over {CLOVER_STALE_HOURS} h (last: {last})"))
+
+
 def _host_config(hdir: Path, now: datetime, problems: list, info: list) -> None:  # mode or type only; the key is never opened
     from hass import host  # lazy: only --host-dir needs it
     try:
@@ -234,6 +255,7 @@ def _host_config(hdir: Path, now: datetime, problems: list, info: list) -> None:
         bad = ("type" if not stat.S_ISREG(st.st_mode) else "owner" if st.st_uid != os.getuid()
                else "mode" if st.st_mode & 0o177 else "size" if st.st_size > 128 else None)
         if bad: problems.append(_problem("host-config", f"secret file {bad}"))
+    if isinstance(cfg.get("clover"), dict): _clover_checks(cfg, now, problems)
     if isinstance(rel := cfg.get("release"), dict) and isinstance(stop := rel.get("stopFile"), str):
         try: mtime = datetime.fromtimestamp(os.lstat(stop).st_mtime, timezone.utc)
         except (OSError, ValueError): return

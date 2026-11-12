@@ -1040,6 +1040,7 @@ class Conversation:
 
     # -- message handling ----------------------------------------------------------------------------------------
     _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
+    till = None  # HASS-CLOVER-2: a hass.clover.chat.TillDesk when host.json has a `clover` block (make_worker); None = no till replies
     _forwarded = None  # HASS-SEC-2 (L5): when the message reached the inbox (inbox.Inbox.forwarded_at); None when not known
 
     def handle(self, msg: Inbound, last_try=False, apply=True, forwarded_at=None) -> str:
@@ -1123,7 +1124,8 @@ class Conversation:
         if command and (command[0] in ("status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "photos", "backlog")
                         or command[0] == "history" and command[1] is not None): expired = []  # H17: read-only; AV2152-02: history <words>, not bare history
         memory = None if command or msg.attachments > 0 else read_memory(msg.text)
-        if memory and memory[0] == "memory": expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
+        till = None if command or memory or msg.attachments > 0 or self.till is None else self.till.parse(msg.text)  # HASS-CLOVER-2
+        if memory and memory[0] == "memory" or till: expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
         for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
@@ -1131,6 +1133,11 @@ class Conversation:
             return disposition, None
         if memory:  # not a site change: never the interpreter or editor, and pause does not apply
             disposition = self._memory(msg, *memory)
+            self._record(msg, disposition)
+            return disposition, None
+        if till:  # HASS-CLOVER-2: a till question (or a till change, which is refused): read-only, from the private cache, no model
+            self._reply(self.till.answer(till, now), long_ok=True)
+            disposition = "till-write-refused" if till[0] == "write" else "till-read"
             self._record(msg, disposition)
             return disposition, None
         keyword = parse_keyword(msg.text) or coded

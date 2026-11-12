@@ -435,11 +435,16 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(cfgmod.ConfigProblem):
             cfgmod.from_settings("x")
 
-    def test_production_needs_the_go_live_flag(self):
+    def test_production_reads_need_no_go_live_flag_but_writes_do(self):
+        """HASS-CLOVER-2: the real store is connected read-only with liveApproved false; the flag only gates (future) writes."""
+        prod = cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": False})
+        self.assertEqual((prod.environment, prod.live_approved, prod.writes_allowed), ("production", False, False))
+        self.assertFalse(cfgmod.from_settings({**self.BASE, "environment": "production"}).writes_allowed)
+        self.assertTrue(cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": True}).writes_allowed)
+        self.assertTrue(cfgmod.from_settings(self.BASE).writes_allowed)
         with self.assertRaises(cfgmod.ConfigProblem) as ctx:
-            cfgmod.from_settings({**self.BASE, "environment": "production"})
+            cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": "no"})
         self.assertEqual(list(ctx.exception.fields), ["liveApproved"])
-        self.assertEqual(cfgmod.from_settings({**self.BASE, "environment": "production", "liveApproved": True}).environment, "production")
 
 
 class NoSiteMoneyTests(unittest.TestCase):
