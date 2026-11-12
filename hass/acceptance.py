@@ -70,6 +70,7 @@ def _run_id(modules, loader, tests_pkg):
             suite.addTest(mod_suite)
         result = unittest.TextTestRunner(stream=buf, verbosity=0, buffer=True).run(suite)
     failures = (len(result.failures) + len(result.errors)
+                + len(result.unexpectedSuccesses)
                 + (import_error is not None) + empty)
     note = ("import error: %s" % import_error if import_error
             else "no tests: %s" % first_empty if first_empty else "")
