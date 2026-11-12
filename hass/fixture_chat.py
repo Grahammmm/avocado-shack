@@ -35,6 +35,8 @@ def _row(n, line, photos=None, names=None) -> Inbound:  # every check names line
     except (ValueError, RecursionError): bad("not JSON")
     if not isinstance(r, dict): bad("row must be a JSON object")
     if type(r.get("id")) not in (int, str) or r.get("id") == "": bad("id must be a non-empty string or an integer")
+    try: str(r["id"]).encode("utf-8")  # RF0330-11: a lone surrogate id would only fail later, in SQLite, after earlier rows ran
+    except UnicodeEncodeError: bad("id must be UTF-8 text")
     for field in ("chat", "sender", "text"):
         if not isinstance(r.get(field), str): bad(f"{field} must be a string")
     if not isinstance(r.get("fromMe", False), bool): bad("fromMe must be true or false")
@@ -42,6 +44,8 @@ def _row(n, line, photos=None, names=None) -> Inbound:  # every check names line
     try: at = datetime.fromisoformat(r.get("at"))
     except (TypeError, ValueError): at = None
     if at is None or at.utcoffset() is None: bad("at must be an ISO time with a UTC offset")
+    try: at.astimezone(timezone.utc)  # RF0010-12: replay converts later; check it here, before any row runs
+    except (OverflowError, ValueError): bad("at must be representable in UTC")
     files = r.get("photos", []) if photos is not None else []  # NB-AV-13: plain names of regular files in --photos
     if not isinstance(files, list) or not all(isinstance(f, str) and f not in ("", ".", "..") and Path(f).name == f and
                                               not (q := Path(photos) / f).is_symlink() and q.is_file() for f in files):
@@ -59,7 +63,9 @@ class FixtureAdapter:
         self.path, self.fail_sends, self.sent, self.photos, self.names = path, fail_sends, [], photos, {}
 
     def inbound(self) -> list:
-        lines = Path(self.path).read_text("utf-8").splitlines()
+        # RF0640-13: split on LF only (read_text already folds CR/CRLF); splitlines() would cut a row at a literal
+        # U+0085/U+2028/U+2029, which are legal inside a JSON string and not JSONL record separators.
+        lines = Path(self.path).read_text("utf-8").split("\n")
         return [_row(n, s, self.photos, self.names) for n, s in enumerate(lines, 1) if s.strip()]  # n: physical lines
 
     def fetch(self, provider_id, count) -> list:  # NB-AV-13 photo source: that row's files, as checked by _row

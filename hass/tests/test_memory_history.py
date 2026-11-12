@@ -4,6 +4,7 @@ Run: python3 -B -m unittest hass.tests.test_memory_history -v
 """
 
 import contextlib, io, json, os, sqlite3, subprocess, sys, tempfile, unittest  # noqa: E401
+from unittest import mock
 from pathlib import Path
 
 from hass import memory
@@ -187,6 +188,45 @@ class HistoryTests(unittest.TestCase):
         run = self.cli("--state", target.parent, "--values")  # the real DB itself still reads as before
         self.assertEqual((run.returncode, [(r["key"], r["value"]) for r in json.loads(run.stdout)["rows"]]),
                          (0, [("pickup.day", "other-shop-secret-5511")]))
+
+    def _lstat_failing(self, exc):
+        real = os.lstat
+        db = str(self.db)
+
+        def fake(p, *a, **k):
+            if str(p) == db: raise exc
+            return real(p, *a, **k)
+        return mock.patch.object(memory.os, "lstat", fake)
+
+    def test_history_lstat_oserror_is_private_unreadable(self):
+        self.state.mkdir(mode=0o700)
+        for exc in (PermissionError(13, "canary-msg-9931", str(self.db)), OSError(5, "canary-msg-9931", str(self.db))):
+            with self.subTest(exc=type(exc).__name__), self._lstat_failing(exc):
+                code, doc, raw = self.history("--values")
+                self.assertEqual((code, raw), (1, '{"result": "unreadable"}\n'))
+                with self.assertRaises(OSError): memory.history(self.state)  # direct helper still raises
+
+    def test_oserror_does_not_change_key_or_unsafe_precedence(self):
+        self.state.mkdir(mode=0o700)
+        with self._lstat_failing(PermissionError(13, "x", str(self.db))):
+            code, doc, _ = self.history("--key", "bad key!")
+            self.assertEqual(code, 2)
+            self.assertEqual(doc["result"], "usage")
+        gone = Path(self.state.parent) / "missing"
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): code = memory.main(["history", "--state", str(gone)])
+        self.assertEqual((code, json.loads(out.getvalue())), (2, {"result": "unsafe"}))
+
+    def test_real_unsearchable_state_cli_is_unreadable(self):
+        self.state.mkdir(mode=0o700)
+        self.state.chmod(0)
+        try:
+            try: os.lstat(self.db)
+            except PermissionError: pass
+            else: self.skipTest("effective user is not refused by a mode-000 directory")
+            run = self.cli("--state", self.state, "--values")
+        finally: self.state.chmod(0o700)
+        self.assertEqual((run.returncode, run.stdout, run.stderr), (1, '{"result": "unreadable"}\n', ""))
 
 
 if __name__ == "__main__":

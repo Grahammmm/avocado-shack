@@ -262,6 +262,93 @@ class RouteTests(unittest.TestCase):
         self.assertIn("question", interpret_check.check_skill(twice, SKILLS))
 
 
+class DecimalNearTieTests(unittest.TestCase):
+    def _lead_only(self, ranked, reg=SKILLS, store=None):
+        lead = ranked[0][0]
+        return router.route({"skill": lead, "slots": {"what": "synthetic"}}, ranked, reg, text="x", store=store)
+
+    def _real(self):
+        import math
+        words = ["quartz" + chr(97 + i // 26) + chr(97 + i % 26) for i in range(80)]
+        items = [_skill("item.alpha", "choose alpha", [" ".join(words)]),
+                 _skill("item.beta", "choose beta", [" ".join(words[:72])]),
+                 _skill("item.gamma", "choose gamma", [" ".join(words[72:])])]
+        items += [_skill("item.filler" + c, "filler", ["otherword"]) for c in "abc"]
+        reg = model.Registry({s.name: s for s in items})
+        return reg, " ".join(words)
+
+    def test_decimal_exact_ten_percent_boundary_asks(self):
+        for lead, second in ((1.1, 0.99), (13.0, 11.7), (167.889, 151.1001), (10.0, 9.0)):
+            ranked = [("stock.set", lead), ("item.hide", second)]
+            result = self._lead_only(ranked)
+            self.assertEqual((result.action, result.calls), ("ask", ()), (lead, second))
+            self.assertEqual(result.reply, "Do you want me to change what's in stock or hide an item?")
+
+    def test_one_exposed_score_step_outside_boundary_runs(self):
+        outside = self._lead_only([("stock.set", 167.889), ("item.hide", 151.1)])
+        self.assertEqual(outside.action, "run")
+        self.assertEqual([n for n, _s in outside.calls], ["stock.set"])
+        inside = self._lead_only([("stock.set", 167.889), ("item.hide", 151.1002)])
+        self.assertEqual(inside.action, "ask")
+        # non-leading single pick: same boundary
+        picked = router.route({"skill": "item.hide", "slots": {"what": "x"}},
+                              [("stock.set", 167.889), ("maker.add", 100.0), ("item.hide", 151.1001)], SKILLS)
+        self.assertEqual(picked.action, "ask")
+        picked = router.route({"skill": "item.hide", "slots": {"what": "x"}},
+                              [("stock.set", 167.889), ("maker.add", 100.0), ("item.hide", 151.1)], SKILLS)
+        self.assertEqual((picked.action, [n for n, _s in picked.calls]), ("run", ["item.hide"]))
+
+    def test_actual_candidates_decimal_boundary_is_inclusive(self):
+        reg, text = self._real()
+        ranked = router.candidates(text, skills=reg)
+        self.assertEqual([(n, s) for n, s in ranked][:2], [("item.alpha", 167.889), ("item.beta", 151.1001)])
+        before = list(ranked)
+        store = _backlog()
+        result = self._lead_only(ranked, reg, store)
+        self.assertEqual((result.action, result.calls), ("ask", ()))
+        self.assertEqual(result.reply, "Do you want me to choose alpha or choose beta?")
+        self.assertEqual(ranked, before)
+        self.assertEqual(store.rows(), [])
+
+    def test_multicall_both_decimal_leaders_settles_tie(self):
+        ranked = [("stock.set", 13.0), ("item.hide", 11.7), ("maker.add", 1.0)]
+        a = {"skill": "stock.set", "slots": {"what": "plums"}}
+        b = {"skill": "item.hide", "slots": {"what": "plums"}}
+        for calls in ([a, b], [b, a]):
+            result = router.route({"calls": calls}, ranked, SKILLS, text="plums")
+            self.assertEqual(result.action, "run", calls)
+            self.assertEqual(len(result.calls), 2)
+        other = {"skill": "stock.set", "slots": {"what": "eggs"}}
+        third = {"skill": "maker.add", "slots": {"what": "hilltop farm"}}
+        for calls in ([a, other], [a, third]):
+            result = router.route({"calls": calls}, ranked, SKILLS, text="plums")
+            self.assertEqual((result.action, result.calls), ("ask", ()), calls)
+
+    def test_decimal_comparison_ignores_host_context(self):
+        import decimal
+        ranked = [("stock.set", 167.889), ("item.hide", 151.1001)]
+        saved = decimal.getcontext().copy()
+        try:
+            decimal.getcontext().prec = 2
+            decimal.getcontext().traps[decimal.Inexact] = True
+            decimal.getcontext().traps[decimal.Rounded] = True
+            self.assertEqual(self._lead_only(ranked).action, "ask")
+            self.assertEqual(self._lead_only([("stock.set", 167.889), ("item.hide", 151.1)]).action, "run")
+        finally:
+            decimal.setcontext(saved)
+
+    def test_outside_pick_backlog_and_ordinary_scores_unchanged(self):
+        store = _backlog()
+        ranked = [("stock.set", 1.1), ("item.hide", 0.99)]
+        outside = router.route({"skill": "hike.add", "slots": {"what": "x"}}, ranked, SKILLS, text="x", store=store)
+        self.assertEqual(outside.action, "ask")
+        self.assertIn("add a hike", outside.reply)
+        self.assertEqual(self._lead_only(ranked, store=store).action, "ask")
+        self.assertEqual(store.rows(), [])
+        self.assertEqual(self._lead_only([("stock.set", 3.0), ("item.hide", 1.0)]).action, "run")
+        self.assertEqual(router.route({"skill": "none", "summary": "s"}, ranked, SKILLS, text="x", store=store).action, "backlog")
+
+
 if __name__ == "__main__":
     unittest.main()
 

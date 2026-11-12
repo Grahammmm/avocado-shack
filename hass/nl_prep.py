@@ -344,10 +344,11 @@ def date_hints(text, today: date):
     for m in ORDINAL_RE.finditer(t):
         n = int(m.group(1))
         if not 1 <= n <= 31: continue
-        d = _safe_date(today.year, today.month, n)
-        if d is None or d < today:
-            nm = (today.month % 12) + 1
-            d = _safe_date(today.year + (today.month == 12), nm, n)
+        d = None
+        for k in range(3):  # three consecutive months always contain every day 1..31; real dates decide month lengths
+            y, mo = divmod(today.year * 12 + today.month - 1 + k, 12)
+            c = _safe_date(y, mo + 1, n) if y <= date.max.year else None
+            if c is not None and c >= today: d = c; break
         if d is not None and not MONTH_DAY_RE.search(t[max(0, m.start() - 12):m.end()]) and not DAY_MONTH_RE.search(t[m.start():m.end() + 14]):
             rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
     for m in MONTH_DAY_RE.finditer(t):
@@ -417,14 +418,20 @@ def asked_range(text):
     return _clock(h1, m1, a1 + "m"), _clock(h2, m2, a2 + "m")
 
 
+def _stored_weekday(word):
+    """Weekday index for a complete stored word (a WEEKDAYS spelling, optionally with one plural s), else None: never a prefix."""
+    w = word.lower()
+    return WEEKDAYS.get(w, WEEKDAYS.get(w[:-1]) if w.endswith("s") else None)
+
+
 def _day_shows(index, wd, asked):
     """The Store line text for weekday ``wd`` when it shows exactly ``asked``, else None."""
     for line in index.hours:
         for part in line.split("\u00b7"):
             m = re.match(r"\s*([A-Za-z]+)(?:\s*[\u2013-]\s*([A-Za-z]+))?\s+(.+?)\s*$", part)
             if not m: continue
-            first = next((i for i, n in enumerate(WEEKDAY_NAMES) if n.lower().startswith(m.group(1).lower()[:3])), None)
-            last = first if m.group(2) is None else next((i for i, n in enumerate(WEEKDAY_NAMES) if n.lower().startswith(m.group(2).lower()[:3])), None)
+            first = _stored_weekday(m.group(1))
+            last = first if m.group(2) is None else _stored_weekday(m.group(2))
             if first is None or last is None or not first <= wd <= last: continue
             shown = re.sub(r"\s*[\u2013-]\s*", "\u2013", m.group(3).lower().replace(" ", ""))
             if shown == f"{asked[0]}\u2013{asked[1]}": return m.group(3)

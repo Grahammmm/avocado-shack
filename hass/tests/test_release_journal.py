@@ -369,4 +369,76 @@ class SubstitutionTests(unittest.TestCase):
             with patch.object(r.os, 'fdopen', fdopen): self.assertEqual(r.read(path), {'a': 'original'})
 
 
+class ListingTests(unittest.TestCase):
+    def refuses(self, books):
+        for call in (books.journals, books.load, books.next_seq):
+            with self.assertRaises(r.BooksError) as ctx: call()
+            self.assertEqual(str(ctx.exception), 'release-books')
+            self.assertTrue(ctx.exception.__suppress_context__)
+            self.assertNotIn('canary', repr(ctx.exception))
+
+    def make(self, tmp):
+        books = r.Books(tmp)
+        r.atomic(Path(tmp) / 'publish.json', anchor())
+        return books
+
+    def test_missing_release_directory_is_private_books_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books = self.make(tmp)
+            self.assertEqual(books.load()[1], [])
+            os.rename(books.directory, Path(tmp) / 'aside')
+            self.refuses(books)
+            self.assertFalse(books.directory.exists())
+
+    def test_directory_replaced_by_regular_file_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books = self.make(tmp)
+            os.rmdir(books.directory)
+            private_file(tmp, 'releases', b'canary')
+            self.refuses(books)
+            self.assertEqual(books.directory.read_bytes(), b'canary')
+
+    def test_permission_and_io_listing_failures_are_classified(self):
+        for exc in (PermissionError(13, 'private-canary'), OSError(5, 'private-canary')):
+            with tempfile.TemporaryDirectory() as tmp, self.subTest(exc=type(exc).__name__):
+                books = self.make(tmp)
+                with patch.object(Path, 'iterdir', side_effect=exc): self.refuses(books)
+
+    def test_lazy_listing_failure_never_returns_partial_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books = self.make(tmp)
+            books.write(entry(1))
+            first = next(books.directory.iterdir())
+            def lazy(self):
+                yield first
+                raise OSError(5, 'private-canary')
+            with patch.object(Path, 'iterdir', lazy), patch.object(r, 'read') as rd:
+                self.refuses(books)
+                self.assertFalse([c for c in rd.call_args_list if c.args[0].parent == books.directory])
+
+    def test_empty_sorted_and_temporary_entries_are_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books = self.make(tmp)
+            self.assertEqual(books.journals(), [])
+            for n in (2, 1): books.write(entry(n, 'intent'))
+            private_file(books.directory, '.release-tmp', b'not json')
+            self.assertEqual([j['seq'] for j in books.journals()], [1, 2])
+            self.assertEqual(books.next_seq(), 3)
+
+    def test_existing_load_alert_boundary_recognizes_listing_error(self):
+        from types import SimpleNamespace
+        from hass import publish_live
+        with tempfile.TemporaryDirectory() as tmp:
+            books = self.make(tmp)
+            os.rmdir(books.directory)
+            seen = []
+            stand_in = SimpleNamespace(books=books, alerts=set(), alert=seen.append)
+            with self.assertRaises(r.BooksError): publish_live.LiveEditor.load(stand_in)
+            self.assertEqual(seen, ['release-books'])
+            with patch.object(Path, 'iterdir', side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt): books.journals()
+            with patch.object(Path, 'iterdir', side_effect=TypeError):
+                with self.assertRaises(TypeError): books.journals()
+
+
 if __name__ == '__main__': unittest.main()

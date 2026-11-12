@@ -155,12 +155,13 @@ def check_skill(result: dict, skills, pending_codes=()) -> dict:
         return {"question": f"I could not read that message as one change. {AGAIN}"}
     if "calls" in result and not set(result) <= {"calls", "revises"}:  # closed envelope: refuse the whole reply, never strip
         return {"question": f"I could not read that message as a change. {AGAIN}"}
+    if result.get("skill") == "none":  # the catch-all has its own closed shape: only skill and an optional text summary
+        if not set(result) <= {"skill", "summary"} or not isinstance(result.get("summary", ""), str):
+            return {"question": f"I could not read that message as a change. {AGAIN}"}
+        return {"skill": "none", "summary": result.get("summary", "")}
     code = result.get("revises")
     if code is not None and (not isinstance(code, str) or code not in set(pending_codes)):
         return {"question": f"I could not find draft {_clean(code)} waiting; reply with the change again."}
-    if result.get("skill") == "none":
-        summary = result.get("summary")
-        return {"skill": "none", "summary": summary if isinstance(summary, str) else ""}
     calls = result["calls"] if "calls" in result else [result]
     if not isinstance(calls, list) or not calls:
         return {"question": "I did not find a change in that message. What would you like to change?"}

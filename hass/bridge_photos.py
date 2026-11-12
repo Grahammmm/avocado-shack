@@ -1,7 +1,7 @@
 """H10: BlueBubblesPhotos, a photo source for Conversation(photos=...). Fixtures only: nothing here runs on its own.
 
 fetch(guid, n) asks loopback BlueBubbles for one message's attachment list, then downloads the first n attachments and
-returns their bytes. Same safety rules as bridge.BlueBubblesSender: loopback base URL only, no proxy, no redirect, the
+returns their bytes. Same safety rules as bridge.BlueBubblesSender: loopback base URL only (explicit nonzero port required), no proxy, no redirect, the
 password read fresh per call from a private file and sent only in the documented `password` query parameter, and no
 error raised here ever carries the URL, the query, the password or a response body.
 REST (docs.bluebubbles.app): GET /api/v1/message/{guid}?with=attachment -> {"data": {"attachments": [{"guid", ...}]}};
@@ -72,7 +72,7 @@ class BlueBubblesPhotos:
         except (TypeError, ValueError, AttributeError):
             parts, port = None, None
         if parts is None or parts.scheme not in ("http", "https") or parts.hostname not in LOOPBACK \
-                or port is None or parts.username is not None or parts.password is not None \
+                or port is None or port == 0 or parts.username is not None or parts.password is not None \
                 or parts.path not in ("", "/") or parts.query or parts.fragment:
             raise ValueError("base_url must be http(s)://127.0.0.1:<port> or http(s)://localhost:<port>")
         self._base = f"{parts.scheme}://{parts.hostname}:{port}"
