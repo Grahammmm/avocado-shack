@@ -200,9 +200,22 @@ def _lists_two(turn, name, alt="") -> bool:
     return False
 
 
+# "not the home page" / "instead of the front page": this one mention of the destination is turned down, nothing else is
+_HOME_REJECTED = re.compile(rf"\b(?:not|instead\s+of)\s+(?:the\s+)?(?:{HOME_PAGE.pattern})", re.IGNORECASE)
+
+
+def _home_only_rejected(turn, name) -> bool:
+    """True when every home-page mention in his text is an explicit rejection and the same text affirmatively picks the saved
+    product (``_picks`` is True; None or False is not a choice). Any other home mention keeps the question."""
+    rest = _HOME_REJECTED.sub(" ", turn)
+    if HOME_PAGE.search(rest) or _HOME_REJECTED.search(turn) is None:
+        return False
+    return _picks(rest, _words(name)) is True
+
+
 def _crowded(turn, name="", alt="") -> str | None:
     """The question one text of his raises about where the photo goes, or None."""
-    if HOME_PAGE.search(turn):
+    if HOME_PAGE.search(turn) and not _home_only_rejected(turn, name):
         return ONE_PLACE
     if _lists_two(turn, name, alt) or BOTH.search(turn):
         return ONE_AT_A_TIME
