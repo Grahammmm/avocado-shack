@@ -342,10 +342,19 @@ class OpenRequests:
             else:
                 out.append(f"Open: {label}")
         row = self._row("owner = ? AND state = 'superseded' ORDER BY request_id DESC LIMIT 1", owner)
-        if row is not None and row["skill"] and now <= datetime.fromisoformat(row["expires_at"]):
+        if row is not None and row["skill"] and self._still_listed(row, now):
             skill = registry.get(row["skill"]) if registry is not None else None
             out.append(f"Replaced: {getattr(skill, 'label', None) or 'an earlier request'}")
         return out
+
+    @staticmethod
+    def _still_listed(row, now) -> bool:
+        """True when the superseded row's stored expiry is readable and not yet past. An unreadable or incomparable
+        expiry (bad text, BLOB, zone-less against an aware clock) proves nothing, so that row lists no Replaced line."""
+        try:
+            return now <= datetime.fromisoformat(row["expires_at"])
+        except (TypeError, ValueError, OverflowError):
+            return False
 
 
 # -- cheap answers and merge (pure) ---------------------------------------------------------------------------
