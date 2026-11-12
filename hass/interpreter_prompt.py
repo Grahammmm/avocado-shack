@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 
 from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES
 from hass.interpret_check import PRICE_REPLY
@@ -179,7 +180,11 @@ def _retention_key(p):
     """Oldest first: damaged ids (lexical), then photo-product-<n> by n (the allocator suffix, newest = largest)."""
     pid = p.get("id")
     match = PRODUCT_ID_RE.fullmatch(pid) if isinstance(pid, str) else None
-    return (0, 0, str(pid)) if match is None else (1, int(match.group(1)), pid)
+    if match is None:
+        return (0, 0, "", str(pid))
+    # RF0640-11: exact decimal magnitude without int(), which refuses suffixes past the interpreter digit limit.
+    digits = "".join(str(unicodedata.decimal(c)) for c in match.group(1)).lstrip("0") or "0"
+    return (1, len(digits), digits, pid)
 
 
 def _product_lines(products, omitted=frozenset()) -> list:
