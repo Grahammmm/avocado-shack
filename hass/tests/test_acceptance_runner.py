@@ -36,6 +36,14 @@ COUNTER = textwrap.dedent("""
     class T(unittest.TestCase):
         def test_a(self): RAN.append(1)
 """)
+EMPTY = "# no cases here\n"
+HOOK_EMPTY = textwrap.dedent("""
+    import unittest
+    class T(unittest.TestCase):
+        def test_a(self): self.assertTrue(True)
+    def load_tests(loader, tests, pattern):
+        return unittest.TestSuite()
+""")
 
 
 @contextlib.contextmanager
@@ -133,6 +141,75 @@ class RunnerTest(unittest.TestCase):
                 rows, code, _ = self._run(n, d, {"H01": ("test_prints",)})
             self.assertEqual((code, rows[0]["result"]), (0, "pass"))
             self.assertNotIn("LEAK-MARKER", outer.getvalue())
+
+    def test_empty_covering_entry_is_bad_map_before_import(self):
+        with temp_pkg({"test_counter.py": COUNTER}) as (n, d):
+            for empty in ((), []):
+                rows, code, probs = self._run(n, d, {"H01": ("test_counter",), "H02": empty},
+                                              ("H01", "H02"))
+                self.assertEqual((rows, code, probs), ([], 2, ["map: H02"]))
+            # the counter module was never run (nor even imported)
+            self.assertNotIn(n + ".test_counter", sys.modules)
+            self.assertEqual(importlib.import_module(n + ".test_counter").RAN, [])
+
+    def test_importable_empty_module_fails_with_zero_tests(self):
+        with temp_pkg({"test_empty.py": EMPTY}) as (n, d):
+            rows, code, probs = self._run(n, d, {"H01": ("test_empty",)})
+            self.assertEqual((code, probs), (1, []))
+            self.assertEqual(rows, [{"id": "H01", "result": "fail", "tests": 0,
+                                     "failures": 1, "note": "no tests: test_empty"}])
+
+    def test_empty_load_tests_hook_is_not_evidence(self):
+        with temp_pkg({"test_hook.py": HOOK_EMPTY}) as (n, d):
+            rows, code, _ = self._run(n, d, {"H01": ("test_hook",)})
+            self.assertEqual(code, 1)
+            self.assertEqual(rows, [{"id": "H01", "result": "fail", "tests": 0,
+                                     "failures": 1, "note": "no tests: test_hook"}])
+
+    def test_empty_module_is_not_masked_by_passing_sibling(self):
+        files = {"test_empty.py": EMPTY, "test_counter.py": COUNTER, "test_ok.py": OK}
+        for order in (("test_empty", "test_ok"), ("test_ok", "test_empty")):
+            with temp_pkg(files) as (n, d):
+                rows, code, _ = self._run(n, d, {"H01": order, "H02": ("test_counter",)})
+                self.assertEqual(code, 1)
+                self.assertEqual(rows[0], {"id": "H01", "result": "fail", "tests": 2,
+                                           "failures": 1, "note": "no tests: test_empty"})
+                self.assertEqual((rows[1]["result"], rows[1]["tests"]), ("pass", 1))
+                self.assertEqual(importlib.import_module(n + ".test_counter").RAN, [1])
+
+    def test_multiple_empty_modules_and_import_error_accounting(self):
+        files = {"test_empty.py": EMPTY, "test_hook.py": HOOK_EMPTY, "test_bad.py": BAD,
+                 "test_raises.py": RAISES, "test_ok.py": OK}
+        with temp_pkg(files) as (n, d):
+            rows, code, _ = self._run(n, d, {
+                "H01": ("test_ok", "test_hook", "test_empty"),
+                "H02": ("test_empty", "test_raises", "test_bad", "test_hook")})
+            self.assertEqual(code, 1)
+            self.assertEqual(rows[0], {"id": "H01", "result": "fail", "tests": 2,
+                                       "failures": 2, "note": "no tests: test_hook"})
+            # import-error note wins; 1 import error + 2 empty + 1 failed case
+            self.assertEqual(rows[1], {"id": "H02", "result": "fail", "tests": 2,
+                                       "failures": 4, "note": "import error: test_raises"})
+
+    def test_reason_rows_and_nonempty_suites_preserve_contract(self):
+        with temp_pkg({"test_ok.py": OK, "test_bad.py": BAD, "test_prints.py": PRINTS}) as (n, d):
+            map_ = {"H07": "needs Michael's devices", "H18": "needs Michael's devices",
+                    "H25": "release step", "H01": ("test_ok", "test_prints"),
+                    "H02": ("test_bad",)}
+            outer = io.StringIO()
+            with contextlib.redirect_stdout(outer):
+                rows, code, _ = self._run(n, d, map_)
+            self.assertEqual(code, 1)
+            self.assertNotIn("LEAK-MARKER", outer.getvalue())
+            by = {r["id"]: r for r in rows}
+            for id_, reason in (("H07", "needs Michael's devices"),
+                                ("H18", "needs Michael's devices"), ("H25", "release step")):
+                self.assertEqual(by[id_], {"id": id_, "result": "not covered", "tests": 0,
+                                           "failures": 0, "note": reason})
+            self.assertEqual(by["H01"], {"id": "H01", "result": "pass", "tests": 3,
+                                         "failures": 0, "note": ""})
+            self.assertEqual((by["H02"]["result"], by["H02"]["failures"], by["H02"]["note"]),
+                             ("fail", 1, ""))
 
     def test_real_map_is_valid_on_disk(self):
         self.assertEqual(acceptance._validate(acceptance.MAP, acceptance._TESTS_DIR,

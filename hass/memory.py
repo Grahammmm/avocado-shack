@@ -220,7 +220,7 @@ def main(argv=None) -> int:
             doc, code = history(args.state, args.key, args.values), 0
         except ValueError: doc, code = {"result": "usage", "problem": "invalid key"}, 2
         except UnsafeFile as exc: doc, code = {"result": "unsafe", "problem": str(exc)}, 2
-        except sqlite3.DatabaseError: doc, code = {"result": "unreadable"}, 1
+        except (OSError, sqlite3.DatabaseError): doc, code = {"result": "unreadable"}, 1
     print(json.dumps(doc, ensure_ascii=False))
     return code
 

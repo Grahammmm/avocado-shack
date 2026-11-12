@@ -1,0 +1,96 @@
+{
+"meta": {
+"name": "Mission Peak",
+"note": "outside the county: found through California search",
+"provenance": "recorded live",
+"recorded": "2026-11-09",
+"status": "place_only",
+"tool": "scripts/hike_lookup_manual.py"
+},
+"responses": {
+"nominatim_search:01e5adf5b9161853": {
+"body": [
+{
+"addresstype": "peak",
+"boundingbox": [
+"37.5124962",
+"37.5125962",
+"-121.8809581",
+"-121.8808581"
+],
+"category": "natural",
+"display_name": "Mission Peak, Fremont, Alameda County, California, 94539, United States",
+"importance": 0.22489365626900393,
+"lat": "37.5125462",
+"licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+"lon": "-121.8809081",
+"name": "Mission Peak",
+"osm_id": 358770877,
+"osm_type": "node",
+"place_id": 334043337,
+"place_rank": 18,
+"type": "peak"
+},
+{
+"addresstype": "peak",
+"boundingbox": [
+"40.2762433",
+"40.2763433",
+"-119.8505287",
+"-119.8504287"
+],
+"category": "natural",
+"display_name": "Mission Peak, Washoe County, Nevada, United States",
+"importance": 0.16000999999999999,
+"lat": "40.2762933",
+"licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+"lon": "-119.8504787",
+"name": "Mission Peak",
+"osm_id": 357553599,
+"osm_type": "node",
+"place_id": 325502391,
+"place_rank": 18,
+"type": "peak"
+},
+{
+"addresstype": "residential",
+"boundingbox": [
+"33.8641274",
+"33.8647531",
+"-116.5556405",
+"-116.5554912"
+],
+"category": "highway",
+"display_name": "Mission Peak, Palm Springs, Riverside County, California, 92292, United States",
+"importance": 0.053397389944304534,
+"lat": "33.8644195",
+"licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+"lon": "-116.5554999",
+"name": "Mission Peak",
+"osm_id": 225027944,
+"osm_type": "way",
+"place_id": 431295788,
+"place_rank": 26,
+"type": "residential"
+}
+],
+"request": {
+"bounded": 1,
+"countrycodes": "us",
+"limit": 10,
+"q": "mission peak",
+"viewbox": "-124.5,42.1,-114.1,32.5"
+},
+"retrieved": "2026-11-09"
+},
+"overpass:42108155c9df32cc": {
+"body": {
+"elements": []
+},
+"request": {
+"query": "[out:json][timeout:40];\n(\n relation[\"route\"~\"^(hiking|foot)$\"][\"name\"~\"miss.*peak\",i](34.9,-121.45,35.8,-119.4);\n way[\"highway\"~\"^(path|footway|track|bridleway|steps)$\"][\"name\"~\"miss.*peak\",i](34.9,-121.45,35.8,-119.4);\n node[\"natural\"=\"peak\"][\"name\"~\"miss.*peak\",i](34.9,-121.45,35.8,-119.4);\n);\nout tags geom;"
+},
+"retrieved": "2026-11-09"
+}
+}
+}
