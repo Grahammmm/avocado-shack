@@ -26,11 +26,15 @@ Read-only and external-only:
 
 Exit codes: 0 every photo passes, 1 the run finished and at least one photo warns, 2 usage, path, sink or setup failure
 (stderr only, no traceback, no partial output).
+The one exception is a sink that was admitted but then fails while the results are written or flushed (full disk, closed
+pipe, I/O error): that is also exit 2 with one fixed stderr sentence and no traceback, but stdout is not transactional,
+so bytes the sink accepted before failing stay there and the output may be incomplete. Nothing is retried or rolled back.
 
 Automated tests use only the synthetic photos of hass/newitem_synthetic.py; running this on real photos is an operator step.
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import stat
@@ -44,6 +48,7 @@ UNREADABLE, CANNOT_RENDER = "unreadable-photo", "cannot-render"
 UNREADABLE_SAY = "I couldn't read this photo. Send it again as a JPEG or PNG."
 
 
+SINK_FAILED = "photo_trial: I couldn't write the photo results. The output may be incomplete."
 FOLDER_UNREADABLE = "The photo folder cannot be read (no permission, or a file system error). Nothing was read."
 
 
@@ -283,8 +288,15 @@ def main(argv=None, stdout=None, stderr=None) -> int:
     except TrialError as exc:
         print(f"photo_trial: {exc}", file=err)
         return 2
-    out.write(format_json(rows) if as_json else format_text(rows))
-    out.flush()
+    text = format_json(rows) if as_json else format_text(rows)
+    try:
+        out.write(text)
+        out.flush()
+    except OSError:  # the sink accepted admission but failed now (full disk, closed pipe, I/O error): fixed, path-free, no retry
+        if out is sys.stdout:  # park the failed standard stream so interpreter shutdown does not flush it again (traceback, exit 120)
+            sys.stdout = io.StringIO()
+        print(SINK_FAILED, file=err)
+        return 2
     return 1 if any(row["status"] != "pass" for row in rows) else 0
 
 
