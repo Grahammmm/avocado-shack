@@ -8,7 +8,7 @@ import html
 from datetime import date
 from pathlib import Path
 
-from hass.content_model import shop_today
+from hass.content_model import iso_day, shop_today
 
 NOTICE_JS = ("<script>(()=>{const expire=()=>document.querySelectorAll('.home-notice').forEach(n=>{"
              "if(new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})>n.dataset.until)n.hidden=true});"
@@ -39,6 +39,9 @@ def stale_paths(content, root: Path) -> list[str]:
     The notice and specials clock overrides do not change the selection freshness clock. A path is stale only when
     it differs from the current render and from every earlier-day render the content allows (the day a notice's
     last day was, and each day the set of active specials changed).
+
+    A special also adds the day before its start: a page generated then correctly omits it, and once its first
+    day arrives that unchanged page is still an earlier exact render (``specials.change_days`` has no such day).
     """
     from hass.sitegen import diff_paths, render, shop_today
     from hass.specials import change_days
@@ -48,8 +51,13 @@ def stale_paths(content, root: Path) -> list[str]:
     stale = diff_paths(render(content, templates, today=today), root)
     notice = content.store.get("notice")
     notice_days = [date.fromisoformat(notice["until"])] if notice and notice["until"] < today.isoformat() else []
+    special_days = set(change_days(content.store, today))
+    for sp in content.store.get("specials") or []:
+        start = iso_day(sp.get("start")) if isinstance(sp, dict) else None
+        if start is not None and date.min < start <= today:
+            special_days.add(date.fromordinal(start.toordinal() - 1))
     for notice_day in [None, *notice_days]:
-        for special_day in [None, *change_days(content.store, today)]:
+        for special_day in [None, *sorted(special_days)]:
             if not stale:
                 return stale
             if notice_day is None and special_day is None:
