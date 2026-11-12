@@ -116,7 +116,7 @@ class CorrLog:
             except OSError: continue
             for raw in text.splitlines():
                 try: row = json.loads(raw)
-                except ValueError: continue
+                except (ValueError, RecursionError): continue  # RecursionError: nesting beyond the decoder's depth
                 if isinstance(row, dict) and isinstance(row.get("kind"), str) and row["kind"] in KINDS and isinstance(row.get("at"), str):
                     try: at = datetime.fromisoformat(row["at"])
                     except ValueError: continue
