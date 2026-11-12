@@ -108,7 +108,7 @@ def main(argv=None, map_=None, tests_pkg=TESTS_PKG, tests_dir=None):
     if unknown:
         print("map: %s" % unknown[0])
         return 2
-    submap = map_ if not args.only else {i: map_[i] for i in ids}
+    submap = map_ if not args.only else {i: map_[i] for i in ids if i in map_}  # absent: _validate says map: Hxx
     rows, code, probs = run(submap, unittest.defaultTestLoader,
                             tests_pkg, tests_dir, tuple(ids))
     if code == 2:
