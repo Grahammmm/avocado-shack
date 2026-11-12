@@ -171,12 +171,18 @@ def parse_segment(segment):
 
 
 def schedule_pieces(line):
-    """Split separators and independent comma schedules, not commas joining days or ordinary prose."""
+    """Split separators and independent comma or "and" schedules, not those joining days or ordinary prose."""
     out = []
     for piece in re.split(r"\s*[·;]\s*", line):
         piece = piece.strip()
-        for comma in re.finditer(",", piece):
-            left, right = piece[:comma.start()].strip(), piece[comma.end():].strip()
+        for cut in re.finditer(r",|\band\b", piece, re.I):
+            left, right = piece[:cut.start()].strip(), piece[cut.end():].strip()
+            # "Closed Mon and Fri, Fri 9–5": when the left is only a closed-day list and the right's first comma part is
+            # only days, that part continues the closed list, so the "and" is not the boundary; the comma after it is.
+            # An open-hours left ("Mon 9–5 and Fri, Sat 10–4") is an independent schedule, so the "and" still splits.
+            if (cut.group(0) != "," and "," in right and parse_segment(right.split(",", 1)[0]) is None
+                    and (parse_segment(left) or (None, None))[1] == "closed"):
+                continue
             if parse_segment(left) is not None and parse_segment(right) is not None:
                 out.append(left)
                 out.extend(schedule_pieces(right))

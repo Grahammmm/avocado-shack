@@ -198,7 +198,7 @@ def load_expected(fixture_root, row):
     if path.is_symlink() or not path.is_file(): raise InputError(f"row {row['id']}: expected/{row['id']}.json is missing (record it with --record and check it by hand)")
     try: data = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError): raise InputError(f"row {row['id']}: expected file is not JSON") from None
-    ok = (isinstance(data, dict) and set(data) == EXPECTED_KEYS and data["schema_version"] == SCHEMA_VERSION and isinstance(data["diff"], list)
+    ok = (isinstance(data, dict) and set(data) == EXPECTED_KEYS and type(data["schema_version"]) is int and data["schema_version"] == SCHEMA_VERSION and isinstance(data["diff"], list)
           and all(isinstance(e, dict) and isinstance(e.get("file"), str) and isinstance(e.get("path"), str) for e in data["diff"])
           and isinstance(data["files"], list) and all(_safe_rel(f) for f in data["files"])
           and isinstance(data["assets"], dict) and all(_safe_rel(k) and isinstance(v, str) and SHA_RE.fullmatch(v) for k, v in data["assets"].items())

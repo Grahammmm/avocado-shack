@@ -21,7 +21,8 @@ FILES = {"hass/templates/index.html": SHELL, "hass/templates/hike/index.html": S
          "storefront-mockup/trail-explorer.css": "p{color:black}"}
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
 OK_CHECKS = {"pageLoaded": True, "noHorizontalOverflow": True, "noPageErrors": True, "noPosts": True,
-             "desktop:pageLoaded": True}
+             "desktop:pageLoaded": True, "desktop:noHorizontalOverflow": True, "desktop:noPageErrors": True,
+             "desktop:noPosts": True}
 GIT_ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
            "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"}
 
@@ -102,6 +103,13 @@ class FakePreviewer:
             Path(out_png).write_bytes(PNG)
             os.chmod(out_png, 0o600)
             return {"ok": False, "png": str(out_png), "checks": {**OK_CHECKS, "noHorizontalOverflow": False}}
+        if isinstance(override, dict):
+            Path(out_png).write_bytes(PNG)
+            os.chmod(out_png, 0o600)
+            desktop = Path(out_png).with_name(Path(out_png).stem + "-desktop.png")
+            desktop.write_bytes(PNG)
+            os.chmod(desktop, 0o600)
+            return {"ok": True, "png": str(out_png), "checks": override, "desktopPng": str(desktop)}
         if override == "bad-checks":
             Path(out_png).write_bytes(PNG)
             os.chmod(out_png, 0o600)
@@ -334,6 +342,99 @@ class OutputTests(RepoCase):
         self.assertEqual((proc.returncode, proc.stdout), (2, json.dumps({"result": "usage"}) + "\n"))
         self.assertEqual(proc.stderr, "design_preview: --out is not usable\n")
 
+    def link_fixture(self):
+        """tmp/elsewhere/child (real, with a sentinel) and tmp/linked -> elsewhere/child; returns the sentinel."""
+        child = self.tmp / "elsewhere" / "child"
+        child.mkdir(parents=True)
+        sentinel = child / "sentinel.txt"
+        sentinel.write_text("keep")
+        os.symlink(child, self.tmp / "linked")
+        return sentinel
+
+    def assert_no_output(self, name):
+        self.assertFalse((self.tmp / name).exists())  # where the cancelled spelling lands
+        self.assertFalse((self.tmp / "elsewhere" / name).exists())  # where the link traversal would land
+
+    def test_output_link_cancelled_by_parent_is_usage(self):
+        sentinel = self.link_fixture()
+        with self.assertRaises(Usage) as ctx:
+            self.prepare(self.tmp / "linked" / ".." / "shots")
+        self.assertEqual(str(ctx.exception), "--out has a symlink on its path")
+        self.assert_no_output("shots")
+        self.assertEqual(sentinel.read_text(), "keep")
+        with self.assertRaises(Usage):  # the direct link stays refused
+            self.prepare(self.tmp / "linked" / "shots")
+
+    def test_cancelled_links_at_multiple_depths_and_relative_paths(self):
+        sentinel = self.link_fixture()
+        os.symlink(self.tmp / "nowhere", self.tmp / "dangling")
+        os.symlink(self.tmp / "elsewhere", self.tmp / "top")
+        spellings = [self.tmp / "top" / "child" / ".." / ".." / "shots", self.tmp / "linked" / ".." / ".." / "shots",
+                     self.tmp / "dangling" / ".." / "shots", self.tmp / "linked" / ".." / "linked" / ".." / "shots",
+                     self.tmp / "linked" / ".." / "." / "shots", f"{self.tmp}//linked//..//shots"]
+        for spelling in spellings:
+            with self.assertRaises(Usage, msg=str(spelling)) as ctx:
+                self.prepare(spelling)
+            self.assertEqual(str(ctx.exception), "--out has a symlink on its path")
+        os.chdir(self.tmp)
+        for spelling in ("linked/../shots", "./linked/../shots"):
+            with self.assertRaises(Usage, msg=spelling):
+                dp.prepare_out(spelling, str(self.repo))
+        self.assert_no_output("shots")
+        self.assertFalse((self.tmp / "nowhere").exists())
+        self.assertEqual(sentinel.read_text(), "keep")
+        self.assertEqual(os.listdir(sentinel.parent), ["sentinel.txt"])
+
+    def test_link_free_parent_components_remain_valid(self):
+        base = self.tmp / "sp ace é"
+        (base / "child").mkdir(parents=True)
+        for spelling, expected in ((base / "child" / ".." / "shots", base / "shots"),
+                                   (f"{base}//child/./../shots2", base / "shots2")):
+            got = self.prepare(spelling)
+            self.assertEqual(got, expected)
+            self.assertEqual(oct(os.stat(got).st_mode & 0o777), "0o700")
+        (base / "rel").mkdir()
+        os.chdir(base / "child")
+        got = dp.prepare_out("../rel/./shots", str(self.repo))  # relative spelling from a real cwd
+        self.assertEqual((got, oct(os.stat(got).st_mode & 0o777)), (base / "rel" / "shots", "0o700"))
+
+    def test_non_directory_or_missing_component_cannot_be_cancelled(self):
+        (self.tmp / "file").write_text("x")
+        for spelling in (self.tmp / "file" / ".." / "shots", self.tmp / "absent" / ".." / "shots", self.tmp / "file" / "shots"):
+            with self.assertRaises(Usage, msg=str(spelling)) as ctx:
+                self.prepare(spelling)
+            self.assertEqual(str(ctx.exception), "--out is not usable")
+        self.assert_no_output("shots")
+        self.assertFalse((self.tmp / "absent").exists())
+        self.assertEqual(self.prepare(self.tmp / "real-parent-missing-final"), self.tmp / "real-parent-missing-final")
+
+    def test_cancelled_link_main_refuses_before_previewer(self):
+        self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
+        os.makedirs(self.tmp / "CANARY-target" / "child")
+        os.symlink(self.tmp / "CANARY-target" / "child", self.tmp / "CANARY-link")
+        before = self.snapshot()
+        out, err, previewer = io.StringIO(), io.StringIO(), mock.Mock()
+        os.chdir(self.repo)
+        with mock.patch.object(dp, "Previewer", previewer), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = dp.main(["--base", "main", "--head", "feature", "--out", f"{self.tmp}/CANARY-link/../shots"])
+        self.assertEqual(code, 2)
+        self.assertEqual(out.getvalue(), json.dumps({"result": "usage"}) + "\n")
+        self.assertEqual(err.getvalue(), "design_preview: --out has a symlink on its path\n")
+        previewer.assert_not_called()
+        self.assertEqual(previewer.mock_calls, [])
+        self.assert_no_output("shots")
+        self.assertFalse((self.tmp / "CANARY-target" / "shots").exists())
+        self.assertEqual(self.snapshot(), before)
+
+    def test_scope_outside_still_precedes_output_traversal(self):
+        self.link_fixture()
+        self.branch("feature", {"hass/evil.py": "x=1", "storefront-mockup/style.css": "body{color:red}"})
+        os.chdir(self.repo)
+        with mock.patch.object(dp, "prepare_out", side_effect=AssertionError("called")):
+            code, doc = dp.run("main", "feature", str(self.tmp / "linked" / ".." / "shots"))
+        self.assertEqual((code, doc["result"]), (1, "outside"))
+        self.assert_no_output("shots")
+
     def test_outside_scope_still_wins_before_preflight(self):
         self.branch("feature", {"hass/evil.py": "x=1", "storefront-mockup/style.css": "body{color:red}"})
         os.chdir(self.repo)
@@ -371,6 +472,37 @@ class OutputTests(RepoCase):
         fake = FakePreviewer({0: "bad-checks"})
         code, doc = self.run_fake(fake, out=self.tmp / "again")
         self.assertEqual((code, doc["captures"][0]["error"]), (1, "bad checks"))
+
+    def test_each_required_design_check_is_mandatory(self):
+        self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})
+        n = 0
+        for key in OK_CHECKS:
+            for pos in range(4):
+                n += 1
+                fake = FakePreviewer({pos: {k: v for k, v in OK_CHECKS.items() if k != key}})
+                code, doc = self.run_fake(fake, out=self.tmp / f"o{n}")
+                self.assertEqual((code, doc["result"], len(fake.calls)), (1, "preview-failed", 4))
+                self.assertEqual([c["error"] for c in doc["captures"]],
+                                 ["bad checks" if i == pos else None for i in range(4)])
+                self.assertTrue(all(c["png"] and c["desktopPng"] for c in doc["captures"]))
+
+    def test_partial_or_unrelated_checks_are_not_success(self):
+        phone = {k: True for k in OK_CHECKS if not k.startswith("desktop:")}
+        desktop = {k: True for k in OK_CHECKS if k.startswith("desktop:")}
+        for checks in ({"other": True}, phone, desktop):
+            self.assertEqual(dp._entry("base", "home", self.result_for(checks))["error"], "bad checks")
+        self.assertIsNone(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": True}))["error"])
+        self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "extra": False}))["error"], "check failed: extra")
+        self.assertEqual(dp._entry("base", "home", self.result_for(phone | {"noPosts": False}))["error"], "check failed: noPosts")
+        for bad in (None, "true", 1):
+            self.assertEqual(dp._entry("base", "home", self.result_for({**OK_CHECKS, "noPosts": bad}))["error"], "bad checks")
+
+    def result_for(self, checks):
+        png, desk = self.tmp / "x.png", self.tmp / "x-desktop.png"
+        for p in (png, desk):
+            p.write_bytes(PNG)
+            os.chmod(p, 0o600)
+        return {"ok": True, "png": str(png), "desktopPng": str(desk), "checks": checks}
 
     def test_main_prints_exactly_one_json_line_and_leaves_git_alone(self):
         self.branch("feature", {"storefront-mockup/style.css": "body{color:red}"})

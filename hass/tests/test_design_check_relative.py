@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import tempfile
@@ -97,6 +98,85 @@ class RelativeTests(unittest.TestCase):
         for _, kw in calls:
             self.assertEqual(kw["env"], expected_env)
             self.assertFalse({"GIT_DIR", "GIT_WORK_TREE"} & set(kw["env"]))
+
+
+def make_repo(root, outside):
+    """Two-commit synthetic repo at root (created if needed): CSS-only, or an outside .py change."""
+    os.makedirs(root, exist_ok=True)
+
+    def git(*a, **kw):
+        return subprocess.run(["git", *a], cwd=root, env=base.ENV, check=True, capture_output=True, **kw)
+
+    git("init", "-q", "-b", "main")
+    for rel in ("storefront-mockup/style.css", "hass/outside.py"):
+        os.makedirs(os.path.join(root, os.path.dirname(rel)), exist_ok=True)
+        with open(os.path.join(root, rel), "w") as fh:
+            fh.write("a\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "base")
+    rel = "hass/outside.py" if outside else "storefront-mockup/style.css"
+    with open(os.path.join(root, rel), "w") as fh:
+        fh.write("b\n")
+    git("commit", "-q", "-a", "-m", "change")
+    return git
+
+
+class WhitespaceRootTests(unittest.TestCase):
+    run_from = RelativeTests.run_from
+    SUFFIXES = {"space": " ", "tab": "\t", "lf": "\n"}
+
+    def roots(self, outside):
+        for name, suffix in self.SUFFIXES.items():
+            tmp = tempfile.TemporaryDirectory()
+            self.addCleanup(tmp.cleanup)
+            yield name, make_repo(os.path.join(tmp.name, "root" + suffix), outside)
+
+    def test_toplevel_preserves_path_whitespace_before_one_record_lf(self):
+        for raw, want in ((b"/r \n", "/r "), (b"/r\t\n", "/r\t"), (b"/r\r\n", "/r\r"), (b"/r\n\n", "/r\n"),
+                          (b"/r\n\n\n", "/r\n\n")):
+            with self.subTest(raw=raw), mock.patch.object(
+                    design_check.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, raw, b"")):
+                self.assertEqual(design_check.toplevel(), want)
+        with mock.patch.object(design_check.subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 0, b"", b"")):
+            with self.assertRaises(design_check.Usage):
+                design_check.toplevel()
+
+    def test_whitespace_root_design_only_from_root_and_nested_folder(self):
+        for name, git in self.roots(outside=False):
+            root = git("rev-parse", "--show-toplevel", text=False).stdout.decode().removesuffix("\n")
+            self.assertEqual(root[-1], self.SUFFIXES[name])
+            for folder in (root, os.path.join(root, "hass")):
+                with self.subTest(name=name, folder=folder):
+                    self.assertEqual(self.run_from(folder),
+                                     (0, {"result": "ok", "changed": 1, "outside": []}, ""))
+                    self.assertEqual(self.run_from(folder, "--base", "HEAD", "--head", "HEAD"),
+                                     (0, {"result": "ok", "changed": 0, "outside": []}, ""))
+
+    def test_whitespace_root_outside_change_is_reported(self):
+        for name, git in self.roots(outside=True):
+            root = git("rev-parse", "--show-toplevel", text=False).stdout.decode().removesuffix("\n")
+            for folder in (root, os.path.join(root, "storefront-mockup")):
+                with self.subTest(name=name, folder=folder):
+                    self.assertEqual(self.run_from(folder),
+                                     (1, {"result": "outside", "changed": 1, "outside": ["M hass/outside.py"]}, ""))
+
+    def test_trimmed_sibling_cannot_supply_a_clean_verdict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            actual, sibling = os.path.join(tmp, "collision-root "), os.path.join(tmp, "collision-root")
+            agit, sgit = make_repo(actual, outside=True), make_repo(sibling, outside=False)
+            self.assertEqual(agit("diff", "--name-status", "HEAD~1", "HEAD", text=True).stdout, "M\thass/outside.py\n")
+
+            def snap():
+                return [(g("rev-parse", "HEAD", text=True).stdout, g("status", "--porcelain", text=True).stdout,
+                         pathlib.Path(r, ".git", "config").read_bytes(),
+                         pathlib.Path(r, "hass", "outside.py").read_bytes())
+                        for g, r in ((agit, actual), (sgit, sibling))]
+
+            before = snap()
+            self.assertEqual(self.run_from(actual, "--base", "HEAD~1", "--head", "HEAD"),
+                             (1, {"result": "outside", "changed": 1, "outside": ["M hass/outside.py"]}, ""))
+            self.assertEqual(snap(), before)
 
 
 if __name__ == "__main__":

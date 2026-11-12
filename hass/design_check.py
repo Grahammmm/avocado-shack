@@ -48,7 +48,7 @@ def git(*args: str, empty_ok: bool = False, cwd: str | None = None) -> str:
 
 def toplevel() -> str:
     try:
-        top = git("rev-parse", "--show-toplevel").strip()
+        top = git("rev-parse", "--show-toplevel").removesuffix("\n")  # only Git's record LF: a root may end in whitespace
     except Usage:
         top = ""
     if not top:

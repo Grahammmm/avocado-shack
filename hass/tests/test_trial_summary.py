@@ -276,6 +276,61 @@ FORGET = ("memory-ambiguous", "backlog-forgot", "backlog-none")  # RF0115-12: wr
 IN_WINDOW, OUT_OF_WINDOW = "2026-11-02T10:00:00-08:00", "2026-12-25T10:00:00-08:00"
 
 
+class AncestorLinkTest(unittest.TestCase):
+    """RF0755-12: a symlink anywhere in the state-directory traversal is refused before SQLite is opened."""
+    ROW = [("approved", "2026-11-02T10:00:00-08:00")]
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory(); self.addCleanup(self._t.cleanup); self.tmp = os.path.realpath(self._t.name)
+
+    def refused(self, state):
+        with mock.patch.object(ts.sqlite3, "connect", side_effect=AssertionError("sqlite opened")):
+            self.assertRaises(ts.Unreadable, ts.summarize, state, ts.date(2026, 11, 1), 7)
+            for extra, want in (((), ts.UNREADABLE_TEXT + "\n"), (("--json",), '{"result": "unreadable"}\n')):
+                self.assertEqual(run("--state", str(state), "--from", "2026-11-01", *extra), (1, want, ""))
+
+    def layout(self, name="fixture-state"):
+        real = Path(self.tmp, "real"); (real / name).mkdir(parents=True); make_state(real / name, messages=self.ROW)
+        return real, name
+
+    def test_symlinked_parent_and_higher_ancestor_are_unreadable(self):
+        real, name = self.layout()
+        (real / name / "deep").mkdir(); make_state(real / name / "deep", messages=self.ROW)
+        link = Path(self.tmp, "linked-parent"); link.symlink_to(real)
+        self.assertEqual(report(real / name)["totals"]["messages"]["approved"], 1)  # direct control
+        self.refused(link / name)
+        self.refused(link / name / "deep")
+        Path(self.tmp, "dangling").symlink_to(Path(self.tmp, "nowhere"))
+        self.refused(Path(self.tmp, "dangling") / name)
+        self.addCleanup(os.chdir, os.getcwd()); os.chdir(self.tmp)
+        self.refused(os.path.join("linked-parent", name))
+        self.assertFalse(Path(self.tmp, "nowhere").exists())
+
+    def test_dot_and_parent_components_do_not_erase_a_link(self):
+        real, name = self.layout()
+        link = Path(self.tmp, "lnk"); link.symlink_to(real)
+        Path(self.tmp, name).mkdir(); make_state(Path(self.tmp, name), messages=self.ROW)  # lexical result of lnk/../name
+        self.refused(f"{link}/../{name}")
+        for ok in (f"{self.tmp}/./real/./{name}", f"{self.tmp}/real/{name}/../{name}", f"{self.tmp}/real/../{name}"):
+            self.assertEqual(report(ok)["totals"]["messages"]["approved"], 1, ok)
+
+    def test_link_free_odd_names_keep_real_reports(self):
+        for dirname in ("with space", "ünï", "q?x#y"):
+            d = Path(self.tmp, dirname); d.mkdir(); make_state(d, messages=self.ROW)
+            self.assertEqual(report(d)["totals"]["messages"]["approved"], 1, dirname)
+            code, out, _ = run("--state", str(d), "--from", "2026-11-01")
+            self.assertEqual(code, 0)
+
+    def test_refusal_does_not_echo_path_or_target(self):
+        real = Path(self.tmp, f"{CANARY}-target"); (real / "s").mkdir(parents=True); make_state(real / "s", messages=self.ROW)
+        link = Path(self.tmp, f"{CANARY}-link"); link.symlink_to(real)
+        before = (real / "s" / "conversation.sqlite3").read_bytes()
+        self.refused(link / "s")
+        out = run("--state", str(link / "s"), "--from", "2026-11-01", "--json")
+        self.assertNotIn(CANARY, out[1] + out[2])
+        self.assertEqual((real / "s" / "conversation.sqlite3").read_bytes(), before)
+
+
 class ForgetDispositionTest(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory(); self.addCleanup(self._t.cleanup); self.tmp = self._t.name

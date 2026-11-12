@@ -51,11 +51,11 @@ MONEY_RE = re.compile(r"\$\s?(\d+(?:\.\d{1,2})?)|\b(\d+(?:\.\d{1,2})?)\s*(?:buck
 TIME_RE = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b([01]?\d|2[0-3]):([0-5]\d)\b|\b(noon|midnight)\b")
 ORDINAL_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b")
 MONTH_DAY_RE = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b")
-DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b(?:\.(?=(?:,\s*|\s+)(?:'\d{2}(?![\d:])|\d{3,}(?!:))))?")
+DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b(?:\.(?=(?:,\s*|\s+)(?:'\d{2}(?![\d:])|'\d+(?!:)|\d{3,}(?!:))))?")
 SLASH_RE = re.compile(r"(?<!/)\b(1[0-2]|0?[1-9])/([0-3]?\d)\b(?:/(\d+))?")  # m/d or m/d/yy(yy); a year-first 2027/12/5 is not read
 ISO_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 YEAR_RE = re.compile(r"(?:,\s*|\s+)(?:'(\d{2})|(\d{4}))(?![\d:])")  # a year the owner wrote right after a month and day
-BAD_YEAR_RE = re.compile(r"(?:,\s*|\s+)\d{3,}(?!\d)(?!:)(?!\s*[ap]\.?m\b)")  # three or more digits after a month and day that YEAR_RE did not take, and that are not a clock time
+BAD_YEAR_RE = re.compile(r"(?:,\s*|\s+)(?:\d{3,}|'\d+)(?!\d)(?!:)(?!\s*[ap]\.?m\b)")  # three or more digits after a month and day that YEAR_RE did not take, and that are not a clock time
 WEEKDAY_RE = re.compile(r"\b(?:(this|next|last|coming|on)\s+)?(" + "|".join(sorted(WEEKDAYS, key=len, reverse=True)) + r")s?\b")
 RELATIVE_RE = re.compile(r"\b(today|tonight|tomorrow|tmrw|tmr|yesterday|day after tomorrow)\b")
 IN_RE = re.compile(r"\bin\s+(\d{1,2}|" + "|".join(WORD_NUMBERS) + r")\s+(day|week)s?\b")
@@ -117,7 +117,10 @@ class _Index:
             if len(longer) == 1: return longer[0], True
             if longer: return None, False  # several words start this way (lem: lemon, lemonade): the owner has not chosen, so no hint
         if len(token) >= FUZZY_MIN:
-            close = difflib.get_close_matches(token, self.vocab_list, n=1, cutoff=FUZZY_CUTOFF)
+            close = difflib.get_close_matches(token, self.vocab_list, n=2, cutoff=FUZZY_CUTOFF)
+            # two words equally close (peich: peach, perch) are a tie, not a unique correction: leave the token unresolved
+            if len(close) == 2 and difflib.SequenceMatcher(None, close[0], token).ratio() == difflib.SequenceMatcher(None, close[1], token).ratio():
+                return None, False
             if close: return close[0], True
         return None, False
 
@@ -249,7 +252,10 @@ def hike_hints(text, index, today: date, weekday_hits) -> dict:
         title = set(tokens(e.get("title") or "")) - {"walk", "hike"}
         if title and title <= words:
             out.append({"hike": e["id"], "title": e.get("title"), "startsAt": e.get("startsAt"), "status": e.get("status")})
-    ideas = [{"routeIdea": r["id"], "title": r.get("title")} for r in index.ideas if (set(tokens(r.get("title") or "")) - {"walk", "hike"}) and set(tokens(r.get("title") or "")) <= words]
+    ideas = []
+    for r in index.ideas:
+        title = set(tokens(r.get("title") or "")) - {"walk", "hike"}  # same reduced set for both tests, like events
+        if title and title <= words: ideas.append({"routeIdea": r["id"], "title": r.get("title")})
     rows = []
     for name, wd in weekday_hits if HIKE_WORD_RE.search(fold(text)) or out or ideas else ():  # a weekday alone is not about hikes
         on = [e for e in index.hikes if e.get("status") == "scheduled" and _weekday_of(e.get("startsAt")) == wd]
@@ -296,8 +302,11 @@ def _named_date(t, m, month, day, today, year=True):
         d = _safe_date(n, month, day) if 2000 <= n <= 2099 else None
         return (t[m.start():y.end()], d) if d is not None else None
     if year and BAD_YEAR_RE.match(t, m.end()): return None  # digits that look like a year but are not one (dec 5 202, 5 dec 20277): no hint
-    d = _safe_date(today.year, month, day)
-    if d is not None and d < today: d = _safe_date(today.year + 1, month, day)
+    # Earliest real occurrence on/after today; Feb 29 can be up to 8 years away (non-leap century), so search a bounded 9 years.
+    d = None
+    for yr in range(today.year, min(today.year + 8, date.max.year) + 1):
+        c = _safe_date(yr, month, day)
+        if c is not None and c >= today: d = c; break
     return (m.group(0), d) if d is not None else None
 
 

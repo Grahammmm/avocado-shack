@@ -83,7 +83,13 @@ def _product(Image, ImageDraw, ImageFont, kind, height):
 def make_photo(product="jar", background="white-sheet", size=(1200, 900), angle=0, share=.62, seed=1, phone_orientation=None,
                fmt="JPEG", alpha=False) -> bytes:
     """Photo bytes. `share` is the product's height as a share of the picture; `angle` tilts it in degrees;
-    `phone_orientation` (6 or 8) stores the picture sideways with that EXIF tag, as a phone does, plus fake GPS/device data."""
+    `phone_orientation` (6 or 8) stores the picture sideways with that EXIF tag, as a phone does, plus fake GPS/device data.
+    Anything but None or the int 6 or 8 raises ValueError before any drawing. `fmt` must be exactly "JPEG" or "PNG";
+    any other value raises ValueError("fmt must be JPEG or PNG") before any drawing."""
+    if phone_orientation is not None and not (type(phone_orientation) is int and phone_orientation in (6, 8)):
+        raise ValueError("phone_orientation must be None, 6 or 8")
+    if not (type(fmt) is str and fmt in ("JPEG", "PNG")):
+        raise ValueError("fmt must be JPEG or PNG")
     from PIL import Image, ImageDraw, ImageFilter, ImageFont  # noqa: PLC0415
     rng = random.Random(seed)
     upright = (size[1], size[0]) if phone_orientation else size  # the scene as seen; stored sideways later
@@ -97,15 +103,19 @@ def make_photo(product="jar", background="white-sheet", size=(1200, 900), angle=
         ImageDraw.Draw(shadow).ellipse((left, top + item.height - item.height // 14, left + item.width, top + item.height + item.height // 14), fill=90)
         shadow = shadow.filter(ImageFilter.GaussianBlur(max(3, h // 70)))
         scene = Image.composite(Image.new("RGB", upright, (40, 40, 40)), scene, shadow)
-    scene.paste(item, (left, top), item)
+    if alpha:  # source-over onto the transparent scene; pasting the layer through its own alpha would apply coverage twice
+        layer = Image.new("RGBA", upright, (0, 0, 0, 0))
+        layer.paste(item, (left, top))  # no mask: copies the straight RGBA and clips at the scene edge
+        scene = Image.alpha_composite(scene, layer)
+    else:
+        scene.paste(item, (left, top), item)
     stored = scene
     exif = None
     if phone_orientation:
         stored = scene.transpose(Image.Transpose.ROTATE_90 if phone_orientation == 6 else Image.Transpose.ROTATE_270)  # sideways pixels
         exif = Image.Exif()
         exif[0x010F], exif[0x0110], exif[0x0132], exif[0x0112] = "SyntheticCo", "Phone 0", "2026:11:07 09:30:00", phone_orientation
-        gps = exif.get_ifd(0x8825)
-        gps[1], gps[2], gps[3], gps[4] = "N", (35.0, 22.0, 0.0), "W", (120.0, 51.0, 0.0)
+        exif[0x8825] = {1: "N", 2: (35.0, 22.0, 0.0), 3: "W", 4: (120.0, 51.0, 0.0)}  # assigned, so GPSInfo is really serialized
     out = io.BytesIO()
     if fmt == "PNG":
         stored.save(out, "PNG", **({"exif": exif} if exif is not None else {}))

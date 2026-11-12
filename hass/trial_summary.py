@@ -9,7 +9,7 @@ Exit 0 ok, 1 store missing/unreadable/unsafe, 2 invalid arguments.
 import argparse, contextlib, json, os, re, sqlite3, stat, sys  # noqa: E401
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 PACIFIC = "America/Los_Angeles"
 NOT_OWNER = ("ignored", "echo", "edited-ignored")  # stored with a NULL time; never an owner message
@@ -69,14 +69,34 @@ def _add(into, other):
     into["interpreterCalls"] += other["interpreterCalls"]
 
 
+def _check_links(state_dir):
+    """Static admission: lstat each component from the anchor; a symlink at any depth (even dangling) is refused. `..` only
+    follows an already-checked real directory, so `link/../x` is refused at `link`. Not race-free."""
+    cur = os.sep
+    for part in os.path.join(os.getcwd(), os.fspath(state_dir)).split(os.sep):
+        if part in ("", "."): continue
+        cur = os.path.dirname(cur) if part == ".." else os.path.join(cur, part)
+        if part != ".." and not stat.S_ISDIR(os.lstat(cur).st_mode): raise Unreadable  # S_ISDIR is false for a link
+
+
 def _check_store(state_dir):
+    """The store file path; the state directory must be real, with no symlink anywhere in its traversal."""
     sdir = Path(state_dir)
     try:
+        _check_links(state_dir)
         if sdir.is_symlink() or not sdir.is_dir(): raise Unreadable
-        mode = os.lstat(path := sdir / "conversation.sqlite3").st_mode  # lstat: a dangling link is seen
+        st = os.lstat(path := sdir / "conversation.sqlite3")  # lstat: a dangling link is seen
     except OSError: raise Unreadable from None
-    if not stat.S_ISREG(mode): raise Unreadable
-    return path
+    if not stat.S_ISREG(st.st_mode): raise Unreadable
+    return path, (st.st_dev, st.st_ino)
+
+
+def _same_leaf(path, ident):
+    """Detection only, not confinement: refuse if the admitted leaf is no longer the same regular file (lstat, never
+    following a link; no size/mtime test, so committed WAL growth is fine). A swap between checks is not prevented."""
+    try: st = os.lstat(path)
+    except OSError: raise Unreadable from None
+    if not stat.S_ISREG(st.st_mode) or (st.st_dev, st.st_ino) != ident: raise Unreadable
 
 
 def _rows(db, tables, table, wanted, optional):
@@ -90,7 +110,7 @@ def _rows(db, tables, table, wanted, optional):
 
 def summarize(state_dir, start, days):
     """The report dict for `days` Pacific days from date `start`; raises Unreadable."""
-    path = _check_store(state_dir)
+    path, ident = _check_store(state_dir)
     window = [(start + timedelta(n)).isoformat() for n in range(days)]
     buckets = {d: _blank() for d in window}
     unknown = _blank()
@@ -99,7 +119,9 @@ def summarize(state_dir, start, days):
         return unknown if day is None else buckets.get(day)  # None: dated, but outside the window
 
     try:
+        _same_leaf(path, ident)
         with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
+            _same_leaf(path, ident)
             db.isolation_level = None
             db.execute("PRAGMA query_only = 1")
             db.execute("BEGIN")
@@ -116,7 +138,8 @@ def summarize(state_dir, start, days):
                 if type(calls) is not int or calls < 0: raise Unreadable
                 if (b := where(_iso_day(day))) is not None: b["interpreterCalls"] += calls
             db.execute("COMMIT")
-    except (sqlite3.Error, OSError): raise Unreadable from None
+        _same_leaf(path, ident)
+    except (sqlite3.Error, OSError, ZoneInfoNotFoundError): raise Unreadable from None  # missing tzdata: refuse whole
     totals = _blank()
     for d in window: _add(totals, buckets[d])
     _add(totals, unknown)

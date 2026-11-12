@@ -216,8 +216,8 @@ class Chain(unittest.TestCase):
                 {"file": "hass/content/products.json", "path": "products[photo-product-175]",
                  "sha256": "82bdb794dffb91937e8545fa866b6924be24c2403add5a658ce17c172e2819b5"}],
             "assets": {
-                "storefront-mockup/assets/products/photo-2cec1911a5900242.jpg": "6de89b6af9589b8749e9fb1bbe578df8912050df3d8caa2a11e8926297962782",
-                "storefront-mockup/assets/products/photo-91c700264e60552f.jpg": "47c973da2b315c19c9ac922d3963e271d62ca93b50f0f17e9257ea449e80fd0b"}})
+                "storefront-mockup/assets/products/photo-2cec1911a5900242.jpg": "5f98e637f500bc54a5c1f380976ff60eb6cab4acbfac959c5baf47d89a36a49d",
+                "storefront-mockup/assets/products/photo-91c700264e60552f.jpg": "8556ee239bc810876db9ef4f64a2cb7e87bc3567af2dbb40b673cdb690007033"}})
         self.assertEqual({p.name for p in (A.FIXTURE_ROOT / "expected").glob("chain-undo-*.json")},
                          {f"chain-undo-{n:02d}.json" for n in numbers})
 
