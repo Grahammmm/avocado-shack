@@ -114,6 +114,8 @@ class Inbox:
                 if wanted is None: raise ValueError("start point required")
                 self.db.execute("INSERT INTO meta(name, value) VALUES ('start_at', ?)", (wanted,))
                 return wanted
+            try: parse_aware(row["value"], "start_at")  # RF0440-12: a damaged recorded cutoff is refused, never echoed
+            except ValueError: raise ValueError("recorded start point is unreadable") from None
             if wanted is not None and wanted != row["value"]:
                 raise ValueError(f"start point already recorded as {row['value']}")
             return row["value"]
