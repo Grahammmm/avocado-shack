@@ -518,19 +518,20 @@ def _image_info(data):
             i += 12 + n
         return "png", w, h, meta
     if data[:2] == b"\xff\xd8":
-        i, w, h, meta = 2, 0, 0, []
+        i, w, h, meta, framed = 2, 0, 0, [], False
         while i + 4 <= len(data):
-            if data[i] != 0xFF: break
+            if data[i] != 0xFF: meta.append("segment-bad"); break  # not a marker: never trusted as clean
             marker, n = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
+            if marker == 0xDA: break  # entropy-coded data follows: stop before it
+            if n < 2 or i + 2 + n > len(data): meta.append("segment-bad"); break  # impossible or truncated length
             if marker == 0xE1:  # APP1: only an Exif block holding nothing but the orientation tag is the plain-copy exception
                 payload = data[i + 4:i + 2 + n]
                 kind = _exif_kind(payload[6:]) if payload[:6] == b"Exif\0\0" else "other"
                 meta.append("segment-e1" if kind == "orientation" else "exif-gps" if kind == "gps" else "segment-e1-other")
             elif marker in (0xED, 0xFE): meta.append(f"segment-{marker:02x}")
-            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
-                h, w = int.from_bytes(data[i + 5:i + 7], "big"), int.from_bytes(data[i + 7:i + 9], "big")
-                break
-            if marker == 0xDA: break
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC) and not framed:
+                if n < 9: meta.append("segment-bad"); break
+                h, w, framed = int.from_bytes(data[i + 5:i + 7], "big"), int.from_bytes(data[i + 7:i + 9], "big"), True
             i += 2 + n
         return "jpeg", w, h, meta
     return None, 0, 0, ["unreadable"]
