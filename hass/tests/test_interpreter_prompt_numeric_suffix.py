@@ -17,7 +17,7 @@ LONG_A, LONG_B, LONG_C = "1" + "0" * 4999, "1" + "0" * 4998 + "1", "9" * 5000  #
 DEC = json.JSONDecoder()
 
 
-def _product(pid, description="describe " * 3):
+def _product(pid, description: object = "describe " * 3):
     return {"id": pid, "name": "n", "status": "active", "description": description}
 
 
