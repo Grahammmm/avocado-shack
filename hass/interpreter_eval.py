@@ -204,6 +204,9 @@ def main(argv=None, transport=None) -> int:
     parser.add_argument("--live", action="store_true", help="operator only: record replies from the local model")
     for flag in ("--replies", "--url", "--model", "--out", "--before", "--after"): parser.add_argument(flag)
     args = parser.parse_args(argv)
+    # RF0300-12: score is stdout-only; recorder flags (even empty ones) would be silently ignored, so refuse them first
+    if args.command == "score" and any(v is not None for v in (args.url, args.model, args.out)):
+        parser.error("score takes only --replies and --cases")
     cmp_ = not args.live and args.command == "compare" and args.before and args.after
     if cmp_ and (args.replies or args.url or args.model or args.out):
         parser.error("compare takes only --before, --after and --cases")
