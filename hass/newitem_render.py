@@ -115,6 +115,11 @@ def _shadowlike(c, ref) -> bool:
     return .35 < k < .98 and max(abs(c[i] - ref[i] * k) for i in range(3)) <= 12
 
 
+def _continues(c, body) -> bool:
+    """True when c is within 12 levels on every channel of the same column's body colour above it (None: no body)."""
+    return body is not None and max(abs(c[i] - body[i]) for i in range(3)) <= 12
+
+
 def _too_thin(size) -> bool:
     """True for a strip: scaled so its long side is ANALYSIS, its short side would be under MIN_WORKING px (over about 40:1)."""
     return round(min(size) * ANALYSIS / max(size)) < MIN_WORKING
@@ -156,9 +161,13 @@ def _coarse(img):
     shade = bytearray(w * h)
     if rows:  # the photo's own cast shadow: background-coloured but darker, in the foot of the subject only
         top, foot = rows[0], rows[-1]
-        for y in range(foot - max(2, round(.16 * (foot - top))), foot + 1):
+        start = foot - max(2, round(.16 * (foot - top)))
+        # each column's nearest ORIGINAL subject pixel above the foot band, taken before anything is removed: a foot
+        # pixel matching it is the product carrying on down (a grey body), not its shadow
+        body = [next((px[y * w + x] for y in range(start - 1, top - 1, -1) if mask[y * w + x]), None) for x in range(w)]
+        for y in range(start, foot + 1):
             for x in range(w):
-                if mask[y * w + x] and _shadowlike(px[y * w + x], refs[y * w + x]):
+                if mask[y * w + x] and _shadowlike(px[y * w + x], refs[y * w + x]) and not _continues(px[y * w + x], body[x]):
                     mask[y * w + x], shade[y * w + x] = 0, 255
     comps = _components(mask, w, h)
     if not comps:
