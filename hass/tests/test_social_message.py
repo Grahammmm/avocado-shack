@@ -100,6 +100,68 @@ class FlagTagTests(unittest.TestCase):
                 self.assertIsNone(classify_social(text))
 
 
+# Independent copy of Unicode 16.0 emoji-sequences.txt RGI_Emoji_Flag_Sequence (259 codes); not imported from production.
+UNICODE16_FLAGS = frozenset("""
+    AC AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV
+    BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CP CQ CR CU CV CW CX CY CZ DE DG DJ DK DM DO DZ EA EC EE EG
+    EH ER ES ET EU FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT
+    HU IC ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT
+    LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP
+    NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL
+    SM SN SO SR SS ST SV SX SY SZ TA TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM UN US UY UZ VA
+    VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW
+""".split())
+
+
+def pair(code):
+    return "".join(chr(0x1F1E6 + ord(c) - 65) for c in code)
+
+
+ALL_PAIRS = [chr(a) + chr(b) for a in range(65, 91) for b in range(65, 91)]
+
+
+class RegionalFlagTests(unittest.TestCase):
+    def test_every_unicode16_supported_flag_is_social(self):
+        self.assertEqual(len(UNICODE16_FLAGS), 259)
+        for code in sorted(UNICODE16_FLAGS):
+            with self.subTest(code=code):
+                self.assertEqual(classify_social(pair(code)), "social")
+        for code in ("US", "GB", "EU", "UN", "XK", "AC"):
+            self.assertEqual(classify_social(pair(code)), "social")
+
+    def test_all_other_regional_pairs_fall_through(self):
+        others = [c for c in ALL_PAIRS if c not in UNICODE16_FLAGS]
+        self.assertEqual(len(others), 417)
+        for code in others:
+            with self.subTest(code=code):
+                self.assertIsNone(classify_social(pair(code)))
+        for text in ("\U0001F1E6\U0001F1E6", "\U0001F1FF\U0001F1FF", "\U0001F1FA\U0001F1F0"):
+            self.assertIsNone(classify_social(text))
+
+    def test_regional_flags_require_whole_input_and_fixed_pairing(self):
+        us, gb, zz, aa = pair("US"), pair("GB"), pair("ZZ"), pair("AA")
+        for text in (pair("U")[:1], us + pair("U")[:1], us + zz, zz + us, us + zz + gb, us + " " + zz, zz + " hi",
+                     zz + "x", us + "x", pair("ZZ")[1:] + pair("US")):
+            with self.subTest(text=text):
+                self.assertIsNone(classify_social(text))
+        for text in (us + gb, us + " " + gb + us):
+            self.assertEqual(classify_social(text), "social")
+
+    def test_unknown_pair_inside_zwj_component_is_not_salvaged(self):
+        for text in (AVOCADO + "\u200d" + pair("ZZ"), pair("ZZ") + "\u200d" + AVOCADO, pair("US") + "\u200d" + pair("AA")):
+            with self.subTest(text=text):
+                self.assertIsNone(classify_social(text))
+        self.assertEqual(classify_social(FAMILY), "social")
+        self.assertEqual(classify_social(AVOCADO + "\u200d" + pair("US")), "social")
+
+    def test_other_emoji_phrase_and_near_contracts_remain(self):
+        for text, want in (("thanks", "social"), (THUMB, "near"), (KEYCAP, "social"), (FLAG_ENG, "social"),
+                           ("\U0001F3F4", "social"), (THUMB_SKIN, "near"), (pair("US") * 5 + pair("GB") * 5, "social")):
+            with self.subTest(text=text):
+                self.assertEqual(classify_social(text), want)
+        self.assertIsNone(classify_social(pair("US") * 5 + pair("ZZ") + pair("GB")))
+
+
 class SocialConversationTests(H06TestCase):
     FIXED = "Nothing changed. Tell me what you'd like to change, or say help."
     def setUp(self):
@@ -162,6 +224,15 @@ class SocialConversationTests(H06TestCase):
                 self.replies()
                 self.assertEqual(self.interp.texts, [text])
                 self.assertEqual((self.approvals(), self.commits(), self.drafts()), (0, 0, drafts))
+
+    def test_unknown_region_pair_reaches_request_with_original_text(self):
+        self.social(pair("US"))
+        text = pair("ZZ")
+        drafts = self.drafts()
+        self.assertNotEqual(self.say(text), "social")
+        self.replies()
+        self.assertEqual(self.interp.texts, [text])
+        self.assertEqual((self.approvals(), self.commits(), self.drafts()), (0, 0, drafts))
 
     def test_control_bearing_social_lookalikes_reach_request_unchanged(self):
         for text in ("thank\x1cyou", AVOCADO + "\x1f", THUMB + "\x1e" + CHECKS[0]):
