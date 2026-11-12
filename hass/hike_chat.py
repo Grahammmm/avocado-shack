@@ -62,16 +62,18 @@ def limit_sentence(n: int) -> str:
 
 
 def _route_for(args, routes) -> dict | None:
-    """The saved route the call names (trailId) or whose title starts the meeting point; None when neither."""
+    """The saved route the call names (trailId), else the one whose title is the meeting point or its longest space-bounded
+    prefix (exact first, then longest folded title; first wins a tie); None when none."""
     routes = routes or {}
     if isinstance(args.get("trailId"), str) and isinstance(routes.get(args["trailId"]), dict):
         return routes[args["trailId"]]
     meet = _fold(args.get("meetingPoint") or "")
+    best, best_len = None, 0
     for route in routes.values():
         title = _fold(route.get("title") or "") if isinstance(route, dict) else ""
-        if title and (meet == title or meet.startswith(title + " ")):
-            return route
-    return None
+        if title and (meet == title or meet.startswith(title + " ")) and len(title) > best_len:
+            best, best_len = route, len(title)
+    return best
 
 
 def build_title(title, meeting_point):
