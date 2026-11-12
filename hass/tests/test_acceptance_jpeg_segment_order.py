@@ -85,6 +85,24 @@ class JpegSegmentOrder(unittest.TestCase):
         self.assertTrue(ar._image_info(b"\xff\xd8" + seg(0xC0, b"\x08\x00"))[3])
         self.assertIn("picture carries metadata", problems(base + b"\xff\xfe\xff\xffxx"))
 
+    def test_marker_fill_bytes_after_sof_are_skipped(self):
+        for fill in (b"\xff", b"\xff\xff\xff"):
+            clean = b"\xff\xd8" + APP0 + DQT + SOF + fill + SOS
+            self.assertEqual(ar._image_info(clean), ("jpeg", 16, 16, []), fill)
+            self.assertEqual(problems(clean), [], fill)
+            between = b"\xff\xd8" + APP0 + DQT + SOF + fill + DQT + fill + SOS  # fill before and after another segment
+            self.assertEqual(ar._image_info(between), ("jpeg", 16, 16, []), fill)
+            marked = b"\xff\xd8" + APP0 + DQT + SOF + fill + seg(0xFE, b"x") + fill + SOS
+            self.assertEqual(ar._image_info(marked), ("jpeg", 16, 16, ["segment-fe"]), fill)
+            self.assertEqual(problems(marked), ["picture carries metadata"], fill)
+            gps = b"\xff\xd8" + APP0 + DQT + SOF + fill + exif([0x8825]) + SOS
+            self.assertEqual(ar._image_info(gps), ("jpeg", 16, 16, ["exif-gps"]), fill)
+
+    def test_fill_bytes_with_nothing_after_are_not_false_clean(self):
+        base = b"\xff\xd8" + DQT + SOF
+        for tail in (b"\xff\xff\xff\xff", b"\xff\xff\xff\xff\xff", b"\xff\xff\xff\xff\xff\xff\xff\xff"):  # 4+ bytes, as the loop's own length floor
+            self.assertTrue(ar._image_info(base + tail)[3], tail)
+
     def test_post_sof_metadata_gives_bad_picture(self):
         self.assertTrue(problems(jpeg(after=[seg(0xFE, b"x")])))
 

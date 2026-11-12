@@ -521,6 +521,8 @@ def _image_info(data):
         i, w, h, meta, framed = 2, 0, 0, [], False
         while i + 4 <= len(data):
             if data[i] != 0xFF: meta.append("segment-bad"); break  # not a marker: never trusted as clean
+            while data[i + 1] == 0xFF and i + 4 <= len(data): i += 1  # legal FF fill bytes before a marker are not the marker
+            if i + 4 > len(data) or data[i + 1] == 0xFF: meta.append("segment-bad"); break  # only fill left: truncated
             marker, n = data[i + 1], int.from_bytes(data[i + 2:i + 4], "big")
             if marker == 0xDA: break  # entropy-coded data follows: stop before it
             if n < 2 or i + 2 + n > len(data): meta.append("segment-bad"); break  # impossible or truncated length
