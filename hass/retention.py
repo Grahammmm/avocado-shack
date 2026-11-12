@@ -10,7 +10,8 @@ webOrphans: web copies whose original is gone (counted, never dated).
 Zone-less or malformed times, and backup stamps that are no real calendar time, count nowhere. No ids, text or file
 names print. SQLite opens mode=ro; nothing is created or written; the owner picks the period (owner action 4). Exit 1:
 a store is missing or unreadable (its keys say "unavailable"); exit 2, before anything opens: bad usage (incl. a
---days reaching before year 1 from --now), or a missing/symlinked dir or a symlinked or non-regular database; else 0.
+--days reaching before year 1 from --now), a missing dir, a dir that is or sits below a symlink, or a symlinked or
+non-regular database; else 0.
 """
 import argparse, contextlib, json, os, sqlite3, stat, sys  # noqa: E401
 from datetime import datetime, timedelta, timezone
@@ -107,9 +108,17 @@ def _backups(folder: Path, cutoff) -> dict:
     return _tally(cutoff, items, ("complete", "incomplete"))
 
 def _dir(raw, what):
+    """An optional root as given, after every component of it is lstat'd in spelling order: a link (direct, intermediate or
+    dangling), a missing or a non-directory component is Unsafe. A static check only; no path is resolved to accept it."""
     if raw is None: return None
-    if Path(raw).is_symlink() or not Path(raw).is_dir(): raise Unsafe(f"{what} must be an existing dir, not a symlink")
-    return Path(raw)
+    path = Path(raw)
+    here = Path(path.anchor) if path.is_absolute() else Path(os.getcwd())  # cwd is already a real path
+    try:
+        for part in path.parts[1 if path.is_absolute() else 0:]:
+            if part == "..": here = here.parent  # every component so far is a real dir, so this is the true parent
+            elif not stat.S_ISDIR(os.lstat(here := here / part).st_mode): raise OSError  # a link or file is no dir
+    except (OSError, ValueError): raise Unsafe(f"{what} must be an existing dir, not a symlink") from None
+    return path
 
 def report(state, days: int, media=None, backups=None, now=None) -> dict:
     """The report dict; raises Unsafe before opening anything."""
