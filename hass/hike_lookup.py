@@ -577,11 +577,27 @@ def elevation_request(points) -> dict:
 def elevations_from(body, count):
     """Metres for each sample, in order, or None when the answer is incomplete or unreadable."""
     try:
-        samples = sorted(body["samples"], key=lambda s: int(s["locationId"]))
-        values = [float(s["value"]) for s in samples]
+        samples = body["samples"]
+        if len(samples) != count:
+            return None
+        values = [None] * count
+        for s in samples:
+            i = _sample_position(s["locationId"])
+            if i is None or i >= count or values[i] is not None:
+                return None
+            values[i] = float(s["value"])
     except (KeyError, TypeError, ValueError, OverflowError):
         return None
-    return values if len(values) == count and all(math.isfinite(v) for v in values) else None
+    return values if all(math.isfinite(v) for v in values) else None
+
+
+def _sample_position(raw):
+    """A locationId as a route position: a non-bool int or ASCII digits only; anything else is None."""
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return raw if raw >= 0 else None
+    if isinstance(raw, str) and raw.isascii() and raw.isdigit():
+        return int(raw)
+    return None
 
 
 def climb_m(z, shape):
