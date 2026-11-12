@@ -160,9 +160,10 @@ def rule_price_in_deal_only(slots, texts, ctx):
 
 # The deal as typed is one whole run of his clauses, never a piece found inside it. A text is cut into clauses at his
 # separators (commas, colons, brackets, a full stop, a dash); each clause loses its request words at the front, only as a
-# lead-in from the clause start made of a request verb, small words and the special's own words ('put', 'put the honey
+# lead-in from the clause start made of a request verb, small words and the special's own words ('put the honey
 # on special', 'change the honey special to', 'special:', 'this week only'; never his deal words before a later 'on
-# sale'), and the end date at the back ('until Friday'). What is left, from the first clause with words in it to the
+# sale'; a verb that starts the deal itself, 'Put two jars in your bag for $5', is his and stays), and the end date at
+# the back ('until Friday'). What is left, from the first clause with words in it to the
 # last, is the run. The special's own name may stand in that run as his label ('Strawberries 2 for $5', 'jam: 2 for
 # $5', '2 for $5 on the jam') or as words of the deal ('Free samples with any purchase'), so each text is read twice:
 # (1) with the name kept: this is always his deal, as it loses nothing he typed; (2) with the name also cut off as a
@@ -222,7 +223,7 @@ def _cutters(names, cut_name=True):
     name = r"(?:(?:the|our|my|this|that|new)\s+)*(?:" + "|".join(r"\s+".join(map(re.escape, n.split())) for n in names) + r")\b" if names else None
     fronts = [re.compile(lead + r"on\s+(?:special|sale)\b(?:\s+" + _JOIN + r"\b)?", re.I),
               re.compile(lead + _SPECIAL_WORD + r"(?:\s+" + _JOIN + r"\b|\s*$)", re.I),
-              re.compile(_VERBS + r"\b", re.I), re.compile(r"(?:" + _WHEN + r")\b", re.I)]
+              re.compile(r"(?:" + _WHEN + r")\b", re.I)]
     if name and cut_name:
         fronts.append(re.compile(name + r"(?:\s+" + _JOIN + r"\b)?", re.I))
     backs = [_DATE_TAIL] + ([re.compile(r"\s+(?:on|for)\s+" + name + r"$", re.I)] if name and cut_name else [])
@@ -471,6 +472,13 @@ def resolve_special(ctx, query):
     exact = [sp for sp in stored if sp.get("id") == text]
     if exact:
         return "one", exact[0], ""
+    # A title is stored plain text, not an instruction: 'All Purpose Flour' names a special even though 'all' is a bulk word.
+    # So an exact (whitespace/case-folded) title of a running or coming special is tried before bulk and generic words.
+    literal = [sp for sp in live if _folded(text) and _folded(sp.get("title", "")) == _folded(text)]
+    if len(literal) == 1:
+        return "one", literal[0], ""
+    if literal:
+        return "several", None, ask(literal)
     words = _words(text)
     if any(w in _ALL for w in words):
         pool = live
@@ -733,6 +741,7 @@ def _register() -> None:
     for rule_id, fn in RULES.items():
         dispatch.RULES.setdefault(rule_id, fn)
     dispatch.READ_ONLY.setdefault("specials.show", show_reply)
+    dispatch.READ_ONLY_LONG.add("specials.show")  # the complete list may run past the everyday length: nothing is cut or dropped
 
 
 _register()

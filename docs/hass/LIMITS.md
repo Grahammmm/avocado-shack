@@ -18,9 +18,15 @@ Plain answers to "why didn't that work?". Every number on this page is checked a
 
 - In live mode, only these changes go from chat to the website (HASS-LIVE-PLAN-1): hide or restore a product, edit a
   product's description or category (not its name), stock words, specials (no price), hikes with sign-up off (add, edit, cancel), a maker's
-  about text, and undo. Anything else (new items, product names, pictures, brands, producers, hiding or restoring a maker, maker places or links, club details, trail
-  facts, route ideas, sample hikes, prices, phone, address, shop hours or notice, the home page photo) is refused in plain
-  words and saved for Graham to do by hand.
+  about text, **a new product (HASS-LIVE-ADD-1, see the next item)**, and undo. Anything else (product names, pictures on a product that
+  is already there, a brand or producer of a product that is already there, hiding or restoring a maker, the place or link of a maker that is
+  already there, club details, trail facts, route ideas, sample hikes, prices, phone, address, shop hours or notice, the home page photo) is
+  refused in plain words and saved for Graham to do by hand.
+- **A new product goes live from chat (HASS-LIVE-ADD-1, G 2026-11-09), under these rules.** It comes with its own picture (a new
+  product cannot be added without one; a picture on a product that is already there stays private). Its brand, maker line, maker name
+  and town must be in your own words in this request: if one is not, Hass asks and drafts nothing, so nothing is ever filled in from a
+  guess. A new maker goes live only together with the new product that names it, with its name and its town; a maker's web link is
+  never put live from chat, and neither is a maker on its own. Every sentence rule below, the 10-record limit and undo still apply.
 - Sentences containing origin or organic claims, health claims, awards or endorsements, trail facts, prices or
   contact details cannot be added, removed, substituted or negated. Other sentences can change; undo is allowed.
 - A live change can touch at most **10** <!-- live_policy.MAX_RECORDS --> records.
@@ -82,6 +88,30 @@ Longer text is refused and nothing is changed; shorten it and send it again.
 - Changes to products, hikes, makers and routes are still undone one whole item at a time.
 - Weekly specials (the "This week's specials" box at the top of the page) are one saved detail: undoing an older specials change is refused if you changed the specials again after it. Undo the newer change first.
 - A special shows through its last day (Pacific) and never after, even if nobody removes it. At most 6 show on one day, each runs at most 31 days, and the title and deal line are at most 60 characters with no links, email addresses or phone numbers. Only the deal line may have a price, and it appears exactly as typed.
+
+## Several owners
+
+- With `ownerChats` set in the config, two or more people can be owners, each in their own one-to-one chat (up to eight chats; how to
+  set it up is in the connection guide, step 6). Without it there is one owner chat, as before.
+- A message counts only when it comes from an owner's own address in that owner's own chat. An owner's number in another owner's chat
+  is ignored, like a stranger.
+- Every answer, picture and question goes to the chat the request came from. G's separate `gChat` stays text only and may never be
+  an owner chat.
+- A `yes` or `no` only reaches a change that the same chat asked for. If one owner tries the other's code, Hass says the change
+  belongs to someone else and changes nothing.
+- There is one website, so one change is open at a time. While one owner has a change waiting for a yes, waiting for details, being
+  saved or going on the website, the other owner's request, photo or undo gets a plain "has a change waiting" answer and nothing is
+  drafted. It works again once the first is saved, cancelled or has timed out.
+- `history`, `status` and `undo` look at the whole site, so they say whose change it was ("Mike's change", "Your change"). A plain
+  `undo` never takes back the other owner's change: Hass says whose it was and how to ask for it (`undo` and its code), and that is
+  still only a proposal until the same owner replies `yes`.
+- Pause and resume, the daily limit on new requests, the daily limit on live changes and the STOP file are shared by all owners.
+  Open requests and questions are kept for each chat separately.
+- The Mac forwarder takes the same list (`ownerChats` in its own config) and reads, taps back and answers in every owner chat,
+  pictures included. Add the second chat to both the host settings and the forwarder config, and restart both. A forwarder that has
+  not been upgraded keeps the second owner's answers waiting (nothing is sent to the wrong chat, nothing is lost).
+- A change kept from before a second owner was added (everyone in one chat) can only be saved or cancelled by the person who asked
+  for it; the other person is told it is not theirs and nothing changes.
 
 ## Problems log (for Graham, not for Mike)
 

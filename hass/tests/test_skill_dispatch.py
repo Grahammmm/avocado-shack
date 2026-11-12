@@ -183,9 +183,14 @@ class SetPhrasesTests(SkillCase):
         self.registry = registry_of(toy("hike.add", "add a hike", slots, _plan_hike, **kw))
         self.conv = self.open()
 
-    def tearDown(self):
+    def setUp(self):
+        super().setUp()
+        # restore the hikes module's own wording afterwards: popping it for good made later modules in the same process
+        # (test_skill_hidden_route) see the generic "signup: False" line
+        patched = mock.patch.dict(dispatch.SET_PHRASES)
+        patched.start()
+        self.addCleanup(patched.stop)
         dispatch.SET_PHRASES.pop("hike.add", None)
-        super().tearDown()
 
     def propose_mill(self, **extra):
         slots = {k: v for k, v in MILL.items() if k != "difficulty"}
@@ -622,6 +627,22 @@ class QueuedCallsTests(SkillCase):
     """RETURN item 2: calls the owner has not finished are kept and asked one at a time, across answers, approvals and restarts."""
     THREE = "add the Mill hike, the Pine hike and the Ocean hike on Saturday"
 
+    def test_a_plain_read_only_skill_keeps_the_old_paths(self):  # AV1109-06: only READ_ONLY_LONG skills get the caption paths
+        look = toy("shop.look", "look at the shop", (), lambda s, c: [], edits=(), preview="none", approval="none",
+                   live_class="read-only", undo=Undo("none", "none"))
+        self.conv.dispatch.registry = registry_of(HIKE_ADD, look)
+        self.script("look and add", {"calls": [{"skill": "shop.look", "slots": {}}, {"skill": "hike.add", "slots": MILL}], "revises": None})
+        self.assertEqual(self.say("look and add"), "backlog")  # a read-only call in a batch is written down, as before
+        self.assertEqual(self.drafts(), [])
+        self.assertNotIn("shop.look", dispatch.READ_ONLY_LONG)
+        with mock.patch.dict(dispatch.READ_ONLY, {"shop.look": lambda s, c: "x" * 700}):
+            self.script("look", skill_reply("shop.look"))
+            with self.assertRaisesRegex(voice.VoiceError, "too long for one message"):  # an everyday answer may not run long
+                self.say("look")
+        self.assertIsNone(dispatch.Ctx(None, None, {}, [], None).site_dir)  # the old constructor still works
+        self.assertEqual(self.conv.dispatch._ctx(self.now, []).site_dir, self.repo.wt / "storefront-mockup")
+        self.nothing_written()
+
     def three(self):
         calls = [{"skill": "hike.add", "slots": {"title": f"{n} hike", "place": n, "day": SATURDAY}} for n in ("Mill", "Pine", "Ocean")]
         self.script(self.THREE, {"calls": calls, "revises": None})
@@ -759,6 +780,102 @@ class AgreementTests(SkillCase):
         self.assertEqual(self.replies(), ["Do you want to add a hike, or change an item's description?"])
         self.nothing_written()
         self.assertEqual([d for d in self.drafts() if d["state"] == "proposed"], [])
+
+
+class MultiCallAgreementTests(SkillCase):
+    SKILLS = (HIKE_ADD, DESCRIBE, STOCK)
+    TEXT = ("add the Mill Creek hike Saturday at 8am at Mill Creek trailhead, easy, "
+            "and the Pine hike at Pine; change the honey description to Big Sur honey")
+    QUESTION = "Do you want to add a hike, or change an item's description?"
+
+    def setUp(self):
+        super().setUp()
+        self.router.ranking = [("hike.add", 10.0), ("item.describe", 9.5), ("stock.set", 1.0)]
+        self.calls = {
+            "hike.add": {"skill": "hike.add", "slots": MILL},
+            "item.describe": {"skill": "item.describe", "slots": {
+                "product": "Big Sur Honey Company honey", "description": "Big Sur honey"}},
+            "stock.set": {"skill": "stock.set", "slots": {"level": "no"}},
+        }
+
+    def call_reply(self, names):
+        calls = [self.calls[n] for n in names]
+        if names.count("hike.add") > 1:
+            calls[-1] = {"skill": "hike.add", "slots": {**MILL, "title": "Pine hike", "place": "Pine"}}
+        return {"calls": calls, "revises": None}
+
+    def ask_for(self, names, pid=None):
+        self.script(self.TEXT, self.call_reply(names))
+        self.assertEqual(self.say(self.TEXT, pid=pid), "question")
+        self.assertEqual(self.replies(), [self.QUESTION])
+        self.assertIsNone(self.live()["skill"])
+        self.assertEqual(self.live()["ask"]["agree"], ["hike.add", "item.describe"])
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_multi_call_near_tie_missing_runner_up_asks(self):
+        self.ask_for(["hike.add", "stock.set"])
+
+    def test_repeated_leader_calls_do_not_settle_tie(self):
+        self.ask_for(["hike.add", "hike.add"])
+
+    def test_multi_call_including_both_leaders_proceeds(self):
+        # Reversed order plus a further call still includes both leading names.
+        self.script(self.TEXT, self.call_reply(["item.describe", "hike.add", "hike.add"]))
+        draft, _ = self.propose(self.TEXT)
+        self.assertEqual(len(json.loads(draft["ops_json"])), 3)
+        self.nothing_written()
+        self.assertEqual(self.say(f"yes {draft['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+
+    def test_third_pick_does_not_hide_runner_up_label(self):
+        self.ask_for(["stock.set", "hike.add"])
+
+    def test_unrelated_single_pick_offers_both_leaders(self):
+        self.script(self.TEXT, self.calls["stock.set"])
+        self.assertEqual(self.say(self.TEXT), "question")
+        self.assertEqual(self.replies(), [self.QUESTION])
+        self.assertEqual(self.live()["ask"]["agree"], ["hike.add", "item.describe"])
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_multicall_tie_boundary_and_owner_choice(self):
+        self.router.ranking[1] = ("item.describe", 9.0)
+        self.ask_for(["hike.add", "hike.add"])
+        self.conv = self.open()  # offered names survive reopening the Conversation
+        self.script("the hikes please", self.call_reply(["hike.add", "hike.add"]))
+        draft, _ = self.propose("the hikes please")
+        self.assertEqual(len(json.loads(draft["ops_json"])), 2)
+        self.nothing_written()
+
+    def test_just_outside_tie_proceeds(self):
+        self.router.ranking[1] = ("item.describe", 8.99)
+        self.script(self.TEXT, self.call_reply(["hike.add", "hike.add"]))
+        draft, _ = self.propose(self.TEXT)
+        self.assertEqual(len(json.loads(draft["ops_json"])), 2)
+        self.nothing_written()
+
+    def test_duplicate_message_does_not_count_as_owner_choice(self):
+        self.ask_for(["hike.add", "hike.add"], pid="tie-message")
+        before = self.live()
+        self.assertEqual(self.say(self.TEXT, pid="tie-message"), "duplicate")
+        self.assertEqual(self.replies(), [])
+        self.assertEqual(self.live(), before)
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_cancelled_or_expired_choice_does_not_settle_a_new_tie(self):
+        self.ask_for(["hike.add", "hike.add"])
+        self.assertEqual(self.say("no"), "no-target")
+        self.replies()
+        self.assertIsNone(self.live())
+        self.ask_for(["hike.add", "hike.add"])
+        self.now += timedelta(minutes=dispatch.openreq.TTL_MINUTES, seconds=1)
+        self.ask_for(["hike.add", "hike.add"])
+
+    def test_stale_offered_names_do_not_authorize_an_unoffered_pick(self):
+        self.ask_for(["hike.add", "hike.add"])
+        self.ask_for(["stock.set", "hike.add"])
 
 
 class RouterContractTests(SkillCase):

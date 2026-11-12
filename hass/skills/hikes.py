@@ -55,6 +55,7 @@ R_FAR = "That is more than a year away. Could you check the day?"
 R_WHAT_MOVE = "What day or time should it move to?"
 R_SIGNUP_NOT_SAID = "You didn't say guests can sign up, so I haven't turned it on. Should guests be able to sign up?"
 R_SPOTS_NOT_SAID = "You didn't say how many can come, so I haven't set a limit. How many can come, or is there no limit?"
+R_CAP_MAX = "The most I can set is 6."  # G 2026-11-08 "available spots (max 6)"; decision 2 stays open, so 6 is the ceiling
 R_NO_RECAP_YET = "Say how it went first, then I can write the post."
 
 R_SIGNUP_UNCLEAR = "I'm not sure if you want guests to be able to sign up. Should they?"
@@ -62,7 +63,8 @@ R_SIGNUP_UNCLEAR = "I'm not sure if you want guests to be able to sign up. Shoul
 _SIGNUP_WORDS = re.compile(r"\b(sign ?-?ups?|signing up|rsvps?|register(?:ed|ing)?|reserv\w*|how many can|people can (?:join|come|sign))\b", re.I)
 # only words about SIGNING UP decide its direction: "limited parking", "no space for dogs" or "a seat cushion" say nothing about it;
 # a guest limit ("15 spots", "max 12") is read by _said_limits and counts as the owner asking for sign-up
-_PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:person|head|lb|pound|oz|ounce|kg|dozen)\b", re.I)
+# "per person"/"per head" is a price only right after a number ("12 per person"); "Bring water per person" is packing advice
+_PRICE = re.compile(r"\$\s*\d|\b\d+(?:\.\d\d)?\s*(?:dollars?|bucks|usd)\b|\bper\s+(?:lb|pound|oz|ounce|kg|dozen)\b|\b\d+(?:\.\d+)?\s+per\s+(?:person|head)\b", re.I)
 _PLACE_TAIL = re.compile(r"(?:^|\s+)(?:trail ?head|gate|entrance|parking(?:\s+lot)?|lot|staging area|picnic area)\s*$", re.I)
 _PLACE_HEAD = re.compile(r"^(?:the|at|by)\s+", re.I)
 _TAG_RE = re.compile(r"[#@\uFF03\uFF20\uFE5F\uFE6B]\w")  # as social_draft: no hashtag or account in free text
@@ -139,6 +141,22 @@ def _name(event) -> str:
 
 def _text(value):
     return value.strip() if isinstance(value, str) else value
+
+
+def _owner_case(value, ctx):
+    """RF2345-9: the difficulty as the owner wrote it. The interpreter may have capitalised it (``EASY``); when the same phrase
+    (case and ordinary whitespace aside, whole words only) is in the owner's own texts, return his spelling of it: the last
+    occurrence in the latest message that has one. Otherwise ``value`` unchanged."""
+    words = value.split() if isinstance(value, str) else []
+    if not words:
+        return value
+    pattern = re.compile(r"(?<!\w)" + r"\s+".join(re.escape(w) for w in words) + r"(?!\w)", re.IGNORECASE)
+    for text in reversed(list(getattr(ctx, "texts", ()) or ())):
+        if isinstance(text, str):
+            hits = list(pattern.finditer(text))
+            if hits:
+                return re.sub(r"\s+", " ", hits[-1].group(0))
+    return value
 
 
 def _given(slots, name):
@@ -311,7 +329,8 @@ def _said_limits(said):
     people") or after a limit word that is itself followed by a guest noun or nothing ("max 12", "up to 20 people"), in
     an affirmative clause. A date, a clock time, a year, a quantity of something else ("only 2 liters of water", "at
     most 2 apples") or a rejected number ("not 12 spots, 20 spots") never counts; the latest instruction wins, so
-    "12 spots" then "actually make it 20 spots" leaves only 20, and a later "no limit" leaves none."""
+    "12 spots" then "actually make it 20 spots" leaves only 20, and a later "no limit" leaves none. Two different counts
+    in the latest instruction ("15 spots or 20 spots") are both kept: the result has several values, which is unresolved."""
     effective = set()
     for clause in _clauses(said):
         if _NO_LIMIT.search(clause):
@@ -329,7 +348,7 @@ def _said_limits(said):
                 if pat is _LIMIT_AFTER or _LIMIT_TAIL.match(text[m.end():]):
                     hits.append((m.start(), int(m.group(1))))
         if hits:
-            effective = {max(hits)[1]}
+            effective = {value for _, value in hits}  # alternatives stay alternatives: no first, last, min or max is picked
     return effective
 
 
@@ -350,6 +369,18 @@ def _said_unlimited(said):
         elif _said_limits(clause):
             state = False
     return state
+
+
+def _off_answered_after_limit(texts):
+    """RF2345-10: whether his latest sign-up-off instruction is in a LATER message than any guest limit he stated (the answer
+    to \"Should they?\" after \"3 spots\"). Off and a limit in the same message stay contradictory: that is still asked."""
+    last_limit = last_off = -1
+    for i, text in enumerate(t for t in (texts or ()) if isinstance(t, str)):
+        if _said_limits(text):
+            last_limit = i
+        if _signup_state(text) is False:
+            last_off = i
+    return last_off > last_limit
 
 
 def rule_no_invention(slots, texts, ctx):
@@ -373,19 +404,60 @@ def rule_no_invention(slots, texts, ctx):
     elif state is True or (signup is False and "hike" in slots and state is None and not limits):
         return R_SIGNUP_UNCLEAR, "other"  # he said on and the slots say off (or nothing), or an edit turns sign-up off without a word
     if cap is not None or no_limit:
+        if state is False and "hike" not in slots and _off_answered_after_limit(texts):
+            return None  # an add: he was asked about sign-up after stating spots and said off, so the kept spots are not written
         if state is False:
             return R_SIGNUP_UNCLEAR, "other"
-        if cap is not None and (no_limit or cap not in limits):
+        if cap is not None and (no_limit or limits != {cap}):  # alternatives ("15 spots or 20 spots") support neither: one unequivocal count only
             return R_SPOTS_NOT_SAID, "other"
         if no_limit and cap is None and not _said_unlimited(said):  # latest word wins: a withdrawn or negated "no limit" is not said
             return R_SPOTS_NOT_SAID, "other"
     return None
 
 
+CAPACITY_CEILING = 6
+PAGE_LIMIT_NOTE = "Page will say: Limited to {n} people · availability unconfirmed; ask at the Shack"  # the limit only: never "N spots left"
+
+
+def _count(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def rule_capacity_ceiling(slots, texts, ctx):
+    """The most the skill will set is 6 (after the no-invention rule, which keeps priority). An add writes a limit only with
+    sign-up on; an edit writes any limit it is given. Zero, negative and non-number values are the editor's to refuse."""
+    cap = _count(slots.get("capacity"))
+    if cap is None or cap <= CAPACITY_CEILING:
+        return None
+    if "hike" not in slots and slots.get("signup") is not True:
+        return None  # hike.add discards a limit when sign-up is not on
+    return R_CAP_MAX, "other"
+
+
+def default_capacity(slots, ctx):
+    """6 when sign-up is explicitly turned on with no number and no "no limit" (his or the slots'), else None. Called only
+    AFTER the rules passed, so a model-written 6 he did not say was already refused. With his words known they must show a
+    sign-up instruction and no count or "no limit" the model left out (those stay with the editor's question)."""
+    if slots.get("signup") is not True or slots.get("capacity") is not None or slots.get("no_limit") is True:
+        return None
+    said = "\n".join(t for t in (getattr(ctx, "texts", ()) or ()) if isinstance(t, str))
+    if said.strip() and (_signup_state(said) is not True or _said_limits(said) or _said_unlimited(said)):
+        return None
+    return CAPACITY_CEILING
+
+
+def _with_default(slots, ctx):
+    slots = dict(slots)
+    cap = default_capacity(slots, ctx)
+    if cap is not None:
+        slots["capacity"] = cap
+    return slots
+
+
 RULES = {"no-price": rule_no_price, "hike-in-future": rule_in_future, "hike-twin": rule_twin,
          "hike-repeat-twin": rule_repeat_twin, "hike-scheduled": rule_scheduled, "hike-cancel-state": rule_cancel_state,
          "hike-already-then": rule_already_then, "hike-recap-state": rule_recap_state,
-         "hike-no-invention": rule_no_invention}
+         "hike-no-invention": rule_no_invention, "hike-capacity-ceiling": rule_capacity_ceiling}
 
 
 def _guard(skill, slots, ctx):
@@ -395,6 +467,29 @@ def _guard(skill, slots, ctx):
         hit = RULES[rule_id](slots, texts, ctx)
         if hit:
             raise Refusal(hit[0])
+
+
+class SignupQuestion(Refusal):
+    """A Refusal that is one question the owner's short answer fixes: the dispatcher keeps the request open (kind ``question``)."""
+
+    kind = "question"
+
+
+def _guard_spots_not_lost(slots, ctx):
+    """hike.add only: the owner's words state a guest limit (\"3 spots\") but sign-up is off or unsaid, so ``_signup_args``
+    would silently drop the count, whether the call copied the count into its capacity slot or left that slot out. Ask
+    whether guests should be able to sign up; never turn it on, pick one of several counts or write a number. An explicit
+    sign-up instruction in the owner's words (either way) is left to the no-invention rule, and unknown owner words keep the
+    plain slot-only behaviour. In a message that carries several calls (``ctx.multi_call``) the owner's words are shared by
+    every call, so a count with no capacity slot cannot be tied to this hike (\"4 spots or 6 spots, and a Pine hike\"): there
+    only a limit the call itself carries counts."""
+    if slots.get("signup") is True:
+        return
+    if _count(slots.get("capacity")) is None and getattr(ctx, "multi_call", False):
+        return
+    said = "\n".join(t for t in (getattr(ctx, "texts", ()) or ()) if isinstance(t, str))
+    if said.strip() and _signup_state(said) is None and _said_limits(said):
+        raise SignupQuestion(R_SIGNUP_UNCLEAR)
 
 
 # -- slot helpers --------------------------------------------------------------------------------------------------
@@ -425,6 +520,13 @@ def add_set_phrases(slots, ctx) -> list:
     """What hike.add chose for the owner, as the plain phrases of the one ``I set:`` line (D8): ``["sign-up off", "the title
     “Mill Creek hike”"]``. ``slots`` are the slots as the owner gave them, BEFORE any default is applied; a slot he gave is
     never listed. Empty when nothing was chosen for him. (The dispatcher's generic default text would read "signup: False".)"""
+    out = _add_defaults(slots, ctx)
+    if out and default_capacity(slots, ctx) is not None:
+        out.append(f"{CAPACITY_CEILING} spots")  # with no other default the skill's notes carry this line instead
+    return out
+
+
+def _add_defaults(slots, ctx) -> list:
     out = []
     if slots.get("signup") is None:
         out.append("sign-up off")  # plan_add writes rsvpEnabled False when sign-up was not said
@@ -442,6 +544,40 @@ def set_line(phrases) -> str | None:
 
 
 SET_PHRASES = {"hike.add": add_set_phrases}  # skill name -> fn(slots as the owner gave them, ctx) -> phrases; consumed by the kit and the dispatcher
+
+
+PAGE_ONLY_NOTE = "Cancelling changes the hike page. Nobody is notified."  # RF2315-12: said before yes, whatever the sign-up state or guest count
+
+
+def notes(name, slots, ctx) -> dict:
+    """Lines shown beside a hike draft: for hike.cancel, that it changes the page and tells nobody; for hike.add / hike.edit,
+    ``I set: 6 spots.`` when the code supplied the six (only when no other default already carries it in SET_PHRASES), and the
+    capacity-only page note for the hike's own limit."""
+    out = {"say": [], "set": [], "warn": []}
+    if name == "hike.cancel":
+        out["say"].append(PAGE_ONLY_NOTE)  # fixed text: reads no guest data, files or settings
+        return out
+    if name not in ("hike.add", "hike.edit"):
+        return out
+    given = dict(slots)
+    derived = default_capacity(given, ctx)
+    limit = derived if derived is not None else _count(given.get("capacity"))
+    if name == "hike.add":
+        on = given.get("signup") is True
+        if derived is not None and not _add_defaults(given, ctx):
+            out["set"].append(set_line([f"{CAPACITY_CEILING} spots"]))
+    else:
+        event = _event(ctx, given.get("hike")) or {}
+        on = given["signup"] if isinstance(given.get("signup"), bool) else event.get("rsvpEnabled") is True
+        if derived is not None:
+            out["set"].append(set_line([f"{CAPACITY_CEILING} spots"]))
+        if limit is None:
+            limit = _count(event.get("capacity"))
+    if given.get("no_limit") is True:
+        limit = None
+    if on and limit is not None and limit > 0:
+        out["say"].append(PAGE_LIMIT_NOTE.format(n=limit))
+    return out
 
 
 def _signup_args(slots):
@@ -464,19 +600,26 @@ def plan_add(slots, ctx):
         slots["title"] = place_title(slots, ctx)
     _need(ADD, slots, "title", "day", "clock", "meeting_point")
     _guard(ADD, slots, ctx)
+    _guard_spots_not_lost(slots, ctx)
+    slots = _with_default(slots, ctx)
     args = {"title": _text(slots["title"]), "date": slots["day"], "time": slots["clock"],
             "meetingPoint": _text(slots["meeting_point"]), **_signup_args(slots)}
     if _given(slots, "trail"):
         args["trailId"] = slots["trail"]
     args.update({ARG.get(f, f): _text(slots[f]) for f in TEXT_SLOTS if _given(slots, f)})
+    if "difficulty" in args:
+        args["difficulty"] = _owner_case(args["difficulty"], ctx)
     return [{"op": "hike.create", "args": args}]
 
 
 def plan_edit(slots, ctx):
     _need(EDIT, slots, "hike")
     _guard(EDIT, slots, ctx)
+    slots = _with_default(slots, ctx)
     args = {"id": slots["hike"]}
     args.update({ARG.get(f, f): _text(slots[f]) for f in EDIT_TEXT_SLOTS if _given(slots, f)})
+    if "difficulty" in args:
+        args["difficulty"] = _owner_case(args["difficulty"], ctx)
     if isinstance(slots.get("signup"), bool):
         args["rsvpEnabled"] = slots["signup"]
     if isinstance(slots.get("capacity"), int) and not isinstance(slots.get("capacity"), bool):
@@ -557,7 +700,7 @@ ADD = Skill(
            Slot("signup", "bool", False, default=False),
            Slot("capacity", "int"), Slot("no_limit", "bool"), Slot("trail", "route_ref"),
            *(_text_slot(f) for f in TEXT_SLOTS)),
-    rules=("hike-in-future", "hike-twin", "hike-no-invention", "no-price"),
+    rules=("hike-in-future", "hike-twin", "hike-no-invention", "hike-capacity-ceiling", "no-price"),
     plan=plan_add,
     edits=((_COMMUNITY, "events[id]"), *_SITE),
     side_effects=("none",), preview="hike", approval="owner-yes", live_class="private-only",
@@ -583,7 +726,7 @@ EDIT = Skill(
     ),
     slots=(_HIKE, Slot("title", "text", limit=_TITLE_LIMIT), _text_slot("meeting_point"), *(_text_slot(f) for f in TEXT_SLOTS),
            Slot("signup", "bool"), Slot("capacity", "int"), Slot("no_limit", "bool")),
-    rules=("hike-scheduled", "hike-no-invention", "no-price"),
+    rules=("hike-scheduled", "hike-no-invention", "hike-capacity-ceiling", "no-price"),
     plan=plan_edit,
     edits=tuple((_COMMUNITY, f"events[id].{ARG.get(f, f)}") for f in (*EDIT_TEXT_SLOTS, "rsvpEnabled", "capacity")) + _SITE,
     side_effects=("none",), preview="hike", approval="owner-yes", live_class="private-only",

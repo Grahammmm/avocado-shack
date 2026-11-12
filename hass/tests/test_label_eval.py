@@ -1,6 +1,7 @@
 """FAV-02 tests: label_eval scores LabelReader replies offline; --live is exercised only with a fake transport."""
 
-import base64, contextlib, io, json, stat, tempfile, unittest  # noqa: E401
+import base64, contextlib, io, json, os, stat, tempfile, unittest  # noqa: E401
+from unittest import mock
 from pathlib import Path
 
 from hass import label_eval as ev
@@ -146,6 +147,165 @@ class LiveTests(Base):
                 self.assertEqual((code, stdout, self.calls, out.exists()), (2, "", [], False))
                 self.assertTrue(err.startswith("a photo is"), err)
 
+    def changing_fstat(self, path, content):
+        """Real fstat result, returned after the file's contents were replaced (deterministic changed-after-fstat)."""
+        real = ev.os.fstat
+
+        def fake(fd):
+            info = real(fd)
+            path.write_bytes(content)
+            return info
+        return mock.patch.object(ev.os, "fstat", fake)
+
+    def read_photo(self, name):
+        fd = os.open(self.photos, os.O_RDONLY | os.O_DIRECTORY)
+        try: return ev._read_photo(fd, name)
+        finally: os.close(fd)
+
+    def test_read_photo_rechecks_empty_bytes_after_stat(self):
+        path = self.photos / "a.jpg"
+        path.write_bytes(b"abc")
+        with self.changing_fstat(path, b""), self.assertRaisesRegex(ev.EvalError, "a photo is not a usable regular file"):
+            self.read_photo("a.jpg")
+
+    def test_read_photo_rechecks_oversize_bytes_after_stat(self):
+        path = self.photos / "a.jpg"
+        path.write_bytes(b"abc")
+        with self.changing_fstat(path, b"x" * (ev.MAX_PHOTO + 1)), self.assertRaisesRegex(ev.EvalError, "a photo is not a usable regular file"):
+            self.read_photo("a.jpg")
+
+    def test_read_photo_actual_length_boundaries(self):
+        path = self.photos / "a.jpg"
+        for content in (b"x", b"y" * ev.MAX_PHOTO):
+            path.write_bytes(content)
+            self.assertEqual(self.read_photo("a.jpg"), content)
+        for content in (b"", b"z" * (ev.MAX_PHOTO + 1)):
+            path.write_bytes(content)
+            with self.assertRaises(ev.EvalError): self.read_photo("a.jpg")
+        path.write_bytes(b"abcdef")
+        with self.changing_fstat(path, b"ab"):
+            self.assertEqual(self.read_photo("a.jpg"), b"ab")  # shrinking to an allowed length is admitted
+
+    def test_live_changed_last_photo_sends_nothing_and_is_private(self):
+        out, last = self.tmp / "replies.jsonl", self.photos / self.cases[-1]["photo"]
+        for content in (b"", b"x" * (ev.MAX_PHOTO + 1)):
+            with self.subTest(size=len(content)), self.changing_fstat_for(last, content):
+                code, stdout, err = self.live(out)
+                self.assertEqual((code, stdout, err, self.calls), (2, "", "a photo is not a usable regular file", []))
+                self.assertNotIn(self.cases[-1]["photo"], err)
+                self.assertEqual(sorted(p.name for p in self.tmp.iterdir()), ["photos"])
+                last.write_bytes(b"\xff\xd8synthetic-9")
+
+    def changing_fstat_for(self, path, content):
+        real = ev.os.fstat
+
+        def fake(fd):
+            info = real(fd)
+            if os.path.samestat(info, path.stat()): path.write_bytes(content)
+            return info
+        return mock.patch.object(ev.os, "fstat", fake)
+
+    def faults(self, name, **faults):
+        """RF0645-13: inject faults scoped to the real descriptor opened for photo ``name`` (fstat, fdopen, read, exit, close);
+        the real stream and the real close always run first. Returns a record of the fd, read sizes and close attempts."""
+        rec, real = {"fd": None, "reads": [], "closes": []}, {k: getattr(ev.os, k) for k in ("open", "fstat", "close", "fdopen")}
+        mine = lambda fd: rec["fd"] is not None and fd == rec["fd"]  # noqa: E731
+
+        def open_(path, *a, **kw):
+            fd = real["open"](path, *a, **kw)
+            if path == name: rec["fd"], rec["closes"] = fd, []
+            return fd
+
+        def fstat(fd):
+            if mine(fd) and "fstat" in faults: raise faults["fstat"]
+            return real["fstat"](fd)
+
+        def close(fd):
+            if mine(fd): rec["closes"].append(fd)
+            real["close"](fd)
+            if mine(fd) and "close" in faults: raise faults["close"]
+
+        class Stream:
+            def __init__(self, fh): self.fh = fh
+            def __enter__(self): return self
+            def read(self, n):
+                rec["reads"].append(n)
+                if "read" in faults: raise faults["read"]
+                return self.fh.read(n)
+            def __exit__(self, *exc):
+                self.fh.close()
+                if "exit" in faults: raise faults["exit"]
+
+        def fdopen(fd, *a, **kw):
+            if mine(fd) and "fdopen" in faults: raise faults["fdopen"]
+            return Stream(real["fdopen"](fd, *a, **kw)) if mine(fd) else real["fdopen"](fd, *a, **kw)
+        stack = contextlib.ExitStack()
+        for key, fn in (("open", open_), ("fstat", fstat), ("close", close), ("fdopen", fdopen)): stack.enter_context(mock.patch.object(ev.os, key, fn))
+        return stack, rec
+
+    def refused(self, name, **faults):
+        """Run the real helper on ``name`` with the faults; assert the exact private refusal and one close of the acquired fd."""
+        stack, rec = self.faults(name, **faults)
+        with stack, self.assertRaises(ev.EvalError) as caught: self.read_photo(name)
+        self.assertEqual(str(caught.exception), "a photo is not a usable regular file")
+        self.assertTrue(caught.exception.__suppress_context__ and caught.exception.__cause__ is None)
+        self.assertNotIn(CANARY, repr(caught.exception))
+        self.assertEqual(rec["closes"], [rec["fd"]])
+        return rec
+
+    def canary(self): return OSError(5, f"{CANARY} {self.photos}")
+
+    def test_photo_post_open_fstat_error_is_private(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        self.assertEqual(self.refused("a.jpg", fstat=self.canary())["reads"], [])
+
+    def test_photo_stream_creation_and_read_errors_are_private(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        self.assertEqual(self.refused("a.jpg", fdopen=self.canary())["reads"], [])
+        self.assertEqual(self.refused("a.jpg", read=self.canary())["reads"], [ev.MAX_PHOTO + 1])
+
+    def test_photo_context_exit_and_close_errors_are_private(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        self.assertEqual(self.refused("a.jpg", exit=self.canary())["reads"], [ev.MAX_PHOTO + 1])
+        self.assertEqual(self.refused("a.jpg", close=self.canary())["reads"], [ev.MAX_PHOTO + 1])
+        (self.photos / "b.jpg").write_bytes(b"")  # an existing refusal still reads the same when cleanup succeeds
+        self.assertEqual(self.refused("b.jpg", close=self.canary())["reads"], [])
+        with self.assertRaisesRegex(ev.EvalError, "^a photo is not a usable regular file$"): self.read_photo("b.jpg")
+
+    def test_main_last_photo_io_failure_prevents_all_calls_and_output(self):
+        out, last = self.tmp / "replies.jsonl", self.cases[-1]["photo"]
+        before = {p.name: (p.read_bytes(), stat.S_IMODE(p.stat().st_mode)) for p in self.photos.iterdir()}
+        for label, fault in (("fstat", {"fstat": self.canary()}), ("read", {"read": self.canary()}), ("close", {"close": self.canary()})):
+            with self.subTest(label):
+                stack, rec = self.faults(last, **fault)
+                with stack: result = self.live(out)
+                self.assertEqual(result, (2, "", "a photo is not a usable regular file"))
+                self.assertEqual((self.calls, out.exists(), sorted(p.name for p in self.tmp.iterdir()), rec["closes"]), ([], False, ["photos"], [rec["fd"]]))
+                self.assertEqual({p.name: (p.read_bytes(), stat.S_IMODE(p.stat().st_mode)) for p in self.photos.iterdir()}, before)
+
+    def test_existing_output_refusal_precedes_photo_fault(self):
+        out, last = self.tmp / "taken.jsonl", self.cases[-1]["photo"]
+        out.write_text("theirs\n")
+        stack, rec = self.faults(last, fstat=self.canary())
+        with stack: result = self.live(out)
+        self.assertEqual((result, self.calls, out.read_text(), rec["fd"]), ((2, "", "--out already exists"), [], "theirs\n", None))
+
+    def test_post_open_non_io_exceptions_are_not_swallowed(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        for exc in (RuntimeError(CANARY), KeyboardInterrupt()):
+            for phase in ("fstat", "read"):
+                with self.subTest(exc=type(exc).__name__, phase=phase):
+                    stack, rec = self.faults("a.jpg", **{phase: exc})
+                    with stack, self.assertRaises(type(exc)) as caught: self.read_photo("a.jpg")
+                    self.assertIs(caught.exception, exc)
+                    self.assertEqual(rec["closes"], [rec["fd"]])
+
+    def test_healthy_photo_read_is_unchanged_with_one_close(self):
+        (self.photos / "a.jpg").write_bytes(b"abc")
+        stack, rec = self.faults("a.jpg")
+        with stack: self.assertEqual(self.read_photo("a.jpg"), b"abc")
+        self.assertEqual((rec["reads"], rec["closes"]), ([ev.MAX_PHOTO + 1], [rec["fd"]]))
+
     def test_non_loopback_url_and_missing_flags_send_nothing(self):
         out = self.tmp / "replies.jsonl"
         self.assertEqual(self.live(out, url="http://example.com:11434"), BAD_URL)
@@ -153,6 +313,75 @@ class LiveTests(Base):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stop:
             ev.main(["--live", "--url", URL, "--model", "m", "--out", str(out)], transport=self.transport)
         self.assertEqual((stop.exception.code, self.calls, out.exists()), (2, [], False))
+
+
+class SurrogatePhotoTests(Base):
+    """RF0415-10: an unpaired-surrogate photo name is refused at admission with the line-numbered case error."""
+    def line(self, photo_json, id="s1"):
+        return '{"id": "%s", "photo": "%s", "expected": {"name": null, "brand": null, "category": null}}' % (id, photo_json)
+
+    def test_photo_surrogate_case_is_line_numbered_refusal(self):
+        for photo in ("\\ud800", "CANARY-\\ud800.jpg", "\\ud800x.jpg", "x\\ud800", "a\\udc80b.jpg", "\\udcff", "ok-\\udfff.jpg", "\\ude00\\ud83d"):
+            for n, rows in ((1, [self.line(photo)]), (2, [self.line("ok.jpg", "s0"), self.line(photo)])):
+                with self.subTest(photo=photo, line=n):
+                    path = self.write("c.jsonl", rows)
+                    with self.assertRaises(ev.EvalError) as caught: ev.load_cases(path)
+                    self.assertEqual(str(caught.exception), f"cases line {n}: not a case")
+                    self.assertIsNone(caught.exception.__cause__)
+                    code, out, err = run("score", "--cases", path, "--replies", self.tmp / "absent.jsonl")
+                    self.assertEqual((code, out, err), (2, "", f"cases line {n}: not a case"))
+                    self.assertNotIn("CANARY", err)
+
+    def test_photo_scalar_unicode_is_preserved(self):
+        names = {"ascii": "plain.jpg", "accent": "caf\u00e9-\u00e9t\u00e9.jpg", "greek": "\u03b5\u03bb\u03b1\u03b9\u03cc\u03bb\u03b1\u03b4\u03bf.jpg",
+                 "emoji": "\U0001f951.jpg"}
+        rows = [self.line(json.dumps(name, ensure_ascii=False)[1:-1], key) for key, name in names.items()]
+        rows.append(self.line("\\ud83e\\udd51-pair.jpg", "pair"))  # valid escaped pair decodes to one scalar
+        cases = ev.load_cases(self.write("c.jsonl", rows))
+        self.assertEqual([c["photo"] for c in cases], [*names.values(), "\U0001f951-pair.jpg"])
+
+    def test_score_bad_photo_refuses_before_reply_or_catalog_read(self):
+        path = self.write("c.jsonl", [self.line("ok.jpg", "s0"), self.line("bad-\\udc80.jpg")])
+        with mock.patch.object(ev, "catalog_categories", side_effect=AssertionError("catalog read")), \
+             mock.patch.object(ev, "score", side_effect=AssertionError("scored")):
+            self.assertEqual(run("score", "--cases", path, "--replies", self.tmp / "no-replies.jsonl"), (2, "", "cases line 2: not a case"))
+
+    def photos_dir(self, *names):
+        photos = self.tmp / "photos"
+        photos.mkdir()
+        for name in names: (photos / name).write_bytes(b"\xff\xd8synthetic")
+        return photos
+
+    def test_fake_live_bad_later_photo_never_reaches_io(self):
+        photos, out, calls = self.photos_dir("ok.jpg"), self.tmp / "out" / "replies.jsonl", []
+        out.parent.mkdir()
+        path = self.write("c.jsonl", [self.line("ok.jpg", "s0"), self.line("bad\\ud800.jpg")])
+        with mock.patch.object(ev, "_read_photo", side_effect=AssertionError("photo read")), mock.patch.object(ev.tempfile, "mkstemp", side_effect=AssertionError("temp")):
+            result = run("--live", "--url", URL, "--model", "m", "--photos", photos, "--out", out, "--cases", path,
+                         transport=lambda *a: calls.append(a))
+        self.assertEqual((result, calls, list(out.parent.iterdir())), ((2, "", "cases line 2: not a case"), [], []))
+
+    def test_fake_live_scalar_unicode_photo_still_records(self):
+        name, calls = "caf\u00e9-\U0001f951.jpg", []
+        photos, out = self.photos_dir(name), self.tmp / "out" / "replies.jsonl"
+        out.parent.mkdir()
+        path = self.write("c.jsonl", [self.line(json.dumps(name, ensure_ascii=False)[1:-1])])
+
+        def transport(url, body, headers, timeout):
+            calls.append(json.loads(body))
+            return 200, json.dumps({"done": True, "message": {"content": json.dumps({"name": "x"})}}).encode()
+        code, stdout, err = run("--live", "--url", URL, "--model", "m", "--photos", photos, "--out", out, "--cases", path, transport=transport)
+        self.assertEqual((code, err, json.loads(stdout), len(calls)), (0, "", {"recorded": 1, "failedCalls": 0}, 1))
+        self.assertEqual(base64.b64decode(calls[0]["messages"][0]["images"][0]), b"\xff\xd8synthetic")
+        self.assertEqual((stat.S_IMODE(out.stat().st_mode), [p.name for p in out.parent.iterdir()]), (0o600, ["replies.jsonl"]))
+        self.assertEqual(json.loads(out.read_text("utf-8")), {"id": "s1", "reply": {"name": "x"}})
+
+    def test_other_bad_photo_and_expected_diagnostics_preserved(self):
+        expected = '{"name": 5, "brand": null, "category": null}'
+        for label, text, message in (("dot", self.line("."), "not a case"), ("slash", self.line("a/b.jpg"), "not a case"), ("nul", self.line("a\\u0000b"), "not a case"),
+                                     ("expected", '{"id": "s1", "photo": "a.jpg", "expected": %s}' % expected, "expected value is neither text nor null")):
+            with self.subTest(label):
+                self.assertEqual(run("score", "--cases", self.write("c.jsonl", [text]), "--replies", self.tmp / "r.jsonl"), (2, "", f"cases line 1: {message}"))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,34 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": [
+        "Monday–Friday 8am–6pm",
+        "Saturday 9am–5pm · Closed Sunday"
+      ],
+      "before": [
+        "Monday–Friday 9am–6pm",
+        "Saturday 9am–5pm · Closed Sunday"
+      ],
+      "file": "hass/content/store.json",
+      "path": "hours"
+    },
+    {
+      "after": {
+        "text": "New tamales on Fridays",
+        "until": "2026-11-20"
+      },
+      "file": "hass/content/store.json",
+      "path": "notice"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

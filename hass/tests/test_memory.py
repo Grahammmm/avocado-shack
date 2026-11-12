@@ -126,6 +126,90 @@ class MemoryTests(unittest.TestCase):
             self.mem.forget("pickup.day")
         self.assertEqual(self.rows(), before)
 
+    def deny(self, action, name, detail=None, once=False):
+        """Make SQLite refuse one transaction statement (`once`: only its first attempt) with 'not authorized'."""
+        seen = []
+
+        def authorizer(code, arg1, arg2, *_):
+            if code == action and arg1 == name and (detail is None or arg2 == detail) and not (once and seen):
+                seen.append(1)
+                return sqlite3.SQLITE_DENY
+            return sqlite3.SQLITE_OK
+        self.mem.db.set_authorizer(authorizer)
+        self.addCleanup(self.mem.db.set_authorizer, None)
+
+    def test_commit_busy_rolls_back_correction_and_releases_connection(self):
+        self.mem.remember("pickup.day", "Saturday", "fact", "operator:ok")
+        before = self.rows()
+        self.mem.db.execute("PRAGMA busy_timeout = 1")  # fixture only: the real COMMIT gives up at once
+        reader = sqlite3.connect(self.state / "conversation.sqlite3", isolation_level=None)
+        self.addCleanup(reader.close)
+        reader.execute("BEGIN")
+        reader.execute("SELECT * FROM memory").fetchall()  # a shared lock the writer's COMMIT cannot get past
+        with self.assertRaisesRegex(sqlite3.OperationalError, "locked"):
+            self.mem.correct("pickup.day", "Sunday", "operator:ok")
+        self.assertFalse(self.mem.db.in_transaction)
+        self.assertEqual((self.rows(), self.mem.get("pickup.day")), (before, "Saturday"))
+        reader.execute("ROLLBACK")
+        self.assertEqual(reader.execute("SELECT value FROM memory").fetchall(), [("Saturday",)])
+        self.mem.correct("pickup.day", "Sunday", "operator:ok")
+        self.mem.remember("tone", "short replies", "preference", "operator:ok")
+        self.assertFalse(self.mem.db.in_transaction)
+        with contextlib.closing(memory.Memory(str(self.state), self.clock)) as reopened:
+            self.assertEqual((reopened.get("pickup.day"), reopened.get("tone")), ("Sunday", "short replies"))
+
+    def test_commit_refusal_rolls_back_each_memory_mutator(self):
+        self.mem.remember("earlier", "kept", "fact", "operator:ok")
+        self.mem.remember("pickup.day", "Saturday", "fact", "operator:ok")
+        calls = {"remember": lambda: self.mem.remember("tone", "short replies", "preference", "operator:ok"),
+                 "correct": lambda: self.mem.correct("pickup.day", "Sunday", "operator:ok"),
+                 "forget": lambda: self.mem.forget("pickup.day")}
+        for name, call in calls.items():
+            before = self.rows()
+            self.deny(sqlite3.SQLITE_TRANSACTION, "COMMIT")
+            with self.subTest(name), self.assertRaisesRegex(sqlite3.DatabaseError, "not authorized"):
+                call()
+            self.assertFalse(self.mem.db.in_transaction)
+            self.assertEqual(self.rows(), before)
+            self.mem.db.set_authorizer(None)
+            call()  # the same call succeeds once nothing refuses the COMMIT
+            self.assertNotEqual(self.rows(), before)
+            self.assertEqual(self.rows("earlier")[0]["value"], "kept")
+
+    def test_final_release_failure_preserves_outer_transaction(self):
+        self.mem.remember("pickup.day", "Saturday", "fact", "operator:ok")
+        self.mem.db.execute("CREATE TABLE sentinel(x)")
+        before = self.rows()
+        self.mem.db.execute("BEGIN")
+        self.mem.db.execute("INSERT INTO sentinel VALUES ('caller write')")
+        self.deny(sqlite3.SQLITE_SAVEPOINT, "RELEASE", "memory_op", once=True)
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "not authorized"):
+            self.mem.correct("pickup.day", "Sunday", "operator:ok")
+        self.assertTrue(self.mem.db.in_transaction)  # the caller's transaction is still the caller's
+        self.assertEqual([r[0] for r in self.mem.db.execute("SELECT x FROM sentinel")], ["caller write"])
+        self.assertEqual(self.mem.get("pickup.day"), "Saturday")
+        self.mem.db.execute("COMMIT")
+        self.assertEqual(self.rows(), before)
+        with contextlib.closing(sqlite3.connect(self.state / "conversation.sqlite3")) as other:
+            self.assertEqual(other.execute("SELECT x FROM sentinel").fetchall(), [("caller write",)])
+
+    def test_nested_success_and_body_failure_keep_existing_ownership(self):
+        self.mem.db.execute("BEGIN")
+        self.mem.remember("first", "a", "fact", "operator:ok")
+        self.assertTrue(self.mem.db.in_transaction)
+        self.mem.db.execute("ROLLBACK")  # nested success was never committed on its own
+        self.assertEqual(self.rows(), [])
+        self.mem.db.execute("BEGIN")
+        self.mem.remember("first", "a", "fact", "operator:ok")
+        with self.assertRaisesRegex(ValueError, "use correct"):
+            self.mem.remember("first", "b", "fact", "operator:ok")  # only this savepoint is undone
+        self.assertTrue(self.mem.db.in_transaction)
+        self.mem.db.execute("COMMIT")
+        self.assertEqual([r["value"] for r in self.rows()], ["a"])
+        self.mem.remember("second", "c", "fact", "operator:ok")  # standalone success commits
+        self.assertFalse(self.mem.db.in_transaction)
+        self.assertEqual([r["value"] for r in self.rows()], ["a", "c"])
+
     def test_database_is_private(self):
         path = self.state / "conversation.sqlite3"
         self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)

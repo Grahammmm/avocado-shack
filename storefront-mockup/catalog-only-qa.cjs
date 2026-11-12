@@ -208,6 +208,126 @@ await open('?item='+'a'.repeat(80));assert.equal((await note()).hidden,false,'80
  // AV1622-04: an old build opened today: every check is 8 days old, so every word is "Last confirmed" and nothing passes Available today.
  await fixture(W.slice(0,4).map(([s])=>[s,pacificAgo(8)]),pacificAgo(8));await open('?avail=1');assert.equal(await avail().count(),0,'8-day-old checks: no control');assert.equal(await countText(),fullCount);assert.equal((await addr()).params.avail,undefined);
  assert.match(await page.locator('#catalog-grid article .availability').first().textContent(),/^Last confirmed /);assert.equal(await page.locator('#catalog-grid .availability',{hasText:/Available today|Limited|Sold out/}).count(),0);
+ // RF0854-13: a page left open while its shelf check ages from seven to eight days retires Available today at the next normal render,
+ // exactly as a reload would (fixed clock: checked Oct 31, Pacific Nov 7 = age seven, Nov 8 = age eight). Own page per case: fresh cache and history.
+ const staleAvailabilityChecks=[];
+ {
+  const same=require('util').isDeepStrictEqual,D7=new Date('2026-11-07T20:00:00Z'),D8=new Date('2026-11-08T20:00:00Z');let cp=null;
+  const real=n=>`catalogFreshness.selectionCheckedOn="2026-10-31";catalog.slice(0,${n}).forEach(p=>{p.availabilityState="yes";p.availabilityCheckedOn="2026-10-31"});`;
+  const synth=rows=>`catalogFreshness.selectionCheckedOn="2026-10-31";catalog.splice(0,catalog.length,...${JSON.stringify(rows)}.map(p=>({...catalog[0],...p,availabilityCheckedOn:"2026-10-31"})));`;
+  const go=async(url,body)=>{if(cp)await cp.context().close();cp=await browser.newPage({viewport:{width:390,height:900}});cp.on('pageerror',e=>errors.push(e.message));
+   await cp.clock.setFixedTime(D7);await cp.route('**/catalog-products.js',async r=>{const res=await r.fetch();await r.fulfill({response:res,body:(await res.text())+';'+body})});
+   await cp.goto(base+'/'+url);await cp.waitForSelector('#catalog-sentinel');await cp.evaluate(()=>{window.__replaced=0;window.__h0=history.length;const r=history.replaceState.bind(history);history.replaceState=(...a)=>{window.__replaced++;return r(...a)}})};
+  // style.css sets html{scroll-behavior:smooth}: focus()/typing start an animated scroll, so wait (in real time, outside the faked page clock) until scrollY holds still before sampling it.
+  const settledY=async()=>{let last=null,same=0;for(let i=0;i<200&&same<4;i++){const y=await cp.evaluate(()=>scrollY);same=y===last?same+1:0;last=y;await new Promise(r=>setTimeout(r,50))}assert.ok(same>=4,'scroll position settles');return last};
+  const st=()=>cp.evaluate(()=>({controls:Math.max(document.querySelectorAll('#avail-filter').length,document.querySelectorAll('.avail-filter').length),checked:$('#avail-filter')?.checked??null,count:$('#catalog-count').textContent,ids:filteredProducts().map(p=>p.id),cards:[...document.querySelectorAll('#catalog-grid article')].map(e=>e.dataset.productId),search:location.search,hash:location.hash,history:history.length-window.__h0,replaced:window.__replaced,focus:document.activeElement?.id||null,y:scrollY,view:activeView,shelf:activeCategory,q:searchText($('#product-search').value),brand:$('#brand-filter').value,from:activeFrom,item:linkedItem,status:$('#catalog-item-status').hidden?null:$('#catalog-item-status').textContent}));
+  const settled=()=>cp.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.images].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r;setTimeout(r,3000)})));let last=-1,same=0;for(let i=0;i<300&&same<10;i++){await new Promise(r=>requestAnimationFrame(r));same=scrollY===last?same+1:0;last=scrollY}});
+  const reloaded=async()=>{await cp.reload();await cp.waitForSelector('#catalog-sentinel');return st()};
+  const tidy=(s,label)=>{assert.equal(new Set(s.cards).size,s.cards.length,label+': unique cards');assert.ok(same(s.cards,s.ids.slice(0,s.cards.length)),label+': cards follow the ordered list');assert.equal(s.count,`${s.ids.length} selections · ${s.cards.length} shown`,label+': count')};
+  // available_filter_retires_on_eighth_day_render: a normal search, view or shelf render on day eight drops the checked control and only ?avail.
+  for(const [label,edit,want] of [['search',()=>cp.locator('#product-search').fill('jam'),'?view=all&utm=x&utm=y&q=jam'],['view',()=>cp.locator('[data-view="packaged"]').click(),'?utm=x&utm=y'],['shelf',()=>cp.locator('[data-filter="pantry"]').click(),'?view=all&utm=x&utm=y&shelf=pantry']]){
+   await go('?view=all&avail=1&utm=x&utm=y#market',real(2));let s=await st();
+   assert.deepEqual([s.controls,s.checked,s.count,s.search],[1,true,'2 selections · 2 shown','?view=all&avail=1&utm=x&utm=y'],label+': age seven keeps Available today');
+   await cp.clock.setFixedTime(D8);await edit();s=await st();
+   assert.deepEqual([s.controls,s.checked,s.search,s.hash,s.history],[0,null,want,'#market',0],label+': age eight retires the control and only avail');
+   assert.ok(s.ids.length>0,label+': remaining filters show their own results');tidy(s,label);
+   const r=await reloaded();assert.ok(same([r.controls,r.search,r.ids,r.view,r.shelf,r.q],[0,s.search,s.ids,s.view,s.shelf,s.q]),label+': same as a reload');
+   staleAvailabilityChecks.push('available_filter_retires_on_eighth_day_render:'+label);
+  }
+  // unchecked_stale_control_retires_without_extra_history + rollover_repaint_has_no_duplicates: an unchecked control goes on a load-more
+  // render with no history write; a checked paginated filter repaints the full list once, then load more continues without duplicates.
+  await go('?view=all&utm=x',real(2));let s=await st();assert.deepEqual([s.controls,s.checked,s.count],[1,false,'170 selections · 12 shown']);
+  await cp.clock.setFixedTime(D8);await cp.evaluate(()=>loadMore());s=await st();
+  assert.deepEqual([s.controls,s.replaced,s.search,s.history,s.count],[0,0,'?view=all&utm=x',0,'170 selections · 24 shown'],'unchecked: retired with no history write');tidy(s,'unchecked');
+  for(const again of [()=>cp.evaluate(()=>loadMore()),()=>cp.locator('#product-search').fill('jam'),()=>cp.locator('#clear-filters').click()]){await again();s=await st();assert.equal(s.controls,0,'repeat renders stay retired');tidy(s,'repeat')}
+  staleAvailabilityChecks.push('unchecked_stale_control_retires_without_extra_history');
+  await go('?view=all&avail=1&utm=x',real(14));s=await st();assert.deepEqual([s.checked,s.count],[true,'14 selections · 12 shown']);
+  await cp.clock.setFixedTime(D8);await cp.evaluate(()=>loadMore());s=await st();
+  assert.deepEqual([s.controls,s.replaced,s.search,s.count],[0,1,'?view=all&utm=x','170 selections · 24 shown'],'paginated: one replaceState, full repaint');tidy(s,'paginated');
+  await cp.evaluate(()=>loadMore());s=await st();assert.equal(s.cards.length,36);tidy(s,'load more after retirement');
+  assert.ok(same((await reloaded()).ids,s.ids),'paginated: same list as a reload');
+  staleAvailabilityChecks.push('rollover_repaint_has_no_duplicates');
+  // stale_filter_retirement_preserves_other_state: view, shelf, search, brand, maker, item, status, duplicate params, hash, focus and scroll.
+  const ROWS=[{id:'qa-leaf',producerKey:'Jayleaf',brand:'QA maker',name:'QA leaf',category:'vegetables',availabilityState:'yes'},{id:'qa-leaf-two',producerKey:'Jayleaf',brand:'QA maker',name:'QA leaf two',category:'vegetables',availabilityState:''},
+   {id:'qa-pasta',producerKey:'Etto',brand:'QA other',name:'QA pasta',category:'pantry',availabilityState:'no'},{id:'qa-jar',producerKey:'Etto',brand:'QA other',name:'QA jar',category:'pantry',availabilityState:''}];
+  for(const [url,want,keep] of [['?view=produce&shelf=vegetables&q=leaf&maker=QA+maker&avail=1&utm=x&utm=y#market','?shelf=vegetables&q=leaf&maker=QA+maker&utm=x&utm=y',{view:'produce',shelf:'vegetables',q:'leaf',brand:'QA maker',from:''}],
+   ['?from=Jayleaf&avail=1&utm=x&utm=y#market','?from=Jayleaf&utm=x&utm=y',{view:'all',shelf:'all',q:'',brand:'',from:'Jayleaf'}]]){
+   await go(url,synth(ROWS));let s=await st();assert.ok(same(s.ids,['qa-leaf']),'age seven: filtered');
+   await settled(); // the #market fragment keeps re-aligning the page while fonts and images load; measure scroll only once it holds still
+   await cp.locator('#product-search').focus();await cp.keyboard.press('End');const y=await settledY();await cp.clock.setFixedTime(D8);await cp.keyboard.type(' ');await settledY();s=await st();
+   assert.ok(same(s.ids,['qa-leaf','qa-leaf-two']),url+': other filters still apply');assert.deepEqual([s.controls,s.search,s.hash,s.focus,s.y,s.history],[0,want,'#market','product-search',y,0],url);
+   for(const k of Object.keys(keep))assert.equal(s[k],keep[k],url+': keeps '+k);
+   const r=await reloaded();assert.ok(same([r.ids,r.search,r.controls],[s.ids,s.search,0]),url+': same as a reload');
+  }
+  await go('?view=all',real(2));const id30=await cp.evaluate(()=>catalog[30].id);
+  await go(`?item=${encodeURIComponent(id30)}&utm=x&utm=y#market`,real(2));s=await st();const n0=s.cards.length;assert.deepEqual([s.controls,s.checked,s.item],[1,false,id30]);
+  await cp.clock.setFixedTime(D8);await cp.evaluate(()=>loadMore());s=await st();
+  assert.deepEqual([s.controls,s.replaced,s.item,s.search,s.hash],[0,0,id30,`?item=${encodeURIComponent(id30)}&utm=x&utm=y`,'#market'],'valid item survives');assert.ok(s.cards.length>n0);tidy(s,'item');
+  await go('?item=gone-fixture&utm=x#market',real(2));const gone=(await st()).status;assert.ok(gone);await cp.clock.setFixedTime(D8);await cp.evaluate(()=>loadMore());s=await st();
+  assert.deepEqual([s.controls,s.replaced,s.status,s.search],[0,0,gone,'?utm=x'],'status line survives');
+  staleAvailabilityChecks.push('stale_filter_retirement_preserves_other_state');
+  // current_words_outside_results_keep_the_control: on day seven a current word anywhere (Sold out included, outside the shelf/search)
+  // keeps the control and an intentionally empty result stays empty; Sold out never passes. Day eight retires it.
+  for(const [url,rows,label] of [['?view=all&shelf=pantry&avail=1',ROWS,'current yes outside the shelf'],['?view=all&avail=1',ROWS.map(p=>({...p,availabilityState:p.availabilityState&&'no'})),'Sold out only']]){
+   await go(url,synth(rows));for(const t of ['qa','qa jar']){await cp.locator('#product-search').fill(t);const s=await st();assert.deepEqual([s.controls,s.checked,s.count,new URLSearchParams(s.search).get('avail')],[1,true,'0 selections · 0 shown','1'],label+': '+t)}
+   await cp.clock.setFixedTime(D8);await cp.locator('#product-search').fill('qa');const s=await st();assert.equal(s.controls,0,label+': day eight retires');assert.ok(s.ids.length>0&&!new URLSearchParams(s.search).has('avail'),label);
+  }
+  staleAvailabilityChecks.push('current_words_outside_results_keep_the_control');
+  await cp.context().close();
+ }
+ // RF0814-10: maker promises include sold-out and unconfirmed rows, across both catalog views.
+ const makerAvailabilityChecks=[];
+ {
+  const rows=[
+   {id:'qa-maker-available',producerKey:'Jayleaf',brand:'QA maker',name:'QA leaf',category:'vegetables',availabilityState:'yes'},
+   {id:'qa-maker-sold-out',producerKey:'Jayleaf',brand:'QA maker',name:'QA jar',category:'pantry',availabilityState:'no'},
+   {id:'qa-maker-unconfirmed',producerKey:'Jayleaf',brand:'QA maker',name:'QA bunch',category:'vegetables',availabilityState:''},
+   {id:'qa-other-available',producerKey:'Etto',brand:'QA other',name:'QA pasta',category:'pantry',availabilityState:'limited'},
+   {id:'qa-other-unconfirmed',producerKey:'Etto',brand:'QA other',name:'QA fruit',category:'fruit',availabilityState:''}
+  ],makerRows=rows.filter(p=>p.producerKey==='Jayleaf');
+  const install=async(current=true)=>{
+   await page.unroute('**/catalog-products.js');
+   await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();await r.fulfill({response:res,body:(await res.text())+`;catalogFreshness.selectionCheckedOn=${JSON.stringify(pacificAgo(current?0:8))};catalog.splice(0,catalog.length,...${JSON.stringify(rows)}.map(p=>({...catalog[0],...p,availabilityCheckedOn:catalogFreshness.selectionCheckedOn})));`})});
+   await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');
+  };
+  const state=()=>page.evaluate(()=>({ids:filteredProducts().map(p=>p.id),cards:[...document.querySelectorAll('#catalog-grid article')].map(e=>e.dataset.productId),checked:$('#avail-filter')?.checked??null,search:location.search,hash:location.hash,history:history.length,q:$('#product-search').value,brand:$('#brand-filter').value,shelf:activeCategory,view:activeView,from:activeFrom}));
+  const expectRows=async(want,label)=>{const st=await state();assert.ok(sameSet(st.ids,want.map(p=>p.id)),label+': filtered rows');assert.ok(sameSet(st.cards,st.ids),label+': rendered rows');assert.equal(await countText(),want.length+' selections',label+': count');return st};
+  const seeAll=async()=>{const b=page.locator('[data-from="Jayleaf"]').first();await b.locator('xpath=ancestor::details').evaluate(e=>e.open=true);assert.equal(await b.textContent(),`See all ${makerRows.length} from Jayleaf`);await b.click()};
+  await install();
+  for(const width of [390,1440]){
+   await page.setViewportSize({width,height:900});await open('?avail=1&utm=x&utm=y#market');
+   let st=await expectRows(rows.filter(p=>['yes','limited'].includes(p.availabilityState)),'before maker navigation');assert.equal(st.checked,true);
+   await seeAll();let after=await expectRows(makerRows,'makerNavigationClearsAvailability');
+   assert.equal(after.checked,false);assert.equal(after.from,'Jayleaf');assert.equal(new URLSearchParams(after.search).get('from'),'Jayleaf');assert.equal(new URLSearchParams(after.search).has('avail'),false);assert.equal(after.history,st.history);assert.equal(after.hash,'#market');assert.equal(new URLSearchParams(after.search).getAll('utm').join(','),'x,y');
+   await page.reload();await expectRows(makerRows,'maker reload');assert.equal(await avail().isChecked(),false);
+   makerAvailabilityChecks.push('makerNavigationClearsAvailability:'+width);
+   await open('?from=Jayleaf&avail=1&shelf=vegetables&q=leaf&maker=QA+maker&utm=x&utm=y#market');
+   st=await expectRows(makerRows.filter(p=>p.availabilityState==='yes'),'before Show everything');assert.equal(st.checked,true);assert.equal(st.from,'Jayleaf');assert.equal(st.shelf,'vegetables');assert.equal(st.q,'leaf');assert.equal(st.brand,'QA maker');
+   await page.locator('[data-clear-from]').click();after=await expectRows(rows,'makerShowEverythingClearsAvailability');
+   assert.equal(after.checked,false);assert.equal(after.from,'');assert.equal(after.shelf,'all');assert.equal(after.q,'');assert.equal(after.brand,'');assert.equal(after.view,'all');assert.equal(after.history,st.history);assert.equal(after.hash,'#market');assert.equal(after.search,'?utm=x&utm=y&view=all');assert.equal(await page.locator('.catalog-from').isVisible(),false);
+   await page.reload();await expectRows(rows,'Show everything reload');
+   makerAvailabilityChecks.push('makerShowEverythingClearsAvailability:'+width);
+  }
+  await open('?from=Jayleaf&avail=1');await expectRows(makerRows.filter(p=>p.availabilityState==='yes'),'explicit AND');assert.equal(await avail().isChecked(),true);
+  // Ordinary controls must not opt out of availability or the active maker.
+  for(const edit of [()=>page.locator('#product-search').fill('QA'),()=>page.locator('#brand-filter').selectOption('QA maker'),()=>page.locator('[data-filter="vegetables"]').click(),()=>page.locator('[data-view="produce"]').click()]){
+   await edit();await expectRows(makerRows.filter(p=>p.availabilityState==='yes'),'ordinary AND edit');assert.equal(await avail().isChecked(),true);assert.equal((await addr()).params.from,'Jayleaf');assert.equal((await addr()).params.avail,'1');
+  }
+  for(const key of ['unknown-maker','constructor','<img src=x onerror=alert(1)>']){
+   const before=await state();await page.evaluate(key=>{const b=document.createElement('button');b.dataset.from=key;document.body.append(b);b.click();b.remove()},key);assert.ok(require('util').isDeepStrictEqual(await state(),before),'invalid delegated key is a complete no-op');
+  }
+  makerAvailabilityChecks.push('makerExplicitAndAndInvalidKey');
+  for(const current of [false,null]){
+   if(current===false)await install(false);
+   else{await page.unroute('**/catalog-products.js');await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();await r.fulfill({response:res,body:(await res.text())+`;catalogFreshness.selectionCheckedOn=null;catalog.splice(0,catalog.length,...${JSON.stringify(rows)}.map(p=>({...catalog[0],...p,availabilityCheckedOn:null})));`})});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')}
+   await page.goto(base+'/');await page.waitForSelector('#catalog-grid article');assert.equal(await avail().count(),0);await expectRows(rows.filter(p=>!['vegetables','fruit'].includes(p.category)),'no control default');
+   // The default packaged view includes the sold-out maker row, whose link still promises all three.
+   await seeAll();await expectRows(makerRows,'no control maker');await page.locator('[data-clear-from]').click();await expectRows(rows,'no control Show everything');
+   await open('?from=Jayleaf&avail=1');assert.equal(await avail().count(),0);assert.equal((await addr()).params.avail,undefined);await expectRows(makerRows,'no control URL');
+  }
+  makerAvailabilityChecks.push('makerNavigationWithoutAvailabilityControl');
+  await page.unroute('**/catalog-products.js');await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache');await open('');assert.equal(await countText(),fullCount,'real catalog restored after maker availability fixtures');
+ }
  // AV1222-14: Clear filters shows for any one filter, resets all five, keeps other parameters and the hash, then focuses the search box.
  const clr=page.locator('#clear-filters'),FILTERS=['shelf=pantry','q=jam','maker=Etto','from='+multi.key];
  for(const width of [390,1440]){await page.setViewportSize({width,height:900});await page.goto(base+'/');await page.waitForSelector('#catalog-grid article');assert.equal(await clr.isVisible(),false,'fresh: hidden');assert.equal(await countText(),defaultCount);
@@ -309,5 +429,5 @@ await open('');
  }
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
- const result={checkedAt:new Date().toISOString(),all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
+ const result={checkedAt:new Date().toISOString(),staleAvailabilityChecks,makerAvailabilityChecks,all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

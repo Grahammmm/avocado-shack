@@ -39,6 +39,8 @@ One slot: `hours`, the **whole** new list (1 to 7 lines, 60 characters each). Th
   are read from his own words, joined across the open request: "fridays", "mon to sat", "weekdays", "every day".
   A line that names no day ("Open late on market nights") stays unless he rewrites the list around it.
 * `hours-no-conflict`: one day with two different statements ("Mon to Sun 9 to 6 and Mon to Fri 8 to 5") is a question.
+  Independent comma-separated schedules ("Monday 9am–6pm, Monday 10am–4pm") are checked separately too; commas in
+  grouped days ("Mon, Tue & Wed 9am–5pm", "Closed Mon, Tue & Wed") still belong to the same statement. Stored wording stays as given.
 * `not-already-true`: the same lines as now (spacing aside): "It already says that: Saturday 9am–5pm. Did you mean
   something else?" and nothing is drafted.
 * `holiday-is-notice`: a closed day on a date or a holiday ("closed Thanksgiving", "closed November 12", "closed the
@@ -66,6 +68,11 @@ notice say?" and "Until what day?". Checks:
 * `no-price`: "20% off", "$3", "sale", "half price", "per lb" and the like are refused, and the caller writes the
   request down as a price request. A notice can still say "drop off your crates" or "parking is behind the store".
 * `not-already-true`: the same words and the same last day.
+
+If one reply both takes the notice down and carries new words or a new last day, nothing is drafted and he is asked
+once: "Do you want the notice changed, or taken down? I can only do one." This comes before the "nothing to take
+down" refusal. An empty or blank text or day does not count as new words. He then answers with the new words (replace)
+or just "take it down" in a fresh request.
 
 Taking it down when none is up is refused. A second notice replaces the first. Edits: `store.json` `notice`; the home
 page. Undo restores the earlier notice or none. Residue: after the last day the notice also disappears by itself in the

@@ -118,6 +118,100 @@ def validate_problems_for(value):
     return out
 
 
+def dated_special(n=1, *, start, end):
+    return {**special(n), "start": start, "end": end}
+
+
+class CalendarConsistencyTests(unittest.TestCase):
+    def test_change_days_future_date_max_has_no_candidates(self):
+        item = dated_special(start="9999-12-31", end="9999-12-31")
+        self.assertEqual(problems(item), [])
+        store = {**STORE, "specials": [item]}
+        before = copy.deepcopy(store)
+        self.assertEqual(specials.change_days(store, date(2026, 11, 9)), [])
+        self.assertEqual(store, before)
+
+    def test_change_days_date_max_today_and_prior_day(self):
+        for start, expected in (("9999-12-31", []), ("9999-12-30", [date(9999, 12, 30)])):
+            with self.subTest(start=start):
+                store = {"specials": [dated_special(start=start, end="9999-12-31")]}
+                before = copy.deepcopy(store)
+                self.assertEqual(specials.change_days(store, date.max), expected)
+                self.assertEqual(store, before)
+
+    def test_change_days_calendar_min_and_ordinary_boundaries(self):
+        cases = [
+            ([dated_special(start="0001-01-01", end="0001-01-01")], date.min, []),
+            ([dated_special(start="0001-01-01", end="0001-01-01")], date(1, 1, 3),
+             [date.min, date(1, 1, 2)]),
+            ([dated_special(start="2026-11-01", end="2026-11-03")], date(2026, 11, 9),
+             [date(2026, 11, d) for d in (1, 2, 3, 4)]),
+            ([dated_special(start="2026-11-08", end="2026-11-09")], date(2026, 11, 9),
+             [date(2026, 11, 8)]),
+            ([dated_special(start="2026-11-09", end="2026-11-10")], date(2026, 11, 9), []),
+            ([dated_special(start="2026-11-03", end="2026-11-04"),
+              dated_special(2, start="2026-11-01", end="2026-11-03")], date(2026, 11, 9),
+             [date(2026, 11, d) for d in (1, 2, 3, 4, 5)]),
+        ]
+        for items, today, expected in cases:
+            with self.subTest(items=items, today=today):
+                store = {"specials": items}
+                before = copy.deepcopy(store)
+                self.assertEqual(specials.change_days(store, today), expected)
+                self.assertEqual(store, before)
+
+    def check_tree(self, damage=None):
+        from unittest import mock
+        from hass import notice
+
+        content = copy.deepcopy(CONTENT)
+        content.store["specials"] = [dated_special(start="9999-12-31", end="9999-12-31")]
+        before_content = copy.deepcopy(content)
+        today = date(2026, 11, 9)
+        generated = sitegen.render(content, today=today)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hass/content").mkdir(parents=True)
+            (root / "hass/templates").symlink_to(REPO_ROOT / "hass/templates", target_is_directory=True)
+            saved_store = root / "hass/content/store.json"
+            saved_store.write_text(json.dumps(content.store), encoding="utf-8")
+            store_bytes = saved_store.read_bytes()
+            for rel, data in generated.items():
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+            target = root / INDEX
+            if damage == "changed":
+                target.write_bytes(target.read_bytes() + b" ")
+            elif damage == "missing":
+                target.unlink()
+            elif damage == "symlink":
+                referent = root / "synthetic-index.html"
+                referent.write_bytes(target.read_bytes())
+                target.unlink()
+                target.symlink_to(referent)
+            before_files = {rel: (root / rel).read_bytes() for rel in generated if (root / rel).exists()}
+            with mock.patch.object(sitegen, "shop_today", return_value=today):
+                stale = notice.stale_paths(content, root)
+            self.assertEqual(stale, [INDEX] if damage else [])
+            self.assertEqual(saved_store.read_bytes(), store_bytes)
+            self.assertEqual(content, before_content)
+            for rel, data in before_files.items():
+                self.assertEqual((root / rel).read_bytes(), data)
+            if damage == "missing":
+                self.assertFalse(target.exists())
+            elif damage == "symlink":
+                self.assertTrue(target.is_symlink())
+
+    def test_stale_paths_consistent_tree_with_far_future_special(self):
+        self.check_tree()
+
+    def test_stale_paths_far_future_special_keeps_drift_visible(self):
+        for damage in ("changed", "missing", "symlink"):
+            with self.subTest(damage=damage):
+                self.check_tree(damage)
+
+
 class RenderTests(unittest.TestCase):
     def test_zero_active_renders_nothing_at_all(self):
         for items in ((), (special(end=-1, start=-5),), (special(start=2, end=4),)):

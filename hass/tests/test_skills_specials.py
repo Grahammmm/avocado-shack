@@ -18,10 +18,12 @@ import unittest
 from datetime import date, timedelta
 from unittest import mock
 
-from hass import editor, interpret_check, live_policy, sitegen, skills, voice
-from hass.content_model import REPO_ROOT, load_and_validate, shop_today
+from hass import editor, interpret_check, live_policy, morning_report, sitegen, skills, voice
+from hass.content_model import REPO_ROOT, load_and_validate, load_content, shop_today
 from hass.ops import load_registry
-from hass.skills import kinds, model, specials as sp, testkit
+from hass.skills import dispatch, kinds, model, reports, specials as sp, testkit
+from hass.tests import test_skill_dispatch as base
+from hass.tests.test_conversation import T0
 from hass.tests.test_store_ops import StoreTestCase, _req
 
 FIXTURES = REPO_ROOT / "hass" / "tests" / "fixtures"
@@ -289,6 +291,35 @@ class RuleTests(unittest.TestCase):
         # words before 'on special' that are not his name for the special are kept, so the deal cannot be picked out: ask
         self.assertIn("exactly as you type it", rule("2 for $5", "put the lemmons on special, 2 for $5", "Lemons")[0])
 
+    def test_deal_leading_request_verb_is_not_scaffolding(self):
+        def rule(deal, text, title="Honey"):
+            return self.rule("specials-deal-as-typed", {"title": title, "deal": deal}, texts=[text])
+
+        make = "new special: Make a friend happy with free samples, until Friday"
+        for text, whole, dropped in (
+                (make, "Make a friend happy with free samples", "a friend happy with free samples"),
+                ("put honey on special, Put two jars in your bag for $5, until Friday", "Put two jars in your bag for $5",
+                 "two jars in your bag for $5"),
+                ("change the honey special to Put two jars in your bag for $5", "Put two jars in your bag for $5",
+                 "two jars in your bag for $5"),
+                ("Put two jars in your bag for $5 till Friday", "Put two jars in your bag for $5", "two jars in your bag for $5")):
+            self.assertIsNone(rule(whole, text), text)  # his whole words, verb included
+            self.assertEqual(rule(dropped, text), (sp.NOT_AS_TYPED, "other"), text)  # the model's shortened deal is asked about
+        self.assertEqual(sp.deal_readings(make, {"title": "Honey"}), ["Make a friend happy with free samples"] * 2)
+        # a real request lead-in is still cut: only the verb inside it goes
+        self.assertIsNone(rule("2 for $5", "put honey on special, 2 for $5, until Friday"))
+        self.assertIsNone(rule("2 for $5", "please change the honey special to 2 for $5"))
+
+    def test_standalone_retyped_deal_keeps_verb(self):
+        slots = {"title": "Honey", "deal": "Put two jars in your bag for $5"}
+        first = "put honey on special, two jars in your bag for $5, until Friday"
+        retype = "Put two jars in your bag for $5"
+        self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=[first, retype]))  # his retyped answer settles it
+        self.assertIsNone(self.rule("specials-deal-as-typed", slots, texts=[retype]))
+        self.assertEqual(sp.deals_typed(retype, {"title": "Honey"}), [retype])
+        self.assertEqual(self.rule("specials-deal-as-typed", dict(slots, deal="two jars in your bag for $5"), texts=[retype]),
+                         (sp.NOT_AS_TYPED, "other"))
+
     def test_a_spelled_out_amount_in_a_title_is_a_price_too(self):
         for title in ("Honey five dollars", "Honey twenty-five cents", "Honey twenty five bucks", "Eggs a buck", "Eggs one hundred dollars",
                       "Eggs 5 euros", "Eggs €5", "Eggs £3", "Eggs three DOLLARS", "Eggs ten bucks each"):
@@ -532,6 +563,26 @@ class PlanTests(unittest.TestCase):
             self.assertEqual(sp.SPECIALS_ADD.plan({"title": "Honey", "deal": whole, "end": "2026-11-13"}, add)[0]["args"]["deal"], whole)
             self.assertEqual(sp.SPECIALS_EDIT.plan({"special": "honey", "deal": whole}, edit)[0]["args"], {"id": "avocado-honey", "deal": whole})
 
+    def test_add_and_edit_keep_deal_verb_after_request_prefix(self):
+        honey = special("honey", "Honey", deal="2 for $5")
+        for add_text, edit_text, whole, dropped in (
+                ("new special: Make a friend happy with free samples, until Friday",
+                 "change the honey special to Make a friend happy with free samples",
+                 "Make a friend happy with free samples", "a friend happy with free samples"),
+                ("put honey on special, Put two jars in your bag for $5, until Friday",
+                 "change the honey special to Put two jars in your bag for $5",
+                 "Put two jars in your bag for $5", "two jars in your bag for $5"),
+                ("put honey on special, Put two jars in your bag for $5, until Friday",
+                 "Put two jars in your bag for $5",  # the same deal retyped alone
+                 "Put two jars in your bag for $5", "two jars in your bag for $5")):
+            add, edit = ctx(texts=[add_text]), ctx(honey, texts=[edit_text])
+            op = sp.SPECIALS_ADD.plan({"title": "Honey", "deal": whole, "end": "2026-11-13"}, add)[0]
+            self.assertEqual(op["args"]["deal"], whole, add_text)
+            op = sp.SPECIALS_EDIT.plan({"special": "honey", "deal": whole}, edit)[0]
+            self.assertEqual(op["args"], {"id": "honey", "deal": whole}, edit_text)
+            self.assertEqual(refusal(sp.SPECIALS_ADD, {"title": "Honey", "deal": dropped, "end": "2026-11-13"}, add), sp.NOT_AS_TYPED, add_text)
+            self.assertEqual(refusal(sp.SPECIALS_EDIT, {"special": "honey", "deal": dropped}, edit), sp.NOT_AS_TYPED, edit_text)
+
     def test_edit_sends_only_what_changes(self):
         c = ctx(special("avocado-honey", "Avocado honey", deal="2 for $5", product="photo-product-041", picture=True))
         args = sp.SPECIALS_EDIT.plan({"special": "honey", "deal": "2 for $5", "end": "2026-11-15"}, c)[0]["args"]
@@ -699,11 +750,12 @@ class LiveBoundaryTests(StoreTestCase):
 class DispatcherHookTests(unittest.TestCase):
     def test_rules_and_the_read_only_answer_are_handed_to_the_dispatcher_when_it_exists(self):
         fake = types.ModuleType("hass.skills.dispatch")
-        fake.RULES, fake.READ_ONLY = {"no-price": object()}, {}
+        fake.RULES, fake.READ_ONLY, fake.READ_ONLY_LONG = {"no-price": object()}, {}, set()
         with mock.patch.dict(sys.modules, {"hass.skills.dispatch": fake}), mock.patch.object(skills, "dispatch", fake, create=True):
             sp._register()
         self.assertEqual(set(fake.RULES) - {"no-price"}, set(sp.RULES))
         self.assertIs(fake.READ_ONLY["specials.show"], sp.show_reply)
+        self.assertEqual(fake.READ_ONLY_LONG, {"specials.show"})
         self.assertIsNot(fake.RULES["no-price"], sp.RULES.get("no-price"))  # another group's rule is never replaced
 
     def test_without_the_dispatcher_nothing_happens(self):
@@ -720,6 +772,119 @@ class DispatcherHookTests(unittest.TestCase):
             hit = rule({"title": "Eggs $3", "deal": "<b>", "end": None, "special": "zzz"}, ["x"], ctx())
             self.assertTrue(hit is None or (isinstance(hit, tuple) and len(hit) == 2 and isinstance(hit[0], str)
                                             and hit[1] in ("unknown-skill", "policy", "unsupported-page", "stuck", "price", "other")))
+
+
+class LongListTests(base.SkillCase):
+    """RF0325-11: the whole specials list reaches the owner through the real Dispatcher and the strict voice check, even past the
+    everyday 600 characters; nothing is cut, and nothing else about the strict check is relaxed."""
+    SKILLS = (sp.SPECIALS_SHOW, reports.REPORT_SHELF, reports.ANSWER_SITE, base.DESCRIBE)
+    DEAL = "Buy two jars and share one with a friend this weekend at the picnic"
+
+    def seed(self, rows):
+        path = self.repo.wt / "hass" / "content" / "store.json"
+        doc = json.loads(path.read_text("utf-8"))
+        doc["specials"] = rows
+        path.write_text(json.dumps(doc), "utf-8")
+
+    def six(self):
+        today = shop_today(T0)
+        return [special(f"sharing-offer-{c.lower()}", f"Sharing offer {c}", start=(today - TODAY).days, end=(today - TODAY).days + 4,
+                        deal=self.DEAL, order=n) for n, c in enumerate("ABCDEF")]
+
+    def expected(self, *, today=None):
+        return voice.plain(sp.show_reply({}, types.SimpleNamespace(
+            today=today or shop_today(T0), content=load_content(self.repo.wt / "hass" / "content"))))
+
+    def say_replies(self, text, reply):
+        self.script(text, reply)
+        return self.say(text), self.replies()
+
+    def untouched_since(self, before):
+        self.assertEqual(self.snapshot(), before)
+        self.nothing_written()
+        self.assertEqual(self.drafts(), [])
+
+    def snapshot(self):
+        return {p.name: p.read_bytes() for p in sorted((self.repo.wt / "hass" / "content").iterdir()) if p.is_file()}
+
+    def test_six_specials_list_delivered_complete_under_strict_voice(self):
+        self.seed(self.six())
+        before = self.snapshot()
+        want = self.expected()
+        self.assertGreater(len(want), voice.LONG_AFTER)
+        for n in "ABCDEF":
+            self.assertIn(f"Sharing offer {n}: {self.DEAL},", want)
+        self.assertEqual(self.say_replies("what are this week's specials", base.skill_reply("specials.show")), ("answer", [want]))
+        self.untouched_since(before)
+        # without the registration (the old behaviour) the strict voice rule refuses the same list: nothing is truncated
+        with mock.patch.object(dispatch, "READ_ONLY_LONG", set()):
+            with self.assertRaises(voice.VoiceError):
+                self.say_replies("what are this week's specials", base.skill_reply("specials.show"))
+
+    def test_specials_long_registration_idempotent_and_narrow(self):
+        handler = dispatch.READ_ONLY["specials.show"]
+        sp._register()
+        sp._register()
+        self.assertIs(dispatch.READ_ONLY["specials.show"], handler)
+        self.assertIs(handler, sp.show_reply)
+        self.assertIn("specials.show", dispatch.READ_ONLY_LONG)
+        self.assertNotIn("answer.site", dispatch.READ_ONLY_LONG)
+        # an unrelated read-only skill that is not registered as long still has the everyday limit
+        self.registry = base.registry_of(reports.ANSWER_SITE)
+        self.conv = self.open()
+        with mock.patch.dict(dispatch.READ_ONLY, {"answer.site": lambda slots, ctx: "That is fine. " * 60}):
+            with mock.patch.object(self.conv, "_reply", wraps=self.conv._reply) as reply:
+                with self.assertRaises(voice.VoiceError):
+                    self.say_replies("what time do we close", base.skill_reply("answer.site", kind="hours"))
+        self.assertEqual(reply.call_args.kwargs, {"long_ok": False})
+        # the long allowance lifts only the length rule: an emoji in a long specials list is still refused
+        self.seed(self.six())
+        self.registry = base.registry_of(sp.SPECIALS_SHOW)
+        self.conv = self.open()
+        with mock.patch.dict(dispatch.READ_ONLY, {"specials.show": lambda slots, ctx: self.expected() + " \U0001F600"}):
+            with self.assertRaises(voice.VoiceError):
+                self.say_replies("what are this week's specials", base.skill_reply("specials.show"))
+
+    def test_coming_and_empty_specials_keep_exact_output(self):
+        today = shop_today(T0)
+        gap = (today - TODAY).days
+        coming = [special(f"coming-{n}", f"Later {n}", start=gap + 2 + n, end=gap + 9, deal=f"deal {n}", order=10 + n) for n in range(5)]
+        rows = [*self.six()[:2], special("ended", "Ended eggs", start=gap - 9, end=gap - 3, order=20), *coming]
+        self.seed(rows)
+        want = self.expected()
+        self.assertEqual(want.splitlines()[0], "On now:")
+        self.assertEqual([ln.split(":")[0] for ln in want.splitlines() if ln.startswith("Later ")], ["Later 0", "Later 1", "Later 2"])
+        self.assertNotIn("Ended eggs", want)
+        self.assertEqual(self.say_replies("what are this week's specials", base.skill_reply("specials.show")), ("answer", [want]))
+        self.seed([])
+        self.assertEqual(self.say_replies("any specials today", base.skill_reply("specials.show")), ("answer", [sp.NO_SPECIALS_NOW]))
+        self.seed([special("ended", "Ended eggs", start=gap - 9, end=gap - 3)])
+        self.assertEqual(self.say_replies("specials now", base.skill_reply("specials.show")), ("answer", [sp.NO_SPECIALS_NOW]))
+
+    def test_specials_read_only_batch_preserves_order_and_no_edits(self):
+        self.seed(self.six())
+        before = self.snapshot()
+        today = shop_today(T0)
+        shelf = voice.plain(morning_report.render(morning_report.facts(load_content(self.repo.wt / "hass" / "content"), today)))
+        show = {"skill": "specials.show", "slots": {}}
+        two = {"calls": [show, {"skill": "report.shelf", "slots": {}}, show], "revises": None}  # the repeated ask is answered once
+        self.assertEqual(self.say_replies("specials and the shelf report", two), ("answer", [self.expected(), shelf]))
+        self.untouched_since(before)
+        flipped = {"calls": [{"skill": "report.shelf", "slots": {}}, show], "revises": None}
+        self.assertEqual(self.say_replies("shelf report then specials", flipped), ("answer", [shelf, self.expected()]))
+        self.untouched_since(before)
+        # a change in the same message: neither is answered nor drafted
+        mixed = {"calls": [show, {"skill": "item.describe", "slots": {"product": "Hass avocado", "description": "Ripe and creamy"}}], "revises": None}
+        self.assertEqual(self.say_replies("specials and make the avocado ripe", mixed), ("refused", [dispatch.MIXED]))
+        self.untouched_since(before)
+        # an unknown sibling skill is not answered as a list either: written down, nothing edited
+        unknown = {"calls": [show, {"skill": "no.such.skill", "slots": {}}], "revises": None}
+        status, [said] = self.say_replies("specials and something odd", unknown)
+        self.assertEqual(status, "backlog")
+        self.assertNotIn("On now:", said)
+        self.assertEqual(self.snapshot(), before)
+        self.nothing_written()
+        self.assertEqual(self.drafts(), [])
 
 
 class OutsideAssumptionTests(unittest.TestCase):
@@ -760,7 +925,9 @@ def _seed(scratch, specials):
     data["specials"] = specials
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True) + "\n", "utf-8")
     content = load_and_validate(scratch.wt / "hass" / "content", scratch.wt / "storefront-mockup")
-    sitegen.write_files(sitegen.render(content, scratch.wt / "hass" / "templates"), scratch.wt)
+    # Render on the kit's day, the day the rows' {d+N} dates are built from, never the real day (MAIN-RED-AVO-2: with the real day
+    # a seeded special that ended before it was left off the page, so the seed page differed from the page the row later saved).
+    sitegen.write_files(sitegen.render(content, scratch.wt / "hass" / "templates", today=shop_today(scratch._clock())), scratch.wt)
     testkit._git(scratch.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-a", "-m", "seed specials")
 
 
@@ -937,6 +1104,24 @@ class GroundedEndToEndTests(unittest.TestCase):
                 disposition, replies, saved, drafts = self.go(text, skill, slots_for(short), seed_for())
                 self.assertNotEqual(disposition, "proposed", (skill, text))
                 self.assertEqual((saved, drafts), (None, []), skill)  # no draft, nothing saved
+                self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
+
+    def test_add_and_edit_keep_imperative_deal_exactly(self):
+        for add_text, edit_text, whole, dropped in (
+                ("put honey on special, Put two jars in your bag for $5, until Friday",
+                 "change the honey special to Put two jars in your bag for $5", "Put two jars in your bag for $5", "two jars in your bag for $5"),
+                ("new special: Make a friend happy with free samples, until Friday",
+                 "change the honey special to Make a friend happy with free samples",
+                 "Make a friend happy with free samples", "a friend happy with free samples")):
+            for skill, text, slots_for, seed in (
+                    (ADD, add_text, lambda d: self.add_slots("Honey", d), None),
+                    (EDIT, edit_text, lambda d: {"special": "honey", "deal": d}, self.edit_seed)):
+                disposition, _replies, saved, _drafts = self.go(text, skill, slots_for(whole), seed and seed())
+                self.assertEqual(disposition, "proposed", (skill, text))
+                self.assertEqual([x["deal"] for x in saved], [whole], (skill, text))  # byte-identical, read back from the store
+                disposition, replies, saved, drafts = self.go(text, skill, slots_for(dropped), seed and seed())
+                self.assertNotEqual(disposition, "proposed", (skill, text))
+                self.assertEqual((saved, drafts), (None, []), (skill, text))  # no draft, nothing saved
                 self.assertTrue(any("exactly as you type it" in r for r in replies), (skill, replies))
 
     def test_add_refuses_a_spelled_out_price_in_the_title_and_keeps_a_plain_one(self):

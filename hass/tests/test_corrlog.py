@@ -12,6 +12,9 @@ import contextlib
 import io
 import json
 import os
+import multiprocessing
+import socket
+from unittest import mock
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -142,6 +145,200 @@ class NeverRaises(LogCase):
         self.assertEqual([r["reason"] for r in self.log.rows()], ["good"])
 
 
+    def _write(self, rows, when=None):
+        when = when or self.now
+        day = self.state / corrlog.FOLDER
+        day.mkdir(exist_ok=True)
+        path = day / f"{when:%Y-%m-%d}.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        return path
+
+    def _mixed(self, when=None):
+        at = (when or self.now).isoformat()
+        good = lambda reason: {"at": at, "kind": "error", "reason": reason}
+        bad = [{"at": at, "kind": k, "reason": "CANARY"} for k in ([], {}, ["error"], {"error": 1})]
+        return [good("first")] + bad + [good("last")], [good("first"), good("last")]
+
+    def test_container_kind_lines_skip_and_continue(self):
+        mixed, accepted = self._mixed()
+        path = self._write(mixed)
+        before = path.read_bytes()
+        self.assertEqual(self.log.rows(), accepted)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_non_string_kind_controls(self):
+        at = NOW.isoformat()
+        rows = [{"at": at, "kind": k, "reason": "x"} for k in (None, 5, True, "bogus")] + [{"at": at, "reason": "x"}]
+        kept = [{"at": at, "kind": k, "reason": "x"} for k in corrlog.KINDS]
+        self._write(rows + kept)
+        self.assertEqual(self.log.rows(), kept)
+
+    def test_support_formatters_ignore_only_bad_kind_rows(self):
+        mixed, accepted = self._mixed()
+        self._write(mixed)
+        ref = self.state / "ref"
+        (ref / corrlog.FOLDER).mkdir(parents=True)
+        (ref / corrlog.FOLDER / f"{NOW:%Y-%m-%d}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in accepted), encoding="utf-8")
+        other = corrlog.CorrLog(ref, lambda: NOW)
+        for fn in (corrlog.problems_text, corrlog.weekly_line):
+            self.assertEqual(fn(self.log), fn(other))
+            self.assertNotIn("CANARY", fn(self.log))
+        self.assertIn("first", corrlog.problems_text(self.log))
+
+    def test_cli_reports_survive_container_kinds(self):
+        now = datetime.now(timezone.utc)
+        mixed, accepted = self._mixed(now)
+        path = self._write(mixed, now)
+        before = path.read_bytes()
+        ref = Path(tempfile.mkdtemp(dir=self.state))
+        (ref / corrlog.FOLDER).mkdir()
+        (ref / corrlog.FOLDER / path.name).write_text("".join(json.dumps(r) + "\n" for r in accepted), encoding="utf-8")
+        members = sorted(p.name for p in self.state.rglob("*"))
+        for what in ("problems", "weekly"):
+            got = []
+            for state in (self.state, ref):
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    self.assertEqual(corrlog.main([what, "--state", str(state)]), 0)
+                self.assertEqual(err.getvalue(), "")
+                got.append(out.getvalue())
+            self.assertEqual(got[0], got[1])
+            self.assertNotIn("CANARY", got[0])
+            self.assertNotIn("No problems", got[0])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(sorted(p.name for p in self.state.rglob("*")), members)
+
+
+class PathAdmission(LogCase):
+    def bounded(self, operation):
+        """A regression must fail, not leave a test runner stuck opening a pipe."""
+        ctx = multiprocessing.get_context("fork")
+        parent, child = ctx.Pipe(duplex=False)
+        def run():
+            try: child.send(operation())
+            finally: child.close()
+        process = ctx.Process(target=run)
+        process.start()
+        child.close()
+        try:
+            self.assertTrue(parent.poll(3), "correspondence I/O blocked")
+            result = parent.recv()
+            process.join(3)
+            self.assertEqual(process.exitcode, 0)
+            return result
+        finally:
+            if process.is_alive():
+                process.terminate()
+                process.join()
+            parent.close()
+
+    def foreign_row(self):
+        return json.dumps({"at": NOW.isoformat(), "kind": "corrected", "reason": "foreign",
+                           "excerpt": "foreign synthetic excerpt"}) + "\n"
+
+    def test_unsafe_correspondence_directories_are_never_traversed(self):
+        outside = self.state / "outside"
+        outside.mkdir()
+        (outside / "2026-11-08.jsonl").write_text(self.foreign_row())
+        (outside / "2025-01-01.jsonl").write_text("old synthetic bytes")
+        before = {p.name: p.read_bytes() for p in outside.iterdir()}
+        for kind in ("linked", "dangling", "file", "missing"):
+            with self.subTest(kind=kind):
+                state = self.state / kind
+                state.mkdir()
+                self.log = corrlog.CorrLog(state, lambda: self.now)
+                if kind == "linked": self.log.dir.symlink_to(outside, target_is_directory=True)
+                if kind == "dangling": self.log.dir.symlink_to(self.state / "absent", target_is_directory=True)
+                if kind == "file": self.log.dir.write_text("blocker")
+                self.assertEqual((self.log.rows(), self.log.last(), self.log.top(), self.log.prune()), ([], [], [], 0))
+                if kind != "missing":
+                    self.assertFalse(self.log.record("error", "x"))
+                    self.assertEqual({p.name: p.read_bytes() for p in outside.iterdir()}, before)
+                    self.assertFalse((self.state / "absent").exists())
+                    if kind == "file": self.assertEqual(self.log.dir.read_text(), "blocker")
+                    else: self.assertTrue(self.log.dir.is_symlink())
+                    self.log.dir.unlink()
+                else: self.assertFalse(self.log.dir.exists())
+
+    def test_linked_day_files_are_not_read_or_reported(self):
+        self.assertTrue(self.log.record("error", "local"))
+        foreign = self.state / "foreign"
+        foreign.write_text(self.foreign_row())
+        for name in ("2026-11-07.jsonl", "2025-01-01.jsonl"):
+            (self.log.dir / name).symlink_to(foreign)
+        self.assertEqual([r["reason"] for r in self.log.rows()], ["local"])
+        self.assertNotIn("foreign", corrlog.problems_text(self.log))
+        self.assertNotIn(corrlog.KINDS["corrected"], corrlog.weekly_line(self.log))
+        self.now -= timedelta(days=1)
+        self.assertFalse(self.log.record("error", "x"))
+        self.assertEqual(self.log.prune(), 0)
+        self.assertTrue((self.log.dir / "2025-01-01.jsonl").is_symlink())
+        self.assertEqual(foreign.read_text(), self.foreign_row())
+
+    def test_nonregular_day_files_do_not_block(self):
+        self.log.dir.mkdir()
+        day = self.log.dir / "2026-11-08.jsonl"
+        for kind in ("fifo", "directory", "socket"):
+            with self.subTest(kind=kind):
+                if kind == "fifo": os.mkfifo(day)
+                elif kind == "directory": day.mkdir()
+                else:
+                    sock = socket.socket(socket.AF_UNIX)
+                    self.addCleanup(sock.close)
+                    with contextlib.chdir(self.log.dir): sock.bind(day.name)
+                try:
+                    for read in (False, True):
+                        with self.subTest(read=read):
+                            result = self.bounded(self.log.rows if read else lambda: self.log.record("error", "x"))
+                            self.assertEqual(result, [] if read else False)
+                finally:
+                    if kind == "directory": day.rmdir()
+                    else: day.unlink()
+
+    def test_fifo_swapped_in_at_open_time_does_not_block(self):
+        self.log.dir.mkdir()
+        day = self.log.dir / "2026-11-08.jsonl"
+        real_open = os.open
+        def operation(read):
+            day.write_text(self.foreign_row())
+            def swap(path, flags, *args, **kwargs):
+                if Path(path) == day:
+                    day.unlink()
+                    os.mkfifo(day)
+                return real_open(path, flags, *args, **kwargs)
+            with mock.patch.object(corrlog.os, "open", side_effect=swap):
+                return self.log.rows() if read else self.log.record("error", "x")
+        for read in (False, True):
+            with self.subTest(read=read):
+                try:
+                    self.assertEqual(self.bounded(lambda: operation(read)), [] if read else False)
+                finally: day.unlink(missing_ok=True)
+
+    def test_refused_descriptors_are_closed_without_reading_or_writing(self):
+        self.log.dir.mkdir()
+        (self.log.dir / "2026-11-08.jsonl").write_text(self.foreign_row())
+        for read in (False, True):
+            with self.subTest(read=read), mock.patch.object(corrlog.os, "open", return_value=321), \
+                 mock.patch.object(corrlog.os, "fstat", return_value=self.log.dir.stat()), \
+                 mock.patch.object(corrlog.os, "close") as close, \
+                 mock.patch.object(corrlog.os, "read") as read_bytes, \
+                 mock.patch.object(corrlog.os, "write") as write_bytes:
+                self.assertEqual(self.log.rows() if read else self.log.record("error", "x"), [] if read else False)
+                close.assert_called_once_with(321)
+                read_bytes.assert_not_called()
+                write_bytes.assert_not_called()
+
+    def test_unreadable_disappeared_and_replacement_decoded_day_files(self):
+        self.log.dir.mkdir()
+        day = self.log.dir / "2026-11-08.jsonl"
+        day.write_bytes(self.foreign_row().encode().replace(b"foreign synthetic", b"\xff synthetic"))
+        self.assertIn("\ufffd", self.log.rows()[0]["excerpt"])
+        for error in (PermissionError, FileNotFoundError):
+            with self.subTest(error=error), mock.patch.object(corrlog.os, "open", side_effect=error):
+                self.assertEqual(self.log.rows(), [])
+                self.assertFalse(self.log.record("error", "x"))
+
+
 class Retention(LogCase):
     def test_day_files_older_than_90_days_are_deleted_whole(self):
         for days_ago in (0, 30, 89, 90, 91, 200):
@@ -178,6 +375,66 @@ class Retention(LogCase):
         os.symlink(elsewhere, self.state / corrlog.FOLDER / "2025-01-01.jsonl")
         self.assertEqual(self.log.prune(), 0)
         self.assertTrue(elsewhere.exists())
+
+    IMPOSSIBLE = ("2026-02-30.jsonl", "2025-02-29.jsonl", "2026-00-01.jsonl", "0000-01-01.jsonl", "2026-13-01.jsonl")
+
+    def plant_impossible(self):
+        folder = self.state / corrlog.FOLDER
+        folder.mkdir(mode=0o700, exist_ok=True)
+        for i, name in enumerate(self.IMPOSSIBLE):
+            (folder / name).write_text(f"unknown-{i}\n")
+            (folder / name).chmod(0o640)
+        return folder
+
+    def test_prune_skips_impossible_calendar_names_and_continues(self):
+        folder = self.plant_impossible()
+        (folder / "2026-01-01.jsonl").write_text("old\n")  # a valid expired day, wherever the scan meets it
+        (folder / "2026-08-10.jsonl").write_text("cutoff day\n")  # NOW 2026-11-08 minus 90 days: kept
+        self.assertEqual(self.log.prune(), 1)
+        self.assertEqual(self.files(), sorted(self.IMPOSSIBLE + ("2026-08-10.jsonl",)))
+        for i, name in enumerate(self.IMPOSSIBLE):
+            self.assertEqual((folder / name).read_text(), f"unknown-{i}\n")
+            self.assertEqual((folder / name).stat().st_mode & 0o777, 0o640)
+        self.assertEqual(self.log.prune(), 0)
+
+    def test_first_daily_record_survives_invalid_day_file(self):
+        folder = self.plant_impossible()
+        (folder / "2026-01-01.jsonl").write_text("old\n")
+        self.assertTrue(self.log.record("error", "first"))
+        self.assertTrue(self.log.record("error", "second"))
+        today = folder / "2026-11-08.jsonl"
+        self.assertEqual([json.loads(x)["reason"] for x in today.read_text("utf-8").splitlines()], ["first", "second"])
+        self.assertEqual(today.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.files(), sorted(self.IMPOSSIBLE + ("2026-11-08.jsonl",)))
+        self.now = NOW + timedelta(days=1)  # a new UTC day scans again and still writes its first row
+        self.assertTrue(self.log.record("error", "third"))
+        self.assertEqual(json.loads((folder / "2026-11-09.jsonl").read_text("utf-8"))["reason"], "third")
+        self.assertEqual((folder / "2026-02-30.jsonl").read_text(), "unknown-0\n")
+
+    def test_prune_calendar_boundaries_and_valid_leap_day(self):
+        folder = self.state / corrlog.FOLDER
+        folder.mkdir(mode=0o700)
+        self.now = datetime(2028, 5, 29, 12, 0, tzinfo=timezone.utc)  # cutoff day 2028-02-29, a real leap day
+        for name in ("2028-02-28.jsonl", "2028-02-29.jsonl", "2028-03-01.jsonl", "2028-05-30.jsonl", "2027-02-29.jsonl"):
+            (folder / name).write_text("x\n")
+        self.assertEqual(self.log.prune(), 1)  # only 2028-02-28 is valid and strictly older
+        self.assertEqual(self.files(), ["2027-02-29.jsonl", "2028-02-29.jsonl", "2028-03-01.jsonl", "2028-05-30.jsonl"])
+        self.now = datetime(2028, 5, 30, 12, 0, tzinfo=timezone.utc)  # the valid leap day is now one day too old
+        self.assertEqual(self.log.prune(), 1)
+        self.assertEqual(self.files(), ["2027-02-29.jsonl", "2028-03-01.jsonl", "2028-05-30.jsonl"])
+
+    def test_prune_cli_with_invalid_day_name_keeps_fixed_output(self):
+        folder = self.plant_impossible()
+        old = (datetime.now(timezone.utc) - timedelta(days=200)).strftime("%Y-%m-%d.jsonl")
+        (folder / old).write_text("old\n")
+        for expected in ("Deleted 1 old day files.\n", "Deleted 0 old day files.\n"):
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(corrlog.main(["prune", "--state", str(self.state)], out=out), 0)
+            self.assertEqual(err.getvalue(), "")
+            self.assertEqual(out.getvalue(), expected)
+        self.assertEqual(self.files(), sorted(self.IMPOSSIBLE))
+        self.assertEqual((folder / "2026-02-30.jsonl").read_text(), "unknown-0\n")
 
 
 class ForG(LogCase):
@@ -502,6 +759,66 @@ class MikesReport(unittest.TestCase):
         source = (Path(conversation.__file__)).read_text("utf-8")
         self.assertNotIn("for-g", source)
         self.assertNotIn("weekly_line", source.split("def _for_g")[0])
+
+
+class EventTimeOrder(LogCase):
+    def put(self, name, *items):
+        folder = self.state / corrlog.FOLDER
+        folder.mkdir(mode=0o700, exist_ok=True)
+        with open(folder / name, "a", encoding="utf-8") as f:
+            for at, reason in items: f.write(json.dumps({"at": at, "kind": "error", "reason": reason}) + "\n")
+
+    def reasons(self, rows): return [r["reason"] for r in rows]
+
+    def test_clock_rollback_does_not_displace_latest_problem(self):
+        self.now = datetime(2026, 11, 8, 12, 0, tzinfo=timezone.utc)
+        self.log.record("error", "later")
+        self.now = datetime(2026, 11, 8, 10, 0, tzinfo=timezone.utc)
+        self.log.record("error", "earlier")
+        self.now = NOW
+        self.assertEqual(self.reasons(self.log.rows()), ["earlier", "later"])
+        self.assertEqual(self.reasons(self.log.last(1)), ["later"])
+        text = corrlog.problems_text(self.log, 1)
+        self.assertIn("(later)", text)
+        self.assertNotIn("(earlier)", text)
+
+    def test_rows_sort_instants_across_files_and_offsets(self):
+        self.put("2026-11-07.jsonl", ("2026-11-08T09:30:00+00:00", "b"))
+        self.put("2026-11-08.jsonl", ("2026-11-08T10:00:00+01:00", "a"), ("2026-11-07T20:00:00+00:00", "z"), ("2026-11-08T11:00:00+00:00", "c"))
+        rows = self.log.rows()
+        self.assertEqual(self.reasons(rows), ["z", "a", "b", "c"])
+        self.assertEqual(rows[1]["at"], "2026-11-08T10:00:00+01:00")  # spelling untouched
+        self.assertEqual(self.reasons(self.log.last(2)), ["c", "b"])
+
+    def test_equal_instants_preserve_scan_ties(self):
+        self.put("2026-11-08.jsonl", ("2026-11-08T10:00:00+00:00", "one"), ("2026-11-08T11:00:00+01:00", "two"))
+        self.put("2026-11-09.jsonl", ("2026-11-08T10:00:00Z", "three"), ("2026-11-08T09:00:00+00:00", "first"))
+        self.assertEqual(self.reasons(self.log.rows()), ["first", "one", "two", "three"])
+        self.assertEqual(self.reasons(self.log.last(4)), ["three", "two", "one", "first"])
+
+    def test_cli_problems_is_newest_first_without_rewriting(self):
+        now = datetime.now(timezone.utc)
+        self.put("x.jsonl")  # stray file, ignored
+        self.put(now.strftime("%Y-%m-%d") + ".jsonl",
+                 ((now - timedelta(minutes=10)).isoformat(), "newer"), ((now - timedelta(minutes=50)).isoformat(), "older"),
+                 ((now - timedelta(minutes=30)).isoformat(), "mid"))
+        path = self.state / corrlog.FOLDER / (now.strftime("%Y-%m-%d") + ".jsonl")
+        before = path.read_bytes()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(corrlog.main(["problems", "--state", str(self.state)], out=out), 0)
+        lines = out.getvalue().splitlines()
+        self.assertEqual(lines[0], "The last 3 problems, newest first:")
+        self.assertEqual([l.rsplit("(", 1)[1][:-2] for l in lines[1:]], ["newer", "mid", "older"])
+        self.assertEqual(err.getvalue(), "")
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.log.top(7, 3), [("error", 3)])
+
+    def test_filtering_precedes_sort_and_empty_behavior_stays(self):
+        self.assertEqual(corrlog.problems_text(self.log), "No problems have been logged lately.")
+        self.put("2026-11-08.jsonl", ("2026-11-08T12:00:00", "naive"), ("garbage", "bad"), ("2026-11-08T12:00:00+00:00", "ok"))
+        self.put("2026-05-01.jsonl", ("2026-05-01T12:00:00+00:00", "old"))
+        self.assertEqual(self.reasons(self.log.rows()), ["ok"])
 
 
 class SafeFolder(unittest.TestCase):

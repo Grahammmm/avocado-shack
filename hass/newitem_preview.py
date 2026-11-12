@@ -47,7 +47,7 @@ CASES = {  # name -> (search term typed in the page, message, Michael's one-line
 
 def apply_in_memory(content, ops, image_path, now):
     """A copy of the catalog with the draft's ops applied by the real op handlers; (content, the new product record)."""
-    cp, ctx = copy.deepcopy(content), SimpleNamespace(now=now, warnings=[])
+    cp, ctx, created = copy.deepcopy(content), SimpleNamespace(now=now, warnings=[]), []
     cp.store["selection_checked_on"] = shop_today(now).isoformat()  # the day's shelf check, so the availability word may show
     for op in ops:
         args = dict(op["args"])
@@ -56,7 +56,9 @@ def apply_in_memory(content, ops, image_path, now):
             args["image"] = image_path
         out = HANDLERS[op["op"]](cp, args, ctx)
         if isinstance(out, Refused): raise RuntimeError(f"{op['op']} refused: {out}")
-    return cp, next(p for p in cp.products if p["image"] == image_path)
+        if op["op"] == "product.add": created += [t.key for t in out if t.collection == "products" and t.before is None]
+    if len(created) != 1: raise RuntimeError(f"expected exactly one product.add creation, got {len(created)}")
+    return cp, next(p for p in cp.products if p["id"] == created[0])  # by the created id: older products may share the image
 
 
 def before_ops(draft_result, message):
@@ -133,7 +135,7 @@ def main() -> int:
             print(name, side, "ok" if run["ok"] else "NOT OK: " + str(run["error"]))
     # the committed JSON never holds the machine's paths or a time; only names, checks and the draft's words
     (OUT / "preview.json").write_text(json.dumps(summary, indent=1, ensure_ascii=False, sort_keys=True) + "\n", "utf-8")
-    return 0 if all(summary[n]["after"]["ok"] for n in summary) else 1
+    return 0 if all(summary[n][side]["ok"] for n in summary for side in ("before", "after")) else 1
 
 
 if __name__ == "__main__":

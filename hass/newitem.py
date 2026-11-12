@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections import Counter, defaultdict
 
 from hass import claims, house_style as hs, media, newitem_render  # newitem_render imports Pillow only when a picture is drawn
@@ -151,7 +152,7 @@ def parse_facts(raw: str) -> dict:
     """The LLM's JSON reply as facts: only FACT_KEYS, each a non-empty string or None; anything else is ignored."""
     try:
         doc = json.loads(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):  # RecursionError: decoder-excessive nesting is just invalid JSON
         return dict.fromkeys(FACT_KEYS)
     doc = doc if isinstance(doc, dict) else {}
     return {k: (doc[k].strip() or None) if isinstance(doc.get(k), str) else None for k in FACT_KEYS}
@@ -186,9 +187,32 @@ def claim_terms(text) -> list:
 def without_claims(name, kind):
     """The public name with every claim term taken out ('Organic honey' -> 'Honey'); the kind word is kept or put back."""
     if not name or not claim_terms(name): return name
-    for t in claim_terms(name):
-        name = re.sub(r"(?<!\w)" + r"[-\s]+".join(re.escape(w) for w in re.split(r"[-\s]+", t)) + r"(?!\w)", " ", name, flags=re.I)
+    # Match the detector's folded text, but cut spans from the original name.
+    # Expanded characters share a source span; discarded combining marks belong
+    # to the preceding span so a removed claim cannot leave its accent behind.
+    folded, spans = [], []
+    for i, char in enumerate(name):
+        plain = "".join(c for c in unicodedata.normalize("NFKD", char) if not unicodedata.combining(c))
+        part = plain.translate(claims._PUNCT).casefold()
+        if not part and spans:
+            spans[-1] = (spans[-1][0], i + 1)
+        for c in part:
+            if c.isspace():
+                if not folded: continue
+                if folded[-1] == " ":
+                    spans[-1] = (spans[-1][0], i + 1)
+                    continue
+                c = " "
+            folded.append(c)
+            spans.append((i, i + 1))
+    text = "".join(folded).rstrip()
+    removed = set()
+    for term in claim_terms(name):
+        for match in claims._pattern(term).finditer(text):
+            removed.update(range(spans[match.start()][0], spans[match.end() - 1][1]))
+    name = "".join(" " if i in removed else c for i, c in enumerate(name))
     name = " ".join(name.split()).strip(" ,-")
+    if claim_terms(name): return without_claims(name, kind)
     if kind and not any(_fold(w) == _fold(kind) for w in name.split()): name = " ".join(x for x in (name, kind) if x)
     return _cap(name) if name else None
 
@@ -278,7 +302,7 @@ def ground(facts: dict, message: str, content) -> tuple:
         value = kept.get(key)
         if not value: continue
         if key == "name":  # his product words, with the maker first: every word of it is his, no claim word he did not affirm
-            ok = all(_fold(w) in low for w in re.findall(r"[\w’'-]+", value)) and not _unaffirmed_terms(value, low)
+            ok = all(_has(message, w) for w in re.findall(r"[\w’'-]+", value)) and not _unaffirmed_terms(value, low)
         elif key == "story":
             ok = _story_ok(value, kept.get("maker"), message)
         elif key == "maker":  # the maker must be WHO he says makes it, not just a capitalised word somewhere in the message

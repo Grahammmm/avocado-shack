@@ -196,5 +196,73 @@ class MorningReportHikesTests(unittest.TestCase):
         self.assertEqual([h["id"] for h in json.loads(self.report("--json"))["hikes"]], ["ridge"])
 
 
+    # RF2115-13: the report keeps its today/tomorrow window inside the supported calendar
+    def final_report(self, day, *args):
+        return self.run_report("--today", day, *args)
+
+    def final_rows(self, day, *args):
+        return json.loads(self.final_report(day, "--json", *args))["hikes"]
+
+    def test_final_day_cli_survives_unrelated_events(self):
+        self.hikes()
+        plain, plain_json = self.final_report("9999-12-31"), self.final_report("9999-12-31", "--json")
+        self.hikes(hike("old", "2026-11-03T09:00:00-08:00"), hike("gone", "9999-12-30T09:00:00-08:00", status="cancelled"))
+        before = self.tree_bytes()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(morning_report.main(["--today", "9999-12-31"], content_dir=self.dir, out=out), 0)
+        self.assertEqual((err.getvalue(), out.getvalue().rstrip("\n")), ("", plain))
+        self.assertNotIn("Hikes", plain)
+        self.assertIn("On the shelves:", plain)
+        self.assertEqual(self.final_report("9999-12-31", "--json"), plain_json)
+        self.assertNotIn("hikes", json.loads(plain_json))
+        self.assertEqual(self.tree_bytes(), before)
+
+    def test_final_day_keeps_scheduled_today_once(self):
+        self.hikes(hike("last", "9999-12-31T09:00:00-08:00", capacity=8), hike("done", "9999-12-31T10:00:00-08:00", status="completed"),
+                   hike("old", "2026-11-03T09:00:00-08:00"))
+        want = {"id": "last", "title": "Last", "day": "9999-12-31", "time": "09:00", "confirmed": None, "capacity": 8}
+        self.assertEqual(self.final_rows("9999-12-31"), [want])
+        self.assertEqual(self.final_report("9999-12-31").split("\n")[-2], f"Hikes: Friday at 9 am, Last ({UNAV})")
+        db = self.rsvp_db([("last", 2), ("last", 3)])
+        self.assertEqual(self.final_rows("9999-12-31", "--guests", db), [want | {"confirmed": 5}])
+        self.assertEqual(self.final_report("9999-12-31", "--guests", db).split("\n")[-2],
+                         "Hikes: Friday at 9 am, Last (5 guests have signed up, room for 8)")
+
+    def test_penultimate_day_includes_final_day_tomorrow(self):
+        self.hikes(hike("a", "9999-12-29T09:00:00-08:00"), hike("c", "9999-12-31T08:00:00-08:00"), hike("b", "9999-12-30T07:00:00-08:00"),
+                   hike("x", "9999-12-30T11:00:00-08:00", status="cancelled"), hike("y", "9999-12-31T11:00:00-08:00", status="completed"))
+        self.assertEqual([(h["id"], h["day"], h["time"]) for h in self.final_rows("9999-12-30")],
+                         [("b", "9999-12-30", "07:00"), ("c", "9999-12-31", "08:00")])
+
+    def test_calendar_window_preserves_boundary_and_ordinary_controls(self):
+        junk = [hike("x", "x"), hike("none", None), hike("naive", "9999-12-31T01:00:00"), hike("dateonly", "9999-12-31"),
+                hike("over", "9999-12-31T23:59:59-08:00"), "not an event", None]
+        for raw in ("not a list", [], junk):
+            with self.subTest(raw=str(raw)[:12]):
+                self.hikes(raw=raw)
+                self.assertNotIn("Hikes", self.final_report("9999-12-31"))
+                self.assertNotIn("hikes", json.loads(self.final_report("9999-12-31", "--json")))
+        self.hikes(hike("ridge", "9999-12-31T09:00:00-08:00"), *junk)
+        self.assertEqual([h["id"] for h in self.final_rows("9999-12-31")], ["ridge"])
+        self.hikes(hike("new", "2027-01-01T09:00:00-08:00"), hike("eve", "2026-12-31T09:00:00-08:00"))  # ordinary year rollover
+        self.assertEqual([h["id"] for h in self.final_rows("2026-12-31")], ["eve", "new"])
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as raised:
+            morning_report.main(["--today", "9999-12-32"], content_dir=self.dir, out=out)
+        self.assertEqual((raised.exception.code, out.getvalue()), (2, ""))
+
+    def test_boundary_reporting_is_read_only(self):
+        self.hikes(hike("last", "9999-12-31T09:00:00-08:00", capacity=8), hike("old", "2026-11-03T09:00:00-08:00"))
+        db = self.rsvp_db([("last", 4)])
+        before, names = self.tree_bytes(), sorted(p.name for p in self.dir.iterdir())
+        for _ in range(2):
+            self.final_report("9999-12-31", "--guests", db)
+            out = self.final_report("9999-12-31", "--json", "--guests", db)
+        self.assertNotIn(SENTINEL, out)
+        self.assertNotIn("example.invalid", out)
+        self.assertEqual((self.tree_bytes(), sorted(p.name for p in self.dir.iterdir())), (before, names))
+
+
 if __name__ == "__main__":
     unittest.main()

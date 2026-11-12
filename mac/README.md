@@ -9,7 +9,7 @@ Commands: `python3 -B mac/hass_forwarder.py {serve,status,check} --config FILE`.
 `serve` binds the webhook to 127.0.0.1 and reaches the receiver over Tailscale.
 
 Create the config privately (0600, regular file, owned by the dedicated Mac user):
-closed keys `ownerChat` (`iMessage;-;<address>`), `receiverUrl`
+closed keys `ownerChat` (`iMessage;-;<address>`), optional `ownerChats` (every owner's own one-to-one chat, `ownerChat` among them), `receiverUrl`
 (`http://<tailnet-name>:8795`), `bbPort`, `bbPasswordFile`, `secretFile`,
 `spoolDir`, `webhookTokenFile`, and optional `webhookPort` (8796).
 All file/directory paths are absolute. The spool directory must already exist at
@@ -20,7 +20,9 @@ these files. Webhook URL: loopback `/bb/<token>`; never publish it.
 The webhook stores only an event type and guid until REST refetch. Normalization
 and owner-chat filtering happen before storing text or posting. Pending messages
 retry forever in FIFO order, with fresh envelope nonces; completed payloads are
-erased. A rejected envelope remains pending and appears in `last_rejected`.
+erased. A rejected envelope remains pending and appears in `last_rejected`;
+`status` also reports `oldest_pending_s` (age of the oldest pending message), `head_tries` and
+`rejected_streak` (consecutive `rejected` answers since the last accepted one).
 Replies use the sealed relay and persistent sent ids to avoid resending after a
 lost ack. A crash between a BlueBubbles send and its sent-id commit can still
 repeat that send; the external API and SQLite cannot form one transaction.

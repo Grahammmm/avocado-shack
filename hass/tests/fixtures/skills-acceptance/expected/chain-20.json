@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/store.json",
+      "path": "intro",
+      "after": "Come browse our shelves. Say hello."
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/index.html"
+  ],
+  "assets": {},
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}

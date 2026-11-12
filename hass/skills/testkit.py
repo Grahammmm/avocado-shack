@@ -32,7 +32,9 @@ import re
 import subprocess
 import sys
 import types
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import wraps
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -247,31 +249,35 @@ class SetupError(ValueError):
     """A row's `setup` ops were refused or did not apply."""
 
 
-_OPEN = []  # the Scratches not yet closed, oldest first; the newest one's clock is the shop's day while any is open
+@contextmanager
+def _clock_scope(clock):
+    """Freeze ambient shop-day fallbacks only during one fixture operation.
 
-
-class _ShopClock(datetime):
-    """MAIN-RED-AVO-1: hass.content_model's ``datetime`` while a Scratch is open, so every wall-clock shop day
-    (``shop_today()`` with no instant: sitegen's page date, the preview targets, the content checks) is the kit's day.
-    The rows are written for START's day; without this the real date leaked in after it and broke every dated row."""
-
-    @classmethod
-    def now(cls, tz=None):
-        if not _OPEN: return datetime.now(tz)
-        now = _OPEN[-1].now
-        return now.astimezone(tz) if tz is not None else now.astimezone().replace(tzinfo=None)
-
-
-def _hold_day(scratch):
+    Restore the exact previous class, including an outer fixture/host test clock,
+    on every exit. No open Scratch owns another instance's ambient calendar.
+    """
     from hass import content_model
-    if not _OPEN: content_model.datetime = _ShopClock
-    _OPEN.append(scratch)
+    previous = content_model.datetime
+
+    class ShopClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            instant = clock()
+            return instant.astimezone(tz) if tz is not None else instant.astimezone().replace(tzinfo=None)
+
+    content_model.datetime = ShopClock
+    try:
+        yield
+    finally:
+        content_model.datetime = previous
 
 
-def _release_day(scratch):
-    from hass import content_model
-    if scratch in _OPEN: _OPEN.remove(scratch)
-    if not _OPEN and content_model.datetime is _ShopClock: content_model.datetime = datetime
+def _with_clock(method):
+    @wraps(method)
+    def clocked(self, *args, **kwargs):
+        with _clock_scope(self._clock):
+            return method(self, *args, **kwargs)
+    return clocked
 
 
 def _clocked_editor(scratch):
@@ -280,33 +286,37 @@ def _clocked_editor(scratch):
     from hass import conversation, editor as editor_mod
 
     class KitEditor(conversation.Editor):
+        _clock = staticmethod(scratch._clock)
+
+        @_with_clock
         def prepare(self, ops):
-            return editor_mod.prepare({"ops": ops}, state=self.state, registry=self.registry, now=scratch.now)
+            return editor_mod.prepare({"ops": ops}, state=self.state, registry=self.registry, now=self._clock())
 
+        @_with_clock
         def apply(self, change_id, draft_hash):
-            return editor_mod.apply(change_id, draft_hash, state=self.state, registry=self.registry, now=scratch.now)
+            return editor_mod.apply(change_id, draft_hash, state=self.state, registry=self.registry, now=self._clock())
 
+        @_with_clock
         def recover(self):
-            return editor_mod.recover(state=self.state, now=scratch.now)
+            return editor_mod.recover(state=self.state, now=self._clock())
 
+        @_with_clock
         def render_draft(self, change_id):
-            return editor_mod.render_draft(change_id, state=self.state, registry=self.registry, now=scratch.now)
+            return editor_mod.render_draft(change_id, state=self.state, registry=self.registry, now=self._clock())
     return KitEditor
 
 
 class Scratch:
     """A throwaway writer worktree + state dir + Conversation with the production Editor and op registry.
-    The kit's clock (START, one minute on per message) is the shop's clock for everything the row drives: the
-    Conversation, the skills' ``ctx.today``, the Editor and the wall-clock shop day. Always ``close()`` a Scratch."""
+    One instance-local clock drives Conversation, skills, Editor and scoped shop-day fallbacks.
+    START advances one minute per message. Always ``close()`` a Scratch."""
 
     def __init__(self, mapping, skills, fault=None, seed=None, setup=None, photos=(), house_render=False):
         self.now = START
-        _hold_day(self)
-        try: self._open(mapping, skills, fault, seed, setup, photos, house_render)
-        except BaseException:
-            _release_day(self)
-            raise
+        self._clock = lambda: self.now
+        self._open(mapping, skills, fault, seed, setup, photos, house_render)
 
+    @_with_clock
     def _open(self, mapping, skills, fault, seed, setup, photos, house_render):
         from hass import conversation, editor, media
         from hass.fixture_chat import FixtureAdapter
@@ -334,7 +344,7 @@ class Scratch:
             except Exception:  # noqa: BLE001 - nothing else owns the throwaway repo yet
                 self.repo.cleanup()
                 raise
-        self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, lambda: self.now, self.previewer)
+        self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, self._clock, self.previewer)
         self._proposal_reply = self.conv._proposal_reply
         self.conv._proposal_reply = self._with_set_line  # the stand-in dispatcher's job: the `I set:` line goes in front of the proposal (FW-3: prefix=...)
         self.Inbound = conversation.Inbound
@@ -355,9 +365,9 @@ class Scratch:
         _git(self.repo.wt, "add", "-A")
         _git(self.repo.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "real assets/products folder")
 
-    def _with_set_line(self, row, draft, prefix=""):
+    def _with_set_line(self, row, draft, prefix="", notes=()):  # HASS-CHAT-1: the conversation now passes the notes it chose
         line, self.interp.chosen = self.interp.set_line(), []  # once, and only for the message whose plan chose something
-        return self._proposal_reply(row, draft, line + prefix)
+        return self._proposal_reply(row, draft, line + prefix, notes)
 
     def _seed_or_clean(self, seed):
         try: self._seed(seed)
@@ -365,6 +375,7 @@ class Scratch:
             self.repo.cleanup()
             raise
 
+    @_with_clock
     def _seed(self, seed):
         """A row's `seed` ({content file: {top-level key: value}}, for example a hike that is already on the page) is
         written into the scratch content, validated, regenerated and committed BEFORE the row starts: the row's
@@ -377,7 +388,7 @@ class Scratch:
             data.update(copy.deepcopy(keys))
             path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
         content = load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup")  # a bad seed stops the row here
-        sitegen.write_files(sitegen.render(content, self.wt / "hass" / "templates"), self.wt)
+        sitegen.write_files(sitegen.render(content, self.wt / "hass" / "templates", today=sitegen.shop_today(self._clock())), self.wt)
         _git(self.wt, "add", "-A")
         _git(self.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-m", "seed")
 
@@ -389,12 +400,14 @@ class Scratch:
         done = self.editor.apply(out["draft"]["change_id"], out["draft"]["draft_hash"])
         if done.get("result") != "applied": raise SetupError(f"setup ops were not applied: {json.dumps(done, sort_keys=True)[:200]}")
 
+    @_with_clock
     def _ctx(self):
-        from hass.content_model import load_and_validate
-        return types.SimpleNamespace(today="2026-11-08", now=self.now, texts=list(self.interp.said), media_root=self.media_root,
+        from hass.content_model import load_and_validate, shop_today
+        return types.SimpleNamespace(today=shop_today(self._clock()).isoformat(), now=self._clock(), texts=list(self.interp.said), media_root=self.media_root,
                                      house_render=self.house_render,
                                      content=load_and_validate(self.wt / "hass" / "content", self.wt / "storefront-mockup"))
 
+    @_with_clock
     def say(self, text):
         from datetime import timedelta
         self.n += 1
@@ -420,7 +433,6 @@ class Scratch:
     def close(self):
         try: self.conv.db.close()
         finally:
-            _release_day(self)
             self.repo.cleanup()
             if self.media_root:
                 import shutil
@@ -433,11 +445,13 @@ def _fault_editor(base, scratch, state, fault):
     class FaultEditor(base):  # kit self-test only: what a broken skill path would do
         applies = 0
 
+        @_with_clock
         def prepare(self, ops):
             out = super().prepare(ops)
             if fault == "write-on-prepare" and out.get("result") == "ok": super().apply(out["draft"]["change_id"], out["draft"]["draft_hash"])
             return out
 
+        @_with_clock
         def apply(self, change_id, draft_hash):
             out = super().apply(change_id, draft_hash)
             self.applies += 1
@@ -449,7 +463,7 @@ def _fault_editor(base, scratch, state, fault):
                 data["town"] = data["town"] + " Leftover"
                 path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
                 content = load_and_validate(scratch.wt / "hass" / "content", scratch.wt / "storefront-mockup")
-                sitegen.write_files(sitegen.render(content, scratch.wt / "hass" / "templates"), scratch.wt)
+                sitegen.write_files(sitegen.render(content, scratch.wt / "hass" / "templates", today=sitegen.shop_today(scratch._clock())), scratch.wt)
                 _git(scratch.wt, "-c", "user.name=kit", "-c", "user.email=kit@example.invalid", "commit", "-q", "-a", "-m", "leftover")
             if fault == "undo-stale-generated" and self.applies == 2:  # content restored, one generated file still shows the edit
                 path = scratch.wt / "storefront-mockup" / "catalog-products.js"
@@ -620,6 +634,7 @@ def _drive(row, expect, sc, skills, skill, names, res):
         if problems: res.fail("jargon", f"owner reply shows {sorted(set(problems))}: {text.splitlines()[0][:80]!r}")
 
 
+@_with_clock
 def _undo_problems(sc, ufiles, leftover):
     """What the real worktree shows after undo, apart from a declared content residue: it is clean (nothing
     uncommitted or untracked), every file that is not content JSON is as at the start, the site files equal a fresh
@@ -676,7 +691,13 @@ def _as_list(v): return [] if v is None else v if isinstance(v, list) else [v]
 
 def _check_preview(expect, requests, skill, res):
     """`requests` are the preview requests the message that made the final draft caused: the preview of the draft
-    that is then approved, never an earlier one."""
+    that is then approved, never an earlier one. A row may say `preview: {"kind": "none"}` (AV1109-04) only for a skill that
+    declares preview none: nothing public changes, so no screenshot is required (a redundant capture is ignored) and
+    `_check_diff` proves no public file moved."""
+    if _wants_no_preview(expect):
+        if skill is None or getattr(skill, "preview", None) != "none": res.fail("wrong-preview", "the row expects no preview, but the skill does not declare preview none"); return
+        res.facts["preview"] = "none"
+        return
     if not requests: res.fail("wrong-preview", "no preview was requested for the final proposal"); return
     last = requests[-1]
     res.facts["preview"] = last.get("kind")
@@ -684,6 +705,10 @@ def _check_preview(expect, requests, skill, res):
     kind = str(getattr(skill, "preview", "") or "").split(":")[0]
     if skill is not None and kind in PREVIEW_KINDS and last.get("kind") not in PREVIEW_KINDS[kind]:
         res.fail("wrong-preview", f"the skill previews {kind!r} but the request is for {last.get('kind')!r}")
+
+
+def _wants_no_preview(expect):
+    return isinstance(expect.get("preview"), dict) and expect["preview"].get("kind") == "none"
 
 
 def _declared_picture(declared, file):
@@ -696,6 +721,9 @@ def _check_diff(expect, files, diff, chosen, res):
     want = sorted(expect["diff"], key=lambda e: (e["file"], e["path"]))
     if diff != want: res.fail("wrong-diff", f"diff {_fmt(diff)} != expected {_fmt(want)}")
     if files != sorted(expect["files"]): res.fail("wrong-diff", f"files {files} != expected {sorted(expect['files'])}")
+    if _wants_no_preview(expect):  # a solely-preview-none proposal changes no public (generated) file
+        public = [f for f in files if not (f.startswith("hass/content/") and f.endswith(".json"))]
+        if public: res.fail("wrong-diff", "a change with preview none must not change a public file: " + ", ".join(public))
     if chosen:
         from hass.editor import GENERATED_PATHS
         declared = [d for s in chosen for d in _declared_edits(s)]

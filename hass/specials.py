@@ -60,6 +60,6 @@ def change_days(store: dict, today: date) -> list[date]:
     days = set()
     for sp in store.get("specials") or []:
         for day in (iso_day(sp.get("start")), iso_day(sp.get("end"))):
-            if day is not None:
+            if day is not None and day < today:
                 days.update(d for d in (day, date.fromordinal(day.toordinal() + 1)) if d < today)
     return sorted(days)

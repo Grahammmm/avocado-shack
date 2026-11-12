@@ -19,6 +19,7 @@ from pathlib import Path
 
 from hass import conversation, corrlog, interpret_check, live_policy, margins, media, morning_report, owner_answers, voice
 from hass.content_model import REPO_ROOT
+from hass.skills import reports
 from hass.tests.test_conversation import CHAT, OWNER, ConversationTestCase, _ops
 from hass.tests.test_editor import DESC, HOURS, NEW_HOURS
 from hass.tests.test_hike_ops import HIKE, HIKE_ID
@@ -36,8 +37,10 @@ OWNER_FACING = {
                         "_record_lines", "proposal_text", "_summary", "_plain", "_asked_again", "_late", "_delayed", "_handle_message",
                         "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
-    "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render"], "interpret_check.py": "all",
-    "label_reader.py": ["question", "_maker_line", "_product_line"],
+    "hike_chat.py": "all",  # HASS-CHAT-1
+    "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render", "restock_text"], "interpret_check.py": "all",
+    "label_reader.py": ["question", "_maker_line", "_product_line"], "skills/reports.py": "all",  # AV1109-08: the shelf skill's sentences
+    "skills/social.py": ["item_reply", "hike_reply", "maker_reply", "recap_reply", "preflight", "refusal"],
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
     "conversation.py": ["HELP_TEXT", "LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "HISTORY_USAGE", "FIND_USAGE", "POST_USAGE", "HIKE_USAGE",
@@ -45,6 +48,10 @@ MODULE_CONSTANTS = {  # names of module-level owner text
                         "NOT_READ_REPLY", "PHOTO_QUESTION", "FETCH_FAILED", "DAILY_LIMIT", "TOO_LONG", "NOTHING", "SOCIAL_REPLY",
                         "UNREADABLE", "HELD_REPLY", "CANT_READ", "HOSTILE_REPLY", "STATUS_PLAIN"],
     "media.py": ["REPLIES"],
+    "skills/social.py": ["COPY_HEAD", "PRODUCT_PHOTO", "NO_PHOTO", "NO_POSTING", "CANT_READ", "CANT_SEE_PHOTO", "NO_STORY", "ITEM_REFUSALS",
+                         "HIKE_REFUSALS", "MAKER_REFUSALS", "SHARED_REFUSALS", "RESOLVER_REFUSALS", "RECAP_REFUSALS", "NO_RECAPS",
+                         "ADD_TO_RECAP", "NO_TAGGING"],
+    "skills/dispatch.py": ["MIXED"],
 }
 SQLISH = re.compile(r"^\s*(?:SELECT|INSERT|UPDATE|CREATE|DELETE|ALTER|PRAGMA|BEGIN|AND|ORDER|WHERE|\"|\)|\]|'|\([\'\"])|\bIS (?:NOT )?NULL\b|\b(?:state|change_id|row_id|ops_json|"
                     r"draft_hash)\b\s*(?:=|IN\b)|ORDER BY")
@@ -172,7 +179,9 @@ class EveryTemplate(unittest.TestCase):
                  *[sentence for _rx, _code, sentence in voice.REASONS], owner_answers.UNDER_WAY, owner_answers.UNKNOWN_STATE,
                  owner_answers.NOT_LIVE, owner_answers.LIVE_SHOWN, owner_answers.LIVE_UNKNOWN, owner_answers.LIVE_UNCONFIRMED,
                  owner_answers.LIVE_NOT_PUBLISHED.format(reason=owner_answers.live_reason("the release was interrupted")),
-                 owner_answers.live_reason("something odd")]
+                 owner_answers.live_reason("something odd"), reports.NO_PUSH, reports.UNREADABLE, reports.NOT_ON_REPORT,
+                 reports.COUNTS_LEAD + q("Cal Poly eggs") + ": not confirmed",
+                 reports.SITE_ASK, reports.SITE_UNREADABLE, reports.NO_MAKER, reports.NO_STORY, reports.NO_HOURS, reports.NO_HIKE]
         bad = [(t[:80], voice.check(t, long_ok=True)) for t in texts if voice.check(t, long_ok=True)]
         self.assertEqual(bad, [])
 
@@ -276,7 +285,7 @@ class Honesty(ConversationTestCase):
     def test_a_reply_that_is_not_done_never_claims_done(self):
         self.assertFalse(voice.claims_live(owner_answers.NOT_LIVE), owner_answers.NOT_LIVE)  # saved is true; on the website is not
         for text in ("It's waiting for your yes. Nothing has changed yet.", owner_answers.UNDER_WAY,
-                     "I couldn't save that change, so nothing changed. Please try again, or ask Graham if it keeps happening.",
+                     "I couldn't save that change, so nothing changed. Please send me the request again in a minute.",
                      "Reply yes to save it, or no to cancel.", "I haven't changed anything yet. To go ahead, reply yes a1b2.",
                      "Changes are paused, so I haven't saved that.", "Nothing changed. Tell me what you'd like to change."):
             self.assertFalse(voice.claims_success(text), text)
@@ -308,14 +317,33 @@ class Honesty(ConversationTestCase):
         self.assertIn("I couldn't save that change", reply)
         self.assertIn("nothing changed", reply)
         self.assertFalse(voice.claims_success(reply), reply)
-        self.assertEqual(self.drafts()[-1]["state"], "failed")
+        self.assertNotIn("yes again", reply)  # a failed draft cannot be approved again; the reply must not say so
+        failed, fresh = self.drafts()[-2:]
+        self.assertEqual((failed["state"], fresh["state"]), ("failed", "proposed"))  # recovery is a fresh proposal
+        self.assertEqual(failed["replaced_by"], fresh["code"])
+        self.assertIn(f"yes {fresh['code']}", reply)  # named by its own code, so a code-required chat can approve it
+        self.assertEqual(self.say(f"yes {fresh['code']}"), "approved")  # and that yes (a repeat of a failed draft needs its code) works
+        self.assertEqual(self.drafts()[-1]["state"], "applied")
+
+    def test_a_failed_save_that_cannot_be_rewritten_asks_for_the_request_again(self):
+        self.assertEqual(self.say("hours"), "proposed")
+        self.replies()
+        self.editor.apply = lambda *a, **k: {"result": "failed", "reason": "disk exploded"}
+        self.editor.prepare = lambda *a, **k: {"result": "refused", "reason": "nope"}
+        self.say("yes")
+        [reply] = self.replies()
+        self.assertIn("nothing changed", reply)
+        self.assertIn("send me the request again", reply)
+        self.assertNotIn("yes again", reply)
+        self.assertEqual([d["state"] for d in self.drafts()], ["failed"])
 
     def test_unknown_skill_says_i_cant_do_that_yet(self):
         self.interp.mapping["magic"] = {"ops": [{"op": "product.teleport", "args": {}}], "revises": None}
         self.say("magic")
         [reply] = self.replies()
         self.assertTrue(reply.startswith("I can't do that"), reply)
-        self.assertIn("ask Graham", reply)
+        self.assertNotIn("ask Graham", reply)  # HASS-CHAT-1: the owners are Graham and Mike; the one next step is named instead
+        self.assertIn("Say help", reply)
         self.assertIn("could-not-do", [r["kind"] for r in self.conv.log.rows()])
 
     def test_missing_fact_says_i_dont_know(self):
@@ -445,6 +473,21 @@ class OperationQuestions(H06TestCase):
         [saved] = self.replies()
         self.assertIn(f"The route idea {NEW['title']} was removed.", saved)
         self.assertEqual(self.fallbacks(), [])
+
+
+class MeetingWarningVoice(unittest.TestCase):
+    """AV2137-02: each meeting-detail guest warning says what changes and how many signed up, in plain words."""
+
+    def test_new_warning_voice_mapping(self):
+        for group in ("meeting place", "meet time", "route"):
+            for n, guests in ((1, "1 guest has"), (3, "3 guests have")):
+                technical = (f"{HIKE_ID}: the {group} changes; {n} confirmed guest{'s are' if n != 1 else ' is'} "
+                             "not told automatically")
+                plain = voice.explain_warning(technical)
+                self.assertEqual(plain, f"The {group} changes. {guests} signed up, and nobody is told automatically.")
+                self.assertEqual(voice.check(plain), [])
+        self.assertEqual(voice.explain_warning(f"{HIKE_ID} guest count unavailable; check RSVPs before approving"),
+                         "I can't see how many guests have signed up. Please check before you say yes.")
 
 
 if __name__ == "__main__":

@@ -120,13 +120,18 @@ class Inbox:
 
     @contextlib.contextmanager
     def _tx(self):
-        self.db.execute("BEGIN IMMEDIATE")
+        """One write transaction. RF0824-10: inside a caller's open transaction it is a SAVEPOINT instead, so a failed
+        inner operation undoes only itself and a successful one commits nothing until the outermost transaction does
+        (the receiver wraps the nonce record and the enqueue in one). A failed COMMIT is rolled back, never left open."""
+        nested = self.db.in_transaction
+        self.db.execute("SAVEPOINT inbox_op" if nested else "BEGIN IMMEDIATE")
         try:
             yield
+            self.db.execute("RELEASE inbox_op" if nested else "COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            if self.db.in_transaction:
+                for sql in ("ROLLBACK TO inbox_op", "RELEASE inbox_op") if nested else ("ROLLBACK",): self.db.execute(sql)
             raise
-        self.db.execute("COMMIT")
 
     def close(self) -> None:
         self.db.close()
@@ -192,6 +197,13 @@ class Inbox:
     def state(self, provider_id: str):
         row = self.db.execute("SELECT state FROM inbound WHERE provider_id = ?", (provider_id,)).fetchone()
         return None if row is None else row["state"]
+
+    def forwarded_at(self, provider_id: str):
+        """HASS-SEC-2 (L5): when the message reached this inbox (its enqueue time, within the envelope's 300 s clock window of
+        the forwarder's send), or None when it is not here or the time cannot be read."""
+        row = self.db.execute("SELECT enqueued_at FROM inbound WHERE provider_id = ?", (provider_id,)).fetchone()
+        try: return None if row is None else parse_aware(row["enqueued_at"], "enqueued_at")
+        except ValueError: return None
 
     def seen(self) -> Nonces:
         return Nonces(self)

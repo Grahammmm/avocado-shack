@@ -20,6 +20,7 @@ from hass.owner_answers import NOT_LIVE
 from hass.tests.test_conversation import CHAT
 from hass.tests.test_editor import git
 from hass.tests.test_preview import PNG_SIGNATURE, BrowserCase
+from hass import conversation
 
 FIXTURE = REPO_ROOT / "hass" / "tests" / "fixtures" / "conversation-preview.jsonl"
 REQUEST = "Update the avocado description"
@@ -50,7 +51,8 @@ class FixtureChatPreviewTests(BrowserCase):
         self.assertEqual((run.returncode, run.stderr), (0, ""))
         self.assertEqual(len(rows), 2)
         [row] = self.drafts()
-        self.assertIn("\nI couldn't make a picture of how it will look.", rows[0]["text"])
+        self.assertTrue(rows[0]["text"].startswith(conversation.PREVIEW_FAILED_HEAD), rows[0]["text"])  # HASS-CHAT-1: said first, then tried again
+        self.assertIn(conversation.PREVIEW_RETRY_LINE, rows[0]["text"])
         self.assertEqual(rows[0]["attachments"], [])
         self.assertTrue(rows[1]["text"].startswith("I saved it, but the preview check didn't pass: "), rows[1])
         self.assertEqual((row["state"], self.commits()), ("applied", 1))

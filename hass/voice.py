@@ -149,6 +149,7 @@ def claims_live(text) -> bool:
     """True when the message says the change is on the website now. 'Saved, but not on the website yet' and 'I'm not sure it's on
     the website' do not count."""
     stripped = _NEGATED.sub(" ", plain(str(text)))
+    stripped = re.sub(r"\bdone by hand\b", " ", stripped, flags=re.I)  # "a separate step, done by hand" says it is NOT on the website
     stripped = re.sub(r"\b(?:reply|say|send|tell me|ask)\b[^.!?\n]*", " ", stripped, flags=re.I)
     return bool(_LIVE.search(stripped))
 
@@ -208,17 +209,17 @@ REASONS = (  # (regex on the lower-cased technical text, log code, plain sentenc
     (r"already (?:has|says|shows|called|hidden|marked|scheduled)|is already|already the same|nothing to change|no change",
      "already-so", "That's already how it is, so nothing changed."),
     (r"guest count unavailable", "guest-count-missing",
-     "I can't see how many guests have signed up, so I can't change this safely. Please ask Graham."),
+     "I can't see how many guests have signed up, so I can't change this safely. Nothing changed."),
     (r"start is in the past|is already past|already past", "time-passed", "That time has already passed. What day and time should it be?"),
     (r"below \d+ confirmed|confirmed guests", "guests-over-limit",
      "More guests than that have already signed up. What limit should it be?"),
-    (r"^held:|held product|on hold", "on-hold", "That product is on hold, so I can't change it. Please ask Graham."),
+    (r"^held:|held product|on hold", "on-hold", "That product is on hold until someone has looked at it, so I can't change it yet. Nothing changed."),
     (r"is hidden; restore|restore it|restore the maker|restore .* first", "hidden-first",
      "That one is hidden right now. Do you want me to bring it back first?"),
     (r"unknown (?:route idea|change)|no such|not found|not-found|is not on the site", "not-found",
      "I don't know that one. Could you give me its name?"),
     (r"nothing to clear|has no .* set", "nothing-to-clear", "There's nothing there to remove."),
-    (r"conflict:", "changed-since", "That has changed since, so I can't undo it cleanly. Please ask Graham."),
+    (r"conflict:", "changed-since", "That has changed since, so I can't undo it cleanly. Tell me what it should say now, and I'll change it to that."),
     (r"still has active products", "maker-has-products",
      "That maker still has products showing. Should I hide those too?"),
     (r"image file .* missing|photo file cannot be read", "photo-missing",
@@ -238,6 +239,9 @@ WARNINGS = (  # (regex on the technical warning, builder of the plain sentence)
         f"{m[1]} {'guest has' if m[1] == '1' else 'guests have'} signed up, and nobody is told automatically.")),
     (r"moves to .*; (\d+) confirmed guests? (?:is|are) not told", lambda m: (
         f"{m[1]} {'guest has' if m[1] == '1' else 'guests have'} signed up for the old time, and nobody is told automatically.")),
+    (r": the (meeting place|meet time|route) changes; (\d+) confirmed guests? (?:is|are) not told", lambda m: (
+        f"The {m[1]} changes. {m[2]} {'guest has' if m[2] == '1' else 'guests have'} signed up, "
+        "and nobody is told automatically.")),
     (r"adds organic badge", lambda m: "This adds the Organic badge."),
     (r"removes organic badge", lambda m: "This takes off the Organic badge."),
     (r"changes the .based in. line on (\d+)", lambda m: f"This changes the 'Based in' line on {m[1]} product card{'s' if m[1] != '1' else ''}."),
@@ -255,7 +259,19 @@ def explain(technical) -> tuple:
     return GENERIC_REFUSAL, "unmapped"
 
 
+_DAY_WORDS = (r"(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day, (?:January|February|March|April|May|June|July|August|"
+              r"September|October|November|December) \d{1,2}, \d{4}")
+EXACT_WARNINGS = (  # AV2137-04 (H04): on the original text, so the hike title keeps its case; the title is quoted
+    (re.compile(rf"(.+) \(({_DAY_WORDS})\) shows this route; its Route line changes", re.S),
+     lambda m: f"The Route line on {quote(m[1])} ({m[2]}) changes too."),
+    (re.compile(r"the trail journal entry for (.+) changes too", re.S),
+     lambda m: f"The trail journal entry for {quote(m[1])} changes too."),
+)
+
+
 def explain_warning(technical) -> str:
+    for rx, build in EXACT_WARNINGS:
+        if m := rx.fullmatch(str(technical or "")): return build(m)
     text = str(technical or "").lower()
     for rx, build in WARNINGS:
         m = re.search(rx, text)
@@ -297,4 +313,15 @@ def value_words(value, field=None) -> str:
     if isinstance(value, list) and all(isinstance(v, str) for v in value): return "; ".join(value)
     if isinstance(value, (int, float)): return str(value)
     if isinstance(value, str): return value
+    if isinstance(value, dict) and set(value) == {"text", "until"} and isinstance(value["text"], str) and value["text"].strip():
+        return _notice_words(value)  # HASS-QA-1: the notice draft showed "more than I can show here"
     return "more than I can show here"
+
+
+def _notice_words(notice) -> str:
+    """A shop notice {text, until} as the owner reads it: its words, then its last day in plain words."""
+    try:
+        day = datetime.strptime(str(notice["until"]), "%Y-%m-%d")
+    except ValueError:
+        return notice["text"].strip()
+    return f"{notice['text'].strip()} (until {day.strftime('%B')} {day.day})"

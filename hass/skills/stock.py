@@ -25,6 +25,7 @@ if __package__ in (None, ""):
 
 from hass.content_model import AVAILABILITY, ID_RE  # noqa: E402
 from hass.interpret_check import PRICE_REPLY  # noqa: E402
+from hass.skills import kinds  # noqa: E402
 from hass.skills.model import Slot, Skill, Trigger, Undo  # noqa: E402
 from hass.sitegen import STALE_AFTER_DAYS  # noqa: E402
 
@@ -49,9 +50,10 @@ NONE_NAMED = "Which products should I clear?"
 class Refusal(ValueError):
     """A plan that refuses carries the fixed owner reply (the test kit and the dispatcher read ``.reply``)."""
 
-    def __init__(self, reply):
+    def __init__(self, reply, kind="refuse"):
         super().__init__(reply)
         self.reply = reply
+        self.kind = kind
 
 
 def _content(ctx):
@@ -78,17 +80,41 @@ def _usable(ctx, pid):
 
 def _today(ctx):
     raw = getattr(ctx, "today", None)
+    if type(raw) is date:  # production dispatch supplies the Pacific date object; a datetime is not a date here
+        return raw
     try:
         return date.fromisoformat(raw) if isinstance(raw, str) else None
     except ValueError:
         return None
 
 
-def _ids(value, cap: int | None = MAX_ITEMS) -> list:
-    """A list of product ids, in the owner's order, each once; the whole-shelf cap applies unless ``cap`` is None."""
-    if not isinstance(value, (list, tuple)) or not all(isinstance(x, str) and ID_RE.fullmatch(x) for x in value):
+def _refs(value, ctx) -> list:
+    """RF2135-10: the product ids a list of references names, in the owner's order, repeats kept.
+
+    A canonical id keeps the id path (the editor judges an id the content does not know). Any other string is a
+    product name or alias, resolved with the existing ``kinds.product_ref``; only one active product is accepted, so an
+    ambiguous, unknown, held or hidden name refuses the whole plan with the resolver's own plain reply.
+    """
+    if not isinstance(value, (list, tuple)) or not all(isinstance(x, str) and x.strip() for x in value):
         raise Refusal(BAD_ITEM)
-    out = list(dict.fromkeys(value))
+    content = _content(ctx)
+    out = []
+    for ref in value:
+        if ID_RE.fullmatch(ref):
+            out.append(ref)
+        elif content is None:
+            raise Refusal(BAD_ITEM)
+        else:
+            found = kinds.product_ref(content, ref, getattr(ctx, "aliases", None))
+            if found.status != "one":
+                raise Refusal(found.reply)
+            out.append(found.value)
+    return out
+
+
+def _ids(value, ctx, cap: int | None = MAX_ITEMS) -> list:
+    """Resolved product ids, in the owner's order, each once; the whole-shelf cap applies unless ``cap`` is None."""
+    out = list(dict.fromkeys(_refs(value, ctx)))
     if cap is not None and len(out) > cap:
         raise Refusal(TOO_MANY.format(count=len(out)))
     return out
@@ -105,7 +131,7 @@ def _set_plan(slots, ctx) -> list:
     for item in items:  # the same product twice with the same word is one change; two words is a question
         pid, word = item["product"], item["availability"]
         if chosen.setdefault(pid, word) != word:
-            raise Refusal(TWICE.format(name=_name(ctx, pid)))
+            raise Refusal(TWICE.format(name=_name(ctx, pid)), kind="question")
     if len(chosen) > MAX_ITEMS:
         raise Refusal(TOO_MANY.format(count=len(chosen)))
     today = _today(ctx)
@@ -134,13 +160,13 @@ def _checked_plan(slots, ctx) -> list:
     seen: dict = {}
     args: dict = {}
     for word, ids in lists.items():
-        if isinstance(ids, (list, tuple)) and len(set(ids)) != len(ids) and all(isinstance(x, str) and ID_RE.fullmatch(x) for x in ids):
-            raise Refusal(TWICE.format(name=_name(ctx, next(x for x in ids if list(ids).count(x) > 1))))  # each product once, same list too
-        ids = _ids(ids, cap=None)  # a morning check may name any number of products: one change, not one per product
+        ids = _refs(ids, ctx)  # a morning check may name any number of products: one change, not one per product
+        if len(set(ids)) != len(ids):
+            raise Refusal(TWICE.format(name=_name(ctx, next(x for x in ids if ids.count(x) > 1))))  # each product once, same list too
         for pid in ids:
             _usable(ctx, pid)
             if pid in seen:
-                raise Refusal(TWICE.format(name=_name(ctx, pid)))
+                raise Refusal(TWICE.format(name=_name(ctx, pid)), kind="question")
             seen[pid] = word
         if ids:
             args[word] = ids
@@ -170,7 +196,7 @@ def _clear_plan(slots, ctx) -> list:
     raw = slots.get("items")
     if not raw:
         raise Refusal(NONE_NAMED)
-    ids = _ids(raw)
+    ids = _ids(raw, ctx)
     ops = []
     for pid in ids:
         _usable(ctx, pid)
@@ -203,7 +229,7 @@ STOCK_SET = Skill(
         Trigger("we're low on stuff", "vague"),
         Trigger("everything is sold out"),
     ),
-    slots=(Slot("items", "text_list", True, ask="Which products, and in, low or out?"),),
+    slots=(Slot("items", "stock_items", True, ask="Which products, and in, low or out?"),),
     rules=("shelf-check-today", "not-already-true", "whole-shelf-max-6", "held-or-hidden-refused", "no-price"),
     plan=_set_plan, edits=_WORD_EDITS + ((_STORE, "selection_checked_on"),) + _GENERATED,
     side_effects=("inventory-word", "shelf-check-day"), preview=_PRODUCT_PREVIEW, approval="owner-yes",
@@ -213,7 +239,7 @@ STOCK_SET = Skill(
             ("a product is on hold", HELD),
             ("more than six products", TOO_MANY),
             ("the product already says it", ALREADY)),
-    cases=_CASES.format("stock.set"), version=1)
+    cases=_CASES.format("stock.set"), version=2)
 
 STOCK_CHECKED = Skill(
     name="stock.checked", label="record the shelf check",
@@ -240,7 +266,7 @@ STOCK_CHECKED = Skill(
             ("the day is before the last check", AFTER),
             ("a product is named twice", TWICE),
             ("the check is already recorded", DONE_TODAY)),
-    cases=_CASES.format("stock.checked"), version=1)
+    cases=_CASES.format("stock.checked"), version=3)
 
 STOCK_CLEAR = Skill(
     name="stock.clear", label="stop showing a word on a product",

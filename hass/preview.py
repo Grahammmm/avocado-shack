@@ -8,7 +8,7 @@ fresh empty temp database and a minimal environment; ``hass/screenshot.cjs`` cap
 The server is always stopped and the copy removed. Screenshots are written 0600; nothing is published or sent.
 A damaged change record gives the target ``{"kind": "unreadable"}``, refused before any copy or server.
 """
-import http.client, json, os, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
+import http.client, json, os, re, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
 from hass.content_model import DEFAULT_INTRO, shop_today
@@ -215,8 +215,23 @@ def _link_assets(dest: Path, real: Path, plan: dict) -> None:
 
 
 def _last_line(text: str) -> str:
+    """The line that says what went wrong: Node's own ``Error: ...`` line when there is one (its last line is only the Node
+    version, which said nothing on 2026-11-09), else the last line."""
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
-    return (lines[-1] if lines else "no output")[:200]
+    errors = [line for line in lines if re.match(r"^(?:\w*Error|Please update)\b", line)]
+    return (errors[0] if errors else lines[-1] if lines else "no output")[:200]
+
+
+FAILURE_KINDS = (  # HASS-CHAT-1: a short, fixed word for the correspondence log (never the raw text)
+    (r"Cannot find module", "playwright-missing"), (r"update your version of Node|Unsupported engine", "node-too-old"),
+    (r"FileNotFoundError|No such file or directory: 'node'|ENOENT", "node-missing"), (r"Timeout|timed out", "timeout"),
+    (r"did not start", "server-did-not-start"), (r"check failed", "check-failed"), (r"unreadable", "unreadable"),
+    (r"Executable doesn't exist|browserType\.launch", "browser-missing"))
+
+
+def failure_kind(error) -> str:
+    """One of FAILURE_KINDS' words for a capture error, or ``other``."""
+    return next((kind for rx, kind in FAILURE_KINDS if re.search(rx, str(error or ""))), "other")
 
 
 def _checks(stdout: str) -> dict | None:
@@ -301,7 +316,7 @@ class Previewer:
                                 "OUT": str(shot), "VIEWPORT": name,
                                 **{k: self.env[k] for k in PASS_THROUGH if self.env.get(k)}}
                     try:
-                        proc = subprocess.run(["node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
+                        proc = subprocess.run([self.env.get("NODE") or "node", str(SCRIPT)], env=node_env, cwd=tmp, capture_output=True,
                                               text=True, timeout=CAPTURE_TIMEOUT)
                         ran = not proc.returncode and shot.is_file()
                         checks = _checks(proc.stdout) if ran else None

@@ -94,8 +94,23 @@ class Backlog:
 
     def purge(self, days=RETENTION_DAYS) -> int:
         """Remove rows received more than ``days`` days ago (D7). Returns how many."""
-        cutoff = (self.clock() - timedelta(days=days)).isoformat()
-        return self.db.execute("DELETE FROM backlog WHERE received_at < ?", (cutoff,)).rowcount
+        now = self.clock()
+        if not isinstance(now, datetime) or now.utcoffset() is None:
+            raise ValueError("backlog clock must be timezone-aware")
+        cutoff = now.astimezone(timezone.utc) - timedelta(days=days)  # elapsed days, not local calendar days
+        removed = 0
+        for row_id, stamp in self.db.execute("SELECT id, received_at FROM backlog").fetchall():
+            # A stored stamp that does not parse, or has no offset, has unknown age: keep it rather than guess a zone.
+            try:
+                at = datetime.fromisoformat(stamp)
+            except (TypeError, ValueError):
+                continue
+            # Compare the aware instants directly: converting to UTC first would overflow for a valid stamp at the
+            # datetime range edge (0001-01-01T00:00:00+02:00) and abort the whole purge.
+            if at.utcoffset() is None or at >= cutoff:
+                continue
+            removed += self.db.execute("DELETE FROM backlog WHERE id = ? AND received_at = ?", (row_id, stamp)).rowcount
+        return removed
 
     def owner_list(self) -> str:
         """The 'backlog' command reply: the last ten, each as 'number. day - what was asked'. No stored text."""
@@ -186,3 +201,22 @@ def _main(argv=None) -> int:
 
 if __name__ == "__main__":
     sys.exit(_main())
+
+
+# RF2345-12 (SKILLS-SPEC 3.26): the finite, explicit fresh-request grammar that code sends to the page.faq refusal before any model.
+_PAGE_FORMS = frozenset({"faq", "add an faq", "add a faq", "frequently asked questions", "add a frequently asked questions page",
+                         "add a questions page", "add a delivery policy page"})
+_FAQ_PAYLOAD = re.compile(r"faq:\s*\S")
+
+
+def explicit_page_request(text) -> bool:
+    """True only for the listed unmistakable fresh FAQ / delivery-policy page requests. Pure; anything else (including
+    negations, quotes, questions and compound messages) is False and keeps its normal route."""
+    if not isinstance(text, str):
+        return False
+    t = re.sub(r"\s+", " ", text.strip().lower())
+    if t.startswith("please "):
+        t = t[len("please "):].lstrip()
+    if _FAQ_PAYLOAD.match(t):
+        return True
+    return t.rstrip(".?!").strip() in _PAGE_FORMS

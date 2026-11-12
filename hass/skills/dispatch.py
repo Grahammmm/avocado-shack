@@ -71,6 +71,8 @@ RULES: dict = {}
 DERIVERS: dict = {}
 SET_PHRASES: dict = {}
 READ_ONLY: dict = {}
+READ_ONLY_LONG: set = set()  # read-only skills whose answer may run long (a full caption to copy); every other check still applies
+MIXED = "I write captions and make changes in separate messages. Send the change on its own. Nothing changed."
 
 
 def _no_price(slots, texts, ctx):
@@ -83,9 +85,12 @@ RULES.setdefault("no-price", _no_price)
 class Ctx:
     """What a skill's ``plan`` and rules may read: the saved content (read-only), today (Pacific), aliases, the owner's texts."""
 
-    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False):
+    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, site_dir=None, *, guest_counts_db=None):
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
+        self.guest_counts_db = guest_counts_db
+        self.multi_call = False  # True while the owner's texts are shared by several calls of one message (a skill cannot tie a loose word to one call)
+        self.site_dir = site_dir  # the writer's storefront-mockup folder (the same checkout the content was read from), or None
 
 
 # -- reply shapes ---------------------------------------------------------------------------------------------
@@ -189,6 +194,12 @@ def _value_problem(slot, value):
     elif k == "text_list":
         if not (isinstance(value, list) and value and all(text_ok(v) for v in value)) or len(set(value)) != len(value):
             return "that list has an empty or repeated line"
+    elif k == "stock_items":  # RF0814-12: shape only; repeats, the six-product cap and every stock rule stay in the plan
+        if not (isinstance(value, list) and value and all(
+                isinstance(v, dict) and set(v) == {"product", "availability"}
+                and isinstance(v["product"], str) and content_model.ID_RE.fullmatch(v["product"])
+                and isinstance(v["availability"], str) and v["availability"] in content_model.AVAILABILITY for v in value)):
+            return "each one needs a product and in stock, low or sold out"
     elif k == "id":
         if not (isinstance(value, str) and content_model.ID_RE.fullmatch(value)):
             return "that is not a name I can use"
@@ -220,6 +231,7 @@ class Filled:
         self.ask: dict | None = None
         self.left_off: list = []
         self.refused: str | None = None
+        self.refused_status: str | None = None  # the resolver's "held" or "hidden" behind ``refused``
 
 
 def drop_denied(skill, slots: dict, keep, texts) -> list:
@@ -254,7 +266,7 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
                 replaced.add(name)
             continue
         if slot.kind in kinds.RESOLVERS:
-            res = _resolve(slot, value, ctx)
+            res = _resolve(slot, value, ctx, include_hidden=skill.name == "item.restore")
             if res.status == "one":
                 out.slots[name] = res.value
                 replaced.add(name)
@@ -263,7 +275,7 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
                 out.problem, out.problem_slot = res.reply, name
                 out.ask = {"slot": name, "ids": list(res.ids), "names": list(res.candidates)} if res.ids else None
                 if res.status in ("held", "hidden"):
-                    out.refused = res.reply
+                    out.refused, out.refused_status = res.reply, res.status
             continue
         problem = _value_problem(slot, value)
         if problem:
@@ -280,12 +292,14 @@ def validate(skill, current: dict, new: dict, texts, ctx, attachments=()) -> Fil
     return out
 
 
-def _resolve(slot, value, ctx):
+def _resolve(slot, value, ctx, *, include_hidden=False):
     fn = kinds.RESOLVERS[slot.kind]
     if slot.kind == "attachment":
         return fn(value)
     if not isinstance(value, str) or not value.strip():
         return kinds.Resolved("invalid", reply=f"I can't use that for the {slot.name.replace('_', ' ')}.")
+    if slot.kind == "product_ref" and include_hidden:
+        return fn(ctx.content, value, ctx.aliases, include_hidden=True)
     if slot.kind in ("product_ref", "maker_ref"):
         return fn(ctx.content, value, ctx.aliases)
     if slot.kind in ("hike_ref", "route_ref"):
@@ -385,10 +399,11 @@ class Dispatcher:
     def _ctx(self, now, texts):
         from hass import editor as editor_mod
         from hass.content_model import load_content, shop_today
-        content = load_content(editor_mod._load(str(self.conv.sdir))[2] / "hass" / "content")
+        writer = editor_mod._load(str(self.conv.sdir))[2]
+        content = load_content(writer / "hass" / "content")
         settings = getattr(self.conv, "settings", None) or {}
         return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
-                   house_render=settings.get("houseRender") is True)
+                   house_render=settings.get("houseRender") is True, site_dir=writer / "storefront-mockup", guest_counts_db=settings.get("guestCountsDb"))
 
     def _owner(self):
         return self.conv._chat()  # the answering chat, so each owner has their own open request (HASS-LIVE-PLAN-1)
@@ -431,8 +446,9 @@ class Dispatcher:
             best, near = found[0], len(found) > 1 and found[0][1] - found[1][1] <= NEAR_TIE * found[0][1]
             if any(p not in names for p in picks):
                 offered = list(dict.fromkeys([*picks, best[0]]))[:3]
-            elif len(picks) == 1 and near:  # the leading pair is ambiguous, whichever one was picked
-                offered = list(dict.fromkeys([picks[0], found[0][0], found[1][0]]))[:2]
+            elif near and not {found[0][0], found[1][0]} <= set(picks):
+                leaders = [found[0][0], found[1][0]]
+                offered = list(dict.fromkeys([picks[0], *leaders])) if len(picks) == 1 and picks[0] in leaders else leaders
             elif len(picks) == 1 and picks[0] != best[0] and best[1] - dict(found)[picks[0]] <= NEAR_TIE * best[1]:
                 offered = [picks[0], best[0]]
             else:
@@ -443,9 +459,16 @@ class Dispatcher:
         return "Do you want to " + ", or ".join(labels) + "?", offered
 
     # entry points --------------------------------------------------------------------------------------------
+    def _explicit_page(self, msg) -> bool:
+        from hass.skills.backlog import explicit_page_request
+        return self.registry.get("page.faq") is not None and explicit_page_request(msg.text)
+
     def cheap(self, msg, now):
         """A short answer to the asked slot read by code alone (no model call). The disposition, or None to let the model read it."""
         req = self.conv.requests.get(self._owner(), now)
+        if req is None and self._explicit_page(msg):  # RF2345-12: an unmistakable fresh FAQ-page ask is refused by code, no model
+            from hass.skills.backlog import NO_FAQ
+            return self._backlog(msg, now, None, "", "unsupported-page", reply=NO_FAQ, texts=[msg.text])
         if req is None or not req["skill"] or not req["asked_slot"]:
             return None
         skill = self.registry.get(req["skill"])
@@ -506,6 +529,12 @@ class Dispatcher:
         attachments = (base["attachments"] if base else [])
         ctx = ctx or self._ctx(now, texts)
         ctx.texts = texts
+        ctx.multi_call = ctx.multi_call or bool(req and req["calls"])  # a queued call of a several-ask message shares its texts
+        said = self._read_only_hook(skill, "preflight", ctx)  # a caption skill: an ask to post, send or schedule is answered first
+        if said:
+            conv.requests.mark(req["request_id"], "closed", now) if req else None
+            conv._reply(said)
+            return "refused"
         slots = dict(req["slots"]) if req else {}
         if resolved:  # a cheap answer: already a checked value (an id the owner picked from our own list), not words to resolve
             filled = Filled()
@@ -518,6 +547,13 @@ class Dispatcher:
             if sl.kind == "attachment" and sl.from_attachment and attachments and not slots.get(sl.name):
                 slots[sl.name] = attachments[-1]
         if filled.refused:
+            said = self._read_only_hook(skill, "refusal", ctx, filled.problem_slot, filled.refused_status)
+            if said:  # a read-only answer about a held or hidden record: said in its own words, nothing left open
+                conv.requests.mark(req["request_id"], "closed", now) if req else None
+                conv._reply(said)
+                if req and req["calls"]:  # this ask is refused; the owner's other caption asks of the same message are not
+                    return self._next_queued(msg, now, None, req["calls"], texts, attachments, "refused")
+                return "refused"
             conv.requests.put(owner, msg.provider_id, now, texts=texts, skill=skill.name, slots=slots, attachments=attachments,
                               request_id=req["request_id"] if req else None, question=filled.refused, asked_slot=None)
             conv._reply(filled.refused)
@@ -685,7 +721,15 @@ class Dispatcher:
             has_slots=any(v not in (None, "", []) for c in result["calls"] for v in c["slots"].values()))
         if asked:
             return self._ask_which(msg, now, req, asked, attachments)
+        long_ones = [c["skill"] in READ_ONLY_LONG for c in result["calls"]]
+        if any(long_ones) and all(self.registry.get(c["skill"]) is not None for c in result["calls"]):
+            if not all(long_ones):  # a caption and a change in one message: neither is answered or drafted
+                conv.requests.mark(req["request_id"], "closed", now) if req is not None else conv.requests.close_live(owner, now, "closed")
+                conv._reply(MIXED)
+                return "refused"
+            return self._read_only_calls(msg, now, result["calls"], req, texts, attachments)
         ctx = self._ctx(now, texts)
+        ctx.multi_call = len(result["calls"]) > 1
         ops, left, waiting, parts, stopped = [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
@@ -733,7 +777,7 @@ class Dispatcher:
                 conv._reply(PLAN_FAILED)
                 return "not-drafted"
             return refused
-        note = self._note_lines(parts)
+        note = self._note_lines(parts, left)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
                                   prefix="\n".join(note) + "\n" if note else "", legacy=False)
         live = conv.requests.get(owner, now)
@@ -750,6 +794,47 @@ class Dispatcher:
         # the complete calls are drafted; the first incomplete one is asked next, one question at a time
         self._queue_only(msg, now, req, first, rest, texts, attachments, ctx)
         return disposition
+
+    def _read_only_calls(self, msg, now, calls, req, texts, attachments):
+        """Several caption asks in one message (every call a READ_ONLY_LONG skill): each complete one is answered in order, once;
+        a held or hidden one is refused in its own words; the first that needs an answer is asked, the rest wait their turn."""
+        conv, owner = self.conv, self._owner()
+        ctx = self._ctx(now, texts)
+        said = next((s for s in (self._read_only_hook(self.registry.get(c["skill"]), "preflight", ctx) for c in calls) if s), None)
+        if said:
+            conv.requests.mark(req["request_id"], "closed", now) if req is not None else conv.requests.close_live(owner, now, "closed")
+            conv._reply(said)
+            return "refused"
+        waiting, done = [], []
+        for call in calls:
+            skill = self.registry.get(call["skill"])
+            filled = validate(skill, {}, call["slots"], texts, ctx, attachments)
+            if filled.refused:
+                conv._reply(self._read_only_hook(skill, "refusal", ctx, filled.problem_slot, filled.refused_status) or filled.refused)
+                continue
+            missing = None if filled.problem else next_missing(skill, filled.slots)
+            if filled.problem or missing is not None:
+                waiting.append({"skill": skill.name, "slots": filled.slots, "problem": filled.problem, "ask": filled.ask,
+                                "slot": filled.problem_slot or missing.name})
+                continue
+            if (skill.name, filled.slots) in done:  # the same caption asked twice: said once
+                continue
+            done.append((skill.name, filled.slots))
+            fn = READ_ONLY.get(skill.name)
+            conv._reply(fn(dict(filled.slots), ctx) if fn else NOT_SURE, long_ok=fn is not None)
+        if waiting:
+            return self._queue_only(msg, now, req, waiting[0], waiting[1:], texts, attachments, ctx)
+        conv.requests.mark(req["request_id"], "closed", now) if req is not None else conv.requests.close_live(owner, now, "closed")
+        return "answer" if done else "refused"
+
+    def _read_only_hook(self, skill, name, ctx, *args):
+        """A read-only skill's own ``preflight`` / ``refusal`` sentence (hass/skills/social.py), else None. Never raises."""
+        hook = skill_hook(skill, name) if getattr(skill, "approval", None) == "none" else None
+        try:
+            said = hook(skill.name, *args, ctx) if name == "refusal" and hook else hook(skill.name, {}, ctx) if hook else None
+        except Exception:  # noqa: BLE001 - the hook is wording: without it the ordinary path goes on
+            said = None
+        return said.strip() if isinstance(said, str) and said.strip() else None
 
     def _say_refusals(self, stopped, texts, msg):
         """The asks of one message whose plan refused: each sentence is said as for one skill (a backlog reason also writes the ask
@@ -797,9 +882,12 @@ class Dispatcher:
         fn = READ_ONLY.get(skill.name)
         if fn is None:
             return self._backlog(msg, now, req, "", "other", texts=texts)
+        queued = req["calls"] if req else []
         if req:
             self.conv.requests.mark(req["request_id"], "closed", now)
-        self.conv._reply(fn(slots, ctx))
+        self.conv._reply(fn(slots, ctx), long_ok=skill.name in READ_ONLY_LONG or (skill.name == "answer.site" and slots.get("kind") == "maker_story"))
+        if queued:  # the owner's other caption asks of the same message go on, one question at a time
+            return self._next_queued(msg, now, None, queued, texts, req["attachments"], "answer")
         return "answer"
 
     def _backlog(self, msg, now, req, summary, reason, reply=None, texts=None):

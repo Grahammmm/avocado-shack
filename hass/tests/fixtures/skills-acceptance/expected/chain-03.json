@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "diff": [
+    {
+      "file": "hass/content/makers.json",
+      "path": "makers.Pebble Kitchen",
+      "after": {
+        "name": "Pebble Kitchen",
+        "place": "Atascadero, California",
+        "story": "Pebble Kitchen is based in Atascadero, California."
+      }
+    },
+    {
+      "file": "hass/content/products.json",
+      "path": "products[photo-product-175]",
+      "after": {
+        "id": "photo-product-175",
+        "name": "Pebble jam",
+        "brand": "Pebble Kitchen",
+        "category": "pantry",
+        "image": "assets/products/photo-2cec1911a5900242.jpg",
+        "description": "Pebble jam from Pebble Kitchen in Atascadero. Butter the toast first.",
+        "producerKey": "Pebble Kitchen",
+        "displayBrand": "Pebble Kitchen",
+        "status": "active",
+        "imageAlt": "Pebble jam in a jar",
+        "addedOn": "2026-11-08",
+        "available": "no",
+        "available_on": "2026-11-08"
+      }
+    },
+    {
+      "file": "hass/content/store.json",
+      "path": "selection_checked_on",
+      "after": "2026-11-08"
+    }
+  ],
+  "files": [
+    "hass/content/makers.json",
+    "hass/content/products.json",
+    "hass/content/store.json",
+    "storefront-mockup/assets/products/photo-2cec1911a5900242.jpg",
+    "storefront-mockup/catalog-products.js",
+    "storefront-mockup/index.html",
+    "storefront-mockup/producers.js",
+    "storefront-mockup/producers.json"
+  ],
+  "assets": {
+    "storefront-mockup/assets/products/photo-2cec1911a5900242.jpg": "5f98e637f500bc54a5c1f380976ff60eb6cab4acbfac959c5baf47d89a36a49d"
+  },
+  "residue": {
+    "content": [],
+    "assets": {}
+  }
+}

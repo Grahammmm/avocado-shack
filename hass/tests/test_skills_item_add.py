@@ -52,16 +52,18 @@ class Declaration(unittest.TestCase):
         self.assertEqual(lint_plan_output(ia.ITEM_ADD, golden, ops), [])
 
     def test_live_class_matches_the_live_boundary(self):
-        """private-only: brand, displayBrand and producerKey are protected, so live_policy stops a live release (D4)."""
+        """chat-live (HASS-LIVE-ADD-1): a new product with its brand and maker is in the live table, so live_policy lets this plan through
+        (the brand fields are guarded inside product.add; the owner-words rule is the conversation's, see test_live_add)."""
         scratch = testkit.Scratch({}, {"item.add": ia.ITEM_ADD}, photos=["reports/hass/newitem-1/synthetic/jar-white-sheet.jpg"])
         try:
             plan = ia.plan_add({"name": "Cal Poly honey", "maker": "Cal Poly", "availability": "yes", "photo": SHA}, scratch._ctx())
             out = scratch.editor.prepare(plan)
             self.assertEqual(out["result"], "ok", out)
-            self.assertTrue(live_policy.check(out["draft"]))
+            self.assertEqual(live_policy.check(out["draft"]), [])
+            self.assertEqual(live_policy.unsaid(out["draft"], "Cal Poly honey"), [])
         finally:
             scratch.close()
-        self.assertEqual(ia.ITEM_ADD.live_class, "private-only")
+        self.assertEqual(ia.ITEM_ADD.live_class, "chat-live")
 
     def test_every_owner_sentence_passes_the_voice_rules(self):
         fixed = list(ia.ASK.values()) + [ia.ONE_PHOTO, ia.NO_LAST_FARM, ia.STORE_LINE, ia.NO_BYTES, ia.RETAKE_BUSY,
@@ -244,6 +246,70 @@ class OnePhotoOneProduct(unittest.TestCase):
     def test_a_pick_before_the_two_products_does_not_clear_them(self):
         slots = {**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}
         self.assertEqual(refusal(slots, "the lemon curd only", "add the lemon curd and the plum jam, both in stock").reply, ia.ONE_PHOTO)
+
+    def test_add_bare_and_comma_lists_ask_before_any_plan(self):
+        for text in ("add the lemon curd and the plum jam", "add lemon curd and plum jam", "add lemon curd, plum jam",
+                     "add lemon curd, and plum jam", "add lemon curd & plum jam", "Adding lemon curd, plum jam, from Linn's"):
+            for name in ("Lemon curd", "Plum jam"):
+                with self.subTest(text=text, name=name):
+                    slots = {**FULL, "name": name, "maker": "Linn's", "shelf": "pantry"}
+                    given = copy.deepcopy(slots)
+                    got = refusal(slots, text)
+                    self.assertEqual((got.reply, got.kind, got.backlog), (ia.ONE_PHOTO, "question", None))
+                    self.assertEqual(slots, given)
+                    with self.assertRaises(ia.Refusal):
+                        ia.plan_add(copy.deepcopy(slots), ctx(text))  # no ops at all
+
+    def test_add_lists_with_a_describing_word_ask_before_any_plan(self):
+        # sweet / organic open a product phrase ("sweet corn"), so they are not asides; the question comes whichever name was chosen
+        for text, names in (("add lemon curd and sweet corn", ("Lemon curd", "Sweet corn")),
+                            ("add lemon curd, organic raspberry jam", ("Lemon curd", "Organic raspberry jam")),
+                            ("add sweet corn and lemon curd", ("Lemon curd", "Sweet corn")),
+                            ("add organic raspberry jam, lemon curd", ("Lemon curd", "Organic raspberry jam")),
+                            ("add lemon curd and the fresh local plum jam", ("Lemon curd", "Fresh local plum jam"))):
+            for name in names:
+                with self.subTest(text=text, name=name):
+                    slots = {**FULL, "name": name, "maker": "Linn's", "shelf": "pantry"}
+                    self.assertEqual(refusal(slots, text).reply, ia.ONE_PHOTO)
+                    with self.assertRaises(ia.Refusal):
+                        ia.plan_add(copy.deepcopy(slots), ctx(text))
+
+    def test_add_describing_words_alone_are_still_asides(self):
+        for text in ("add lemon curd, sweet", "add lemon curd, organic", "add lemon curd, fresh from the farm",
+                     "add lemon curd, tasty on toast", "add lemon curd, sweet and tart", "add lemon curd and great photo",
+                     "add lemon curd, fresh packaged in a jar", "add lemon curd, organic, in stock"):
+            with self.subTest(text=text):
+                done = ia.describe_add({**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}, ctx(text))
+                self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+
+    def test_add_compound_name_and_caption_are_not_lists(self):
+        for name, text in (("Salt and vinegar chips", "add salt and vinegar chips"),
+                           ("Cookies and Cream chocolate", "Add Cookies and Cream chocolate from Linn's"),
+                           ("Lemon curd", "add lemon curd, in a jar"),
+                           ("Lemon curd", "add lemon curd, please"),
+                           ("Lemon curd", "add lemon curd, on a plain counter"),
+                           ("Lemon curd", "add lemon curd, great on toast and scones"),
+                           ("Lemon curd", "add lemon curd, from Smith Farm in Salem, Oregon"),
+                           ("Lemon curd", "add lemon curd, Smith Farm, Oregon"),
+                           ("Lemon curd", "add lemon curd, in stock and on the pantry shelf")):
+            with self.subTest(text=text):
+                done = ia.describe_add({**FULL, "name": name, "maker": "Linn's", "shelf": "pantry"}, ctx(text))
+                self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+        for name in ("Salt and vinegar chips", "Lemon curd"):  # a list that holds a compound name still asks
+            with self.subTest(name=name):
+                self.assertEqual(refusal({**FULL, "name": name, "maker": "Linn's"}, "add salt and vinegar chips and lemon curd").reply, ia.ONE_PHOTO)
+
+    def test_add_bare_list_keeps_question_until_positive_single_choice(self):
+        slots = {**FULL, "name": "Lemon curd", "maker": "Linn's", "shelf": "pantry"}
+        for first in ("add lemon curd and plum jam", "add lemon curd, plum jam"):
+            for later in ("ok", "add lemon curd and plum jam", "add lemon curd, plum jam", "yes, both", "the plum jam only please"):
+                with self.subTest(first=first, later=later):
+                    self.assertEqual(refusal(slots, first, later).reply, ia.ONE_PHOTO)
+            with self.subTest(first=first, later="pick"):
+                done = ia.describe_add(slots, ctx(first, "the lemon curd only please"))
+                self.assertEqual([op["op"] for op in done.ops], ["product.add", "store.confirm_selection"])
+                self.assertEqual(done.ops[0]["args"]["name"], "Lemon curd")
+                self.assertNotIn("plum", repr(done.ops).lower())
 
 
 class HouseDescriptionIsEnforced(unittest.TestCase):

@@ -51,11 +51,11 @@ MONEY_RE = re.compile(r"\$\s?(\d+(?:\.\d{1,2})?)|\b(\d+(?:\.\d{1,2})?)\s*(?:buck
 TIME_RE = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b([01]?\d|2[0-3]):([0-5]\d)\b|\b(noon|midnight)\b")
 ORDINAL_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b")
 MONTH_DAY_RE = re.compile(r"\b(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b")
-DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b(?:\.(?=(?:,\s*|\s+)(?:'\d{2}(?![\d:])|\d{3,}(?!:))))?")
+DAY_MONTH_RE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(" + "|".join(sorted(MONTHS, key=len, reverse=True)) + r")\b(?:\.(?=(?:,\s*|\s+)(?:'\d{2}(?![\d:])|'\d+(?!:)|\d{3,}(?!:))))?")
 SLASH_RE = re.compile(r"(?<!/)\b(1[0-2]|0?[1-9])/([0-3]?\d)\b(?:/(\d+))?")  # m/d or m/d/yy(yy); a year-first 2027/12/5 is not read
 ISO_RE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 YEAR_RE = re.compile(r"(?:,\s*|\s+)(?:'(\d{2})|(\d{4}))(?![\d:])")  # a year the owner wrote right after a month and day
-BAD_YEAR_RE = re.compile(r"(?:,\s*|\s+)\d{3,}(?!\d)(?!:)(?!\s*[ap]\.?m\b)")  # three or more digits after a month and day that YEAR_RE did not take, and that are not a clock time
+BAD_YEAR_RE = re.compile(r"(?:,\s*|\s+)(?:\d{3,}|'\d+)(?!\d)(?!:)(?!\s*[ap]\.?m\b)")  # three or more digits after a month and day that YEAR_RE did not take, and that are not a clock time
 WEEKDAY_RE = re.compile(r"\b(?:(this|next|last|coming|on)\s+)?(" + "|".join(sorted(WEEKDAYS, key=len, reverse=True)) + r")s?\b")
 RELATIVE_RE = re.compile(r"\b(today|tonight|tomorrow|tmrw|tmr|yesterday|day after tomorrow)\b")
 IN_RE = re.compile(r"\bin\s+(\d{1,2}|" + "|".join(WORD_NUMBERS) + r")\s+(day|week)s?\b")
@@ -117,7 +117,10 @@ class _Index:
             if len(longer) == 1: return longer[0], True
             if longer: return None, False  # several words start this way (lem: lemon, lemonade): the owner has not chosen, so no hint
         if len(token) >= FUZZY_MIN:
-            close = difflib.get_close_matches(token, self.vocab_list, n=1, cutoff=FUZZY_CUTOFF)
+            close = difflib.get_close_matches(token, self.vocab_list, n=2, cutoff=FUZZY_CUTOFF)
+            # two words equally close (peich: peach, perch) are a tie, not a unique correction: leave the token unresolved
+            if len(close) == 2 and difflib.SequenceMatcher(None, close[0], token).ratio() == difflib.SequenceMatcher(None, close[1], token).ratio():
+                return None, False
             if close: return close[0], True
         return None, False
 
@@ -249,7 +252,10 @@ def hike_hints(text, index, today: date, weekday_hits) -> dict:
         title = set(tokens(e.get("title") or "")) - {"walk", "hike"}
         if title and title <= words:
             out.append({"hike": e["id"], "title": e.get("title"), "startsAt": e.get("startsAt"), "status": e.get("status")})
-    ideas = [{"routeIdea": r["id"], "title": r.get("title")} for r in index.ideas if (set(tokens(r.get("title") or "")) - {"walk", "hike"}) and set(tokens(r.get("title") or "")) <= words]
+    ideas = []
+    for r in index.ideas:
+        title = set(tokens(r.get("title") or "")) - {"walk", "hike"}  # same reduced set for both tests, like events
+        if title and title <= words: ideas.append({"routeIdea": r["id"], "title": r.get("title")})
     rows = []
     for name, wd in weekday_hits if HIKE_WORD_RE.search(fold(text)) or out or ideas else ():  # a weekday alone is not about hikes
         on = [e for e in index.hikes if e.get("status") == "scheduled" and _weekday_of(e.get("startsAt")) == wd]
@@ -266,9 +272,15 @@ def _weekday_of(starts_at):
 
 
 # -- dates, times, numbers, prices ---------------------------------------------------------------------------------------
-def _next_weekday(today: date, wd: int, include_today=False) -> date:
+def _shift(d: date, days: int):
+    """``d`` moved by ``days``, or None when that day is outside the calendar (date.min..date.max): a hint is never clamped or guessed."""
+    try: return d + timedelta(days=days)
+    except OverflowError: return None
+
+
+def _next_weekday(today: date, wd: int, include_today=False):
     delta = (wd - today.weekday()) % 7
-    return today + timedelta(days=delta if (delta or include_today) else 7)
+    return _shift(today, delta if (delta or include_today) else 7)
 
 
 def _safe_date(year, month, day):
@@ -290,8 +302,11 @@ def _named_date(t, m, month, day, today, year=True):
         d = _safe_date(n, month, day) if 2000 <= n <= 2099 else None
         return (t[m.start():y.end()], d) if d is not None else None
     if year and BAD_YEAR_RE.match(t, m.end()): return None  # digits that look like a year but are not one (dec 5 202, 5 dec 20277): no hint
-    d = _safe_date(today.year, month, day)
-    if d is not None and d < today: d = _safe_date(today.year + 1, month, day)
+    # Earliest real occurrence on/after today; Feb 29 can be up to 8 years away (non-leap century), so search a bounded 9 years.
+    d = None
+    for yr in range(today.year, min(today.year + 8, date.max.year) + 1):
+        c = _safe_date(yr, month, day)
+        if c is not None and c >= today: d = c; break
     return (m.group(0), d) if d is not None else None
 
 
@@ -310,20 +325,21 @@ def date_hints(text, today: date):
     day = lambda d: d.isoformat()  # noqa: E731
     for m in RELATIVE_RE.finditer(t):
         word = m.group(1)
-        d = {"today": 0, "tonight": 0, "tomorrow": 1, "tmrw": 1, "tmr": 1, "yesterday": -1, "day after tomorrow": 2}[word]
-        rows.append({"said": word, "date": day(today + timedelta(days=d)), "weekday": WEEKDAY_NAMES[(today + timedelta(days=d)).weekday()]})
+        d = _shift(today, {"today": 0, "tonight": 0, "tomorrow": 1, "tmrw": 1, "tmr": 1, "yesterday": -1, "day after tomorrow": 2}[word])
+        if d is not None: rows.append({"said": word, "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
     for m in WEEKDAY_RE.finditer(t):
         mod, name = m.group(1), m.group(2)
         wd = WEEKDAYS[name]
         hits.append((name, wd))
-        nxt, last = _next_weekday(today, wd), today - timedelta(days=((today.weekday() - wd) % 7) or 7)
+        nxt, last = _next_weekday(today, wd), _shift(today, -(((today.weekday() - wd) % 7) or 7))
         said = f"{mod} {name}" if mod and mod != "on" else name
         if mod == "next" or wd == today.weekday() and mod != "last":
-            options = [nxt, nxt + timedelta(days=7)] if mod == "next" and wd != today.weekday() else [today, today + timedelta(days=7)]
-            rows.append({"said": said, "unclear": [day(d) for d in options], "weekday": WEEKDAY_NAMES[wd], "note": "two readings; ask which unless the owner said"})
+            first, second = (nxt, None if nxt is None else _shift(nxt, 7)) if mod == "next" and wd != today.weekday() else (today, _shift(today, 7))
+            if first is not None and second is not None:  # both readings or no row: never a lone date for an ambiguous day
+                rows.append({"said": said, "unclear": [day(first), day(second)], "weekday": WEEKDAY_NAMES[wd], "note": "two readings; ask which unless the owner said"})
         elif mod == "last":
-            rows.append({"said": said, "date": day(last), "weekday": WEEKDAY_NAMES[wd]})
-        else:
+            if last is not None: rows.append({"said": said, "date": day(last), "weekday": WEEKDAY_NAMES[wd]})
+        elif nxt is not None and last is not None:
             rows.append({"said": said, "next": day(nxt), "last": day(last), "weekday": WEEKDAY_NAMES[wd], "note": "next = the coming one; last = the one just past"})
     for m in ORDINAL_RE.finditer(t):
         n = int(m.group(1))
@@ -349,8 +365,8 @@ def date_hints(text, today: date):
         if d is not None and 2000 <= d.year <= 2099: rows.append(_date_row(m.group(0), d))
     for m in IN_RE.finditer(t):
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_NUMBERS[m.group(1)]
-        d = today + timedelta(days=n * (7 if m.group(2) == "week" else 1))
-        rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
+        d = _shift(today, n * (7 if m.group(2) == "week" else 1))
+        if d is not None: rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
     if re.search(r"\b(next week|this weekend|next month|couple (?:of )?(?:days|weeks)|few (?:days|weeks)|sometime|soon)\b", t):
         rows.append({"said": "a loose time", "date": None, "note": "not one day: ask which day"})
     return rows[:MAX_LIST], hits
@@ -415,6 +431,9 @@ def _day_shows(index, wd, asked):
     return None
 
 
+_DAY_SPAN_RE = re.compile(r"\s*(?:[-\u2013\u2014]|to|through|until)\s*")  # what joins two weekdays into a span
+
+
 def hours_hints(text, index):
     """The Store already shows EVERY day and hours the owner asks for: a fact for "it already says that", never a draft.
     Each day is matched to its own range (the nearest one); any change not already true, or any pairing in doubt, gives no hint."""
@@ -422,6 +441,7 @@ def hours_hints(text, index):
     ranges = [(m.start(), m.end(), asked_range(m.group(0))) for m in RANGE_RE.finditer(t)]
     days = [(m.start(), m.end(), WEEKDAYS[m.group(2)]) for m in WEEKDAY_RE.finditer(t)]
     if not (ranges and days and index.hours) or any(r[2] is None for r in ranges): return None
+    if any(_DAY_SPAN_RE.fullmatch(t[a[1]:b[0]]) for a, b in zip(days, days[1:])): return None  # "Monday-Friday": endpoints never prove the days between
     rest = WEEKDAY_RE.sub(" ", RANGE_RE.sub(" ", t))  # every other word must be plain filler: "closed", "opens at 10am", "from 10" are changes nothing here proves already true
     if any(w not in PLAIN_WORDS for w in TOKEN_RE.findall(rest)): return None
     same, used = [], set()

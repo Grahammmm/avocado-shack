@@ -11,12 +11,14 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
-from hass import live_policy, skills, voice
+from hass import itemstd, live_policy, skills, voice
 from hass.content_model import REPO_ROOT, TEXT_LIMITS, load_and_validate
 from hass.ops import load_registry
 from hass.skills import makers as m
 from hass.skills import testkit
+from hass.tests.test_skill_dispatch import SkillCase, registry_of
 
 CONTENT = load_and_validate(REPO_ROOT / "hass" / "content", REPO_ROOT / "storefront-mockup")
 BY_NAME = {s.name: s for s in m.SKILLS}
@@ -151,7 +153,7 @@ class AddAMaker(unittest.TestCase):
         self.assertEqual(refusal(m.describe_add, {"name": "x", "place": "y", "story": "<b>Hi</b>"}).reply, m.PLAIN_TEXT_REPLY)
 
     def test_the_website_is_one_public_https_address_or_a_question(self):
-        add = lambda url: m.describe_add({"name": "Bee Happy Farm", "place": "Atascadero", "url": url}, ctx()).ops[0]["args"].get("url")
+        add = lambda url: m.describe_add({"name": "Bee Happy Farm", "place": "Atascadero, California", "url": url}, ctx()).ops[0]["args"].get("url")
         self.assertEqual(add("https://beehappyfarm.com"), "https://beehappyfarm.com")
         self.assertEqual(add("beehappyfarm.com"), "https://beehappyfarm.com")
         self.assertEqual(add("www.beehappyfarm.com/about"), "https://www.beehappyfarm.com/about")
@@ -315,7 +317,11 @@ class HideAMaker(unittest.TestCase):
         self.assertEqual(m.plan_hide({"maker": "Etto"}, SimpleNamespace(today="2026-11-08")), [{"op": "maker.hide", "args": {"key": "Etto"}}])
 
 
-class RestoreAMaker(unittest.TestCase):
+class RestoreAMaker(SkillCase):
+    """The first five tests call the plan directly; the real_dispatch ones go through the production maker.restore
+    declaration, the real slot resolver, Conversation and Editor (the shared kit's Scratch skips the slot resolver)."""
+    SKILLS = (BY_NAME["maker.restore"],)
+
     def test_a_hidden_maker_comes_back_and_their_products_stay_hidden(self):
         content = with_hidden("Etto")
         out = m.describe_restore({"maker": "etto"}, ctx(content))
@@ -358,6 +364,86 @@ class RestoreAMaker(unittest.TestCase):
         finally:
             scratch.close()
 
+    # -- the production dispatcher: the slot kind decides whether the hidden-aware handler is ever reached ----------
+    def _hide(self, *keys):
+        for key in keys:
+            draft = self.editor.prepare([{"op": "maker.hide", "args": {"key": key, "withProducts": True}}])["draft"]
+            self.assertEqual(self.editor.apply(draft["change_id"], draft["draft_hash"])["result"], "applied")
+        self.base = self.count()
+
+    def _asks(self, skill, slots, text="restore request"):
+        self.script(text, {"skill": skill, "slots": slots})
+        disposition = self.say(text)
+        return disposition, self.replies()
+
+    def _read(self, name):
+        return (self.repo.wt / "hass" / "content" / name).read_text("utf-8")
+
+    def test_real_dispatch_restores_hidden_maker_by_key_or_name(self):
+        self._hide("Etto")
+        for said in ("Etto", "etto", "Ett"):
+            with self.subTest(said=said):
+                disposition, out = self._asks("maker.restore", {"maker": said}, f"bring back {said}")
+                self.assertEqual(disposition, "proposed", out)
+                self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.restore", "args": {"key": "Etto"}}])
+                self.nothing_written()
+        self.assertEqual(self.registry.skills["maker.restore"].slots[0].kind, "text")
+
+    def test_real_dispatch_restore_approval_and_undo_preserve_products(self):
+        self._hide("Etto")
+        before_products, before_head = self._read("products.json"), self.repo.head()
+        held = [p["id"] for p in json.loads(before_products)["products"] if p.get("status") == "held"]
+        self.assertTrue(held, "the real held products are the held-product control")
+        self.assertEqual(self._asks("maker.restore", {"maker": "Etto"})[0], "proposed")
+        draft = self.drafts()[-1]
+        self.assertEqual(live_policy.check(self.editor.prepare(json.loads(draft["ops_json"]))["draft"]), ["not live: maker.restore"], "restoring a maker stays private")
+        self.nothing_written()
+        self.assertEqual(self.say(f"yes {draft['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+        _files, diff = testkit.tree_diff(self.repo.wt, before_head)
+        self.assertEqual([(e["file"], e["path"], e.get("before"), e.get("after")) for e in diff], [("hass/content/makers.json", "makers.Etto.hidden", True, None)])
+        self.assertEqual(self._read("products.json"), before_products, "no product comes back with the maker: hidden stay hidden, held stay held")
+        self.say("undo")
+        self.say(f"yes {self.drafts()[-1]['code']}")
+        self.assertEqual(testkit.tree_diff(self.repo.wt, before_head)[1], [], "undo hides the maker again exactly as before")
+
+    def test_real_dispatch_restore_refusals_are_not_visibility_loops(self):
+        self._hide("Cal Poly", "Cayucos")
+        cases = (("visible", {"maker": "Stepladder"}, "refused", "Stepladder is already on the site."),
+                 ("unknown", {"maker": "Acme"}, "question", "I don't know a maker called Acme. Who is it?"),
+                 ("blank", {"maker": "  "}, "question", None), ("malformed", {"maker": ["Cal Poly"]}, "question", None),
+                 ("ambiguous", {"maker": "ca"}, "question", "Which maker do you mean: Cal Poly or Cayucos?"))
+        for label, slots, expected, reply in cases:
+            with self.subTest(label):
+                disposition, out = self._asks("maker.restore", slots, f"restore {label}")
+                self.assertEqual(disposition, expected, out)
+                self.assertEqual(len(out), 1)
+                if reply: self.assertEqual(out[0], reply)
+                self.assertNotIn("back first", out[0])
+                self.assertEqual(self.drafts(), [])
+                self.nothing_written()
+        disposition, out = self._asks("maker.restore", {"maker": "Cayucos"}, "bring back Cayucos")  # the complete corrected request
+        self.assertEqual(disposition, "proposed", out)
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.restore", "args": {"key": "Cayucos"}}])
+        self.nothing_written()
+
+    def test_restore_declaration_does_not_relax_other_maker_slots(self):
+        self.assertEqual([BY_NAME[n].slots[0].kind for n in ("maker.restore", "maker.edit", "maker.hide")], ["text", "maker_ref", "maker_ref"])
+        self._hide("Etto")
+        for skill, slots in (("maker.edit", {"maker": "Etto", "story": "Etto makes pasta."}), ("maker.hide", {"maker": "Etto"})):
+            with self.subTest(skill):
+                self.registry = registry_of(BY_NAME[skill])
+                self.conv = self.open()
+                disposition, out = self._asks(skill, slots, f"{skill} Etto")
+                self.assertEqual((disposition, out), ("refused", ["Etto is hidden. Do you want me to bring them back first?"]))
+                self.assertEqual(self.drafts(), [])
+                self.nothing_written()
+        self.registry = registry_of(BY_NAME["maker.edit"])  # ordinary maker_ref resolution of a visible maker is unchanged
+        self.conv = self.open()
+        disposition, out = self._asks("maker.edit", {"maker": "Stepladder", "name": "Stepladder Farm"}, "rename Stepladder to Stepladder Farm")
+        self.assertEqual(disposition, "proposed", out)
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"])[0]["args"]["key"], "Stepladder")
+
 
 class PlainWords(unittest.TestCase):
     def test_every_reply_for_every_current_maker_passes_the_voice_rules(self):
@@ -395,7 +481,7 @@ class PlansArePure(unittest.TestCase):
 
     def test_every_plan_returns_only_registered_ops(self):
         registry = load_registry()
-        for ops in (m.plan_add({"name": "B", "place": "P"}, ctx()), m.plan_edit({"maker": "Etto", "story": "S."}, ctx()),
+        for ops in (m.plan_add({"name": "B", "place": "P, California"}, ctx()), m.plan_edit({"maker": "Etto", "story": "S."}, ctx()),
                     m.plan_hide({"maker": "Etto", "with_products": True}, ctx()), m.plan_restore({"maker": "Etto"}, SimpleNamespace(today="x"))):
             for op in ops:
                 self.assertIn(op["op"], registry)
@@ -409,6 +495,429 @@ class CaseFiles(unittest.TestCase):
             rows = testkit.load_rows(path)
             names = {c.get("skill") for r in rows for c in ([x for x in r.get("replies", []) if isinstance(x, dict)] + [y for x in r.get("replies", []) if isinstance(x, dict) for y in x.get("calls", [])])}
             self.assertEqual(names - {None}, {skill.name})
+
+
+# -- town-state (ITEM-STANDARD section 5, SKILLS-MAKERS-2) ---------------------------------------------------------
+TOWN_Q, MISSING = "Which town are they in?", "Still missing: the town"
+REGION_MAKERS = ("Straus", "Alle-Pia", "Corberosa", "Massa Organics", "Sierra Nevada", "Ava\u2019s")  # the six saved regions
+ORCHARD = {"name": "Synthetic Orchard", "place": "Central Coast"}
+FALLBACK_SET = "I set: the about text to \u201cSynthetic Orchard is based in Central Coast.\u201d, because you didn't give one."
+ETTO_HIDES = "This hides Artisan short-cut pasta, Casarecce pasta, Conchiglie pasta, Radiatori pasta and Rigatoni pasta too."
+ETTO_STAYS = "Their products stay hidden until you bring them back: Artisan short-cut pasta, Casarecce pasta, Conchiglie pasta, Radiatori pasta and Rigatoni pasta."
+
+
+def said(*texts):
+    return ctx(texts=list(texts))
+
+
+def asks_town(test, fn, slots, c):
+    with test.assertRaises(m.Refusal) as caught:
+        fn(slots, c)
+    test.assertEqual((caught.exception.kind, caught.exception.reply), ("question", TOWN_Q), slots)
+
+
+class TownState(unittest.TestCase):
+    def test_town_state_calls_shared_checker(self):
+        with mock.patch.object(m.itemstd, "check_maker", wraps=itemstd.check_maker) as spy:
+            m.describe_add({"name": "Bee Happy Farm", "place": "Atascadero, California"}, ctx())
+        self.assertEqual(spy.call_args.args[0]["place"], "Atascadero, California")
+        # only producer_town in the checker's answer decides; its other gaps (no story, no website) never block or ask
+        gaps = {"missing": ["story", "website"], "needs_a_look": []}
+        with mock.patch.object(m.itemstd, "check_maker", return_value=gaps):
+            self.assertEqual(m.plan_add(ORCHARD, ctx())[0]["args"]["place"], "Central Coast")
+        with mock.patch.object(m.itemstd, "check_maker", return_value={"missing": ["producer_town"], "needs_a_look": []}):
+            asks_town(self, m.describe_add, {"name": "Bee Happy Farm", "place": "Atascadero, California"}, ctx())
+        self.assertEqual(m.RULES["town-state"], m.rule_town_state)
+        self.assertEqual([s.name for s in m.SKILLS if "town-state" in s.rules], ["maker.add", "maker.edit"])
+
+    def test_region_add_and_explicit_region_edit_ask_without_draft(self):
+        for place in ("Central Coast", "Northern California", "Central Coast, California", "California\u2019s Central Coast",
+                      "Near Chico, California", "Atascadero"):
+            with self.subTest(place=place):
+                asks_town(self, m.describe_add, {"name": "Synthetic Orchard", "place": place}, ctx())
+                asks_town(self, m.describe_edit, {"maker": "Etto", "place": place}, ctx())
+                self.assertEqual(m.notes("maker.add", {"name": "Synthetic Orchard", "place": place}, ctx()), {"say": [], "set": [], "warn": []})
+        asks_town(self, m.describe_edit, {"maker": "Straus", "place": "Northern California"}, ctx())  # the same saved region still asks
+        asks_town(self, m.describe_edit, {"maker": "Straus", "place": "Northern California", "story": "They make milk."}, ctx())
+        for place in ("Paso Robles, California", "Paso Robels, Califronia", "  Paso   Robels,  Califronia "):  # used as given
+            with self.subTest(place=place):
+                out = m.describe_add({"name": "Synthetic Orchard", "place": place}, ctx())
+                typed = " ".join(place.split())
+                self.assertEqual(out.ops[0]["args"]["place"], typed)
+                self.assertEqual(out.ops[0]["args"]["story"], f"Synthetic Orchard is based in {typed}.")  # D5 unchanged
+                self.assertNotIn(MISSING, out.notes)
+                self.assertEqual(m.describe_edit({"maker": "Linn", "place": place}, ctx()).ops[0]["args"], {"key": "Linn's", "place": typed})
+
+    def test_unknown_keeps_region_and_says_still_missing(self):
+        for latest in ("I don't know the town", "i don\u2019t know the town.", "I DON'T KNOW THE TOWN!",
+                       "add Synthetic Orchard in Central Coast. I don't know the town",
+                       "I don't know the town?", "I don't know the town?!", "I don\u2019t know the town...?",
+                       "add Synthetic Orchard in Central Coast I don't know the town",
+                       "add Synthetic Orchard in Central Coast I don't know the town?"):
+            with self.subTest(latest=latest):
+                c = said("add Synthetic Orchard in Central Coast", latest)
+                out = m.describe_add(dict(ORCHARD), c)
+                self.assertEqual(out.ops, [{"op": "maker.add", "args": {"key": "Synthetic Orchard", "name": "Synthetic Orchard", "place": "Central Coast",
+                                                                       "story": "Synthetic Orchard is based in Central Coast."}}])
+                self.assertEqual(out.notes.count(MISSING), 1)
+                self.assertEqual(m.notes("maker.add", dict(ORCHARD), c), {"say": [MISSING], "set": [FALLBACK_SET], "warn": []})
+                edit = m.describe_edit({"maker": "Etto", "place": "Northern California"}, c)
+                self.assertEqual((edit.ops[0]["args"], edit.notes.count(MISSING)), ({"key": "Etto", "place": "Northern California"}, 1))
+                self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "place": "Northern California"}, c)["say"], [MISSING])
+        fallback = ctx(owner_text="add Synthetic Orchard in Central Coast. I don't know the town")  # no texts: direct helper calls
+        self.assertIn(MISSING, m.describe_add(dict(ORCHARD), fallback).notes)
+        for line in (TOWN_Q, MISSING):
+            self.assertEqual(voice.check(line), [], line)
+            self.assertEqual(testkit.plain_words_problems(line), [], line)
+
+    def test_unknown_is_not_inferred_or_saved_as_place(self):
+        decline = "I don't know the town"
+        for label, slots, c in (
+                ("no context", ORCHARD, None), ("no texts", ORCHARD, ctx()), ("empty texts", ORCHARD, said()),
+                ("decline used as the place", {"name": "Synthetic Orchard", "place": decline}, said("add Synthetic Orchard", decline)),
+                ("phrase in the story", {**ORCHARD, "story": "I don't know the town."}, said("add Synthetic Orchard in Central Coast")),
+                ("an older message", ORCHARD, said(decline, "add Synthetic Orchard in Central Coast")),
+                ("not his last words", ORCHARD, said("I don't know the town but it is near Paso")),
+                ("someone else's words", ORCHARD, said("Hawaii don't know the town")),
+                ("a question about it", ORCHARD, said("Do you know the town?")),
+                ("texts win over owner_text", ORCHARD, ctx(texts=["add it"], owner_text=decline)),
+                ("a bare town is not a region", {"name": "Synthetic Orchard", "place": "Templeton"}, said(decline))):
+            with self.subTest(label):
+                asks_town(self, m.describe_add, dict(slots), c)
+                self.assertEqual(m.notes("maker.add", dict(slots), c), {"say": [], "set": [], "warn": []})
+        self.assertFalse(m.said_unknown_town(SimpleNamespace(texts=[None])))
+        c = said("add Synthetic Orchard", decline)
+        out = m.describe_add({"name": "Synthetic Orchard", "place": "Cambria, California"}, c)  # a town after all: no marker
+        self.assertEqual((out.ops[0]["args"]["place"], MISSING in out.notes), ("Cambria, California", False))
+        self.assertEqual(refusal(m.describe_add, {"name": "x", "place": "Central Coast $3"}, texts=[decline]).reply, m.PRICE_REPLY)
+        self.assertEqual(refusal(m.describe_add, {**ORCHARD, "story": "Plums, $3 a bag."}, texts=[decline]).reply, m.PRICE_REPLY)
+        self.assertIn("longer than", refusal(m.describe_add, {**ORCHARD, "story": "A " * 400}, texts=[decline]).reply)
+        err = refusal(m.describe_edit, {"maker": "Straus", "place": "Northern California"}, texts=[decline])  # nothing would change
+        self.assertIn("already says that", err.reply)
+        self.assertEqual(m.notes("maker.edit", {"maker": "Straus", "place": "Northern California"}, c)["say"], [])
+        self.assertEqual(m.notes("maker.hide", {"maker": "Etto", "with_products": True}, c),
+                         {"say": [ETTO_HIDES], "set": [], "warn": []})  # the product effect, never the town marker
+
+    def test_story_only_edit_does_not_reask_saved_region(self):
+        before = copy.deepcopy(CONTENT.makers)
+        regions = [k for k, rec in CONTENT.makers.items() if "place_is_a_region" in itemstd.check_maker(rec)["needs_a_look"]]
+        self.assertEqual(sorted(regions), sorted(REGION_MAKERS))
+        for key in REGION_MAKERS:
+            with self.subTest(key=key):
+                out = m.describe_edit({"maker": key, "story": "They make good food."}, ctx())
+                self.assertEqual(out.ops[0]["args"], {"key": key, "story": f"{CONTENT.makers[key]['name']} makes good food."})
+                self.assertNotIn(MISSING, out.notes)
+                self.assertEqual(m.notes("maker.edit", {"maker": key, "story": "They make good food."}, ctx())["say"], [])
+                self.assertNotIn("place", m.plan_edit({"maker": key, "name": "Renamed Maker"}, ctx())[0]["args"])
+        self.assertEqual(CONTENT.makers, before, "planning changes no saved maker")
+
+
+class TownStateDispatch(SkillCase):
+    """The production maker.add / maker.edit declarations through the real dispatcher, Conversation and Editor."""
+    SKILLS = (BY_NAME["maker.add"], BY_NAME["maker.edit"])
+
+    def turn(self, text, skill, slots):
+        self.script(text, {"skill": skill, "slots": slots})
+        return self.say(text), self.replies()
+
+    def asks(self, text, skill, slots):
+        disposition, out = self.turn(text, skill, slots)
+        self.assertEqual((disposition, out), ("question", [TOWN_Q]))
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def proposed(self, text, skill, slots, ops):
+        disposition, out = self.turn(text, skill, slots)
+        self.assertEqual(disposition, "proposed", out)
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), ops)
+        self.nothing_written()
+        return "\n".join(out)
+
+    def test_real_dispatch_region_then_town_continues_same_maker(self):
+        self.asks("add Synthetic Orchard in Central Coast, they grow plums", "maker.add",
+                   {"name": "Synthetic Orchard", "place": "Central Coast", "story": "They grow plums."})
+        self.assertEqual(self.live()["question"], TOWN_Q)
+        before = self.repo.head()
+        products = (self.repo.wt / "hass" / "content" / "products.json").read_text("utf-8")
+        reply = self.proposed("Paso Robels, California", "maker.add", {"place": "Paso Robels, California"},
+                              [{"op": "maker.add", "args": {"key": "Synthetic Orchard", "name": "Synthetic Orchard",
+                                                            "place": "Paso Robels, California", "story": "Synthetic Orchard grows plums."}}])
+        self.assertNotIn(MISSING, reply)
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+        self.assertEqual(json.loads((self.repo.wt / "hass" / "content" / "makers.json").read_text("utf-8"))["makers"]["Synthetic Orchard"]["place"],
+                         "Paso Robels, California")
+        self.say("undo")
+        self.say(f"yes {self.drafts()[-1]['code']}")
+        _files, residue = testkit.tree_diff(self.repo.wt, before)
+        self.assertTrue(residue and all(e["path"].startswith("makers.Synthetic Orchard") for e in residue), residue)  # declared add residue
+        self.assertEqual((self.repo.wt / "hass" / "content" / "products.json").read_text("utf-8"), products)
+
+    def test_real_dispatch_region_edit_then_town(self):
+        self.asks("Etto is in Northern California", "maker.edit", {"maker": "Etto", "place": "Northern California"})
+        self.proposed("Templeton, California", "maker.edit", {"place": "Templeton, California"},
+                      [{"op": "maker.edit", "args": {"key": "Etto", "place": "Templeton, California"}}])
+
+    def test_real_dispatch_unknown_keeps_region_and_shows_marker(self):
+        self.asks("add Synthetic Orchard in Central Coast", "maker.add", dict(ORCHARD))
+        self.asks("Central Coast is all I have", "maker.add", {})  # anything but his own "I don't know the town" asks again
+        reply = self.proposed("I don\u2019t know the town.", "maker.add", {},
+                              [{"op": "maker.add", "args": {"key": "Synthetic Orchard", "name": "Synthetic Orchard", "place": "Central Coast",
+                                                            "story": "Synthetic Orchard is based in Central Coast."}}])
+        self.assertEqual(reply.count(MISSING), 1)
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+
+    def test_real_dispatch_unknown_on_edit_and_in_the_first_message(self):
+        self.asks("Etto is in Northern California", "maker.edit", {"maker": "Etto", "place": "Northern California"})
+        reply = self.proposed("I don't know the town", "maker.edit", {},
+                              [{"op": "maker.edit", "args": {"key": "Etto", "place": "Northern California"}}])
+        self.assertEqual(reply.count(MISSING), 1)
+        self.say("no")
+        reply = self.proposed("add Synthetic Orchard in Central Coast. I don't know the town", "maker.add", dict(ORCHARD),
+                              [{"op": "maker.add", "args": {"key": "Synthetic Orchard", "name": "Synthetic Orchard", "place": "Central Coast",
+                                                            "story": "Synthetic Orchard is based in Central Coast."}}])
+        self.assertEqual(reply.count(MISSING), 1)
+
+    def test_real_dispatch_decline_is_never_saved_as_the_place(self):
+        self.asks("add Synthetic Orchard in Central Coast", "maker.add", dict(ORCHARD))
+        disposition, out = self.turn("I don't know the town", "maker.add", {"place": "I don't know the town"})
+        self.assertEqual(disposition, "question", out)  # the dispatcher's own slot check asks again (town and state)
+        self.assertEqual(len(out), 1)
+        self.assertIn(out[0], (TOWN_Q, "Where are they based (town and state)?"))
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+
+class FallbackStoryDisclosure(SkillCase):
+    """A maker with no story: the proposal says the based-in line was Hass's choice, once, before the owner's yes."""
+    SKILLS = (BY_NAME["maker.add"], BY_NAME["maker.edit"], BY_NAME["maker.hide"], BY_NAME["maker.restore"])
+    BEE = {"name": "Bee Happy Farm", "place": "Atascadero, California"}
+    BEE_SET = "I set: the about text to \u201cBee Happy Farm is based in Atascadero, California.\u201d, because you didn't give one."
+
+    def propose_reply(self, text, mapping):
+        self.script(text, mapping)
+        self.assertEqual(self.say(text), "proposed")
+        [reply] = self.replies()
+        return reply
+
+    def test_fallback_story_notes_disclose_exact_generated_value(self):
+        for story in (None, "", "   "):
+            with self.subTest(story=story):
+                slots = {**self.BEE, **({} if story is None else {"story": story})}
+                out = m.describe_add(dict(slots), ctx())
+                got = m.notes("maker.add", slots, ctx())
+                self.assertEqual(got, {"say": [], "set": [self.BEE_SET], "warn": []})
+                self.assertEqual(out.ops[0]["args"]["story"], "Bee Happy Farm is based in Atascadero, California.")
+                self.assertIn(out.ops[0]["args"]["story"], got["set"][0])
+                self.assertEqual(voice.check(got["set"][0], long_ok=True), [])
+        before = copy.deepcopy(CONTENT.makers)
+        m.notes("maker.add", dict(self.BEE), ctx())
+        self.assertEqual(CONTENT.makers, before)
+        supplied = m.notes("maker.add", {**self.BEE, "story": "They keep bees on the hill."}, ctx())
+        self.assertEqual(supplied, {"say": [], "set": [], "warn": []})
+
+    def test_unknown_town_marker_and_story_disclosure_coexist(self):
+        c = said("add Synthetic Orchard in Central Coast", "I don't know the town")
+        self.assertEqual(m.notes("maker.add", dict(ORCHARD), c), {"say": [MISSING], "set": [FALLBACK_SET], "warn": []})
+        for slots in ({"name": "Synthetic Orchard", "place": "Central Coast"}, {"name": "Synthetic Orchard"}, {"place": "Central Coast"},
+                      {"name": "Synthetic Orchard", "place": "Central Coast", "story": "A $3 jar."}):
+            with self.subTest(slots=slots):  # a plan that stops (a region not declined, a missing slot, a price) has no draft to note
+                self.assertEqual(m.notes("maker.add", dict(slots), ctx()), {"say": [], "set": [], "warn": []})
+
+    def test_production_add_discloses_default_before_yes(self):
+        reply = self.propose_reply("add Bee Happy Farm in Atascadero, California", {"skill": "maker.add", "slots": dict(self.BEE)})
+        self.assertEqual(reply.count(self.BEE_SET), 1)
+        self.assertLess(reply.index(self.BEE_SET), reply.lower().index("reply yes"))
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.add", "args": {
+            "key": "Bee Happy Farm", "name": "Bee Happy Farm", "place": "Atascadero, California",
+            "story": "Bee Happy Farm is based in Atascadero, California."}}])
+        self.nothing_written()
+        self.say("no")
+        self.replies()
+        again = self.propose_reply("add Bee Happy Farm in Atascadero, California again", {"calls": [{"skill": "maker.add", "slots": dict(self.BEE)}], "revises": None})
+        self.assertEqual(again.count(self.BEE_SET), 1)
+        self.assertLess(again.index(self.BEE_SET), again.lower().index("reply yes"))
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"])[0]["args"]["story"], "Bee Happy Farm is based in Atascadero, California.")
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(self.commits(), 1)
+
+    def test_continued_maker_discloses_only_after_place_answer(self):
+        self.script("add Bee Happy Farm", {"skill": "maker.add", "slots": {"name": "Bee Happy Farm"}})
+        self.assertEqual(self.say("add Bee Happy Farm"), "question")
+        [asked] = self.replies()
+        self.assertNotIn("I set", asked)
+        self.assertEqual(self.drafts(), [])
+        reply = self.propose_reply("Atascadero, California", {"skill": "maker.add", "slots": {"place": "Atascadero, California"}})
+        self.assertEqual(reply.count(self.BEE_SET), 1)
+        self.say("no")
+        self.replies()
+        self.script("add Bee Happy Farm. They keep bees", {"skill": "maker.add", "slots": {"name": "Bee Happy Farm"}})
+        self.assertEqual(self.say("add Bee Happy Farm. They keep bees"), "question")
+        self.replies()
+        reply = self.propose_reply("Atascadero, California", {"skill": "maker.add", "slots": {"place": "Atascadero, California", "story": "They keep bees."}})
+        self.assertNotIn("I set", reply)
+        self.assertNotIn("because you didn't give one", reply)
+        self.assertIn("Bee Happy Farm keeps bees.", reply)
+
+    def test_edit_hide_restore_and_refusals_keep_old_notes(self):
+        c = said("Etto is in Northern California", "I don't know the town")
+        self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "place": "Northern California"}, c), {"say": [MISSING], "set": [], "warn": []})
+        self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "story": "They roast."}, ctx()), {"say": [], "set": [], "warn": []})
+        self.assertEqual(m.notes("maker.hide", {"maker": "Etto"}, ctx()), {"say": [], "set": [], "warn": []})
+        self.assertEqual(m.notes("maker.restore", {"maker": "Etto"}, ctx()), {"say": [], "set": [], "warn": []})
+        twin = m.notes("maker.add", {"name": "Etto", "place": "Atascadero, California"}, ctx())  # already on the site: a question, no draft
+        self.assertEqual(twin, {"say": [], "set": [], "warn": []})
+        self.script("add Etto in Atascadero", {"skill": "maker.add", "slots": {"name": "Etto", "place": "Atascadero, California"}})
+        self.assertEqual(self.say("add Etto in Atascadero"), "question")
+        [reply] = self.replies()
+        self.assertNotIn("I set", reply)
+        self.assertEqual([d for d in self.drafts() if d["state"] == "proposed"], [])
+        self.nothing_written()
+
+
+def etto_with(*states, hidden=False):
+    """A copy of the real content where Etto's products are exactly these: (name, status) pairs, plus the maker hidden or not."""
+    content = copy.deepcopy(CONTENT)
+    template = next(p for p in content.products if p.get("producerKey") == "Etto")
+    content.products = [p for p in content.products if p.get("producerKey") != "Etto"]
+    content.products += [{**copy.deepcopy(template), "id": f"synthetic-{i}", "name": name, "status": status} for i, (name, status) in enumerate(states)]
+    if hidden:
+        content.makers["Etto"]["hidden"] = True
+    else:
+        content.makers["Etto"].pop("hidden", None)
+    return content
+
+
+class MakerProductEffectNotes(SkillCase):
+    """maker.hide / maker.restore proposals say, before the owner's yes, what happens to the maker's products."""
+    SKILLS = (BY_NAME["maker.add"], BY_NAME["maker.edit"], BY_NAME["maker.hide"], BY_NAME["maker.restore"])
+
+    def _hide(self, key):
+        draft = self.editor.prepare([{"op": "maker.hide", "args": {"key": key, "withProducts": True}}])["draft"]
+        self.assertEqual(self.editor.apply(draft["change_id"], draft["draft_hash"])["result"], "applied")
+        self.base = self.count()
+
+    def _propose(self, text, mapping):
+        self.script(text, mapping)
+        self.assertEqual(self.say(text), "proposed")
+        [reply] = self.replies()
+        return reply
+
+    def _read(self, name):
+        return (self.repo.wt / "hass" / "content" / name).read_text("utf-8")
+
+    def test_real_restore_proposal_explains_products_stay_hidden(self):
+        self._hide("Etto")
+        products, head = self._read("products.json"), self.repo.head()
+        reply = self._propose("bring back Etto", {"skill": "maker.restore", "slots": {"maker": "Etto"}})
+        self.assertEqual(reply.count(ETTO_STAYS), 1)
+        self.assertLess(reply.index(ETTO_STAYS), reply.lower().index("reply yes"))
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.restore", "args": {"key": "Etto"}}])
+        self.nothing_written()
+        self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
+        self.assertEqual(self._read("products.json"), products, "the products really do stay as they were")
+        self.say("undo")
+        self.say(f"yes {self.drafts()[-1]['code']}")
+        self.assertEqual(testkit.tree_diff(self.repo.wt, head)[1], [], "undo hides the maker again exactly as before")
+
+    def test_real_hide_proposal_names_product_effect_once(self):
+        slots = {"maker": "Etto", "with_products": True}
+        reply = self._propose("hide Etto and their products", {"skill": "maker.hide", "slots": dict(slots)})
+        self.assertEqual(reply.count(ETTO_HIDES), 1)
+        self.assertLess(reply.index(ETTO_HIDES), reply.lower().index("reply yes"))
+        self.assertEqual(json.loads(self.drafts()[-1]["ops_json"]), [{"op": "maker.hide", "args": {"key": "Etto", "withProducts": True}}])
+        self.nothing_written()
+        self.say("no")
+        self.replies()
+        again = self._propose("hide Etto again", {"calls": [{"skill": "maker.hide", "slots": dict(slots)}], "revises": None})
+        self.assertEqual(again.count(ETTO_HIDES), 1)  # the calls envelope shows it once too
+        self.nothing_written()
+
+    def test_restore_note_only_lists_hidden_not_held_or_active(self):
+        content = etto_with(("Zed", "active"), ("Beta", "hidden"), ("Held one", "held"), ("Alpha", "hidden"), hidden=True)
+        before = copy.deepcopy(content.products)
+        got = m.notes("maker.restore", {"maker": "Etto"}, ctx(content))
+        self.assertEqual(got, {"say": ["Their products stay hidden until you bring them back: Alpha and Beta."], "set": [], "warn": []})
+        self.assertEqual(m.plan_restore({"maker": "Etto"}, ctx(content)), [{"op": "maker.restore", "args": {"key": "Etto"}}])
+        self.assertEqual(content.products, before, "noting the effect changes no product")
+
+    def test_no_products_no_effect_note(self):
+        nothing = {"say": [], "set": [], "warn": []}
+        for label, states in (("none", ()), ("held only", (("Held one", "held"), ("Held two", "held")))):
+            with self.subTest(label):
+                self.assertEqual(m.notes("maker.restore", {"maker": "Etto"}, ctx(etto_with(*states, hidden=True))), nothing)
+                self.assertEqual(m.notes("maker.hide", {"maker": "Etto"}, ctx(etto_with(*states))), nothing)
+                self.assertEqual(m.notes("maker.hide", {"maker": "Etto", "with_products": True}, ctx(etto_with(*states))), nothing)
+
+    def test_product_name_cap_uses_existing_formatter(self):
+        for n in (1, 5, 6, 8):
+            with self.subTest(n=n):
+                names = [f"Product {i}" for i in range(n, 0, -1)]  # unsorted on purpose
+                hide = m.notes("maker.hide", {"maker": "Etto", "with_products": True}, ctx(etto_with(*[(x, "active") for x in names])))
+                back = m.notes("maker.restore", {"maker": "Etto"}, ctx(etto_with(*[(x, "hidden") for x in names], hidden=True)))
+                shown = ", ".join(f"Product {i}" for i in range(1, min(n, 5)))
+                tail = f"Product {min(n, 5)}"
+                listed = (shown + " and " + tail) if n > 1 else tail
+                listed += f" and {n - 5} more" if n > 5 else ""
+                self.assertEqual(hide["say"], [f"This hides {listed} too."])
+                self.assertEqual(back["say"], [f"Their products stay hidden until you bring them back: {listed}."])
+
+    def test_question_and_refusal_have_empty_notes(self):
+        nothing = {"say": [], "set": [], "warn": []}
+        hidden = with_hidden("Etto")
+        cases = (("maker.hide", {"maker": "Etto"}, ctx()),  # no opt-in yet: the question
+                 ("maker.hide", {"maker": "Etto", "with_products": False}, ctx()),  # products would stay on the site
+                 ("maker.hide", {"maker": "Etto", "with_products": True}, ctx(hidden)),  # already hidden
+                 ("maker.hide", {"maker": "Acme", "with_products": True}, ctx()),  # unknown
+                 ("maker.restore", {"maker": "Etto"}, ctx()),  # already visible
+                 ("maker.restore", {"maker": "Acme"}, ctx(hidden)))  # unknown
+        for skill, slots, c in cases:
+            with self.subTest(skill=skill, slots=slots):
+                self.assertEqual(m.notes(skill, slots, c), nothing)
+        self.assertEqual(m.notes("maker.restore", {"maker": "ca"}, ctx(with_hidden("Cal Poly", "Cayucos"))), nothing)  # ambiguous
+        self.assertEqual(m.notes("maker.hide", {"maker": "Etto", "with_products": True}, SimpleNamespace(today="2026-11-08")),
+                         nothing)  # no content: no guessed product list
+        self.script("hide Etto", {"skill": "maker.hide", "slots": {"maker": "Etto"}})
+        self.assertEqual(self.say("hide Etto"), "question")
+        [asked] = self.replies()
+        self.assertEqual(asked, "Do you want me to hide their 5 products too?")
+        self.assertEqual(self.drafts(), [])
+        self.nothing_written()
+
+    def test_add_edit_notes_not_forwarded_wholesale(self):
+        c = said("Etto is in Northern California", "I don't know the town")
+        self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "place": "Northern California"}, c), {"say": [MISSING], "set": [], "warn": []})
+        self.assertEqual(m.notes("maker.add", dict(ORCHARD), said("add Synthetic Orchard in Central Coast", "I don't know the town")),
+                         {"say": [MISSING], "set": [FALLBACK_SET], "warn": []})
+        self.assertEqual(m.notes("maker.edit", {"maker": "Etto", "story": "They roast."}, ctx()), {"say": [], "set": [], "warn": []})
+        edit = {"skill": "maker.edit", "slots": {"maker": "Etto", "place": "Northern California"}}
+        self.script("Etto is in Northern California. I don't know the town", copy.deepcopy(edit))
+        self.assertEqual(self.say("Etto is in Northern California. I don't know the town"), "proposed")
+        [single] = self.replies()
+        self.assertEqual(single.count(MISSING), 1)
+        for line in (ETTO_HIDES, ETTO_STAYS, "stay hidden", "This hides"):
+            self.assertNotIn(line, single)
+        self.say("no")
+        self.replies()
+        again = "Etto is in Northern California once more. I don't know the town"
+        self.script(again, {"calls": [copy.deepcopy(edit)], "revises": None})
+        self.assertEqual(self.say(again), "proposed")
+        [calls] = self.replies()
+        self.assertEqual(calls.count(MISSING), 1)
+        self.assertNotIn("stay hidden", calls)
+
+
+class TownCaseRows(unittest.TestCase):
+    def test_town_case_rows_and_strict_voice(self):
+        rows = {name: testkit.load_rows(CASES / f"{name}.jsonl") for name in ("maker.add", "maker.edit")}
+        town = {name: [r for r in got if r["id"].startswith(("town-", "plan-town-"))] for name, got in rows.items()}
+        self.assertGreaterEqual(min(len(v) for v in town.values()), 5)
+        self.assertGreaterEqual(sum(len(v) for v in town.values()), 10)
+        said_lines = json.dumps(town)
+        for line in (TOWN_Q, MISSING):
+            self.assertIn(line, said_lines)
+            self.assertEqual(voice.check(line), [], line)
 
 
 if __name__ == "__main__":

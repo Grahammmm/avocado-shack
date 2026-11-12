@@ -121,6 +121,101 @@ class BacklogTests(unittest.TestCase):
         self.assertEqual(self.store.purge(), 1)
         self.assertEqual([r["summary"] for r in self.store.rows()], ["mid"])
 
+    def _seed(self, stamp, state="open", text="t"):
+        cur = self.store.db.execute("INSERT INTO backlog(received_at, reason, summary, text, state) VALUES (?,?,?,?,?)",
+                                    (stamp, "other", "s", text, state))
+        return cur.lastrowid
+
+    def _ids(self):
+        return [r[0] for r in self.store.db.execute("SELECT id FROM backlog ORDER BY id")]
+
+    def test_purge_uses_instants_for_positive_and_negative_offsets(self):
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)  # cutoff 2026-08-11T12:00Z
+        cases = {
+            "2026-08-11T13:00:00+02:00": True,   # 11:00Z, expired
+            "2026-08-11T07:00:00-07:00": False,  # 14:00Z, fresh
+            "2026-08-11T14:00:00+02:00": False,  # 12:00Z exactly
+            "2026-08-11T05:00:00-07:00": False,  # 12:00Z exactly
+            "2026-08-11T11:00:00+00:00": True,
+            "2026-08-11T13:00:00+00:00": False,
+        }
+        ids = {s: self._seed(s) for s in cases}
+        self.assertEqual(self.store.purge(), sum(cases.values()))
+        self.assertEqual(self._ids(), sorted(i for s, i in ids.items() if not cases[s]))
+
+    def test_purge_preserves_microsecond_boundary(self):
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
+        gone = self._seed("2026-08-11T11:59:59.999999+00:00")
+        keep = [self._seed(s) for s in ("2026-08-11T12:00:00+00:00", "2026-08-11T12:00:00Z",
+                                        "2026-08-11T05:00:00-07:00", "2026-08-11T12:00:00.000001+00:00")]
+        self.assertEqual(self.store.purge(), 1)
+        self.assertNotIn(gone, self._ids())
+        self.assertEqual(self._ids(), keep)
+
+    def test_purge_uses_elapsed_days_across_dst(self):
+        from zoneinfo import ZoneInfo
+        pac = ZoneInfo("America/Los_Angeles")
+        # 90 elapsed days before 2026-11-09 12:00 PST (20:00Z) is 2026-08-11 20:00Z = 13:00 PDT.
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=pac)
+        gone = self._seed("2026-08-11T19:59:59+00:00")
+        keep = self._seed("2026-08-11T20:00:00+00:00")
+        self.assertEqual(self.store.purge(), 1)
+        self.assertEqual(self._ids(), [keep])
+        self.assertNotEqual(gone, keep)
+
+    def test_purge_ages_legacy_open_and_closed_rows_without_rewriting(self):
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
+        self.store.db.execute("CREATE TABLE sentinel(v TEXT)")
+        self.store.db.execute("INSERT INTO sentinel VALUES ('x')")
+        self._seed("2026-08-11T13:00:00+02:00", "open")
+        self._seed("2026-08-11T13:00:00+02:00", "closed")
+        a = self._seed("2026-08-11T07:00:00-07:00", "open")
+        b = self._seed("2026-08-11T07:00:00-07:00", "closed")
+        before = self.store.db.execute("SELECT * FROM backlog WHERE id IN (?,?) ORDER BY id", (a, b)).fetchall()
+        self.assertEqual(self.store.purge(), 2)
+        after = self.store.db.execute("SELECT * FROM backlog ORDER BY id").fetchall()
+        self.assertEqual([tuple(r) for r in after], [tuple(r) for r in before])
+        self.assertEqual(self.store.db.execute("SELECT v FROM sentinel").fetchall()[0][0], "x")
+        self.assertEqual(self.store.purge(), 0)
+        self.assertGreater(self.store.record("other", "n", "n"), b)
+
+    def test_purge_retains_unknown_age_without_disclosing_text(self):
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
+        keep = [self._seed(s, text="CANARY-PRIVATE") for s in ("garbage", "2026-01-01", "2026-01-01T00:00:00", "")]
+        self._seed("2026-08-11T11:00:00+00:00", text="CANARY-PRIVATE")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(self.store.purge(), 1)
+        self.assertEqual(self._ids(), keep)
+        self.assertNotIn("CANARY", out.getvalue() + err.getvalue())
+        self.clock.now = datetime(2026, 11, 9, 12, 0)  # naive
+        with self.assertRaises(ValueError) as ctx:
+            self.store.purge()
+        self.assertNotIn("CANARY", str(ctx.exception))
+        self.assertEqual(self._ids(), keep)
+
+    def test_purge_survives_range_edge_stamps_and_continues(self):
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
+        low = self._seed("0001-01-01T00:00:00+02:00")   # UTC instant is before year 1: expired, must not raise
+        mid = self._seed("2026-08-11T11:00:00+00:00")   # expired, after the edge row
+        high = self._seed("9999-12-31T23:59:59.999999-02:00")  # UTC instant is past year 9999: fresh, must not raise
+        fresh = self._seed("2026-11-09T11:00:00+00:00")
+        self.assertEqual(self.store.purge(), 2)
+        self.assertEqual(self._ids(), [high, fresh])
+        self.assertNotIn(low, self._ids())
+        self.assertNotIn(mid, self._ids())
+
+    def test_purge_cli_count_matches_offset_aware_deletions(self):
+        self.clock.now = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
+        self._seed("2026-08-11T13:00:00+02:00")
+        keep = self._seed("2026-08-11T07:00:00-07:00")
+        from unittest import mock
+        out = io.StringIO()
+        with mock.patch.object(backlog.Backlog, "open", return_value=self.store), contextlib.redirect_stdout(out):
+            code = backlog._main(["purge", "--state", str(self.state)])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue(), "removed 1 rows older than 90 days\n")
+
     def test_state_file_is_private_and_shared_with_conversation_db(self):
         path = self.state / "conversation.sqlite3"
         self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)

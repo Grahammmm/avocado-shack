@@ -18,6 +18,7 @@ from hass.tests.test_live_policy import edit
 NOW = datetime(2026, 11, 8, 18, 0, tzinfo=timezone.utc)
 SITE = "fixture.example.invalid"
 PRODUCT = "photo-product-001"
+PENDING_UNLISTED = {"product.set_restock"}  # in the registry, in neither table: refused like any unlisted op
 
 
 def op(opname, /, **args): return {"op": opname, "args": args}
@@ -27,7 +28,8 @@ class TableShape(unittest.TestCase):
     def test_every_real_operation_is_classified(self):
         """A new op fails this test until someone decides live or private for it (never silently live)."""
         names = set(load_registry())
-        self.assertEqual(names - set(policy.LIVE) - set(policy.PRIVATE), set())
+        # AV1109-03: product.set_restock is pending an operator listing decision; until then it is refused as unlisted.
+        self.assertEqual(names - set(policy.LIVE) - set(policy.PRIVATE), PENDING_UNLISTED)
         self.assertEqual(set(policy.LIVE) & set(policy.PRIVATE), set())
         self.assertEqual(set(policy.LIVE) - names, set())
         self.assertEqual(set(policy.PRIVATE) - names, set())
@@ -36,16 +38,20 @@ class TableShape(unittest.TestCase):
         self.assertEqual(sorted(policy.LIVE), sorted([
             "product.hide", "product.restore", "product.edit", "product.set_availability", "product.clear_availability",
             "store.confirm_selection", "specials.add", "specials.edit", "specials.remove", "specials.clear_expired",
-            "hike.create", "hike.update", "hike.cancel", "maker.edit", "history.revert"]))
+            "hike.create", "hike.update", "hike.cancel", "maker.edit", "history.revert",
+            "product.add", "maker.add"]))  # HASS-LIVE-ADD-1 (G, 2026-11-09)
         self.assertEqual(policy.LIVE["product.edit"], {"id", "description", "category"})
         self.assertEqual(policy.LIVE["maker.edit"], {"key", "story"})
+        self.assertEqual(policy.LIVE["product.add"], {"name", "brand", "category", "description", "photo", "imageAlt", "producerKey",
+                                                      "displayBrand"})  # never `image`
+        self.assertEqual(policy.LIVE["maker.add"], {"key", "name", "place", "story"})  # never `url`
 
     def test_every_private_reason_is_plain_and_passes_the_voice_check(self):
         for name in policy.PRIVATE:
             with self.subTest(op=name):
                 text = policy.refusal([f"not live: {name}"])
                 self.assertEqual(voice.check(text), [], text)
-                self.assertIn("I've saved it for Graham", text)
+                self.assertIn("I've kept it on the list of changes to make by hand", text)
                 self.assertNotIn("not live", text)
         for reasons in (["not live: product.edit.brand"], ["not live: made.up"], ["sign-up is on"], ["more than 10 records"]):
             self.assertEqual(voice.check(policy.refusal(reasons)), [])
@@ -96,11 +102,23 @@ class RealDrafts(unittest.TestCase):
         for name in ("maker.hide", "maker.restore"):
             self.assertIn(name, policy.PRIVATE)
             self.assertNotIn(name, policy.LIVE)
-            self.assertIn("I've saved it for Graham", policy.refusal([f"not live: {name}"]))
+            self.assertIn("I've kept it on the list of changes to make by hand", policy.refusal([f"not live: {name}"]))
         self.assertEqual(self.refused(op("maker.hide", key=self.maker_key(), withProducts=True)), ["not live: maker.hide"])
 
     def test_undo_always_passes(self):
         self.assertEqual(policy.check(edit("old", "new", op="history.revert")), [])
+
+    def test_restock_stays_unlisted_and_refused(self):
+        """AV1109-03: no table lists product.set_restock, so a real draft of it is refused in plain words."""
+        for name in PENDING_UNLISTED:
+            self.assertNotIn(name, policy.LIVE)
+            self.assertNotIn(name, policy.PRIVATE)
+        reasons = self.refused(op("product.set_restock", id=PRODUCT, restock_on="2026-11-20"))
+        self.assertEqual(reasons, ["not live: product.set_restock"])
+        text = policy.refusal(reasons)
+        self.assertIn("a kind of change I can't put on the website from chat yet", text)
+        self.assertIn("I've kept it on the list of changes to make by hand", text)
+        self.assertEqual(voice.check(text), [])
 
     def test_private_only_never_goes_live(self):
         cases = {
@@ -108,7 +126,7 @@ class RealDrafts(unittest.TestCase):
             "product.edit producer": [op("product.edit", id=PRODUCT, producerKey="Etto")],
             "product.edit name": [op("product.edit", id=PRODUCT, name="New plain name")],
             "maker hide": [op("maker.hide", key=self.maker_key(), withProducts=True)],
-            "new item": [op("product.add", name="Test jam", brand="Test Orchard", category="pantry", image="assets/products/photo-product-001.webp",
+            "new item with a picture file that is already on the site (image argument)": [op("product.add", name="Test jam", brand="Test Orchard", category="pantry", image="assets/products/photo-product-001.webp",
                             description="Sweet jam.")],
             "hours": [op("store.set_hours", hours=["Monday 9am-5pm"])],
             "phone": [op("store.set_phone", phone="805 555 0123")],
@@ -128,7 +146,7 @@ class RealDrafts(unittest.TestCase):
         for record in draft["records"]:
             if record["collection"] == "events": record["before"] = {**(record["after"] or {}), "rsvpEnabled": True}
         self.assertEqual(policy.check(draft), ["sign-up is on"])
-        self.assertIn("sign up", policy.refusal(["sign-up is on"]))
+        self.assertIn("sign-up", policy.refusal(["sign-up is on"]))
 
     def test_claims_still_block_inside_the_table(self):
         for text in ("Organic and grown in Paso Robles.", "Award-winning and good for your heart."):
@@ -161,7 +179,7 @@ class RefusedIsSavedPrivately(ConversationTestCase):
         self.assertEqual(self.say("organic"), "proposed")
         [reply] = self.replies()
         self.assertIn("I can't put this on the website from chat", reply)
-        self.assertIn("I've saved it for Graham to look at", reply)
+        self.assertIn("I've kept it on the list of changes to make by hand", reply)
         self.assertNotIn("Reply yes", reply)
         [row] = self.backlog()
         self.assertEqual((row["reason"], row["state"]), ("policy", "open"))
@@ -169,7 +187,7 @@ class RefusedIsSavedPrivately(ConversationTestCase):
         self.assertTrue(row["summary"].startswith(f"[{code}]"))
         self.assertIn("test.set_product_description", row["text"])
         self.assertEqual(self.say(f"yes {code}"), "no-target")  # a yes cannot get around it
-        self.assertIn("I've saved it for Graham", self.replies()[0])
+        self.assertIn("I've kept it on the list of changes to make by hand", self.replies()[0])
         self.assertEqual(len(self.backlog()), 1)  # once, not once per try
         self.assertEqual((self.editor.applies, self.commits()), (0, 0))
         self.assertEqual(self.conv.db.execute("SELECT count(*) FROM approvals").fetchone()[0], 0)

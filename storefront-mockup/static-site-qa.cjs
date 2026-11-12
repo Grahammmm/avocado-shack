@@ -5,7 +5,7 @@
 // a plain sentence instead of a parser error.
 //   node storefront-mockup/static-site-qa.cjs DIR      (DIR outside the repo; QA_OUT_DIR as for the other checks)
 const {out}=require('./qa-env.cjs').qaEnv({preview:false});
-const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert/strict');
+const fs=require('fs'),path=require('path'),http=require('http'),util=require('util'),assert=require('assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const refuse=m=>{process.stderr.write('static-site QA refused: '+m+'\n');process.exit(2)};
 const root=process.argv[2]&&fs.realpathSync(process.argv[2]);
@@ -140,10 +140,27 @@ server.listen(0,'127.0.0.1',async()=>{
   for(const [name,events] of [['empty',[]],['cancelled only',[nh('c','C','2026-12-06T09:00:00-08:00',{status:'cancelled'})]],['completed only',[nh('d','D','2026-12-06T09:00:00-08:00',{status:'completed'})]],['past day only',[nh('p','P','2026-11-08T09:00:00-08:00')]],['missing file',null],['malformed events',{bad:1}]]){
    const r=await homeNext(events);assert.equal(r.n,1,name);assert.equal(r.hidden,true,name);assert.equal(r.links,0,name);assert.equal(r.text,'',name);assert.deepEqual(r.errs,[],name);assert.ok(!r.reqs.some(q=>q.includes('hiking-preview')),name+': sample requested');}
   {const day=[nh('s','Started today','2026-11-09T07:00:00-08:00')]; // Pacific 9 Nov 07:00
-   let r=await homeNext(day,{iso:'2026-11-09T20:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.links,1,'started today, viewer in Tokyo');assert.equal(r.text,'Next hike: Monday, November 9, 7:00 AM - Started today');
+   // RF0814-11: a walk that has already started is not the "next" hike, even on its own Pacific day and with the viewer in Tokyo; it stays visible as TODAY on /hike.
+   let r=await homeNext(day,{iso:'2026-11-09T20:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.n,1,'started only');assert.equal(r.hidden,true,'started only: hidden');assert.equal(r.links,0,'started only: no link');assert.equal(r.text,'','started only: empty');assert.deepEqual(r.errs,[]);
    r=await homeNext(day,{iso:'2026-11-10T08:30:00Z',tz:'Asia/Tokyo'});assert.equal(r.links,0,'hidden after Pacific midnight');
    r=await homeNext([nh('t','Plain hike','2026-12-06T09:00:00-08:00',{timezone:undefined}),],{width:1440});assert.equal(r.text,'Next hike: Sunday, December 6, 9:00 AM - Plain hike');
    r=await homeNext([nh('w','A very long hike title '.repeat(8),'2026-12-06T09:00:00-08:00')],{width:390});assert.equal(r.overflow,false,'long title overflows the page');}
+  // RF0814-11 homeNextSkipsStartedWithFutureSibling: noon Pacific, 9am started + 3pm future (reverse input order): home names only 3pm; /hike keeps 9am as TODAY and 3pm as THE NEXT HIKE.
+  {const noon='2026-11-09T20:00:00Z',nine=nh('r-9','Started morning walk','2026-11-09T09:00:00-08:00'),three=nh('r-3','Future afternoon walk','2026-11-09T15:00:00-08:00');
+   let r=await homeNext([three,nine],{iso:noon});assert.equal(r.links,1,'mixed');assert.equal(r.text,'Next hike: Monday, November 9, 3:00 PM - Future afternoon walk');assert.equal(r.href,'/hike#upcoming-hikes');assert.deepEqual(r.errs,[]);assert.ok(!r.reqs.some(q=>q.startsWith('POST')),'POST from home');
+   r=await homeNext([nine,three],{iso:noon,tz:'Asia/Tokyo'});assert.equal(r.text,'Next hike: Monday, November 9, 3:00 PM - Future afternoon walk','mixed, other input order, viewer in Tokyo');
+   const h=await hikeAt(noon,{events:[three,nine]});const card=t=>h.arts.find(a=>a.t===t);
+   assert.match(card('Started morning walk').txt,/TODAY/,'/hike keeps the started walk as TODAY');assert.match(card('Future afternoon walk').txt,/THE NEXT HIKE/,'/hike labels the future walk THE NEXT HIKE');assert.deepEqual(h.errs,[]);
+   // homeNextStartBoundary: start-1ms selects it, the exact start and start+1ms do not.
+   for(const [iso,shown] of [['2026-11-09T22:59:59.999Z',true],['2026-11-09T23:00:00.000Z',false],['2026-11-09T23:00:00.001Z',false]]){r=await homeNext([three],{iso});assert.equal(r.links,shown?1:0,iso);assert.equal(r.hidden,!shown,iso);assert.equal(r.text,shown?'Next hike: Monday, November 9, 3:00 PM - Future afternoon walk':'',iso);}
+   // homeNextAbsoluteTimeAcrossZones: fall-back hour, same wall text 1:30 AM twice; decided by instant (PDT 08:30Z, PST 09:30Z), and equal instants keep input order.
+   const pdt=nh('f-pdt','First 1:30','2026-11-01T01:30:00-07:00'),pst=nh('f-pst','Second 1:30','2026-11-01T01:30:00-08:00');
+   r=await homeNext([pst,pdt],{iso:'2026-11-01T08:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.text,'Next hike: Sunday, November 1, 1:30 AM - First 1:30','before both');
+   r=await homeNext([pst,pdt],{iso:'2026-11-01T09:00:00Z',tz:'Asia/Tokyo'});assert.equal(r.text,'Next hike: Sunday, November 1, 1:30 AM - Second 1:30','between the two identical wall times');
+   r=await homeNext([pst,pdt],{iso:'2026-11-01T09:30:00Z'});assert.equal(r.links,0,'both started');
+   r=await homeNext([nh('e-2','Equal second','2026-12-06T09:00:00-08:00'),nh('e-1','Equal first','2026-12-06T09:00:00-08:00')]);assert.equal(r.text,'Next hike: Sunday, December 6, 9:00 AM - Equal second','equal starts keep input order');
+   // homeNextFiltersAndFallback: invalid/missing starts and non-scheduled events are never selected next to a valid future sibling.
+   r=await homeNext([nh('x1','Bad start','not a date'),nh('x2','No start',undefined,{startsAt:undefined}),nh('x3','Cancelled','2026-12-01T09:00:00-08:00',{status:'cancelled'}),nh('x4','Completed','2026-12-02T09:00:00-08:00',{status:'completed'}),nh('x5','Good sibling','2026-12-20T09:00:00-08:00')]);assert.equal(r.text,'Next hike: Sunday, December 20, 9:00 AM - Good sibling');assert.deepEqual(r.errs,[]);}
   // AV1422-09: the no-hike empty state (sample off, no events) keeps the look its h3 had: 32px/8px at desktop, 29px/8px on a phone.
   for(const [w,size] of [[1440,'32px'],[390,'29px']]){const ctx=await browser.newContext({viewport:{width:w,height:900}}),p=await ctx.newPage();
    await p.route('**/hiking-preview.json',r=>r.fulfill(json({...sample,enabled:false})));await p.route('**/community.json',r=>r.fulfill(json({events:[],routeIdeas:[]})));
@@ -161,6 +178,30 @@ server.listen(0,'127.0.0.1',async()=>{
   for(const t of ['RSVP-off hike','no-flag hike']){assert.match(art(t).txt,SHARED,t);assert.doesNotMatch(art(t).txt,JOIN,t)}
   assert.ok(art('cancelled hike').x&&/CANCELLED/.test(art('cancelled hike').txt)&&/This hike is cancelled\./.test(art('cancelled hike').txt));assert.doesNotMatch(art('cancelled hike').txt,JOIN);assert.doesNotMatch(art('cancelled hike').txt,SHARED);
   assert.deepEqual(fx.errs,[]);assert.deepEqual(fx.sent,[],'the static hike list sent something');
+  // AV1109-12 (docs/hass/HIKE-PAGE.md 3.3.1): one test per row of the spots table on the published static site. It has no API and no counts file, so it can never trust a count: rows 1-3 are the pure helper; a limited hike here is row 4 whatever stray counts the JSON carries.
+  const SP_LIMITED=c=>'Limited to '+c+' people · availability unconfirmed; ask at the Shack',SP_FULL='Full. Ask at the Shack to go on the waitlist.';
+  const spSrc=fs.readFileSync(path.join(root,'community.js'),'utf8'),spots=new Function('esc',spSrc.slice(spSrc.indexOf('// SPOTS-BEGIN'),spSrc.indexOf('// SPOTS-END'))+';return {spotsState,spotsMarkup,spotsCount}')(t=>String(t));
+  const SS=(e,c)=>spots.spotsState({capacity:6,rsvpEnabled:true,rsvpOpen:true,...e},c).text;
+  // rows 1-3 (trusted count, capacity matches)
+  assert.equal(SS({},{capacity:6,remaining:2}),'2 spots left','row 1');assert.equal(SS({},{capacity:6,remaining:1}),'1 spot left','row 2');assert.equal(SS({},{capacity:6,remaining:0}),SP_FULL,'row 3');
+  // rows 4 and 5 (taken unknown; count made for another limit): the limit now in community.json, never a number left
+  for(const c of [null,undefined,{},{capacity:6,remaining:null},{capacity:6,remaining:'2'},{capacity:6,remaining:-1},{capacity:6,remaining:7},{capacity:6,remaining:1.5}])assert.equal(SS({},c),SP_LIMITED(6),'row 4: '+JSON.stringify(c));
+  assert.equal(SS({},{capacity:8,remaining:2}),SP_LIMITED(6),'row 5');assert.equal(SS({capacity:8},{capacity:6,remaining:0}),SP_LIMITED(8),'row 5 after a limit change');
+  // rows 6 and 7
+  assert.equal(SS({rsvpEnabled:false},{capacity:6,remaining:2}),'RSVP details will be shared when confirmed.','row 6');assert.equal(SS({capacity:null},{capacity:6,remaining:2}),'To join, ask at the Shack.','row 7');
+  assert.equal(spots.spotsCount({staticSite:true,capacity:6,remaining:2}),null,'static count ignored');
+  // the real static page: every hike with a limit says it and nothing more, whatever counts the JSON carries; nobody gets a button
+  const sp=await hikeAt('2026-11-09T08:30:00Z',{events:[ev('s-many','Synthetic row one',{rsvpEnabled:true,capacity:6,remaining:2,rsvpOpen:true,confirmedGuests:4}),ev('s-one','Synthetic row two',{rsvpEnabled:true,capacity:6,remaining:1,rsvpOpen:true}),
+   ev('s-full','Synthetic row three',{rsvpEnabled:true,capacity:6,remaining:0,rsvpOpen:true}),ev('s-null','Synthetic row four',{rsvpEnabled:true,capacity:6,remaining:null}),ev('s-nocount','Synthetic row four missing',{rsvpEnabled:true,capacity:6}),
+   ev('s-off','Synthetic row six',{rsvpEnabled:false,capacity:6,remaining:2,rsvpOpen:true}),ev('s-none','Synthetic row seven',{rsvpEnabled:true,remaining:2,rsvpOpen:true}),ev('s-x','Synthetic cancelled limited',{status:'cancelled',startsAt:'2026-11-09T12:00:00-08:00',rsvpEnabled:true,capacity:6,remaining:2})]});
+  const sa=t=>sp.arts.find(a=>a.t.endsWith(t)),SPOTS=/spots? left|places? available|This hike is full|Full\. Ask/;
+  assert.equal(sp.arts.length,8,'eight spots fixture hikes shown');
+  for(const t of ['row one','row two','row three','row four','row four missing']){assert.ok(sa(t).txt.includes(SP_LIMITED(6)),t+': limit stated');assert.doesNotMatch(sa(t).txt,SPOTS,t+': no spots-left claim');assert.doesNotMatch(sa(t).txt,/RSVP details will be shared|To join, ask at the Shack\./,t+': one spots line')}
+  assert.match(sa('row six').txt,/RSVP details will be shared when confirmed\./,'row 6 on the page');assert.doesNotMatch(sa('row six').txt,/Limited to|spots? left/,'row 6 has no spots line');
+  assert.match(sa('row seven').txt,/To join, ask at the Shack\./,'row 7 on the page');assert.doesNotMatch(sa('row seven').txt,/Limited to|spots? left/,'row 7 has no spots line');
+  for(const a of sp.arts)assert.equal(a.b,0,a.t+': no RSVP button on the static site');
+  assert.ok(sa('cancelled limited').x&&/This hike is cancelled\./.test(sa('cancelled limited').txt)&&!/Limited to|spots? left|To join|RSVP details/.test(sa('cancelled limited').txt),'a cancelled card is unchanged');
+  assert.deepEqual(sp.errs,[]);assert.deepEqual(sp.sent,[],'the static spots list sent something');
   for(const missing of MISSING){ // a missing path, at any depth, gets the shop's own 404 page with its stylesheet
    const res=await page.goto(base+missing);await page.waitForLoadState('networkidle');
    assert.equal(res.status(),404,missing+': status');assert.equal(await page.locator('h1').innerText(),'That page isn’t here.',missing+': heading');
@@ -184,6 +225,44 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.equal(await p.locator(form).getAttribute('aria-disabled'),'true');
    assert.equal(hits,1,route+': one GET /api/community');assert.equal(posts,0,route+': nothing posted');await p.close();
   }
+  // RF0854-12: the shared dialog (Privacy and the RSVP form) closes only for a real backdrop click, Close or Escape; a click on its own padding/border keeps it open.
+  // Points are measured at click time and checked with elementFromPoint and the dialog's rectangle, so no test passes by hitting a child or the backdrop by mistake.
+  const box=(p,where)=>p.locator('#dialog').evaluate((d,where)=>{const r=d.getBoundingClientRect(),y=where==='corner'?r.top+3:r.top+r.height/2;
+   const x=where==='backdrop'?r.left/2:r.left+3,hit=document.elementFromPoint(x,y);return {x,y,hitDialog:hit===d,inside:x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom}},where);
+  const isOpen=p=>p.locator('#dialog').evaluate(d=>d.open);
+  const clickPadding=async(p,where,why)=>{const pt=await box(p,where);assert.ok(pt.hitDialog&&pt.inside,why+': '+where+' point is the dialog itself, inside its box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),true,why+': '+where+' padding click closed the dialog')};
+  const clickBackdrop=async(p,why)=>{const pt=await box(p,'backdrop');assert.ok(pt.hitDialog&&!pt.inside,why+': backdrop point is outside the box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),false,why+': backdrop click left the dialog open')};
+  const rsvpApi={acceptsSubmissions:true,routeIdeas:[],events:[{id:'rf0854-walk',title:'Synthetic dialog walk',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles',meetingPoint:'Synthetic trailhead',rsvpOpen:true,rsvpEnabled:true,remaining:6,confirmedGuests:0}]};
+  for(const [width,other] of [[390,1440],[1440,390]]){const ctx=await browser.newContext({viewport:{width,height:900}}),p=await ctx.newPage(),errs=[];let posts=0;
+   p.on('pageerror',e=>errs.push(e.message));p.on('request',r=>{if(r.method()!=='GET'||r.postData())posts++});
+   try{await p.clock.setFixedTime(new Date('2026-11-09T08:30:00Z'));await p.route('**/api/community',r=>r.fulfill(json(rsvpApi)));
+    // privacy_inside_padding_and_border_stays_open (also after a viewport resize)
+    await p.goto(base+'/');const privacy=p.getByRole('button',{name:'Privacy',exact:true});await privacy.click();
+    const before=await p.locator('#dialog').evaluate(d=>({text:d.innerText,label:d.getAttribute('aria-labelledby')}));
+    await clickPadding(p,'corner','privacy '+width);await clickPadding(p,'side','privacy '+width);
+    await p.setViewportSize({width:other,height:700});await clickPadding(p,'corner','privacy resized '+width+'→'+other);await p.setViewportSize({width,height:900});
+    assert.deepEqual(await p.locator('#dialog').evaluate(d=>({text:d.innerText,label:d.getAttribute('aria-labelledby')})),before,'privacy '+width+': content unchanged');
+    assert.equal(await p.locator('#dialog-title').innerText(),'Your privacy matters.');
+    // child_close_and_escape_keep_existing_behavior
+    await p.locator('#dialog-content p').first().click();assert.equal(await isOpen(p),true,'privacy '+width+': paragraph click');
+    await p.keyboard.press('Escape');assert.equal(await isOpen(p),false,'privacy '+width+': Escape');assert.equal(await privacy.evaluate(b=>b===document.activeElement),true,'privacy '+width+': focus back after Escape');
+    await privacy.click();await p.getByRole('button',{name:'Close details'}).click();assert.equal(await isOpen(p),false,'privacy '+width+': Close');assert.equal(await privacy.evaluate(b=>b===document.activeElement),true,'privacy '+width+': focus back after Close');
+    // backdrop_click_still_closes
+    await privacy.click();await clickBackdrop(p,'privacy '+width);
+    // rsvp_inside_padding_preserves_open_form: the real RSVP renderer, synthetic data, filled but never submitted
+    await p.goto(base+'/hike/');const rsvp=p.locator('[data-rsvp="rf0854-walk"]');await rsvp.click();
+    await p.locator('#rsvp-name').fill('Synthetic Visitor');await p.locator('#rsvp-email').fill('synthetic@example.invalid');await p.locator('#rsvp-party').selectOption('2');
+    const values=()=>p.locator('#hike-rsvp').evaluate(f=>[f.elements.name.value,f.elements.email.value,f.elements.partySize.value]);
+    await clickPadding(p,'corner','rsvp '+width);await clickPadding(p,'side','rsvp '+width);
+    assert.ok(util.isDeepStrictEqual(await values(),['Synthetic Visitor','synthetic@example.invalid','2']),'rsvp '+width+': typed values kept');
+    await p.locator('#rsvp-name').click();assert.equal(await isOpen(p),true,'rsvp '+width+': input click');
+    await p.keyboard.press('Escape');assert.equal(await isOpen(p),false,'rsvp '+width+': Escape');
+    await rsvp.click();await p.getByRole('button',{name:'Close details'}).click();assert.equal(await isOpen(p),false,'rsvp '+width+': Close');
+    await rsvp.click();await clickBackdrop(p,'rsvp '+width);
+    assert.equal(posts,0,'rsvp '+width+': nothing posted');assert.deepEqual(await p.evaluate(()=>[localStorage.length,sessionStorage.length]),[0,0],'rsvp '+width+': nothing stored');assert.deepEqual(errs,[],'dialog '+width+': page errors');
+   }finally{await ctx.close()}}
+  await require('./invitation-qa.cjs')(browser,base,true);
+  result.dialogPaddingKeepsOpen=true;
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,noticesGone:true,defaultView:"packaged",catalog:170,errors});
   fs.writeFileSync(path.join(out,'static-site-QA.json'),JSON.stringify(result,null,1));

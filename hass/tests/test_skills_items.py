@@ -278,7 +278,7 @@ class ImageMissing(unittest.TestCase):
         with tempfile.TemporaryDirectory() as empty, self.assertRaises(it.Refusal) as caught:
             it.plan_restore({"items": [pid]}, ctx_for(content, site_dir=empty))
         self.assertIn("picture is missing", caught.exception.reply)
-        self.assertIn("Graham", caught.exception.reply)
+        self.assertIn("by hand", caught.exception.reply)  # HASS-CHAT-1: the one next step, never "ask Graham"
 
 
 class OwnerWords(unittest.TestCase):
@@ -370,6 +370,106 @@ class OwnerWords(unittest.TestCase):
         warned = it.notes(EDIT, {"item": "photo-product-017", "description": "Great stuff!"}, ctx)["warn"]
         self.assertTrue(warned)
         it.plan_edit({"item": "photo-product-017", "description": "Great stuff!"}, ctx)  # a warning, never a refusal
+
+
+class EditNotesFollowThePlan(unittest.TestCase):
+    """RF2235-9: the 'I set:' and advice lines describe only what survives in the planned product.edit."""
+
+    PESTO, FIGS = "photo-product-032", "photo-product-097"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.content = load_and_validate(CONTENT, SITE)
+
+    def content_with(self, pid, **fields):
+        content = copy.deepcopy(self.content)
+        next(p for p in content.products if p["id"] == pid).update(fields)
+        return content
+
+    def notes(self, slots, content=None):
+        return it.notes(EDIT, slots, ctx_for(content or self.content))
+
+    def row(self, text, slots, expect, **more):
+        base = {"id": "notes-row", "kind": "clean", "version": 1, "texts": [text],
+                "replies": [{"skill": EDIT, "slots": slots}], "expect": {"skill": EDIT, "disposition": "proposed", **expect}}
+        return {**base, **more}
+
+    def test_same_maker_plus_shelf_has_no_default_note(self):
+        slots = {"item": self.PESTO, "maker": "Stardust Grove", "category": "dairy"}  # the pesto is already Stardust Grove's
+        self.assertEqual(self.notes(slots), {"say": [], "set": [], "warn": []})
+        row = self.row("move the garlic pesto to dairy, it is Stardust Grove's", slots, {
+            "ops": [{"op": "product.edit", "args": {"id": self.PESTO, "category": "dairy"}}],
+            "diff": [{"file": "hass/content/products.json", "path": f"products[{self.PESTO}].category", "before": "pantry", "after": "dairy"}],
+            "files": ["hass/content/products.json", "storefront-mockup/catalog-products.js"],
+            "preview": {"kind": "product", "id": self.PESTO}, "reply_contains": "dairy", "reply_not_contains": ["I set:", "maker line"]})
+        result = run_case_row(row, SKILLS, SKILLS[EDIT])
+        self.assertEqual(result.problems, [])
+
+    def test_unchanged_default_line_with_changed_maker_key_is_not_disclosed(self):
+        content = self.content_with(self.PESTO, displayBrand="Etto")  # the line already reads Etto; the maker key is Stardust Grove
+        slots = {"item": self.PESTO, "maker": "Etto"}
+        [op] = it.plan_edit(slots, ctx_for(content))
+        self.assertEqual(op["args"], {"id": self.PESTO, "brand": "Etto", "producerKey": "Etto"})
+        self.assertEqual(self.notes(slots, content)["set"], [])
+
+    def test_clear_producer_default_only_when_display_line_changes(self):
+        clear = {"item": self.PESTO, "clear": ["clearProducer"]}
+        [line] = self.notes(clear)["set"]
+        self.assertEqual(voice.plain(line), "I set: the maker line on the card to From the market.")
+        content = self.content_with(self.PESTO, displayBrand=it.UNKNOWN_SHOWN)  # already the fallback line: only the relation changes
+        self.assertEqual(self.notes({**clear, "category": "dairy"}, content)["set"], [])
+
+    def test_clear_producer_on_unlinked_product_still_discloses_a_changed_default(self):
+        content = self.content_with(self.PESTO, producerKey=None, displayBrand="Grandma's pesto")  # no maker link left to clear
+        clear = {"item": self.PESTO, "clear": ["clearProducer"]}
+        [op] = it.plan_edit(clear, ctx_for(content))
+        self.assertNotIn("clearProducer", op["args"])  # the plan dropped the already-true relation
+        self.assertEqual(op["args"]["displayBrand"], it.UNKNOWN_SHOWN)  # but the custom line is still replaced
+        [line] = self.notes(clear, content)["set"]
+        self.assertEqual(voice.plain(line), "I set: the maker line on the card to From the market.")
+        with_shelf = self.notes({**clear, "category": "dairy"}, content)["set"]
+        self.assertEqual([voice.plain(x) for x in with_shelf], ["I set: the maker line on the card to From the market."])
+        owner_line = self.notes({**clear, "display_brand": "Home made"}, content)["set"]  # the owner's own label: no default note
+        self.assertEqual(owner_line, [])
+
+    def test_unchanged_description_does_not_warn(self):
+        saved = "Great stuff!"  # short, no full stop, an exclamation mark: every advisory would fire
+        content = self.content_with(self.PESTO, description=saved)
+        for repeated in (saved, "  Great   stuff! "):
+            with self.subTest(repeated):
+                self.assertEqual(self.notes({"item": self.PESTO, "description": repeated, "category": "dairy"}, content),
+                                 {"say": [], "set": [], "warn": []})
+        changed = self.notes({"item": self.PESTO, "description": "Okay stuff?"}, content)["warn"]
+        self.assertEqual(changed, it.advisory("Okay stuff?"))
+        self.assertEqual(len(changed), 3)
+        self.assertEqual(self.notes({"item": self.PESTO, "description": "Great stuff!"}, self.content)["warn"], it.advisory("Great stuff!"))
+
+    def test_real_default_and_explicit_label_controls(self):
+        slots = {"item": self.FIGS, "maker": "Etto"}
+        before = copy.deepcopy((slots, self.content.products))
+        [line] = self.notes(slots)["set"]
+        self.assertEqual(voice.plain(line), "I set: the maker line on the card to Etto.")
+        self.assertEqual(self.notes({**slots, "display_brand": "Etto Pasta"})["set"], [])
+        self.assertEqual(self.notes({**slots, "display_brand": "Etto Pasta", "category": "dairy"})["set"], [])
+        self.assertTrue((slots, self.content.products) == before)
+        bare = it.notes(EDIT, {"item": self.FIGS, "maker": "Etto"}, types.SimpleNamespace(today="2026-11-08"))  # no content: the plan is not reduced
+        self.assertEqual(voice.plain(bare["set"][0]), "I set: the maker line on the card to Etto.")
+
+    def test_refused_edit_has_no_notes(self):
+        hidden = self.content_with("photo-product-055", status="hidden")
+        refused = (
+            ({"item": self.FIGS, "name": "Figs", "description": "Great stuff!"}, self.content_with(self.FIGS, description="Great stuff!")),  # nothing left
+            ({"item": "photo-product-040", "maker": "Etto", "description": "Great stuff!"}, None),  # on hold
+            ({"item": "photo-product-055", "maker": "Etto", "description": "Great stuff!"}, hidden),  # hidden
+            ({"item": self.FIGS, "maker": "Etto", "clear": ["clearProducer"], "description": "Great stuff!"}, None),  # conflicting
+            ({"item": "photo-product-999", "maker": "Etto", "description": "Great stuff!"}, None),  # missing
+            ({"item": self.FIGS, "maker": "Etto", "description": "Two for five."}, None),  # a price
+        )
+        for slots, content in refused:
+            with self.subTest(slots):
+                with self.assertRaises(it.Refusal):
+                    it.plan_edit(slots, ctx_for(content or self.content))
+                self.assertEqual(self.notes(slots, content), {"say": [], "set": [], "warn": []})
 
 
 class LiveClass(unittest.TestCase):

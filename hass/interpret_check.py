@@ -24,7 +24,7 @@ UNDO_GUIDANCE = "To undo the last change, say " + voice.quote("undo") + ". To se
 PRICE_REPLY = "The website doesn't show prices, so I haven't made any change. Could you send it without the price?"  # AV0222-03
 PLAIN_TEXT_REPLY = ("The website only takes plain words, so I haven't made any change. "
                     "Could you send it again without special marks?")
-CANT_DO_YET = "I can't do that kind of change yet. You can ask Graham."
+CANT_DO_YET = "I can't do that kind of change from chat yet, so nothing changed. Say help to see what I can change."
 WANTS = {"bool": "yes or no", "int": "a whole number", "text_list": "a list of words"}
 
 
@@ -153,6 +153,8 @@ def check_skill(result: dict, skills, pending_codes=()) -> dict:
     if not is_skill_reply(result): return result
     if "skill" in result and "calls" in result:
         return {"question": f"I could not read that message as one change. {AGAIN}"}
+    if "calls" in result and not set(result) <= {"calls", "revises"}:  # closed envelope: refuse the whole reply, never strip
+        return {"question": f"I could not read that message as a change. {AGAIN}"}
     code = result.get("revises")
     if code is not None and (not isinstance(code, str) or code not in set(pending_codes)):
         return {"question": f"I could not find draft {_clean(code)} waiting; reply with the change again."}

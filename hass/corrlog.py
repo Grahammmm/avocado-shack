@@ -14,7 +14,7 @@ Writing never raises: a full disk or a bad folder means no row, never a lost rep
 
 Command line (for G, on the box):  python3 hass/corrlog.py problems --state DIR   |   weekly --state DIR
 """
-import argparse, json, os, re, sys  # noqa: E401
+import argparse, json, os, re, stat, sys  # noqa: E401
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -69,6 +69,10 @@ class CorrLog:
         self.dir, self.clock = Path(state) / FOLDER, clock
         self._pruned_on = None  # the day this instance last pruned: old files go without anyone running prune
 
+    def _real_directory(self) -> bool:
+        try: return stat.S_ISDIR(self.dir.lstat().st_mode)
+        except OSError: return False
+
     def record(self, kind, reason, *, msg=None, reply=None, excerpt=None, seconds=None) -> bool:
         """Add one row. True when it was written. Never raises."""
         try:
@@ -81,12 +85,15 @@ class CorrLog:
                    "excerpt": _clean(excerpt)}
             if isinstance(seconds, (int, float)) and not isinstance(seconds, bool): row["seconds"] = round(float(seconds), 1)
             self.dir.mkdir(mode=0o700, exist_ok=True)
+            if not self._real_directory(): return False
             if self._pruned_on != now.date():  # at most one directory scan a day; prune never raises
                 self._pruned_on = now.date()
                 self.prune()
             path = self.dir / f"{now:%Y-%m-%d}.jsonl"
-            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-            try: os.write(fd, (json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
+            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+            try:
+                if not stat.S_ISREG(os.fstat(fd).st_mode): return False
+                os.write(fd, (json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
             finally: os.close(fd)
             return True
         except Exception:  # noqa: BLE001 - a log row is never worth a lost reply
@@ -95,27 +102,39 @@ class CorrLog:
     def rows(self, days=RETENTION_DAYS) -> list:
         """Valid rows from the last `days` days, oldest first. Unreadable lines and files are skipped."""
         out, cutoff = [], self.clock().astimezone(timezone.utc) - timedelta(days=days)
+        if not self._real_directory(): return []
         try: files = sorted(p for p in self.dir.iterdir() if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.jsonl", p.name))
-        except OSError: return out
+        except OSError: return []
         for path in files:
-            try: text = path.read_text("utf-8", "replace")
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                try:
+                    if not stat.S_ISREG(os.fstat(fd).st_mode): continue
+                    with os.fdopen(fd, "r", encoding="utf-8", errors="replace", closefd=False) as stream:
+                        text = stream.read()
+                finally: os.close(fd)
             except OSError: continue
             for raw in text.splitlines():
                 try: row = json.loads(raw)
                 except ValueError: continue
-                if isinstance(row, dict) and row.get("kind") in KINDS and isinstance(row.get("at"), str):
+                if isinstance(row, dict) and isinstance(row.get("kind"), str) and row["kind"] in KINDS and isinstance(row.get("at"), str):
                     try: at = datetime.fromisoformat(row["at"])
                     except ValueError: continue
-                    if at.tzinfo is not None and at >= cutoff: out.append(row)
-        return out
+                    if at.tzinfo is not None and at >= cutoff: out.append((at, row))
+        out.sort(key=lambda pair: pair[0])  # stable: by real instant, equal instants keep scan order
+        return [row for _, row in out]
 
     def prune(self) -> int:
         """Delete whole day files older than RETENTION_DAYS. Returns how many were deleted. Never raises."""
         removed, cutoff = 0, (self.clock().astimezone(timezone.utc) - timedelta(days=RETENTION_DAYS)).date()
+        if not self._real_directory(): return removed
         try:
             for path in self.dir.iterdir():
                 m = re.fullmatch(r"(\d{4}-\d{2}-\d{2})\.jsonl", path.name)
-                if m and path.is_file() and not path.is_symlink() and datetime.strptime(m[1], "%Y-%m-%d").date() < cutoff:
+                if not (m and path.is_file() and not path.is_symlink()): continue
+                try: day = datetime.strptime(m[1], "%Y-%m-%d").date()
+                except ValueError: continue  # named like a day but not a real date (2026-02-30): not ours, left untouched
+                if day < cutoff:
                     path.unlink()
                     removed += 1
         except OSError:
