@@ -225,6 +225,7 @@ def status(state_dir, now=None):
     if not stat.S_ISREG(mode): return {"result": "unsafe", "reason": "inbox file is a link or not a regular file"}, 2
     try:
         with contextlib.closing(sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True)) as db:
+            db.execute("BEGIN")  # one deferred read snapshot: counts, dispositions, ages and nonces agree; close() ends it
             if db.execute("PRAGMA quick_check").fetchone()[0] != "ok": return {"result": "unreadable"}, 1
             tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             rows = lambda table, sql: db.execute(sql).fetchall() if table in tables else []  # noqa: E731

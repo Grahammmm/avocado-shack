@@ -8,11 +8,13 @@ CONNECTING THE REAL CHANNEL is G's job, step by step in docs/hass/CONNECT.md; no
 Envelope text with a repeated key or a NaN/Infinity constant is rejected unread (shape, before the MAC; nonce untouched).
 """
 import json, sys  # noqa: E401
+from datetime import timezone
 from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import bridge, stagelog  # noqa: E402
+from hass.inbox import parse_aware  # noqa: E402
 
 CONNECT_DOC = "docs/hass/CONNECT.md"
 REJECTED = {  # bridge.EnvelopeError code -> plain words
@@ -114,6 +116,10 @@ class Receiver:
         try:  # a missing or short secret is a ValueError from bridge: a setup fault, raised, never a message result
             with self.inbox._tx():  # RF0824-10: the nonce and the queue row commit together or not at all
                 msg = bridge.unseal(envelope, secret, now=now, seen=self.inbox.seen())
+                try:  # RF0240-10: a signed received_at the inbox cannot store is shape; raised so the nonce rolls back
+                    parse_aware(msg.received_at).astimezone(timezone.utc)
+                except (ValueError, OverflowError):
+                    raise bridge.EnvelopeError("shape") from None
                 queued = self.inbox.enqueue(msg)
         except bridge.EnvelopeError as exc:
             if exc.code == "replay": return _result("duplicate", "this exact envelope was already received"), None
