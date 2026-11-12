@@ -38,6 +38,8 @@ AMOUNT_RE = re.compile(r"[$€£]?\s*\d+(?:[.,]\d+)?\s*" + _UNIT + r"?\.?",
                        re.IGNORECASE)  # a price or a size (amount + unit), not a name
 FRACTION_SIZE_RE = re.compile(r"(?:\d+\s+)?(?:\d+\s*[/\u2044]\s*\d+|[\u00bc-\u00be\u2150-\u215e])\s*" + _UNIT + r"\.?",
                               re.IGNORECASE)  # RF1025-13: a whole-value fractional size ("1 1/2 oz", "½ lb")
+MULTIPLIED_SIZE_RE = re.compile(r"\d+\s*[xX\u00d7]\s*\d+(?:[.,]\d+)?\s*" + _UNIT + r"\.?",
+                                re.IGNORECASE)  # RF1530-18: a whole-value multiplied size ("2 x 500 ml", "6 × 12 oz")
 
 
 def _norm(value) -> str:
@@ -62,7 +64,7 @@ def _clean(field, value, categories):
     if any(term in folded for term in _TERMS): return None  # no organic/origin claim ever comes from a photo
     if _norm(value) in PLACEHOLDERS: return None  # a whole-value placeholder only
     if field in ("name", "brand") and (not _has_letter(value) or AMOUNT_RE.fullmatch(value)
-                                          or FRACTION_SIZE_RE.fullmatch(value)):
+                                          or FRACTION_SIZE_RE.fullmatch(value) or MULTIPLIED_SIZE_RE.fullmatch(value)):
         return None  # a barcode, price or bare size
     if field == "category":
         return next((c for c in categories if isinstance(c, str) and c.casefold() == value.casefold()), None)
