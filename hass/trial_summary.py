@@ -99,10 +99,18 @@ def _same_leaf(path, ident):
     if not stat.S_ISREG(st.st_mode) or (st.st_dev, st.st_ino) != ident: raise Unreadable
 
 
+def _fold(name):
+    """ASCII-only fold (SQLite identifier equivalence); never Unicode casefold."""
+    return name.translate(_ASCII_FOLD) if isinstance(name, str) else name
+
+
+_ASCII_FOLD = {c: c + 32 for c in range(65, 91)}
+
+
 def _rows(db, tables, table, wanted, optional):
     """Rows of `wanted` columns (required) plus `optional` ones (NULL when the old table lacks them); [] without the table; a lazy cursor, consumed before the connection closes."""
     if table not in tables: return []
-    have = {r[1] for r in db.execute(f"PRAGMA table_info({table})")}
+    have = {_fold(r[1]) for r in db.execute(f"PRAGMA table_info({table})")}
     if not set(wanted) <= have: raise Unreadable
     cols = [*wanted, *(c if c in have else "NULL" for c in optional)]
     return db.execute(f"SELECT {', '.join(cols)} FROM {table}")
@@ -125,7 +133,7 @@ def summarize(state_dir, start, days):
             db.isolation_level = None
             db.execute("PRAGMA query_only = 1")
             db.execute("BEGIN")
-            tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            tables = {_fold(r[0]) for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
             for disposition, at in _rows(db, tables, "messages", ["disposition"], ["received_at"]):
                 if disposition in NOT_OWNER: continue
                 if (b := where(_pacific_day(at))) is not None: b["messages"][_bucket(disposition)] += 1
