@@ -287,6 +287,15 @@ def _upright(data):
     return im.convert("RGB"), alpha, turned
 
 
+def _visible_luma(gray, cover):
+    """Coverage-weighted mean grey of a cut-out with no nearly opaque pixel; nothing visible at all is a blank photo."""
+    total = weight = 0
+    for v, m in zip(gray, cover):
+        total, weight = total + v * m, weight + m
+    if not weight: raise Refused("blank")
+    return total / weight
+
+
 def render(data: bytes, spec=None) -> dict:
     """{"jpeg": bytes, "report": {...}, "check": house_style.check_image(...)} for one owner photo."""
     Image, _, ImageChops, ImageDraw, ImageEnhance, ImageFilter = _modules()
@@ -332,8 +341,9 @@ def render(data: bytes, spec=None) -> dict:
         subject, cut = subject.resize(size, lanczos), cut.resize(size, lanczos)
         if alpha is not None:  # back to straight colour for the final source-over paste
             subject = Image.frombytes("RGBa", size, Image.merge("RGBA", (*subject.split(), cut)).tobytes()).convert("RGBA").convert("RGB")
-        solid = [v for v, m in zip(subject.convert("L").getdata(), cut.getdata()) if m > 200]
-        luma = statistics.fmean(solid) if solid else 128
+        gray = subject.convert("L").getdata()
+        solid = [v for v, m in zip(gray, cut.getdata()) if m > 200]
+        luma = statistics.fmean(solid) if solid else _visible_luma(gray, cut.getdata())  # translucent all over: measure it, never a made-up grey
         lo, hi = stats["subject_luma"]["p05"], stats["subject_luma"]["p95"]
         if luma < lo or luma > hi:  # exposure only, within a gentle range: never recolour a label
             gain = max(.8, min(1.25, (lo if luma < lo else hi) / max(luma, 1.0)))  # a pure-black subject: the full lift, no zero divide
