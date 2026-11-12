@@ -129,7 +129,7 @@ def _affirmed(rx, owner: str) -> bool:
     just before it in its clause. Clauses end at . ! ? ; : or a newline; words split on whitespace, , " ( ) stripped."""
     for clause in _CLAUSE.split(owner):
         for m in rx.finditer(clause):
-            words = [w for w in (w.strip(',"()') for w in clause[:m.start()].split()) if w]
+            words = [w for w in (w.strip(',"()') for w in clause[:m.start()].replace("-", " ").split()) if w]  # RF0240-12: not-organic negates
             if not set(words[-3:]) & set(NEGATORS):
                 return True
     return False
