@@ -90,7 +90,9 @@ def _product_line(found, products) -> str:
     if not products or "name" not in found or "brand" not in found: return ""
     shown = SimpleNamespace(products=[p for p in products if isinstance(p, dict) and p.get("status") != "held"])
     twin = catalog._twin(shown, found["name"], found["brand"])
-    return f" {voice.quote(twin['name'])} is already on the website. Reply with that name if you want to update it instead." if twin else ""
+    if not twin: return ""
+    state = "saved, but hidden from the website" if twin.get("status") == "hidden" else "on the website"  # RF0300-11
+    return f" {voice.quote(twin['name'])} is already {state}. Reply with that name if you want to update it instead."
 
 
 def question(found, makers=None, products=None) -> str:

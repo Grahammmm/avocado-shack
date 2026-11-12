@@ -112,8 +112,13 @@ def _no_duplicate_keys(pairs):
 
 
 def _read_aux_json(path: Path):
-    """Auxiliary evidence JSON; a repeated object key at any depth is ambiguous and refused."""
-    return json.loads(path.read_text("utf-8"), object_pairs_hook=_no_duplicate_keys)
+    """Decode an auxiliary JSON file; a repeated object key at any depth is refused and
+    decoder recursion overflow becomes a ValueError (private exit 2)."""
+    text = path.read_text("utf-8")
+    try:
+        return json.loads(text, object_pairs_hook=_no_duplicate_keys)
+    except RecursionError:
+        raise ValueError("JSON nested too deeply") from None
 
 
 def run_checks(repo: Path) -> tuple[list[str], dict]:
