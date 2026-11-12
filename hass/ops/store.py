@@ -151,12 +151,15 @@ def _confirm_selection(content, args, ctx):
                 return Refused(f"{pid} is listed twice in {value}" if same
                                else f"{pid} is listed twice ({wanted[pid]} and {value})")
             wanted[pid] = value
+    resolved = []  # RF0440-10: read-only preflight first, so a later refusal leaves every product unchanged
     for pid, value in wanted.items():
         product = _product(content, pid)
         if not isinstance(product, dict):
             return product
         if product["status"] != "active":
             return Refused(f"{pid} is {product['status']}; restore it before marking it available")
+        resolved.append((pid, product, value))
+    for pid, product, value in resolved:
         if (product.get("available"), product.get("available_on")) != (value, day.isoformat()):
             before = copy.deepcopy(product)
             product["available"], product["available_on"] = value, day.isoformat()  # AV1102-01: word + its day
