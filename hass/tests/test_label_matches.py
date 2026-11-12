@@ -27,8 +27,9 @@ PRODUCTS = [{"id": "p-1", "name": "Lion's Mane", "brand": "Far West Fungi", "sta
              "hold": {"reason": "r", "source": "s"}}]
 
 
-def listed(pid, name):
-    return f" \ue000{name}\ue001 is already on the website. Reply with that name if you want to update it instead."
+def listed(pid, name, hidden=False):
+    state = "saved, but hidden from the website" if hidden else "on the website"
+    return f" \ue000{name}\ue001 is already {state}. Reply with that name if you want to update it instead."
 
 
 class QuestionTests(unittest.TestCase):
@@ -60,7 +61,7 @@ class QuestionTests(unittest.TestCase):
     def test_listed_product_active_or_hidden_but_never_held(self):
         found = {"name": "whole  MILK", "brand": "straus family creamery"}
         self.assertEqual(question(found, None, PRODUCTS),
-                         f"The label looks like \ue000straus family creamery whole  MILK{TAIL}" + listed("p-2", "Whole milk"))
+                         f"The label looks like \ue000straus family creamery whole  MILK{TAIL}" + listed("p-2", "Whole milk", hidden=True))
         self.assertEqual(question({"name": "Lion's Mane", "brand": "Far West Fungi"}, MAKERS, PRODUCTS),
                          f"The label looks like \ue000Far West Fungi Lion's Mane{TAIL} I know the maker as \ue000Far West Fungi\ue001."
                          + listed("p-1", "Lion's Mane"))
@@ -68,6 +69,29 @@ class QuestionTests(unittest.TestCase):
         self.assertEqual(question(held, None, PRODUCTS), f"The label looks like \ue000Straus Family Creamery Raw cream{TAIL}")
         other = {"name": "Lion's Mane", "brand": "Other Farm"}  # same name, other brand
         self.assertEqual(question(other, None, PRODUCTS), f"The label looks like \ue000Other Farm Lion's Mane{TAIL}")
+
+    def test_hidden_twin_is_saved_but_not_on_the_website(self):
+        found = {"name": "whole  MILK", "brand": "straus family creamery"}
+        before = dict(found)
+        line = question(found, None, PRODUCTS)
+        self.assertTrue(line.endswith(" \ue000Whole milk\ue001 is already saved, but hidden from the website. Reply with that name if you want to update it instead."))
+        self.assertNotIn("already on the website", line)
+        self.assertEqual(found, before)
+
+    def test_active_twin_reply_is_byte_identical(self):
+        line = question({"name": "Lion's Mane", "brand": "Far West Fungi"}, None, PRODUCTS)
+        self.assertTrue(line.endswith(" \ue000Lion's Mane\ue001 is already on the website. Reply with that name if you want to update it instead."))
+
+    def test_held_twin_remains_unmentioned(self):
+        held = {"name": "Raw cream", "brand": "Straus Family Creamery"}
+        self.assertEqual(question(held, None, PRODUCTS), f"The label looks like \ue000Straus Family Creamery Raw cream{TAIL}")
+
+    def test_hidden_match_preserves_brand_suppression_and_maker_line(self):
+        found = {"name": "Straus Family Creamery whole milk", "brand": "Straus Family Creamery"}
+        products = [{"id": "p-4", "name": "Straus Family Creamery whole milk", "brand": "Straus Family Creamery", "status": "hidden"}]
+        self.assertEqual(question(found, MAKERS, products),
+                         f"The label looks like \ue000Straus Family Creamery whole milk{TAIL} I know the maker as \ue000Straus Family Creamery\ue001."
+                         + listed("p-4", "Straus Family Creamery whole milk", hidden=True))
 
     def test_both_name_and_brand_are_needed_for_a_product_line(self):
         self.assertEqual(question({"name": "Lion's Mane"}, None, PRODUCTS), "The label looks like \ue000Lion's Mane\ue001. Is that right? Either way, tell me which product it is.")
@@ -113,6 +137,25 @@ class LabelMatchConversationTests(unittest.TestCase):
         self.assertEqual((row["state"], row["summary"]), ("needs-details", f"{PHOTO_QUESTION} {line}"))
         self.assertEqual(json.loads(row["ops_json"]), [{"op": "product.set_photo", "args": {"photo": SHA}}])
         self.assertEqual(len(self.transport.calls), 1)
+
+    def test_hidden_match_photo_summary_and_reply_are_honest_without_ops(self):
+        path = self.repo.wt / "hass" / "content" / "products.json"
+        data = json.loads(path.read_text("utf-8"))
+        [butter] = [p for p in data["products"] if p["id"] == "photo-product-028"]
+        butter["status"] = "hidden"
+        path.write_text(json.dumps(data), "utf-8")
+        self.open({"name": "straus BUTTER", "brand": "STRAUS", "category": "dairy"})
+        _result, replies, row = self.photo()
+        tail = " \ue000Straus butter\ue001 is already saved, but hidden from the website. Reply with that name if you want to update it instead."
+        self.assertTrue(replies[0].endswith(tail), replies)
+        self.assertTrue(row["summary"].endswith(tail), row["summary"])
+        self.assertNotIn("already on the website", replies[0])
+        self.assertEqual(json.loads(row["ops_json"]), [{"op": "product.set_photo", "args": {"photo": SHA}}])
+        self.assertEqual(self.repo.product("photo-product-028")["status"], "hidden")
+
+    def test_hidden_match_sentence_passes_strict_voice(self):
+        from hass import voice
+        self.assertEqual(voice.check("The label looks like x." + listed("p", "Straus butter", hidden=True)), [])
 
     def test_an_unlisted_label_keeps_the_plain_line(self):
         self.open({"name": "Quince paste", "brand": "Nobody Farm", "category": "dairy"})
