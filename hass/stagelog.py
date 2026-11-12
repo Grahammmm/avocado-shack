@@ -53,7 +53,9 @@ def read(path) -> list:
     out = []
     try: text = Path(path).read_text("utf-8", "replace")
     except OSError: return out
-    for raw in text.splitlines():
+    # Records end at LF only (read_text already folded CRLF/CR to LF). str.splitlines would also cut at U+0085/U+2028/U+2029,
+    # which are legal literal characters inside a JSON string, and the two fragments would both be dropped as malformed.
+    for raw in text.split("\n"):
         try: row = json.loads(raw)
         # Excessive nesting is malformed diagnostic input too; skip only this line.
         except (ValueError, RecursionError): continue
