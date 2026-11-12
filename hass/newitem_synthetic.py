@@ -85,11 +85,18 @@ def make_photo(product="jar", background="white-sheet", size=(1200, 900), angle=
     """Photo bytes. `share` is the product's height as a share of the picture; `angle` tilts it in degrees;
     `phone_orientation` (6 or 8) stores the picture sideways with that EXIF tag, as a phone does, plus fake GPS/device data.
     Anything but None or the int 6 or 8 raises ValueError before any drawing. `fmt` must be exactly "JPEG" or "PNG";
-    any other value raises ValueError("fmt must be JPEG or PNG") before any drawing."""
+    any other value raises ValueError("fmt must be JPEG or PNG") before any drawing. `product` must be exactly one of
+    PRODUCTS and `background` exactly one of BACKGROUNDS (strings only, no aliasing or normalization, checked even
+    when alpha=True): ValueError("product must be one of PRODUCTS") / ValueError("background must be one of BACKGROUNDS"),
+    product first, before any drawing."""
     if phone_orientation is not None and not (type(phone_orientation) is int and phone_orientation in (6, 8)):
         raise ValueError("phone_orientation must be None, 6 or 8")
     if not (type(fmt) is str and fmt in ("JPEG", "PNG")):
         raise ValueError("fmt must be JPEG or PNG")
+    if not (type(product) is str and product in PRODUCTS):
+        raise ValueError("product must be one of PRODUCTS")
+    if not (type(background) is str and background in BACKGROUNDS):
+        raise ValueError("background must be one of BACKGROUNDS")
     from PIL import Image, ImageDraw, ImageFilter, ImageFont  # noqa: PLC0415
     rng = random.Random(seed)
     upright = (size[1], size[0]) if phone_orientation else size  # the scene as seen; stored sideways later

@@ -220,5 +220,98 @@ class RunnerTest(unittest.TestCase):
                          (("test_auto_policy",), "test_design_check"))
 
 
+UNEXP = textwrap.dedent("""
+    import unittest
+    class T(unittest.TestCase):
+        @unittest.expectedFailure
+        def test_a(self): self.assertTrue(True)
+""")
+UNEXP2 = textwrap.dedent("""
+    import unittest
+    print('LEAK-MARKER')
+    class T(unittest.TestCase):
+        @unittest.expectedFailure
+        def test_a(self): print('LEAK-MARKER')
+        @unittest.expectedFailure
+        def test_b(self): pass
+        def test_c(self): self.assertTrue(True)
+""")
+EXPECTED = textwrap.dedent("""
+    import unittest
+    class T(unittest.TestCase):
+        @unittest.expectedFailure
+        def test_a(self): self.assertTrue(False)
+        @unittest.skip("x")
+        def test_b(self): pass
+        def test_c(self): self.assertTrue(True)
+""")
+ERRS = textwrap.dedent("""
+    import unittest
+    class T(unittest.TestCase):
+        def test_a(self): raise RuntimeError('x')
+""")
+
+
+class UnexpectedSuccessTest(unittest.TestCase):
+    _run = RunnerTest._run
+
+    def test_unexpected_success_fails_acceptance(self):
+        with temp_pkg({"test_unexp.py": UNEXP}) as (n, d):
+            rows, code, probs = self._run(n, d, {"H01": ("test_unexp",)})
+            self.assertEqual((code, probs), (1, []))
+            self.assertEqual(rows, [{"id": "H01", "result": "fail", "tests": 1,
+                                     "failures": 1, "note": ""}])
+            res = unittest.TextTestRunner(stream=io.StringIO()).run(
+                unittest.TestLoader().loadTestsFromName(n + ".test_unexp"))
+            self.assertFalse(res.wasSuccessful())
+
+    def test_multiple_unexpected_successes_counted_each(self):
+        with temp_pkg({"test_unexp2.py": UNEXP2, "test_ok.py": OK}) as (n, d):
+            for order in (("test_unexp2", "test_ok"), ("test_ok", "test_unexp2")):
+                rows, code, _ = self._run(n, d, {"H01": order})
+                self.assertEqual(code, 1)
+                self.assertEqual(rows[0], {"id": "H01", "result": "fail", "tests": 5,
+                                           "failures": 2, "note": ""})
+
+    def test_unexpected_success_adds_to_assertion_error_and_import_counts(self):
+        files = {"test_unexp.py": UNEXP, "test_bad.py": BAD, "test_errs.py": ERRS,
+                 "test_raises.py": RAISES}
+        with temp_pkg(files) as (n, d):
+            rows, _, _ = self._run(n, d, {
+                "H01": ("test_unexp", "test_bad"), "H02": ("test_unexp", "test_errs"),
+                "H03": ("test_unexp", "test_raises"),
+                "H04": ("test_unexp", "test_bad", "test_raises")})
+            self.assertEqual([(r["tests"], r["failures"], r["note"]) for r in rows],
+                             [(3, 2, ""), (2, 2, ""),
+                              (1, 2, "import error: test_raises"),
+                              (3, 3, "import error: test_raises")])
+
+    def test_expected_failures_and_skips_keep_existing_outcomes(self):
+        with temp_pkg({"test_expected.py": EXPECTED}) as (n, d):
+            rows, code, _ = self._run(n, d, {"H01": ("test_expected",)})
+            self.assertEqual(code, 0)
+            self.assertEqual(rows, [{"id": "H01", "result": "pass", "tests": 3,
+                                     "failures": 0, "note": ""}])
+
+    def test_unexpected_success_does_not_stop_later_rows(self):
+        with temp_pkg({"test_unexp.py": UNEXP, "test_ok.py": OK}) as (n, d):
+            rows, code, _ = self._run(n, d, {"H01": ("test_unexp",), "H02": ("test_ok",),
+                                             "H25": "release step"})
+            self.assertEqual(code, 1)
+            self.assertEqual([(r["id"], r["result"]) for r in rows],
+                             [("H01", "fail"), ("H02", "pass"), ("H25", "not covered")])
+
+    def test_cli_unexpected_success_summary_and_output_isolation(self):
+        with temp_pkg({"test_ok.py": UNEXP2}) as (n, d):
+            code, lines = _main(["--only", "H01"], n, d)
+            self.assertEqual(code, 1)
+            self.assertEqual(len(lines), 2)
+            self.assertEqual(json.loads(lines[0]), {"id": "H01", "result": "fail",
+                             "tests": 3, "failures": 2, "note": ""})
+            self.assertEqual(json.loads(lines[1])["summary"],
+                             {"ids": 1, "pass": 0, "fail": 1, "not covered": 0})
+            self.assertNotIn("LEAK-MARKER", "".join(lines))
+
+
 if __name__ == "__main__":
     unittest.main()

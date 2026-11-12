@@ -75,8 +75,15 @@ def side_overlays(base_sha: str, head_sha: str, top: str) -> dict:
 
 
 def _git_dirs(top: str) -> list[Path]:
-    dirs = design_check.git("rev-parse", "--git-dir", "--git-common-dir", cwd=top).split("\n")
-    return [Path(top, d).resolve() for d in dirs if d]
+    """[git-dir, common-dir], each from its own query so a path holding a line feed is not split into false records;
+    only Git's one terminal framing LF is removed. An empty answer refuses rather than skip a guard."""
+    dirs = []
+    for flag in ("--git-dir", "--git-common-dir"):
+        path = design_check.git("rev-parse", flag, cwd=top).removesuffix("\n")
+        if not path:
+            raise Usage("git rev-parse failed")
+        dirs.append(Path(top, path).resolve())
+    return dirs
 
 
 def prepare_out(out: str, top: str) -> Path:

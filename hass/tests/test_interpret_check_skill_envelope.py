@@ -70,8 +70,11 @@ class EnvelopeTests(unittest.TestCase):
     def test_other_reply_paths_and_inputs_are_unchanged(self):
         single = {"skill": "stock.set", "slots": {"what": "eggs out"}}
         self.assertIs(interpret_check.check_skill(single, SKILLS), single)
-        none = interpret_check.check_skill({"skill": "none", "summary": "x", "extra": 1}, SKILLS)
+        none = interpret_check.check_skill({"skill": "none", "summary": "x"}, SKILLS)
         self.assertEqual(none, {"skill": "none", "summary": "x"})
+        # RF0330-13: the none catch-all is a closed shape; an extra key is refused, not stripped
+        mixed = interpret_check.check_skill({"skill": "none", "summary": "x", "extra": 1}, SKILLS)
+        self.assertEqual(set(mixed), {"question"})
         for passthrough in ({"question": "q?"}, {"unsupported": "u"}, {"ops": []}):
             self.assertIs(interpret_check.check_skill(passthrough, SKILLS), passthrough)
         unknown = interpret_check.check_skill({"calls": [{"skill": "no.such", "slots": {}}]}, SKILLS)
