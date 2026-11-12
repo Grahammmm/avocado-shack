@@ -45,6 +45,8 @@ FIELD_WORDS = {
     "invitation": "the invitation text",
     "bring": "what to bring",
     "accessNote": "the note about getting there",
+    "id": "which one you mean",
+    "changeId": "the change to undo",
 }
 
 
