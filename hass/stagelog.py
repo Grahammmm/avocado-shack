@@ -62,16 +62,25 @@ def read(path) -> list:
     return out
 
 
+def _offset(t, origin):
+    """round(t - origin, 3), or None when the difference is not a usable finite number."""
+    try: delta = t - origin
+    except OverflowError: return None
+    return round(delta, 3) if _usable(delta) else None
+
+
 def table(rows) -> list:
     """[(message id, {stage: seconds after that message's first stage})] from the merged rows of both logs. Reply stages
-    (keyed by reply id) join their message through the `reply-queued` line, which carries both `id` and `rid`."""
+    (keyed by reply id) join their message through the `reply-queued` line, which carries both `id` and `rid`. A stage whose
+    offset cannot be represented (two finite extremes whose difference overflows) is omitted; origins are unchanged."""
     by_reply = {r["rid"]: r["id"] for r in rows if r["stage"] == "reply-queued" and type(r.get("rid")) is str}
     first, seen = {}, {}
     for r in sorted(rows, key=lambda r: r["t"]):
         ident = by_reply.get(r["id"], r["id"]) if r["stage"] in ("reply-pulled", "bb-send-start", "bb-send-end") else r["id"]
         seen.setdefault(ident, {}).setdefault(r["stage"], r["t"])
         first[ident] = min(first.get(ident, r["t"]), r["t"])
-    return [(i, {s: round(t - first[i], 3) for s, t in sorted(st.items(), key=lambda kv: ORDER.index(kv[0]) if kv[0] in ORDER else 99)})
+    return [(i, {s: d for s, t in sorted(st.items(), key=lambda kv: ORDER.index(kv[0]) if kv[0] in ORDER else 99)
+                 if (d := _offset(t, first[i])) is not None})
             for i, st in seen.items() if "accepted" in st or "webhook-in" in st]
 
 
