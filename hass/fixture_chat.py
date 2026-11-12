@@ -35,6 +35,8 @@ def _row(n, line, photos=None, names=None) -> Inbound:  # every check names line
     except (ValueError, RecursionError): bad("not JSON")
     if not isinstance(r, dict): bad("row must be a JSON object")
     if type(r.get("id")) not in (int, str) or r.get("id") == "": bad("id must be a non-empty string or an integer")
+    try: str(r["id"]).encode("utf-8")  # RF0330-11: a lone surrogate id would only fail later, in SQLite, after earlier rows ran
+    except UnicodeEncodeError: bad("id must be UTF-8 text")
     for field in ("chat", "sender", "text"):
         if not isinstance(r.get(field), str): bad(f"{field} must be a string")
     if not isinstance(r.get("fromMe", False), bool): bad("fromMe must be true or false")
