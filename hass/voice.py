@@ -97,7 +97,7 @@ def check(text, *, emoji_ok=False, long_ok=False, ids_ok=False) -> list:
 
     emoji_ok: Mike used an emoji first. long_ok: he asked for a list, or it is a draft he must read in full.
     ids_ok: the message teaches a command whose answer is an id he has to type (find, listing, post, alias)."""
-    if not isinstance(text, str) or not text.strip(): return ["empty"]
+    if not isinstance(text, str) or not plain(text).strip(): return ["empty"]  # empty = blank once the marks are gone (what Mike would see)
     ours = _ours(text)
     broken = []
     for hit in _WORD_RE.finditer(ours):
