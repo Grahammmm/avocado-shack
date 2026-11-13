@@ -49,7 +49,7 @@ def _words(row) -> str:
 
 def help_section(registry=None) -> str:
     data = manifest(registry)
-    lines = ["Skills in this version (what is on your phone may differ):"]
+    lines = ["What I can do in this version (what is on your phone may differ):"]
     for pack in PACKS:
         lines.append(PACK_WORDS[pack] + ":")
         rows = [row for row in data["skills"] if row["pack"] == pack]

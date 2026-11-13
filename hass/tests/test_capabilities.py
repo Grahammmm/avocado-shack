@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from hass import capabilities, skills, voice
 from hass.ops import load_registry
+from hass.skills import testkit
 from hass.skills.model import Registry
 from hass.tests.test_skills_model import _skill
 
@@ -28,6 +29,7 @@ class CapabilityTests(unittest.TestCase):
         page = capabilities.owner_page(data)
         help_text = capabilities.help_section(self.registry)
         self.assertEqual(voice.check(help_text, long_ok=True), [])
+        self.assertEqual(testkit.plain_words_problems(help_text), [])
         for row in data['skills']:
             self.assertEqual(page.count(f"({row['name']})"), 1)
             lines = [line for line in help_text.splitlines() if line.startswith(row['label'] + ' - ')]
