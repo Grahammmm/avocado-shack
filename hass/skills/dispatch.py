@@ -524,6 +524,9 @@ class Dispatcher:
     # the common step: slots in -> question, refusal, backlog or draft ----------------------------------------
     def _advance(self, msg, now, req, skill, new_slots, revises, ctx=None, prior=None, resolved=False):
         conv, owner = self.conv, self._owner()
+        if hasattr(conv.editor, 'skill_allowed') and not conv.editor.skill_allowed(skill):
+            conv._reply("That's switched off, so nothing changed.")
+            return 'refused'
         base = prior or req  # the request whose texts and photo this one continues
         texts = _joined(base, msg)
         attachments = (base["attachments"] if base else [])
@@ -678,7 +681,7 @@ class Dispatcher:
         earlier = _earlier(texts, msg)
         hooked = self._skill_notes(skill, slots, now, texts)  # the skill's own lines: what it said and did, and what to know before yes
         note = self._note_lines([(hooked, defaults)], left_off)
-        disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False, skill_names=(skill,))
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
         live = conv.requests.get(owner, now)
@@ -714,6 +717,10 @@ class Dispatcher:
     # several asks in one message ------------------------------------------------------------------------------
     def _calls(self, msg, now, result, req):
         conv, owner = self.conv, self._owner()
+        if hasattr(conv.editor, 'skill_allowed') and any(
+                s is not None and not conv.editor.skill_allowed(s) for s in (self.registry.get(c['skill']) for c in result['calls'])):
+            conv._reply("That's switched off, so nothing changed.")
+            return 'refused'
         texts = _joined(req, msg)
         attachments = req["attachments"] if req else []
         asked = None if any(self.registry.get(c.get("skill")) is None for c in result["calls"]) else self._agreement(
@@ -779,7 +786,8 @@ class Dispatcher:
             return refused
         note = self._note_lines(parts, left)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
-                                  prefix="\n".join(note) + "\n" if note else "", legacy=False)
+                                  prefix="\n".join(note) + "\n" if note else "", legacy=False,
+                                  skill_names=tuple(self.registry.get(c['skill']) for c in result['calls']))
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if waiting:  # the shelf-check question holds the open request: the incomplete calls wait on it, not lost

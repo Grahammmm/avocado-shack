@@ -282,6 +282,8 @@ class LiveEditor(conversation.Editor):
     routes_chat = True  # the conversation passes the approving owner's chat, kept in the release entry
 
     def apply(self, change_id, draft_hash, chat=None):
+        guard = getattr(self, 'environment_guard', None)
+        if guard and (problem := guard(change_id)): return problem
         if not journal.CID.fullmatch(str(change_id)): return self.refuse('the change could not be read')
         with self.books.lock() as held:
             if not held: return self.refuse('another change is going live')
@@ -303,6 +305,7 @@ class LiveEditor(conversation.Editor):
             if used >= self.cfg['dailyCap'] and not undo: return self.refuse(f"today's limit of {self.cfg['dailyCap']} live changes is reached; send it again tomorrow")
             self.interval(books)
             if self.stopped(): return self.refuse('live changes are stopped right now')
+            if guard and (problem := guard(change_id)): return problem
             if reasons := live_policy.check(draft): return self.refuse('; '.join(reasons))
             try: self.site_state(books['last_site_commit'])
             except (ValueError, subprocess.SubprocessError, OSError):
@@ -331,6 +334,10 @@ class LiveEditor(conversation.Editor):
         return f"hass live: {j['change_id']} ({j['code']}){suffix}" if j['kind'] != 'baseline' else f"hass baseline: {j['writer_after']}"
 
     def pipeline(self, j):
+        guard = getattr(self, 'environment_guard', None)
+        if guard and guard(j['change_id'], recorded=True):
+            self.alert('env-gone')
+            return
         # A built record is the durable intent for mirroring and committing locally.
         try:
             files = self.build(j['writer_after'], j['today'], j['change_id'], 'new', checks=True)
@@ -434,6 +441,10 @@ class LiveEditor(conversation.Editor):
         _books, entries = self.load()
         for j in entries:
             state, facts, fields = j['state'], {}, {}
+            guard = getattr(self, 'environment_guard', None)
+            if guard and guard(j['change_id'], recorded=True):
+                self.alert('env-gone')
+                continue
             if state == 'intent':
                 recovery = super().recover()
                 if recovery.get('result') != 'ok' or any(x['state'] == 'unresolved' for x in recovery.get('recovered', [])):
@@ -637,6 +648,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
     try:
         cfg = host.load_host(args.host)
+        from hass.sandbox import policy
+        mode = policy(cfg)
+        if mode['hold'] or 'site' not in mode['live']:
+            raise ValueError('sandbox')
         live = LiveEditor(cfg['state'], cfg['release'], Path(args.host).resolve().parent)
         out = live.operate(args.command, args.change_id, args.confirm, args.resolution, args.from_remote)
         # CLI never emits paths, sender, owner text or push history.

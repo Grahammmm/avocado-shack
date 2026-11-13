@@ -219,13 +219,16 @@ class Editor:
     routes_chat = False  # True on an editor that records which owner chat approved (LiveEditor); fixtures keep two arguments
 
     def apply(self, change_id, draft_hash):
-        return editor_mod.apply(change_id, draft_hash, state=self.state, registry=self.registry)
+        guard = getattr(self, 'environment_guard', None)
+        return editor_mod.apply(change_id, draft_hash, state=self.state, registry=self.registry,
+                                **({'guard': lambda: guard(change_id), 'recovery_guard': lambda cid: guard(cid, recorded=True)} if guard else {}))
 
     def show(self, change_id):
         return editor_mod.show(change_id, state=self.state)
 
     def recover(self):
-        return editor_mod.recover(state=self.state)
+        guard = getattr(self, 'environment_guard', None)
+        return editor_mod.recover(state=self.state, **({'guard': lambda cid: guard(cid, recorded=True)} if guard else {}))
 
     def render_draft(self, change_id):
         return editor_mod.render_draft(change_id, state=self.state, registry=self.registry)
@@ -946,6 +949,7 @@ class Conversation:
         """live_policy.check, and HASS-SEC-2 (M1): an undo of a change the release engine never put on the website (saved in
         private mode before live) is refused too. Only a live editor (publish_live.LiveEditor.went_live) can tell; its apply()
         refuses the same undo again."""
+        if draft and draft.get("environment", {}).get("env") == "sandbox": return []
         reasons = live_policy.check(draft)
         went_live = getattr(self.editor, "went_live", None)
         if callable(went_live) and live_policy.is_undo(draft) and not all(went_live(cid) for cid in live_policy.undone(draft)):
@@ -977,7 +981,8 @@ class Conversation:
                     head, tail = PREVIEW_FAILED_HEAD, "\n" + PREVIEW_RETRY_LINE
                     self._queue_preview_retry(row)
         text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), head=head, undo=_is_undo(row),
-                                      live_site=self.settings.get("liveSite"), now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
+                                      live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
+                                      now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
         if self._paused(): text += "\n" + PAUSED_LINE
         self._reply(text, shots, long_ok=True)
 
@@ -1065,6 +1070,7 @@ class Conversation:
         """Process one inbound message; returns its disposition. Replies are only enqueued (see flush).
         apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
         row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
+        if hasattr(self.editor, "sync_settings"): self.editor.sync_settings(self.settings)
         self._label_job = None
         try:
             with self._tx():
@@ -1205,6 +1211,10 @@ class Conversation:
             self._reply(f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it.")
             self._record(msg, "no-target")
             return "no-target", None
+        if hasattr(self.editor, "check_environment") and (problem := self.editor.check_environment(target["change_id"])):
+            self._outcome(target, problem, now)
+            self._record(msg, "env-changed")
+            return "env-changed", None
         if self.settings.get("liveSite") and (reasons := self._live_reasons(self.editor.show(target["change_id"]).get("draft"))):
             self._save_private(target, reasons)  # HASS-LIVE-PLAN-1: refused for the website, kept for Graham, never lost
             self._reply(live_policy.refusal(reasons, understood=q(target["summary"])))
@@ -1385,6 +1395,7 @@ class Conversation:
             if not (isinstance(ops, list) and all(isinstance(c, dict) and isinstance(c.get("op"), str) for c in ops)): return None
             calls = row.get("calls") if hasattr(row, "get") else row["calls"]
             return {"ops": ops, "revises": pending.get("revises"), "texts": texts if isinstance(texts, list) else [],
+                    "skills": pending.get("skills", []),
                     "calls": calls if isinstance(calls, list) else [], "ask": pending.get("ask"),  # HASS-CHAT-1: "meet" or None (shelf check)
                     "suggest": pending.get("suggest"), "index": pending.get("index"), "notes": [n for n in pending.get("notes") or () if isinstance(n, str)]}
         except (sqlite3.Error, ValueError, TypeError, KeyError, RecursionError): return None
@@ -1396,7 +1407,7 @@ class Conversation:
             return checked_on(load_and_validate(wt / "hass" / "content", wt / "storefront-mockup").store), True
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError): return None, False
 
-    def _ask_shelf(self, msg, now, result, earlier) -> str:
+    def _ask_shelf(self, msg, now, result, earlier, skill_names=()) -> str:
         """HASS-SHELFCHECK-FLOW-1: the change was refused only because today's shelf check is missing (none, or older than
         today): keep it with our question. Nothing is drafted or written until the owner's own yes; a check dated after
         today cannot be fixed by a yes, so that says so."""
@@ -1404,7 +1415,8 @@ class Conversation:
         if readable and day is not None and day > shop_today(now):
             self._reply(SHELF_CLOCK)
             return "not-drafted"
-        self._open_ask(msg, now, earlier, {"ops": result["ops"], "revises": result.get("revises")})
+        self._open_ask(msg, now, earlier, {"ops": result["ops"], "revises": result.get("revises"),
+                                         "skills": [getattr(s, 'name', s) for s in skill_names]})
         self._reply(SHELF_QUESTION)
         return "question"
 
@@ -1445,7 +1457,7 @@ class Conversation:
             self._reply(SHELF_NO)
             return "shelf-no"
         ops = [{"op": "store.confirm_selection", "args": {}}, *ask["ops"]]
-        out = self.editor.prepare(ops)
+        out = self.editor.prepare(ops, skills=ask.get('skills', ())) if hasattr(self.editor, 'gate') else self.editor.prepare(ops)
         draft = out.get("draft") if out["result"] == "ok" else None
         revised = self._by_code(ask["revises"], ("proposed", "needs-details")) if isinstance(ask["revises"], str) else None
         if draft is None or claims.unstated(draft, " ".join(ask["texts"]), self._makers(), self._routes(), self._sources()) or (
@@ -1542,7 +1554,7 @@ class Conversation:
         earlier = (recent or {}).get("earlier") or []  # HASS-HIKE-FLOW-1: the open request this text may be answering
         return self._draft(msg, now, result, earlier, failed=failed, req=req)
 
-    def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True, notes=()):
+    def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True, notes=(), skill_names=()):
         """Draft ``result["ops"]`` (from the interpreter, or from a skill plan: SKILLS-FW-3), or relay its question / unsupported
         reply: revises, the interpret check, the editor, the claims gate over the owner's JOINED texts, the proposal. The caller
         has already counted the model call, if there was one. Returns the disposition."""
@@ -1596,7 +1608,7 @@ class Conversation:
                 self._asked_again(shaped.ask["question"], msg)
                 return "question"
             result, notes = {**result, "ops": shaped.ops}, [*notes, *shaped.notes]
-        out = self.editor.prepare(result["ops"])
+        out = self.editor.prepare(result["ops"], skills=skill_names) if hasattr(self.editor, "gate") else self.editor.prepare(result["ops"])
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
             expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))  # H16: questions lapse too
@@ -1618,7 +1630,7 @@ class Conversation:
             self._asked_again(out["question"], msg)
             return "needs-details"
         if out["result"] == "refused" and out.get("reason") == catalog.NOT_CHECKED_TODAY and not ({"store.confirm_selection"} & {c["op"] for c in result["ops"]}):
-            return self._ask_shelf(msg, now, result, earlier)  # HASS-SHELFCHECK-FLOW-1: ask, keep the change, write nothing
+            return self._ask_shelf(msg, now, result, earlier, skill_names)  # keep skill off-policy through the shelf question
         if out["result"] != "ok":
             self._reply(self._plain(_reason(out)))
             return "not-drafted"
@@ -1701,6 +1713,15 @@ class Conversation:
         """Store the apply result and its reply in one transaction (before anything is sent)."""
         with self._answer_to(_row_chat(row)): return self._outcome_to(row, out, now)
 
+    def _reprepare(self, row):
+        ops = json.loads(row['ops_json'])
+        return self.editor.reprepare(row['change_id'], ops) if hasattr(self.editor, 'reprepare') else self.editor.prepare(ops)
+
+    def _row_live_site(self, row):
+        doc = self.editor.show(row['change_id'])
+        binding = (doc.get('draft') or doc.get('change') or {}).get('environment', {})
+        return None if binding.get('env') == 'sandbox' else self.settings.get('liveSite')
+
     def _outcome_to(self, row, out, now):
         result = out.get("result")
         if result in ("applied", "already-applied"):
@@ -1710,11 +1731,20 @@ class Conversation:
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
                                              call["args"].get("changeId")):
                         self._move(orig, "reverted", reason=f"undone by {row['code']}")
-            if self.previewer is None or self.settings.get("liveSite"):
-                self._reply(answers.applied_text(row["code"], row["summary"], live_site=self.settings.get("liveSite")))
+            if self.previewer is None or self._row_live_site(row):
+                self._reply(answers.applied_text(row["code"], row["summary"], live_site=self._row_live_site(row)))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
+        elif result == "env-changed":
+            again = self._reprepare(row)
+            new = self._propose(again["draft"], row["sender"], now) if again["result"] == "ok" else None
+            self._move(row, "rejected" if row["state"] == "proposed" else "failed", reason="env-changed",
+                       **({"replaced_by": new["code"]} if new else {}))
+            if new:
+                self._proposal_reply(new, again["draft"], "Things changed since that draft, so I've written a fresh one. Please check it:\n")
+            else:
+                self._reply("Things changed since that draft, so nothing changed. Please ask for a fresh draft when the target is ready.")
         elif result == "stale":
-            again = self.editor.prepare(json.loads(row["ops_json"]))
+            again = self._reprepare(row)
             if again["result"] == "ok":
                 new = self._propose(again["draft"], row["sender"], now)
                 self._move(row, "rejected", reason="stale", replaced_by=new["code"])
@@ -1728,7 +1758,7 @@ class Conversation:
             refused = self.settings.get("liveSite") and answers.live_refused(out.get("reason"))  # HASS-LIVE-PLAN-1: the real reason, in words
             # A failed draft is never approved again (yes only targets `proposed`), so recovery is a fresh proposal with
             # its own code, written up from the same change; the owner's next yes (and code, when needed) approves that one.
-            again = None if refused else self.editor.prepare(json.loads(row["ops_json"]))
+            again = None if refused else self._reprepare(row)
             new = self._propose(again["draft"], row["sender"], now) if again and again["result"] == "ok" else None
             self._move(row, "failed", reason=_reason(out), **({"replaced_by": new["code"]} if new else {}))
             self._problem("error", "save-failed")
@@ -1752,7 +1782,7 @@ class Conversation:
                         self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
                     else:
                         self._move(row, "failed", reason=INTERRUPTED)
-                        with self._answer_to(_row_chat(row)): self._reply(answers.recovered_text(row["code"], live_site=self.settings.get("liveSite")))
+                        with self._answer_to(_row_chat(row)): self._reply(answers.recovered_text(row["code"], live_site=self._row_live_site(row)))
         self._verify_pending()
         return [self._row(r["row_id"])["state"] for r in rows]
 
@@ -1794,12 +1824,12 @@ class Conversation:
             with self._tx(), self._answer_to(_row_chat(row)):
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
-                    text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)), live_site=self.settings.get("liveSite"))
-                    if not self.settings.get("liveSite"): self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
+                    text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)), live_site=self._row_live_site(row))
+                    if not self._row_live_site(row): self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
                 else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
-                    if not self.settings.get("liveSite"): self._reply(answers.applied_text(row["code"], row["summary"], error=error, live_site=self.settings.get("liveSite")))
+                    if not self._row_live_site(row): self._reply(answers.applied_text(row["code"], row["summary"], error=error, live_site=self._row_live_site(row)))
 
     def screenshot(self, change_id) -> str | None:
         row = self.db.execute("SELECT screenshot FROM drafts WHERE change_id = ? AND state IN ('applied', 'verified') "

@@ -213,7 +213,7 @@ def _compute(ops, wt: Path, settings, registry, now, sdir=None) -> dict:
     return {"result": "ok", "base": base, "records": records, "generated": generated, "assets": assets,
             "warnings": list(ctx.warnings), "summary": summary, "writes": writes, "files": files, "store": new.store}
 
-def prepare(request, *, state=None, registry=None, now=None) -> dict:
+def prepare(request, *, state=None, registry=None, now=None, environment=None) -> dict:
     sdir, cfg, wt = _load(state)
     ops, problems = _parse_request(request)
     if problems: return {"result": "invalid", "problems": problems}
@@ -223,6 +223,7 @@ def prepare(request, *, state=None, registry=None, now=None) -> dict:
         return {"result": "invalid", "problems": exc.problems}
     if out["result"] != "ok": return out
     seed, attempt, change_id, draft_hash = {"base": out["base"], "ops": ops}, 0, "", ""
+    if environment is not None: seed["environment"] = copy.deepcopy(environment)
     if out["assets"]: seed["assets"] = out["assets"]  # the picture bytes are part of what is approved (same ops, other bytes = new hash)
     while not change_id or (sdir / "changes" / f"{change_id}.json").is_file():  # a recorded change id is never reused
         core = json.dumps(dict(seed, attempt=attempt) if attempt else seed, sort_keys=True, separators=(",", ":"),
@@ -234,6 +235,8 @@ def prepare(request, *, state=None, registry=None, now=None) -> dict:
     draft = {"change_id": change_id, "draft_hash": draft_hash, "base": out["base"], "ops": ops,
              "records": out["records"], "generated": out["generated"], "warnings": out["warnings"],
              "created_at": _now(now), **({"assets": out["assets"]} if out["assets"] else {})}
+    if environment is not None: draft["environment"] = copy.deepcopy(environment)
+    if environment is not None and attempt > 1: draft['hash_attempt'] = attempt - 1
     _write_json(path, draft)
     return {"result": "ok", "draft": draft}
 
@@ -267,16 +270,18 @@ def _drop_new_assets(wt: Path, paths) -> None:
             _git(wt, "rm", "-q", "--cached", "--ignore-unmatch", "--", p)
             if (wt / p).parent.resolve().is_relative_to(wt.resolve()): (wt / p).unlink(missing_ok=True)
 
-def _recover_locked(sdir: Path, wt: Path, now) -> dict:
+def _recover_locked(sdir: Path, wt: Path, now, guard=None) -> dict:
     """Resolve every journal: committed -> applied; HEAD still at base -> restore and failed. Never re-apply."""
     if problems := worktree_problems(wt, recovering=True): return {"result": "refused", "problems": problems}
     done = []
     for jpath in sorted((sdir / "journal").glob("chg-*.json")):
         cid, journal, head = jpath.stem, _read(jpath), _out(wt, "rev-parse", "HEAD")
+        if guard and (problem := guard(cid)): return problem
         draft = _read(sdir / "drafts" / f"{cid}.json") if (sdir / "drafts" / f"{cid}.json").is_file() else {}
         if CHANGE_ID_RE.fullmatch(cid) and _out(wt, "log", "-1", "--format=%s") == f"hass content: {cid}":
             rec = {"state": "applied", "change_id": cid, "commit": head, "revision": content_revision(wt),
-                   "recovered": True, "applied_at": _now(now), **{k: draft.get(k) for k in ("base", "records", "generated")}}
+                   "recovered": True, "applied_at": _now(now), **{k: draft.get(k) for k in ("base", "records", "generated")},
+                   **({"environment": draft["environment"]} if "environment" in draft else {})}
         elif CHANGE_ID_RE.fullmatch(cid) and head == journal.get("base_commit"):
             _git(wt, "checkout", "HEAD", "--", *OWNED_PATHS)
             _drop_new_assets(wt, journal.get("paths"))
@@ -291,10 +296,10 @@ def _recover_locked(sdir: Path, wt: Path, now) -> dict:
         done.append({"change_id": cid, "state": rec["state"]})
     return {"result": "ok", "recovered": done}
 
-def recover(*, state=None, now=None) -> dict:
+def recover(*, state=None, now=None, guard=None) -> dict:
     sdir, _cfg, wt = _load(state)
     with _writer_lock(sdir) as held:
-        return _recover_locked(sdir, wt, now) if held else {"result": "busy"}
+        return _recover_locked(sdir, wt, now, guard) if held else {"result": "busy"}
 
 def _post_checks(wt: Path) -> list[str]:
     try:
@@ -304,22 +309,33 @@ def _post_checks(wt: Path) -> list[str]:
         return list(exc.problems)
     return [f"generated file out of date: {p}" for p in stale] + migration_check.run_checks(wt)[0]
 
-def apply(change_id, draft_hash, *, state=None, registry=None, now=None) -> dict:
+def apply(change_id, draft_hash, *, state=None, registry=None, now=None, guard=None, recovery_guard=None) -> dict:
     sdir, cfg, wt = _load(state)
     if not CHANGE_ID_RE.fullmatch(str(change_id)): return {"result": "invalid", "problems": ["malformed change id"]}
     with _writer_lock(sdir) as held:
         if not held: return {"result": "busy"}
-        if (recovered := _recover_locked(sdir, wt, now))["result"] != "ok": return recovered
+        if guard and (problem := guard()): return problem
+        if (recovered := _recover_locked(sdir, wt, now, recovery_guard))["result"] != "ok": return recovered
         if any(r["state"] == "unresolved" for r in recovered["recovered"]):
             return {"result": "refused", "problems": ["an interrupted change needs reconciliation"]}
-        return _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now)
+        return _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now, guard)
 
-def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
+def bound_hash_valid(draft):
+    if 'environment' not in draft: return False
+    seed = {k: draft[k] for k in ('base', 'ops', 'environment')}
+    if draft.get('assets'): seed['assets'] = draft['assets']
+    if draft.get('hash_attempt'): seed['attempt'] = draft['hash_attempt']
+    core = json.dumps(seed, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+    return draft.get('draft_hash') == 'sha256:' + hashlib.sha256(core.encode('utf-8')).hexdigest()
+
+def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now, guard=None) -> dict:
     draft_path, rec_path = sdir / "drafts" / f"{change_id}.json", sdir / "changes" / f"{change_id}.json"
     if not draft_path.is_file(): return {"result": "not-found", "key": change_id}
     draft = _read(draft_path)
     if draft.get("draft_hash") != draft_hash:
         return {"result": "invalid", "problems": ["draft hash does not match the stored draft"]}
+    if 'environment' in draft and not bound_hash_valid(draft):
+        return {"result": "env-changed"}
     rec = _read(rec_path) if rec_path.is_file() else {}
     if rec.get("state") == "applied": return {"result": "already-applied", **rec}
     if rec: return {**rec, "result": "failed", "problems": rec["problems"] + ["prepare again and get a new approval"]}
@@ -333,6 +349,7 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
             or out["assets"] != draft.get("assets", {})):  # also the picture bytes (a setting turned on or off since prepare)
         return {"result": "stale", "problems": ["re-running the operations gave a different result"]}
     paths, journal = sorted(out["writes"]), sdir / "journal" / f"{change_id}.json"
+    if guard and (problem := guard()): return problem
     _write_json(journal, {"phase": "writing", "change_id": change_id, "paths": paths,
                           "base_commit": _out(wt, "rev-parse", "HEAD")})
     sitegen.write_files(out["writes"], wt)
@@ -348,7 +365,8 @@ def _apply_locked(sdir, cfg, wt, change_id, draft_hash, registry, now) -> dict:
         journal.unlink()
         return {"result": "failed", "problems": problems}
     rec = {"state": "applied", "change_id": change_id, "commit": _out(wt, "rev-parse", "HEAD"), "applied_at": _now(now),
-           "revision": content_revision(wt), **{k: draft[k] for k in ("base", "records", "generated")}}
+           "revision": content_revision(wt), **{k: draft[k] for k in ("base", "records", "generated")},
+           **({"environment": draft["environment"]} if "environment" in draft else {})}
     _write_json(rec_path, rec)
     _mark_reverted(sdir, draft, change_id)
     journal.unlink()
