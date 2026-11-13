@@ -47,7 +47,9 @@ class TargetTests(unittest.TestCase):
                         ["availability"].startswith("Last confirmed "))
 
     def test_no_word_is_none_but_present(self):
-        for rec, st in ((record(), store()), (record(available="no", available_on=CHECKED), store(None))):
+        # HASS-PREVIEW-2: an existing product (it has a before) with no word expects no word; a record that ADDS a product and carries
+        # no word of its own expects nothing (hass/tests/test_preview_new_item_word.py)
+        for rec, st in ((record({"image": OLD}), store()), (record(available="no", available_on=CHECKED), store(None))):
             with self.subTest(rec=rec, store=st):
                 self.assertIsNone(preview.target_for(rec, TODAY, store=st)["availability"])
 
