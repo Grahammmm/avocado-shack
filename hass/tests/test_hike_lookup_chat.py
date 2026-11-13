@@ -14,6 +14,7 @@ import shutil
 import socket
 import tempfile
 import threading
+import time
 import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -367,11 +368,12 @@ class WhenThePlainFlowRuns(ChatCase):
         self.assertEqual((self.say("yes"), self.replies()), ("no-target", ["Nothing is waiting for your yes."]))
 
     def test_the_map_is_given_ninety_seconds_in_all_and_a_slow_answer_leaves_the_plain_flow(self):
-        ticks = iter(range(0, 100000, 50))  # every clock read is 50 seconds later
+        now = [0.0]  # the clock moves only when a server takes its time
 
         def slow_fetch(service, request):
+            now[0] += 100.0  # the first answer comes after 100 seconds: more than the 90 for the lookup in all
             return FakeFetch("a@b.co")(service, request)
-        cfg = {"contact": CONTACT, "folder": self.folder, "fetch": slow_fetch, "clock": lambda: float(next(ticks)), "sleep": lambda s: None}
+        cfg = {"contact": CONTACT, "folder": self.folder, "fetch": slow_fetch, "clock": lambda: now[0], "sleep": lambda s: None}
         ctx = SimpleNamespace(hike_lookup=cfg, now=self.now, texts=[ADD_BISHOP], multi_call=False, content=SimpleNamespace(
             community={"routeIdeas": [], "events": []}), today=self.now.date())
         result = hikes._look_up(cfg, "Bishop Peak hike", ctx)
@@ -845,6 +847,75 @@ class SpacingAndReservation(NoNetwork):
             self.assertGreaterEqual(clock.slept[0], hl.MIN_INTERVAL_S["nominatim_search"] - 0.1)
             self.assertIs(hl.shared_limiter(clock.monotonic), hl.shared_limiter(clock.monotonic))
             self.assertIsNot(hl.shared_limiter(clock.monotonic), hl.shared_limiter(self.Clock().monotonic))
+
+    class Takes:
+        """A fetch that takes the time left and remembers it."""
+        accepts_timeout = True
+
+        def __init__(self):
+            self.seen = []
+
+        def __call__(self, service, request, timeout=None):
+            self.seen.append(timeout)
+            return {}
+
+    def test_time_spent_reserving_the_request_is_taken_off_what_the_fetch_is_given(self):
+        for start, delay, expected in ((80.0, 2.0, [8.0]), (89.0, 2.0, [])):  # 2 s in the day count: 8 s left, or nothing left at 91 s
+            with self.subTest(start=start), tempfile.TemporaryDirectory() as tmp:
+                now, fetch = [0.0], self.Takes()
+                transport = hl.CachedTransport(fetch, tmp, now=lambda: self.NOW, sleep=lambda s: None, clock=lambda: now[0], max_seconds=90.0)
+                transport.begin_lookup()
+                now[0] = start
+                reserve = transport._reserve
+
+                def slow_reserve(today, reserve=reserve):
+                    ok = reserve(today)
+                    now[0] += delay  # the day-count lock took this long
+                    return ok
+                transport._reserve = slow_reserve
+                if expected:
+                    transport.get("overpass", {"query": "a"})
+                else:
+                    with self.assertRaises(hl.TransportError) as caught:
+                        transport.get("overpass", {"query": "a"})
+                    self.assertEqual(caught.exception.kind, "slow")
+                self.assertEqual(fetch.seen, expected)  # never the 10 s that were left before the reservation
+
+    def test_a_server_busy_with_another_request_cannot_hold_a_lookup_past_its_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            limiter, fetch = hl.SpacingLimiter(), self.Takes()
+            entered, release = threading.Event(), threading.Event()
+
+            def other_lookup():  # a request to the same server that is still running
+                with limiter.hold("overpass", lambda: 0.0, lambda s: None):
+                    entered.set()
+                    release.wait(30)
+            holder = threading.Thread(target=other_lookup)
+            holder.start()
+            try:
+                self.assertTrue(entered.wait(30))
+                transport = hl.CachedTransport(fetch, tmp, now=lambda: self.NOW, sleep=lambda s: None, clock=lambda: 89.8,
+                                               max_seconds=90.0, limiter=limiter)
+                transport.began = 0.0  # 0.2 s of the lookup are left
+                began = time.monotonic()
+                with self.assertRaises(hl.TransportError) as caught:
+                    transport.get("overpass", {"query": "a"})
+                self.assertLess(time.monotonic() - began, 10)  # it waited about 0.2 s, not until the other request was done
+                self.assertEqual((caught.exception.kind, fetch.seen), ("slow", []))
+            finally:
+                release.set()
+                holder.join(30)
+            self.assertFalse(holder.is_alive())
+
+    def test_a_spacing_wait_that_would_end_past_the_time_is_not_slept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock, fetch = self.Clock(), self.Takes()
+            transport = self.make(tmp, fetch, clock, max_seconds=1.0, limiter=hl.SpacingLimiter())
+            transport.begin_lookup()
+            transport.get("overpass", {"query": "a"})
+            with self.assertRaises(hl.TransportError) as caught:  # the next one must wait MIN_INTERVAL_S, more than the 1 s in all
+                transport.get("overpass", {"query": "b"})
+            self.assertEqual((caught.exception.kind, len(fetch.seen), clock.slept), ("slow", 1, []))
 
     def start_all(self, threads):
         for th in threads:

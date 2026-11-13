@@ -175,20 +175,27 @@ class SpacingLimiter:
         self._last: dict = {}
 
     @contextmanager
-    def hold(self, service: str, clock: Callable[[], float], sleep: Callable[[float], None]):
+    def hold(self, service: str, clock: Callable[[], float], sleep: Callable[[float], None], deadline: float | None = None):
+        """Wait for this server's turn and its spacing, then let the caller make its request. ``deadline`` (a ``clock`` reading, or None
+        for no limit) bounds ALL the waiting: a turn not won, or a spacing that would run past it, raises ``TransportError("slow")``
+        and no request is made. The caller still works out what is left of its time once the wait is over."""
         host = SERVICE_HOST[service]
         with self._guard:
             lock = self._locks.setdefault(host, threading.Lock())
-        waited = not lock.acquire(blocking=False)  # another request to this server was running: this one waited for its turn
-        if waited:
-            lock.acquire()
+        if not lock.acquire(blocking=False):  # another request to this server is running: wait for its turn, but only as long as there is time
+            left = None if deadline is None else deadline - clock()
+            if left is None:
+                lock.acquire()
+            elif left <= 0 or not lock.acquire(timeout=min(left, threading.TIMEOUT_MAX)):
+                raise TransportError("slow", "the lookup took too long")
         try:
             wait = MIN_INTERVAL_S[service] - (clock() - self._last.get(host, -1e9))
             if wait > 0:
+                if deadline is not None and clock() + wait >= deadline:
+                    raise TransportError("slow", "the lookup took too long")  # the request would start with nothing left: do not sleep to it
                 sleep(wait)
-                waited = True
             try:
-                yield waited  # True when time passed before the request could start (its caller works out what is left of its time)
+                yield
             finally:
                 self._last[host] = clock()
         finally:
@@ -390,20 +397,24 @@ class CachedTransport:
             self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "budget", "seconds": 0})
             raise TransportError("budget")
         self.used_lookup += 1
-        with self.limiter.hold(service, self.clock, self.sleep) as waited:  # waits its turn for this server, stamps the time when done
-            started, body, failure = self.clock(), None, None
-            if waited:  # the turn or the spacing took time: what the request itself may still take is less than it was
-                left = self._time_left(started)
-            if left is not None and left <= 0:
-                failure = TransportError("slow", "the lookup took too long")
-            else:
-                try:
-                    body = self._fetch(service, request, left)
-                except TransportError as exc:
-                    failure = exc
+        deadline = None if self.max_seconds is None or self.began is None else self.began + self.max_seconds
+        started, body, failure = None, None, None
+        try:
+            with self.limiter.hold(service, self.clock, self.sleep, deadline):  # waits its turn for this server, stamps the time when done
+                started = self.clock()
+                left = self._time_left(started)  # always worked out here, after the day count, the turn and the spacing took what time they took
+                if left is not None and left <= 0:
+                    failure = TransportError("slow", "the lookup took too long")
+                else:
+                    try:
+                        body = self._fetch(service, request, left)
+                    except TransportError as exc:
+                        failure = exc
+        except TransportError as exc:  # the turn or the spacing could not be had inside the lookup's time
+            failure = exc
         if failure is not None:
             self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": failure.kind,
-                      "seconds": round(self.clock() - started, 2)})
+                      "seconds": 0 if started is None else round(self.clock() - started, 2)})
             if saved is not None:
                 return Response(saved[0], saved[1], stale=True)
             raise failure
