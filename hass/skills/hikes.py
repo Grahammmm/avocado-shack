@@ -653,6 +653,7 @@ def _write_offer(cfg, texts, now, *, reply="", candidates=(), reasks=0):
     than OFFER_KEEP while it is there. A failure to write is not an error: the plain flow runs."""
     path = _offer_path(cfg, texts)
     try:
+        _private_folder(Path(cfg["folder"]))
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         for old in path.parent.glob("*.json"):
             if now.timestamp() - old.stat().st_mtime > OFFER_KEEP.total_seconds():
@@ -695,11 +696,21 @@ def _place_words(title) -> bool:
     return any(w not in _NOT_A_PLACE for w in hl.name_tokens(title))
 
 
+def _private_folder(folder: Path) -> None:
+    """The lookup folder itself is private (0700): ``mkdir(parents=True, mode=...)`` gives only the last directory that mode, so a
+    ``saved`` or ``offers`` folder made first would leave this one at the umask default. A failure is left to the later write."""
+    try:
+        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    except OSError:
+        pass
+
+
 def _make_transport(cfg, ctx):
     from hass import hike_fetch  # the one module with network code; imported only when a lookup is really made
     now = ctx.now
     folder = Path(cfg["folder"])
     extra = {k: cfg[k] for k in ("sleep", "clock") if k in cfg}
+    _private_folder(folder)
     return hl.CachedTransport(cfg.get("fetch") or hike_fetch.LiveFetch(cfg["contact"]), folder / "saved", now=lambda: now,
                               log=hl.file_log(folder), max_seconds=LOOKUP_SECONDS, limiter=hl.shared_limiter(extra.get("clock")),
                               **extra)  # one limiter for the whole process: a new transport per lookup must not forget the last request
