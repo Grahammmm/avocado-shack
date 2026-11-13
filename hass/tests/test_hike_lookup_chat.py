@@ -7,11 +7,13 @@ Editor with a scripted interpreter (the model's replies are written out per owne
 Run: python3 -m unittest hass.tests.test_hike_lookup_chat -v
 """
 import dataclasses
+import fcntl
 import json
 import os
 import shutil
 import socket
 import tempfile
+import threading
 import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -419,7 +421,7 @@ class WhenThePlainFlowRuns(ChatCase):
         transport.begin_lookup()
         transport.get("overpass", {"query": "a"})
         now[0] = 89.9
-        transport.last_at["overpass"] = 89.9  # the next one must wait MIN_INTERVAL_S: past the limit
+        transport.limiter._last["overpass"] = 89.9  # the next one must wait MIN_INTERVAL_S: past the limit
         with self.assertRaises(hl.TransportError) as caught:
             transport.get("overpass", {"query": "b"})
         self.assertEqual((caught.exception.kind, len(seen)), ("slow", 1))
@@ -771,6 +773,180 @@ class LiveClient(NoNetwork):
             self.assertIsNone(hikes._lookup_cfg(SimpleNamespace(hike_lookup=bad)))
         self.assertIsNone(hikes._lookup_cfg(SimpleNamespace()))  # a context from before this card has no setting: off
         self.assertIn("hike_lookup", dispatch.Ctx.__init__.__code__.co_varnames)
+
+
+class SpacingAndReservation(NoNetwork):
+    """Review of PR #810: the spacing between requests to one server holds across lookups (a new transport per chat lookup) and across
+    the two Nominatim calls, and the 60-a-day count is a locked check-add-write that two clients of one folder cannot both win."""
+
+    class Clock:
+        def __init__(self):
+            self.t, self.slept = 1000.0, []
+
+        def sleep(self, s):
+            self.slept.append(s)
+            self.t += s
+
+        def monotonic(self):
+            self.t += 0.01
+            return self.t
+
+    NOW = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)
+
+    def make(self, folder, raw, clock=None, **kw):
+        clock = clock or self.Clock()
+        return hl.CachedTransport(raw, folder, now=lambda: self.NOW, sleep=clock.sleep, clock=clock.monotonic, **kw)
+
+    def test_a_new_transport_given_the_shared_limiter_still_waits_for_the_last_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock, limiter = self.Clock(), hl.SpacingLimiter()
+            raw = mock.Mock(return_value={"answer": 1})
+            for query in ("a", "b", "c"):  # three lookups, each with a transport of its own
+                t = self.make(tmp, raw, clock, limiter=limiter)
+                t.begin_lookup()
+                t.get("overpass", {"query": query})
+            self.assertEqual(raw.call_count, 3)
+            self.assertEqual(len(clock.slept), 2)
+            self.assertTrue(all(s >= hl.MIN_INTERVAL_S["overpass"] - 0.1 for s in clock.slept), clock.slept)
+
+    def test_without_a_shared_limiter_each_transport_is_on_its_own(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock = self.Clock()
+            raw = mock.Mock(return_value={"answer": 1})
+            for query in ("a", "b"):
+                self.make(tmp, raw, clock).get("overpass", {"query": query})
+            self.assertEqual(clock.slept, [])  # the default is private: only the chat opts in to sharing
+
+    def test_nominatim_search_then_reverse_is_one_server_and_one_spacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock, limiter = self.Clock(), hl.SpacingLimiter()
+            raw = mock.Mock(return_value={"answer": 1})
+            first, second = self.make(tmp, raw, clock, limiter=limiter), self.make(tmp, raw, clock, limiter=limiter)
+            first.get("nominatim_search", {"q": "bishop"})
+            second.get("nominatim_reverse", {"lat": 1, "lon": 2})
+            self.assertEqual(len(clock.slept), 1)
+            self.assertGreaterEqual(clock.slept[0], hl.MIN_INTERVAL_S["nominatim_search"] - 0.1)
+            second.get("overpass", {"query": "x"})  # a different server: no wait for Nominatim
+            second.get("elevation", {"points": [[1, 2]]})
+            self.assertEqual(len(clock.slept), 1)
+            self.assertEqual(hl.SERVICE_HOST["nominatim_search"], hl.SERVICE_HOST["nominatim_reverse"])
+            self.assertEqual(sorted(hl.SERVICE_HOST), sorted(hl.MIN_INTERVAL_S))
+
+    def test_a_failed_request_still_counts_for_the_spacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock, limiter = self.Clock(), hl.SpacingLimiter()
+            bad = mock.Mock(side_effect=hl.TransportError("busy"))
+            with self.assertRaises(hl.TransportError):
+                self.make(tmp, bad, clock, limiter=limiter).get("nominatim_search", {"q": "a"})
+            self.make(tmp, mock.Mock(return_value={"answer": 1}), clock, limiter=limiter).get("nominatim_reverse", {"lat": 1, "lon": 2})
+            self.assertEqual(len(clock.slept), 1)
+
+    def test_the_chat_gives_every_lookup_the_one_limiter_of_its_clock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clock = self.Clock()
+            raw = mock.Mock(return_value={"answer": 1})
+            cfg = {"contact": CONTACT, "folder": tmp, "fetch": raw, "sleep": clock.sleep, "clock": clock.monotonic}
+            ctx = SimpleNamespace(now=self.NOW)
+            for query in ("a", "b"):  # what ``_look_up`` does for each chat lookup: a new transport every time
+                t = hikes._make_transport(cfg, ctx)
+                t.begin_lookup()
+                t.get("nominatim_search", {"q": query})
+            self.assertEqual(len(clock.slept), 1)
+            self.assertGreaterEqual(clock.slept[0], hl.MIN_INTERVAL_S["nominatim_search"] - 0.1)
+            self.assertIs(hl.shared_limiter(clock.monotonic), hl.shared_limiter(clock.monotonic))
+            self.assertIsNot(hl.shared_limiter(clock.monotonic), hl.shared_limiter(self.Clock().monotonic))
+
+    def start_all(self, threads):
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join(30)
+            self.assertFalse(th.is_alive())
+
+    def test_two_clients_cannot_both_take_the_last_request_of_the_day(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp).mkdir(exist_ok=True)
+            (Path(tmp) / hl.COUNT_FILE).write_text(json.dumps({"counts": {"2026-11-09": hl.MAX_PER_DAY - 1}}), "utf-8")
+            barrier, results, fetched = threading.Barrier(2), [], []
+
+            def fetch(service, request):
+                fetched.append(request)
+                return {"answer": 1}
+
+            def client(query):
+                t = self.make(tmp, fetch)
+                t.begin_lookup()
+                barrier.wait(10)
+                try:
+                    t.get("overpass", {"query": query})
+                    results.append("fetched")
+                except hl.TransportError as exc:
+                    results.append(exc.kind)
+
+            self.start_all([threading.Thread(target=client, args=(q,)) for q in ("a", "b")])
+            self.assertEqual(sorted(results), ["budget", "fetched"])
+            self.assertEqual(len(fetched), 1)
+            self.assertEqual(json.loads((Path(tmp) / hl.COUNT_FILE).read_text("utf-8"))["counts"], {"2026-11-09": hl.MAX_PER_DAY})
+
+    def test_many_clients_lose_no_increments_and_never_pass_the_day_limit(self):
+        for per_day, clients, each in ((60, 8, 5), (10, 8, 5)):
+            with self.subTest(per_day=per_day), tempfile.TemporaryDirectory() as tmp:
+                barrier, fetched, lock = threading.Barrier(clients), [], threading.Lock()
+
+                def fetch(service, request):
+                    with lock:
+                        fetched.append(request)
+                    return {"answer": 1}
+
+                def client(n):
+                    t = self.make(tmp, fetch, per_day=per_day, per_lookup=each)
+                    t.begin_lookup()
+                    barrier.wait(10)
+                    for i in range(each):
+                        try:
+                            t.get("overpass", {"query": f"{n}-{i}"})
+                        except hl.TransportError as exc:
+                            self.assertEqual(exc.kind, "budget")
+
+                self.start_all([threading.Thread(target=client, args=(n,)) for n in range(clients)])
+                want = min(per_day, clients * each)
+                self.assertEqual(len(fetched), want)
+                self.assertEqual(json.loads((Path(tmp) / hl.COUNT_FILE).read_text("utf-8"))["counts"], {"2026-11-09": want})
+                self.assertEqual([p.name for p in Path(tmp).glob("day-count*.tmp")], [])  # no writer left its temp file behind
+
+    def test_the_count_lock_is_a_real_cross_client_lock_and_a_busy_one_means_no_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = mock.Mock(return_value={"answer": 1})
+            t = self.make(tmp, raw)
+            t.begin_lookup()
+            fd = os.open(Path(tmp) / hl.COUNT_LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o600)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX)  # another client is in the middle of writing the count
+                with mock.patch.object(hl, "COUNT_LOCK_SECONDS", 0.05), self.assertRaises(hl.TransportError) as ctx:
+                    t.get("overpass", {"query": "a"})
+                self.assertEqual((ctx.exception.kind, raw.call_count), ("budget", 0))
+            finally:
+                os.close(fd)
+            t.get("overpass", {"query": "a"})  # the lock is gone: the same request goes through and is counted
+            self.assertEqual((raw.call_count, t.day_count()), (1, 1))
+
+    def test_no_file_locking_means_no_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = mock.Mock(return_value={"answer": 1})
+            t = self.make(tmp, raw)
+            t.begin_lookup()
+            with mock.patch.object(hl, "fcntl", None), self.assertRaises(hl.TransportError) as ctx:
+                t.get("overpass", {"query": "a"})
+            self.assertEqual((ctx.exception.kind, raw.call_count), ("budget", 0))
+
+    def test_the_cached_answer_files_are_written_under_names_no_other_writer_uses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            names = set()
+            real = hl._unique_tmp
+            with mock.patch.object(hl, "_unique_tmp", side_effect=lambda p: names.add(real(p)) or real(p)):
+                self.make(tmp, lambda s, r: {"answer": 1}).get("overpass", {"query": "a"})
+            self.assertTrue(names and all(str(os.getpid()) in n.name and n.name.endswith(".tmp") for n in names))
+            self.assertEqual(len({n.name for n in names}), len(names))
 
 
 class Declaration(unittest.TestCase):

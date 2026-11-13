@@ -24,13 +24,22 @@ import difflib
 import hashlib
 import json
 import math
+import os
 import re
 import statistics
+import threading
+import time
 import unicodedata
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
+
+try:
+    import fcntl  # POSIX file locking: the day count's cross-process lock. Without it no request is made (fails closed)
+except ImportError:  # pragma: no cover - not on the Linux/macOS hosts Hass runs on
+    fcntl = None
 
 from hass import voice
 from hass.content_model import FORBIDDEN_TEXT, INVISIBLE_RE
@@ -123,17 +132,85 @@ class FixtureTransport:
 # service -> (lifetime in days, minimum seconds between two requests to it)
 LIFETIME_DAYS = {"overpass": 30, "nominatim_search": 30, "nominatim_reverse": 90, "elevation": 365}
 MIN_INTERVAL_S = {"overpass": 2.0, "nominatim_search": 1.1, "nominatim_reverse": 1.1, "elevation": 0.5}
+# the public server a service really talks to: the two Nominatim calls are ONE host with ONE "a request a second" policy
+SERVICE_HOST = {"overpass": "overpass", "nominatim_search": "nominatim", "nominatim_reverse": "nominatim", "elevation": "elevation"}
 MAX_PER_LOOKUP = 8
 MAX_PER_DAY = 60
 COUNT_FILE = "day-count.json"
+COUNT_LOCK_FILE = "day-count.lock"
+COUNT_LOCK_SECONDS = 5.0  # how long a request waits for another client to finish writing the count before it is refused
 COUNT_DAYS_KEPT = 7
+
+
+def _unique_tmp(path: Path) -> Path:
+    """A temp file name beside ``path`` that no other process or thread is using."""
+    return path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.{time.monotonic_ns()}.tmp")
+
+
+def _fsync(path: Path) -> None:
+    """Flush a just-written file to disk (best effort: a file system that cannot is not a reason to refuse)."""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+class SpacingLimiter:
+    """Minimum time between two requests to one public server, shared by every ``CachedTransport`` given the same limiter (thread-safe).
+
+    A new ``CachedTransport`` is made for each chat lookup, so a limiter of its own would forget the last request every time; the chat
+    uses ``shared_limiter()`` so the spacing holds across lookups. Requests to one server (``SERVICE_HOST``: both Nominatim calls are
+    one) are also made one at a time. This spaces requests inside ONE process; the day count (below) is what is shared between
+    processes."""
+
+    def __init__(self):
+        self._guard = threading.Lock()
+        self._locks: dict = {}
+        self._last: dict = {}
+
+    @contextmanager
+    def hold(self, service: str, clock: Callable[[], float], sleep: Callable[[float], None]):
+        host = SERVICE_HOST[service]
+        with self._guard:
+            lock = self._locks.setdefault(host, threading.Lock())
+        waited = not lock.acquire(blocking=False)  # another request to this server was running: this one waited for its turn
+        if waited:
+            lock.acquire()
+        try:
+            wait = MIN_INTERVAL_S[service] - (clock() - self._last.get(host, -1e9))
+            if wait > 0:
+                sleep(wait)
+                waited = True
+            try:
+                yield waited  # True when time passed before the request could start (its caller works out what is left of its time)
+            finally:
+                self._last[host] = clock()
+        finally:
+            lock.release()
+
+
+_SHARED_LIMITERS: dict = {}
+_SHARED_GUARD = threading.Lock()
+
+
+def shared_limiter(clock: Callable[[], float] | None = None) -> SpacingLimiter:
+    """The one limiter of this process for ``clock`` (default ``time.monotonic``): what the chat gives every lookup's transport."""
+    with _SHARED_GUARD:
+        return _SHARED_LIMITERS.setdefault(clock or time.monotonic, SpacingLimiter())
 
 
 class CachedTransport:
     """The polite wrapper the live skill uses around a raw fetch function ``fetch(service, request) -> body``.
 
     * a saved answer younger than its lifetime is returned with no request at all;
-    * otherwise one request is made, at least ``MIN_INTERVAL_S`` after the last one to that service;
+    * otherwise one request is made, at least ``MIN_INTERVAL_S`` after the last one to that server (``limiter``: pass
+      ``shared_limiter()`` to keep the spacing across several transports; the default is private to this one);
     * at most ``MAX_PER_LOOKUP`` requests per ``begin_lookup()`` and ``MAX_PER_DAY`` per day (``budget`` error after);
     * when a refresh fails and an older saved answer exists, that is returned marked ``stale``;
     * ``max_seconds`` (optional): once a lookup (``begin_lookup`` to now) has run that long, no further request is made (``slow``), so a
@@ -142,22 +219,24 @@ class CachedTransport:
     The clock, the sleep and the log are injected, so the tests run in no time and touch no network.
 
     The per-day count is kept ON DISK (``day-count.json`` in the saved-answer folder, HIKE-LOOKUP-2), so a restart of Hass cannot
-    reset it: every counted request is written before it is made. A count file that cannot be read or written fails CLOSED:
+    reset it: every counted request is written before it is made. Checking the limit, adding one and writing the file is ONE step
+    under a lock on ``day-count.lock`` (``flock``), so two clients of the same folder (Hass and the manual script, or two chat turns)
+    can neither both take the last request nor overwrite each other's count. A count file that cannot be read or written fails CLOSED:
     the lookup is refused (``budget``) for the rest of that day, and the damaged file is set aside as ``day-count.bad``.
     """
 
     def __init__(self, fetch: Callable, folder, *, now: Callable[[], datetime] | None = None,
                  sleep: Callable[[float], None] | None = None, clock: Callable[[], float] | None = None,
                  log: Callable[[dict], None] | None = None, per_lookup: int = MAX_PER_LOOKUP, per_day: int = MAX_PER_DAY,
-                 max_seconds: float | None = None):
-        import time
+                 max_seconds: float | None = None, limiter: SpacingLimiter | None = None):
         self.fetch, self.folder = fetch, Path(folder)
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.sleep = sleep or time.sleep
         self.clock = clock or time.monotonic
         self.log = log or (lambda row: None)
         self.per_lookup, self.per_day, self.max_seconds = per_lookup, per_day, max_seconds
-        self.used_lookup, self.last_at, self.day_counts, self.began = 0, {}, {}, None
+        self.limiter = limiter or SpacingLimiter()
+        self.used_lookup, self.day_counts, self.began = 0, {}, None
 
     def begin_lookup(self):
         self.used_lookup = 0
@@ -200,9 +279,14 @@ class CachedTransport:
     def _write_counts(self, counts: dict):
         self.folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         keep = dict(sorted(counts.items())[-COUNT_DAYS_KEPT:])
-        tmp = self.counts_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"counts": keep}, sort_keys=True), "utf-8")
-        tmp.replace(self.counts_path)
+        tmp = _unique_tmp(self.counts_path)  # never a name another writer could be using
+        try:
+            tmp.write_text(json.dumps({"counts": keep}, sort_keys=True), "utf-8")
+            _fsync(tmp)
+            tmp.replace(self.counts_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
         return keep
 
     def day_count(self, today: date | None = None) -> int:
@@ -211,12 +295,41 @@ class CachedTransport:
         self.day_counts = self._counts(today)
         return self.day_counts.get(today.isoformat(), 0)
 
-    def _count_one(self, today: date) -> None:
-        """Write one more request for ``today`` to disk before it is made. Raises ``TransportError("budget")`` when it cannot."""
+    @contextmanager
+    def _count_lock(self):
+        """Exclusive lock on ``day-count.lock``, shared by every client of this folder (other processes and other threads). Waits at
+        most ``COUNT_LOCK_SECONDS``; a lock that cannot be taken at all is an ``OSError`` (the caller refuses the request)."""
+        if fcntl is None:
+            raise OSError("no file locking on this system")
+        self.folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(self.folder / COUNT_LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o600)
         try:
-            counts = self._counts(today)
-            counts[today.isoformat()] = counts.get(today.isoformat(), 0) + 1
-            self.day_counts = self._write_counts(counts)
+            deadline = time.monotonic() + COUNT_LOCK_SECONDS
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise OSError("the day count is busy") from None
+                    time.sleep(0.01)
+            yield
+        finally:
+            os.close(fd)  # closing the descriptor drops the lock
+
+    def _reserve(self, today: date) -> bool:
+        """ONE step, under the lock: read the day count, and if it is under ``per_day`` add one and write it to disk. True: this request
+        is reserved (and counted) and may be made; False: the day's limit is used up. Raises ``TransportError("budget")`` when the count
+        cannot be read, locked or saved."""
+        try:
+            with self._count_lock():
+                counts = self._counts(today)
+                if counts.get(today.isoformat(), 0) >= self.per_day:
+                    self.day_counts = counts
+                    return False
+                counts[today.isoformat()] = counts.get(today.isoformat(), 0) + 1
+                self.day_counts = self._write_counts(counts)
+                return True
         except OSError:
             raise TransportError("budget", "the day count cannot be saved") from None
 
@@ -229,15 +342,20 @@ class CachedTransport:
 
     def _write(self, key, request, body, day):
         self.folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-        tmp = self._path(key).with_suffix(".tmp")
-        tmp.write_text(json.dumps({"retrieved": day.isoformat(), "request": request, "body": body}, ensure_ascii=False), "utf-8")
-        tmp.replace(self._path(key))
+        tmp = _unique_tmp(self._path(key))
+        try:
+            tmp.write_text(json.dumps({"retrieved": day.isoformat(), "request": request, "body": body}, ensure_ascii=False), "utf-8")
+            tmp.replace(self._path(key))
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
-    def _time_left(self):
-        """Seconds of the lookup's ``max_seconds`` still left, or None when there is no limit (or no lookup has begun)."""
+    def _time_left(self, at=None):
+        """Seconds of the lookup's ``max_seconds`` still left (at clock reading ``at``, default now), or None when there is no limit
+        (or no lookup has begun)."""
         if self.max_seconds is None or self.began is None:
             return None
-        return self.max_seconds - (self.clock() - self.began)
+        return self.max_seconds - ((self.clock() if at is None else at) - self.began)
 
     def _too_slow(self, service, key, saved) -> Response:
         self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "slow", "seconds": 0})
@@ -263,9 +381,7 @@ class CachedTransport:
         if left is not None and left <= 0:
             return self._too_slow(service, key, saved)
         try:
-            over = self.used_lookup >= self.per_lookup or self.day_count(today) >= self.per_day
-            if not over:
-                self._count_one(today)  # on disk before the request is made
+            over = self.used_lookup >= self.per_lookup or not self._reserve(today)  # counted on disk before the request is made
         except TransportError:
             over = True
         if over:
@@ -273,24 +389,24 @@ class CachedTransport:
                 return Response(saved[0], saved[1], stale=True)
             self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "budget", "seconds": 0})
             raise TransportError("budget")
-        wait = MIN_INTERVAL_S[service] - (self.clock() - self.last_at.get(service, -1e9))
-        if wait > 0:
-            self.sleep(wait)
-            left = self._time_left()
-            if left is not None and left <= 0:  # the pause between two requests used up the rest of the time
-                return self._too_slow(service, key, saved)
-        started = self.clock()
         self.used_lookup += 1
-        try:
-            body = self._fetch(service, request, left)
-        except TransportError as exc:
-            self.last_at[service] = self.clock()
-            self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": exc.kind,
+        with self.limiter.hold(service, self.clock, self.sleep) as waited:  # waits its turn for this server, stamps the time when done
+            started, body, failure = self.clock(), None, None
+            if waited:  # the turn or the spacing took time: what the request itself may still take is less than it was
+                left = self._time_left(started)
+            if left is not None and left <= 0:
+                failure = TransportError("slow", "the lookup took too long")
+            else:
+                try:
+                    body = self._fetch(service, request, left)
+                except TransportError as exc:
+                    failure = exc
+        if failure is not None:
+            self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": failure.kind,
                       "seconds": round(self.clock() - started, 2)})
             if saved is not None:
                 return Response(saved[0], saved[1], stale=True)
-            raise
-        self.last_at[service] = self.clock()
+            raise failure
         self._write(key, request, body, today)
         self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "fetched",
                   "seconds": round(self.clock() - started, 2)})
