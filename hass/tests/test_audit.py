@@ -59,7 +59,7 @@ class AuditLogTests(unittest.TestCase):
                "phone subject": ({"subjects": ["items:8055550142"]}, "digit run: subjects"),
                "count": ({"fields": ["stock12345"]}, "digit run: fields"),
                "sentence result": ({"result": "the till said no"}, "bad value: result"),
-               "token ref": ({"refs": {"token": "sk_live_abc"}}, "bad value: refs"),
+               "token ref": ({"refs": {"token": "not-a-real-token"}}, "bad value: refs"),
                "approved without who": ({"step": "approved"}, "missing: approved_by")}
         for name, (change, problem) in bad.items():
             with self.subTest(name):

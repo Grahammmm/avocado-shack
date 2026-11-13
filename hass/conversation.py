@@ -1896,11 +1896,11 @@ class Conversation:
 
     def _history_lines(self, limit) -> list:
         """AVB-10: `history` reads the audit log: the newest approved actions on the site and the till, newest yes first. A site
-        change is told in its own words from its draft row (where it is now); a till change by its code and where it stands,
-        since the till journal keeps its details. Changes approved before the audit log existed (no `approved` line) follow,
-        newest first, as before."""
+        change is told in its own words from its draft row (where it is now); a till change says which till and where it
+        stands, since the till journal keeps its details. Changes approved before the audit log existed (no `approved` line)
+        follow, newest first, as before."""
         lines = []
-        try: entries = self.audit.approved(limit + HISTORY_SEARCH_MAX)
+        try: entries = self.audit.approved(3 * limit)  # slack for actions whose draft was re-written (stale) and not shown
         except Exception: entries = []  # noqa: BLE001,E701 - an unreadable log still shows the changes below
         for e in entries:
             if e["target"] == "site" and e.get("draft"):
