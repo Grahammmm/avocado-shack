@@ -28,17 +28,18 @@ end to end); the real dispatcher must call it the same way (docs/hass/skills/hik
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
 import unicodedata
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from hass import nl_prep, voice  # noqa: E402
+from hass import hike_lookup as hl, nl_prep, voice  # noqa: E402
 from hass.ops.hikes import MAX_AHEAD_DAYS, TZ  # noqa: E402
 from hass.skills.model import Skill, Slot, Trigger, Undo  # noqa: E402
 from hass.social_draft import HIKE_TAGS, MAX_CAPTION  # noqa: E402
@@ -560,6 +561,9 @@ def notes(name, slots, ctx) -> dict:
     if name not in ("hike.add", "hike.edit"):
         return out
     given = dict(slots)
+    if name == "hike.add" and (found := _confirmed(given, ctx)) is not None:
+        out["say"].extend(lookup_lines(found))
+        out["warn"].extend(hl.warnings(found))
     derived = default_capacity(given, ctx)
     limit = derived if derived is not None else _count(given.get("capacity"))
     if name == "hike.add":
@@ -593,6 +597,207 @@ def _signup_args(slots):
     return args  # sign-up on with neither: the editor asks "how many can come, or no limit?"
 
 
+# -- HIKE-LOOKUP-2: the map lookup in the hike.add chat -----------------------------------------------------------------
+# Design: docs/hass/HIKE-LOOKUP.md. The one place the lookup meets the chat is the ``question`` hook for the meeting place of
+# ``hike.add``: when Mike named a hike but no meeting place or distance, the question he would be asked is, if the operator set
+# ``hikeLookup.contact``, the map's "Did you mean ...?" (at most 3 trails, measured numbers only). His yes or number is read here
+# from his own texts (``hl.read_answer``); the offered trails are kept privately in ``<state>/hike_lookup/offers/`` under a hash of
+# the texts the offer answered, so no new slot and no change to the open request is needed. A confirmed trail becomes ``route.add``
+# plus the hike on it (never a hike by itself: Mike still gives the day, time and meeting place, and every draft needs ``yes <code>``).
+# Anything else (no setting, no match, not sure, the map unreachable, a bug) leaves the plain flow exactly as it was.
+OFFER_TTL = timedelta(hours=2)  # as long as an open request lives (openreq.MAX_MINUTES)
+OFFER_KEEP = timedelta(hours=24)  # a saved offer is erased this long after it was made (the owner's texts follow the same 24 hour rule)
+LOOKUP_SECONDS = 90.0  # the chat waits for the map this long at most, all requests of one lookup together
+MAX_REASKS = 1  # a bare "yes" to several trails is asked once more; the slot may be asked three times in all (openreq.MAX_UNRESOLVED)
+_NOT_A_PLACE = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mon", "tue", "wed", "thu", "fri", "sat", "sun",
+                "morning", "afternoon", "evening", "sunrise", "sunset", "weekend", "weekly", "monthly", "group", "club", "community", "new", "sample"}
+
+
+def _lookup_cfg(ctx):
+    """The operator's lookup setting from the context (``{"contact", "folder"}``), or None: no setting, no lookup. (Test-only keys
+    ``fetch``, ``sleep`` and ``clock`` replace the live client, the sleeping and the clock.)"""
+    cfg = getattr(ctx, "hike_lookup", None)
+    if not isinstance(cfg, dict) or hl.valid_contact(cfg.get("contact")) is None or not isinstance(cfg.get("folder"), (str, Path)):
+        return None
+    return cfg
+
+
+def _offer_texts(ctx):
+    texts = [t for t in (getattr(ctx, "texts", None) or ()) if isinstance(t, str)]
+    now = getattr(ctx, "now", None)
+    return texts if texts and isinstance(now, datetime) and now.tzinfo is not None and not getattr(ctx, "multi_call", False) else None
+
+
+def _offer_path(cfg, texts) -> Path:
+    key = hashlib.sha256("\x1f".join(t[:4000] for t in texts).encode("utf-8")).hexdigest()
+    return Path(cfg["folder"]) / "offers" / f"{key}.json"
+
+
+def _read_offer(cfg, texts, now):
+    """The saved offer made at exactly these texts, or None (none made, older than OFFER_TTL, or not exactly what ``_write_offer`` wrote)."""
+    try:
+        data = json.loads(_offer_path(cfg, texts).read_text("utf-8"))
+        at = datetime.fromisoformat(data["at"])
+        cands = [hl.candidate_from_json(c) for c in data["candidates"]]
+        if data["v"] != 1 or data["status"] not in ("offered", "none") or not isinstance(data["reply"], str) \
+                or not isinstance(data["reasks"], int) or isinstance(data["reasks"], bool) or None in cands or at.tzinfo is None \
+                or not 0 <= (now - at).total_seconds() <= OFFER_TTL.total_seconds() or (data["status"] == "offered") != bool(cands):
+            return None
+        return {"status": data["status"], "reply": data["reply"], "reasks": data["reasks"], "candidates": cands}
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
+        return None
+
+
+def _write_offer(cfg, texts, now, *, reply="", candidates=(), reasks=0):
+    """Save the offer (or, with no candidates, the fact that nothing is offered at these texts) privately. Erases saved offers older
+    than OFFER_KEEP while it is there. A failure to write is not an error: the plain flow runs."""
+    path = _offer_path(cfg, texts)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        for old in path.parent.glob("*.json"):
+            if now.timestamp() - old.stat().st_mtime > OFFER_KEEP.total_seconds():
+                old.unlink(missing_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"v": 1, "at": now.isoformat(), "status": "offered" if candidates else "none", "reply": reply,
+                                   "reasks": reasks, "candidates": [hl.candidate_to_json(c) for c in candidates]},
+                                  ensure_ascii=False), "utf-8")
+        tmp.replace(path)
+    except OSError:
+        return False
+    return True
+
+
+def _state(cfg, texts, now):
+    """Where the identity question stands, from the saved offers and Mike's texts: ``("none",)`` (no offer yet), ``("pending", offer)``
+    (the offer was made at exactly these texts), ``("confirmed", candidate)``, ``("declined",)`` (no, something else, nothing was
+    offered, or a trail the map is not sure of) or ``("reask", offer)`` (a bare yes to several trails: asked once more)."""
+    for k in range(1, len(texts) + 1):
+        offer = _read_offer(cfg, texts[:k], now)
+        if offer is None:
+            continue
+        if offer["status"] == "none":
+            return ("declined",)
+        if k == len(texts):
+            return ("pending", offer)
+        kind, index = hl.read_answer(texts[k], len(offer["candidates"]))
+        if kind == "pick":
+            found = offer["candidates"][index]
+            return ("confirmed", found) if found.sure else ("declined",)
+        if kind == "yes":
+            if _read_offer(cfg, texts[:k + 1], now) is not None:
+                continue
+            return ("reask", offer) if k + 1 == len(texts) else ("declined",)
+        return ("declined",)
+    return ("none",)
+
+
+def _place_words(title) -> bool:
+    return any(w not in _NOT_A_PLACE for w in hl.name_tokens(title))
+
+
+def _make_transport(cfg, ctx):
+    from hass import hike_fetch  # the one module with network code; imported only when a lookup is really made
+    now = ctx.now
+    folder = Path(cfg["folder"])
+    extra = {k: cfg[k] for k in ("sleep", "clock") if k in cfg}
+    return hl.CachedTransport(cfg.get("fetch") or hike_fetch.LiveFetch(cfg["contact"]), folder / "saved", now=lambda: now,
+                              log=hl.file_log(folder), max_seconds=LOOKUP_SECONDS, **extra)
+
+
+def _look_up(cfg, title, ctx):
+    """The map lookup for ``title`` as a ``LookupResult``, or None when anything at all goes wrong (the plain flow is never broken by it)."""
+    try:
+        transport = _make_transport(cfg, ctx)
+        transport.begin_lookup()
+        return hl.lookup(title, transport, today=ctx.now.date(), route_ideas=_routes(ctx))
+    except Exception:  # noqa: BLE001 - a map lookup is a convenience; no error of it may stop a hike being added
+        return None
+
+
+def _lookup_open(slots, ctx, *, asking=True):
+    """(cfg, texts) when this hike.add may use the map: the operator set it up, it is one hike (not several asks in one message), Mike
+    named it, and he gave neither a distance nor a listed route idea. To START a lookup (``asking``) he must also not have given the
+    meeting place yet; reading his answer to an offer already made does not depend on it (he gives the place after the yes)."""
+    cfg, texts = _lookup_cfg(ctx), _offer_texts(ctx)
+    if cfg is None or texts is None or "hike" in slots or any(_given(slots, n) for n in ("distance", "trail")):
+        return None
+    if asking and (_given(slots, "meeting_point") or cfg.get("waiting")):  # a draft waiting for his yes: a bare yes could mean either
+        return None
+    return (cfg, texts) if _given(slots, "title") and _place_words(slots["title"]) else None
+
+
+def answer(req, text, ctx):
+    """The skill's own code-only reading of a short answer (``hass.skills.dispatch``, ``answer`` hook): ``{}`` (no slot changes) when the
+    open ``hike.add`` is waiting for its meeting place AFTER the map's "Did you mean" offer and ``text`` is a plain answer to it (yes, no or
+    a number: ``hl.read_answer``), else None. The answer itself is read from his texts by ``_state``; reading it here is what keeps
+    a bare yes from being taken for an approval and from costing a model call."""
+    if req.get("skill") != "hike.add" or req.get("state") != "open" or req.get("asked_slot") != "meeting_point":
+        return None
+    if (opened := _lookup_open(req.get("slots") or {}, ctx, asking=False)) is None:
+        return None
+    cfg, texts = opened
+    offer = _read_offer(cfg, texts[:-1], ctx.now)
+    if offer is None or offer["status"] != "offered" or hl.read_answer(text, len(offer["candidates"]))[0] == "other":
+        return None
+    return {}
+
+
+def question(slot_name, slots, ctx):
+    """The skill's own wording of the one question for a missing slot (``hass.skills.dispatch.question_for``). For the meeting place of
+    ``hike.add`` this is the map's proposal when the lookup finds trail(s) to offer; every other case, or any failure, is None (the
+    slot's own question stands)."""
+    if slot_name != "meeting_point" or (opened := _lookup_open(slots, ctx)) is None:
+        return None
+    cfg, texts = opened
+    now = ctx.now
+    state = _state(cfg, texts, now)
+    if state[0] == "pending":
+        return state[1]["reply"] or None
+    if state[0] == "reask":
+        offer = state[1]
+        if offer["reasks"] >= MAX_REASKS or not _write_offer(cfg, texts, now, reply=offer["reply"], candidates=offer["candidates"],
+                                                              reasks=offer["reasks"] + 1):
+            return None
+        return offer["reply"]
+    if state[0] != "none":
+        return None
+    result = _look_up(cfg, slots["title"], ctx)
+    if result is not None and result.status in ("one", "several") and result.candidates:
+        if _write_offer(cfg, texts, now, reply=result.reply, candidates=result.candidates):
+            return result.reply
+        return None
+    _write_offer(cfg, texts, now)  # nothing to offer: said once, so a later turn does not ask the map again
+    return None
+
+
+def _confirmed(slots, ctx):
+    """The map trail Mike said yes to for this hike.add, or None. Pure reading of what was saved: it makes no request."""
+    opened = _lookup_open(slots, ctx, asking=False)
+    if opened is None:
+        return None
+    state = _state(opened[0], opened[1], ctx.now)
+    return state[1] if state[0] == "confirmed" else None
+
+
+def lookup_lines(found) -> list:
+    """The line shown beside the draft when a map trail is added as a route idea: what it is, its measured numbers and its source."""
+    return [f"I'll also add a route idea for {voice.quote(found.name)}, {hl.facts(found)}. "
+            f"Source: {found.source}, retrieved {found.retrieved:%b} {found.retrieved.day}, {found.retrieved.year}."]
+
+
+def _with_route_idea(found, ops, ctx):
+    """``route.add`` for the confirmed trail in front of the hike's ``hike.create`` (which then links it by ``trailId``). A route idea
+    that already has the trail's name is linked instead of added twice."""
+    routes = _routes(ctx)
+    same = next((r for r in routes if r.get("status") == "idea" and _fold(r.get("title", "")) == _fold(found.name)), None)
+    create = ops[-1]
+    if same is not None:
+        return [{"op": "hike.create", "args": {**create["args"], "trailId": same["id"]}}]
+    used = {r.get("id") for r in routes} | {e.get("id") for e in _events(ctx) or ()}
+    args = {**create["args"], "trailId": hl.route_id(found.name, used)}
+    return [{"op": "route.add", "args": hl.route_add_args(found)}, {"op": "hike.create", "args": args}]
+
+
 # -- plans ---------------------------------------------------------------------------------------------------------
 def plan_add(slots, ctx):
     slots = dict(slots)
@@ -609,7 +814,10 @@ def plan_add(slots, ctx):
     args.update({ARG.get(f, f): _text(slots[f]) for f in TEXT_SLOTS if _given(slots, f)})
     if "difficulty" in args:
         args["difficulty"] = _owner_case(args["difficulty"], ctx)
-    return [{"op": "hike.create", "args": args}]
+    ops = [{"op": "hike.create", "args": args}]
+    if (found := _confirmed(slots, ctx)) is not None:  # HIKE-LOOKUP-2: Mike said yes to a map trail: its route idea first, then the hike on it
+        ops = _with_route_idea(found, ops, ctx)
+    return ops
 
 
 def plan_edit(slots, ctx):

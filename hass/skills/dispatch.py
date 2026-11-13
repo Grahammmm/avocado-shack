@@ -85,10 +85,11 @@ RULES.setdefault("no-price", _no_price)
 class Ctx:
     """What a skill's ``plan`` and rules may read: the saved content (read-only), today (Pacific), aliases, the owner's texts."""
 
-    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, site_dir=None, *, guest_counts_db=None):
+    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, site_dir=None, *, guest_counts_db=None, hike_lookup=None):
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
         self.guest_counts_db = guest_counts_db
+        self.hike_lookup = hike_lookup  # HIKE-LOOKUP-2: {"contact", "folder"} when the operator set hikeLookup.contact, else None (no map lookup)
         self.multi_call = False  # True while the owner's texts are shared by several calls of one message (a skill cannot tie a loose word to one call)
         self.site_dir = site_dir  # the writer's storefront-mockup folder (the same checkout the content was read from), or None
 
@@ -403,7 +404,15 @@ class Dispatcher:
         content = load_content(writer / "hass" / "content")
         settings = getattr(self.conv, "settings", None) or {}
         return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
-                   house_render=settings.get("houseRender") is True, site_dir=writer / "storefront-mockup", guest_counts_db=settings.get("guestCountsDb"))
+                   house_render=settings.get("houseRender") is True, site_dir=writer / "storefront-mockup", guest_counts_db=settings.get("guestCountsDb"),
+                   hike_lookup={"contact": settings["hikeLookupContact"], "folder": self.conv.sdir / "hike_lookup", "waiting": self._draft_waiting(now)}
+                   if settings.get("hikeLookupContact") else None)
+
+    def _draft_waiting(self, now) -> bool:
+        """True while one of the owner's drafts waits for an answer (a proposal for his yes, or a question): a bare yes would then be
+        ambiguous, so the map's \"Did you mean\" question is not started (HIKE-LOOKUP-2)."""
+        conv = self.conv
+        return any(conv._mine(r) and conv._expiry(r) > now for r in conv._drafts("state IN ('proposed', 'needs-details')"))
 
     def _owner(self):
         return self.conv._chat()  # the answering chat, so each owner has their own open request (HASS-LIVE-PLAN-1)
@@ -463,6 +472,18 @@ class Dispatcher:
         from hass.skills.backlog import explicit_page_request
         return self.registry.get("page.faq") is not None and explicit_page_request(msg.text)
 
+    def takes_answer(self, text, now) -> bool:
+        """HIKE-LOOKUP-2: True when ``text`` is a short answer the OPEN request's skill reads itself (its optional ``answer(request, text, ctx)``
+        hook returns slots, possibly none): a bare yes, no or number to a question of the skill's own, which the conversation must not take
+        for an approval. Never raises; False when skills are off, nothing is open, or the skill has no such hook."""
+        try:
+            req = self.conv.requests.get(self._owner(), now)
+            skill = self.registry.get(req["skill"]) if req is not None and req["skill"] and req["state"] == "open" else None
+            hook = skill_hook(skill, "answer") if skill is not None else None
+            return hook is not None and hook(req, text, self._ctx(now, [*req["texts"], text])) is not None
+        except Exception:  # noqa: BLE001 - an unreadable request is no reason to change how a yes is read
+            return False
+
     def cheap(self, msg, now):
         """A short answer to the asked slot read by code alone (no model call). The disposition, or None to let the model read it."""
         req = self.conv.requests.get(self._owner(), now)
@@ -475,9 +496,14 @@ class Dispatcher:
         slot = next((s for s in getattr(skill, "slots", ()) if s.name == req["asked_slot"]), None)
         try:
             ctx = self._ctx(now, [*req["texts"], msg.text])
-            ok, value = openreq.cheap_answer(slot, msg.text, ask=req["ask"], content=ctx.content, aliases=ctx.aliases, today=ctx.today)
+            hook = skill_hook(skill, "answer")  # HIKE-LOOKUP-2: the skill's own code-only reading of a short answer (None: not one)
+            answered = hook(req, msg.text, ctx) if hook is not None and req["state"] == "open" else None
+            ok, value = (False, None) if answered is not None else openreq.cheap_answer(
+                slot, msg.text, ask=req["ask"], content=ctx.content, aliases=ctx.aliases, today=ctx.today)
         except Exception:  # noqa: BLE001 - unreadable content: the model path (and its own errors) decides
             return None
+        if answered is not None:
+            return self._advance(msg, now, req, skill, answered, None, ctx=ctx, resolved=True)
         if not ok:
             return None
         return self._advance(msg, now, req, skill, {slot.name: value}, None, ctx=ctx, resolved=True)

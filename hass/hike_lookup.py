@@ -125,6 +125,8 @@ LIFETIME_DAYS = {"overpass": 30, "nominatim_search": 30, "nominatim_reverse": 90
 MIN_INTERVAL_S = {"overpass": 2.0, "nominatim_search": 1.1, "nominatim_reverse": 1.1, "elevation": 0.5}
 MAX_PER_LOOKUP = 8
 MAX_PER_DAY = 60
+COUNT_FILE = "day-count.json"
+COUNT_DAYS_KEPT = 7
 
 
 class CachedTransport:
@@ -134,27 +136,89 @@ class CachedTransport:
     * otherwise one request is made, at least ``MIN_INTERVAL_S`` after the last one to that service;
     * at most ``MAX_PER_LOOKUP`` requests per ``begin_lookup()`` and ``MAX_PER_DAY`` per day (``budget`` error after);
     * when a refresh fails and an older saved answer exists, that is returned marked ``stale``;
+    * ``max_seconds`` (optional): once a lookup (``begin_lookup`` to now) has run that long, no further request is made (``slow``), so a
+      slow public server cannot keep the chat waiting for the sum of eight 60 second timeouts;
     * ``log(row)`` gets one row per request: when, service, key, outcome, seconds. Never the owner's message.
     The clock, the sleep and the log are injected, so the tests run in no time and touch no network.
+
+    The per-day count is kept ON DISK (``day-count.json`` in the saved-answer folder, HIKE-LOOKUP-2), so a restart of Hass cannot
+    reset it: every counted request is written before it is made. A count file that cannot be read or written fails CLOSED:
+    the lookup is refused (``budget``) for the rest of that day, and the damaged file is set aside as ``day-count.bad``.
     """
 
     def __init__(self, fetch: Callable, folder, *, now: Callable[[], datetime] | None = None,
                  sleep: Callable[[float], None] | None = None, clock: Callable[[], float] | None = None,
-                 log: Callable[[dict], None] | None = None, per_lookup: int = MAX_PER_LOOKUP, per_day: int = MAX_PER_DAY):
+                 log: Callable[[dict], None] | None = None, per_lookup: int = MAX_PER_LOOKUP, per_day: int = MAX_PER_DAY,
+                 max_seconds: float | None = None):
         import time
         self.fetch, self.folder = fetch, Path(folder)
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.sleep = sleep or time.sleep
         self.clock = clock or time.monotonic
         self.log = log or (lambda row: None)
-        self.per_lookup, self.per_day = per_lookup, per_day
-        self.used_lookup, self.last_at, self.day_counts = 0, {}, {}
+        self.per_lookup, self.per_day, self.max_seconds = per_lookup, per_day, max_seconds
+        self.used_lookup, self.last_at, self.day_counts, self.began = 0, {}, {}, None
 
     def begin_lookup(self):
         self.used_lookup = 0
+        self.began = self.clock()
 
     def _path(self, key: str) -> Path:
         return self.folder / (key.replace(":", "-") + ".json")
+
+    @property
+    def counts_path(self) -> Path:
+        return self.folder / COUNT_FILE
+
+    def _counts(self, today: date) -> dict:
+        """{iso day: requests made that day} from disk. No file is an empty record; a file that is not exactly that shape is
+        set aside and today is counted as already used up (fail closed until tomorrow)."""
+        try:
+            raw = self.counts_path.read_text("utf-8")
+        except FileNotFoundError:
+            return {}
+        except OSError:
+            return {today.isoformat(): self.per_day}
+        try:
+            data = json.loads(raw)
+            counts = data["counts"]
+            if not isinstance(counts, dict) or not all(
+                    isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and v >= 0 for k, v in counts.items()):
+                raise ValueError("counts")
+            for k in counts:
+                date.fromisoformat(k)
+            return dict(counts)
+        except (ValueError, KeyError, TypeError, RecursionError):
+            full = {today.isoformat(): self.per_day}
+            try:
+                self.counts_path.replace(self.counts_path.with_suffix(".bad"))
+                self._write_counts(full)  # a fresh file that says "used up today", so the next call does not start from zero
+            except OSError:
+                pass
+            return full
+
+    def _write_counts(self, counts: dict):
+        self.folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        keep = dict(sorted(counts.items())[-COUNT_DAYS_KEPT:])
+        tmp = self.counts_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"counts": keep}, sort_keys=True), "utf-8")
+        tmp.replace(self.counts_path)
+        return keep
+
+    def day_count(self, today: date | None = None) -> int:
+        """How many requests were made on ``today`` (default: the clock's day), read from disk."""
+        today = today or self.now().date()
+        self.day_counts = self._counts(today)
+        return self.day_counts.get(today.isoformat(), 0)
+
+    def _count_one(self, today: date) -> None:
+        """Write one more request for ``today`` to disk before it is made. Raises ``TransportError("budget")`` when it cannot."""
+        try:
+            counts = self._counts(today)
+            counts[today.isoformat()] = counts.get(today.isoformat(), 0) + 1
+            self.day_counts = self._write_counts(counts)
+        except OSError:
+            raise TransportError("budget", "the day count cannot be saved") from None
 
     def _read(self, key: str):
         try:
@@ -176,7 +240,18 @@ class CachedTransport:
         if age_ok:
             self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "saved", "seconds": 0})
             return Response(saved[0], saved[1])
-        if self.used_lookup >= self.per_lookup or self.day_counts.get(today, 0) >= self.per_day:
+        if self.max_seconds is not None and self.began is not None and self.clock() - self.began > self.max_seconds:
+            self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "slow", "seconds": 0})
+            if saved is not None:
+                return Response(saved[0], saved[1], stale=True)
+            raise TransportError("slow", "the lookup took too long")  # the chat is waiting: stop asking after ``max_seconds`` in all
+        try:
+            over = self.used_lookup >= self.per_lookup or self.day_count(today) >= self.per_day
+            if not over:
+                self._count_one(today)  # on disk before the request is made
+        except TransportError:
+            over = True
+        if over:
             if saved is not None:
                 return Response(saved[0], saved[1], stale=True)
             self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "budget", "seconds": 0})
@@ -186,7 +261,6 @@ class CachedTransport:
             self.sleep(wait)
         started = self.clock()
         self.used_lookup += 1
-        self.day_counts[today] = self.day_counts.get(today, 0) + 1
         try:
             body = self.fetch(service, request)
         except TransportError as exc:
@@ -883,6 +957,16 @@ def _stale(c: Candidate) -> str:
     return f" This is from a saved copy from {_day(c.retrieved)}, and I couldn't check it again today." if c.stale else ""
 
 
+def facts(c: Candidate) -> str:
+    """``about 2.4 miles out and back on the map, with about 740 feet of climbing`` for a sure candidate (measured numbers only)."""
+    return _facts(c)
+
+
+def warnings(c: Candidate) -> list:
+    """The park-check and saved-copy sentences of a candidate (each a whole sentence), for the line beside a draft."""
+    return [s.strip() for s in (_closure(c), _stale(c)) if s.strip()]
+
+
 def proposal(c: Candidate) -> str:
     """THE proposal sentence for one sure candidate:
     ``Did you mean "<name>" near <place>, about <x.x> miles <a loop | out and back | one way>, with about <n> feet of climbing? Reply yes to use it, or no and tell me more.``"""
@@ -982,3 +1066,119 @@ def plan_ops(c: Candidate, hike: dict | None = None, used_ids=()) -> list:
             args[k] = hike[k]
     ops.append({"op": "hike.create", "args": args})
     return ops
+
+
+# -- HIKE-LOOKUP-2: what the chat flow keeps and reads -------------------------------------------------------------------
+
+
+LOG_FILE = "requests.log"
+LOG_MAX_BYTES = 1_000_000  # the request log stops growing at 1 MB (rows are small: no text, no coordinates)
+_OSM_ID = re.compile(r"(?:way|relation)/\d+")
+CONTACT_RE = re.compile(r"(?:[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|https://[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?:/[A-Za-z0-9._~%/-]*)?)")
+CONTACT_MAX = 100
+
+
+def valid_contact(value) -> str | None:
+    """The operator's contact address for the map services' User-Agent (the ``hikeLookup.contact`` setting): an e-mail address
+    or an https link, printable ASCII, no spaces, at most ``CONTACT_MAX`` characters. Anything else is None. No address is built in."""
+    if not isinstance(value, str) or not value.isascii() or len(value) > CONTACT_MAX:
+        return None
+    return value if CONTACT_RE.fullmatch(value) else None
+
+
+def file_log(folder) -> Callable[[dict], None]:
+    """A ``CachedTransport`` log that appends one JSON row per request (when, service, key, outcome, seconds: never query text,
+    coordinates or reply text) to ``<folder>/requests.log``. A write that fails is dropped: the log is a record, not a gate."""
+    path = Path(folder) / LOG_FILE
+
+    def write(row: dict) -> None:
+        try:
+            Path(folder).mkdir(parents=True, exist_ok=True, mode=0o700)
+            if path.exists() and path.stat().st_size > LOG_MAX_BYTES:
+                return
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({k: row.get(k) for k in ("at", "service", "key", "outcome", "seconds")}, sort_keys=True) + "\n")
+        except OSError:
+            pass
+
+    return write
+
+
+def candidate_to_json(c: Candidate) -> dict:
+    """A candidate as plain JSON (kept privately between the question and Mike's answer)."""
+    return {"name": c.name, "miles": c.miles, "gain_ft": c.gain_ft, "shape": c.shape, "source": c.source,
+            "retrieved": c.retrieved.isoformat(), "place": c.place, "osm": list(c.osm), "unsure": c.unsure,
+            "notes": list(c.notes), "stale": c.stale, "stage": c.stage, "score": c.score, "basis": c.basis, "record": c.record}
+
+
+def _own_text(data: dict, key: str) -> str:
+    value = data[key]
+    if not isinstance(value, str):
+        raise ValueError(key)
+    return value
+
+
+def candidate_from_json(data) -> Candidate | None:
+    """The candidate ``candidate_to_json`` wrote, or None when the data is not exactly that (a damaged or edited file is never
+    half-trusted). Text is cleaned again, and a number without a known shape is dropped."""
+    try:
+        if not isinstance(data, dict):
+            return None
+        miles, gain, shape, osm, notes = data["miles"], data["gain_ft"], _own_text(data, "shape"), data["osm"], data["notes"]
+        if miles is not None:
+            miles = float(_number(miles, "miles"))
+        if gain is not None and (isinstance(gain, bool) or not isinstance(gain, int)):
+            return None
+        if shape not in SHAPE_WORDS and shape != "":
+            return None
+        if not (isinstance(osm, list) and all(isinstance(o, str) and _OSM_ID.fullmatch(o) for o in osm)):
+            return None
+        if not (isinstance(notes, list) and all(isinstance(n, str) for n in notes)) or data["stage"] not in ("slo", "california"):
+            return None
+        if not isinstance(data["stale"], bool) or not isinstance(data["record"], dict):
+            return None
+        unsure = clean_public(_own_text(data, "unsure"))
+        if not shape or unsure:
+            miles, shape = None, ""
+        return Candidate(name=clean_public(_own_text(data, "name")), miles=miles, gain_ft=gain, shape=shape,
+                         source=_own_text(data, "source"), retrieved=date.fromisoformat(_own_text(data, "retrieved")),
+                         place=clean_public(_own_text(data, "place"), 60), osm=tuple(osm), unsure=unsure,
+                         notes=tuple(clean_public(n) for n in notes), stale=data["stale"], stage=data["stage"],
+                         score=float(_number(data["score"], "score")), basis=_own_text(data, "basis"), record=data["record"])
+    except (KeyError, ValueError, TypeError, TransportError):
+        return None
+
+
+_YES_WORDS = {"yes", "yeah", "yep", "yup", "y", "ok", "okay", "sure", "correct", "right", "exactly", "please", "thanks", "thank",
+              "you", "that", "thats", "that's", "is", "it", "the", "one", "use", "do"}
+_YES_FIRST = {"yes", "yeah", "yep", "yup", "y", "ok", "okay", "sure", "correct", "right", "exactly", "that", "thats", "that's", "use", "do"}
+_NO_FIRST = {"no", "nope", "nah", "neither", "none", "not"}
+_ORDINAL = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3}
+
+
+def read_answer(text, offered: int) -> tuple:
+    """Mike's short reply to the identity question as ``(kind, index)``: ``("pick", i)`` (a 0-based position of the trail he chose;
+    for ONE offered trail a plain yes is a pick), ``("yes", None)`` (a yes when several were offered: which one is not said),
+    ``("no", None)`` (no, or no and something more) or ``("other", None)`` (anything else, including a long message). Never
+    guesses: a number outside the offered range is ``other``."""
+    words = re.sub(r"[^a-z0-9' ]+", " ", str(text).casefold().replace("\u2019", "'")).split()
+    if not words:
+        return ("other", None)
+    if len(words) == 2 and re.fullmatch(r"[0-9a-f]{4,12}", words[1]) and words[0] in _YES_FIRST | _NO_FIRST:
+        return ("other", None)  # "yes a1b2" / "no a1b2" name a draft by its code: that is an approval or a cancel, never this answer
+    if words[0] in _NO_FIRST:
+        return ("no", None)
+    if len(words) > 5:
+        return ("other", None)
+    if len(words) > 1 and words[0] in ("number", "option", "the"):
+        words = words[1:]
+    if len(words) == 2 and words[1] == "one" and words[0] in _ORDINAL:
+        words = words[:1]
+    pick = None
+    if len(words) == 1:
+        pick = int(words[0]) if words[0].isdigit() and len(words[0]) == 1 else _ORDINAL.get(words[0])
+    if pick is not None:
+        return ("pick", pick - 1) if 1 <= pick <= offered else ("other", None)
+    if words[0] in _YES_FIRST and all(w in _YES_WORDS for w in words):
+        return ("pick", 0) if offered == 1 else ("yes", None)
+    return ("other", None)
