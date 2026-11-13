@@ -40,7 +40,9 @@ that came first: short answers, then the rules. Mike's side is in [the phone gui
   which year, and the town Mike confirmed, never a claim, contact, price, third party or instruction. What they make is
   written only with plain product words, so a claim joined to a product ("makes jam and relieves migraines") leaves that
   page sentence out, and the year and the town are taken only from a sentence that says them of the maker, with no
-  negation (HASS-559-FIX). Mike sees it as "The
+  negation (HASS-559-FIX); a founding sentence that goes on after the year with anything but who or with what ("and shut
+  down in 2005", "or so the story goes") gives no year, and a "makes" sentence with a negation or a turn ("but", "no
+  longer") gives no product (AVO-FIX-559). Mike sees it as "The
   maker's own site says: ... (source: <address>, read on <day>)" and it goes live only with his `yes <code>` to that draft
   (HASS-SEC-3). A site that cannot be read, or not in time, gets "I could not read their site; tell me about them in a
   sentence." With no words and no address Hass asks once: "What should we say about <Maker>? A sentence is enough." and

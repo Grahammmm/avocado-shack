@@ -23,6 +23,8 @@ What may be taken from the page (HASS-SEC-3 H2 / L2; each rule tested in hass/te
   makes ("<Maker> makes <things>."), since which year ("<Maker> started in <year>.") and the town, only when it is the town the
   owner already confirmed ("<Maker> is based in <town>."); at most ``MAX_SENTENCES`` of them, written by code in the house
   voice. The "things" are plain lower-case words cut before any place, purpose or manner ("in", "for", "with", ...);
+  a founding sentence that goes on after the year with anything but who or with what, and a "makes" sentence with a
+  negation or a turn, give no fact (AVO-FIX-559);
 * a page sentence is left out whole when it has a number (a year is fine), ``!``, ``?``, a quotation, a link or an address,
   a hype word, anything the live gate calls a claim (``live_policy._protected``), a claim, contact, price, third-party or
   instruction word (``DROP_WORDS``), a capitalised name other than the maker and the confirmed town, first-person talk past
@@ -711,15 +713,43 @@ def _affirmative(s: str) -> bool:
     return not any(w.strip(",").lower() in NOT_SAID for w in s.split())
 
 
+# AVO-FIX-559: after the year a founding sentence may only go on with who started it or with what ("by two sisters", "with
+# one pot and a stack of family recipes"), in plain lower-case words. Any other ending ("and shut down in 2005", "or so the
+# story goes", "according to a rumor", "as a joke", "to help ...") leaves the year out: a hedge, a reversal or a purpose is
+# never turned into "<Maker> started in <year>." An "and" inside it must lead to another person or thing ("and a stack of
+# ..."), never to a new clause ("and went out of business").
+_TAIL_TURNS = frozenset("""
+or but then after before later until till who whom whose which that when while where so because though although according
+as to since if unless once
+""".split())
+_AND_NEXT = frozenset("a an the one two three four five six some their his her its".split()) | THING_WORDS
+_TAIL_WORDS = 8
+
+
+def _closed_tail(tail: str) -> bool:
+    words = tail.strip().removesuffix(".").split()
+    if not words:
+        return tail.strip() == "."
+    if not tail.strip().endswith(".") or words[0] not in ("by", "with") or len(words) - 1 > _TAIL_WORDS or len(words) < 2:
+        return False
+    for i, word in enumerate(words[1:], 1):
+        if not re.fullmatch(r"[a-z]+", word) or word in _TAIL_TURNS or word in NOT_SAID:
+            return False
+        if word == "and" and (i + 1 == len(words) or not _thing_word(words[i + 1]) and words[i + 1] not in _AND_NEXT):
+            return False
+    return True
+
+
 def _since(s: str, name: str) -> int:
-    """The year the maker started, when ``s`` says so of the maker: "<Name> (was) founded in 1998 ...", "We started <Name>
-    in 2019 ...", "<Name> has been making jam since 2010."; 0 otherwise."""
+    """The year the maker started, when ``s`` says so of the maker and says nothing more than who or with what: "<Name>
+    (was) founded in 1998 (by two sisters).", "We started <Name> in 2019 (with one pot).", "<Name> has been making jam since
+    2010."; 0 otherwise."""
     if not _affirmative(s):
         return 0
     who = r"(?:" + _name_re(name) + r"|We)"
-    for shape in (rf"^{who}\s+(?:was\s+|were\s+)?{_FOUNDED}\s+in\s+{_YEAR}\b",
-                  rf"^We\s+{_FOUNDED}\s+{_name_re(name)}\s+in\s+{_YEAR}\b"):
-        if m := re.match(shape, s, re.IGNORECASE):
+    for shape in (rf"^{who}\s+(?:was\s+|were\s+)?{_FOUNDED}\s+in\s+{_YEAR}(\s.*|\.)$",
+                  rf"^We\s+{_FOUNDED}\s+{_name_re(name)}\s+in\s+{_YEAR}(\s.*|\.)$"):
+        if (m := re.match(shape, s, re.IGNORECASE)) and _closed_tail(m.group(2)):
             return int(m.group(1))
     m = re.match(rf"^{who}\s+(?:has|have)\s+been\s+(?:open|in\s+business|(?:{_ING})(?:\s+(.+?))?)\s+since\s+{_YEAR}\.$", s,
                  re.IGNORECASE)
@@ -764,7 +794,7 @@ def facts(name: str, page: dict, *, town: str = "", today=None) -> dict:
             s = source_ok(sentence, name, town)
             if s is None:
                 continue
-            if "makes" not in found and (m := re.match(head, s, re.IGNORECASE)):
+            if "makes" not in found and _affirmative(s) and (m := re.match(head, s, re.IGNORECASE)):
                 verb = m.group(1).lower()
                 things = _things(m.group(2))
                 if things:

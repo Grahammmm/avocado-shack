@@ -104,7 +104,10 @@ network (the test kit gives recorded pages, so no test touches the network).
 * **The story (SEC-3 H2):** no page sentence is ever used as it stands. Code takes at most three facts from page sentences that
   pass every rule and writes the story from them, in the house voice, at most 2 sentences: what they make ("<Maker> makes
   small-batch fruit jam and relish."), since which year ("<Maker> started in 2019.") or, without a year, the town **only when it
-  is the town he confirmed** ("<Maker> is based in Morro Bay."). A page sentence is left out whole when it has a number (a year
+  is the town he confirmed** ("<Maker> is based in Morro Bay."). The year only from "<Maker> (was) founded/started in <year>."
+  followed by nothing but who or with what ("by two sisters", "with one pot"), or "<Maker> has been making <things> since
+  <year>."; a negation, a turn ("but", "no longer"), a hedge or anything after the year leaves that fact out (AVO-FIX-559).
+  A page sentence is left out whole when it has a number (a year
   is fine), `!`, `?`, `;`, a quotation, a link or an e-mail, a hype word, anything the live gate calls a claim, a claim,
   contact, price, third-party or instruction word (organic, award, trusted, call, order, price, Hass, publish, ...), a
   capitalised name that is not the maker or the confirmed town (a shop, a store, another place), first-person talk past a

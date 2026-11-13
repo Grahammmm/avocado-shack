@@ -251,6 +251,51 @@ class H2TheReturnAtF82c6eba(unittest.TestCase):
             self.assertEqual(caught.exception.code, "unreachable")
 
 
+class FoundingYearAndProductFromAClosedAffirmativeSentence(unittest.TestCase):
+    """AVO-FIX-559 (follow-up to Sol RETURN t_2c550041 M): a founding sentence that goes on after the year with anything but
+    who or with what (a reversal, a hedge, a purpose) gives no year, and a "makes" sentence with a negation or a turn ("but",
+    "no longer") gives no product: neither is turned into an affirmative public fact."""
+
+    JAM = "Harbor Lane makes jam in small copper pots."
+
+    def story(self, *blocks):
+        out = ms.draft_story("Harbor Lane", page_of(*blocks), town="Morro Bay", today=DAY)
+        return out and out["sentences"]
+
+    def test_a_reversed_hedged_or_purposed_founding_gives_no_year(self):
+        for tail in ("and shut down in 2005", "and went out of business", "and ceased trading soon after",
+                     "according to a rumor", "in theory and in 2010 in fact", ", or so the story goes",
+                     "as a joke and is fictional", "to help kids with autism", "by a baker who quit in 2005",
+                     "with one pot and then folded", "by two sisters and later closed"):
+            sentence = "Harbor Lane was founded in 1998" + ("" if tail.startswith(",") else " ") + tail + "."
+            with self.subTest(sentence=sentence):
+                self.assertEqual(ms._since(ms.source_ok(sentence, "Harbor Lane", "Morro Bay") or sentence, "Harbor Lane"), 0)
+                self.assertEqual(self.story(self.JAM, sentence), ["Harbor Lane makes jam."])
+
+    def test_who_or_with_what_still_gives_the_year(self):
+        for sentence, year in (("Harbor Lane was founded in 1998 by two sisters.", 1998),
+                               ("We started Harbor Lane in 2019 with one pot and a stack of family recipes.", 2019),
+                               ("Harbor Lane was founded in 1998 by a baker and her son.", 1998),
+                               ("Harbor Lane opened in 2004 with a small kitchen and two pots.", 2004)):
+            with self.subTest(sentence=sentence):
+                self.assertEqual(self.story(self.JAM, sentence), ["Harbor Lane makes jam.", f"Harbor Lane started in {year}."])
+
+    def test_a_negated_or_turned_makes_sentence_gives_no_product(self):
+        for sentence in ("Harbor Lane makes jam in winter but stopped last year.",
+                         "Harbor Lane makes jam in a kitchen it no longer uses.",
+                         "Harbor Lane makes jam in the old barn until next spring.",
+                         "Harbor Lane makes jam with no added sugar or pectin."):
+            with self.subTest(sentence=sentence):
+                self.assertIsNone(self.story(sentence))
+
+    def test_the_conversation_never_proposes_a_reversed_founding_year(self):
+        out = ia.describe_add(dict(SLOTS), plan_ctx(lambda url: page_of(
+            self.JAM, "Harbor Lane was founded in 1998 and shut down in 2005.")))
+        maker = next(op for op in out.ops if op["op"] == "maker.add")
+        self.assertEqual(maker["args"]["story"], "Harbor Lane makes jam.")
+        self.assertNotIn("1998", "\n".join(out.say))
+
+
 def plan_ctx(reader, texts=None):
     return types.SimpleNamespace(content=None, today="2026-11-09", live=True, next_product_id="photo-product-175",
                                  selection_checked_today=False, maker_page=reader,
