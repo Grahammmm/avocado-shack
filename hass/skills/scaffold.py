@@ -584,7 +584,22 @@ def check(spec, root) -> list:
     return problems
 
 
+@contextlib.contextmanager
+def _no_bytecode():
+    """Loading the new module must not leave a __pycache__ file behind (a rolled-back skill leaves nothing at all)."""
+    before, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        yield
+    finally:
+        sys.dont_write_bytecode = before
+
+
 def scaffold(ns, out=print) -> int:
+    with _no_bytecode():
+        return _scaffold(ns, out)
+
+
+def _scaffold(ns, out) -> int:
     from hass.ops import load_registry
     root = Path(ns.root).resolve() if ns.root else REPO_ROOT
     spec = build_spec(ns, load_registry(), testkit.registry_skills())
