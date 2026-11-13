@@ -84,7 +84,10 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
                   "status": after.get("status"), "description": after.get("description")}
         before = record.get("before")
         if after.get("status") == "active":  # a hidden product is only checked for being absent
-            if store is not None:
+            # HASS-PREVIEW-2: a product added in this change (no before) that carries no availability of its own has nothing to say
+            # about the card's word: item.add writes the word in a LATER product record of the same change (product.set_availability),
+            # which has its own target. Expecting "no word" from the add record failed every new item that is in (availabilityShown).
+            if store is not None and not ("before" in record and before is None and "available" not in after):
                 from hass.sitegen import availability_label  # the one place the word and the stale rule live
                 target["availability"] = availability_label(after, store, today or shop_today())
             if isinstance(before, dict) and before.get("image") != after.get("image") and isinstance(after.get("image"), str):
