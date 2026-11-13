@@ -203,7 +203,7 @@ class H2TheReturnAtF82c6eba(unittest.TestCase):
             (jam, "Harbor Lane has been closed since 2010 for the winter."): ["Harbor Lane makes jam."],
             (jam, "Harbor Lane was founded in 1998 by two sisters."): ["Harbor Lane makes jam.", "Harbor Lane started in 1998."],
             (jam, "We started Harbor Lane in 2019 with one pot of fruit."): ["Harbor Lane makes jam.", "Harbor Lane started in 2019."],
-            (jam, "Harbor Lane has been making jam and relish since 2010."): ["Harbor Lane makes jam.", "Harbor Lane started in 2010."],
+            (jam, "Harbor Lane has been making jam and relish since 2010."): ["Harbor Lane makes jam."],
         }
         for blocks, want in cases.items():
             with self.subTest(blocks=blocks):
@@ -723,6 +723,56 @@ class InTheConversation(unittest.TestCase):
                     self.chat.say("no")
                 self.assertEqual(self.chat.commits(), 0)  # nothing goes anywhere without his yes
                 ms._CACHE.clear()
+
+    def test_559b_source_blocks_and_history_keep_their_meaning_in_the_actual_draft(self):
+        """Third RETURN: real HTML -> extraction -> conversation -> draft/provenance, never a detached sentence fixture."""
+        from hass.tests import test_item_add_dispatch as tid
+        jam = "Harbor Lane makes jam in small copper pots."
+        founded = "Harbor Lane was founded in 1998 by two sisters."
+        town = "Harbor Lane cooks in a shared kitchen in Morro Bay."
+        history = "Harbor Lane has been making jam since 2010."
+        plain = "Harbor Lane makes jam."
+        dated = plain + " Harbor Lane started in 1998."
+        local = plain + " Harbor Lane is based in Morro Bay."
+        cases = [
+            ("abbreviation", ["A fictional example, e.g. " + jam], None, []),
+            ("retracted product", [jam + " This statement is fictional."], None, []),
+            ("unknown prefix", ["A parable follows. " + jam], None, []),
+            ("unknown suffix", [jam + " Read as an allegory."], None, []),
+            ("retracted founding", [jam, founded + " That founding date is unverified."], plain, [jam]),
+            ("retracted town", [jam, town + " That location is fictional."], plain, [jam]),
+            ("production is not founding", [jam, history], plain, [jam]),
+            ("production before founding", [jam, history, founded], dated, [jam, founded]),
+            ("production after founding", [jam, founded, history], dated, [jam, founded]),
+            ("literal multi-sentence founding", [jam + " " + founded], dated, [jam + " " + founded]),
+            ("literal multi-sentence town", [jam + " " + town], local, [jam + " " + town]),
+        ]
+        for label, blocks, want, evidence in cases:
+            markup = "<html><body>" + "".join("<p>" + b + "</p>" for b in blocks) + "</body></html>"
+            page = page_of(*ms.extract(markup))
+            with self.subTest(case=label), mock.patch.object(ms, "fetch", self.recorded_fetch(page)):
+                before = len(self.chat.drafts())
+                disposition, replies = self.chat.say(self.TEXT, tid.JAR)
+                text = "\n".join(replies)
+                if want is None:
+                    self.assertEqual(disposition, "question")
+                    self.assertIn("What should we say about Harbor Lane?", text)
+                    self.assertEqual(len(self.chat.drafts()), before)
+                else:
+                    self.assertEqual(disposition, "proposed")
+                    draft = self.chat.drafts()[-1]
+                    story = next(op for op in json.loads(draft["ops_json"]) if op["op"] == "maker.add")["args"]["story"]
+                    self.assertEqual(story, want)
+                    self.assertIn("The maker's own site says: " + want, text)
+                    self.assertIn(ADDRESS, text)
+                    self.assertIn("only if you say yes to this change", text)
+                    rows = [json.loads(line) for line in (self.chat.conv.sdir / "maker-sources.jsonl").read_text("utf-8").splitlines()]
+                    source = next(row for row in rows if row["draft"] == draft["code"])
+                    self.assertEqual(source["from"], evidence)  # complete supporting blocks, not detached fragments
+                    self.assertEqual(source["story"], want)
+            self.assertEqual(self.chat.commits(), 0)
+            self.chat.say("no")  # also cancel after a failed subtest, so later rows exercise the real path
+            ms._CACHE.clear()
 
     def test_a_site_that_cannot_be_read_is_one_plain_question_and_nothing_is_drafted(self):
         from hass.tests import test_item_add_dispatch as tid

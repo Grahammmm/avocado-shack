@@ -2168,3 +2168,9 @@ Review fix (same branch): stored stamps are now compared to the cutoff as aware 
 Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it actually read (0 < length <= MAX_PHOTO) and raises the existing fixed refusal when a file shrank to empty or grew past the cap after fstat; live() still checks every photo before any transport call and writes nothing on refusal. A file shrinking to a nonempty allowed length is still admitted; no snapshot guarantee. Valid input and output are byte-identical.
 
 Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.
+
+## AVO-FIX-559b: preserve source-block context and historical predicates — November 13, 2026
+
+Branch rb/hass-live-add-2, PR #559, final operator-admitted Codex escalation after three SEC-3 RETURNs. Maker-site facts are admitted only after every sentence in their complete source block is understood as an allowed affirmative fact; unknown context drops the whole block. Private provenance retains the complete supporting blocks. Product-making history no longer becomes the maker's founding year or masks an explicit founding date. Exact-draft owner approval and the operator security hold are unchanged; the PR stays draft.
+
+Builder evidence: 147 focused maker-site, production-dispatch/photo/undo and SEC-2 tests pass. The new real-HTML production-path table had 10 failing subtests on the prior candidate and passes after repair (11 cases, including literal multi-sentence controls and complete provenance). Preserved second- and third-RETURN probes replayed against this clone, with both four-test receipt suites passing and zero commits without yes. No live state, publication or credentials touched. Diagnosis posted before code edits on PR #559; independent review and operator release remain outstanding.

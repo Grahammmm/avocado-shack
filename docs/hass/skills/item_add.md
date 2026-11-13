@@ -103,13 +103,17 @@ network (the test kit gives recorded pages, so no test touches the network).
   his answer (or just the town line) is used; the same question is not asked twice.
 * **The story (SEC-3 H2):** no page sentence is ever used as it stands. Code takes at most three facts from page sentences that
   pass every rule and writes the story from them, in the house voice, at most 2 sentences: what they make ("<Maker> makes
-  small-batch fruit jam and relish."), since which year ("<Maker> started in 2019.") or, without a year, the town **only when it
+  small-batch fruit jam and relish."), the explicit founding year ("<Maker> started in 2019.") or, without a year, the town **only when it
   is the town he confirmed** ("<Maker> is based in Morro Bay."). Each fact only from a page sentence that is **wholly** one
   closed shape, every word from a closed list: "<Maker> makes <plain product words>" then at most two workplace phrases ("in
   small copper pots", "in a shared kitchen", "by hand") and the confirmed town; "<Maker> (was) founded/started in <year>"
-  then only who or with what ("by two sisters", "with one pot"); or "<Maker> has been making <things> since <year>.".
+  then only who or with what ("by two sisters", "with one pot"). Product-making history ("has been making jam since 2010")
+  is omitted: it does not establish the maker's founding year and cannot override an explicit founding date.
   Nothing is cut off: a negation, a turn ("but", "no longer"), a hedge or a hypothetical ("and the date is fictional", "in a
   fictional story", "in a dream") leaves that fact out, and with no product left he is asked (AVO-FIX-559).
+  The **complete source block** is the admission unit: every sentence must state an allowed affirmative fact. Any unknown
+  context drops the whole block, including retractions before/after a fact and abbreviation fragments at "e.g."; facts are
+  never accepted from a detached suffix. Literal multi-sentence fact blocks still work (AVO-FIX-559b).
   A page sentence is left out whole when it has a number (a year
   is fine), `!`, `?`, `;`, a quotation, a link or an e-mail, a hype word, anything the live gate calls a claim, a claim,
   contact, price, third-party or instruction word (organic, award, trusted, call, order, price, Hass, publish, ...), a
@@ -117,7 +121,7 @@ network (the test kit gives recorded pages, so no test touches the network).
   leading We / Our, or a character that is not plain ASCII. The words he would publish are shown in the preview as **"The maker's
   own site says: <the story> (source: <address>, read on <day>). These words go on the website as their story only if you say
   yes to this change."** and go live only with his `yes <code>` to that exact draft; the draft's hash binds the text.
-* **Source record:** the address, the day, the page sentences the facts came from and the story are kept privately with the
+* **Source record:** the address, the day, the complete supporting page blocks and the story are kept privately with the
   draft (`maker-sources.jsonl`), taken from the drafting call itself (SEC-3 L3): the plan is never run again for it, so the record
   is always the read the draft was written from. The address is not put on the maker: the website-link field is protected and
   is not published.

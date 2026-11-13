@@ -716,7 +716,6 @@ claims claimed say says said believed thought joke joking satire parody fake gam
 circa around about estimated guess if unless
 """.split())
 _FOUNDED = r"(?:started|founded|opened|established|launched|began)"
-_ING = "|".join(sorted({(b[:-1] if b.endswith("e") else b) + "ing" for b in MAKES}, key=len, reverse=True))
 _YEAR = r"((?:18|19|20)\d{2})"
 
 
@@ -782,9 +781,9 @@ def _made(rest: str, town: str):
 
 
 def _since(s: str, name: str) -> int:
-    """The year the maker started, when ``s`` WHOLLY says so of the maker and says nothing more than who (``_WHO``) or with
-    what (``_WITH``): "<Name> (was) founded in 1998 (by two sisters).", "We started <Name> in 2019 (with one pot).",
-    "<Name> has been making jam since 2010."; 0 otherwise."""
+    """An explicit maker start year, with only who (``_WHO``) or with what (``_WITH``):
+    "<Name> (was) founded in 1998 (by two sisters).", "We started <Name> in 2019 (with one pot).";
+    0 otherwise. Product-making history and being open since a year do not establish a founding year."""
     if not _affirmative(s):
         return 0
     who = r"(?:" + _name_re(name) + r"|We)"
@@ -792,10 +791,6 @@ def _since(s: str, name: str) -> int:
                   rf"^We\s+{_FOUNDED}\s+{_name_re(name)}\s+in\s+{_YEAR}(\s.*|\.)$"):
         if (m := re.match(shape, s, re.IGNORECASE)) and _FOUNDING_TAIL.fullmatch(m.group(2)):
             return int(m.group(1))
-    m = re.match(rf"^{who}\s+(?:has|have)\s+been\s+(?:open|in\s+business|(?:{_ING})(?:\s+(.+?))?)\s+since\s+{_YEAR}\.$", s,
-                 re.IGNORECASE)
-    if m and (m.group(1) is None or _exact_things(m.group(1))):
-        return int(m.group(2))
     return 0
 
 
@@ -812,31 +807,41 @@ def _based(s: str, name: str, town: str) -> bool:
 
 
 def facts(name: str, page: dict, *, town: str = "", today=None) -> dict:
-    """{"makes": (verb, things, source), "since": (year, source), "town": (town, source)} found on the page, each from the
-    first page sentence that passes ``source_ok`` and WHOLLY says that fact of the maker (``_made``, ``_since``,
-    ``_based``); a fact not found is missing."""
+    """{"makes": (verb, things, block), "since": (year, block), "town": (town, block)}.
+    Admit a block only when EVERY sentence passes ``source_ok`` and wholly states an allowed affirmative maker fact.
+    Unknown context rejects the whole block: splitting must never detach a qualifier/retraction (including at ``e.g.``).
+    Keep the full supporting block as provenance, and only then take its first facts. Missing facts stay missing."""
     year_now = (today or date.today()).year
     head = r"^(?:" + _name_re(name) + r"|We)\s+(?:also\s+|now\s+|still\s+)?(" + _VERB + r")\s+(.+)$"
     found: dict = {}
     for block in page.get("blocks", ()):
+        pending: dict = {}
         for sentence in _split(block):
             s = source_ok(sentence, name, town)
             if s is None:
-                continue
-            if "makes" not in found and _affirmative(s) and (m := re.match(head, s, re.IGNORECASE)):
+                break
+            stated: dict = {}
+            if _affirmative(s) and (m := re.match(head, s, re.IGNORECASE)):
                 verb = m.group(1).lower()
                 made = _made(m.group(2), town)
                 if made and made[0]:
-                    found["makes"] = (_THIRD.get(verb, verb), made[0], sentence)
-            if "since" not in found and 1800 <= (year := _since(s, name)) <= year_now:
-                found["since"] = (year, sentence)
-            if town and "town" not in found and _based(s, name, town):
-                found["town"] = (town, sentence)
+                    stated["makes"] = (_THIRD.get(verb, verb), made[0], block)
+            if 1800 <= (year := _since(s, name)) <= year_now:
+                stated["since"] = (year, block)
+            if town and _based(s, name, town):
+                stated["town"] = (town, block)
+            if not stated:
+                break
+            for key, value in stated.items():
+                pending.setdefault(key, value)
+        else:  # no sentence was rejected: only now may this block contribute any facts
+            for key, value in pending.items():
+                found.setdefault(key, value)
     return found
 
 
 def draft_story(name: str, page: dict, *, said: str = "", town: str = "", today=None) -> dict | None:
-    """{"sentences": [house-voice sentences written from the facts], "from": [the page sentences the facts came from]} for
+    """{"sentences": [house-voice sentences written from the facts], "from": [the complete supporting page blocks]} for
     the maker, or None when the page gives nothing usable (it must say what they make). ``said`` is Mike's own words about
     the maker; a fact sentence they already carry is not said twice. ``town`` is the town he confirmed."""
     name = " ".join((name or "").split())
@@ -865,5 +870,5 @@ def draft_story(name: str, page: dict, *, said: str = "", town: str = "", today=
 
 
 def record(page: dict, story: dict) -> dict:
-    """The provenance kept privately with the story: where it was read, when, which page sentences the facts came from."""
+    """The provenance kept privately with the story: where it was read, when, and the complete supporting page blocks."""
     return {"source": page["url"], "retrieved": page["retrieved"], "from": list(story["from"]), "story": " ".join(story["sentences"])}
