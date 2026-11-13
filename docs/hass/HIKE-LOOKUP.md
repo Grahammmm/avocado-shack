@@ -160,7 +160,7 @@ name is linked instead of added again. Nothing is published; `route.add` stays p
 | the answer | `hass/skills/hikes.py` `answer` + `Dispatcher.takes_answer` / `cheap` + `Conversation._handle` | a bare yes, no or number to the offer is read by code (no model call) and is **not** an approval or a cancel; `yes <code>`, `no <code>`, `approve`, `cancel` and `reject` keep their meaning |
 | the draft | `hass/skills/hikes.py` `plan_add`, `notes` | `route.add` + `hike.create`, and the line beside the draft |
 | the live client | `hass/hike_fetch.py` | the standard-library fetch behind `CachedTransport`; the only module with network code. Also used by the manual script |
-| the limits | `hass/hike_lookup.py` `CachedTransport` | spacing per service, 8 requests per lookup, **60 per day kept on disk** (`day-count.json`), and 90 seconds for one lookup in all |
+| the limits | `hass/hike_lookup.py` `CachedTransport` | spacing per server (shared across lookups), 8 requests per lookup, **60 per day kept on disk and reserved under a lock** (`day-count.json`, `day-count.lock`), and 90 seconds for one lookup in all |
 
 **The offer is kept without a new slot and without changing the open request.** The offered trails are saved as JSON in
 `<state>/hike_lookup/offers/<sha256 of the owner's texts so far>.json` (mode 0700; the owner's words are only in the hash). The answer is
@@ -171,7 +171,16 @@ file is ignored. The sentence that asks is asked once; a bare yes to several tra
 **Limits that are now on disk.** `<state>/hike_lookup/saved/` holds the saved answers (30, 90 and 365 days as in section 6) and
 `day-count.json`: requests made per day, written before each request, last 7 days kept. A restart of Hass cannot reset it. A count file that
 cannot be read or written fails closed: the day is counted as used up (no request), the damaged file is kept as `day-count.bad`, and
-tomorrow starts clean. `requests.log` holds one row per request (time, service, hash, outcome, seconds) and stops growing at 1 MB.
+tomorrow starts clean. **One step, one lock:** checking the limit, adding one and writing the file happen together under an exclusive
+`flock` on `day-count.lock` in the same folder, and the request is made only after that reservation succeeded; so Hass, a second chat turn
+and the manual script can never both take the 60th request or overwrite each other's count. A lock held for more than 5 seconds, or a
+system without `fcntl`, means no request (fails closed). Each writer uses a temp file of its own name (pid, thread, time), never a shared one.
+
+**Spacing is shared across lookups.** Every chat lookup makes a new `CachedTransport`, so the chat gives all of them the one
+`hike_lookup.shared_limiter()` of the process: the 2.0 s / 1.1 s / 0.5 s gaps hold from one lookup to the next, requests to one server are made
+one at a time, and `nominatim_search` and `nominatim_reverse` are one server (`SERVICE_HOST`) with one 1.1 s gap. The default limiter of a bare
+`CachedTransport` is private to it (the tests and the manual script).
+ `requests.log` holds one row per request (time, service, hash, outcome, seconds) and stops growing at 1 MB.
 
 **Operator steps** (nothing here was run against the real services by the card; CI and the tests use the recorded answers only):
 
@@ -188,6 +197,8 @@ tomorrow starts clean. `requests.log` holds one row per request (time, service, 
 * The editor's draft lists the route's `elevation` and `elevationLabel` under the same words (`hass/voice.py` line 299 words both as
   "the elevation"), so the draft shows "the elevation: Elevation gain" and not the climb. The measured climb is in the line beside the draft.
   (A change to that wording, not made here: it is not this card's file.)
+* Spacing is kept inside one process. The manual script is a second process: it shares the day count (locked) but not the spacing, so do not run it
+  while Hass is making a lookup (it is run once, by the operator).
 * The map names in the question are the map's, shown in the usual Mike's-words marks. A saved offer holds them as plain text in the private state folder.
 * HIKE-LOOKUP-3 (connectors, official-length cross-check, lollipops) is still open; a "not sure" trail still gets no number.
 

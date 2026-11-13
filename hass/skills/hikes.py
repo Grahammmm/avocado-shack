@@ -701,7 +701,8 @@ def _make_transport(cfg, ctx):
     folder = Path(cfg["folder"])
     extra = {k: cfg[k] for k in ("sleep", "clock") if k in cfg}
     return hl.CachedTransport(cfg.get("fetch") or hike_fetch.LiveFetch(cfg["contact"]), folder / "saved", now=lambda: now,
-                              log=hl.file_log(folder), max_seconds=LOOKUP_SECONDS, **extra)
+                              log=hl.file_log(folder), max_seconds=LOOKUP_SECONDS, limiter=hl.shared_limiter(extra.get("clock")),
+                              **extra)  # one limiter for the whole process: a new transport per lookup must not forget the last request
 
 
 def _look_up(cfg, title, ctx):
