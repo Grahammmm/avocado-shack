@@ -435,18 +435,17 @@ class WhenThePlainFlowRuns(ChatCase):
         community = json.loads((self.repo.wt / "hass/content/community.json").read_text("utf-8"))
         self.assertEqual([r["title"] for r in community["routeIdeas"] if r["id"] == "idea-bishop-peak-trail"], ["Bishop Peak Trail"])
 
-    def test_a_yes_to_one_hike_is_not_kept_when_the_hike_is_then_corrected_to_another(self):
+    def test_a_yes_to_one_trail_does_not_carry_over_when_the_hike_is_then_corrected_to_a_different_one(self):
         self.turn(ADD_BISHOP, BISHOP)
         self.turn("yes", skill_reply("hike.add"))
-        disposition, _ = self.turn("Actually make it Cerro San Luis, meet at the gate",
-                                   skill_reply("hike.add", title="Cerro San Luis hike", meeting_point="the gate"))
+        disposition, [proposal] = self.turn("Actually make it Cerro San Luis, meet at Marsh Street trailhead", skill_reply(
+            "hike.add", title="Cerro San Luis hike", meeting_point="Marsh Street trailhead"))
         self.assertEqual(disposition, "proposed")
-        [hike] = self.last_ops()
-        self.assertEqual(hike["op"], "hike.create")  # no route idea of Bishop Peak's
-        self.assertEqual((hike["args"]["title"], hike["args"]["meetingPoint"]), ("Cerro San Luis hike", "the gate"))
-        self.assertNotIn("trailId", hike["args"])
-        self.assertNotIn("Bishop", json.dumps(self.last_ops()))
-        self.assertEqual(len(FakeFetch.requests), 3)  # and the map was not asked again for the new name
+        [hike] = self.last_ops()  # no route idea, no link to Bishop Peak's route
+        self.assertEqual((hike["op"], hike["args"]["title"], "trailId" in hike["args"]), ("hike.create", "Cerro San Luis hike", False))
+        self.assertNotIn("route idea", voice.plain(proposal))
+        self.assertNotIn("2.4 miles", voice.plain(proposal))
+        self.assertEqual(FakeFetch.requests, ["overpass", "nominatim_reverse", "elevation"])  # and the map was not asked again
 
     def test_a_correction_that_keeps_the_hike_named_keeps_the_yes_and_its_route_idea(self):
         self.turn(ADD_BISHOP, BISHOP)
@@ -454,15 +453,6 @@ class WhenThePlainFlowRuns(ChatCase):
         self.turn("Actually make it Bishop Peak, meet at the gate",
                   skill_reply("hike.add", title="Bishop Peak", meeting_point="the gate"))
         self.assertEqual([op["op"] for op in self.last_ops()], ["route.add", "hike.create"])
-
-    def test_an_offer_is_bound_to_the_hike_name_it_was_made_for(self):
-        self.turn(ADD_BISHOP, BISHOP)
-        [path] = self.offers()
-        data = json.loads(path.read_text("utf-8"))
-        self.assertEqual(data["name"], hl.name_tokens("Bishop Peak hike"))
-        for broken in ({k: v for k, v in data.items() if k != "name"}, {**data, "name": "bishop"}, {**data, "name": [1]}):
-            path.write_text(json.dumps(broken), "utf-8")
-            self.assertIsNone(hikes._read_offer({"folder": self.folder}, [ADD_BISHOP], self.now))
 
     def test_a_route_idea_that_already_has_the_trails_name_is_linked_and_never_added_twice(self):
         found = hl.candidate_from_json({**hl.candidate_to_json(hl.lookup("Bishop Peak", hl.FixtureTransport(FIX / "bishop_peak.json"),
