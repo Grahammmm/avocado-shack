@@ -233,6 +233,25 @@ class CachedTransport:
         tmp.write_text(json.dumps({"retrieved": day.isoformat(), "request": request, "body": body}, ensure_ascii=False), "utf-8")
         tmp.replace(self._path(key))
 
+    def _time_left(self):
+        """Seconds of the lookup's ``max_seconds`` still left, or None when there is no limit (or no lookup has begun)."""
+        if self.max_seconds is None or self.began is None:
+            return None
+        return self.max_seconds - (self.clock() - self.began)
+
+    def _too_slow(self, service, key, saved) -> Response:
+        self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "slow", "seconds": 0})
+        if saved is not None:
+            return Response(saved[0], saved[1], stale=True)
+        raise TransportError("slow", "the lookup took too long")  # the chat is waiting: stop asking after ``max_seconds`` in all
+
+    def _fetch(self, service, request, left):
+        """One raw request. A fetch function that says it takes a ``timeout`` (``accepts_timeout``, as ``hike_fetch.LiveFetch`` does) is
+        given the time left, so a request that starts just inside ``max_seconds`` cannot run on past it."""
+        if left is not None and getattr(self.fetch, "accepts_timeout", False):
+            return self.fetch(service, request, timeout=left)
+        return self.fetch(service, request)
+
     def get(self, service: str, request: dict) -> Response:
         key, today = request_key(service, request), self.now().date()
         saved = self._read(key)
@@ -240,11 +259,9 @@ class CachedTransport:
         if age_ok:
             self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "saved", "seconds": 0})
             return Response(saved[0], saved[1])
-        if self.max_seconds is not None and self.began is not None and self.clock() - self.began > self.max_seconds:
-            self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": "slow", "seconds": 0})
-            if saved is not None:
-                return Response(saved[0], saved[1], stale=True)
-            raise TransportError("slow", "the lookup took too long")  # the chat is waiting: stop asking after ``max_seconds`` in all
+        left = self._time_left()
+        if left is not None and left <= 0:
+            return self._too_slow(service, key, saved)
         try:
             over = self.used_lookup >= self.per_lookup or self.day_count(today) >= self.per_day
             if not over:
@@ -259,10 +276,13 @@ class CachedTransport:
         wait = MIN_INTERVAL_S[service] - (self.clock() - self.last_at.get(service, -1e9))
         if wait > 0:
             self.sleep(wait)
+            left = self._time_left()
+            if left is not None and left <= 0:  # the pause between two requests used up the rest of the time
+                return self._too_slow(service, key, saved)
         started = self.clock()
         self.used_lookup += 1
         try:
-            body = self.fetch(service, request)
+            body = self._fetch(service, request, left)
         except TransportError as exc:
             self.last_at[service] = self.clock()
             self.log({"at": self.now().isoformat(), "service": service, "key": key, "outcome": exc.kind,

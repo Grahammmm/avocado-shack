@@ -33,13 +33,20 @@ valid_contact = hl.valid_contact
 
 
 class LiveFetch:
+    accepts_timeout = True  # ``CachedTransport`` hands it the time left of the lookup's total limit (``timeout=``)
+
     def __init__(self, contact, opener=urllib.request.urlopen):
         if valid_contact(contact) is None:
             raise ValueError("a contact address (an e-mail address or an https link) is required for the User-Agent")
         self.agent = f"avocado-shack-hass-hike-lookup/0.1 (contact: {contact})"
         self.opener = opener
 
-    def __call__(self, service, request):
+    def __call__(self, service, request, timeout=None):
+        """One request. ``timeout`` (seconds, optional) is what is left of the whole lookup's limit: the request waits that long at
+        most, never more than ``TIMEOUT_S``, and is not made at all when nothing is left."""
+        wait = TIMEOUT_S if timeout is None else min(TIMEOUT_S, timeout)
+        if wait <= 0:
+            raise hl.TransportError("slow", "no time left")
         url = ENDPOINTS[service]
         data = None
         if service == "overpass":
@@ -53,7 +60,7 @@ class LiveFetch:
             url += "?" + urllib.parse.urlencode({**request, "format": "jsonv2"})
         req = urllib.request.Request(url, data=data, headers={"User-Agent": self.agent})
         try:
-            with self.opener(req, timeout=TIMEOUT_S) as resp:
+            with self.opener(req, timeout=wait) as resp:
                 raw = resp.read(MAX_BODY_BYTES + 1)
             if len(raw) > MAX_BODY_BYTES:
                 raise hl.TransportError("bad", "answer too large")

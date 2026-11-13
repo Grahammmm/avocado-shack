@@ -9,6 +9,7 @@ Run: python3 -m unittest hass.tests.test_hike_lookup_chat -v
 import dataclasses
 import json
 import os
+import shutil
 import socket
 import tempfile
 import unittest
@@ -19,7 +20,7 @@ from unittest import mock
 
 from hass import conversation, hike_fetch, hike_lookup as hl, voice
 from hass.skills import dispatch, hikes
-from hass.tests.test_conversation import CHAT, SETTINGS
+from hass.tests.test_conversation import CHAT, SETTINGS, T0 as NOW
 from hass.tests.test_skill_dispatch import LIVE1, SATURDAY, SkillCase, registry_of, skill_reply
 
 FIX = Path(__file__).resolve().parent / "fixtures" / "hike_lookup"
@@ -376,6 +377,53 @@ class WhenThePlainFlowRuns(ChatCase):
         self.assertEqual((result.status, result.candidates[0].place, result.candidates[0].gain_ft), ("one", "", None))
         self.assertIn("no climbing figure I trust", voice.plain(result.reply))
 
+    def test_the_time_left_is_given_to_a_fetch_that_takes_it_and_not_to_one_that_does_not(self):
+        seen = []
+
+        class Takes:
+            accepts_timeout = True
+
+            def __call__(self, service, request, timeout=None):
+                seen.append(timeout)
+                return {}
+        now = [0.0]
+        transport = hl.CachedTransport(Takes(), self.folder / "t1", max_seconds=90.0, clock=lambda: now[0], sleep=lambda s: None)
+        transport.begin_lookup()
+        now[0] = 25.0
+        transport.get("overpass", {"query": "a"})
+        self.assertEqual(seen, [65.0])
+        now[0] = 90.5  # nothing left: not even started
+        with self.assertRaises(hl.TransportError) as caught:
+            transport.get("nominatim_reverse", {"lat": 1})
+        self.assertEqual((caught.exception.kind, seen), ("slow", [65.0]))
+        plain = []
+        other = hl.CachedTransport(lambda service, request: plain.append((service, request)) or {}, self.folder / "t2",
+                                   max_seconds=90.0, clock=lambda: now[0], sleep=lambda s: None)
+        other.begin_lookup()
+        other.get("overpass", {"query": "a"})
+        self.assertEqual(len(plain), 1)
+
+    def test_the_pause_between_two_requests_cannot_use_up_the_time_and_still_start_one(self):
+        now, seen = [0.0], []
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        class Takes:
+            accepts_timeout = True
+
+            def __call__(self, service, request, timeout=None):
+                seen.append(timeout)
+                return {}
+        transport = hl.CachedTransport(Takes(), self.folder / "t3", max_seconds=90.0, clock=lambda: now[0], sleep=sleep)
+        transport.begin_lookup()
+        transport.get("overpass", {"query": "a"})
+        now[0] = 89.9
+        transport.last_at["overpass"] = 89.9  # the next one must wait MIN_INTERVAL_S: past the limit
+        with self.assertRaises(hl.TransportError) as caught:
+            transport.get("overpass", {"query": "b"})
+        self.assertEqual((caught.exception.kind, len(seen)), ("slow", 1))
+
     def test_a_confirmed_trail_with_the_hikes_own_name_is_still_one_route_idea_and_one_hike(self):
         self.turn("add a hike on Bishop Peak Trail Saturday at 9am", skill_reply("hike.add", title="Bishop Peak Trail", day=SATURDAY, clock="09:00"))
         self.turn("yes", skill_reply("hike.add"))
@@ -384,6 +432,35 @@ class WhenThePlainFlowRuns(ChatCase):
         self.assertEqual(self.say(f"yes {self.drafts()[-1]['code']}"), "approved")
         community = json.loads((self.repo.wt / "hass/content/community.json").read_text("utf-8"))
         self.assertEqual([r["title"] for r in community["routeIdeas"] if r["id"] == "idea-bishop-peak-trail"], ["Bishop Peak Trail"])
+
+    def test_a_yes_to_one_hike_is_not_kept_when_the_hike_is_then_corrected_to_another(self):
+        self.turn(ADD_BISHOP, BISHOP)
+        self.turn("yes", skill_reply("hike.add"))
+        disposition, _ = self.turn("Actually make it Cerro San Luis, meet at the gate",
+                                   skill_reply("hike.add", title="Cerro San Luis hike", meeting_point="the gate"))
+        self.assertEqual(disposition, "proposed")
+        [hike] = self.last_ops()
+        self.assertEqual(hike["op"], "hike.create")  # no route idea of Bishop Peak's
+        self.assertEqual((hike["args"]["title"], hike["args"]["meetingPoint"]), ("Cerro San Luis hike", "the gate"))
+        self.assertNotIn("trailId", hike["args"])
+        self.assertNotIn("Bishop", json.dumps(self.last_ops()))
+        self.assertEqual(len(FakeFetch.requests), 3)  # and the map was not asked again for the new name
+
+    def test_a_correction_that_keeps_the_hike_named_keeps_the_yes_and_its_route_idea(self):
+        self.turn(ADD_BISHOP, BISHOP)
+        self.turn("yes", skill_reply("hike.add"))
+        self.turn("Actually make it Bishop Peak, meet at the gate",
+                  skill_reply("hike.add", title="Bishop Peak", meeting_point="the gate"))
+        self.assertEqual([op["op"] for op in self.last_ops()], ["route.add", "hike.create"])
+
+    def test_an_offer_is_bound_to_the_hike_name_it_was_made_for(self):
+        self.turn(ADD_BISHOP, BISHOP)
+        [path] = self.offers()
+        data = json.loads(path.read_text("utf-8"))
+        self.assertEqual(data["name"], hl.name_tokens("Bishop Peak hike"))
+        for broken in ({k: v for k, v in data.items() if k != "name"}, {**data, "name": "bishop"}, {**data, "name": [1]}):
+            path.write_text(json.dumps(broken), "utf-8")
+            self.assertIsNone(hikes._read_offer({"folder": self.folder}, [ADD_BISHOP], self.now))
 
     def test_a_route_idea_that_already_has_the_trails_name_is_linked_and_never_added_twice(self):
         found = hl.candidate_from_json({**hl.candidate_to_json(hl.lookup("Bishop Peak", hl.FixtureTransport(FIX / "bishop_peak.json"),
@@ -614,6 +691,29 @@ class LiveClient(NoNetwork):
             return self.Resp(body)
 
         return hike_fetch.LiveFetch(contact, opener=opener)
+
+    def test_a_request_that_starts_inside_the_ninety_seconds_is_not_let_run_past_them(self):
+        now, timeouts = [0.0], []
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder, True)
+
+        def opener(req, timeout=None):  # a server that answers only after 100 seconds, on a clock that counts only what is waited
+            timeouts.append(timeout)
+            if "overpass" in req.full_url:
+                now[0] += 80
+                return LiveClient.Resp(b'{"elements": []}')
+            now[0] += min(timeout, 100)
+            raise TimeoutError()
+        cfg = {"contact": CONTACT, "folder": folder, "fetch": hike_fetch.LiveFetch(CONTACT, opener=opener),
+               "clock": lambda: now[0], "sleep": lambda s: None}
+        ctx = SimpleNamespace(hike_lookup=cfg, now=NOW, texts=[ADD_BISHOP], multi_call=False, content=SimpleNamespace(
+            community={"routeIdeas": [], "events": []}), today=NOW.date())
+        result = hikes._look_up(cfg, "Bishop Peak hike", ctx)
+        self.assertEqual((result.status, result.failure, result.candidates), ("unavailable", "slow", ()))  # nothing offered: the plain flow
+        self.assertEqual(timeouts[0], hike_fetch.TIMEOUT_S)  # the first request has the usual limit (90 s left, more than 60)
+        self.assertEqual(timeouts[1], 10)  # the second starts at 80 s: it is given the 10 seconds left, not another 60
+        self.assertLessEqual(now[0], hikes.LOOKUP_SECONDS)  # the chat was never kept waiting past the 90 seconds
+        self.assertEqual(len(timeouts), 2)  # and no third request was started
 
     def test_no_contact_no_client_and_none_is_built_in(self):
         for bad in (None, "", "nobody", "http://insecure.example.com", "a b@example.com"):

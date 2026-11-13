@@ -639,16 +639,19 @@ def _read_offer(cfg, texts, now):
         data = json.loads(_offer_path(cfg, texts).read_text("utf-8"))
         at = datetime.fromisoformat(data["at"])
         cands = [hl.candidate_from_json(c) for c in data["candidates"]]
+        name = data["name"]  # the hike name (its words) the lookup was made for: a yes is only ever to THAT hike
+        if not isinstance(name, list) or not all(isinstance(w, str) for w in name):
+            return None
         if data["v"] != 1 or data["status"] not in ("offered", "none") or not isinstance(data["reply"], str) \
                 or not isinstance(data["reasks"], int) or isinstance(data["reasks"], bool) or None in cands or at.tzinfo is None \
                 or not 0 <= (now - at).total_seconds() <= OFFER_TTL.total_seconds() or (data["status"] == "offered") != bool(cands):
             return None
-        return {"status": data["status"], "reply": data["reply"], "reasks": data["reasks"], "candidates": cands}
+        return {"status": data["status"], "reply": data["reply"], "reasks": data["reasks"], "candidates": cands, "name": name}
     except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return None
 
 
-def _write_offer(cfg, texts, now, *, reply="", candidates=(), reasks=0):
+def _write_offer(cfg, texts, now, title, *, reply="", candidates=(), reasks=0):
     """Save the offer (or, with no candidates, the fact that nothing is offered at these texts) privately. Erases saved offers older
     than OFFER_KEEP while it is there. A failure to write is not an error: the plain flow runs."""
     path = _offer_path(cfg, texts)
@@ -659,7 +662,7 @@ def _write_offer(cfg, texts, now, *, reply="", candidates=(), reasks=0):
                 old.unlink(missing_ok=True)
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps({"v": 1, "at": now.isoformat(), "status": "offered" if candidates else "none", "reply": reply,
-                                   "reasks": reasks, "candidates": [hl.candidate_to_json(c) for c in candidates]},
+                                   "reasks": reasks, "name": hl.name_tokens(title), "candidates": [hl.candidate_to_json(c) for c in candidates]},
                                   ensure_ascii=False), "utf-8")
         tmp.replace(path)
     except OSError:
@@ -669,7 +672,7 @@ def _write_offer(cfg, texts, now, *, reply="", candidates=(), reasks=0):
 
 def _state(cfg, texts, now):
     """Where the identity question stands, from the saved offers and Mike's texts: ``("none",)`` (no offer yet), ``("pending", offer)``
-    (the offer was made at exactly these texts), ``("confirmed", candidate)``, ``("declined",)`` (no, something else, nothing was
+    (the offer was made at exactly these texts), ``("confirmed", candidate, offer)``, ``("declined",)`` (no, something else, nothing was
     offered, or a trail the map is not sure of) or ``("reask", offer)`` (a bare yes to several trails: asked once more)."""
     for k in range(1, len(texts) + 1):
         offer = _read_offer(cfg, texts[:k], now)
@@ -682,7 +685,7 @@ def _state(cfg, texts, now):
         kind, index = hl.read_answer(texts[k], len(offer["candidates"]))
         if kind == "pick":
             found = offer["candidates"][index]
-            return ("confirmed", found) if found.sure else ("declined",)
+            return ("confirmed", found, offer) if found.sure else ("declined",)
         if kind == "yes":
             if _read_offer(cfg, texts[:k + 1], now) is not None:
                 continue
@@ -751,11 +754,13 @@ def question(slot_name, slots, ctx):
     cfg, texts = opened
     now = ctx.now
     state = _state(cfg, texts, now)
+    if state[0] in ("pending", "reask") and state[1]["name"] != hl.name_tokens(slots["title"]):
+        return None  # an offer made for another hike name is never asked again for this one
     if state[0] == "pending":
         return state[1]["reply"] or None
     if state[0] == "reask":
         offer = state[1]
-        if offer["reasks"] >= MAX_REASKS or not _write_offer(cfg, texts, now, reply=offer["reply"], candidates=offer["candidates"],
+        if offer["reasks"] >= MAX_REASKS or not _write_offer(cfg, texts, now, slots["title"], reply=offer["reply"], candidates=offer["candidates"],
                                                               reasks=offer["reasks"] + 1):
             return None
         return offer["reply"]
@@ -763,10 +768,10 @@ def question(slot_name, slots, ctx):
         return None
     result = _look_up(cfg, slots["title"], ctx)
     if result is not None and result.status in ("one", "several") and result.candidates:
-        if _write_offer(cfg, texts, now, reply=result.reply, candidates=result.candidates):
+        if _write_offer(cfg, texts, now, slots["title"], reply=result.reply, candidates=result.candidates):
             return result.reply
         return None
-    _write_offer(cfg, texts, now)  # nothing to offer: said once, so a later turn does not ask the map again
+    _write_offer(cfg, texts, now, slots["title"])  # nothing to offer: said once, so a later turn does not ask the map again
     return None
 
 
@@ -776,7 +781,10 @@ def _confirmed(slots, ctx):
     if opened is None:
         return None
     state = _state(opened[0], opened[1], ctx.now)
-    return state[1] if state[0] == "confirmed" else None
+    if state[0] != "confirmed":
+        return None
+    # the yes was to the hike named when the map was asked: a later correction to another hike ("Actually make it Cerro San Luis") is not it
+    return state[1] if state[2]["name"] == hl.name_tokens(slots["title"]) else None
 
 
 def lookup_lines(found) -> list:
