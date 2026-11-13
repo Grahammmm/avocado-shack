@@ -21,7 +21,10 @@ def load_skills() -> Registry:
     registry = Registry()
     for info in pkgutil.iter_modules(__path__):
         module = importlib.import_module(f"{__name__}.{info.name}")
-        for skill in getattr(module, "SKILLS", ()):
+        exported = getattr(module, "SKILLS", ())
+        if len({skill.pack for skill in exported}) > 1:
+            raise ValueError(f"{module.__name__}: SKILLS must belong to one pack")
+        for skill in exported:
             if skill.name in registry.skills:
                 raise ValueError(f"duplicate skill name {skill.name!r}")
             registry.skills[skill.name] = skill
