@@ -678,7 +678,9 @@ class Dispatcher:
         earlier = _earlier(texts, msg)
         hooked = self._skill_notes(skill, slots, now, texts)  # the skill's own lines: what it said and did, and what to know before yes
         note = self._note_lines([(hooked, defaults)], left_off)
-        disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        conv._skill_ref = f"{skill.name}@{skill.version}"  # AVB-10: the audit line names the skill that planned this draft
+        try: disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        finally: conv._skill_ref = None
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
         live = conv.requests.get(owner, now)
@@ -730,7 +732,7 @@ class Dispatcher:
             return self._read_only_calls(msg, now, result["calls"], req, texts, attachments)
         ctx = self._ctx(now, texts)
         ctx.multi_call = len(result["calls"]) > 1
-        ops, left, waiting, parts, stopped = [], [], [], [], []
+        ops, left, waiting, parts, stopped, used = [], [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
             if skill is None or skill.approval == "none" or skill.name == "backlog.log":
@@ -760,6 +762,7 @@ class Dispatcher:
                     stopped.append((said, reason if reason in BACKLOG_REASONS else None))
                 continue
             ops += planned if isinstance(planned, list) else []
+            used.append(f"{skill.name}@{skill.version}")  # AVB-10: only the skills that planned part of this draft
             parts.append((self._skill_notes(skill, slots, now, texts), shown))  # what each complete call said, set and warns of
             left += filled.left_off
         if len(ops) > MAX_OPS:
@@ -778,8 +781,10 @@ class Dispatcher:
                 return "not-drafted"
             return refused
         note = self._note_lines(parts, left)
-        disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
-                                  prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        conv._skill_ref = "+".join(dict.fromkeys(used)) or None  # AVB-10
+        try: disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
+                                       prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        finally: conv._skill_ref = None
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if waiting:  # the shelf-check question holds the open request: the incomplete calls wait on it, not lost
