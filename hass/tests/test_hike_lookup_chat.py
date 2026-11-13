@@ -387,6 +387,18 @@ class WhenThePlainFlowRuns(ChatCase):
         community = json.loads((self.repo.wt / "hass/content/community.json").read_text("utf-8"))
         self.assertEqual([r["title"] for r in community["routeIdeas"] if r["id"] == "idea-bishop-peak-trail"], ["Bishop Peak Trail"])
 
+    def test_a_yes_to_one_trail_does_not_carry_over_when_the_hike_is_then_corrected_to_a_different_one(self):
+        self.turn(ADD_BISHOP, BISHOP)
+        self.turn("yes", skill_reply("hike.add"))
+        disposition, [proposal] = self.turn("Actually make it Cerro San Luis, meet at Marsh Street trailhead", skill_reply(
+            "hike.add", title="Cerro San Luis hike", meeting_point="Marsh Street trailhead"))
+        self.assertEqual(disposition, "proposed")
+        [hike] = self.last_ops()  # no route idea, no link to Bishop Peak's route
+        self.assertEqual((hike["op"], hike["args"]["title"], "trailId" in hike["args"]), ("hike.create", "Cerro San Luis hike", False))
+        self.assertNotIn("route idea", voice.plain(proposal))
+        self.assertNotIn("2.4 miles", voice.plain(proposal))
+        self.assertEqual(FakeFetch.requests, ["overpass", "nominatim_reverse", "elevation"])  # and the map was not asked again
+
     def test_a_route_idea_that_already_has_the_trails_name_is_linked_and_never_added_twice(self):
         found = hl.candidate_from_json({**hl.candidate_to_json(hl.lookup("Bishop Peak", hl.FixtureTransport(FIX / "bishop_peak.json"),
                                                                          today=date(2026, 11, 9)).candidates[0])})

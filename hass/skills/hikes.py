@@ -777,7 +777,12 @@ def _confirmed(slots, ctx):
     if opened is None:
         return None
     state = _state(opened[0], opened[1], ctx.now)
-    return state[1] if state[0] == "confirmed" else None
+    if state[0] != "confirmed":
+        return None
+    # the yes was to a trail found for the hike's name at that time: a later correction to a different hike (a changed title) must
+    # not carry that trail's route and measured facts along. Same similarity the lookup itself needed to offer the trail.
+    tokens = hl.name_tokens(slots["title"])
+    return state[1] if tokens and hl.name_score(tokens, state[1].name) >= hl.MATCH_MIN else None
 
 
 def lookup_lines(found) -> list:

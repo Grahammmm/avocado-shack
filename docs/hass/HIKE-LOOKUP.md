@@ -168,6 +168,10 @@ read from the next text of the same request (`hikes._state`), so the plan and th
 the same hash. An offer is used for 2 hours (the open request's own limit); the next offer written after 24 hours erases it. A damaged or edited
 file is ignored. The sentence that asks is asked once; a bare yes to several trails is asked one more time.
 
+A yes belongs to the hike it was given for: when the hike is later corrected to a different name ("Actually make it Cerro San Luis"), the
+title no longer matches the confirmed trail (`hl.name_score` below `MATCH_MIN`, the test the lookup itself used) and the plan has no route idea
+and no `trailId` from the map; the hike goes ahead plain.
+
 **Limits that are now on disk.** `<state>/hike_lookup/saved/` holds the saved answers (30, 90 and 365 days as in section 6) and
 `day-count.json`: requests made per day, written before each request, last 7 days kept. A restart of Hass cannot reset it. A count file that
 cannot be read or written fails closed: the day is counted as used up (no request), the damaged file is kept as `day-count.bad`, and
