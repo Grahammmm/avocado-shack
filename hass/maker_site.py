@@ -22,9 +22,11 @@ What may be taken from the page (HASS-SEC-3 H2 / L2; each rule tested in hass/te
 * never a page sentence. Three facts only, each from a page sentence that passes every rule (``source_ok``): what the maker
   makes ("<Maker> makes <things>."), since which year ("<Maker> started in <year>.") and the town, only when it is the town the
   owner already confirmed ("<Maker> is based in <town>."); at most ``MAX_SENTENCES`` of them, written by code in the house
-  voice. The "things" are plain lower-case words cut before any place, purpose or manner ("in", "for", "with", ...);
-  a founding sentence that goes on after the year with anything but who or with what, and a "makes" sentence with a
-  negation or a turn, give no fact (AVO-FIX-559);
+  voice. Each fact comes only from a page sentence that is WHOLLY one closed shape, every word accounted for: the things
+  are plain product words (``THING_WORDS``), then at most two literal workplace phrases ("in small copper pots", "in a
+  shared kitchen", "by hand") and the confirmed town; after a founding year only who started it and with what, from
+  closed word lists. Nothing is cut off or skipped, so a qualifier ("in a fictional story", "in a dream", "and the date is
+  fictional"), a negation or a turn leaves that fact out and Mike is asked instead (AVO-FIX-559);
 * a page sentence is left out whole when it has a number (a year is fine), ``!``, ``?``, a quotation, a link or an address,
   a hype word, anything the live gate calls a claim (``live_policy._protected``), a claim, contact, price, third-party or
   instruction word (``DROP_WORDS``), a capitalised name other than the maker and the confirmed town, first-person talk past
@@ -698,58 +700,97 @@ def _exact_things(text: str) -> bool:
     return _things(plain) == plain
 
 
-# HASS-559-FIX (M, Sol RETURN t_2c550041): the founding year and the town are taken only from a sentence that says it of the
-# maker, affirmatively, in one of the shapes below; a negation, a turn ("but", "until") or any other clause leaves it out.
+# HASS-559-FIX (M, Sol RETURN t_2c550041) and AVO-FIX-559 (Sol RETURN at 194f4e6): a fact is taken only from a page sentence
+# that says it of the maker, affirmatively, and is WHOLLY one of the closed shapes below. Every word after the verb or the
+# year must be accounted for by a closed word list; nothing is cut off or skipped. So a hedge, a reversal, a purpose or a
+# hypothetical ("in a fictional story", "in a dream", "and the date is fictional", "in fiction", "or so the story goes")
+# leaves that fact out and Mike is asked instead: it is never stripped down into "<Maker> makes jam." or "<Maker> started
+# in <year>." The words in NOT_SAID leave the whole sentence out of every fact, a second, independent guard.
 NOT_SAID = frozenset(claims.NEGATORS) | frozenset("""
 but until except formerly former previously once used moved closed close closing sold left longer anymore ago
+fiction fictional fictitious imaginary imagined imagine dream dreams dreamed dreamt pretend pretended hypothetical
+hypothetically story stories tale tales legend legends legendary myth myths mythical rumor rumors rumour rumours rumored
+rumoured supposedly allegedly alleged reportedly apparently unverified unconfirmed uncertain unclear unknown maybe perhaps
+possibly probably might may could would will someday soon plan plans planned planning hope hopes hoped wish wishes claim
+claims claimed say says said believed thought joke joking satire parody fake game novel film movie roughly approximately
+circa around about estimated guess if unless
 """.split())
 _FOUNDED = r"(?:started|founded|opened|established|launched|began)"
 _ING = "|".join(sorted({(b[:-1] if b.endswith("e") else b) + "ing" for b in MAKES}, key=len, reverse=True))
 _YEAR = r"((?:18|19|20)\d{2})"
-_PLACE_WORDS = frozenset({"a", "an", "the"})
 
 
 def _affirmative(s: str) -> bool:
     return not any(w.strip(",").lower() in NOT_SAID for w in s.split())
 
 
-# AVO-FIX-559: after the year a founding sentence may only go on with who started it or with what ("by two sisters", "with
-# one pot and a stack of family recipes"), in plain lower-case words. Any other ending ("and shut down in 2005", "or so the
-# story goes", "according to a rumor", "as a joke", "to help ...") leaves the year out: a hedge, a reversal or a purpose is
-# never turned into "<Maker> started in <year>." An "and" inside it must lead to another person or thing ("and a stack of
-# ..."), never to a new clause ("and went out of business").
-_TAIL_TURNS = frozenset("""
-or but then after before later until till who whom whose which that when while where so because though although according
-as to since if unless once
-""".split())
-_AND_NEXT = frozenset("a an the one two three four five six some their his her its".split()) | THING_WORDS
-_TAIL_WORDS = 8
+def _alt(words) -> str:
+    return "(?:" + "|".join(sorted(map(re.escape, words), key=len, reverse=True)) + ")"
 
 
-def _closed_tail(tail: str) -> bool:
-    words = tail.strip().removesuffix(".").split()
-    if not words:
-        return tail.strip() == "."
-    if not tail.strip().endswith(".") or words[0] not in ("by", "with") or len(words) - 1 > _TAIL_WORDS or len(words) < 2:
-        return False
-    for i, word in enumerate(words[1:], 1):
-        if not re.fullmatch(r"[a-z]+", word) or word in _TAIL_TURNS or word in NOT_SAID:
-            return False
-        if word == "and" and (i + 1 == len(words) or not _thing_word(words[i + 1]) and words[i + 1] not in _AND_NEXT):
-            return False
-    return True
+# The closed word lists. Only lower-case words: a capitalised word other than the maker and the confirmed town never gets
+# this far (``source_ok``). None of them is a claim, hype or DROP word (subtracted, and tested).
+_DET = frozenset("a an the one two three four five six her his their its".split())
+_PEOPLE = frozenset("""
+sister sisters brother brothers sibling siblings friend friends couple family baker bakers cook cooks chef chefs farmer
+farmers grower growers beekeeper beekeepers neighbor neighbors neighbour neighbours mother mom father dad son sons daughter
+daughters husband wife partner partners grandmother grandma grandfather grandpa aunt uncle cousin cousins parents
+""".split()) - DROP_WORDS - NOT_SAID
+_STARTER = frozenset("""
+pot pots kettle kettles stove stoves oven ovens kitchen kitchens recipe recipes stack box boxes crate crates cart table
+stand garden tree trees hive hives jar jars pan pans
+""".split()) - DROP_WORDS - NOT_SAID
+_KIND = frozenset("""
+small little big large old shared commercial home family community copper cast-iron wood wood-fired stone clay steel oak
+back
+""".split()) - DROP_WORDS - NOT_SAID
+_PLACE = frozenset("""
+kitchen kitchens pot pots kettle kettles batch batches oven ovens bakery farm farms orchard orchards garden gardens barn
+shed roastery creamery smokehouse dairy cellar brewery winery cidery greenhouse greenhouses field fields grove groves vat
+vats crock crocks barrel barrels smoker smokers workshop garage hillside hillsides market markets
+""".split()) - DROP_WORDS - NOT_SAID
+_THING_FORMS = frozenset(f for w in THING_WORDS for f in (w, w + "s", w + "es", w[:-1] + "ies" if w.endswith("y") else w))
+# who started it: "a baker", "two sisters", "a baker and her son"
+_WHO = rf"(?:{_alt(_DET)}\s+)?{_alt(_PEOPLE)}"
+# with what: "one pot", "a small kitchen", "a stack of family recipes", "one pot of fruit"
+_WITH = (rf"{_alt(_DET)}\s+(?:{_alt(_KIND)}\s+){{0,2}}{_alt(_STARTER)}"
+         rf"(?:\s+of\s+(?:{_alt(_KIND)}\s+){{0,2}}(?:{_alt(_STARTER)}|{_alt(_THING_FORMS)}))?")
+_FOUNDING_TAIL = re.compile(rf"(?:\s+by\s+{_WHO}(?:\s+and\s+{_WHO})?)?(?:\s+with\s+{_WITH}(?:\s+and\s+{_WITH})?)?\.")
+# where and when it is made: "in small copper pots", "in a shared kitchen", "on a hillside", "by hand", "at dawn", "by the sea"
+_WHERE = (r"(?:by\s+hand|at\s+dawn|(?:each|every)\s+(?:morning|day|week|season|summer|fall|autumn|winter|spring)"
+          r"|by\s+the\s+(?:sea|coast|bay|harbor|harbour|pier)"
+          rf"|(?:in|at|on)\s+(?:{_alt(_DET)}\s+)?(?:{_alt(_KIND)}\s+){{0,3}}{_alt(_PLACE)})")
+
+
+def _made(rest: str, town: str):
+    """(things, in_town) when ``rest`` (the words after the verb, to the full stop) is WHOLLY: plain things (may be empty),
+    then at most two ``_WHERE`` phrases, then optionally "in <the confirmed town>"; None for anything else."""
+    rest = rest.strip()
+    if not rest.endswith(".") or rest.endswith(".."):
+        return None
+    words = rest[:-1].split()
+    at = r"\s+in\s+(?i:" + re.escape(" ".join(town.split())) + r")" if town and town.strip() else None
+    for cut in range(len(words), -1, -1):
+        things, tail = " ".join(words[:cut]), " " + " ".join(words[cut:]) if words[cut:] else ""
+        if things and not _exact_things(things):
+            continue
+        if re.fullmatch(rf"(?:\s+{_WHERE}){{0,2}}", tail):
+            return things, False
+        if at and re.fullmatch(rf"(?:\s+{_WHERE}){{0,2}}{at}", tail):
+            return things, True
+    return None
 
 
 def _since(s: str, name: str) -> int:
-    """The year the maker started, when ``s`` says so of the maker and says nothing more than who or with what: "<Name>
-    (was) founded in 1998 (by two sisters).", "We started <Name> in 2019 (with one pot).", "<Name> has been making jam since
-    2010."; 0 otherwise."""
+    """The year the maker started, when ``s`` WHOLLY says so of the maker and says nothing more than who (``_WHO``) or with
+    what (``_WITH``): "<Name> (was) founded in 1998 (by two sisters).", "We started <Name> in 2019 (with one pot).",
+    "<Name> has been making jam since 2010."; 0 otherwise."""
     if not _affirmative(s):
         return 0
     who = r"(?:" + _name_re(name) + r"|We)"
     for shape in (rf"^{who}\s+(?:was\s+|were\s+)?{_FOUNDED}\s+in\s+{_YEAR}(\s.*|\.)$",
                   rf"^We\s+{_FOUNDED}\s+{_name_re(name)}\s+in\s+{_YEAR}(\s.*|\.)$"):
-        if (m := re.match(shape, s, re.IGNORECASE)) and _closed_tail(m.group(2)):
+        if (m := re.match(shape, s, re.IGNORECASE)) and _FOUNDING_TAIL.fullmatch(m.group(2)):
             return int(m.group(1))
     m = re.match(rf"^{who}\s+(?:has|have)\s+been\s+(?:open|in\s+business|(?:{_ING})(?:\s+(.+?))?)\s+since\s+{_YEAR}\.$", s,
                  re.IGNORECASE)
@@ -759,33 +800,21 @@ def _since(s: str, name: str) -> int:
 
 
 def _based(s: str, name: str, town: str) -> bool:
-    """True when ``s`` says the maker is in the town he confirmed: "<Name> is based in <Town>." or "<Name> makes jam (in a
-    shared kitchen) in <Town>." (the town last, nothing about anyone else in between)."""
+    """True when ``s`` WHOLLY says the maker is in the town he confirmed: "<Name> is based in <Town>." or "<Name> makes jam
+    (in a shared kitchen) in <Town>." (``_made``: the town last, only plain things and workplace phrases before it)."""
     if not (town and _affirmative(s)):
         return False
-    who, at = r"(?:" + _name_re(name) + r"|We)", r"in\s+" + _name_re(town) + r"\.$"
-    if re.match(rf"^{who}\s+(?:is|are)\s+(?:based|located)\s+{at}", s, re.IGNORECASE):
+    who = r"(?:" + _name_re(name) + r"|We)"
+    if re.match(rf"^{who}\s+(?:is|are)\s+(?:based|located)\s+in\s+{_name_re(town)}\.$", s, re.IGNORECASE):
         return True
-    m = re.match(rf"^{who}\s+(?:also\s+|now\s+|still\s+)?(?:{_VERB})\s+(.*?)\s*{at}", s, re.IGNORECASE)
-    if not m:
-        return False
-    words = m.group(1).split()
-    things = words[:words.index("in")] if "in" in words else words
-    room = words[len(things):]
-    if things and not _exact_things(" ".join(things)):
-        return False
-    if room:  # one "in a/an/the <up to 3 plain words>" before the town, e.g. "in a shared kitchen"
-        if not (2 <= len(room) - 1 <= 4 and room[0] == "in" and room[1].lower() in _PLACE_WORDS
-                and all(re.fullmatch(r"[a-z]+(?:-[a-z]+)*", w) and w not in CUT_WORDS and w not in NOT_SAID
-                        and w not in ("is", "are", "was", "were", "be", "been") for w in room[2:])):
-            return False
-    return True
+    m = re.match(rf"^{who}\s+(?:also\s+|now\s+|still\s+)?(?:{_VERB})\s+(.+)$", s, re.IGNORECASE)
+    return bool(m and (made := _made(m.group(1), town)) and made[1])
 
 
 def facts(name: str, page: dict, *, town: str = "", today=None) -> dict:
     """{"makes": (verb, things, source), "since": (year, source), "town": (town, source)} found on the page, each from the
-    first page sentence that passes ``source_ok`` and says that fact of the maker (``_since``, ``_based``); a fact not
-    found is missing."""
+    first page sentence that passes ``source_ok`` and WHOLLY says that fact of the maker (``_made``, ``_since``,
+    ``_based``); a fact not found is missing."""
     year_now = (today or date.today()).year
     head = r"^(?:" + _name_re(name) + r"|We)\s+(?:also\s+|now\s+|still\s+)?(" + _VERB + r")\s+(.+)$"
     found: dict = {}
@@ -796,9 +825,9 @@ def facts(name: str, page: dict, *, town: str = "", today=None) -> dict:
                 continue
             if "makes" not in found and _affirmative(s) and (m := re.match(head, s, re.IGNORECASE)):
                 verb = m.group(1).lower()
-                things = _things(m.group(2))
-                if things:
-                    found["makes"] = (_THIRD.get(verb, verb), things, sentence)
+                made = _made(m.group(2), town)
+                if made and made[0]:
+                    found["makes"] = (_THIRD.get(verb, verb), made[0], sentence)
             if "since" not in found and 1800 <= (year := _since(s, name)) <= year_now:
                 found["since"] = (year, sentence)
             if town and "town" not in found and _based(s, name, town):

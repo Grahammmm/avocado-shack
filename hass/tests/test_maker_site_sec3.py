@@ -194,7 +194,7 @@ class H2TheReturnAtF82c6eba(unittest.TestCase):
     def test_the_founding_year_is_taken_only_from_an_affirmative_clause_about_the_maker(self):
         jam = "Harbor Lane makes jam in small copper pots."
         cases = {
-            ("Harbor Lane makes jam in a kitchen that was founded in 1998.",): ["Harbor Lane makes jam."],
+            (jam, "Harbor Lane makes jam in a kitchen that was founded in 1998."): ["Harbor Lane makes jam."],
             (jam, "Harbor Lane was not founded in 1998 by a baker."): ["Harbor Lane makes jam."],
             (jam, "Harbor Lane never started in 1998 as a bakery."): ["Harbor Lane makes jam."],
             (jam, "Harbor Lane bought an old farm that was established in 1950."): ["Harbor Lane makes jam."],
@@ -294,6 +294,95 @@ class FoundingYearAndProductFromAClosedAffirmativeSentence(unittest.TestCase):
         maker = next(op for op in out.ops if op["op"] == "maker.add")
         self.assertEqual(maker["args"]["story"], "Harbor Lane makes jam.")
         self.assertNotIn("1998", "\n".join(out.say))
+
+
+class QualifiedSourceFactsAreLeftOut(unittest.TestCase):
+    """AVO-FIX-559 (Sol RETURN at 194f4e6): a fact is taken only from a page sentence that is WHOLLY one closed shape. A
+    qualifier after the year, the product or before the town ("and the date is fictional", "in a fictional story", "in a
+    dream") is never stripped off to leave an affirmative "<Maker> started in 1998." / "makes jam." / "is based in <town>.":
+    that fact is left out and he is asked. Each case is checked twice: as shipped, and with the NOT_SAID word guard reduced to
+    the plain negators, so the closed grammar alone is shown to leave it out."""
+
+    JAM = "Harbor Lane makes jam in small copper pots."
+    QUALIFIED_FOUNDING = ("Harbor Lane was founded in 1998 by a baker and the date is fictional.",
+                          "Harbor Lane was founded in 1998 by a baker and the date remains unverified.",
+                          "Harbor Lane was founded in 1998 by a baker in fiction.",
+                          "Harbor Lane was founded in 1998 by a baker and the year is a guess.",
+                          "Harbor Lane was founded in 1998 by a baker and her son in a novel.",
+                          "Harbor Lane was founded in 1998 by a baker as legend has it.",
+                          "We started Harbor Lane in 2019 with one pot in a dream.",
+                          "Harbor Lane was founded in 1998 by a baker and a ghost.",
+                          "Harbor Lane was founded in 1998 by the sea.")
+    HYPOTHETICAL_MAKING = ("Harbor Lane makes jam in a fictional story.",
+                           "Harbor Lane makes jam in a dream.",
+                           "Harbor Lane makes jam in an imaginary kitchen.",
+                           "Harbor Lane makes jam in a game.",
+                           "Harbor Lane makes jam on paper.",
+                           "Harbor Lane makes jam in a kitchen that was founded in 1998.",
+                           "Harbor Lane makes jam in small copper pots in a novel.")
+    HYPOTHETICAL_TOWN = ("Harbor Lane cooks in a dream in Morro Bay.",
+                         "Harbor Lane cooks in a pretend kitchen in Morro Bay.",
+                         "Harbor Lane cooks in a story set in Morro Bay.",
+                         "Harbor Lane makes jam in a novel in Morro Bay.",
+                         "Harbor Lane cooks in a kitchen of the mind in Morro Bay.")
+
+    def story(self, *blocks):
+        out = ms.draft_story("Harbor Lane", page_of(*blocks), town="Morro Bay", today=DAY)
+        return out and out["sentences"]
+
+    def guards(self):
+        """As shipped, then with only the closed grammar standing (NOT_SAID reduced to the plain negators)."""
+        yield "shipped"
+        with mock.patch.object(ms, "NOT_SAID", frozenset(claims.NEGATORS)):
+            yield "grammar only"
+
+    def test_a_qualified_founding_gives_no_year(self):
+        for guard in self.guards():
+            for sentence in self.QUALIFIED_FOUNDING:
+                with self.subTest(guard=guard, sentence=sentence):
+                    self.assertEqual(ms._since(sentence, "Harbor Lane"), 0)
+                    self.assertEqual(self.story(self.JAM, sentence), ["Harbor Lane makes jam."])
+
+    def test_a_hypothetical_production_gives_no_product(self):
+        for guard in self.guards():
+            for sentence in self.HYPOTHETICAL_MAKING:
+                with self.subTest(guard=guard, sentence=sentence):
+                    self.assertNotIn("makes", ms.facts("Harbor Lane", page_of(sentence), town="Morro Bay", today=DAY))
+                    self.assertIsNone(self.story(sentence))  # nothing says what they make: he is asked instead
+
+    def test_a_hypothetical_place_gives_no_town(self):
+        for guard in self.guards():
+            for sentence in self.HYPOTHETICAL_TOWN:
+                with self.subTest(guard=guard, sentence=sentence):
+                    self.assertFalse(ms._based(sentence, "Harbor Lane", "Morro Bay"))
+                    self.assertEqual(self.story(self.JAM, sentence), ["Harbor Lane makes jam."])
+
+    def test_literal_workplaces_and_founders_still_give_the_facts(self):
+        cases = {
+            (self.JAM, "Harbor Lane was founded in 1998 by two sisters."): ["Harbor Lane makes jam.", "Harbor Lane started in 1998."],
+            (self.JAM, "Harbor Lane cooks in a shared kitchen in Morro Bay."):
+                ["Harbor Lane makes jam.", "Harbor Lane is based in Morro Bay."],
+            ("Harbor Lane bakes rye bread by hand in a wood oven in Morro Bay.",):
+                ["Harbor Lane bakes rye bread.", "Harbor Lane is based in Morro Bay."],
+            ("Harbor Lane makes jam in small batches in an old barn.",): ["Harbor Lane makes jam."],
+            ("Harbor Lane makes jam and relish every week.",): ["Harbor Lane makes jam and relish."],
+        }
+        for guard in self.guards():
+            for blocks, want in cases.items():
+                with self.subTest(guard=guard, blocks=blocks):
+                    self.assertEqual(self.story(*blocks), want)
+
+    def test_the_planner_drafts_only_the_grounded_facts(self):
+        cases = {(self.JAM, s): "Harbor Lane makes jam." for s in self.QUALIFIED_FOUNDING[:3] + self.HYPOTHETICAL_TOWN[:1]}
+        cases[(self.JAM, "Harbor Lane was founded in 1998 by two sisters.")] = "Harbor Lane makes jam. Harbor Lane started in 1998."
+        for blocks, want in cases.items():
+            with self.subTest(blocks=blocks):
+                out = ia.describe_add(dict(SLOTS), plan_ctx(lambda url, blocks=blocks: page_of(*blocks)))
+                self.assertEqual(next(op for op in out.ops if op["op"] == "maker.add")["args"]["story"], want)
+        with self.assertRaises(ia.Refusal) as caught:
+            ia.describe_add(dict(SLOTS), plan_ctx(lambda url: page_of(self.HYPOTHETICAL_MAKING[0])))
+        self.assertEqual(caught.exception.kind, "question")
+        self.assertIn("What should we say about Harbor Lane?", caught.exception.reply)
 
 
 def plan_ctx(reader, texts=None):
@@ -590,7 +679,7 @@ class InTheConversation(unittest.TestCase):
 
     def test_559fix_an_unrelated_or_negated_year_is_never_proposed_as_the_story(self):
         from hass.tests import test_item_add_dispatch as tid
-        cases = [["Harbor Lane makes jam in a kitchen that was founded in 1998."],
+        cases = [["Harbor Lane makes jam in small copper pots.", "Harbor Lane makes jam in a kitchen that was founded in 1998."],
                  ["Harbor Lane makes jam in small copper pots.", "Harbor Lane was not founded in 1998 by a baker."]]
         for blocks in cases:
             with self.subTest(blocks=blocks), mock.patch.object(ms, "fetch", self.recorded_fetch(page_of(*blocks))):
@@ -601,6 +690,38 @@ class InTheConversation(unittest.TestCase):
                 self.assertEqual(story, "Harbor Lane makes jam.")
                 self.assertNotIn("1998", "\n".join(replies))
                 self.chat.say("no")
+                ms._CACHE.clear()
+
+    def test_avo_fix_559_a_qualified_source_fact_is_never_proposed(self):
+        """Sol RETURN at 194f4e6, on the production path: the reviewer's sources, each against the real draft."""
+        from hass.tests import test_item_add_dispatch as tid
+        jam = "Harbor Lane makes jam in small copper pots."
+        cases = [([jam, "Harbor Lane was founded in 1998 by a baker and the date is fictional."], "Harbor Lane makes jam."),
+                 ([jam, "Harbor Lane was founded in 1998 by a baker and the date remains unverified."], "Harbor Lane makes jam."),
+                 ([jam, "Harbor Lane was founded in 1998 by a baker in fiction."], "Harbor Lane makes jam."),
+                 ([jam, "Harbor Lane cooks in a dream in Morro Bay."], "Harbor Lane makes jam."),
+                 (["Harbor Lane makes jam in a fictional story."], None),
+                 ([jam, "Harbor Lane was founded in 1998 by two sisters."], "Harbor Lane makes jam. Harbor Lane started in 1998.")]
+        for blocks, want in cases:
+            with self.subTest(blocks=blocks), mock.patch.object(ms, "fetch", self.recorded_fetch(page_of(*blocks))):
+                before = len(self.chat.drafts())
+                disposition, replies = self.chat.say(self.TEXT, tid.JAR)
+                text = "\n".join(replies)
+                if want is None:
+                    self.assertEqual(disposition, "question")
+                    self.assertIn("What should we say about Harbor Lane?", text)
+                    self.assertEqual(len(self.chat.drafts()), before)
+                else:
+                    self.assertEqual(disposition, "proposed")
+                    draft = self.chat.drafts()[-1]
+                    story = next(op for op in json.loads(draft["ops_json"]) if op["op"] == "maker.add")["args"]["story"]
+                    self.assertEqual(story, want)
+                    self.assertIn(want, text)  # labelled for him exactly as it would go live
+                    if "1998" not in want:
+                        self.assertNotIn("1998", text)
+                    self.assertNotIn("is based in", story)
+                    self.chat.say("no")
+                self.assertEqual(self.chat.commits(), 0)  # nothing goes anywhere without his yes
                 ms._CACHE.clear()
 
     def test_a_site_that_cannot_be_read_is_one_plain_question_and_nothing_is_drafted(self):

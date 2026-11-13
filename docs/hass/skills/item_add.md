@@ -104,9 +104,12 @@ network (the test kit gives recorded pages, so no test touches the network).
 * **The story (SEC-3 H2):** no page sentence is ever used as it stands. Code takes at most three facts from page sentences that
   pass every rule and writes the story from them, in the house voice, at most 2 sentences: what they make ("<Maker> makes
   small-batch fruit jam and relish."), since which year ("<Maker> started in 2019.") or, without a year, the town **only when it
-  is the town he confirmed** ("<Maker> is based in Morro Bay."). The year only from "<Maker> (was) founded/started in <year>."
-  followed by nothing but who or with what ("by two sisters", "with one pot"), or "<Maker> has been making <things> since
-  <year>."; a negation, a turn ("but", "no longer"), a hedge or anything after the year leaves that fact out (AVO-FIX-559).
+  is the town he confirmed** ("<Maker> is based in Morro Bay."). Each fact only from a page sentence that is **wholly** one
+  closed shape, every word from a closed list: "<Maker> makes <plain product words>" then at most two workplace phrases ("in
+  small copper pots", "in a shared kitchen", "by hand") and the confirmed town; "<Maker> (was) founded/started in <year>"
+  then only who or with what ("by two sisters", "with one pot"); or "<Maker> has been making <things> since <year>.".
+  Nothing is cut off: a negation, a turn ("but", "no longer"), a hedge or a hypothetical ("and the date is fictional", "in a
+  fictional story", "in a dream") leaves that fact out, and with no product left he is asked (AVO-FIX-559).
   A page sentence is left out whole when it has a number (a year
   is fine), `!`, `?`, `;`, a quotation, a link or an e-mail, a hype word, anything the live gate calls a claim, a claim,
   contact, price, third-party or instruction word (organic, award, trusted, call, order, price, Hass, publish, ...), a
