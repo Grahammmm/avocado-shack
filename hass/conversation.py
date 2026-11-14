@@ -17,8 +17,9 @@ from hass import claims, interpret_check, label_reader, margins, media, morning_
 from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, checked_on, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
-from hass import corrlog, hike_chat, live_policy, voice  # noqa: E402
+from hass import audit as audit_mod, corrlog, hike_chat, live_policy, voice  # noqa: E402
 from hass import capabilities  # noqa: E402
+from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, openreq  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -111,6 +112,9 @@ USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NO
 # backend. Short codes and seconds only: never the owner's text, the prompt, a URL or a model reply.
 AUDIT = """CREATE TABLE IF NOT EXISTS interpreter_audit(provider_id TEXT PRIMARY KEY, at TEXT NOT NULL, backend TEXT NOT NULL,
   fallback INTEGER NOT NULL, primary_error TEXT, error TEXT, seconds REAL)"""
+# AVB-10: which audit action (hass/audit.py) a draft row belongs to, the skill that planned it and the action it undoes.
+# Lazy like CONTROL. Ids only. A re-written draft (stale, failed) keeps its request's action.
+AUDIT_DRAFTS = "CREATE TABLE IF NOT EXISTS audit_drafts(row_id INTEGER PRIMARY KEY, action TEXT NOT NULL, skill TEXT, undo_of TEXT)"
 DAILY_LIMIT = ("I've read as many new requests as I can for today, so I couldn't read that one and nothing changed. "
                "Yes, no, undo and status still work. Please send it again tomorrow.")
 MAX_OWNER_TEXT = 4000  # AV1737-04 (H05/H22): twice the longest field limit (recap 2000); test_owner_text_cap checks it
@@ -780,6 +784,7 @@ class Conversation:
         self.outbox = Outbox(self.db, self._now)
         self.outbox.private_chat = self.settings.get("gChat")
         self.log = self.outbox.log = corrlog.CorrLog(self.sdir, self._now)  # HASS-VOICE-1: the correspondence log (state folder only)
+        self.audit = audit_mod.AuditLog(self.sdir, self._now)  # AVB-10: one line per step of every action (ids only)
         self.memory = None  # H15 store on this same connection, opened by the first memory command
         self.requests = openreq.OpenRequests(self.db)  # SKILLS-FW-3: the one open-request store (lazy table)
         self.skills_mode = self.settings["skillsMode"]
@@ -794,15 +799,85 @@ class Conversation:
     def _now(self) -> datetime:
         return self.clock()
 
+    _audit_lines = None  # AVB-10: audit lines of the open transaction; written only after it commits, dropped on rollback
+
     @contextlib.contextmanager
     def _tx(self):
         self.db.execute("BEGIN IMMEDIATE")
+        self._audit_lines = []
         try:
             yield
         except BaseException:
             self.db.execute("ROLLBACK")
+            self._audit_lines = None
             raise
         self.db.execute("COMMIT")
+        lines, self._audit_lines = self._audit_lines, None
+        for step, line in lines: self.audit.record(step, **line)
+
+    # -- AVB-10: the audit log ------------------------------------------------------------------------------------
+    _skill_ref = None  # the skill(s) planning the draft being made (`item.add@3`), set by the skills dispatcher
+
+    def _audit_role(self, chat) -> str:
+        """The audit role of an owner chat: `owner:g` for G's own chat, `owner:<first name>` (ownerNames, ASCII letters), else `owner`."""
+        if chat is not None and chat == self.settings.get("gChat"): return "owner:g"
+        name = self.settings.get("ownerNames", {}).get(chat)
+        return f"owner:{name.lower()}" if isinstance(name, str) and re.fullmatch(r"[A-Za-z]{1,20}", name) else "owner"
+
+    def _audit_of(self, row):
+        """(action, skill, undo_of) of a draft row; a row from before the audit log gets its action now."""
+        self.db.execute(AUDIT_DRAFTS)
+        link = self.db.execute("SELECT action, skill, undo_of FROM audit_drafts WHERE row_id = ?", (row["row_id"],)).fetchone()
+        if link is not None: return tuple(link)
+        action = audit_mod.new_action("draft", row["row_id"], row["code"], row["created_at"])
+        self.db.execute("INSERT INTO audit_drafts(row_id, action) VALUES (?, ?)", (row["row_id"], action))
+        return action, None, None
+
+    def _audit_link(self, row, like=None, undo_of=None):
+        """Bind a freshly proposed row to its action: the action of `like` (a re-written draft of the same request), the
+        action it already has (a filled question), or a new one; the skill is the dispatcher's, or `like`'s."""
+        self.db.execute(AUDIT_DRAFTS)
+        old = self._audit_of(like) if like is not None else None
+        mine = self.db.execute("SELECT action FROM audit_drafts WHERE row_id = ?", (row["row_id"],)).fetchone()
+        action = old[0] if old else mine[0] if mine else audit_mod.new_action("draft", row["row_id"], row["code"], row["created_at"])
+        skill = self._skill_ref if isinstance(self._skill_ref, str) and audit_mod.SKILL_RE.fullmatch(self._skill_ref) else old[1] if old else None
+        self.db.execute("INSERT OR REPLACE INTO audit_drafts(row_id, action, skill, undo_of) VALUES (?, ?, ?, ?)",
+                        (row["row_id"], action, skill, undo_of if undo_of is not None else old[2] if old else None))
+
+    def _audit(self, step, row, result="ok", records=None, **extra):
+        """AVB-10: one audit line for a step of this draft row's action: ids, codes and fixed words only (never the owner's
+        text or a value). Inside a transaction it is written when the transaction commits. Never raises past the log."""
+        try:
+            action, skill, undo_of = self._audit_of(row)
+            change, msg = row["change_id"], self.outbox.msg_id
+            refs = {"change": change} if isinstance(change, str) and audit_mod.REFS["change"].fullmatch(change) else {}
+            commit = extra.pop("commit", None)
+            if isinstance(commit, str) and audit_mod.REFS["commit"].fullmatch(commit): refs["commit"] = commit
+            line = dict(action=action, who=self._audit_role(row["chat"]), pack="site", target="site",
+                        env="live" if self.settings.get("liveSite") else "sandbox", result=result, draft=row["code"],
+                        skill=skill, undo_of=undo_of, msg=_short(msg) if msg else None, refs=refs,
+                        subjects=audit_mod.subjects_of(records), fields=audit_mod.fields_of(records), **extra)
+        except Exception:  # noqa: BLE001 - an audit line is never worth a lost reply
+            return
+        if self._audit_lines is not None: self._audit_lines.append((step, line))
+        else: self.audit.record(step, **line)
+
+    def _audit_ask(self, msg, step, result, skills=(), n=0):
+        """AVB-10: one audit line for a skill request that makes no draft: a read-only answer (`answered`, A0) or a refusal
+        before any draft (`refused`). The action is one id per (message, skill call); the line holds the skill names, the
+        pack, the one-way message id and a fixed result word only: never the request, the answer, a price or a count."""
+        try:
+            names = [s.name if hasattr(s, "name") else s for s in skills if s is not None]
+            refs = [f"{s.name}@{s.version}" if hasattr(s, "name") else s for s in skills if s is not None]
+            skill = "+".join(dict.fromkeys(r for r in refs if isinstance(r, str))) or None
+            line = dict(action=audit_mod.new_action("ask", msg.provider_id, skill or "-", n), who=self._audit_role(msg.chat),
+                        pack=audit_mod.pack_of(names), target="local", env="live" if self.settings.get("liveSite") else "sandbox",
+                        result=result, skill=skill if skill and audit_mod.SKILL_RE.fullmatch(skill) else None,
+                        msg=_short(msg.provider_id), approval="A0" if step == "answered" else None)
+        except Exception:  # noqa: BLE001 - an audit line is never worth a lost reply
+            return
+        if self._audit_lines is not None: self._audit_lines.append((step, line))
+        else: self.audit.record(step, **line)
 
     def flush(self, adapter) -> int:
         return self.outbox.flush(adapter)
@@ -1035,22 +1110,28 @@ class Conversation:
                         (msg.provider_id, disposition, msg.received_at if owner else None))
         if owner: self.db.execute("INSERT OR IGNORE INTO message_chats(provider_id, chat) VALUES (?, ?)", (msg.provider_id, msg.chat))
 
-    def _propose(self, draft, sender, now, row=None):
-        """Insert a proposed draft (or fill a needs-details row) bound to the A2 hash, base and expiry."""
+    def _propose(self, draft, sender, now, row=None, like=None, undo_of=None):
+        """Insert a proposed draft (or fill a needs-details row) bound to the A2 hash, base and expiry. AVB-10: `like` is the
+        draft this one re-writes (same request, same audit action); `undo_of` the audit action an undo takes back."""
         expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))
         fields = dict(change_id=draft["change_id"], draft_hash=draft["draft_hash"], base=draft["base"],
                       ops_json=json.dumps(draft["ops"], sort_keys=True), summary=_summary(draft), expires_at=expires,
                       proposed_at=_iso(now), missing_json=None)  # AVB-03: the proposal instant itself; a filled question has nothing missing
         if row is not None:
             self._move(row, "proposed", **fields)
-            return self._row(row["row_id"])
-        cur = self.db.execute(
-            "INSERT INTO drafts(change_id, code, state, draft_hash, base, ops_json, summary, sender, chat, created_at,"
-            " expires_at, proposed_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (fields["change_id"], self._code(draft["draft_hash"][7:]), fields["draft_hash"], fields["base"],
-             fields["ops_json"], fields["summary"], sender, self._chat(), _iso(now), expires,
-             fields["proposed_at"]))
-        return self._row(cur.lastrowid)
+            new = self._row(row["row_id"])
+        else:
+            cur = self.db.execute(
+                "INSERT INTO drafts(change_id, code, state, draft_hash, base, ops_json, summary, sender, chat, created_at,"
+                " expires_at, proposed_at) VALUES (?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (fields["change_id"], self._code(draft["draft_hash"][7:]), fields["draft_hash"], fields["base"],
+                 fields["ops_json"], fields["summary"], sender, self._chat(), _iso(now), expires,
+                 fields["proposed_at"]))
+            new = self._row(cur.lastrowid)
+        try: self._audit_link(new, like, undo_of)
+        except Exception: pass  # noqa: BLE001,E701 - AVB-10: the link is ids only; a draft is never lost for it
+        self._audit("drafted", new, records=draft.get("records"))
+        return new
 
     # -- message handling ----------------------------------------------------------------------------------------
     _answering = None  # AV0022-10 (H16): received_at of the message handle() is running; replies are tagged with it
@@ -1163,7 +1244,9 @@ class Conversation:
         memory = None if command or msg.attachments > 0 else read_memory(msg.text)
         till = None if command or memory or msg.attachments > 0 or self.till is None else self.till.parse(msg.text)  # HASS-CLOVER-2
         if memory and memory[0] == "memory" or till: expired = []  # AV0222-05: the bare `memory` listing is read-only; writes still sweep
-        for row in expired: self._move(row, "expired", expires_at=_iso(self._expiry(row)))
+        for row in expired:
+            self._move(row, "expired", expires_at=_iso(self._expiry(row)))
+            if row["state"] == "proposed": self._audit("refused", row, "expired")  # AVB-10
         if command or msg.attachments > 0:  # NB-AV-09: a photo caption is never a command, keyword or approval
             disposition = self._photo(msg, now, last_try) if msg.attachments > 0 else self._command(msg, now, *command)
             self._record(msg, disposition)
@@ -1233,6 +1316,7 @@ class Conversation:
         target = targets[0]
         if verb == "reject":
             self._move(target, "rejected", reason="owner")
+            if target["state"] == "proposed": self._audit("refused", target, "said-no")  # AVB-10
             self._reply("Okay, I've cancelled that. Nothing changed.")
             self._problem("corrected", "said-no")
             self._record(msg, "rejected")
@@ -1251,6 +1335,7 @@ class Conversation:
             return "no-target", None
         if self.settings.get("liveSite") and (reasons := self._live_reasons(self.editor.show(target["change_id"]).get("draft"))):
             self._save_private(target, reasons)  # HASS-LIVE-PLAN-1: refused for the website, kept for Graham, never lost
+            self._audit("refused", target, "policy")  # AVB-10: the draft stays waiting; the live gate said no
             self._reply(live_policy.refusal(reasons, understood=q(target["summary"])))
             self._record(msg, "no-target")
             return "no-target", None
@@ -1259,6 +1344,7 @@ class Conversation:
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (msg.sender, msg.chat, msg.provider_id, target["change_id"],
                                                  target["draft_hash"], target["base"], target["expires_at"], _iso(now)))
         self._move(target, "approved")
+        self._audit("approved", target, approval="A1", approved_by=self._audit_role(msg.chat))  # AVB-10: msg is the yes
         self.requests.close_drafted(self._chat(), now)  # SKILLS-FW-3: the request that made this draft is finished
         self._record(msg, "approved")
         return "approved", self._row(target["row_id"])
@@ -1657,7 +1743,9 @@ class Conversation:
                     (code, ops_json, out["question"], msg.sender, msg.chat, _iso(now), expires, missing_json))
                 self._last_draft_code = code
                 # An incomplete correction still supersedes the proposal it names: it can no longer be approved.
-                if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=code)
+                if revised is not None:
+                    if revised["state"] == "proposed": self._audit("refused", revised, "replaced")  # AVB-10
+                    self._move(revised, "rejected", reason="revised", replaced_by=code)
             self._reply(out["question"])
             self._asked_again(out["question"], msg)
             return "needs-details"
@@ -1679,8 +1767,10 @@ class Conversation:
         elif revised is not None and revised["state"] == "needs-details":
             row = self._propose(draft, msg.sender, now, row=revised)
         else:
-            row = self._propose(draft, msg.sender, now)
-            if revised is not None: self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
+            row = self._propose(draft, msg.sender, now, like=revised)  # AVB-10: a correction stays the same request
+            if revised is not None:
+                if revised["state"] == "proposed": self._audit("refused", revised, "replaced")  # AVB-10
+                self._move(revised, "rejected", reason="revised", replaced_by=row["code"])
         self._last_draft_code = row["code"]
         self._proposal_reply(row, draft, prefix, notes)
         return "proposed"
@@ -1749,6 +1839,7 @@ class Conversation:
         result = out.get("result")
         if result in ("applied", "already-applied"):
             self._move(row, "applied", commit=out.get("commit"))
+            self._audit("undone" if _is_undo(row) else "applied", row, commit=out.get("commit"))  # AVB-10
             for call in json.loads(row["ops_json"]):  # an applied undo closes the draft it reverted
                 if call.get("op") == "history.revert":
                     for orig in self._drafts("change_id = ? AND state IN ('applied', 'verified')",
@@ -1758,9 +1849,10 @@ class Conversation:
                 self._reply(answers.applied_text(row["code"], row["summary"], live_site=self.settings.get("liveSite")))
             # with a previewer the reply waits for verify(): nothing says it worked before it is checked
         elif result == "stale":
+            self._audit("failed", row, "stale")  # AVB-10: a re-written draft below keeps the same action
             again = self.editor.prepare(json.loads(row["ops_json"]))
             if again["result"] == "ok":
-                new = self._propose(again["draft"], row["sender"], now)
+                new = self._propose(again["draft"], row["sender"], now, like=row)
                 self._move(row, "rejected", reason="stale", replaced_by=new["code"])
                 self._proposal_reply(new, again["draft"], "The website changed while that was waiting, so I've written it up again. "
                                                           "Please look it over:\n")
@@ -1773,7 +1865,8 @@ class Conversation:
             # A failed draft is never approved again (yes only targets `proposed`), so recovery is a fresh proposal with
             # its own code, written up from the same change; the owner's next yes (and code, when needed) approves that one.
             again = None if refused else self.editor.prepare(json.loads(row["ops_json"]))
-            new = self._propose(again["draft"], row["sender"], now) if again and again["result"] == "ok" else None
+            self._audit("failed", row, "policy" if refused else result if result in ("refused", "busy") else "failed")  # AVB-10
+            new = self._propose(again["draft"], row["sender"], now, like=row) if again and again["result"] == "ok" else None
             self._move(row, "failed", reason=_reason(out), **({"replaced_by": new["code"]} if new else {}))
             self._problem("error", "save-failed")
             if refused: self._reply(refused)
@@ -1796,6 +1889,7 @@ class Conversation:
                         self._outcome(row, {"result": "applied", "commit": change.get("commit")}, self._now())
                     else:
                         self._move(row, "failed", reason=INTERRUPTED)
+                        self._audit("failed", row, "interrupted")  # AVB-10
                         with self._answer_to(_row_chat(row)): self._reply(answers.recovered_text(row["code"], live_site=self.settings.get("liveSite")))
         self._verify_pending()
         return [self._row(r["row_id"])["state"] for r in rows]
@@ -1838,11 +1932,13 @@ class Conversation:
             with self._tx(), self._answer_to(_row_chat(row)):
                 if png:
                     self._move(row, "verified", screenshot=png, checked_at=_iso(self._now()))
+                    self._audit("verified", row)  # AVB-10
                     text = answers.applied_text(row["code"], row["summary"], checked=not (unshown and all(unshown)), live_site=self.settings.get("liveSite"))
                     if not self.settings.get("liveSite"): self._reply(text + ("\n" + answers.ROUTE_UNSHOWN if any(unshown) else ""), [png])
                 else:  # the raw diagnostic stays on the row; the owner gets plain words (SHOP-4)
                     self.db.execute("UPDATE drafts SET reason = ?, checked_at = ? WHERE row_id = ?",
                                     (f"not verified: {error}", _iso(self._now()), row["row_id"]))
+                    self._audit("verified", row, "not-verified")  # AVB-10: the diagnostic stays on the row, never here
                     if not self.settings.get("liveSite"): self._reply(answers.applied_text(row["code"], row["summary"], error=error, live_site=self.settings.get("liveSite")))
 
     def screenshot(self, change_id) -> str | None:
@@ -1858,6 +1954,33 @@ class Conversation:
         """One `history` line. HASS-OWNERS-2: with several owners it says whose change it was (`Mike's change`, `Your change`)."""
         words = f"{q(r['summary'])}: {answers.history_words(dict(r), self._install(r))}"
         return f"- {self._whose(r['chat'])}, {words}" if self._shared else f"- {words}"
+
+    def _history_lines(self, limit) -> list:
+        """AVB-10: `history` reads the audit log: the newest approved actions on the site and the till, newest yes first. A site
+        change is told in its own words from its draft row (where it is now); a till change says which till and where it
+        stands, since the till journal keeps its details. Changes approved before the audit log existed (no `approved` line)
+        follow, newest first, as before."""
+        lines = []
+        try: entries = self.audit.approved(3 * limit)  # slack for actions whose draft was re-written (stale) and not shown
+        except Exception: entries = []  # noqa: BLE001,E701 - an unreadable log still shows the changes below
+        for e in entries:
+            if e["target"] == "site" and e.get("draft"):
+                row = self.db.execute("SELECT * FROM drafts WHERE code = ?", (e["draft"],)).fetchone()
+                if row is not None and row["state"] in HISTORY_STATES: lines.append(self._history_line(row))
+            elif e["target"] == "till": lines.append(audit_mod.till_line(e))
+            if len(lines) >= limit: return lines
+        try: logged = self.audit.approved_drafts()
+        except Exception: logged = set()  # noqa: BLE001,E701
+        for r in self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
+                                 "ORDER BY row_id DESC", HISTORY_STATES):
+            if len(lines) >= limit: break
+            if r["code"] not in logged: lines.append(self._history_line(r))  # SHOP-4: where it is now instead of the commit
+        return lines
+
+    def _audit_action(self, row):
+        """The audit action of a draft row, or None when it cannot be read (an undo is never stopped for it)."""
+        try: return self._audit_of(row)[0]
+        except Exception: return None  # noqa: BLE001,E701
 
     def _history_search(self, query: str) -> str:
         """AV2152-02: up to ten newest owner-approved changes whose summary holds every word; read-only."""
@@ -1891,10 +2014,8 @@ class Conversation:
         if verb == "backlog": return self._backlog_list()  # SKILLS-FW-3
         if verb == "history" and code is not None: return self._history_search(code)
         if verb == "history":
-            rows = self.db.execute(f"SELECT * FROM drafts WHERE state IN ({', '.join('?' * len(HISTORY_STATES))}) "
-                                   "ORDER BY row_id DESC LIMIT ?", (*HISTORY_STATES, HISTORY_MAX)).fetchall()
-            self._reply("\n".join(["Here's what we changed lately:"] + [  # SHOP-4: where it is now instead of the commit
-                self._history_line(r) for r in rows]) if rows else "We haven't made any changes yet.", long_ok=True)
+            lines = self._history_lines(HISTORY_MAX)
+            self._reply("\n".join(["Here's what we changed lately:"] + lines) if lines else "We haven't made any changes yet.", long_ok=True)
             return "history"
         done = [r for r in self._drafts("change_id IS NOT NULL AND \"commit\" IS NOT NULL")  # AV0022-07: skip undos
                 if self._visible_undo(r) and (code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code)]
@@ -1914,7 +2035,7 @@ class Conversation:
             self._reply(self._plain(_reason(out), "undo that"))
             return "not-drafted"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", out["draft"]["change_id"]) if self._mine(r)]
-        row = same[0] if same else self._propose(out["draft"], msg.sender, now)
+        row = same[0] if same else self._propose(out["draft"], msg.sender, now, undo_of=self._audit_action(target))
         self._proposal_reply(row, out["draft"], f"To undo {self._whose(target['chat'], False)}, I'd change it back:\n" if theirs else "To undo that, I'd change it back:\n")
         return "proposed"
 

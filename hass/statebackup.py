@@ -5,7 +5,7 @@
                                 | drill BACKUP --into DIR --worktree WT [--media-into DIR] | diff OLD NEW
 
 create refuses a symlinked or odd config.json/writer.lock before anything opens it, takes the writer lock and copies a
-settled state dir (config.json, drafts, changes, screenshots and consistent sqlite snapshots of inbox.sqlite3, then
+settled state dir (config.json, drafts, changes, screenshots, the audit log and consistent sqlite snapshots of inbox.sqlite3, then
 conversation.sqlite3; never writer.lock, a journal, a symlink or an unknown entry) into a new private
 <out>/hass-state-<UTC stamp>/ (out: an existing 0700 user dir; built aside, renamed in) and writes MANIFEST.json last.
 verify re-checks every hash and mode, refuses extra entries and symlinks and runs the sqlite integrity check on both
@@ -36,11 +36,12 @@ from hass.editor import UnsafeState  # noqa: E402
 MANIFEST, CONFIG, DB, LOCK = "MANIFEST.json", "config.json", "conversation.sqlite3", "writer.lock"
 INBOX = "inbox.sqlite3"  # H16 inbound queue; snapshotted like DB
 BUNDLE = "content.bundle"  # FAV-07: git bundle of the writer worktree's HEAD == contentCommit
-DIRS = ("drafts", "changes", "screenshots")
+DIRS = ("drafts", "changes", "screenshots", "audit")  # AVB-10: audit/ is the one audit log (ids only), kept with the state
 ORIG = "media/originals/"  # H10 photo originals <aa>/<sha>.<ext> + <aa>/<sha>.json, aa == sha[:2] (hass/media.py)
 FILE_RE = re.compile(r"config\.json|conversation\.sqlite3|inbox\.sqlite3|content\.bundle"
                      r"|(drafts|changes)/chg-[0-9A-Za-z_-]+\.json"
                      r"|screenshots/[0-9A-Za-z_-][0-9A-Za-z._-]*\.png"
+                     r"|audit/[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl"
                      r"|media/originals/(?P<aa>[0-9a-f]{2})/(?P=aa)[0-9a-f]{62}\.(json|%s)"
                      % "|".join(sorted(set(photos.EXT.values()))))
 HEX_RE = re.compile(r"[0-9a-f]{64}")

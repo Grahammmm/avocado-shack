@@ -488,7 +488,8 @@ class Dispatcher:
         req = self.conv.requests.get(self._owner(), now)
         if req is None and self._explicit_page(msg):  # RF2345-12: an unmistakable fresh FAQ-page ask is refused by code, no model
             from hass.skills.backlog import NO_FAQ
-            return self._backlog(msg, now, None, "", "unsupported-page", reply=NO_FAQ, texts=[msg.text])
+            return self._backlog(msg, now, None, "", "unsupported-page", reply=NO_FAQ, texts=[msg.text],
+                                 skill=self.registry.get("page.faq") or "page.faq")
         if req is None or not req["skill"] or not req["asked_slot"]:
             return None
         skill = self.registry.get(req["skill"])
@@ -509,6 +510,8 @@ class Dispatcher:
             if req is not None:
                 self.conv.requests.mark(req["request_id"], "cancelled", now)
             self.conv._reply(DROPPED)
+            if req is not None:  # AVB-10: the owner dropped his open request before any draft
+                self._logged(msg, "refused", "said-no", self.registry.get(req["skill"]) if req["skill"] else None)
             return "cancelled"
         if "calls" in result:
             return self._calls(msg, now, result, req)
@@ -554,6 +557,7 @@ class Dispatcher:
         if said:
             conv.requests.mark(req["request_id"], "closed", now) if req else None
             conv._reply(said)
+            self._logged(msg, "refused", "policy", skill)  # AVB-10: an ask to post, send or schedule
             return "refused"
         slots = dict(req["slots"]) if req else {}
         if resolved:  # a cheap answer: already a checked value (an id the owner picked from our own list), not words to resolve
@@ -571,12 +575,14 @@ class Dispatcher:
             if said:  # a read-only answer about a held or hidden record: said in its own words, nothing left open
                 conv.requests.mark(req["request_id"], "closed", now) if req else None
                 conv._reply(said)
+                self._logged(msg, "refused", "refused", skill)  # AVB-10
                 if req and req["calls"]:  # this ask is refused; the owner's other caption asks of the same message are not
                     return self._next_queued(msg, now, None, req["calls"], texts, attachments, "refused")
                 return "refused"
             conv.requests.put(owner, msg.provider_id, now, texts=texts, skill=skill.name, slots=slots, attachments=attachments,
                               request_id=req["request_id"] if req else None, question=filled.refused, asked_slot=None)
             conv._reply(filled.refused)
+            self._logged(msg, "refused", "refused", skill)  # AVB-10: a held or hidden record; the request stays open
             return "refused"
         if filled.problem:
             return self._ask(msg, now, req, skill, slots, texts, attachments, skill_slot=filled.problem_slot,
@@ -590,7 +596,7 @@ class Dispatcher:
         for rule in skill.rules:
             hit = RULES.get(rule, lambda *a: None)(slots, texts, ctx)
             if hit:
-                return self._backlog(msg, now, req, "", hit[1], reply=hit[0], texts=texts)
+                return self._backlog(msg, now, req, "", hit[1], reply=hit[0], texts=texts, skill=skill)
         if skill.approval == "none":
             return self._read_only(msg, now, req, skill, slots, ctx, texts)
         try:
@@ -600,9 +606,11 @@ class Dispatcher:
         if not isinstance(ops, list) or not ops or not all(isinstance(o, dict) and set(o) == {"op", "args"} for o in ops):
             conv.requests.mark(req["request_id"], "closed", now) if req else None
             conv._reply(PLAN_FAILED)
+            self._logged(msg, "refused", "failed", skill)  # AVB-10
             return "not-drafted"
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
+            self._logged(msg, "refused", "cap", skill)  # AVB-10
             return "question"
         return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off,
                            queued=req["calls"] if req else (), ctx=ctx)
@@ -616,16 +624,17 @@ class Dispatcher:
         if not (isinstance(reply, str) and reply.strip()):
             conv.requests.mark(req["request_id"], "closed", now) if req else None
             conv._reply(PLAN_FAILED)
+            self._logged(msg, "refused", "failed", skill)  # AVB-10
             return "not-drafted"
         reply = reply.strip()
         if getattr(exc, "backlog", None) in BACKLOG_REASONS:
-            return self._backlog(msg, now, req, "", exc.backlog, reply=reply, texts=texts)
+            return self._backlog(msg, now, req, "", exc.backlog, reply=reply, texts=texts, skill=skill)
         if getattr(exc, "kind", None) == "question":
             asks = (req["asks"] + 1) if req and req["asked_slot"] is None and req["question"] == reply else 1
             if asks > openreq.MAX_UNRESOLVED:  # the same question three times: give up, as for a slot
                 example = next((t.text for t in skill.triggers if getattr(t, "tag", "") == "clean"), skill.triggers[0].text)
                 conv.requests.mark(req["request_id"], "closed", now)
-                return self._backlog(msg, now, None, "", "stuck", reply=STUCK.format(example=example), texts=texts)
+                return self._backlog(msg, now, None, "", "stuck", reply=STUCK.format(example=example), texts=texts, skill=skill)
             conv.requests.put(owner, msg.provider_id, now, texts=texts, request_id=req["request_id"] if req else None, skill=skill.name,
                               slots=given, asked_slot=None, question=reply, attachments=attachments, asks=asks,
                               calls=req["calls"] if req else [], draft_code=(req["draft_code"] if req else None))
@@ -633,6 +642,7 @@ class Dispatcher:
             return "question"
         conv.requests.mark(req["request_id"], "closed", now) if req else None
         conv._reply(reply)
+        self._logged(msg, "refused", "refused", skill)  # AVB-10: the skill's own refusal
         return "refused"
 
     def _ask(self, msg, now, req, skill, slots, texts, attachments, *, skill_slot, problem, ask, revises, shown=None, ctx=None):
@@ -644,7 +654,7 @@ class Dispatcher:
             example = next((t.text for t in skill.triggers if getattr(t, "tag", "") == "clean"), skill.triggers[0].text)
             if req:
                 conv.requests.mark(req["request_id"], "closed", now)
-            stuck = self._backlog(msg, now, None, "", "stuck", reply=STUCK.format(example=example), texts=texts)
+            stuck = self._backlog(msg, now, None, "", "stuck", reply=STUCK.format(example=example), texts=texts, skill=skill)
             queued = [c for c in (req["calls"] if req else []) if self.registry.get(c.get("skill")) is not None]
             if queued:  # this ask is given up; the owner's other asks are not
                 self._queue_only(msg, now, None, queued[0], queued[1:], texts, attachments, None)
@@ -699,7 +709,9 @@ class Dispatcher:
         earlier = _earlier(texts, msg)
         hooked = self._skill_notes(skill, slots, now, texts, ctx)  # the skill's own lines: what it said and did, and what to know before yes
         note = self._note_lines([(hooked, defaults)], left_off)
-        disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        conv._skill_ref = f"{skill.name}@{skill.version}"  # AVB-10: the audit line names the skill that planned this draft
+        try: disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        finally: conv._skill_ref = None
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
         if disposition == "proposed":
@@ -763,11 +775,12 @@ class Dispatcher:
             if not all(long_ones):  # a caption and a change in one message: neither is answered or drafted
                 conv.requests.mark(req["request_id"], "closed", now) if req is not None else conv.requests.close_live(owner, now, "closed")
                 conv._reply(MIXED)
+                self._logged(msg, "refused", "refused", *[self.registry.get(c["skill"]) for c in result["calls"]])  # AVB-10
                 return "refused"
             return self._read_only_calls(msg, now, result["calls"], req, texts, attachments)
         ctx = self._ctx(now, texts)
         ctx.multi_call = len(result["calls"]) > 1
-        ops, left, waiting, parts, stopped, planned_calls = [], [], [], [], [], []
+        ops, left, waiting, parts, stopped, used, planned_calls = [], [], [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
             if skill is None or skill.approval == "none" or skill.name == "backlog.log":
@@ -794,14 +807,16 @@ class Dispatcher:
                     waiting.append({"skill": skill.name, "slots": given, "ask": None, "slot": None, "problem": said})
                 else:  # this ask is refused (or failed); the owner's other asks are not
                     reason = getattr(exc, "backlog", None)
-                    stopped.append((said, reason if reason in BACKLOG_REASONS else None))
+                    stopped.append((said, reason if reason in BACKLOG_REASONS else None, skill))
                 continue
             ops += planned if isinstance(planned, list) else []
+            used.append(skill)  # AVB-10: only the skills that planned part of this draft
             parts.append((self._skill_notes(skill, slots, now, texts, ctx), shown))  # what each complete call said, set and warns of
             planned_calls.append((skill, slots))
             left += filled.left_off
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
+            self._logged(msg, "refused", "cap", *used)  # AVB-10
             return "question"
         refused = self._say_refusals(stopped, texts, msg)
         if not ops:
@@ -813,11 +828,14 @@ class Dispatcher:
                 conv.requests.close_live(owner, now, "closed")
             if refused is None:
                 conv._reply(PLAN_FAILED)
+                self._logged(msg, "refused", "failed", *used)  # AVB-10
                 return "not-drafted"
             return refused
         note = self._note_lines(parts, left)
-        disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
-                                  prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        conv._skill_ref = "+".join(dict.fromkeys(f"{s.name}@{s.version}" for s in used)) or None  # AVB-10
+        try: disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
+                                       prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        finally: conv._skill_ref = None
         if disposition == "proposed":  # HASS-SEC-3 (L3): each drafted call's own source record, as for one skill
             for called, called_slots in planned_calls:
                 self._keep_sources(called, called_slots, now, texts, conv._last_draft_code, ctx)
@@ -845,13 +863,15 @@ class Dispatcher:
         if said:
             conv.requests.mark(req["request_id"], "closed", now) if req is not None else conv.requests.close_live(owner, now, "closed")
             conv._reply(said)
+            self._logged(msg, "refused", "policy", *[self.registry.get(c["skill"]) for c in calls])  # AVB-10
             return "refused"
         waiting, done = [], []
-        for call in calls:
+        for n, call in enumerate(calls):
             skill = self.registry.get(call["skill"])
             filled = validate(skill, {}, call["slots"], texts, ctx, attachments)
             if filled.refused:
                 conv._reply(self._read_only_hook(skill, "refusal", ctx, filled.problem_slot, filled.refused_status) or filled.refused)
+                self._logged(msg, "refused", "refused", skill, n=n)  # AVB-10
                 continue
             missing = None if filled.problem else next_missing(skill, filled.slots)
             if filled.problem or missing is not None:
@@ -863,6 +883,7 @@ class Dispatcher:
             done.append((skill.name, filled.slots))
             fn = READ_ONLY.get(skill.name)
             conv._reply(fn(dict(filled.slots), ctx) if fn else NOT_SURE, long_ok=fn is not None)
+            self._logged(msg, "answered" if fn else "refused", "ok" if fn else "unknown", skill, n=n)  # AVB-10
         if waiting:
             return self._queue_only(msg, now, req, waiting[0], waiting[1:], texts, attachments, ctx)
         conv.requests.mark(req["request_id"], "closed", now) if req is not None else conv.requests.close_live(owner, now, "closed")
@@ -885,16 +906,18 @@ class Dispatcher:
             return None
         from hass.skills.backlog import Backlog
         outcome = "not-drafted"
-        for said, reason in stopped:
+        for n, (said, reason, skill) in enumerate(stopped):
             if said is None:
                 self.conv._reply(PLAN_FAILED)
+                self._logged(msg, "refused", "failed", skill, n=n)  # AVB-10
                 continue
             if reason:
-                n = Backlog(self.conv.db, self.conv._now).record(reason, "", "\n".join(texts) if texts else msg.text)
-                said, outcome = said + " " + NO_SKILL_SAID.format(n=n), "backlog"
+                n_ = Backlog(self.conv.db, self.conv._now).record(reason, "", "\n".join(texts) if texts else msg.text)
+                said, outcome = said + " " + NO_SKILL_SAID.format(n=n_), "backlog"
             elif outcome != "backlog":
                 outcome = "refused"
             self.conv._reply(said)
+            self._logged(msg, "refused", "backlog" if reason else "refused", skill, n=n)  # AVB-10
         return outcome
 
     def _queue_only(self, msg, now, req, first, rest, texts, attachments, ctx):
@@ -913,25 +936,31 @@ class Dispatcher:
         return "question"
 
     # nothing to draft ------------------------------------------------------------------------------------------
+    def _logged(self, msg, step, result, *skills, n=0):
+        """AVB-10: the audit line of a skill request that made no draft (an answer or a refusal); ids and fixed words only."""
+        log = getattr(self.conv, "_audit_ask", None)
+        if log is not None: log(msg, step, result, skills, n)
+
     def _read_only(self, msg, now, req, skill, slots, ctx, texts):
         if skill.name == "page.faq":
             from hass.skills.backlog import NO_FAQ
-            return self._backlog(msg, now, req, "", "unsupported-page", reply=NO_FAQ, texts=texts)
+            return self._backlog(msg, now, req, "", "unsupported-page", reply=NO_FAQ, texts=texts, skill=skill)
         if skill.name == "backlog.log":
             return self._backlog(msg, now, req, slots.get("summary", ""), slots.get("reason") if slots.get("reason") in (
-                "unknown-skill", "policy", "unsupported-page", "stuck", "price", "other") else "other", texts=texts)
+                "unknown-skill", "policy", "unsupported-page", "stuck", "price", "other") else "other", texts=texts, skill=skill)
         fn = READ_ONLY.get(skill.name)
         if fn is None:
-            return self._backlog(msg, now, req, "", "other", texts=texts)
+            return self._backlog(msg, now, req, "", "other", texts=texts, skill=skill)
         queued = req["calls"] if req else []
         if req:
             self.conv.requests.mark(req["request_id"], "closed", now)
         self.conv._reply(fn(slots, ctx), long_ok=skill.name in READ_ONLY_LONG or (skill.name == "answer.site" and slots.get("kind") == "maker_story"))
+        self._logged(msg, "answered", "ok", skill)
         if queued:  # the owner's other caption asks of the same message go on, one question at a time
             return self._next_queued(msg, now, None, queued, texts, req["attachments"], "answer")
         return "answer"
 
-    def _backlog(self, msg, now, req, summary, reason, reply=None, texts=None):
+    def _backlog(self, msg, now, req, summary, reason, reply=None, texts=None, skill=None):
         """Write the request down (the catch-all), say so in plain words, change nothing, close the open request."""
         from hass.skills.backlog import Backlog
         conv = self.conv
@@ -942,6 +971,7 @@ class Dispatcher:
             conv.requests.close_live(self._owner(), now, "closed")
         base = NO_SKILL_SAID.format(n=n)
         conv._reply((reply + " " + base) if reply else base)
+        self._logged(msg, "refused", "backlog", skill)
         return "backlog"
 
     # a photo (spec 2.7) --------------------------------------------------------------------------------------
