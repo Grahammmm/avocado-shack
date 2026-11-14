@@ -736,6 +736,9 @@ class LiveClient(NoNetwork):
                 release.wait(30)
                 return b""
 
+            def close(self):  # like a buffered HTTPResponse: close waits for the outstanding read
+                release.wait(30)
+
         def stuck_headers(req, timeout=None):  # headers that never arrive
             release.wait(30)
             raise TimeoutError()

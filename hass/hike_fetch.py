@@ -35,6 +35,13 @@ MAX_BODY_BYTES = 8_000_000  # a county search is well under this; an answer past
 valid_contact = hl.valid_contact
 
 
+def _close(resp):
+    try:
+        resp.close()
+    except Exception:
+        pass
+
+
 class LiveFetch:
     accepts_timeout = True  # ``CachedTransport`` hands it the time left of the lookup's total limit (``timeout=``)
 
@@ -88,11 +95,8 @@ class LiveFetch:
         try:
             threading.Thread(target=work, daemon=True).start()
             if not done.wait(wait):  # real elapsed time: a peer that trickles bytes inside one read or one header cannot hold the chat
-                for resp in opened:
-                    try:
-                        resp.close()
-                    except Exception:
-                        pass
+                for resp in opened:  # close can wait behind the worker's blocked read, so it never runs on the caller
+                    threading.Thread(target=_close, args=(resp,), daemon=True).start()
                 raise hl.TransportError("slow", "time limit")
             if "exc" in box:
                 raise box["exc"]
