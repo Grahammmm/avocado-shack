@@ -15,9 +15,34 @@ registry, the lint, the slot resolvers and the catch-all backlog.
 | `hass/skills/__init__.py` | `load_skills()` (finds every module's `SKILLS`), `skill_lint(skills, ops_registry)` |
 | `hass/skills/kinds.py` | resolvers for the skill-level slot kinds (`product_ref`, `maker_ref`, `hike_ref`, `route_ref`, `shelf`, `availability`, `day`, `clock`, `attachment`) |
 | `hass/skills/backlog.py` | the "I can't do that yet" store, plus the skills `backlog.log` and `page.faq` |
+| `hass/skills/scaffold.py` | the new-skill scaffolder (below): makes a skill, its cases, its doc page and its test, and checks them |
 
 To add a skill, add a module to `hass/skills/` that exports `SKILLS = (...)`. No list is edited, so two cards never
 touch the same file. A duplicate skill name raises when the registry loads.
+
+## Make a new skill with one command
+
+```
+python3 hass/skills/scaffold.py new group.verb --op product.hide --label "hide a product"
+```
+
+It writes `hass/skills/<group>_<verb>.py`, the 10 case rows in `hass/tests/fixtures/skills/<group>/<name>.jsonl` (2 or
+more refusals, an undo row, 2 plan rows), `docs/hass/skills/<group>_<verb>.md` and `hass/tests/test_skills_<group>_<verb>.py`,
+then runs the lint with the case-file minima and every row through the kit on the scratch shop. If any of that fails it
+removes what it wrote and says why; it never overwrites a file. Options: `--arg NAME` (take an optional op argument as a
+required slot, for example `product.edit --arg description`), `--say "sentence"` (up to 3 owner sentences),
+`--setup JSON` (ops applied before each draft row), `--module`, `--summary`, `--dry-run`.
+
+It covers one registered op whose arguments are a product, text, bool, int, date, time or enum (`product.*` ops and the
+plain `store.*` ops). A maker key, a url, a picture, a list, a hike or a route is written by hand, and the command says so.
+
+The result is a starting point, never an accepted skill: the sentences, rules and refusals are placeholders, the expected
+diffs were recorded from a first run. `live_class` is a label, not a lock: the command reads it off the live table in
+`hass/live_policy.py` (`chat-live` when the op and every argument the skill sends are already listed there, `private-only`
+otherwise, for example `product.hide` is `chat-live` and `store.set_intro` is `private-only`). What actually gates a real draft
+is `live_policy.check` and the owner's yes; the command never edits that file. Module names that are Python keywords are
+refused, and the generated module and test are compiled before the command reports success. A person reads every sentence and
+every row before the skill is merged.
 
 ## The fields every skill fills
 
