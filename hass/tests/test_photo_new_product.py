@@ -116,7 +116,7 @@ class PhotoNewProductTests(unittest.TestCase):
                  "two add": [_op("product.add", **ADD), _op("product.add", **{**ADD, "name": "Test medlar"})]}
         for name, ops in cases.items():
             with self.subTest(name):
-                self.assertRefused(name, ops, "photo-many-ops", "A photo can go on one product at a time. Which product is it for?", before)
+                self.assertRefused(name, ops, "photo-many-ops", "One photo can go in one place; say which.", before)
         self.assertEqual(self.repo.product(PID)["image"], IMAGE)
 
     def test_add_that_revises_no_photo_draft_gets_no_photo(self):
@@ -128,8 +128,9 @@ class PhotoNewProductTests(unittest.TestCase):
                            "Send the photo with the product name as its caption.", before, revises=False)
 
     def test_prompt_snapshot_holds_the_new_vs_existing_rule_once(self):
-        rule = ("- When a pending draft is a photo question (product.set_photo), answer with product.set_photo for a "
-                "listed product, or product.add with imageAlt when the owner says it is a new product; never both.\n")
+        rule = ("- When a pending draft is a photo question (product.set_photo), answer with exactly one of product.set_photo (a "
+                "listed product), product.add (a new product) or store.set_home_image (the home page), and set revises to its "
+                "code. Take imageAlt from the owner's words about the photo; never invent it.\n")
         self.assertEqual(FIXTURE.read_text("utf-8").count(rule), 1)
         self.assertEqual(build(TEST_REGISTRY, tiny_content()).count(rule), 1)
 

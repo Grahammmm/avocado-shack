@@ -49,8 +49,9 @@ ATTACHMENT_REPLY = ("I can't read photos, voice notes or files yet, so nothing c
                     "Could you type the change instead?")
 NOT_READ_REPLY = ("I only notice new messages, so I missed that tap or edit and nothing changed. "
                   "Please send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
-PHOTO_QUESTION = "Which product is this photo for, and what does it show? A few words is fine."  # NB-AV-09 (H12): asked by every new photo draft
-PHOTO_OPS = ("product.set_photo", "product.add")  # AV0022-04: ops in a photo-draft answer that get the draft's photo
+PHOTO_QUESTION = ("Is this photo for a product in the shop, a new product, or the home page? "
+                  "And what does it show, for people who cannot see it? A few words is fine.")  # NB-AV-09 (H12): asked by every new photo draft
+PHOTO_OPS = ("product.set_photo", "product.add", "store.set_home_image")  # AV0022-04, AV1937-01: ops in a photo-draft answer that get the draft's photo
 FETCH_FAILED = "I couldn't get that photo after trying three times, so nothing changed. Could you send it again?"
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
 # HASS-INTERP-OPENAI-1: which backend answered each message. Lazy like CONTROL; written only for an interpreter that names its
@@ -1406,11 +1407,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 else: self._asked_again(result[key], msg)
                 return "reader-failed" if failed and key == "unsupported" else key
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
-        photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
-                     None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
+        photo = next((c["args"]["photo"] for c in json.loads(revised["ops_json"]) if c["op"] in PHOTO_OPS
+                      and isinstance(c["args"].get("photo"), str)), None) if revised else None  # NB-AV-09, AV1937-01: a fill keeps the draft's photo, whichever place it was heading for; another one is refused
         calls = [c for c in result["ops"] if c["op"] in PHOTO_OPS] if photo else []  # AV0022-04: a new product too
         if len(calls) > 1:  # AV0022-04: one photo, one product; nothing changes until the owner says which
-            return self._reply("A photo can go on one product at a time. Which product is it for?") or "photo-many-ops"
+            return self._reply("One photo can go in one place; say which.") or "photo-many-ops"
         if any(c["args"].setdefault("photo", photo) != photo for c in calls):
             return self._reply("That answer goes with a different photo, so nothing changed. Which product is this photo for?") or "photo-mismatch"
         notes = list(notes)
