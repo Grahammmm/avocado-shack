@@ -1044,9 +1044,24 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _for_g(self, msg):
         """HASS-VOICE-1: `problems` (the last ten problem moments) and `weekly` (the week's three most common) from G's own number
         only (settings gSenders, never an owner sender). They read the correspondence log and nothing else; Mike never sees them."""
+        word = msg.text.strip().lower().rstrip(".!")
+        if word == "till report":
+            allowed = (not msg.from_me and msg.kind == "new" and msg.attachments == 0
+                       and sender_key(msg.sender) in self.settings.get("gKeys", ())
+                       and msg.chat == self.settings.get("gChat") and msg.chat not in self._owner_chats)
+            if not allowed:
+                return None
+            text = "I haven't been able to read the till yet."
+            if self.till is not None:
+                try:
+                    text = self.till.report(self._now(), editor_mod._load(str(self.sdir))[2])
+                except Exception:
+                    text = "I couldn't compare the till with the website. Nothing changed."
+            self.outbox.add(msg.chat, text, (), self._answering or None, long_ok=True)
+            self._record(msg, "g-till-report", owner=False)
+            return "g-till-report"
         if msg.from_me or msg.kind != "new" or msg.attachments > 0 or sender_key(msg.sender) not in self.settings.get("gKeys", ()): return None
         if msg.chat != self.settings.get("gChat") or msg.chat in self._owner_chats: return None  # only G's own chat; never an owner's
-        word = msg.text.strip().lower().rstrip(".!")
         if word not in ("problems", "weekly"): return None
         text = corrlog.problems_text(self.log) if word == "problems" else corrlog.weekly_line(self.log)
         self.outbox.add(msg.chat, text, (), self._answering or None, long_ok=True, ids_ok=True)

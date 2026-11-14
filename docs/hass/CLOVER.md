@@ -7,6 +7,79 @@ G decided on 2026-11-09 that Hass talks to Clover directly so that Mike (the own
 design (the seven questions, one chosen answer each) and describes the code in `hass/clover/`. It builds on `reports/hass/SKILLS-SPEC.md`
 (5.2 asked these questions; the answers are mapped at the end) and `docs/hass/TASKMAP.md` (T26 "Price change", gated until Clover).
 
+## Reports
+
+AVB-14 adds **cache-only** reports. They do not load a token, call Clover, use a
+model, change stock or update the site. These commands are for the deterministic
+Hass service/operator, not permission for a model to read live financial records:
+
+```text
+python3 -B hass/clover/cli.py report stock --host /path/to/host.json
+python3 -B hass/clover/cli.py report mismatch --host /path/to/host.json
+python3 -B hass/clover/cli.py report --all --host /path/to/host.json
+```
+
+Files: `<state>/clover/reports/YYYY-MM-DD-stock.md` and `...-mismatch.md`, dated in
+America/Los_Angeles. Folder 0700, files 0600; same-day reruns replace atomically.
+`--out DIR` chooses another private directory outside the runtime/writer checkout
+(the parent must exist); unsafe modes, symlinks and unsafe destination files are
+refused, never repaired. Each successful write prunes only regular, owned,
+single-link `YYYY-MM-DD-stock.md` / `...-mismatch.md` files in that output folder
+whose Pacific date is at least 90 days old. Other files and subfolders stay put.
+These are local, finance-local-class files: never attach them to chat, commit them,
+feed live records to a cloud model or publish them. This version emits no prices.
+
+Stock: all cached items, including hidden ones (marked), with sold-out counts
+(<=0), positive counts at or below `lowStockThreshold` (default 5), and no-count
+items. Every file labels last sync and freshness/outage, including historical
+snapshots over 24 hours old. Another till's or unidentified cache is refused.
+
+Mismatch: writer worktree `hass/content/products.json`, active site products only,
+and private `<state>/clover/links.json` with shape
+`{"product-id": {"cloverId": "CLOVERID", "sku": "OPTIONAL-SAVED-SKU"}}`.
+An absent link table is an explicit gap, not proof of absence. No fuzzy/name join:
+reports list both unlinked sides, missing/inactive link endpoints, changed saved
+SKUs, different names, and stock-word disagreements (`yes`/`limited` with count
+<=0 or `no` with count >0). Unknown counts/absent words are not guessed. Nothing
+is automatically fixed. A malformed/unsafe link table refuses the comparison.
+
+G can text **`till report`** in the configured `gChat` from a `gSenders` address,
+even while changes are paused. The response computes the same headings from the
+current cache, with totals only: no item names, SKUs, prices, paths or file text.
+It does not write a file. Owners (including Mike), strangers, wrong chats,
+attachments, edited messages and echoes cannot use this command. Existing age
+and outage wording applies; counts over 24 hours old are not quoted in chat.
+Mismatch headline totals count findings across sections, not unique products.
+
+`deploy/hass/hass-clover-report.service` / `.timer` are **uninstalled templates**:
+`report --all`, daily at 06:00 America/Los_Angeles, persistent across missed runs.
+Installation/enablement is an operator step after review and a runtime move; this
+PR does not install, enable or restart anything. Rollback: disable/remove that
+timer, then the operator may delete the reports folder; revert the PR for code.
+
+Rendered stock sample from the synthetic #571 fixtures (not live inventory):
+
+```markdown
+# Low stock
+
+Last sync: 2026-11-10T20:00:00+00:00
+Snapshot: fresh
+Comparison uses saved links only; unlinked items are gaps, not confirmed absences.
+
+## Sold out (2)
+
+- Eggs, dozen \(FAKEITEM00003\): 0
+- Old honey jar \(FAKEITEM00004\): 0; hidden on till
+
+## Low stock (at or under 5) (0)
+
+- None.
+
+## No count (1)
+
+- Market special \(ring up price\) \(FAKEITEM00006\): no count
+```
+
 ## Credential rule (read this first)
 
 G's standing fleet rule is that no agent handles credentials; this design keeps its spirit.

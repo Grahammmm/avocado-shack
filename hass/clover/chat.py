@@ -109,6 +109,21 @@ class TillDesk:
         except Exception:  # noqa: BLE001 - an unreadable cache is "can't reach the till", never a crash of the conversation
             return None, False
 
+    def report(self, now, worktree):
+        """G-only caller; freshly computed headline, never a file's arbitrary text."""
+        from hass.clover import reports
+        snapshot, reachable = self._snapshot()
+        if snapshot is None:
+            return NEVER_READ if reachable else DOWN_NO_DATA
+        state, label = reads.freshness(snapshot, now, reachable)
+        if state == "too-old":
+            return label
+        try:
+            content, links = reports.read_inputs(self.state, worktree)
+            return reports.headline(snapshot, content, links, now, self.config.low_stock_threshold, reachable)
+        except Exception:  # no names, prices, paths or input exceptions in the reply
+            return "I couldn't compare the till with the website. Nothing changed."
+
     def answer(self, intent, now):
         """The reply text for a parsed intent at `now` (timezone-aware). Till names and SKUs are quoted (shown as the till has them)."""
         if intent[0] == "write":

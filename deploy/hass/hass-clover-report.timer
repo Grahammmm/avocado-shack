@@ -1,0 +1,9 @@
+[Unit]
+Description=Hass daily local till reports at 06:00 Pacific (template)
+
+[Timer]
+OnCalendar=*-*-* 06:00 America/Los_Angeles
+Persistent=true
+
+[Install]
+WantedBy=timers.target
