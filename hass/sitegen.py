@@ -443,10 +443,15 @@ def publish(content: Content, repo: Path, out: Path) -> list[str]:
 def _check_root(repo: Path, root: Path) -> Path:
     """AV1622-08: the folder to compare must be an existing real directory outside the repository, reached through no
     symlink (the folder itself, dangling links and every parent included). Metadata only; nothing is created."""
-    top = Path(os.path.abspath(root))
-    for i in range(1, len(top.parts) + 1):
-        if os.path.islink(Path(*top.parts[:i])):
+    # Walk the path as given, ``..`` included, before any normalisation: collapsing ``link/..`` or ``missing/..`` first
+    # would check a different folder than the one named. Each prefix must exist and be no link; lstat raises otherwise.
+    given = Path(os.path.join(os.getcwd(), os.fspath(root)))
+    for i in range(1, len(given.parts) + 1):
+        prefix = Path(*given.parts[:i])
+        if os.path.islink(prefix):
             raise OSError(errno.ELOOP, "folder or one of its parents is a symlink")
+        os.lstat(prefix)
+    top = Path(os.path.abspath(given))  # safe now: every component is a real, existing directory or file, no link
     for found in (top, Path(os.path.realpath(top))):
         for base in (Path(os.path.abspath(repo)), Path(os.path.realpath(repo))):
             if found == base or base in found.parents:

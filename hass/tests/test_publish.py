@@ -375,6 +375,23 @@ class CheckPublish(unittest.TestCase):
         self.assertEqual(sorted(p.as_posix() for p in self.tmp.rglob("*") if "site" not in p.relative_to(self.tmp).parts[:1]), before)
         self.assertSentinelUntouched()
 
+    def test_check_publish_dotdot_is_checked_before_it_is_collapsed(self):
+        """The path as given is what is checked: ``link/../site`` and ``missing/../site`` must not fall back to the
+        lexically collapsed (and here exact) ``tmp/site``; a ``..`` through real folders stays fine."""
+        nested = self.outside / "nested"
+        nested.mkdir()
+        (self.tmp / "link").symlink_to(nested, target_is_directory=True)
+        self.assertEqual(self.check(self.site)[0], 0)  # the collapsed target really is an exact copy
+        walker = mock.Mock(side_effect=AssertionError("a refused folder must not be read"))
+        for name, target in {"symlink then ..": f"{self.tmp}/link/../site", "missing then ..": f"{self.tmp}/nowhere/../site",
+                             "file then ..": f"{self.sentinel}/../site"}.items():
+            with self.subTest(name), mock.patch.object(sitegen, "check_publish", walker):
+                code, out, err = self.check(target)
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("check-publish refused", err)
+        self.assertEqual(self.check(f"{self.tmp}/outside/../site")[0], 0)
+        self.assertSentinelUntouched()
+
     def test_check_publish_nested_links_and_special_files(self):
         trails = self.site / "assets" / "trails"
         moved = self.outside / "trails"
