@@ -281,6 +281,31 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(plan["tier"], "affected")
         self.assertIn(cs.PRIVACY_GUARD, plan["shards"][0])
 
+    def test_affected_cost_budget_boundary(self):
+        from unittest import mock
+        modules = [cs.SMOKE, cs.PRIVACY_GUARD, "test_leaf", "test_other"]
+        for cost, tier in ((240, "affected"), (241, "affected"),
+                           (480, "affected"), (481, "full")):
+            with self.subTest(cost=cost), \
+                    mock.patch.object(cs, "changed_paths", return_value=["hass/leaf.py"]), \
+                    mock.patch.object(cs, "build_graph", return_value=({}, {
+                        cs.test_path("test_leaf"): {"hass/leaf.py"}})):
+                weights = {cs.SMOKE: 1, cs.PRIVACY_GUARD: 1, "test_leaf": cost - 2}
+                plan = cs.make_plan("pull_request", "base", 4, weights, modules)
+                self.assertEqual(plan["tier"], tier)
+                expected = modules if tier == "full" else modules[:3]
+                self.assertTrue(cs.union_proof(expected, plan["shards"])[0])
+
+    def test_non_pr_events_ignore_affected_budget(self):
+        from unittest import mock
+        modules = [cs.SMOKE, cs.PRIVACY_GUARD, "test_leaf"]
+        for event in ("push", "schedule", "workflow_dispatch"):
+            with self.subTest(event=event), mock.patch.object(cs, "changed_paths") as changed:
+                plan = cs.make_plan(event, "base", 4, {}, modules)
+                self.assertEqual(plan["tier"], "full")
+                self.assertTrue(cs.union_proof(modules, plan["shards"])[0])
+                changed.assert_not_called()
+
     def test_plan_round_trips_through_json(self):
         self.assertEqual(json.loads(json.dumps(self.FULL)), self.FULL)
 

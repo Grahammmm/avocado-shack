@@ -51,7 +51,8 @@ WEIGHTS = TESTS / "ci_weights.json"
 DEFAULT_SHARDS = 4
 MAX_SHARDS = 8
 DEFAULT_WEIGHT = 3  # seconds for a module with no measurement yet
-AFFECTED_MAX_SECONDS = 240  # past this, the affected tier would be no faster than a full shard
+# Allow up to eight measured minutes in quick to avoid the full tier's extra runner queue.
+AFFECTED_MAX_SECONDS = 480
 SHARED_FRACTION = 0.5
 SMOKE = "test_ci_shards"
 PRIVACY_GUARD = "test_tracked_private"  # repo-wide: any newly tracked private path must fail every PR, affected or full
@@ -330,7 +331,7 @@ def make_plan(event, base, shards, weights, modules=None):
                 cost = sum(weight(n, weights) for n in selected)
                 if cost > AFFECTED_MAX_SECONDS:
                     selected, reason = None, (f"affected selection ({cost}s measured) is over "
-                                              f"{AFFECTED_MAX_SECONDS}s; a full shard is as fast")
+                                              f"{AFFECTED_MAX_SECONDS}s affected-tier budget")
                 else:
                     tier, reason = "affected", f"{len(selected)} affected module(s), {cost}s measured"
         except (OSError, ValueError, subprocess.CalledProcessError) as error:

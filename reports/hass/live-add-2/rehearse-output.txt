@@ -1,0 +1,30 @@
+MIKE: new Cal Poly clover honey, packaged in a jar, pantry shelf, it's in
+HASS: I set: the description to “Clover honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.”, and you can send a different one if you like.
+Here's the change I'd make:
+A new product: Cal Poly clover honey
+  the brand: Cal Poly
+  the shelf: pantry
+  the description: Clover honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.
+  the brand shown on the card: Cal Poly
+  the photo: the photo from your message
+  the photo description: Cal Poly clover honey in a jar
+  the name: Cal Poly clover honey
+  the maker: Cal Poly
+  whether it shows: showing
+Avocado Shack, the shelf check: from nothing to 2026-11-08
+Cal Poly clover honey, the shelf word: from nothing to yes
+Cal Poly clover honey, when it was last checked: from nothing to 2026-11-08
+I'll hold this for you until today at 9:11 am.
+Reply yes to save it, or no to cancel. If something's wrong, tell me what to fix.
+Cal Poly is already on the site, so I'm using them.
+This also records today as the day you checked the shelves.
+The picture is tidied up to match the other pictures on the site.
+I set: the description to “Clover honey from Cal Poly in San Luis Obispo. Spoon a little beside cheese or onto buttered toast; give it a chance to be tasted on its own.”, and you can send a different one if you like.
+MIKE: yes <code>
+HASS: Saved and checked: a new product: Cal Poly clover honey; the shelf check for Avocado Shack; the shelf word, when it was last checked for...
+It's saved, but not on the website yet. Copying it there is a separate step. Please ask Graham to put it on the website.
+PILLOW: 12.0.0
+FILES: ["hass/content/products.json", "hass/content/store.json", "storefront-mockup/assets/products/photo-2cec1911a5900242.jpg", "storefront-mockup/catalog-products.js", "storefront-mockup/index.html"]
+PICTURE: storefront-mockup/assets/products/photo-2cec1911a5900242.jpg
+sample-jar-white-sheet.jpg JPEG (1200, 900) RGB 30583 bytes
+result-house-picture.jpg JPEG (800, 800) RGB 18982 bytes

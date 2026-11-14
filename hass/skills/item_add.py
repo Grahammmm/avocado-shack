@@ -41,13 +41,14 @@ Owner wording follows docs/hass/VOICE.md. Skill page: docs/hass/skills/item_add.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import types
 from datetime import date
 from pathlib import Path
 from typing import NamedTuple
 
-from hass import claims, house_style as hs, media, newitem, newitem_render, voice
+from hass import claims, house_style as hs, live_policy, maker_site, media, newitem, newitem_render, voice
 from hass.content_model import (AVAILABILITY, CATEGORIES, FORBIDDEN_TEXT, INVISIBLE_RE, SHELF_LABELS, TEXT_LIMITS,
                                 checked_on)
 from hass.interpret_check import PLAIN_TEXT_REPLY, PRICE_REPLY
@@ -92,6 +93,31 @@ RETAKE_OTHER = ("The picture won't quite match the others. A new photo on a plai
 AS_TAKEN = ("I'll use the photo as you took it, so it may look different from the other pictures. A photo on a plain surface, "
             "with the product in the middle, would look better. If this one is fine, just reply yes.")
 PICTURE_OK = "The picture is tidied up to match the other pictures on the site."
+# HASS-LIVE-ADD-2: the maker's story. A new maker with no words from him and no web address gets ONE plain question, never a
+# made-up story. His answer is his own words; "skip" keeps only the one line that says where they are based (D5).
+ASK_STORY = "What should we say about {maker}? A sentence is enough."
+SKIP_STORY = re.compile(r"\b(?:skip(?:\s+it|\s+the\s+story)?|no\s+story|nothing\s+to\s+(?:say|add)|leave\s+it\s+(?:out|off|blank)|just\s+the\s+town)\b"
+                        r"|^\s*(?:no|none|nope|nothing|never\s*mind)[\s.!]*$", re.IGNORECASE)
+# HASS-SEC-3 (H2): what a maker's own website says is never published by itself. It is offered here, in the preview, labelled
+# with where and when it was read, and goes on the website only with his yes to this exact draft (the same yes-code flow).
+SITE_SAYS = ("The maker's own site says: {summary} (source: {url}, read on {day}). "
+             "These words go on the website as their story only if you say yes to this change.")
+
+
+def site_says(summary, url, retrieved) -> str:
+    """The preview line for a story written from the maker's website: the exact words, the address and the day it was read
+    (the words and the address are marked as quoted, so the voice rules do not judge an address's slashes)."""
+    try:
+        day = date.fromisoformat(retrieved)
+        when = f"{day:%b} {day.day}, {day.year}"
+    except (TypeError, ValueError):
+        when = "a day I can't read"
+    return SITE_SAYS.format(summary=_q(summary), url=_q(url), day=when)
+
+
+SITE_SKIPPED = "I couldn't use {maker}'s website, so the story is {what}."
+LIVE_CLAIM = ("I can't put {what} on the website from chat, so nothing changed. Send it again without that and I'll add the "
+              "product.")  # the backlog line that follows says the message is written down for Graham
 MANY_ITEMS = "I can add one product at a time. Which one do you want first?"
 # One photo is one product (rule one-photo): he names two products in one message, or the name slot lists two. A determiner
 # before each product ("the lemon curd and the plum jam") or a list sign (& +) is what tells two products from one name such
@@ -138,6 +164,7 @@ class Outcome(NamedTuple):
     left_off: tuple = ()  # "Left off: ..." (a price or size, with the reason)
     say: tuple = ()  # plain extra sentences (the shelf-check line, a maker used or created)
     warn: tuple = ()  # the picture advice
+    sources: tuple = ()  # HASS-LIVE-ADD-2: where a drafted maker story was read (maker_site.record), kept privately with the draft
 
 
 # -- plain helpers -------------------------------------------------------------------------------------------------
@@ -177,6 +204,56 @@ def _today(ctx):
 
 def _q(text) -> str:
     return voice.quote(text)
+
+
+def _live(ctx) -> bool:
+    """True when what the plan makes goes to the real website on his yes (settings ``liveSite``): the live gate is then judged
+    here as well, so a claim is rewritten out or refused in plain words, not only caught later."""
+    return getattr(ctx, "live", False) is True
+
+
+def _claim_kinds(text) -> list:
+    """The kinds of claim the live gate would refuse in ``text`` (live_policy.PROTECTED), [] when none."""
+    return sorted(live_policy._protected(text)[1]) if isinstance(text, str) else []
+
+
+def _live_claims(ctx, *texts) -> None:
+    """Live: a claim (where the food comes from, organic, health, awards, prices, contact, trail facts) in his words is
+    refused with the plain reason. The refusal is kept as a policy row for Graham (backlog), never drafted."""
+    if not _live(ctx):
+        return
+    kinds = sorted({k for t in texts for k in _claim_kinds(t)})
+    if kinds:
+        what = _join([live_policy.PLAIN_KINDS.get(k, "a claim I can't check") for k in kinds], "or")
+        raise Refusal(LIVE_CLAIM.format(what=what), "refuse", "policy")
+
+
+def _site_story(name, url, said, ctx, answered=False, town=""):
+    """({"page", "story"} for the maker's own website, or None when he gave no address). A page that cannot be read or has
+    nothing usable asks him ONE plain question, never a made-up story. Pure: the read happened BEFORE the conversation's write
+    transaction and only its result is behind ``ctx.maker_page`` (HASS-SEC-3 M2). ``answered``: he has already given his own
+    story words or said to skip it, so the website is optional: a page that cannot be used is left out (None) and his answer
+    is used, instead of asking the same question again. ``town`` is the town he confirmed (the only place the story may name)."""
+    address = _clean(url)
+    if not address:
+        return None
+    ask = ASK_STORY.format(maker=name)
+    reader = getattr(ctx, "maker_page", None)
+    try:
+        if not callable(reader):
+            raise maker_site.PageError("unreachable")
+        page = reader(address)
+    except maker_site.PageError as exc:
+        if answered:
+            return None
+        # a site that could not be read (or not in time) is the one plain line, which already asks for his sentence
+        raise Refusal(exc.reply if exc.code == "unreachable" else f"{exc.reply} {ask}", "question") from exc
+    story = maker_site.draft_story(name, page, said=said, town=town, today=_today(ctx))
+    if story is None:
+        if answered:
+            return None
+        raise Refusal(f"{maker_site.CODES['unreadable']} {ask}", "question")
+    return {"page": page, "story": story}
 
 
 def _said(name, text) -> bool:
@@ -333,7 +410,10 @@ def house_description(slots, ctx):
         if facts["place"] == NOT_NEEDED:
             facts["place"] = None
     text = newitem.compose(facts, content, hs.load_spec(), _message(ctx))["text"]
-    sentences = hs.sentences(text)
+    if _live(ctx) and _claim_kinds(text):  # rewritten without the claim, never sent with it (HASS-LIVE-ADD-2 B)
+        facts.update(maker=None, place=None)
+        text = newitem.compose(facts, content, hs.load_spec(), _message(ctx))["text"]
+    sentences = [s for s in hs.sentences(text) if not (_live(ctx) and _claim_kinds(s))]
     for extra in newitem.GENERIC_SERVING:
         if len(sentences) >= 2:
             break
@@ -563,6 +643,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if any(c.isdigit() for c in name):
         raise Refusal("The name can't have numbers or sizes in it. What is it called?", "question")
     name = _text(name, "name", "name")
+    _live_claims(ctx, name, slots.get("story"), slots.get("image_alt"))  # live: a claim in a public word is refused, never drafted
     price, size = _price_size(raw_name, message)
 
     # 2. what it is: packaged or fresh
@@ -578,6 +659,7 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if choice.get("same") and not _said(choice["name"], message):  # the claims gate wants a maker in his own words: he is asked to say it
         raise Refusal(f"Please say the name, so I use the right one: {_q(choice['name'])}.", "question")
     ops: list = []
+    sources: tuple = ()
     set_lines: list = []
     say: list = []
     left: list = []
@@ -595,12 +677,31 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
         place = _clean(slots.get("place"))
         if not place or place == NOT_NEEDED:
             raise Refusal(question("place", slots, ctx), "question")
+        # the maker's story (HASS-LIVE-ADD-2 C, HASS-SEC-3 H2): his own words, plus a short story written from a few facts on
+        # the maker's OWN website when he gave its address (maker_site.draft_story: what they make, since when, the town he
+        # confirmed; never a page sentence). It is labelled in the preview with its address and day, and goes live only with
+        # his yes to this draft. With neither, one plain question; "skip" keeps only the D5 line. The address itself is not
+        # kept on the maker (the website-link field is protected and is never published); it is the story's recorded source.
+        mine = _clean(slots.get("story"))
+        # a skip given in any later text of this request holds for the rest of it, so revising the description or caption after
+        # a skipped story revises the draft instead of asking for the story again (Codex RETURN at 9f213272, item 1)
+        skipped = any(SKIP_STORY.search(t) for t in _texts(ctx)[1:])
+        found = _site_story(choice["name"], slots.get("maker_url"), mine, ctx, answered=bool(mine) or skipped,
+                            town=place.split(",")[0].strip())
+        summary = " ".join(found["story"]["sentences"]) if found else ""
+        story_in = " ".join(part for part in (mine, summary) if part)
+        if not story_in and not skipped:
+            raise Refusal(ASK_STORY.format(maker=choice["name"]), "question")
         try:
-            made = makers.describe_add({"name": choice["name"], "place": place, "story": slots.get("story"),
-                                        "url": slots.get("maker_url")},
+            made = makers.describe_add({"name": choice["name"], "place": place, "story": story_in or None, "url": None},
                                        types.SimpleNamespace(content=content, owner_text=message or None))
         except makers.Refusal as exc:
             raise Refusal(exc.reply, exc.kind) from exc
+        if found and summary in made.ops[0]["args"].get("story", ""):  # the label is shown exactly when the text is in the draft
+            sources = (maker_site.record(found["page"], found["story"]),)
+            say.append(site_says(summary, found["page"]["url"], found["page"]["retrieved"]))
+        elif _clean(slots.get("maker_url")):  # the website could not be used and his answer (or skip) stands in for it
+            say.append(SITE_SKIPPED.format(maker=_q(choice["name"]), what="your words" if mine else "just the town"))
         ops += made.ops
         key, brand = made.ops[0]["args"]["key"], choice["name"]
         set_lines += list(made.set_lines)
@@ -623,6 +724,14 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
 
     # 5. the description: drafted in the shop's voice, or his own words
     description = _clean(slots.get("description"))
+    if description and "description" not in filled and _live(ctx) and (kinds := _claim_kinds(description)):
+        # live: his own description says something the website cannot carry from chat; it is rewritten without it, and he is told
+        slots = dict(slots, description=house_description({**slots, "description": None}, ctx))
+        description = _clean(slots.get("description"))
+        filled.append("description")
+        left.append("your wording of the description, because it says "
+                    + _join([live_policy.PLAIN_KINDS.get(k, "a claim I can't check") for k in kinds], "or")
+                    + ", which I can't put on the website from chat")
     if not description:
         raise Refusal(question("description", slots, ctx), "question")
     description = _text(description, "description", "description")
@@ -672,11 +781,40 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     if price or size:
         parts = ([f"the price ({_join(price, 'and')})"] if price else []) + ([f"the size ({_join(size, 'and')})"] if size else [])
         left.append(f"{_join(parts, 'and')}, because the website shows no prices or sizes")
-    return Outcome(ops, tuple(set_lines), tuple(left), tuple(say), _picture_notes(ctx, sha))
+    return Outcome(ops, tuple(set_lines), tuple(left), tuple(say), _picture_notes(ctx, sha), sources)
 
 
 def plan_add(slots: dict, ctx=None) -> list:
-    return describe_add(slots, ctx).ops
+    key = _drafted_key(slots)
+    done = describe_add(slots, ctx)
+    _remember(ctx, key, done)
+    return done.ops
+
+
+# HASS-SEC-3 (L3): the Outcome of the drafting call itself, kept on the ctx the dispatcher drafts with, so the lines shown
+# beside the draft (``notes``) and the private source record (``sources``) describe the very read the draft was written from.
+def _drafted_key(slots) -> str:
+    try:
+        return json.dumps(slots, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return repr(slots)
+
+
+def _remember(ctx, key, done) -> None:
+    if ctx is None:
+        return
+    kept = getattr(ctx, "drafted", None)
+    if not isinstance(kept, dict):
+        try:
+            ctx.drafted = kept = {}
+        except AttributeError:
+            return
+    kept[key] = done
+
+
+def _drafted(ctx, slots):
+    kept = getattr(ctx, "drafted", None)
+    return kept.get(_drafted_key(slots)) if isinstance(kept, dict) else None
 
 
 # -- the picture advice (read-only: nothing is written, nothing is committed) ----------------------------------------------
@@ -742,12 +880,24 @@ def set_phrases(slots, ctx) -> list:
 SET_PHRASES = {"item.add": set_phrases}
 
 
+def sources(name, slots, ctx) -> list:
+    """Where the drafted maker story was read ([maker_site.record, ...]); the dispatcher keeps them privately with the draft.
+    HASS-SEC-3 (L3): only ever the drafting call's own record (kept by ``plan_add`` on the ctx it drafted with); the plan is
+    never run again for it, so the page is never read a second time and the record cannot describe a different read.
+    Never raises."""
+    done = _drafted(ctx, slots)
+    return list(done.sources) if done is not None else []
+
+
 def notes(name, slots, ctx) -> dict:
-    """The lines a proposal shows beside the draft, as the test kit (and the dispatcher, once it asks) plays them."""
-    try:
-        done = describe_add(dict(slots), ctx)
-    except Refusal:
-        return {}
+    """The lines a proposal shows beside the draft, as the test kit (and the dispatcher, once it asks) plays them. With the
+    drafting ctx (HASS-SEC-3 L3) they are the drafting call's own lines, so the label he reads is the text the draft carries."""
+    done = _drafted(ctx, slots)
+    if done is None:
+        try:
+            done = describe_add(dict(slots), ctx)
+        except Refusal:
+            return {}
     say = list(done.say) + [w for w in done.warn if w in (PICTURE_OK,)]
     warn = [f"Left off: {line}." for line in done.left_off] + [w for w in done.warn if w != PICTURE_OK]
     return {"say": say, "set": [f"I set: {line}." for line in done.set_lines], "warn": warn}

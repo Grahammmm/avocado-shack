@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## CI-5 — affected-tier cost budget (November 13, 2026)
+
+Raised the one measured-cost fallback in `hass/tests/ci_shards.py` from 240 to 480 seconds. This keeps safely mapped medium selections in the quick job instead of queueing four full-suite shards. Infrastructure/shared-library/unmapped fallbacks, mandatory smoke/private-file guards, aggregate verification and full main/nightly/manual runs are unchanged. Workflow comment updated; no job, timeout, runner or service changes.
+
+Builder check: `python3 -m unittest hass.tests.test_ci_shards -v` ran 27 tests, OK, including old/new cost boundaries (240/241/480/481 seconds) and full coverage for push/schedule/manual events. This is build evidence, not a measured speedup. Post-merge acceptance remains the next 40 green PR runs (full-tier share below 40%, queue median below 5 minutes, wall median below 25 minutes) and seven days without a red-main episode caused by a skipped test. Rollback: restore the 240-second budget/revert this change. Not installed, merged or live-verified by the builder.
+
 ## AVOC-MAIN-RED-SCAFFOLD: scaffold capability metadata — November 13, 2026
 
 Repaired the AVB-20 template after AVB-09 made capability metadata mandatory. Generated skills describe their existing owner-approved site write (`site`, site target, A1, subject/field-name audit declaration, owner); sandbox support follows the op and selected arguments' live boundary (`full` for chat-live, otherwise `preview`). The lint, live policy and approval path are unchanged. Added coverage for all metadata fields and a private-only product-name edit alongside the existing product, text and store cases; the review-required warning remains.
@@ -2181,6 +2187,12 @@ Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it act
 
 Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.
 
+## AVO-FIX-559b: preserve source-block context and historical predicates — November 13, 2026
+
+Branch rb/hass-live-add-2, PR #559, final operator-admitted Codex escalation after three SEC-3 RETURNs. Maker-site facts are admitted only after every sentence in their complete source block is understood as an allowed affirmative fact; unknown context drops the whole block. Private provenance retains the complete supporting blocks. Product-making history no longer becomes the maker's founding year or masks an explicit founding date. Exact-draft owner approval and the operator security hold are unchanged; the PR stays draft.
+
+Builder evidence: 147 focused maker-site, production-dispatch/photo/undo and SEC-2 tests pass. The new real-HTML production-path table had 10 failing subtests on the prior candidate and passes after repair (11 cases, including literal multi-sentence controls and complete provenance). Preserved second- and third-RETURN probes replayed against this clone, with both four-test receipt suites passing and zero commits without yes. No live state, publication or credentials touched. Diagnosis posted before code edits on PR #559; independent review and operator release remain outstanding.
+
 ## AVB-09: one generated capability inventory — November 13, 2026
 
 The skill declarations now explicitly name pack, changing targets, approval class, sandbox support, declared audit fields and audience. Missing/invalid fields fail the lint; mixed-pack `SKILLS` exports are rejected. The legacy approval execution field and all existing plans, previews and policy gates are unchanged. A2/A3 stay unavailable, not silently treated as A1. The new `hass/capabilities.py` generates `docs/hass/capabilities.json` and the owner page `CAPABILITIES.md`; `help` appends the same registry-derived skills to the existing fixed-command examples. CI tests reject missing/stale generated files. The FAQ is honestly labelled as request-recording only, and the empty till pack is visible. These describe source capabilities, not the installed runtime or permission to publish. AVB-10/11 retain the audit writer/per-target sandbox work.
@@ -2190,3 +2202,7 @@ Builder evidence: generator `--check` passed; 63 focused metadata/help/model/lin
 ## AVB-11: one per-target sandbox gate — November 13, 2026
 
 G adopted AVB-02 and chose per-target routing. The host now defaults every new change to sandbox unless its target is explicitly in `live`; a mixed bundle stays entirely sandbox. Draft hashes bind target identities and mode generation, approval/apply recheck them, and undo/recovery retain the recorded target. Existing site writer/release gates stay in place. `host.py mode` can change one target without changing the other; it never restarts services. See docs/hass/SANDBOX.md for migration, retained holds and rollback. The generic till boundary uses fake transports in acceptance; real till writes, companion transactions and audit integration remain the admitted downstream cards. Tests include each registered skill's existing case or built-in read-only plan, actual dispatcher/host paths and a throwaway bare Git publication target. This is a source build, not a deployment, live trial, merchant qualification or human acceptance.
+
+## AVB-04: attended runtime release with automatic rollback — November 13, 2026
+
+`hass/runtime_release.py` builds on the operator's completed AVB-03 move notes. Default is a Git-metadata-only plan; explicit attended apply stages/tests the target, backs up, stops the existing runtime units, moves the checkout and matching host pin, then starts/self-tests or restores both. No unit installation, credentials, publishing, persistent-state migration or live worker action. See `docs/hass/RUNTIME-RELEASE.md` for recovery, budgets and retained gates. Temporary real-Git/synthetic-host tests cover success, failed and interrupted moves and refusals; service boundaries are simulated. The timed second live move and phone check remain operator-owned and unverified, not implied by the fixture tests.
