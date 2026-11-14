@@ -79,12 +79,15 @@ def _route_for(args, routes) -> dict | None:
 def build_title(title, meeting_point):
     """A hike title: kept when it already names a hike or walk; else his place words plus "hike", using the meeting point when
     it is the longer form of the same place ("Fiscalini Ranch" + "Fiscalini Ranch bluff trail" -> "Fiscalini Ranch bluff trail
-    hike"). None when there is nothing to build from or the result is too long."""
+    hike"): equal to the title or extending it after a space, so "Pine" never becomes "Pineapple trail hike". None when there
+    is nothing to build from or the result is too long."""
     title = " ".join(title.split()) if isinstance(title, str) else ""
     meet = " ".join(meeting_point.split()) if isinstance(meeting_point, str) else ""
     if title and HIKE_WORD.search(title):
         return title
-    base = meet if meet and (not title or _fold(meet).startswith(_fold(title))) and not MEET_WORD.search(meet) else title
+    folded_title, folded_meet = _fold(title), _fold(meet)
+    whole_name = not title or folded_meet == folded_title or folded_meet.startswith(folded_title + " ")
+    base = meet if meet and whole_name and not MEET_WORD.search(meet) else title
     base = re.sub(r"^(?:the|at)\s+", "", base, flags=re.I).strip()
     if not base:
         return None
