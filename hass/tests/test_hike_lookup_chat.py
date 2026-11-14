@@ -663,8 +663,8 @@ class LiveClient(NoNetwork):
     """``hike_fetch.LiveFetch`` with a fake ``urlopen``: no socket is ever opened."""
 
     class Resp:
-        def __init__(self, body):
-            self.body = body
+        def __init__(self, body, on_read=None):
+            self.body, self.on_read = body, on_read
 
         def __enter__(self):
             return self
@@ -673,7 +673,10 @@ class LiveClient(NoNetwork):
             return False
 
         def read(self, n=-1):
-            return self.body if n < 0 else self.body[:n]
+            if self.on_read:
+                self.on_read()
+            out, self.body = (self.body, b"") if n < 0 else (self.body[:n], self.body[n:])
+            return out
 
     def fetch(self, body=b"{}", contact=CONTACT, error=None):
         self.opened = []
@@ -708,6 +711,19 @@ class LiveClient(NoNetwork):
         self.assertEqual(timeouts[1], 10)  # the second starts at 80 s: it is given the 10 seconds left, not another 60
         self.assertLessEqual(now[0], hikes.LOOKUP_SECONDS)  # the chat was never kept waiting past the 90 seconds
         self.assertEqual(len(timeouts), 2)  # and no third request was started
+
+    def test_a_body_that_trickles_in_is_cut_off_at_the_time_limit(self):
+        now = [0.0]
+
+        def tick():  # every read succeeds quickly (no socket timeout) but the clock moves 10 s each time
+            now[0] += 10
+
+        client = hike_fetch.LiveFetch(CONTACT, opener=lambda req, timeout=None: LiveClient.Resp(b"x" * 10_000_000, tick),
+                                      clock=lambda: now[0])
+        with self.assertRaises(hike_fetch.hl.TransportError) as cm:
+            client("overpass", {"query": "q"}, timeout=30)
+        self.assertEqual(cm.exception.kind if hasattr(cm.exception, "kind") else cm.exception.args[0], "slow")
+        self.assertLessEqual(now[0], 40)
 
     def test_no_contact_no_client_and_none_is_built_in(self):
         for bad in (None, "", "nobody", "http://insecure.example.com", "a b@example.com"):

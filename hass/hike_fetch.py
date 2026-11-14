@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import http.client
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +29,7 @@ ENDPOINTS = {
     "elevation": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples",
 }
 TIMEOUT_S = 60
+CHUNK_BYTES = 65_536
 MAX_BODY_BYTES = 8_000_000  # a county search is well under this; an answer past it is not read
 valid_contact = hl.valid_contact
 
@@ -35,11 +37,12 @@ valid_contact = hl.valid_contact
 class LiveFetch:
     accepts_timeout = True  # ``CachedTransport`` hands it the time left of the lookup's total limit (``timeout=``)
 
-    def __init__(self, contact, opener=urllib.request.urlopen):
+    def __init__(self, contact, opener=urllib.request.urlopen, clock=time.monotonic):
         if valid_contact(contact) is None:
             raise ValueError("a contact address (an e-mail address or an https link) is required for the User-Agent")
         self.agent = f"avocado-shack-hass-hike-lookup/0.1 (contact: {contact})"
         self.opener = opener
+        self.clock = clock
 
     def __call__(self, service, request, timeout=None):
         """One request. ``timeout`` (seconds, optional) is what is left of the whole lookup's limit: the request waits that long at
@@ -59,9 +62,19 @@ class LiveFetch:
         else:
             url += "?" + urllib.parse.urlencode({**request, "format": "jsonv2"})
         req = urllib.request.Request(url, data=data, headers={"User-Agent": self.agent})
+        deadline = self.clock() + wait  # one elapsed-time limit over connect, headers and body: a trickle cannot outlast it
         try:
             with self.opener(req, timeout=wait) as resp:
-                raw = resp.read(MAX_BODY_BYTES + 1)
+                parts, size = [], 0
+                while size <= MAX_BODY_BYTES:
+                    if self.clock() >= deadline:
+                        raise hl.TransportError("slow", "time limit")
+                    chunk = resp.read(min(CHUNK_BYTES, MAX_BODY_BYTES + 1 - size))
+                    if not chunk:
+                        break
+                    parts.append(chunk)
+                    size += len(chunk)
+                raw = b"".join(parts)
             if len(raw) > MAX_BODY_BYTES:
                 raise hl.TransportError("bad", "answer too large")
             return json.loads(raw)
