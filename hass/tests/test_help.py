@@ -6,12 +6,12 @@ import re
 import unittest
 from datetime import timedelta
 
-from hass import conversation, voice
+from hass import capabilities, conversation, voice
 from hass.tests.test_commands_doc import parser_verbs, verb
 from hass.tests.test_conversation import GROUP, STRANGER, T0, ConversationTestCase, _ops
 from hass.tests.test_editor import HOURS, NEW_HOURS
 
-LINES = voice.plain(conversation.HELP_TEXT).splitlines()
+LINES = voice.plain(conversation.HELP_TEXT).splitlines()  # fixed commands keep their short-list contract
 
 
 def examples():
@@ -60,21 +60,35 @@ class HelpConversationTests(ConversationTestCase):
         for text in ("help", "Help!", "commands.", "?"):
             with self.subTest(text=text):
                 self.assertEqual(self.say(text), "help")
-                self.assertEqual(self.replies(), [voice.plain(conversation.HELP_TEXT)])
+                self.assertEqual(self.replies(), [voice.plain(conversation.HELP_TEXT + "\n\n" + capabilities.help_section())])
         self.assertEqual((self.say("help", pid="m1"), self.replies()), ("duplicate", []))  # a resent help: no reply
         self.assertEqual(self.state(), ([], [], 0, 0, []))
+
+    def test_help_uses_the_injected_registry_not_a_copied_inventory(self):
+        from dataclasses import replace
+        from types import SimpleNamespace
+        from hass.skills import load_skills
+        from hass.skills.model import Registry
+        skill = replace(load_skills().skills['item.hide'], label='hide something special')
+        self.conv.dispatch = SimpleNamespace(registry=Registry({skill.name: skill}))
+        before = self.state()
+        self.assertEqual(self.say('help'), 'help')
+        [reply] = self.replies()
+        self.assertIn('hide something special - ', reply)
+        self.assertNotIn('bring a hidden product back - ', reply)
+        self.assertEqual(self.state(), before)
 
     def test_help_sentence_goes_to_the_interpreter(self):
         self.interp.mapping["help me with avocados"] = _ops((HOURS, {"hours": NEW_HOURS}))
         self.assertEqual(self.say("help me with avocados"), "proposed")
-        self.assertNotEqual(self.replies(), [voice.plain(conversation.HELP_TEXT)])
+        self.assertNotEqual(self.replies(), [voice.plain(conversation.HELP_TEXT + "\n\n" + capabilities.help_section())])
 
     def test_help_does_not_expire_a_lapsed_proposal(self):
         draft, _reply = self.propose("hours")
         self.now = T0 + timedelta(seconds=601)  # lapsed; no other message has swept it yet
         before = self.state()
         self.assertEqual(self.say("help"), "help")
-        self.assertEqual((self.replies(), self.state()), ([voice.plain(conversation.HELP_TEXT)], before))
+        self.assertEqual((self.replies(), self.state()), ([voice.plain(conversation.HELP_TEXT + "\n\n" + capabilities.help_section())], before))
         self.assertEqual(self.drafts()[0]["state"], "proposed")
         self.assertEqual(self.say(f"yes {draft['code']}"), "no-target")  # a later message still expires it
         self.assertEqual(self.drafts()[0]["state"], "expired")
@@ -85,7 +99,7 @@ class HelpConversationTests(ConversationTestCase):
         self.replies()
         before = self.state()
         self.assertEqual(self.say("Help!"), "help")
-        self.assertEqual((self.replies(), self.state()), ([voice.plain(conversation.HELP_TEXT)], before))
+        self.assertEqual((self.replies(), self.state()), ([voice.plain(conversation.HELP_TEXT + "\n\n" + capabilities.help_section())], before))
         self.assertEqual((self.drafts()[0]["state"], self.editor.applies), ("proposed", 0))
 
     def test_stranger_or_group_help_is_ignored_without_a_reply(self):

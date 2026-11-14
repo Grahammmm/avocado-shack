@@ -161,6 +161,7 @@ def notes(name, slots, ctx) -> dict:
 _PRODUCTS = "hass/content/products.json"
 
 STOCK_RESTOCK = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="stock.restock", label="record when more is coming", version=2,
     summary="Note the day more of one product is expected. A day only; never a count, never the shelf word.",
     triggers=(
