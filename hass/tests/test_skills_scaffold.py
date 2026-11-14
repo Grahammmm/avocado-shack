@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from hass import live_policy
 from hass.content_model import REPO_ROOT
 from hass.ops import load_registry
 from hass.skills import load_skills, scaffold, skill_lint, testkit
@@ -86,10 +87,35 @@ class Made(unittest.TestCase):
         self.assertEqual(self.skill("sample.tuck_away").edits, (("hass/content/products.json", "products[id].status"),))
         self.assertEqual(self.skill("sample.new_intro").preview, "home")
 
-    def test_the_new_skill_starts_private_only_and_owner_approved(self):
+    def test_the_live_class_is_read_off_the_live_table_not_assumed(self):
+        """A label, not a lock: chat-live exactly when live_policy lists the op with every argument the skill sends."""
+        want = {"sample.tuck_away": "chat-live",  # product.hide is in live_policy.LIVE with {id}
+                "sample.reword": "chat-live",  # product.edit may carry description
+                "sample.new_intro": "private-only"}  # store.set_intro is a PRIVATE op
         for _key, (name, _r) in self.runs.items():
             skill = self.skill(name)
-            self.assertEqual((skill.live_class, skill.approval, skill.version), ("private-only", "owner-yes", 1))
+            with self.subTest(name):
+                self.assertEqual((skill.live_class, skill.approval, skill.version), (want[name], "owner-yes", 1))
+                module, doc = self.paths(name)["module"].read_text("utf-8"), self.paths(name)["doc"].read_text("utf-8")
+                for text in (module, doc):
+                    self.assertIn("not a lock", text)
+                    self.assertNotIn("until its owner lists it", text)
+                    self.assertNotIn("until the operator lists", text)
+                self.assertIn(f"`live_class` is `{want[name]}`", doc)
+
+    def test_a_label_over_an_already_live_op_is_never_called_private_only(self):
+        """The reviewer's case: product.hide is already live, so a generated hide skill must say so (live_policy gates drafts, not this label)."""
+        self.assertIn("product.hide", live_policy.LIVE)
+        self.assertEqual(scaffold.live_boundary("product.hide", True, {})[0], "chat-live")
+        self.assertEqual(scaffold.live_boundary("product.edit", True, {"description": "description"})[0], "chat-live")
+        self.assertEqual(scaffold.live_boundary("product.edit", True, {"name": "name"})[0], "private-only")  # name is never live
+        self.assertEqual(scaffold.live_boundary("store.set_phone", False, {"phone": "phone"})[0], "private-only")
+        self.assertEqual(scaffold.live_boundary("store.set_hours", False, {})[0], "private-only")
+        self.assertEqual(scaffold.live_boundary("route.add", False, {})[0], "private-only")
+        # and it agrees with the gate that does decide: a real draft of the sample's plan passes live_policy.check
+        draft = {"ops": [{"op": "product.hide", "args": {"id": "photo-product-042"}}],
+                 "records": [{"collection": "products", "before": {"status": "active"}, "after": {"status": "hidden"}}]}
+        self.assertEqual(live_policy.check(draft), [])
 
     def test_a_text_slot_refuses_a_price_and_a_blank(self):
         skill = self.skill("sample.reword")
@@ -145,6 +171,32 @@ class Refuses(unittest.TestCase):
                 self.assertEqual(code, 2, err)
                 self.assertIn(want, err)
                 self.assertEqual(written, [])
+
+    def test_a_python_keyword_module_name_is_refused_and_nothing_is_written(self):
+        for word in ("class", "import", "return"):
+            with self.subTest(word):
+                code, _out, err, written = self.attempt("sample.x", "--op", "product.hide", "--label", "hide it", "--module", word)
+                self.assertEqual(code, 2)
+                self.assertIn("Python keyword", err)
+                self.assertEqual(written, [])
+
+    def test_words_that_break_the_generated_python_are_refused_and_rolled_back(self):
+        code, _out, err, written = self.attempt("sample.x", "--op", "product.hide", "--label", 'tuck a product """ away')
+        self.assertEqual(code, 2)
+        self.assertIn("not valid", err)
+        self.assertEqual(written, [])
+
+    def test_a_generated_file_that_does_not_parse_is_caught_before_success(self):
+        """check() compiles the generated module and test, because nothing else runs the test: a bad import line is caught here."""
+        real = scaffold.render_test
+        scaffold.render_test = lambda spec: real(spec).replace("import unittest", "from hass.skills import class as module")
+        try:
+            code, _out, err, written = self.attempt("sample.x", "--op", "product.hide", "--label", "tuck away")
+        finally:
+            scaffold.render_test = real
+        self.assertEqual(code, 2)
+        self.assertIn("not valid Python", err)
+        self.assertEqual(written, [])
 
     def test_dry_run_lists_the_files_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:

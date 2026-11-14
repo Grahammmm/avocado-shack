@@ -37,8 +37,12 @@ It covers one registered op whose arguments are a product, text, bool, int, date
 plain `store.*` ops). A maker key, a url, a picture, a list, a hike or a route is written by hand, and the command says so.
 
 The result is a starting point, never an accepted skill: the sentences, rules and refusals are placeholders, the expected
-diffs were recorded from a first run, and the skill is `private-only` until the operator lists its op in
-`hass/live_policy.py`. A person reads every sentence and every row before the skill is merged.
+diffs were recorded from a first run. `live_class` is a label, not a lock: the command reads it off the live table in
+`hass/live_policy.py` (`chat-live` when the op and every argument the skill sends are already listed there, `private-only`
+otherwise, for example `product.hide` is `chat-live` and `store.set_intro` is `private-only`). What actually gates a real draft
+is `live_policy.check` and the owner's yes; the command never edits that file. Module names that are Python keywords are
+refused, and the generated module and test are compiled before the command reports success. A person reads every sentence and
+every row before the skill is merged.
 
 ## The fields every skill fills
 

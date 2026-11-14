@@ -16,8 +16,11 @@ The skill wraps ONE registered op whose arguments are product ids (`product.*` o
 enum. Anything else (a maker key, a url, a picture, a list, hikes, routes) is written by hand: the command says so.
 
 MACHINE-VALID IS NOT ACCEPTED. The sentences, rules and refusals are placeholders in the owner's voice; the expected
-diffs are recorded from a first run on the scratch shop. A person reads every one before the skill is merged, and the new
-skill stays `private-only` (no live approval) until the operator lists its op in hass/live_policy.py.
+diffs are recorded from a first run on the scratch shop. A person reads every one before the skill is merged.
+
+`live_class` is a LABEL, not a lock. The command reads it off the live table (hass/live_policy.py): `chat-live` when the op
+and every argument the skill sends are already listed there, `private-only` otherwise. What actually decides whether a draft
+goes live is live_policy.check on the draft plus the owner's yes; this command never edits that file.
 """
 from __future__ import annotations
 
@@ -25,6 +28,7 @@ import argparse
 import contextlib
 import copy
 import json
+import keyword
 import re
 import sys
 import types
@@ -34,6 +38,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from hass import live_policy  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.skills import model, testkit  # noqa: E402
 
@@ -68,6 +73,8 @@ class Spec:
     summary: str
     setup: list = field(default_factory=list)
     recorded: dict = field(default_factory=dict)
+    live_class: str = "private-only"  # read off hass/live_policy.py by live_boundary(); a label, not a lock
+    live_why: str = ""
 
     @property
     def group(self): return self.name.split(".")[0]
@@ -86,6 +93,21 @@ class Spec:
 
 
 # -- reading the request ------------------------------------------------------------------------------------------
+def live_boundary(op, has_item, args) -> tuple:
+    """(live_class, plain reason), read off the live table in hass/live_policy.py. It is the table that gates a real draft
+    (live_policy.check), never this label: `chat-live` means the op and every argument the skill sends are listed there."""
+    if op.startswith("route.") or op in live_policy.OPS:
+        return "private-only", f"{op} is a protected operation in hass/live_policy.py"
+    if op not in live_policy.LIVE:
+        return "private-only", f"{op} is not in the live table in hass/live_policy.py"
+    allowed = live_policy.LIVE[op]
+    sent = ({"id"} if has_item else set()) | set(args.values())
+    extra = sorted(sent - allowed) if allowed is not None else []
+    if extra:
+        return "private-only", f"{op} is live, but not with the argument(s) {', '.join(extra)}"
+    return "chat-live", f"{op} is in the live table in hass/live_policy.py with the arguments this skill sends"
+
+
 def _snake(arg): return re.sub(r"(?<=[a-z0-9])([A-Z])", lambda m: "_" + m.group(1).lower(), arg).lower()
 
 
@@ -110,6 +132,8 @@ def build_spec(ns, ops, registry_skills) -> Spec:
     module = ns.module or ns.name.replace(".", "_")
     if not MODULE_RE.fullmatch(module):
         raise ScaffoldError(f"module name {module!r} must be lower case letters, digits and underscores")
+    if keyword.iskeyword(module):
+        raise ScaffoldError(f"module name {module!r} is a Python keyword and cannot be imported; choose another with --module")
     label = " ".join(ns.label.split())
     if not label or re.search(r"\b[a-z]+\.[a-z_]+\b", label):
         raise ScaffoldError("--label is the skill in the owner's words, never an id like group.verb")
@@ -148,6 +172,7 @@ def build_spec(ns, ops, registry_skills) -> Spec:
     if len(summary) > model.MAX_SUMMARY:
         raise ScaffoldError(f"--summary is over {model.MAX_SUMMARY} characters")
     spec = Spec(ns.name, ns.op, label, module, args, kinds, choices, has_item, says, summary, setup)
+    spec.live_class, spec.live_why = live_boundary(ns.op, has_item, args)
     if len(refusal_plan(spec)) < model.MIN_REFUSAL_ROWS:
         raise ScaffoldError(f"{ns.op} has nothing the scaffold can refuse (no product, no text); write this skill by hand")
     taken = {model._fold(t.text): s.name for s in registry_skills for t in s.triggers}
@@ -297,7 +322,8 @@ placeholders. Authoring guide: docs/hass/SKILLS.md. Wording: docs/hass/VOICE.md.
 
 The plan is a pure function of the slots and an optional ``ctx`` (``ctx.content`` as the loaded content). It writes
 nothing: it returns one ``{op}`` call, or raises a ``Refusal`` carrying the sentence the owner is told.
-``live_class`` is ``private-only``: the op is not in the live boundary (hass/live_policy.py) until its owner lists it.
+``live_class`` is ``{live_class}``: {live_why}. It is a label read off the live table, not a lock: what gates a real
+draft is live_policy.check on the draft and the owner's yes.
 """
 from __future__ import annotations
 
@@ -377,7 +403,7 @@ def _plan(slots, ctx=None) -> list:
     rules=({rules}),
     plan=_plan, edits=({edits}),
     side_effects=("none",), preview={preview!r}, approval="owner-yes",
-    live_class="private-only",  # {op} is not in the live boundary until its owner lists it
+    live_class={live_class!r},  # a label read off hass/live_policy.py (not a release lock): {live_why}
     undo=Undo("revert", "none"),
     refuse=(
 {refuse}
@@ -412,7 +438,7 @@ def render_module(spec) -> str:
         name_const=spec.name.upper().replace(".", "_"), summary=spec.summary,
         triggers="\n".join(f"        Trigger({t.text!r}{'' if t.tag == 'clean' else f', {t.tag!r}'})," for t in triggers(spec)),
         slots=_slot_lines(spec), rules="".join(f"{r!r}, " for r in rules).rstrip() , edits="".join(f"({f!r}, {p!r}), " for f, p in edits),
-        preview=rec.get("skill_preview", "none"), refuse=refuse_lines)
+        preview=rec.get("skill_preview", "none"), refuse=refuse_lines, live_class=spec.live_class, live_why=spec.live_why)
 
 
 def render_cases(spec) -> str:
@@ -451,8 +477,9 @@ puts the shop back as it was.
 
 ## Where it stands
 
-`live_class` is `private-only`: `{spec.op}` is in neither live table (`hass/live_policy.py`), so a real draft is refused as "not live"
-until the operator lists it. The preview is `{spec.recorded.get('skill_preview', 'none')}`.
+`live_class` is `{spec.live_class}`: {spec.live_why}. That is a label read off the live table, not a lock: what gates a real
+draft is `live_policy.check` on the draft (claims, prices, contact words) and his yes, and the scaffolder never edits
+`hass/live_policy.py`. The preview is `{spec.recorded.get('skill_preview', 'none')}`.
 """
 
 
@@ -573,9 +600,19 @@ def _rollback(written):
 
 
 def check(spec, root) -> list:
-    """The lint with the case-file minima, the golden plan, and every case row on the scratch shop. [] when all pass."""
+    """The generated Python compiles, the lint with the case-file minima, the golden plan, and every case row on the scratch
+    shop. [] when all pass."""
     from hass.ops import load_registry
     from hass.skills import skill_lint
+    broken = []
+    for key in ("module", "test"):  # the test is never run here, so a file that does not even parse must be caught now
+        path = root / spec.paths()[key]
+        try:
+            compile(path.read_text(encoding="utf-8"), str(path), "exec")
+        except (SyntaxError, ValueError) as exc:
+            broken.append(f"{spec.paths()[key]}: the generated file is not valid Python ({exc})")
+    if broken:
+        return broken
     skills = testkit.load_skill_module(root / spec.paths()["module"])
     golden = {spec.name: [r["slots"] for r in case_rows(spec) if r.get("plan") and "expect_ops" in r]}
     problems = skill_lint(skills, load_registry(), repo_root=root, golden=golden)
@@ -623,8 +660,10 @@ def _scaffold(ns, out) -> int:
         problems = check(spec, root)
         if problems:
             raise ScaffoldError("the new skill does not pass its own checks:\n  " + "\n  ".join(problems[:8]))
-    except Exception:
+    except Exception as exc:
         _rollback(written)
+        if isinstance(exc, SyntaxError):  # words in --label/--say/--summary that break the generated Python (a quote run, a backslash)
+            raise ScaffoldError(f"the generated Python is not valid ({exc.msg}); change the words you gave in --label, --say or --summary") from exc
         raise
     out(f"scaffolded {spec.name} over {spec.op}: lint clean, {len(case_rows(spec))} rows pass (10 cases, 2 plans)")
     for rel in spec.paths().values():
