@@ -27,6 +27,11 @@ fails the check is not written. record() never raises unless strict=True: the ch
 full, but a till write (AVB-15) calls it with strict=True and stops when the line could not be written. record() says True
 only when every byte of the line is written and flushed (a short write is finished; no progress or an error raises).
 
+Framing: a record is one line ended by the LF byte, holding exactly the bytes record() writes for a valid row. A line
+without its LF (a write that stopped) is never a record: the readers skip it, `check` counts it as bad, and the next
+record() puts TORN (`!torn` LF) after it instead of a bare LF, so it stays bad for good and keeps its own number. The LF
+says only where a line ends: it does not prove the flush finished, that the caller was told yes, or that a till write ran.
+
 A skill request that makes no draft is an action of its own (`target: local`): `answered` for a read-only skill (A0) and
 `refused` for a refusal before any draft (hass/skills/dispatch.py, Conversation._audit_ask).
 
@@ -45,7 +50,10 @@ from hass.stagelog import short  # noqa: E402
 
 FOLDER = "audit"
 DAY_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl")
-MAX_LINE = 4096  # bytes; a line is ids and codes only, so this is never reached by a valid row
+MAX_LINE = 4096  # bytes, TORN included; a line is ids and codes only, so this is never reached by a valid row
+# Written in front of the next line when the file does not end in LF (a write that stopped). It closes the torn line with
+# bytes that can never end a JSON object, so that line stays bad for good; nothing on disk is cut, moved or rewritten.
+TORN = b"!torn\n"
 STEPS = ("asked", "drafted", "refused", "approved", "applied", "published", "verified", "failed", "undone", "answered")
 PACKS = ("site", "front", "till", "reports", "core")
 TARGETS = ("site", "till", "local")
@@ -186,9 +194,11 @@ class AuditLog:
             size, lines = os.fstat(fd).st_size, 0
             os.lseek(fd, 0, os.SEEK_SET)
             while chunk := os.read(fd, 1 << 16): lines += chunk.count(b"\n")
-            if size and not _ends_with_newline(fd, size): lines += 1  # a torn last line keeps its own number
-            row["seq"] = lines + 1
-            data = (("\n" if size and not _ends_with_newline(fd, size) else "") + json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+            torn = bool(size) and os.pread(fd, 1, size - 1) != b"\n"
+            # A torn last line (a write that stopped before its LF) is closed with TORN, never a bare LF: it then ends in
+            # bytes that are not JSON, so it stays a bad line for good and keeps its own number.
+            row["seq"] = lines + (2 if torn else 1)
+            data = (TORN if torn else b"") + _encode(row) + b"\n"
             if len(data) > MAX_LINE: raise AuditError("the audit line is too long")
             _write_all(fd, data)
             os.fsync(fd)
@@ -207,21 +217,29 @@ class AuditLog:
             return []
 
     @staticmethod
-    def read_day(path) -> list:
-        """The lines of one day file that pass check(), in file order; anything else is skipped."""
+    def scan_day(path):
+        """(the records of one day file in file order, the number of bad lines), or None when it cannot be read.
+        Framing is the literal LF byte only: a record is exactly the bytes record() writes for a valid row, ended by LF.
+        Anything else is a bad line: a torn or closed-off (TORN) line, a line with other bytes, and an unterminated end."""
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             with os.fdopen(fd, "rb") as fh:
-                if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode): return []
-                text = fh.read().decode("utf-8", "replace")
+                if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode): return None
+                data = fh.read()
         except OSError:
-            return []
-        out = []
-        for raw in text.split("\n"):
-            try: row = json.loads(raw)
-            except (ValueError, RecursionError): continue
-            if not check(row): out.append(row)
-        return out
+            return None
+        *ended, tail = data.split(b"\n")  # bytes.split on LF alone: CR, VT, FF or U+2028 never end a line
+        out, bad = [], int(bool(tail))  # a nonempty end with no LF is never a record, whatever it holds
+        for raw in ended:
+            row = _decode(raw)
+            if row is None: bad += 1
+            else: out.append(row)
+        return out, bad
+
+    @classmethod
+    def read_day(cls, path) -> list:
+        """The records of one day file, in file order; bad lines are skipped (scan_day)."""
+        return (cls.scan_day(path) or ([], 0))[0]
 
     def rows(self, days=None) -> list:
         """Every valid line, oldest first; `days` keeps only the newest N day files."""
@@ -316,26 +334,32 @@ def main(argv=None) -> int:
         return 0
     good = bad = 0
     for path in log.days():
-        try: text = path.read_text("utf-8", "replace")
-        except OSError: bad += 1; continue  # noqa: E702
-        for raw in text.split("\n"):
-            if not raw: continue
-            try: row = json.loads(raw)
-            except (ValueError, RecursionError): row = None
-            if check(row): bad += 1
-            else: good += 1
+        scanned = log.scan_day(path)
+        if scanned is None: bad += 1; continue  # noqa: E702
+        good, bad = good + len(scanned[0]), bad + scanned[1]
     print(json.dumps({"result": "ok" if not bad else "bad", "lines": good, "bad": bad, "days": len(log.days())}))
     return 1 if bad else 0
 
 
-def _ends_with_newline(fd, size) -> bool:
-    return os.pread(fd, 1, size - 1) == b"\n"
+def _encode(row) -> bytes:
+    """The one byte form of a record (no LF): sorted keys, no spaces, ASCII."""
+    return json.dumps(row, sort_keys=True, separators=(",", ":")).encode("ascii")
+
+
+def _decode(raw):
+    """The record in one LF-ended line, or None: it must pass check() and be byte for byte what _encode writes for it, so
+    a line closed off with TORN, a CR before the LF, spaces or any other bytes never count as a record."""
+    try:
+        row = json.loads(raw.decode("ascii"))
+        return row if not check(row) and _encode(row) == raw else None
+    except (ValueError, RecursionError, TypeError):
+        return None
 
 
 def _write_all(fd, data) -> None:
     """Write every byte of `data` (a short write goes on from where it stopped). A write that makes no progress or fails
-    raises: the line is then not on disk in full, the earlier lines are untouched, and the torn end has no newline, so the
-    reader skips it, `check` counts it and the next line starts on a line of its own."""
+    raises: the line is then not on disk in full and the earlier lines are untouched. The torn end has no LF, so the
+    readers skip it and `check` counts it; the next record() closes it with TORN, so it never becomes a record."""
     view = memoryview(data)
     while view:
         done = os.write(fd, view)

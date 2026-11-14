@@ -5,7 +5,7 @@ repo, linked writer worktree, private 0700 state dir, fake previewer, injected c
 Run: python3 -m unittest hass.tests.test_audit -v
 """
 
-import errno, json, os, shutil, subprocess, sys, tempfile, unittest  # noqa: E401
+import contextlib, errno, io, json, os, shutil, subprocess, sys, tempfile, unittest  # noqa: E401
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -26,6 +26,8 @@ SCRIPT = REPO_ROOT / "hass" / "audit.py"
 TILL: dict = dict(who="owner", pack="till", target="till", env="sandbox", result="ok", draft="7c1e", skill="till.stock@1",
             refs={"till": "tj-0123abcd"}, subjects=["items:hass-avocado"], fields=["stock"])
 PRIVATE_TEXT = "kumquat desc $12.50 call +1 805 555 0142"  # owner words, a price and a phone number: none may reach the log
+ACT, APPROVE = audit.new_action("till", "lf"), dict(approval="A1", approved_by="owner")
+MARK = b"!torn\n"  # what closes off a line that stopped before its LF (the audit contract, not read from hass.audit)
 
 
 def lines(state):
@@ -119,7 +121,7 @@ class AuditLogTests(unittest.TestCase):
             if not steps: return real(fd, data)
             step = steps.pop(0)
             if isinstance(step, BaseException): raise step
-            return real(fd, bytes(data[:step])) if step else 0
+            return real(fd, bytes(data[:step])) if step else 0  # a negative n: all but the last -n bytes
         return mock.patch.object(audit.os, "write", fake)
 
     def test_a_short_write_is_finished_before_record_says_yes(self):
@@ -149,6 +151,112 @@ class AuditLogTests(unittest.TestCase):
         self.assertEqual([r["step"] for r in self.log.rows()], ["drafted", "approved"])  # the next line stands on its own
         run = subprocess.run([sys.executable, str(SCRIPT), "check", "--state", str(self.state)], capture_output=True, text=True)
         self.assertEqual((run.returncode, json.loads(run.stdout)["lines"], json.loads(run.stdout)["bad"]), (1, 2, 2))  # the two torn ends
+
+    # -- a write that stops just before its LF, and the next write after one that stopped (review round 2) ------------
+    def _fresh(self, torn_approval=False):
+        """A new state folder: one drafted line; with torn_approval, then an approved line that stopped just before its LF."""
+        state = Path(tempfile.mkdtemp(prefix="avb10-lf-"))
+        os.chmod(state, 0o700)
+        self.addCleanup(shutil.rmtree, state, True)
+        log = audit.AuditLog(state, lambda: T0)
+        self.assertTrue(log.record("drafted", action=ACT, strict=True, **TILL))
+        if torn_approval:
+            with self._writes(-1, OSError(errno.ENOSPC, "full")), self.assertRaises(audit.AuditError):
+                log.record("approved", action=ACT, strict=True, **APPROVE, **TILL)
+        return state, log, state / audit.FOLDER / "2026-11-13.jsonl"
+
+    @staticmethod
+    def _cli(state, *args):
+        """The command line's own main(), in this process: (exit code, what it printed)."""
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out): code = audit.main([*args, "--state", str(state)])
+        return code, out.getvalue()
+
+    def _check(self, state):
+        code, out = self._cli(state, "check")
+        got = json.loads(out)
+        return code, got["lines"], got["bad"]
+
+    def _only(self, state, log, steps):
+        """The records are exactly `steps`; no approved line reaches the reader, history or the command line."""
+        self.assertEqual([r["step"] for r in log.rows()], steps)
+        self.assertEqual((log.approved(10), log.approved_drafts()), ([], set()))
+        self.assertEqual([json.loads(x)["step"] for x in self._cli(state, "show")[1].splitlines()], steps)
+        self.assertEqual(self._cli(state, "history"), (0, "no approved actions\n"))
+
+    def test_a_write_that_stops_just_before_its_lf_is_never_a_record(self):
+        state, log, day = self._fresh()
+        first = day.read_bytes()
+        with self._writes(-1, OSError(errno.ENOSPC, "full")), self.assertRaises(audit.AuditError):
+            log.record("approved", action=ACT, strict=True, **APPROVE, **TILL)
+        torn = day.read_bytes()[len(first):]
+        self.assertEqual((torn[:1], torn[-1:], json.loads(torn)["step"]), (b"{", b"}", "approved"))  # only the LF is missing
+        self._only(state, log, ["drafted"])
+        self.assertEqual(self._check(state), (1, 1, 1))
+        run = subprocess.run([sys.executable, str(SCRIPT), "check", "--state", str(state)], capture_output=True, text=True)
+        self.assertEqual((run.returncode, json.loads(run.stdout)), (1, {"result": "bad", "lines": 1, "bad": 1, "days": 1}))
+        # the next line closes the torn one off with `!torn` LF: kept byte for byte, bad for good, with its own number
+        self.assertTrue(log.record("refused", action=ACT, strict=True, **{**TILL, "result": "said-no"}))
+        self.assertTrue(day.read_bytes().startswith(first + torn + MARK))
+        self.assertEqual([r["seq"] for r in log.rows()], [1, 3])
+        self._only(state, log, ["drafted", "refused"])
+        self.assertEqual(self._check(state), (1, 2, 1))
+        self.assertTrue(log.record("refused", action=ACT, strict=True, **{**TILL, "result": "said-no"}))
+        self.assertEqual(self._check(state), (1, 3, 1))  # still one bad line: it never turns into a record
+        self.assertEqual(audit.TORN, MARK)
+        # the same stop without strict says False and leaves the same bytes
+        state, log, day = self._fresh()
+        with self._writes(-1, OSError(errno.ENOSPC, "full")):
+            self.assertFalse(log.record("approved", action=ACT, **APPROVE, **TILL))
+        self.assertEqual(day.read_bytes(), first + torn)
+        self._only(state, log, ["drafted"])
+
+    def test_every_stop_in_a_line_or_in_the_line_after_a_torn_one_stays_out_and_later_lines_are_safe(self):
+        """All-prefix sweep. Stage `line`: an approved line stops after k of its bytes. Stage `recovery`: on drafted + an
+        approved line torn just before its LF, the next approved line (`!torn` LF + the line) stops after k bytes: in the
+        marker, just after it, or anywhere in the new line up to just before its LF. Then a healthy line is written."""
+        for stage in ("line", "recovery"):
+            _, log, day = self._fresh(stage == "recovery")  # the whole write, to learn its bytes (the control)
+            before = day.read_bytes()
+            self.assertTrue(log.record("approved", action=ACT, strict=True, **APPROVE, **TILL))
+            payload = day.read_bytes()[len(before):]
+            self.assertEqual([(r["step"], r["seq"]) for r in log.rows()][1:], [("approved", 2 if stage == "line" else 3)])
+            self.assertEqual(payload.startswith(MARK), stage == "recovery")
+            for k in range(len(payload)):  # 0 is a write that makes no progress
+                with self.subTest(stage=stage, k=k):
+                    state, log, day = self._fresh(stage == "recovery")
+                    before, strict = day.read_bytes(), k % 2 == 0
+                    with self._writes(k, OSError(errno.ENOSPC, "full")):
+                        if strict:
+                            with self.assertRaises(audit.AuditError):
+                                log.record("approved", action=ACT, strict=True, **APPROVE, **TILL)
+                        else:
+                            self.assertFalse(log.record("approved", action=ACT, **APPROVE, **TILL))
+                    stopped = day.read_bytes()
+                    self.assertEqual(stopped, before + payload[:k])  # only what was written; nothing before it changed
+                    if stage == "line": bad, seq = (0, 2) if k == 0 else (1, 3)
+                    else: bad, seq = (1, 3) if k <= len(MARK) else (2, 4)  # a second torn line counts as one more
+                    self._only(state, log, ["drafted"])
+                    self.assertEqual(self._check(state), (1 if bad else 0, 1, bad))
+                    self.assertTrue(log.record("refused", action=ACT, strict=True, **{**TILL, "result": "said-no"}))
+                    self.assertTrue(day.read_bytes().startswith(stopped))
+                    self.assertEqual([r["seq"] for r in log.rows()], [1, seq])
+                    self._only(state, log, ["drafted", "refused"])
+                    self.assertEqual(self._check(state), (1 if bad else 0, 2, bad))
+
+    def test_only_the_lf_byte_ends_a_record(self):
+        self.assertTrue(self.log.record("drafted", action=ACT, strict=True, **TILL))
+        day = self.state / audit.FOLDER / "2026-11-13.jsonl"
+        line = day.read_bytes()[:-1]
+        others = [line + b"\r\n", b" " + line + b"\n", line + b" \n", line.replace(b",", b", ", 1) + b"\n",
+                  line[:-1] + b',"seq":1}\n']  # a CR, spaces, or a key twice: not the bytes record() writes
+        with open(day, "ab") as fh: fh.write(b"".join(others) + line + b"\r")  # and an end with a CR but no LF
+        self.assertEqual([r["seq"] for r in self.log.rows()], [1])
+        self.assertEqual(self._check(self.state), (1, 1, len(others) + 1))
+        self.assertTrue(self.log.record("refused", action=ACT, strict=True, **{**TILL, "result": "said-no"}))
+        self.assertIn(line + b"\r" + MARK, day.read_bytes())
+        self.assertEqual([(r["step"], r["seq"]) for r in self.log.rows()], [("drafted", 1), ("refused", len(others) + 3)])
+        self.assertEqual(self._check(self.state), (1, 2, len(others) + 1))
 
     # -- where a till change stands (review round 1, finding 3) -----------------------------------------------------
     def test_till_history_says_only_what_the_lines_show(self):

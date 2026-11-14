@@ -33,8 +33,13 @@ It is the shape in HASS-ARCHITECTURE section 5 (AVB-02).
   strict=True)` before and after each till write. With `strict=True` a line that cannot be written raises `AuditError`, so
   the write does not happen without its record. `record` returns True only when every byte of the line is written and
   flushed: a short write goes on from where it stopped; a write that stops (no progress, an error, a full disk) raises.
-  Earlier lines are never touched; a torn end has no newline, so the reader skips it, `check` counts it as bad, and the next
-  line starts on a line of its own.
+  Earlier lines are never touched.
+- Framing is the LF byte alone. A record is one line ended by LF that holds exactly the bytes `record` writes for a valid
+  row (sorted keys, no spaces). A line that stopped before its LF, even one with every JSON byte, is never a record: the
+  readers (`history`, `show`) skip it and `check` counts it as bad. The next `record` writes `!torn` and LF in front of its
+  own line, never a bare LF, so the torn line stays on disk byte for byte, stays bad for good and keeps its own number. If
+  that write stops too, the same holds for it, and `check` counts both. Nothing is cut, rewritten or repaired. The LF only
+  says where a line ends: it is not proof that the flush finished, that the caller was told yes, or that a till write ran.
 
 ## Who reads it
 
