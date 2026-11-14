@@ -88,6 +88,36 @@ class BacklogTests(unittest.TestCase):
         for jargon in ("backlog_", "sqlite", "reason", "unknown-skill"):
             self.assertNotIn(jargon, reply)
 
+    def test_top_counts_all_open_rows_with_deterministic_ties_without_reading_messages(self):
+        self.assertEqual(self.store.top(), [])
+        for reason, count in (("unknown-skill", 1005), ("policy", 2), ("other", 2)):
+            for _ in range(count):
+                self.store.record(reason, "PRIVATE-SUMMARY", "PRIVATE-TEXT")
+        closed = self.store.record("price", "PRIVATE-SUMMARY", "PRIVATE-TEXT")
+        self.store.db.execute("UPDATE backlog SET state='closed' WHERE id=?", (closed,))
+        before = self.store.db.total_changes
+
+        def counts_only(action, table, column, database, source):
+            if action == sqlite3.SQLITE_READ and table == "backlog" and column not in ("reason", "state", ""):
+                return sqlite3.SQLITE_DENY
+            return sqlite3.SQLITE_OK
+
+        self.store.db.set_authorizer(counts_only)
+        try:
+            expected = [{"reason": "unknown-skill", "count": 1005},
+                        {"reason": "other", "count": 2}, {"reason": "policy", "count": 2}]
+            self.assertEqual(self.store.top(), expected)
+            self.assertEqual(self.store.top(state=None), expected + [{"reason": "price", "count": 1}])
+            self.assertEqual(self.store.db.total_changes, before)
+        finally:
+            self.store.db.set_authorizer(None)
+
+    def test_top_does_not_echo_unrecognised_legacy_reason(self):
+        self.store.db.execute("PRAGMA ignore_check_constraints=ON")
+        self.store.db.execute("INSERT INTO backlog(received_at, reason, summary, text) VALUES ('t', ?, 's', 't')",
+                              ("PRIVATE-LEGACY-REASON",))
+        self.assertEqual(self.store.top(), [])
+
     def test_forget_removes_one_row_and_zeroes_nothing_else(self):
         a = self.store.record("other", "a", "t1")
         b = self.store.record("other", "b", "t2")
@@ -296,6 +326,37 @@ class CliTests(unittest.TestCase):
     def test_list_text_is_the_operator_view(self):
         r = self.run_cli("list", "--state", str(self.state), "--text")
         self.assertIn("SECRET-OWNER-WORDS", r.stdout)
+
+    def test_top_cli_prints_only_ranked_counts_and_never_request_or_summary(self):
+        store = backlog.Backlog.open(self.state, Clock())
+        for reason in ("policy", "policy", "price"):
+            store.record(reason, "PRIVATE-SUMMARY", "SECRET-OWNER-WORDS")
+        store.db.execute("UPDATE backlog SET state='closed' WHERE reason='price'")
+        store.close()
+        for flags, expected in (((), "count\treason\n2\tpolicy\n1\tother\n"),
+                                (("--all",), "count\treason\n2\tpolicy\n1\tother\n1\tprice\n")):
+            with self.subTest(flags=flags):
+                r = self.run_cli("top", "--state", str(self.state), *flags)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(r.stdout, expected)
+                self.assertEqual(r.stderr, "")
+                for private in ("PRIVATE-SUMMARY", "SECRET-OWNER-WORDS", "add a gift card option"):
+                    self.assertNotIn(private, r.stdout + r.stderr)
+
+    def test_top_empty_and_no_text_option(self):
+        store = backlog.Backlog.open(self.state, Clock())
+        store.forget(1)
+        store.close()
+        r = self.run_cli("top", "--state", str(self.state))
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "count\treason\n", ""))
+        r = self.run_cli("top", "--state", str(self.state), "--text")
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stdout, "")
+
+    def test_top_unsafe_state_exits_2(self):
+        r = self.run_cli("top", "--state", str(ROOT / "hass" / "tests" / "nope-state"))
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(r.stdout, "")
 
     def test_purge_reports(self):
         r = self.run_cli("purge", "--state", str(self.state))
