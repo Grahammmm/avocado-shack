@@ -294,17 +294,19 @@ def _active_products(content, key) -> list:
     return [p for p in content.products if p.get("status") == "active" and p.get("producerKey") == key] if content else []
 
 
-def _twin(content, name: str):
+def _twin(content, name: str, exclude=None):
+    """The first maker, other than ``exclude`` (the maker being edited), whose key or name matches ``name``."""
     if content is None:
         return None
     want = _norm(name)
-    return next((k for k, m in content.makers.items() if _norm(k) == want or _norm(m.get("name", "")) == want), None)
+    return next((k for k, m in content.makers.items()
+                 if k != exclude and (_norm(k) == want or _norm(m.get("name", "")) == want)), None)
 
 
 def rule_maker_twin(content, name: str, own_key=None) -> None:
     """maker-twin: the same name (case, spacing and apostrophes ignored) is never a second maker."""
-    twin = _twin(content, name)
-    if twin is not None and twin != own_key:
+    twin = _twin(content, name, own_key)
+    if twin is not None:
         existing = content.makers[twin]
         if existing.get("hidden") is True:
             raise Refusal(f"{existing['name']} is on the site but hidden. Do you want me to bring them back instead?", "question")
