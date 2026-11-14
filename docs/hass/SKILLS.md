@@ -44,6 +44,12 @@ is `live_policy.check` and the owner's yes; the command never edits that file. M
 refused, and the generated module and test are compiled before the command reports success. A person reads every sentence and
 every row before the skill is merged.
 
+The scaffold's capability metadata describes the one owner-approved site-content op: `pack='site'`,
+`targets=('site',)`, `approval_class='A1'`, `who='owner'`, and audit field names `logs=('subjects', 'fields')`
+(never supplied values or text). `sandbox` is `full` for a `chat-live` plan and `preview` for a private-only plan,
+using the op **and its selected arguments**, not the skill's name or group. This declares the existing writer/preview
+support; it does not enable a target, grant permission or bypass the live gate.
+
 ## The fields every skill fills
 
 `name` (`group.verb`, never reused or renamed; retire with `status="retired"`), `label` (owner words, never the id),

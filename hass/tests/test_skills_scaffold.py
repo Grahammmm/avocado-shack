@@ -38,6 +38,7 @@ class Made(unittest.TestCase):
         for key, argv in {
             "product": ("sample.tuck_away", "--op", "product.hide", "--label", "tuck a product out of sight"),
             "text": ("sample.reword", "--op", "product.edit", "--arg", "description", "--label", "reword a product"),
+            "private_text": ("sample.rename", "--op", "product.edit", "--arg", "name", "--label", "rename a product"),
             "store": ("sample.new_intro", "--op", "store.set_intro", "--label", "change the home intro"),
         }.items():
             cls.runs[key] = (argv[0], run("new", *argv, "--root", str(cls.root)))
@@ -91,6 +92,7 @@ class Made(unittest.TestCase):
         """A label, not a lock: chat-live exactly when live_policy lists the op with every argument the skill sends."""
         want = {"sample.tuck_away": "chat-live",  # product.hide is in live_policy.LIVE with {id}
                 "sample.reword": "chat-live",  # product.edit may carry description
+                "sample.rename": "private-only",  # the same op may not carry name live
                 "sample.new_intro": "private-only"}  # store.set_intro is a PRIVATE op
         for _key, (name, _r) in self.runs.items():
             skill = self.skill(name)
@@ -102,6 +104,14 @@ class Made(unittest.TestCase):
                     self.assertNotIn("until its owner lists it", text)
                     self.assertNotIn("until the operator lists", text)
                 self.assertIn(f"`live_class` is `{want[name]}`", doc)
+
+    def test_capability_metadata_describes_the_generated_site_writer(self):
+        for key, (name, _r) in self.runs.items():
+            with self.subTest(key):
+                skill = self.skill(name)
+                self.assertEqual((skill.pack, skill.targets, skill.approval_class, skill.logs, skill.who),
+                                 ("site", ("site",), "A1", ("subjects", "fields"), "owner"))
+                self.assertEqual(skill.sandbox, "full" if key in ("product", "text") else "preview")
 
     def test_a_label_over_an_already_live_op_is_never_called_private_only(self):
         """The reviewer's case: product.hide is already live, so a generated hide skill must say so (live_policy gates drafts, not this label)."""
