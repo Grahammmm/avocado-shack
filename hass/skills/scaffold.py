@@ -403,6 +403,9 @@ def _plan(slots, ctx=None) -> list:
     rules=({rules}),
     plan=_plan, edits=({edits}),
     side_effects=("none",), preview={preview!r}, approval="owner-yes",
+    # One owner-approved site-content op; audit names only, never the supplied words.
+    pack="site", targets=("site",), approval_class="A1",
+    sandbox={sandbox!r}, logs=("subjects", "fields"), who="owner",
     live_class={live_class!r},  # a label read off hass/live_policy.py (not a release lock): {live_why}
     undo=Undo("revert", "none"),
     refuse=(
@@ -438,7 +441,8 @@ def render_module(spec) -> str:
         name_const=spec.name.upper().replace(".", "_"), summary=spec.summary,
         triggers="\n".join(f"        Trigger({t.text!r}{'' if t.tag == 'clean' else f', {t.tag!r}'})," for t in triggers(spec)),
         slots=_slot_lines(spec), rules="".join(f"{r!r}, " for r in rules).rstrip() , edits="".join(f"({f!r}, {p!r}), " for f, p in edits),
-        preview=rec.get("skill_preview", "none"), refuse=refuse_lines, live_class=spec.live_class, live_why=spec.live_why)
+        preview=rec.get("skill_preview", "none"), refuse=refuse_lines, live_class=spec.live_class, live_why=spec.live_why,
+        sandbox="full" if spec.live_class == "chat-live" else "preview")
 
 
 def render_cases(spec) -> str:

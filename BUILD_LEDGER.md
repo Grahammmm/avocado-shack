@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AVOC-MAIN-RED-SCAFFOLD: scaffold capability metadata — November 13, 2026
+
+Repaired the AVB-20 template after AVB-09 made capability metadata mandatory. Generated skills describe their existing owner-approved site write (`site`, site target, A1, subject/field-name audit declaration, owner); sandbox support follows the op and selected arguments' live boundary (`full` for chat-live, otherwise `preview`). The lint, live policy and approval path are unchanged. Added coverage for all metadata fields and a private-only product-name edit alongside the existing product, text and store cases; the review-required warning remains.
+
+Fresh proof: the four requested modules (`test_skills_scaffold`, `test_capabilities`, `test_skills_lint`, `test_help`) reproduced 4 failures and 10 errors on main, then passed all 49 tests with the repair. `python3 hass/capabilities.py --check` passes without regeneration: no registry skill was added. CI planner/required-check evidence is recorded in the PR and task handoff. No live edits, messages or publication.
+
 ## R4-AV-05: the skill test kit judges replies before the safe fallback — November 13, 2026
 
 The checker, not the control row, was wrong: its isolated Conversation used the normal voice fallback, replacing a jargon-filled question with a safe line before the kit examined it. The scratch conversation now sets its own outbox to strict voice checking, so the existing VoiceError handler records `jargon`. This does not change the live conversation, voice rules, or the negative control. No new meta-tests or workflow changes.
