@@ -20,6 +20,7 @@ import time
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 UNITS = ("hass-receiver.service", "hass-worker.service", "hass-health.timer")
+STAGING_BUDGET_SECONDS = 1800
 
 
 class Refused(Exception):
@@ -197,8 +198,18 @@ class Release:
         self.inbox_empty()
         self.stage = self.run_dir / "stage"
         self.command("stage", ["git", "-C", self.a.runtime, "worktree", "add", "--detach", self.stage, self.a.target])
-        self.command("acceptance", [self.a.python, "-B", "hass/acceptance.py"], cwd=self.stage, timeout=360)
-        self.command("tests", [self.a.python, "-B", "hass/tests/run_parallel.py"], cwd=self.stage, timeout=600)
+        # Staging has its own shared deadline; it cannot consume or enlarge the
+        # normal work/switch budget. Keep command()'s process-group timeout guard.
+        staging_start = time.monotonic()
+        work_deadline = self.deadline
+        self.deadline = staging_start + STAGING_BUDGET_SECONDS
+        try:
+            self.command("acceptance", [self.a.python, "-B", "hass/acceptance.py"],
+                         cwd=self.stage, timeout=STAGING_BUDGET_SECONDS)
+            self.command("tests", [self.a.python, "-B", "hass/tests/run_parallel.py"],
+                         cwd=self.stage, timeout=STAGING_BUDGET_SECONDS)
+        finally:
+            self.deadline = work_deadline + (time.monotonic() - staging_start)
         self.command("backup", ["systemctl", "--user", "start", "hass-backup.service"], timeout=120)
         if self.command("backup-result", ["systemctl", "--user", "show", "-p", "Result", "--value", "hass-backup.service"]) != "success":
             raise Refused("backup-result")

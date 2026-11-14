@@ -62,8 +62,10 @@ never point tests at live paths. Path overrides do not grant release authority.
    detached HEAD and exact host bytes, validate, start and self-test again. A dirty
    checkout, unexpected HEAD or externally edited host is never overwritten.
 
-The normal work budget is 900 seconds including preflight/staging; switching only
-starts with at least 180 seconds left. Recovery gets a separate 180 seconds plus
+Staging (`acceptance.py` + `run_parallel.py`) has its own shared 1800-second budget
+(`STAGING_BUDGET_SECONDS`), with no retries or timeout override flag. The normal
+work budget remains 900 seconds excluding those staging tests; switching only
+starts with at least 180 seconds left of that budget. Recovery gets a separate 180 seconds plus
 one bounded emergency-stop attempt. A timeout kills the whole child process group
 before recovery. The backup timer is left alone; no units are installed/reloaded.
 

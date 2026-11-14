@@ -330,6 +330,89 @@ class TransactionTests(unittest.TestCase):
         self.assertNotIn("stop", obj.calls)
         self.assert_old()
 
+    def timed_staging(self, acceptance, tests, work_seconds=0, fail_start=False):
+        """Virtual staging children still go through the production timeout guard."""
+        clock = [100.0]
+        real_popen = subprocess.Popen
+        budgets = []
+        recovery = []
+        with patch("hass.runtime_release.time.monotonic", side_effect=lambda: clock[0]):
+            obj = FixtureRelease(self.args)
+        fixture_command = obj.command
+
+        class StageChild:
+            pid = 123456789  # killpg is mocked; never signal a real process
+            returncode = 0
+
+            def __init__(self, duration):
+                self.duration = duration
+
+            def communicate(self, timeout=None):
+                if timeout is not None:
+                    budgets.append(timeout)
+                    clock[0] += min(self.duration, timeout)
+                    if self.duration > timeout:
+                        raise subprocess.TimeoutExpired("fixture-stage", timeout)
+                return "", ""
+
+        def popen(argv, **kwargs):
+            if argv[-1] in ("hass/acceptance.py", "hass/tests/run_parallel.py"):
+                return StageChild(acceptance if argv[-1] == "hass/acceptance.py" else tests)
+            return real_popen(argv, **kwargs)
+
+        def command(label, argv, cwd=None, timeout=60, codes=(0,)):
+            if label in ("acceptance", "tests"):
+                obj.calls.append(label)
+                return release.Release.command(obj, label, argv, cwd=cwd, timeout=timeout, codes=codes)
+            if label == "backup-result":
+                clock[0] += work_seconds
+            if label == "start" and fail_start and not obj.rollback_mode:
+                raise release.Refused("start")
+            if label == "stop" and obj.rollback_mode:
+                recovery.append(obj.deadline - clock[0])
+            return fixture_command(label, argv, cwd=cwd, timeout=timeout, codes=codes)
+
+        obj.command = command
+        with patch("hass.runtime_release.time.monotonic", side_effect=lambda: clock[0]), \
+                patch("hass.runtime_release.subprocess.Popen", side_effect=popen), \
+                patch("hass.runtime_release.os.killpg") as killpg, \
+                contextlib.redirect_stdout(self.out):
+            code = obj.run()
+        return obj, code, budgets, recovery, killpg
+
+    def test_1000_second_staging_has_own_shared_budget(self):
+        obj, code, budgets, _, killpg = self.timed_staging(130, 870)
+        self.assertEqual(code, 0)
+        self.assertEqual(budgets, [1800, 1670])
+        self.assertEqual(self.phase(obj), "released")
+        killpg.assert_not_called()
+
+    def test_staging_timeout_refuses_before_downtime(self):
+        for acceptance, tests in ((1801, 0), (130, 1671)):
+            with self.subTest(acceptance=acceptance, tests=tests):
+                obj, code, budgets, _, killpg = self.timed_staging(acceptance, tests)
+                self.assertEqual(budgets[0], 1800)
+                self.assertEqual(code, 1)
+                self.assertNotIn("stop", obj.calls)
+                self.assertNotIn("backup", obj.calls)
+                self.assertTrue(obj.active)
+                self.assert_old()
+                killpg.assert_called_once_with(123456789, release.signal.SIGKILL)
+
+    def test_staging_does_not_enlarge_switch_or_recovery_budget(self):
+        obj, code, _, _, _ = self.timed_staging(130, 870, work_seconds=721)
+        self.assertEqual(code, 1)
+        self.assertIn("insufficient-switch-budget", self.out.getvalue())
+        self.assertNotIn("stop", obj.calls)
+        self.assert_old()
+        # Exactly 180 seconds remaining still admits switching; failure then gets
+        # a fresh 180-second recovery budget, not the staging or normal budget.
+        obj, code, _, recovery, _ = self.timed_staging(130, 870, work_seconds=720, fail_start=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(recovery, [180])
+        self.assertEqual(self.phase(obj), "rolled-back")
+        self.assert_old()
+
     def test_real_cli_plan(self):
         argv = [sys.executable, str(Path(release.__file__).resolve()), "--target", self.new,
                 "--expected-old", self.old, "--runtime", str(self.rt)]
