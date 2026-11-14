@@ -1,6 +1,6 @@
 # Hike lookup: name a hike, Hass finds it, proposes it, then builds the page (HASS-HIKE-LOOKUP-1)
 
-Design plus an **offline, fixture-tested prototype**. Written 2026-11-09. Nothing here touches the live site, the running Hass runtime, `host.json`, approvals or any send. The only new files are `hass/hike_lookup.py`, its test and recorded fixtures, one manual script and this page. `hass/publish_live.py`, the receiver, the worker, the host and `hass/conversation.py` are unchanged.
+Design plus an **offline, fixture-tested prototype**. Written 2026-11-09. **HIKE-LOOKUP-2 (card A6) has wired it into the hike chat: see section 7**; that part is off unless the operator sets `hikeLookup.contact`. Nothing here touches the live site, the running Hass runtime, `host.json`, approvals or any send. The only new files are `hass/hike_lookup.py`, its test and recorded fixtures, one manual script and this page. `hass/publish_live.py`, the receiver, the worker, the host and `hass/conversation.py` are unchanged.
 
 **Assumption stated first.** G wrote "OS data". Ordnance Survey covers Great Britain only and the shop is in San Luis Obispo, California, so this design uses **OpenStreetMap** (names, route lines; Overpass and Nominatim) and **USGS 3DEP** (elevation; the ImageServer `getSamples` call, point queries as the fallback). If G meant something else, only `hass/hike_lookup.py`'s transport and the manual script change; the rest stands.
 
@@ -119,10 +119,92 @@ The absence of a closure note is never said to mean the trail is open. All of th
 
 * **What goes out.** Only (a) the Overpass query built from the hike name, (b) the same name for Nominatim, (c) public coordinates of the trail for the place and the elevation. No owner message, date, time, meeting place, chat id, phone, address or e-mail. `name_tokens` is the only door: it drops digits, addresses, links and everything past six words (tested with a phone number and an e-mail typed into the name). The module has no network code at all (tested): it only calls a `transport` it is given.
 * **Client.** Plain HTTPS, standard library only, **no third-party client library** (none was installed or needed, so there is no source to inspect), no account, key or credential. The User-Agent names the app and a **contact address the operator chooses** (the manual script refuses to run without `--contact`; none is built in).
-* **Limits.** `CachedTransport`: at most **8 requests per lookup** and **60 per day**; at least 2.0 s between Overpass requests, 1.1 s between Nominatim requests (the public Nominatim policy is one a second), 0.5 s for USGS; a lookup normally makes 3 to 6 requests (county search, then up to three place lookups and three elevation requests for the trails offered).
+* **Limits.** `CachedTransport`: at most **8 requests per lookup** and **60 per day** (the day count is kept on disk since HIKE-LOOKUP-2); at least 2.0 s between Overpass requests, 1.1 s between Nominatim requests (the public Nominatim policy is one a second), 0.5 s for USGS; a lookup normally makes 3 to 6 requests (county search, then up to three place lookups and three elevation requests for the trails offered).
 * **Cache lifetime.** Names and lines 30 days, place 90, elevation 365 (terrain does not change). A saved answer inside its lifetime means no request. Past it, one refresh; if that fails the old copy is used and marked stale. Folder mode 0700 in the state directory (DESIGN: `<state>/hike_lookup/`).
 * **Logged.** One row per request: time, service, request key (a hash), outcome (`saved`, `fetched`, `busy`, `slow`, `network`, `budget`) and seconds. No query text, no coordinates, no reply text. The identity question's private row follows the existing open-request rules (kept on the box, 30 minutes).
 * **Licences.** OpenStreetMap data is ODbL: the route idea's source line and the page's map credit say "OpenStreetMap contributors". USGS 3DEP is a US government work.
+
+## 7. HIKE-LOOKUP-2: wired into the hike chat (card A6)
+
+Built after the prototype above. **OFF unless the operator sets `hikeLookup.contact`.** With no setting, nothing in this section runs and
+the hike flow is exactly what it was. This card edits `hass/conversation.py` (the lines below), so it is scheduled by the operator and
+does not land during a live trial week.
+
+**What Mike sees.** He names a hike and does not say where to meet or how far it is ("add a hike on Bishop Peak Saturday at 9am"). Where
+Hass would ask "Where do people meet?", it asks the map's question instead, with at most three trails and measured numbers only:
+
+> Did you mean "Bishop Peak Trail" in San Luis Obispo County, about 2.4 miles out and back on the map, with about 740 feet of climbing? Reply yes to use it, or no and tell me more.
+
+With several trails: the numbered list of section 1 ("Reply 1, 2 or 3, or no if it isn't one of these"). A trail the map is "not sure" of is
+listed with no number and cannot be picked into a route idea. After **yes** (or the number) Hass asks the usual "Where do people meet?";
+after **no** (or anything that is not a clear yes or number) it asks the same and never looks again in that request. When Mike has given the
+meeting place, a distance or a listed route idea himself, or Hass already has a route idea of that name, or the title is only a day or a
+time of day ("Saturday morning hike"), or a draft is already waiting for his yes, or one message holds several asks, nothing is looked up.
+A lookup that finds nothing, is "not sure", fails (network, slow, busy, unreadable, over our limit) or breaks for any other reason says
+nothing about the map: the plain question is asked and the hike goes ahead without a route idea. (The failure sentences of section 5 are
+kept for the manual script and for a later card that wants to say them in chat.)
+
+**The draft.** With the place and the other details given, the draft is `route.add` (the map trail, measured miles and feet, source
+name and retrieval date, `To be confirmed` for everything else) followed by `hike.create` linked to it by `trailId`, shown as one change
+with the line "I'll also add a route idea for ... Source: OpenStreetMap contributors and USGS 3DEP, retrieved <date>." and, when the map
+had one, its park-check or saved-copy sentence as a warning. It needs the usual `yes <code>`. A route idea Hass already has with the same
+name is linked instead of added again. Nothing is published; `route.add` stays private-only (`live_policy`).
+
+**Where the pieces are.**
+
+| Piece | File | What |
+|---|---|---|
+| the setting | `hass/conversation.py` `load_settings` | `hikeLookup` `{"contact": <an e-mail address or an https link>}` (or the flat key `hikeLookup.contact`) becomes `hikeLookupContact`; anything else raises `ConfigError`; absent = off. No address is built in |
+| the context | `hass/skills/dispatch.py` `Ctx.hike_lookup`, `Dispatcher._ctx` | `{"contact", "folder": <state>/hike_lookup, "waiting": <a draft waits for his yes>}` or `None` |
+| the question | `hass/skills/hikes.py` `question` | the proposal, in place of the meeting-place question; keeps the offer privately (below) |
+| the answer | `hass/skills/hikes.py` `answer` + `Dispatcher.takes_answer` / `cheap` + `Conversation._handle` | a bare yes, no or number to the offer is read by code (no model call) and is **not** an approval or a cancel; `yes <code>`, `no <code>`, `approve`, `cancel` and `reject` keep their meaning |
+| the draft | `hass/skills/hikes.py` `plan_add`, `notes` | `route.add` + `hike.create`, and the line beside the draft |
+| the live client | `hass/hike_fetch.py` | the standard-library fetch behind `CachedTransport`; the only module with network code. Also used by the manual script |
+| the limits | `hass/hike_lookup.py` `CachedTransport` | spacing per server (shared across lookups), 8 requests per lookup, **60 per day kept on disk and reserved under a lock** (`day-count.json`, `day-count.lock`), and 90 seconds for one lookup in all (a request that starts inside the 90 seconds is given only the time left as its timeout, never a fresh 60; waiting for the day count, a busy server or the spacing is counted too, and a wait that cannot finish inside the 90 seconds ends the lookup as slow without a request) |
+
+**The offer is kept without a new slot and without changing the open request.** The offered trails are saved as JSON in
+`<state>/hike_lookup/offers/<sha256 of the owner's texts so far>.json` (mode 0700; the owner's words are only in the hash). The answer is
+read from the next text of the same request (`hikes._state`), so the plan and the note beside the draft find the confirmed trail again by
+the same hash. An offer is used for 2 hours (the open request's own limit); the next offer written after 24 hours erases it. A damaged or edited
+file is ignored. The sentence that asks is asked once; a bare yes to several trails is asked one more time.
+
+A yes belongs to the hike it was given for: when the hike is later corrected to a different name ("Actually make it Cerro San Luis"), the
+title no longer matches the confirmed trail (`hl.name_score` below `MATCH_MIN`, the test the lookup itself used) and the plan has no route idea
+and no `trailId` from the map; the hike goes ahead plain.
+
+**Limits that are now on disk.** `<state>/hike_lookup/saved/` holds the saved answers (30, 90 and 365 days as in section 6) and
+`day-count.json`: requests made per day, written before each request, last 7 days kept. A restart of Hass cannot reset it. A count file that
+cannot be read or written fails closed: the day is counted as used up (no request), the damaged file is kept as `day-count.bad`, and
+tomorrow starts clean. **One step, one lock:** checking the limit, adding one and writing the file happen together under an exclusive
+`flock` on `day-count.lock` in the same folder, and the request is made only after that reservation succeeded; so Hass, a second chat turn
+and the manual script can never both take the 60th request or overwrite each other's count. A lock held for more than 5 seconds, or a
+system without `fcntl`, means no request (fails closed). Each writer uses a temp file of its own name (pid, thread, time), never a shared one.
+
+**Spacing is shared across lookups.** Every chat lookup makes a new `CachedTransport`, so the chat gives all of them the one
+`hike_lookup.shared_limiter()` of the process: the 2.0 s / 1.1 s / 0.5 s gaps hold from one lookup to the next, requests to one server are made
+one at a time, and `nominatim_search` and `nominatim_reverse` are one server (`SERVICE_HOST`) with one 1.1 s gap. The default limiter of a bare
+`CachedTransport` is private to it (the tests and the manual script).
+ `requests.log` holds one row per request (time, service, hash, outcome, seconds) and stops growing at 1 MB.
+
+**Operator steps** (nothing here was run against the real services by the card; CI and the tests use the recorded answers only):
+
+1. Pick the contact address for the User-Agent. It is sent to OpenStreetMap, Nominatim and USGS with every request.
+2. Once, by hand, check the real services still answer as recorded:
+   `python3 scripts/hike_lookup_manual.py --contact <address> --cache <state>/hike_lookup/saved "Bishop Peak"` (it shares the day count with Hass).
+3. Add `"hikeLookup": {"contact": "<address>"}` to `settings` in Hass's `config.json` and restart Hass (a restart is the operator's, not this card's).
+4. **Rollback:** remove the setting and restart (the feature is off; saved answers and offers stay on disk and are never read). Or revert the PR.
+
+**Known limits of this card.**
+
+* Mike's yes is read from his own words by code, so only a plain yes, no or a number (one to three, or first/second/third) counts. Anything longer
+  is a no, and the plain flow runs. A yes together with the meeting place in one message ("yes, Highland trailhead") is therefore a no.
+* The editor's draft lists the route's `elevation` and `elevationLabel` under the same words (`hass/voice.py` line 299 words both as
+  "the elevation"), so the draft shows "the elevation: Elevation gain" and not the climb. The measured climb is in the line beside the draft.
+  (A change to that wording, not made here: it is not this card's file.)
+* Spacing is kept inside one process. The manual script is a second process: it shares the day count (locked) but not the spacing, so do not run it
+  while Hass is making a lookup (it is run once, by the operator).
+* The map names in the question are the map's, shown in the usual Mike's-words marks. A saved offer holds them as plain text in the private state folder.
+* HIKE-LOOKUP-3 (connectors, official-length cross-check, lollipops) is still open; a "not sure" trail still gets no number.
 
 ## Known limits (found while recording the fixtures)
 
@@ -138,6 +220,7 @@ The absence of a closure note is never said to mean the trail is open. All of th
 |---|---|
 | `hass/hike_lookup.py` | the module: matching, chaining, distance, climb, proposal wording, `plan_ops`, `CachedTransport`, `FixtureTransport` |
 | `hass/tests/test_hike_lookup.py` | 57 tests, no network (sockets are blocked during every test) |
+| `hass/hike_fetch.py`, `hass/tests/test_hike_lookup_chat.py` | HIKE-LOOKUP-2: the live client (the only network code) and the hermetic tests of the chat flow, the on-disk count and the client with a fake `urlopen` |
 | `hass/tests/fixtures/hike_lookup/*.json` | recorded answers, 2026-11-09: Bishop Peak, Cerro San Luis, Point Buchon, Valencia Peak, Bluff Trail (three matches), Mission Peak (outside the county), Mount Doom Trail (no match). Trimmed to the tags and geometry the code reads |
 | `scripts/hike_lookup_manual.py` | **MANUAL, MAKES LIVE CALLS.** Looks a name up for real, or records a fixture with `--record`. Refuses to run when `CI` is set; the tests check that |
 
@@ -149,8 +232,8 @@ python3 scripts/hike_lookup_manual.py --contact <an address> --record hass/tests
 
 ## Next cards (not built here)
 
-1. **HIKE-LOOKUP-2:** wire `hike_lookup.lookup` into the `hike.add` route slot and the open-request store; the live transport and the private `hike_lookup/` folder in the state directory; the "draft already waiting" guard. Touches `hass/conversation.py` and `hass/skills/`, so it must not run during a live trial.
+1. **HIKE-LOOKUP-2: done (card A6), section 7.** Wired into the `hike.add` meeting-place question; the live transport and the private `hike_lookup/` folder in the state directory; the "draft already waiting" guard. Touches `hass/conversation.py` and `hass/skills/`, so the operator schedules it outside a live trial week.
 2. **HIKE-LOOKUP-3:** the known limits above (connectors to the road, official-length cross-check, lollipops).
-3. **Operator:** choose the contact address for the User-Agent; decide whether `route.add` from a lookup may ever be chat-live (HIKE-PAGE.md decision 6, G's).
+3. **Operator:** choose the contact address for the User-Agent (`hikeLookup.contact`, section 7); decide whether `route.add` from a lookup may ever be chat-live (HIKE-PAGE.md decision 6, G's).
 
 No new G decision is needed for this design. Nothing was published, sent or deployed.
