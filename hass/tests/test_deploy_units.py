@@ -5,7 +5,7 @@ from pathlib import Path
 
 DIR = Path(__file__).resolve().parents[2] / "deploy" / "hass"
 RUNTIME = "%h/.local/share/hass/runtime/hass/"
-SERVICES = ("hass-receiver", "hass-worker", "hass-health", "hass-backup", "hass-clover-sync")
+SERVICES = ("hass-receiver", "hass-worker", "hass-health", "hass-backup", "hass-clover-sync", "hass-clover-report")
 
 
 def parse(name):
@@ -18,7 +18,7 @@ def parse(name):
 class UnitTest(unittest.TestCase):
     def test_every_unit_parses_and_is_in_this_list(self):
         names = sorted(p.name for p in DIR.iterdir())
-        self.assertEqual(names, sorted([f"{s}.service" for s in SERVICES] + ["hass-health.timer", "hass-backup.timer", "hass-clover-sync.timer"]))
+        self.assertEqual(names, sorted([f"{s}.service" for s in SERVICES] + ["hass-health.timer", "hass-backup.timer", "hass-clover-sync.timer", "hass-clover-report.timer"]))
         for name in names: self.assertTrue(parse(name).sections(), name)
 
     def test_services_run_from_the_runtime_worktree_with_the_house_rules(self):
@@ -76,6 +76,17 @@ class UnitTest(unittest.TestCase):
             self.assertNotIn(word, text)
         timer = parse("hass-clover-sync.timer")
         self.assertEqual((timer["Timer"]["OnCalendar"], timer["Timer"]["Persistent"]), ("*:0/15", "true"))
+        self.assertEqual(timer["Install"]["WantedBy"], "timers.target")
+
+
+    def test_clover_reports_are_daily_cache_only(self):
+        svc = parse("hass-clover-report.service")["Service"]
+        self.assertEqual(svc["Type"], "oneshot")
+        self.assertEqual(svc["ExecStart"], "/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/clover/cli.py report --all "
+                                         "--host %h/.local/state/hass/host/host.json")
+        timer = parse("hass-clover-report.timer")
+        self.assertEqual(timer["Timer"]["OnCalendar"], "*-*-* 06:00 America/Los_Angeles")
+        self.assertEqual(timer["Timer"]["Persistent"], "true")
         self.assertEqual(timer["Install"]["WantedBy"], "timers.target")
 
 
