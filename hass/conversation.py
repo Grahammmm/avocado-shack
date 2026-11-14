@@ -1050,8 +1050,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                        and sender_key(msg.sender) in self.settings.get("gKeys", ())
                        and msg.chat == self.settings.get("gChat") and msg.chat not in self._owner_chats)
             if not allowed:
-                self._record(msg, "ignored", owner=False)
-                return "ignored"
+                return None
             text = "I haven't been able to read the till yet."
             if self.till is not None:
                 try:

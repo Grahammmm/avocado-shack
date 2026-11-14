@@ -196,12 +196,32 @@ class ReportChatTests(ConversationTestCase):
         self.assertFalse((self.repo.state / "clover/reports").exists())
         self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
-    def test_owner_stranger_wrong_chat_echo_and_edit_get_no_report_or_model(self):
-        for sender, dest, kw in ((OWNER, CHAT, {}), (STRANGER, self.GCHAT, {}), (self.G, CHAT, {}),
-                                 (self.G, self.GCHAT, {"from_me": True}), (self.G, self.GCHAT, {"kind": "edited"})):
-            self.assertEqual(self.say("till report", sender=sender, chat=dest, **kw), "ignored")
-            self.assertEqual(self.replies(), [])
-        self.interp.interpret.assert_not_called()
+    def test_non_g_report_preserves_normal_owner_stranger_echo_and_edit_handling(self):
+        self.interp.interpret = mock.Mock(return_value={"unsupported": "Sorry, I can't do that yet."})
+        cases = (
+            (OWNER, CHAT, False, "new", "unsupported", ["Sorry, I can't do that yet."], True),
+            (OWNER, CHAT, False, "edited", "not-read", [conversation.NOT_READ_REPLY], True),
+            (OWNER, CHAT, True, "new", "echo", [], False),
+            (STRANGER, self.GCHAT, False, "new", "ignored", [], False),
+            (self.G, CHAT, False, "new", "ignored", [], False),
+            (self.G, self.GCHAT, True, "new", "echo", [], False),
+            (self.G, self.GCHAT, False, "edited", "edited-ignored", [], False),
+        )
+        with mock.patch.object(self.conv.till, "report") as report:
+            for sender, dest, from_me, kind, expected, replies, owner in cases:
+                with self.subTest(sender=sender, chat=dest, from_me=from_me, kind=kind):
+                    self.assertEqual(self.say("till report", sender=sender, chat=dest, from_me=from_me, kind=kind), expected)
+                    self.assertEqual(self.replies(), replies)
+                    row = self.conv.db.execute("SELECT disposition, received_at FROM messages WHERE provider_id = ?",
+                                               (f"m{self.n}",)).fetchone()
+                    self.assertEqual(tuple(row), (expected, self.now.isoformat() if owner else None))
+                    chat_row = self.conv.db.execute("SELECT chat FROM message_chats WHERE provider_id = ?",
+                                                    (f"m{self.n}",)).fetchone()
+                    self.assertEqual(tuple(chat_row) if chat_row else None, (dest,) if owner else None)
+            report.assert_not_called()
+        self.interp.interpret.assert_called_once()
+        self.assertEqual(self.interp.interpret.call_args.args[0], "till report")
+        self.assertEqual((self.drafts(), self.commits()), ([], 0))
 
     def test_chat_preserves_age_outage_identity_and_unavailable_content(self):
         self.now += timedelta(hours=1)
