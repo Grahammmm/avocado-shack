@@ -2181,6 +2181,12 @@ Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it act
 
 Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.
 
+## AVO-FIX-559b: preserve source-block context and historical predicates — November 13, 2026
+
+Branch rb/hass-live-add-2, PR #559, final operator-admitted Codex escalation after three SEC-3 RETURNs. Maker-site facts are admitted only after every sentence in their complete source block is understood as an allowed affirmative fact; unknown context drops the whole block. Private provenance retains the complete supporting blocks. Product-making history no longer becomes the maker's founding year or masks an explicit founding date. Exact-draft owner approval and the operator security hold are unchanged; the PR stays draft.
+
+Builder evidence: 147 focused maker-site, production-dispatch/photo/undo and SEC-2 tests pass. The new real-HTML production-path table had 10 failing subtests on the prior candidate and passes after repair (11 cases, including literal multi-sentence controls and complete provenance). Preserved second- and third-RETURN probes replayed against this clone, with both four-test receipt suites passing and zero commits without yes. No live state, publication or credentials touched. Diagnosis posted before code edits on PR #559; independent review and operator release remain outstanding.
+
 ## AVB-09: one generated capability inventory — November 13, 2026
 
 The skill declarations now explicitly name pack, changing targets, approval class, sandbox support, declared audit fields and audience. Missing/invalid fields fail the lint; mixed-pack `SKILLS` exports are rejected. The legacy approval execution field and all existing plans, previews and policy gates are unchanged. A2/A3 stay unavailable, not silently treated as A1. The new `hass/capabilities.py` generates `docs/hass/capabilities.json` and the owner page `CAPABILITIES.md`; `help` appends the same registry-derived skills to the existing fixed-command examples. CI tests reject missing/stale generated files. The FAQ is honestly labelled as request-recording only, and the empty till pack is visible. These describe source capabilities, not the installed runtime or permission to publish. AVB-10/11 retain the audit writer/per-target sandbox work.

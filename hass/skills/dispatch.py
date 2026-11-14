@@ -85,9 +85,11 @@ RULES.setdefault("no-price", _no_price)
 class Ctx:
     """What a skill's ``plan`` and rules may read: the saved content (read-only), today (Pacific), aliases, the owner's texts."""
 
-    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, site_dir=None, *, guest_counts_db=None):
+    def __init__(self, content, today, aliases, texts, now, media_root=None, house_render=False, live=False, maker_page=None, site_dir=None, *, guest_counts_db=None):
         self.content, self.today, self.aliases, self.texts, self.now = content, today, aliases, texts, now
         self.media_root, self.house_render = media_root, house_render  # the stored originals (for a photo check) and the houseRender setting
+        self.live = live is True  # HASS-LIVE-ADD-2: settings liveSite is on, so a change goes to the real website on his yes
+        self.maker_page = maker_page  # HASS-LIVE-ADD-2: fn(address) -> the page of a maker's own website (hass/maker_site.py) or PageError
         self.guest_counts_db = guest_counts_db
         self.multi_call = False  # True while the owner's texts are shared by several calls of one message (a skill cannot tie a loose word to one call)
         self.site_dir = site_dir  # the writer's storefront-mockup folder (the same checkout the content was read from), or None
@@ -388,6 +390,18 @@ def candidates_of(router_result) -> list:
 
 
 # -- the orchestrator -----------------------------------------------------------------------------------------
+def maker_site_log(sdir, code, rows, now) -> None:
+    """Append one JSON line per recorded source to ``<state>/maker-sources.jsonl`` (0600). Owner text is never written."""
+    import json
+    import os
+    path = os.path.join(str(sdir), "maker-sources.jsonl")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as out:
+        for row in rows:
+            out.write(json.dumps({"draft": code, "at": now.isoformat() if hasattr(now, "isoformat") else str(now), **row},
+                                 sort_keys=True, ensure_ascii=False) + "\n")
+
+
 class Dispatcher:
     """One per Conversation. ``conv`` supplies the db, the editor and the draft path; nothing here is reachable by anyone but
     the owner, because ``Conversation._handle`` drops every other sender and chat before a request exists."""
@@ -402,8 +416,14 @@ class Dispatcher:
         writer = editor_mod._load(str(self.conv.sdir))[2]
         content = load_content(writer / "hass" / "content")
         settings = getattr(self.conv, "settings", None) or {}
-        return Ctx(content, shop_today(now), self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
-                   house_render=settings.get("houseRender") is True, site_dir=writer / "storefront-mockup", guest_counts_db=settings.get("guestCountsDb"))
+        from hass import maker_site
+        today = shop_today(now)
+        # HASS-SEC-3 (M2): a maker's website was read BEFORE the write transaction (Conversation._read_sites); here, inside it,
+        # the plan only sees that result and never the network
+        read = maker_site.prefetched(getattr(self.conv, "_pages", None))
+        return Ctx(content, today, self.conv.aliases(), list(texts), now, media_root=settings.get("mediaRoot"),
+                   house_render=settings.get("houseRender") is True, live=bool(settings.get("liveSite")), maker_page=read,
+                   site_dir=writer / "storefront-mockup", guest_counts_db=settings.get("guestCountsDb"))
 
     def _owner(self):
         return self.conv._chat()  # the answering chat, so each owner has their own open request (HASS-LIVE-PLAN-1)
@@ -585,7 +605,7 @@ class Dispatcher:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
             return "question"
         return self._draft(msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, filled.left_off,
-                           queued=req["calls"] if req else ())
+                           queued=req["calls"] if req else (), ctx=ctx)
 
     def _plan_stopped(self, msg, now, req, skill, given, texts, attachments, exc, revises):
         """A plan raised. A skill's own refusal (``exc.reply`` is a sentence for the owner, ``exc.kind`` is ``question`` when one
@@ -638,15 +658,16 @@ class Dispatcher:
         conv._reply(question)
         return "question"
 
-    def _skill_notes(self, skill, slots, now, texts) -> dict:
+    def _skill_notes(self, skill, slots, now, texts, ctx=None) -> dict:
         """``notes(skill name, slots, ctx)`` of the skill's module -> ``{say, set, warn}`` lines shown beside the draft (before the
-        owner's yes). Missing, failing or malformed: no lines (the draft is then shown as before). Each line once, plain strings only."""
+        owner's yes). Missing, failing or malformed: no lines (the draft is then shown as before). Each line once, plain strings only.
+        ``ctx`` is the context the plan drafted with (HASS-SEC-3 L3), so the lines describe that very plan."""
         out = {"say": [], "set": [], "warn": []}
         hook = skill_hook(skill, "notes")
         if hook is None:
             return out
         try:
-            got = hook(skill.name, dict(slots), self._ctx(now, texts))
+            got = hook(skill.name, dict(slots), ctx if ctx is not None else self._ctx(now, texts))
         except Exception:  # noqa: BLE001 - a note is advice, never a reason to lose the draft
             return out
         for key in out:
@@ -672,15 +693,17 @@ class Dispatcher:
         note += list(dict.fromkeys(warn))
         return note
 
-    def _draft(self, msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, left_off, queued=()):
+    def _draft(self, msg, now, req, skill, slots, texts, attachments, ops, revises, defaults, left_off, queued=(), ctx=None):
         """Hand the plan to the conversation's ordinary draft path (editor.prepare, claims over the JOINED texts, proposal)."""
         conv, owner = self.conv, self._owner()
         earlier = _earlier(texts, msg)
-        hooked = self._skill_notes(skill, slots, now, texts)  # the skill's own lines: what it said and did, and what to know before yes
+        hooked = self._skill_notes(skill, slots, now, texts, ctx)  # the skill's own lines: what it said and did, and what to know before yes
         note = self._note_lines([(hooked, defaults)], left_off)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
+        if disposition == "proposed":
+            self._keep_sources(skill, slots, now, texts, code, ctx)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if queued:  # the shelf-check question now holds the open request: the queued asks wait on it, not lost
@@ -702,6 +725,20 @@ class Dispatcher:
             if queued:
                 return self._next_queued(msg, now, None, queued, texts, attachments, disposition)
         return disposition
+
+    def _keep_sources(self, skill, slots, now, texts, code, ctx=None) -> None:
+        """HASS-LIVE-ADD-2: where a drafted maker story was read (address, day, the page sentences it came from), one private line
+        per draft in ``maker-sources.jsonl`` in the state folder. A hook of the skill's module; best effort, never a reason to lose the draft.
+        HASS-SEC-3 (L3): ``ctx`` is the context the plan drafted with; the hook reads that plan's own record, never a new read."""
+        hook = skill_hook(skill, "sources")
+        if hook is None:
+            return
+        try:
+            rows = hook(skill.name, dict(slots), ctx if ctx is not None else self._ctx(now, texts))
+            if rows:
+                maker_site_log(self.conv.sdir, code, rows, now)
+        except Exception:  # noqa: BLE001
+            return
 
     def _next_queued(self, msg, now, rid, queued, texts, attachments, disposition):
         """The current call is done: the next queued call becomes the open request and its one question is asked. Calls whose
@@ -730,7 +767,7 @@ class Dispatcher:
             return self._read_only_calls(msg, now, result["calls"], req, texts, attachments)
         ctx = self._ctx(now, texts)
         ctx.multi_call = len(result["calls"]) > 1
-        ops, left, waiting, parts, stopped = [], [], [], [], []
+        ops, left, waiting, parts, stopped, planned_calls = [], [], [], [], [], []
         for call in result["calls"]:
             skill = self.registry.get(call["skill"])
             if skill is None or skill.approval == "none" or skill.name == "backlog.log":
@@ -760,7 +797,8 @@ class Dispatcher:
                     stopped.append((said, reason if reason in BACKLOG_REASONS else None))
                 continue
             ops += planned if isinstance(planned, list) else []
-            parts.append((self._skill_notes(skill, slots, now, texts), shown))  # what each complete call said, set and warns of
+            parts.append((self._skill_notes(skill, slots, now, texts, ctx), shown))  # what each complete call said, set and warns of
+            planned_calls.append((skill, slots))
             left += filled.left_off
         if len(ops) > MAX_OPS:
             conv._reply(TOO_MANY.format(limit=MAX_OPS, count=len(ops)))
@@ -780,6 +818,9 @@ class Dispatcher:
         note = self._note_lines(parts, left)
         disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
                                   prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        if disposition == "proposed":  # HASS-SEC-3 (L3): each drafted call's own source record, as for one skill
+            for called, called_slots in planned_calls:
+                self._keep_sources(called, called_slots, now, texts, conv._last_draft_code, ctx)
         live = conv.requests.get(owner, now)
         if live is not None and live["pending"]:
             if waiting:  # the shelf-check question holds the open request: the incomplete calls wait on it, not lost

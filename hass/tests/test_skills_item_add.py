@@ -48,7 +48,7 @@ class Declaration(unittest.TestCase):
         self.assertIs(skills.load_skills().get("item.add"), ia.ITEM_ADD)
         ops = load_registry()
         self.assertEqual(skills.skill_lint([ia.ITEM_ADD], ops, repo_root=REPO_ROOT), [])
-        golden = ia.plan_add(dict(FULL), SimpleNamespace(today="2026-11-08", next_product_id="photo-product-175"))
+        golden = ia.plan_add(dict(FULL), SimpleNamespace(today="2026-11-08", next_product_id="photo-product-175", texts=["new honey", "skip"]))
         self.assertEqual(lint_plan_output(ia.ITEM_ADD, golden, ops), [])
 
     def test_live_class_matches_the_live_boundary(self):
@@ -157,16 +157,27 @@ class Questions(unittest.TestCase):
 
 class Plan(unittest.TestCase):
     def test_new_maker_product_and_todays_shelf_check_on_its_own_line(self):
-        done = ia.describe_add(dict(FULL), ctx("new wildflower honey from Bee Happy Farm in Atascadero, its in"))
+        done = ia.describe_add(dict(FULL), ctx("new wildflower honey from Bee Happy Farm in Atascadero, its in", "skip"))
         self.assertEqual([op["op"] for op in done.ops], ["maker.add", "product.add", "store.confirm_selection"])
         self.assertEqual(done.ops[0]["args"]["story"], "Bee Happy Farm is based in Atascadero, California.")  # D5
         self.assertEqual(done.ops[2]["args"], {"yes": ["photo-product-175"]})
         self.assertIn(ia.STORE_LINE, done.say)  # D2
 
+    def test_a_skipped_story_stays_skipped_while_the_draft_is_revised(self):
+        """Codex RETURN at 9f213272 item 1: after 'skip', changing the description or caption revises the draft (D5 line only)."""
+        for later in ("make the description say Spoon it on toast", "the caption should be honey jar", "call it Clover honey"):
+            for skip in ("skip", "skip the story", "no"):
+                with self.subTest(skip=skip, later=later):
+                    done = ia.describe_add(dict(FULL), ctx("new wildflower honey from Bee Happy Farm in Atascadero, its in", skip, later))
+                    self.assertEqual(done.ops[0]["args"]["story"], "Bee Happy Farm is based in Atascadero, California.")
+        with self.assertRaises(ia.Refusal) as caught:  # no skip anywhere: still the one story question
+            ia.describe_add(dict(FULL), ctx("new wildflower honey from Bee Happy Farm in Atascadero, its in", "the caption should be honey jar"))
+        self.assertEqual(caught.exception.reply, ia.ASK_STORY.format(maker="Bee Happy Farm"))
+
     def test_check_already_recorded_today_sets_only_the_word(self):
         content = copy.deepcopy(CONTENT)
         content.store["selection_checked_on"] = "2026-11-08"
-        done = ia.describe_add({**FULL, "availability": "no"}, ctx(content=content))
+        done = ia.describe_add({**FULL, "availability": "no"}, ctx("new honey", "skip", content=content))
         self.assertEqual(done.ops[-1], {"op": "product.set_availability", "args": {"id": "photo-product-175", "available": "no"}})
         self.assertNotIn(ia.STORE_LINE, done.say)
 
@@ -372,7 +383,8 @@ class PreviewShowsTheNewProduct(unittest.TestCase):
     def draft(self, slots):
         scratch = testkit.Scratch({}, {"item.add": ia.ITEM_ADD}, photos=["reports/hass/newitem-1/synthetic/jar-white-sheet.jpg"])
         try:
-            plan = ia.plan_add(slots, SimpleNamespace(today="2026-11-08", next_product_id="photo-product-175", content=CONTENT))
+            plan = ia.plan_add(slots, SimpleNamespace(today="2026-11-08", next_product_id="photo-product-175", content=CONTENT,
+                                                texts=["new honey", "skip"]))
             out = scratch.editor.prepare(plan)
             self.assertEqual(out["result"], "ok", out)
             return out["draft"]["records"]
