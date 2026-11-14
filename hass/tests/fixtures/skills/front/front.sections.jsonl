@@ -5,6 +5,6 @@
 {"id": "reset", "plan": true, "kind": "clean", "version": 1, "slots": {"reset": true}, "expect_ops": [{"op": "store.reset_sections", "args": {}}], "ctx": {"store": {"homeSections": [{"id": "market", "shown": true}, {"id": "our-way", "shown": true}, {"id": "visit", "shown": true}, {"id": "newsletter", "shown": false}]}}}
 {"id": "already-default", "plan": true, "kind": "refuse", "version": 1, "slots": {"reset": true}, "expect_error": "already that way"}
 {"id": "already-shown", "plan": true, "kind": "clean", "version": 1, "slots": {"show": ["food"]}, "expect_error": "already that way"}
-{"id": "style", "plan": true, "kind": "clean", "version": 1, "slots": {"hide": ["blue"]}, "expect_error": "colours"}
+{"id": "style", "plan": true, "kind": "clean", "version": 1, "slots": {"hide": ["blue"]}, "expect_error": "Colours"}
 {"id": "duplicate", "plan": true, "kind": "clean", "version": 1, "slots": {"order": ["food", "food", "food", "food"]}, "expect_error": "exactly once"}
 {"id": "hide-and-show", "plan": true, "kind": "clean", "version": 1, "slots": {"hide": ["newsletter"], "show": ["newsletter"]}, "expect_error": "Hide or show"}

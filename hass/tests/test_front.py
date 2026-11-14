@@ -183,11 +183,12 @@ class UndoFrontTests(H06TestCase):
     def setUp(self):
         super().setUp()
         from hass.tests.test_conversation import _ops
+        live = BANNER | {'start': shop_today().isoformat(), 'end': (shop_today() + timedelta(days=3)).isoformat()}  # H06 runs on the real clock
         self.interp.mapping.update({
             'sections': _ops(('store.set_sections',{'order':['visit','market','newsletter','our-way'],'hidden':['our-way']})),
             'reset sections': _ops(('store.reset_sections',{})),
-            'banner': _ops(('store.set_banner',BANNER)),
-            'banner2': _ops(('store.set_banner',BANNER|{'text':'Hello neighbors'})),
+            'banner': _ops(('store.set_banner',live)),
+            'banner2': _ops(('store.set_banner',live|{'text':'Hello neighbors'})),
             'clear banner': _ops(('store.clear_banner',{})),
         })
 
