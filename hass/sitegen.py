@@ -41,7 +41,7 @@ from hass.content_model import (  # noqa: E402
     checked_on, iso_day, load_and_validate, shop_today,
 )
 from hass import specials  # noqa: E402
-from hass.notice import NOTICE_JS, slots as notice_slots, stale_paths  # noqa: E402,F401
+from hass.notice import BANNER_JS, banner_link, NOTICE_JS, slots as notice_slots, stale_paths  # noqa: E402,F401
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
 SITE_PREFIX = "storefront-mockup/"
@@ -196,8 +196,38 @@ def render_template(text: str, slots: dict[str, str]) -> str:
     return out
 
 
+def front_slots(store, template_dir, rel, day):
+    from hass.content_model import default_sections
+    home = Path(template_dir) / "home"
+    sections = store.get("homeSections", default_sections())
+    shown = {r["id"] for r in sections if r["shown"]}
+    prefix = "" if rel == "index.html" else "hike-"
+
+    def links(name):
+        text = (home / (prefix + name + ".html")).read_text()
+        return re.sub(r'<a href="(?:/)?#([^"\s]+)"[^>]*>.*?</a>',
+                      lambda m: m[0] if m[1] in shown else "", text)
+
+    visit = "#visit" if rel == "index.html" else "/#visit"
+    banner = store.get("banner")
+    strip = f'<div class="preview"><span>GOOD FOOD. CLOSE TO HOME.</span><a href="{visit}">Come visit the Shack ↗</a></div>'
+    if banner:
+        live = banner["start"] <= day.isoformat() <= banner["end"]
+        link = banner_link(banner, store)
+        strip = render_template((home / "banner.html").read_text(), {
+            "front.defaultHidden": ' hidden style="display:none"' if live else "",
+            "front.bannerHidden": "" if live else ' hidden style="display:none"',
+            "front.visitHref": visit, "front.start": html.escape(banner["start"], quote=True),
+            "front.end": html.escape(banner["end"], quote=True), "front.text": html.escape(banner["text"], quote=False),
+            "front.linkHtml": f'<a href="{html.escape(link, quote=True)}">Find out more ↗</a>' if link else "",
+        })
+    return {"home.sections": "".join((home / (r["id"] + ".html")).read_text() for r in sections if r["shown"])
+            if rel == "index.html" else "", "home.navHtml": links("nav"), "home.footerLinksHtml": links("footer"),
+            "front.bannerHtml": strip, "front.bannerScript": BANNER_JS if banner else ""}
+
+
 def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, notice_today=None,
-           specials_today=None) -> dict[str, bytes]:
+           specials_today=None, banner_today=None) -> dict[str, bytes]:
     """Return {repo-relative path: bytes} for every generated site file. ``today`` (default: the shop's current date)
     decides selection staleness and notice expiry; ``notice_today`` and ``specials_today`` override only notice and specials expiry for artifact checks."""
     today = today or shop_today()
@@ -211,6 +241,8 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, n
              **specials.slots(content.store, content.products, specials_today or today)}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")
+        for key, value in front_slots(content.store, template_dir, rel, banner_today or today).items():
+            text = text.replace("{{" + key + "}}", value)
         files[SITE_PREFIX + rel] = render_template(text, slots).encode("utf-8")
     return files
 

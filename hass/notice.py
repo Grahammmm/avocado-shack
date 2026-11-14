@@ -10,6 +10,27 @@ from pathlib import Path
 
 from hass.content_model import iso_day, shop_today
 
+BANNER_JS = ("<script>(()=>{const swap=()=>{const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});"
+             "document.querySelectorAll('[data-banner]').forEach(b=>{const live=day>=b.dataset.start&&day<=b.dataset.end;"
+             "b.hidden=!live;b.style.display=live?'':'none';const d=b.previousElementSibling;"
+             "d.hidden=live;d.style.display=live?'none':''})};swap();setInterval(swap,1000);"
+             "document.addEventListener('visibilitychange',swap);window.addEventListener('pageshow',swap)})()</script>\n")
+
+
+def banner_link(banner, store):
+    from hass.content_model import BANNER_LINKS, BANNER_PAGES
+    link = banner.get("link")
+    page = BANNER_PAGES.get(link)
+    return BANNER_LINKS.get(link) if not page or store.get(page, {}).get("shown") else None
+
+
+def banner_target(banner, store, today):
+    if not banner or not banner["start"] <= today.isoformat() <= banner["end"]:
+        return None
+    link = banner_link(banner, store)
+    return {"text": banner["text"], **({"link": link} if link else {})}
+
+
 NOTICE_JS = ("<script>(()=>{const expire=()=>document.querySelectorAll('.home-notice').forEach(n=>{"
              "if(new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})>n.dataset.until)n.hidden=true});"
              "expire();setInterval(expire,1000);document.addEventListener('visibilitychange',expire);"
@@ -61,9 +82,17 @@ def stale_paths(content, root: Path) -> list[str]:
         days.add(last)
         if last < date.max:
             days.add(date.fromordinal(last.toordinal() + 1))
+    banner = content.store.get("banner") or {}
+    for key in ("start", "end"):
+        boundary = iso_day(banner.get(key))
+        if boundary is not None:
+            days.add(boundary)
+            offset = -1 if key == "start" else 1
+            if date.min.toordinal() <= boundary.toordinal() + offset <= date.max.toordinal():
+                days.add(date.fromordinal(boundary.toordinal() + offset))
     for day in sorted(d for d in days if d < today):
         if not stale:
             return stale
-        before = diff_paths(render(content, templates, today=today, notice_today=day, specials_today=day), root)
+        before = diff_paths(render(content, templates, today=today, notice_today=day, specials_today=day, banner_today=day), root)
         stale = [rel for rel in stale if rel in before]
     return stale
