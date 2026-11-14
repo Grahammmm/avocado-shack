@@ -76,6 +76,9 @@ does not change.
 that refusal asks `registry.get("page.faq")`, which returns nothing for a retired skill, so "add an FAQ" now goes to the
 model and `front.faq` (tested in `hass/tests/test_front_pages.py`, no dispatcher edit). A bare "add an FAQ" names no
 question, so the reply is "What is the question?": the model's guessed words are not his and are dropped.
+No `front.page` trigger uses the word "hide": a fifth skill sharing it pushed `item.hide` out of the router's top three
+for "hide an item". "hide Our policies page" still routes to `front.page`; a bare "hide the About page" ties it with
+`page.about`, so the owner is asked which.
 `page.about` still changes the home page story; its "new About page" refusal now points at `front.page` (version 2).
 
 ## Preview and release
