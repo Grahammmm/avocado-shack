@@ -1,0 +1,37 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": [
+        {
+          "id": "market",
+          "shown": true
+        },
+        {
+          "id": "our-way",
+          "shown": true
+        },
+        {
+          "id": "visit",
+          "shown": true
+        },
+        {
+          "id": "newsletter",
+          "shown": false
+        }
+      ],
+      "file": "hass/content/store.json",
+      "path": "homeSections"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/hike/index.html",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

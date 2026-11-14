@@ -22,7 +22,9 @@ from hass.ops import (  # noqa: E402
     NeedsDetails, NotFound, OpContext, Refused, check_args, has_control_chars, load_registry)
 
 CONTENT_PATHS = tuple(f"hass/content/{n}.json" for n in ("products", "makers", "community", "store"))
-REVISION_PATHS = tuple(sorted(CONTENT_PATHS + ("hass/templates/index.html", "hass/templates/hike/index.html")))
+HOME_PARTS = tuple(f"hass/templates/home/{n}.html" for n in (  # AVB-19-B1: the home/hike page parts (sitegen.front_parts)
+    "banner", "footer", "hike-footer", "hike-nav", "market", "nav", "newsletter", "our-way", "strip", "visit"))
+REVISION_PATHS = tuple(sorted(CONTENT_PATHS + HOME_PARTS + ("hass/templates/index.html", "hass/templates/hike/index.html")))
 GENERATED_PATHS = tuple(sitegen.SITE_PREFIX + n for n in (
     "catalog-products.js", "producers.js", "producers.json", "community.json", "index.html", "hike/index.html"))
 OWNED_PATHS = CONTENT_PATHS + GENERATED_PATHS

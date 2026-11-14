@@ -28,7 +28,7 @@ class _Buttons(HTMLParser):
 class ShelfLabelTests(unittest.TestCase):
     def test_shelf_labels_match_real_filter_buttons(self):
         expected = list(SHELF_LABELS.items())
-        for page in ("hass/templates/index.html", "storefront-mockup/index.html"):
+        for page in ("hass/templates/home/market.html", "storefront-mockup/index.html"):  # AVB-19-B1: the food part's template
             with self.subTest(page=page):
                 parser = _Buttons()
                 parser.feed((REPO_ROOT / page).read_text(encoding="utf-8"))

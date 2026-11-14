@@ -15,7 +15,7 @@ BUTTON = re.compile(r"<button\b[^>]*\bid=\"clear-filters\"[^>]*>")
 
 class ClearFiltersTests(unittest.TestCase):
     def test_template_and_generated_page_have_one_hidden_button(self):
-        for path in ("hass/templates/index.html", "storefront-mockup/index.html"):
+        for path in ("hass/templates/home/market.html", "storefront-mockup/index.html"):  # AVB-19-B1: the food part's template
             tags = BUTTON.findall((ROOT / path).read_text(encoding="utf-8"))
             self.assertEqual(len(tags), 1, path)
             self.assertIn('type="button"', tags[0], path)

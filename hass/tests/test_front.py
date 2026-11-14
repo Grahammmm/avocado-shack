@@ -47,6 +47,12 @@ class FrontTests(unittest.TestCase):
         for path, data in sitegen.render(self.content).items():
             self.assertEqual(data, (REPO_ROOT/path).read_bytes(), path)
 
+    def test_every_home_part_is_in_the_draft_revision(self):  # a part edit stales a draft like an index.html edit does
+        from hass import editor
+        parts = sorted(str(p.relative_to(REPO_ROOT)) for p in (REPO_ROOT/'hass/templates/home').glob('*.html'))
+        self.assertEqual(list(editor.HOME_PARTS), parts)
+        self.assertTrue(set(parts) <= set(editor.REVISION_PATHS))
+
     def test_sections_order_hidden_links_and_hero(self):
         self.apply('store.set_sections', {'order':['visit','newsletter','market','our-way'], 'hidden':['newsletter','our-way']})
         files = sitegen.render(self.content, today=DAY)

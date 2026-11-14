@@ -454,6 +454,8 @@ class Pictures(Base):
 FIRST_SENTENCES = {
     'answer.site': 'what time do we close saturday?',
     'backlog.log': 'can you order more eggs from the farm',
+    'front.banner': 'banner: Come say hello from tomorrow through Sunday',
+    'front.sections': 'hide the newsletter part',
     'hike.add': 'add a hike Saturday at 8am, Mill Creek trailhead, easy, bring water',
     'hike.cancel': 'cancel the Point Buchon hike, rained out - we will pick a new date soon',
     'hike.edit': 'change the Cass Hill meeting point to the upper lot',
