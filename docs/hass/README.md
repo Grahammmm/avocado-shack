@@ -82,7 +82,7 @@ Account ownership and recovery stay with Michael. Development access can be dele
 
 ## The bigger store-manager vision
 
-The full [future feature backlog](FEATURES.md#later-store-manager-work) preserves the earlier goals: Shopify/Clover inventory, costs and margin suggestions, supplier offers and reorders, daily reports, spoilage reduction, social media, newsletters and bookkeeping. Those integrations will use the same conversation and approval approach.
+The full [future feature backlog](FEATURES.md#later-store-manager-work) preserves the earlier goals: Shopify/Clover inventory, costs and margin suggestions, supplier offers and reorders, daily reports, spoilage reduction, social media, newsletters and bookkeeping. Those integrations will use the same conversation and approval approach. The Clover (items and stock) design and prototype is [CLOVER.md](CLOVER.md).
 
 They are **later projects**. Today's catalog stays free of prices and checkout. Weekly boxes and merchandise stay removed unless Michael explicitly brings them back. Store and hiking contacts remain separate from the political campaign.
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 DIR = Path(__file__).resolve().parents[2] / "deploy" / "hass"
 RUNTIME = "%h/.local/share/hass/runtime/hass/"
-SERVICES = ("hass-receiver", "hass-worker", "hass-health", "hass-backup")
+SERVICES = ("hass-receiver", "hass-worker", "hass-health", "hass-backup", "hass-clover-sync")
 
 
 def parse(name):
@@ -18,7 +18,7 @@ def parse(name):
 class UnitTest(unittest.TestCase):
     def test_every_unit_parses_and_is_in_this_list(self):
         names = sorted(p.name for p in DIR.iterdir())
-        self.assertEqual(names, sorted([f"{s}.service" for s in SERVICES] + ["hass-health.timer", "hass-backup.timer"]))
+        self.assertEqual(names, sorted([f"{s}.service" for s in SERVICES] + ["hass-health.timer", "hass-backup.timer", "hass-clover-sync.timer"]))
         for name in names: self.assertTrue(parse(name).sections(), name)
 
     def test_services_run_from_the_runtime_worktree_with_the_house_rules(self):
@@ -63,6 +63,20 @@ class UnitTest(unittest.TestCase):
         self.assertEqual((backup["OnCalendar"], backup["Persistent"]), ("*-*-* 03:30 America/Los_Angeles", "true"))
         self.assertIn("statebackup.py create --state", parse("hass-backup.service")["Service"]["ExecStart"])
         for timer in ("hass-health", "hass-backup"): self.assertEqual(parse(f"{timer}.timer")["Install"]["WantedBy"], "timers.target")
+
+    def test_clover_sync_is_a_read_only_15_minute_oneshot(self):
+        """HASS-CLOVER-2: a template only (the operator installs it after review); the token is never in the unit."""
+        service = parse("hass-clover-sync.service")["Service"]
+        self.assertEqual(service["Type"], "oneshot")
+        self.assertEqual(service["ExecStart"], "/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/clover/cli.py sync "
+                                               "--host %h/.local/state/hass/host/host.json")
+        self.assertEqual(service["SuccessExitStatus"], "1")
+        text = (DIR / "hass-clover-sync.service").read_text("utf-8") + (DIR / "hass-clover-sync.timer").read_text("utf-8")
+        for word in ("token", "Bearer", "Authorization", "--force", "StartLimit"):
+            self.assertNotIn(word, text)
+        timer = parse("hass-clover-sync.timer")
+        self.assertEqual((timer["Timer"]["OnCalendar"], timer["Timer"]["Persistent"]), ("*:0/15", "true"))
+        self.assertEqual(timer["Install"]["WantedBy"], "timers.target")
 
 
 if __name__ == "__main__":
