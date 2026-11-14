@@ -441,4 +441,131 @@ class ListingTests(unittest.TestCase):
                 with self.assertRaises(TypeError): books.journals()
 
 
+class WriteCeilingTests(unittest.TestCase):
+    """The writer never installs bytes its own reader (CAP) refuses."""
+
+    @staticmethod
+    def sized(total):
+        """dict whose canonical serialization is exactly `total` bytes, LF included ('{"t": ""}\\n' is 10)."""
+        return {'t': 'x' * (total - 10)}
+
+    @staticmethod
+    def snap(path):
+        st = path.stat()
+        return path.read_bytes(), st.st_ino, st.st_mode, st.st_mtime_ns
+
+    def seeded(self, tmp):
+        books = r.Books(tmp)
+        r.atomic(Path(tmp) / 'publish.json', anchor())
+        j = entry()
+        books.write(j)
+        return books, j, books.directory / (j['change_id'] + '.json')
+
+    def test_atomic_serialized_byte_ceiling_includes_newline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for total in (CAP - 1, CAP):
+                with self.subTest(total=total):
+                    path = Path(tmp) / f'ok{total}.json'
+                    r.atomic(path, self.sized(total))
+                    self.assertEqual(len(path.read_bytes()), total)
+                    self.assertEqual(r.read(path), self.sized(total))
+            path = private_file(tmp, 'keep.json', b'{"keep": 1}')
+            for total in (CAP + 1, CAP + 2):
+                with self.subTest(total=total), self.assertRaises(r.BooksError) as ctx: r.atomic(path, self.sized(total))
+                self.assertEqual(str(ctx.exception), 'release-books')
+                self.assertIsNone(ctx.exception.__cause__)
+                self.assertEqual(path.read_bytes(), b'{"keep": 1}')
+            self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ['keep.json', f'ok{CAP - 1}.json', f'ok{CAP}.json'])
+
+    def test_books_oversize_transition_preserves_disk_and_memory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books, j, path = self.seeded(tmp)
+            anchor_path = Path(tmp) / 'publish.json'
+            before, anchor_before = self.snap(path), self.snap(anchor_path)
+            members, expected = sorted(os.listdir(books.directory)), json.loads(json.dumps(j))
+            with self.assertRaises(r.BooksError) as ctx:
+                books.write(j, 'applied', summary='CANARY' * (CAP // 6 + 1))
+            self.assertEqual(str(ctx.exception), 'release-books')
+            self.assertNotIn('CANARY', repr(ctx.exception))
+            self.assertNotIn(tmp, repr(ctx.exception))
+            self.assertEqual(j, expected)
+            self.assertEqual(j['state'], 'intent')
+            self.assertEqual(before, self.snap(path))
+            self.assertEqual(anchor_before, self.snap(anchor_path))
+            self.assertEqual(members, sorted(os.listdir(books.directory)))
+            self.assertEqual(books.load()[1], [expected])
+            self.assertEqual(books.next_seq(), 2)
+
+    def test_compact_unicode_noop_rewrite_refuses_without_poisoning_books(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books, j, path = self.seeded(tmp)
+            for text, count in (('é', 5000), ('😀', 5000)):  # fitting controls round-trip
+                with self.subTest(text=text):
+                    books.write(j, summary=text * count)
+                    self.assertEqual(books.load()[1][0]['summary'], text * count)
+            compact = json.dumps({**j, 'summary': 'é' * 200000}, ensure_ascii=False, sort_keys=True).encode() + b'\n'
+            canonical = len(json.dumps({**j, 'summary': 'é' * 200000}, sort_keys=True)) + 1
+            self.assertLessEqual(len(compact), CAP)
+            self.assertGreater(canonical, CAP)
+            path.write_bytes(compact)
+            before = self.snap(path)
+            loaded = books.load()[1][0]
+            expected = json.loads(json.dumps(loaded))
+            with self.assertRaises(r.BooksError): books.write(loaded)
+            self.assertEqual(loaded, expected)
+            self.assertEqual(before, self.snap(path))
+            self.assertEqual(books.load()[1], [expected])
+
+    def test_oversize_refuses_before_parent_or_temporary_creation(self):
+        big = self.sized(CAP + 1)
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / 'absent' / 'deeper' / 'x.json'
+            kept = private_file(tmp, 'kept.json', b'{"keep": 1}')
+            kept_before = self.snap(kept)
+            with patch.object(r, 'private_dir') as pd, patch.object(r.tempfile, 'mkstemp') as mk, \
+                    patch.object(r.os, 'replace') as rep, patch.object(r.os, 'fsync') as fs, \
+                    patch.object(r.os, 'chmod') as chmod, patch.object(Path, 'mkdir') as mkdir:
+                for target in (missing, kept):
+                    with self.assertRaises(r.BooksError): r.atomic(target, big)
+            for spy in (pd, mk, rep, fs, chmod, mkdir): spy.assert_not_called()
+            self.assertFalse((Path(tmp) / 'absent').exists())
+            self.assertEqual(kept_before, self.snap(kept))
+            self.assertEqual(sorted(os.listdir(tmp)), ['kept.json'])
+
+    def test_manifest_and_other_fields_use_whole_encoded_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            books, j, path = self.seeded(tmp)
+            built = {**entry(state='built'), 'manifest': {f'assets/img/{i:06d}-{"p" * 20}.jpg': 'a' * 64 for i in range(11000)}}
+            self.assertLessEqual(len(json.dumps(built['manifest'])), 2 * CAP)
+            before = self.snap(path)
+            with self.assertRaises(r.BooksError): books.write(built)
+            self.assertEqual(before, self.snap(path))
+            self.assertEqual(books.load()[1][0]['state'], 'intent')
+            built['manifest'] = {f'assets/{i}.jpg': 'a' * 64 for i in range(50)}
+            books.write(built)
+            self.assertEqual(books.load()[1][0]['manifest'], built['manifest'])
+
+    def test_fitting_writes_keep_atomic_durability_and_error_semantics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'sub' / 'x.json'
+            data = {'b': 'é😀', 'a': [1, 2.5, None, True]}
+            order, real_fsync, real_replace = [], os.fsync, os.replace
+            with patch.object(r.os, 'fsync', lambda fd: (order.append('fsync'), real_fsync(fd))[1]), \
+                    patch.object(r.os, 'replace', lambda a, b: (order.append('replace'), real_replace(a, b))[1]):
+                self.assertIsNone(r.atomic(path, data))
+            self.assertEqual(order, ['fsync', 'replace', 'fsync'])
+            self.assertEqual(path.read_bytes(), b'{"a": [1, 2.5, null, true], "b": "\\u00e9\\ud83d\\ude00"}\n')
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+            self.assertEqual([p.name for p in path.parent.iterdir()], ['x.json'])
+            with patch.object(r.os, 'replace', side_effect=OSError('fixture')):
+                with self.assertRaises(OSError): r.atomic(path, {'new': 1})
+            self.assertEqual(r.read(path), data)
+            self.assertEqual([p.name for p in path.parent.iterdir()], ['x.json'])
+            with self.assertRaises(ValueError) as ctx: r.atomic(path, {'n': float('nan')})
+            self.assertNotIsInstance(ctx.exception, r.BooksError)
+            with self.assertRaises(TypeError): r.atomic(path, {'n': object()})
+            self.assertEqual(r.read(path), data)
+
+
 if __name__ == '__main__': unittest.main()
