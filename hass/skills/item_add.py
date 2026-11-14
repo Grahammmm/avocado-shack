@@ -819,11 +819,17 @@ def _drafted(ctx, slots):
 
 # -- the picture advice (read-only: nothing is written, nothing is committed) ----------------------------------------------
 def _original(ctx, sha):
-    """The stored original's bytes when the caller can give them (``ctx.photo_bytes(sha)`` or ``ctx.media_root``), else None."""
+    """The stored original's bytes when the caller can give them (``ctx.photo_bytes(sha)`` or ``ctx.media_root``), else None.
+
+    The source-photo ceiling (``media.MAX_BYTES``) is enforced again at this later read: a file is read through an open stream
+    with a ``MAX_BYTES + 1`` bound and anything longer is refused (None) before it is hashed or reviewed. A ``photo_bytes``
+    result longer than the ceiling is refused before it is copied; what happens inside that trusted callback is not bounded here."""
     fn = getattr(ctx, "photo_bytes", None)
     try:
         if callable(fn):
             data = fn(sha)
+            if data and len(data) > media.MAX_BYTES:
+                return None
             return bytes(data) if data else None
         root = getattr(ctx, "media_root", None)
         if not root:
@@ -832,7 +838,10 @@ def _original(ctx, sha):
         for ext in ("jpg", "png"):
             path = folder / f"{sha}.{ext}"
             if path.is_file():
-                data = path.read_bytes()
+                with path.open("rb") as stream:
+                    data = stream.read(media.MAX_BYTES + 1)
+                if len(data) > media.MAX_BYTES:
+                    return None
                 return data if hashlib.sha256(data).hexdigest() == sha else None
     except (OSError, ValueError, TypeError):
         return None
