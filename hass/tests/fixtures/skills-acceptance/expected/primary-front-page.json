@@ -1,0 +1,28 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": {
+        "intro": "",
+        "paragraphs": [
+          "Parking is right behind the shop."
+        ],
+        "shown": true,
+        "title": "Getting here"
+      },
+      "file": "hass/content/store.json",
+      "path": "pageGettingHere"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/getting-here/index.html",
+    "storefront-mockup/hike/index.html",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

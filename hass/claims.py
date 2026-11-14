@@ -172,6 +172,16 @@ def _said(phrase, lines: str) -> bool:
 
 
 NESTED_TEXT = {"homeImage": ("imageAlt",), "notice": ("text",), "banner": ("text",)}  # RF0220-11 (+AVB-19 banner): the only dict-valued store slots with free text
+PAGE_TEXT = ("pageAbout", "pageGettingHere", "pagePolicies", "pageFaq")  # AVB-19-B2: a fixed page's words, checked as one text
+
+
+def _page_words(page) -> str:
+    """Every owner text of a fixed page (title, intro, paragraphs, questions and answers), one per line; not a page: ''."""
+    if not isinstance(page, dict):
+        return ""
+    texts = [page.get("title"), page.get("intro")] + list(page.get("paragraphs") or [])
+    texts += [e.get(k) for e in page.get("entries") or [] if isinstance(e, dict) for k in ("q", "a")]
+    return "\n".join(t for t in texts if isinstance(t, str))
 
 
 def _fields(r: dict, before: dict, after: dict):
@@ -192,6 +202,8 @@ def _fields(r: dict, before: dict, after: dict):
             for leaf in NESTED_TEXT[field]:
                 if isinstance(new.get(leaf), str):
                     yield f"{field}.{leaf}", new[leaf], old.get(leaf)
+        elif r.get("collection") == "store" and field in PAGE_TEXT and isinstance(new, dict):
+            yield f"{field}.words", _page_words(new), _page_words(old)
         else:
             yield field, new, old
 

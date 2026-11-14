@@ -7,7 +7,7 @@ import unittest
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from hass import editor, live_policy, preview, sitegen
+from hass import claims, editor, live_policy, preview, sitegen
 from hass.content_model import INFO_PAGES, REPO_ROOT, load_content, validate_store
 from hass.ops import OpContext, Refused, load_registry
 from hass.skills import load_skills, router, skill_lint, testkit
@@ -114,6 +114,12 @@ class PageTests(unittest.TestCase):
             plan_page({'template':'about',**{k:v for k,v in PAGE.items() if k!='page'},'title':'The best shop'}, {'texts':['Hello neighbors']})
         with self.assertRaises(SkillStop):
             plan_faq({**FAQ,'answer':'We are the best shop.'},{'texts':['Hello neighbors']})
+        # the draft claims gate reads every page word too, not only the plan (a dict store value was skipped before)
+        for key,after in (('pageAbout',{'shown':True,'title':'About','intro':'','paragraphs':['All organic food, every single day.']}),
+                          ('pageFaq',{'shown':True,'title':'Questions','entries':[{'q':'Is it organic?','a':'Yes, all organic.'}]})):
+            draft={'ops':[{'op':'store.set_page','args':{}}],'records':[{'collection':'store','key':'store','before':{},'after':{key:after}}]}
+            self.assertEqual(claims.unstated(draft,'fill the page',{}),[('store store '+key+'.words','organic')])
+            self.assertEqual(claims.unstated(draft,'say organic',{}),[])
 
 
 class PageUndoTests(StoreTestCase):

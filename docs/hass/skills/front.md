@@ -40,3 +40,47 @@ bad `effectiveDay` before loading the browser, and adds `sectionsShown`, `banner
 ## Live
 
 All four ops are in `live_policy.PRIVATE`; none is in `LIVE`. G chooses later which may go public.
+
+# Front-end skills, part 2 (AVB-19-B2)
+
+Two more skills and four more private-only store ops, same files. Design sections 2, 3 (`pageAbout`, `pageGettingHere`,
+`pagePolicies`, `pageFaq`), 4.3 and 4.4.
+
+| Skill | What Mike says (examples) | Plans |
+|---|---|---|
+| `front.page` | "create the Getting here page: Parking is right behind the shop." · "fill the About template" · "hide Our policies page" | `store.set_page` / `store.hide_page` |
+| `front.faq` | "Questions: Is parking nearby? Yes, right behind the shop." · "remove the question about opening hours" | `store.set_faq` / `store.remove_faq` |
+
+## Pages
+
+Exactly four fixed pages share one template, `hass/templates/info/index.html`: `about/` (About), `getting-here/`
+(Getting here), `policies/` (Our policies) and `faq/` (Questions). No other page can be made by message; the header nav
+does not change.
+
+- `pageAbout`, `pageGettingHere`, `pagePolicies`: `{"shown", "title", "intro", "paragraphs"}`. Title 3 to 60
+  characters, intro up to 300, 1 to 6 paragraphs of 20 to 600 characters; every text is one line with no web address,
+  email, handle or price, HTML-escaped; a claim word he did not say stops the plan (as for the banner).
+- `pageFaq`: `{"shown", "title", "entries"}` (`intro` optional). At most 20 entries `{"q", "a"}`; a question is 5 to 120
+  characters and ends in `?`, an answer 2 to 600; the same question (case and spaces folded) replaces its answer. Each
+  entry renders as `<details><summary>question</summary><p>answer</p></details>`. The first entry shows the page in the
+  same draft; removing the last entry hides it.
+- A page that is not shown is a `noindex` "Nothing here yet" placeholder, is never published (`sitegen.publish_files`)
+  and has no banner or footer links. A shown page adds one footer link on every generated page (home, hike and the shown
+  pages). The 404 page (a fixed file, not rendered from store content) is left unchanged: it gets no footer links, so no
+  new release path opens.
+- `hide_page` keeps the words with `shown: false`; `undo` of a creation removes the key (the placeholder comes back).
+
+## Routing and the old FAQ refusal
+
+`page.faq` is retired (`status="retired"`, its name never reused). The dispatcher's code path that sent exact FAQ asks to
+that refusal asks `registry.get("page.faq")`, which returns nothing for a retired skill, so "add an FAQ" now goes to the
+model and `front.faq` (tested in `hass/tests/test_front_pages.py`, no dispatcher edit). A bare "add an FAQ" names no
+question, so the reply is "What is the question?": the model's guessed words are not his and are dropped.
+`page.about` still changes the home page story; its "new About page" refusal now points at `front.page` (version 2).
+
+## Preview and release
+
+A store record that changes a page key previews that page (`kind: store`, `page`, `pageTitle`); `screenshot.cjs`
+accepts only the four page paths and adds `pageTitle`. The release engine (`publish_live.py`) allows exactly the four
+page files for a store change; `editor.GENERATED_PATHS`, `REVISION_PATHS`, `design_check` and the static-site check list
+the template and the four paths. All four new ops are in `live_policy.PRIVATE`; none is in `LIVE`.
