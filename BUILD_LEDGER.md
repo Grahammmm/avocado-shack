@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## R4-AV-09 — G-only backlog reason ranking (November 14, 2026)
+
+Added `python3 hass/skills/backlog.py top --state DIR [--all]` to the local operator CLI, not the owner-chat skill registry. It prints only counts and fixed reason labels, descending by count with alphabetical ties; open rows by default, closed rows included with `--all`. It aggregates in SQLite without selecting messages, summaries or identifiers and without the listing's row limit. Existing private-state checks and host/operator access remain the boundary; no new endpoint or identity mechanism.
+
+Fresh fixture proof: all 35 `test_skills_backlog` tests pass, including SQL authorizer denial of private-column reads, 1,005-row aggregation, ties, closed/empty stores, unknown legacy reasons, unsafe state refusal and exact CLI output with private-text/summary canaries. Affected-tier and exact-head CI results are recorded on the PR/card. No real backlog, owner data, runtime service, send or publication accessed. Rollback: revert this PR.
+
 ## AVB-14 — cache-only Clover reports (November 14, 2026)
 
 Added private daily stock/mismatch Markdown files, cache-only CLI commands, an uninstalled 06:00 Pacific timer template, and G-only `till report` totals. No token loading, network, prices in chat, automatic fixes or new permission. Missing links remain explicit gaps; no guessed matches. The report folder is 0700, files 0600, and dated report files age out after 90 days. Source cache identity/age safeguards remain.

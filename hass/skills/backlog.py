@@ -7,6 +7,11 @@ a log or the interpreter, and never leaves the box. Rows are removed after RETEN
 
     python3 hass/skills/backlog.py list  --state DIR [--text] [--all]   (--text prints the stored message: operator only)
     python3 hass/skills/backlog.py purge --state DIR                    (drops rows older than RETENTION_DAYS)
+    python3 hass/skills/backlog.py top   --state DIR [--all]             (G-only: ranked reason counts, no messages)
+
+``top`` is a local operator CLI only, not an owner-chat skill. G's host access and the existing private-state
+ownership checks are its access boundary; it is not exposed to the interpreter, owners or guests. It counts all
+open rows by default (including retained older rows); --all includes closed rows. Ties sort by reason name.
 """
 from __future__ import annotations
 
@@ -85,6 +90,16 @@ class Backlog:
         cur = self.db.execute(f"SELECT {cols} FROM backlog {where} ORDER BY id DESC LIMIT ?", (*args, limit))
         names = [d[0] for d in cur.description]
         return [dict(zip(names, r)) for r in cur.fetchall()]
+
+    def top(self, *, state: str | None = "open") -> list:
+        """Rank reason counts only, without selecting request text, summaries or identifiers."""
+        placeholders = ",".join("?" for _ in REASONS)
+        where = " AND state = ?" if state else ""
+        args = (*REASONS, state) if state else REASONS
+        cur = self.db.execute(
+            f"SELECT reason, COUNT(*) FROM backlog WHERE reason IN ({placeholders}){where} "
+            "GROUP BY reason ORDER BY COUNT(*) DESC, reason ASC", args)
+        return [{"reason": reason, "count": count} for reason, count in cur]
 
     def forget(self, number) -> bool:
         """Remove one row by its number (numbers are never reused, so a stale forget cannot hit a newer row). True when a row was removed."""
@@ -177,9 +192,10 @@ SKILLS = (BACKLOG_LOG,)  # front-pack export lives in faq.py
 def _main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="backlog.py", description="Operator view of the 'can't do that yet' backlog.")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("list", "purge"):
+    for name in ("list", "purge", "top"):
         p = sub.add_parser(name)
         p.add_argument("--state", required=True)
+    sub.choices["top"].add_argument("--all", action="store_true", help="include closed rows")
     sub.choices["list"].add_argument("--text", action="store_true", help="print the stored message (operator only)")
     sub.choices["list"].add_argument("--all", action="store_true", help="include closed rows")
     args = parser.parse_args(argv)
@@ -191,6 +207,12 @@ def _main(argv=None) -> int:
     try:
         if args.cmd == "purge":
             print(f"removed {store.purge()} rows older than {RETENTION_DAYS} days")
+            return 0
+        if args.cmd == "top":
+            counts = store.top(state=None if args.all else "open")
+            print("count\treason")
+            for r in counts:
+                print(f"{r['count']}\t{r['reason']}")
             return 0
         for r in store.rows(1000, state=None if args.all else "open", text=args.text):
             print(f"{r['id']}\t{r['received_at'][:10]}\t{r['reason']}\t{r['state']}\t{r['summary']}")
