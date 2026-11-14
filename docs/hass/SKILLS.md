@@ -28,8 +28,10 @@ python3 hass/skills/scaffold.py new group.verb --op product.hide --label "hide a
 
 It writes `hass/skills/<group>_<verb>.py`, the 10 case rows in `hass/tests/fixtures/skills/<group>/<name>.jsonl` (2 or
 more refusals, an undo row, 2 plan rows), `docs/hass/skills/<group>_<verb>.md` and `hass/tests/test_skills_<group>_<verb>.py`,
-then runs the lint with the case-file minima and every row through the kit on the scratch shop. If any of that fails it
-removes what it wrote and says why; it never overwrites a file. Options: `--arg NAME` (take an optional op argument as a
+then builds and checks them in a private staging folder under the root: the lint with the case-file minima and every row through
+the kit on the scratch shop. Only when all of that passes does it link the finished files into place, one exclusive link per
+name, so it never overwrites. Any existing entry at a name, including a dangling or valid symlink, a directory or a file that
+appears late, is left as it was and the command exits 2; it removes only the files and folders it made itself. Options: `--arg NAME` (take an optional op argument as a
 required slot, for example `product.edit --arg description`), `--say "sentence"` (up to 3 owner sentences),
 `--setup JSON` (ops applied before each draft row), `--module`, `--summary`, `--dry-run`.
 

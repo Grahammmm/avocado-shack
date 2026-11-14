@@ -6,10 +6,14 @@ never overwrites. The samples are written under a temporary folder, so no sample
 Run: python3 -B -m unittest hass.tests.test_skills_scaffold -v
 """
 import contextlib
+import errno
 import io
+import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from hass import live_policy
 from hass.content_model import REPO_ROOT
@@ -221,6 +225,186 @@ class Refuses(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("did not end in a draft", err)
         self.assertEqual(written, [])
+
+
+ARGV = ("new", "sample.tuck_away", "--op", "product.hide", "--label", "tuck away")
+LEAVES = ("hass/skills/sample_tuck_away.py", "hass/tests/fixtures/skills/sample/sample.tuck_away.jsonl",
+          "docs/hass/skills/sample_tuck_away.md", "hass/tests/test_skills_sample_tuck_away.py")
+CALLER = b"CALLER CONTENT\n"
+
+
+def entries(root):
+    """Every file, directory and link under root, relative, without following links."""
+    found = set()
+    for here, dirs, files in os.walk(root):
+        found.update(str(Path(here, n).relative_to(root)) for n in dirs + files)
+    return found
+
+
+@contextlib.contextmanager
+def link_hook(before):
+    """before(n, src, dest) runs ahead of the nth os.link (1-based); real linking is delegated unchanged."""
+    real, calls = os.link, []
+
+    def link(src, dst, *args, **kwargs):
+        calls.append(dst)
+        before(len(calls), Path(src), Path(dst))
+        return real(src, dst, *args, **kwargs)
+    with mock.patch.object(os, "link", link):
+        yield calls
+
+
+def arrive_at(position, make):
+    """A hook that has make(dest) run just before the position-th link."""
+    return lambda n, _src, dest: make(dest) if n == position else None
+
+
+def sentinel(dest):
+    dest.write_bytes(CALLER)
+
+
+class Occupied(unittest.TestCase):
+    """The scaffolder keeps every entry it did not make: dangling links, late arrivals, replaced files."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.root = self.tmp / "root"
+        self.root.mkdir()
+
+    def go(self, *extra):
+        return run(*ARGV, "--root", str(self.root), *extra)
+
+    def test_dangling_output_symlink_is_occupied_and_target_stays_absent(self):
+        for rel in LEAVES:
+            with self.subTest(rel):
+                shutil.rmtree(self.root)
+                self.root.mkdir()
+                (self.root / rel).parent.mkdir(parents=True)
+                target = self.tmp / "outside" / "generated.py"
+                target.parent.mkdir(exist_ok=True)
+                (self.root / rel).symlink_to(target)
+                before = entries(self.root)
+                code, out, err = self.go()
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn(f"{rel} already exists", err)
+                self.assertTrue((self.root / rel).is_symlink())
+                self.assertEqual(os.readlink(self.root / rel), str(target))
+                self.assertFalse(os.path.lexists(target))
+                self.assertEqual(entries(self.root), before)
+
+    def test_late_regular_file_is_never_overwritten(self):
+        with link_hook(arrive_at(3, sentinel)):
+            code, out, err = self.go()
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("already exists", err)
+        late = self.root / LEAVES[2]
+        self.assertEqual(late.read_bytes(), CALLER)
+        self.assertEqual([p for p in entries(self.root) if (self.root / p).is_file()], [LEAVES[2]])
+        self.assertFalse(any(".scaffold-" in p for p in entries(self.root)))
+
+    def test_late_symlink_is_never_followed_or_removed(self):
+        valid = self.tmp / "valid-target.txt"
+        valid.write_bytes(CALLER)
+        absent = self.tmp / "absent-target.txt"
+        for target in (valid, absent):
+            with self.subTest(target.name):
+                shutil.rmtree(self.root)
+                self.root.mkdir()
+                with link_hook(arrive_at(2, lambda dest, t=target: dest.symlink_to(t))):
+                    code, out, err = self.go()
+                self.assertEqual((code, out), (2, ""))
+                late = self.root / LEAVES[1]
+                self.assertTrue(late.is_symlink())
+                self.assertEqual(os.readlink(late), str(target))
+                self.assertEqual(valid.read_bytes(), CALLER)
+                self.assertFalse(os.path.lexists(absent))
+                self.assertFalse(os.path.lexists(self.root / LEAVES[0]))
+
+    def test_later_leaf_conflict_rolls_back_only_owned_artifacts(self):
+        for position in (2, 3, 4):
+            with self.subTest(position):
+                shutil.rmtree(self.root)
+                (self.root / "hass" / "skills").mkdir(parents=True)
+                (self.root / "hass" / "skills" / "keep.txt").write_text("mine", encoding="utf-8")
+                (self.root / "docs").mkdir()
+                with link_hook(arrive_at(position, sentinel)):
+                    code, _out, _err = self.go()
+                self.assertEqual(code, 2)
+                late = self.root / LEAVES[position - 1]
+                files = {p for p in entries(self.root) if (self.root / p).is_file()}
+                self.assertEqual(files, {"hass/skills/keep.txt", LEAVES[position - 1]})
+                self.assertEqual(late.read_bytes(), CALLER)
+                self.assertTrue((self.root / "docs").is_dir())
+                keep_dirs = {str(q) for f in files for q in Path(f).parents} | {"docs"}
+                self.assertEqual({p for p in entries(self.root) if (self.root / p).is_dir()}, keep_dirs - {"."})
+
+    def test_cleanup_preserves_replaced_installed_path(self):
+        def replace_first_then_collide(n, _src, dest):
+            if n == 3:
+                first, other = self.root / LEAVES[0], self.tmp / "replacement"
+                other.write_bytes(CALLER)
+                os.rename(other, first)  # a different inode now sits at the name this run installed
+                sentinel(dest)
+        with link_hook(replace_first_then_collide):
+            code, _out, _err = self.go()
+        self.assertEqual(code, 2)
+        self.assertEqual((self.root / LEAVES[0]).read_bytes(), CALLER)
+        self.assertFalse(os.path.lexists(self.root / LEAVES[1]))
+        self.assertEqual((self.root / LEAVES[2]).read_bytes(), CALLER)
+
+    def test_io_and_check_failures_leave_no_final_scaffold(self):
+        absent = self.tmp / "not" / "made" / "yet"
+        with link_hook(lambda *_a: None) as calls, mock.patch.object(scaffold, "check", return_value=["boom"]):
+            code, out, err = run(*ARGV, "--root", str(absent))
+        self.assertEqual((code, out, calls), (2, "", []))
+        self.assertIn("does not pass its own checks", err)
+        self.assertFalse(os.path.lexists(self.tmp / "not"))
+        for why, fail in (("the first link is unsupported", (1, NotImplementedError("secret-detail"))),
+                          ("a later link fails", (3, OSError(errno.EPERM, "secret-detail", "/secret/path")))):
+            with self.subTest(why):
+                def boom(n, _src, _dest, fail=fail):
+                    if n == fail[0]:
+                        raise fail[1]
+                with link_hook(boom):
+                    code, out, err = self.go()
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn(scaffold._IO_FAILURE, err)
+                self.assertNotIn("secret", err)
+                self.assertEqual(entries(self.root), set())
+
+    def test_success_bytes_metadata_and_dry_run_remain_compatible(self):
+        staged = {}
+
+        def read_stage(n, src, _dest):
+            staged[n] = src.read_bytes()
+        with link_hook(read_stage):
+            code, out, err = self.go()
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("REVIEW before merge", out)
+        for n, rel in enumerate(LEAVES, 1):
+            installed = self.root / rel
+            self.assertEqual(installed.read_bytes(), staged[n])
+            self.assertEqual(installed.stat().st_nlink, 1)  # the staging copy is gone
+        self.assertFalse(any(".scaffold-" in p for p in entries(self.root)))
+        [skill] = testkit.load_skill_module(self.root / LEAVES[0])
+        self.assertEqual((skill.pack, skill.approval_class, skill.live_class), ("site", "A1", "chat-live"))
+        absent = self.tmp / "absent-root"
+        code, out, err = run(*ARGV, "--dry-run", "--root", str(absent))
+        self.assertEqual((code, err), (0, ""))
+        self.assertFalse(os.path.lexists(absent))
+        for kind in ("file", "directory", "link", "fifo"):
+            with self.subTest(kind):
+                shutil.rmtree(self.root)
+                self.root.mkdir()
+                path = self.root / LEAVES[3]
+                path.parent.mkdir(parents=True)
+                {"file": lambda: path.write_bytes(CALLER), "directory": path.mkdir, "link": lambda: path.symlink_to(self.tmp),
+                 "fifo": lambda: os.mkfifo(path)}[kind]()
+                code, out, err = self.go()
+                self.assertEqual((code, out), (2, ""))
+                self.assertIn("already exists", err)
 
 
 class Pieces(unittest.TestCase):
