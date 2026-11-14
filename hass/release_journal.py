@@ -19,6 +19,7 @@ OPTIONAL = {'writer_after', 'manifest', 'site_commit', 'step', 'reason', 'observ
             'pushed_at', 'next_check', 'unchecked', 'alerted', 'summary', 'chat'}
 SHA = re.compile(r'[0-9a-f]{40}')
 CID = re.compile(r'chg-[0-9a-f]{12}')
+MAX_BYTES = 1048576  # one ceiling: the reader refuses more, so the writer must never install more
 
 
 class BooksError(ValueError):
@@ -41,13 +42,17 @@ def private_dir(path):
 
 
 def atomic(path, data):
-    """Durable before returning; a failed write must prevent the next side effect."""
+    """Durable before returning; a failed write must prevent the next side effect.
+
+    Serialized bytes (escaping and LF included) above MAX_BYTES are refused before any filesystem effect."""
     path = Path(path)
+    raw = (json.dumps(data, sort_keys=True, allow_nan=False) + '\n').encode()
+    if len(raw) > MAX_BYTES: raise BooksError('release-books') from None
     private_dir(path.parent)
     fd, name = tempfile.mkstemp(prefix='.release-', dir=path.parent)
     try:
         with os.fdopen(fd, 'wb') as stream:
-            stream.write((json.dumps(data, sort_keys=True, allow_nan=False) + '\n').encode())
+            stream.write(raw)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, path)
@@ -67,7 +72,7 @@ def _pairs(items):
 
 
 def _admitted(st):
-    return stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid() and stat.S_IMODE(st.st_mode) == 0o600 and st.st_size <= 1048576
+    return stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid() and stat.S_IMODE(st.st_mode) == 0o600 and st.st_size <= MAX_BYTES
 
 
 def read(path):
@@ -82,8 +87,8 @@ def read(path):
         except BaseException:
             os.close(fd)
             raise
-        with stream: raw = stream.read(1048576 + 1)
-        if len(raw) > 1048576: raise BooksError('release-books')
+        with stream: raw = stream.read(MAX_BYTES + 1)
+        if len(raw) > MAX_BYTES: raise BooksError('release-books')
         data = json.loads(raw, object_pairs_hook=_pairs)
         if not isinstance(data, dict): raise BooksError('release-books')
         return data
