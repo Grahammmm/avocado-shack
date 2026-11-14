@@ -130,13 +130,46 @@ def _page_claims(values, ctx):
         raise stop
 
 
+def _literal_spans(text, literals):
+    """Spans of complete, balanced "..." or curly double-quoted runs whose inside is exactly one supplied page text."""
+    spans = []
+    if text.count('"') % 2 == 0:
+        spans += [m.span() for m in re.finditer(r'"([^"]*)"', text) if m.group(1) in literals]
+    opened, curly = None, []
+    for i, ch in enumerate(text):
+        if ch == "\u201c" and opened is None:
+            opened = i
+        elif ch == "\u201d" and opened is not None:
+            curly.append((opened, i + 1))
+            opened = None
+        elif ch in "\u201c\u201d":  # nested or stray: ambiguous, protect no curly span in this text
+            return spans
+    if opened is None:
+        spans += [(a, b) for a, b in curly if text[a + 1:b - 1] in literals]
+    return spans
+
+
+def _outside_literals(texts, args):
+    """The request texts to scan for style/layout words: quoted copy equal to the supplied title, intro or paragraph is blanked."""
+    paragraphs = args.get("paragraphs")
+    values = [args.get("title"), args.get("intro"), *(paragraphs if isinstance(paragraphs, (list, tuple)) else ())]
+    literals = {v for v in values if isinstance(v, str) and v}
+    out = []
+    for t in texts:
+        chars = list(t)
+        for a, b in _literal_spans(t, literals) if literals else ():
+            chars[a:b] = " " * (b - a)
+        out.append("".join(chars))
+    return out
+
+
 def plan_page(slots, ctx):
     from hass.ops.front import page_value
     page = slots.get("template")
     args = {"page": page, **{k: slots[k] for k in ("title", "intro", "paragraphs") if k in slots}}
     if slots.get("hide") and len(args) > 1:
         raise SkillStop("Hide the page, or change its words? I can only do one.", "question")
-    if any(STYLE.search(t) or re.search(r"\b(?:layout|html)\b", t, re.I) for t in texts_of(ctx)):
+    if any(STYLE.search(t) or re.search(r"\b(?:layout|html)\b", t, re.I) for t in _outside_literals(texts_of(ctx), args)):
         raise _style_stop()
     _, why = page_value(store_of(ctx) or {}, args, bool(slots.get("hide")))
     if why:
