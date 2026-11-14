@@ -9,15 +9,16 @@
 'use strict';
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
 if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const base=process.env.PREVIEW_URL,target=JSON.parse(process.env.TARGET||'{}'),out=process.env.OUT;
-const origin=new URL(base).origin;
 // AV1104-10 operator design preview: {kind:'design',page:'home'|'hike'}; the page is a fixed enum checked before any navigation.
 if(target.kind==='design'&&!['home','hike'].includes(target.page)){console.error('bad design page');process.exit(1);}
+// AVB-19: a preview-only browser day (a future banner start), checked before the browser library is even loaded.
 if(Object.hasOwn(target,'effectiveDay')){
   const d=target.effectiveDay;
   if(typeof d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d)||!Number.isFinite(Date.parse(d+'T12:00:00Z'))||new Date(d+'T12:00:00Z').toISOString().slice(0,10)!==d){console.error('bad effectiveDay');process.exit(1);}
 }
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const origin=new URL(base).origin;
 const allowed=req=>{
   if(!['GET','HEAD'].includes(req.method()))return false;
   try{const url=new URL(req.url());return url.protocol==='data:'||(url.origin===origin&&url.hostname==='127.0.0.1');}
@@ -182,10 +183,12 @@ const allowed=req=>{
           checks.noticeShown=await n.count()===1&&await n.isVisible()&&ws(await n.textContent())===ws(target.notice);}
       }
     }
-    if(target.kind==='store'){
+    if(target.kind==='store'&&(Array.isArray(target.sections)||Object.hasOwn(target,'banner'))){  // AVB-19 front changes
       checks.pageLoaded=await page.locator('.hero h1').first().isVisible();
       checks.noHorizontalOverflow=await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth);
-      if(target.sections||Object.hasOwn(target,'banner'))await page.evaluate(()=>window.scrollTo(0,0));
+      // the picture shows what changed: the first home part for a new order, else the top strip
+      if(Array.isArray(target.sections))await page.locator('main > section[id]').first().evaluate(e=>e.scrollIntoView({block:'start'}));
+      else await page.evaluate(()=>window.scrollTo(0,0));
     }
     await page.waitForTimeout(150);
     await page.screenshot({path:out});

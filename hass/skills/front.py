@@ -79,7 +79,7 @@ def plan_banner(slots, ctx):
 
 
 _COMMON = dict(pack="front", targets=("site",), approval_class="A1", sandbox="preview", logs=("fields",), who="owner",
-               side_effects=("backlog-row",), preview="home", approval="owner-yes", live_class="private-only",
+               side_effects=("none",), preview="home", approval="owner-yes", live_class="private-only",
                undo=Undo("revert", "none"), version=1)
 FRONT_SECTIONS = Skill(
     name="front.sections", label="move or hide a home page part",

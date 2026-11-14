@@ -196,34 +196,44 @@ def render_template(text: str, slots: dict[str, str]) -> str:
     return out
 
 
-def front_slots(store, template_dir, rel, day):
+HIDDEN = ' hidden style="display:none"'
+
+
+def front_parts(store, template_dir, rel):
+    """AVB-19: the home parts in their saved order and the header/footer links of the shown parts. Template text
+    only (it may hold other slots, so it is put in before the slot pass); no owner word is in it."""
     from hass.content_model import default_sections
     home = Path(template_dir) / "home"
     sections = store.get("homeSections", default_sections())
     shown = {r["id"] for r in sections if r["shown"]}
+    read = lambda name: (home / (name + ".html")).read_bytes().decode("utf-8")  # noqa: E731
     prefix = "" if rel == "index.html" else "hike-"
 
     def links(name):
-        text = (home / (prefix + name + ".html")).read_text()
-        return re.sub(r'<a href="(?:/)?#([^"\s]+)"[^>]*>.*?</a>',
-                      lambda m: m[0] if m[1] in shown else "", text)
+        return re.sub(r'<a href="/?#([^"\s]+)"[^>]*>.*?</a>', lambda m: m[0] if m[1] in shown else "", read(prefix + name))
 
-    visit = "#visit" if rel == "index.html" else "/#visit"
+    return {"home.sections": "".join(read(r["id"]) for r in sections if r["shown"]) if rel == "index.html" else "",
+            "home.navHtml": links("nav"), "home.footerLinksHtml": links("footer")}
+
+
+def front_banner(store, template_dir, rel, day):
+    """AVB-19: the top strip. Without a banner it is the shop's default line, byte for byte; with one, the default
+    line and the banner line are both rendered, the one for ``day`` visible, and BANNER_JS swaps them in the browser."""
+    home = Path(template_dir) / "home"
+    read = lambda name: (home / (name + ".html")).read_bytes().decode("utf-8")  # noqa: E731
     banner = store.get("banner")
-    strip = f'<div class="preview"><span>GOOD FOOD. CLOSE TO HOME.</span><a href="{visit}">Come visit the Shack ↗</a></div>'
+    live = bool(banner) and banner["start"] <= day.isoformat() <= banner["end"]
+    visit = "#visit" if rel == "index.html" else "/#visit"
+    strip = render_template(read("strip"), {"front.stripAttrs": (" data-banner-default" + (HIDDEN if live else "")) if banner else "",
+                                            "front.visitHref": visit})
     if banner:
-        live = banner["start"] <= day.isoformat() <= banner["end"]
         link = banner_link(banner, store)
-        strip = render_template((home / "banner.html").read_text(), {
-            "front.defaultHidden": ' hidden style="display:none"' if live else "",
-            "front.bannerHidden": "" if live else ' hidden style="display:none"',
-            "front.visitHref": visit, "front.start": html.escape(banner["start"], quote=True),
-            "front.end": html.escape(banner["end"], quote=True), "front.text": html.escape(banner["text"], quote=False),
-            "front.linkHtml": f'<a href="{html.escape(link, quote=True)}">Find out more ↗</a>' if link else "",
-        })
-    return {"home.sections": "".join((home / (r["id"] + ".html")).read_text() for r in sections if r["shown"])
-            if rel == "index.html" else "", "home.navHtml": links("nav"), "home.footerLinksHtml": links("footer"),
-            "front.bannerHtml": strip, "front.bannerScript": BANNER_JS if banner else ""}
+        strip += render_template(read("banner"), {
+            "front.bannerHidden": "" if live else HIDDEN,
+            "front.start": html.escape(banner["start"], quote=True), "front.end": html.escape(banner["end"], quote=True),
+            "front.text": html.escape(banner["text"], quote=False),
+            "front.linkHtml": f'<a href="{html.escape(link, quote=True)}">Find out more ↗</a>' if link else ""})
+    return {"front.bannerHtml": strip, "front.bannerScript": BANNER_JS if banner else ""}
 
 
 def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, notice_today=None,
@@ -241,9 +251,10 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, n
              **specials.slots(content.store, content.products, specials_today or today)}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")
-        for key, value in front_slots(content.store, template_dir, rel, banner_today or today).items():
+        for key, value in front_parts(content.store, template_dir, rel).items():
             text = text.replace("{{" + key + "}}", value)
-        files[SITE_PREFIX + rel] = render_template(text, slots).encode("utf-8")
+        page = {**slots, **front_banner(content.store, template_dir, rel, banner_today or today)}
+        files[SITE_PREFIX + rel] = render_template(text, page).encode("utf-8")
     return files
 
 

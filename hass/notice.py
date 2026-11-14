@@ -82,14 +82,11 @@ def stale_paths(content, root: Path) -> list[str]:
         days.add(last)
         if last < date.max:
             days.add(date.fromordinal(last.toordinal() + 1))
-    banner = content.store.get("banner") or {}
-    for key in ("start", "end"):
-        boundary = iso_day(banner.get(key))
-        if boundary is not None:
-            days.add(boundary)
-            offset = -1 if key == "start" else 1
-            if date.min.toordinal() <= boundary.toordinal() + offset <= date.max.toordinal():
-                days.add(date.fromordinal(boundary.toordinal() + offset))
+    banner = content.store.get("banner")  # AVB-19: the day before it shows, its first day and the day after its last
+    start, end = (iso_day(banner.get("start")), iso_day(banner.get("end"))) if isinstance(banner, dict) else (None, None)
+    for day, offset in ((start, -1), (start, 0), (end, 1)):
+        if day is not None and date.min.toordinal() <= day.toordinal() + offset <= date.max.toordinal():
+            days.add(date.fromordinal(day.toordinal() + offset))
     for day in sorted(d for d in days if d < today):
         if not stale:
             return stale

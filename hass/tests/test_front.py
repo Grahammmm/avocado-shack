@@ -1,17 +1,28 @@
-"""AVB-19 B1: home order, dated top strip, private ops, selective undo and skill cases."""
+"""AVB-19 B1: home order, dated top strip, private ops, selective undo and skill cases.
+
+Capture tests run the real loopback preview and Chromium (skipped when PLAYWRIGHT_MODULE is unset); AVB19_SHOTS=<dir> keeps
+their PNGs. Run: python3 -B -m unittest hass.tests.test_front -v
+"""
 import copy
+import json
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from hass import live_policy, notice, preview, sitegen
-from hass.content_model import REPO_ROOT, default_sections, load_content, validate_store
+from hass import claims, live_policy, notice, preview, sitegen
+from hass.content_model import REPO_ROOT, default_sections, load_content, shop_today, validate_store
 from hass.ops import OpContext, Refused, load_registry
-from hass.skills import load_skills, skill_lint, testkit
+from hass.skills import load_skills, router, skill_lint, testkit
 from hass.skills.front import FRONT_BANNER, FRONT_SECTIONS, plan_banner, plan_sections
 from hass.skills.shop import SkillStop
+from hass.tests.test_editor import git
 from hass.tests.test_notice_specials_prestart import Tree, check, sp
+from hass.tests.test_store_ops import StoreTestCase
 from hass.tests.test_undo import H06TestCase
 
 DAY = date(2026, 11, 8)
@@ -143,8 +154,28 @@ class FrontTests(unittest.TestCase):
             self.assertIn(name,live_policy.PRIVATE)
             self.assertNotIn(name,live_policy.LIVE)
         with self.assertRaises(SkillStop):
-            plan_banner(BANNER|{'text':'Certified organic food'}, {'today':DAY,'texts':['Come say hello']})
-        self.assertTrue(plan_banner(BANNER|{'text':'Certified organic food'}, {'today':DAY,'texts':['Certified organic food']}))
+            plan_banner(BANNER|{'text':'The best food in town'}, {'today':DAY,'texts':['Come say hello']})
+        self.assertTrue(plan_banner(BANNER|{'text':'The best food in town'}, {'today':DAY,'texts':['The best food in town']}))
+        draft={'ops':[{'op':'store.set_banner','args':{}}],
+               'records':[{'collection':'store','key':'store','before':{},'after':{'banner':BANNER|{'text':'Organic food'}}}]}
+        self.assertEqual(claims.unstated(draft,'put up a banner',{}),[('store store banner.text','organic')])
+        self.assertEqual(claims.unstated(draft,'banner: Organic food',{}),[])
+
+    def test_real_router_runs_the_front_plans_and_writes_no_backlog_row(self):
+        from hass.tests.test_skills_router import _backlog
+        reg = load_skills()
+        for name, slots in (('front.sections', {'hide': ['newsletter']}), ('front.banner', {'text': 'Come say hello', 'end': '2026-11-12'})):
+            with self.subTest(name=name):
+                store = _backlog()
+                route = router.route({'skill': name, 'slots': slots}, [(name, 3.0)], reg, text='x', store=store)
+                self.assertEqual((route.action, [n for n, _s in route.calls], store.rows()), ('run', [name], []))
+
+    def test_notice_words_still_rank_the_notice_first(self):  # design 4.2: two messages that must go to shop.notice
+        reg = load_skills()
+        for text in ("put a notice up: we're closed Thanksgiving, back Friday", 'notice: closed Friday for inventory'):
+            with self.subTest(text=text):
+                self.assertEqual(router.candidates(text, skills=reg)[0][0], 'shop.notice')
+        self.assertEqual(router.candidates('put a dated banner across the top', skills=reg)[0][0], 'front.banner')
 
 
 class UndoFrontTests(H06TestCase):
@@ -195,3 +226,61 @@ class UndoFrontTests(H06TestCase):
         self.apply('banner2')
         self.assertEqual(self.say('undo '+created['code']),'not-drafted')
         self.assertEqual(self.content('store')['banner']['text'],'Hello neighbors')
+
+
+class BadEffectiveDayTests(unittest.TestCase):
+    def test_screenshot_refuses_a_bad_effective_day_before_any_browser(self):  # acceptance 4a (d)
+        env = {'PATH': os.environ.get('PATH', ''), 'PREVIEW_URL': 'http://127.0.0.1:9', 'OUT': '/nonexistent/shot.png',
+               'PLAYWRIGHT_MODULE': '/nonexistent/hass-test/playwright'}
+        for day in ('2026-02-30', 'tomorrow'):
+            with self.subTest(day=day):
+                run = subprocess.run(['node', str(REPO_ROOT/'hass'/'screenshot.cjs')], capture_output=True, text=True, timeout=30,
+                                     env={**env, 'TARGET': json.dumps({'kind': 'store', 'effectiveDay': day})})
+                self.assertEqual((run.returncode, run.stderr.strip()), (1, 'bad effectiveDay'))
+
+
+@unittest.skipUnless(os.environ.get('PLAYWRIGHT_MODULE'), 'PLAYWRIGHT_MODULE is not set')
+class FrontCaptureTests(StoreTestCase):
+    """Acceptance 4a (a, b) and 8: the real loopback preview and Chromium, phone and desktop, on the real clock."""
+    def setUp(self):
+        self.r = repo = self.repo()
+        for rel in git(REPO_ROOT, 'ls-files', 'storefront-mockup').splitlines():
+            if not rel.startswith('storefront-mockup/assets/') and not (repo.wt/rel).exists():
+                (repo.wt/rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(REPO_ROOT/rel, repo.wt/rel)
+        git(repo.wt, 'add', '-A')
+        git(repo.wt, 'commit', '-q', '-m', 'full site')
+        holder = tempfile.TemporaryDirectory(prefix='hass-avb19-')
+        self.addCleanup(holder.cleanup)
+        self.out = Path(os.environ.get('AVB19_SHOTS') or holder.name)
+
+    def shot(self, draft, name, target=None):
+        record = draft['records'][0]
+        target = target or preview.target_for(record, shop_today(), store=record['after'])
+        files = {rel: self.r.read(rel) for rel in (INDEX, HIKE)}
+        return target, preview.Previewer(self.r.wt).capture(files, target, self.out/f'{name}.png')
+
+    def assertPassed(self, got, *names):
+        self.assertTrue(got['ok'], got)
+        for name in ('pageLoaded', 'noHorizontalOverflow', 'noPageErrors', *names):
+            self.assertIs(got['checks'][name], True, name)
+            self.assertIs(got['checks']['desktop:'+name], True, 'desktop:'+name)
+        self.assertTrue(Path(got['png']).is_file() and Path(got['desktopPng']).is_file())
+
+    def test_sections_capture_phone_and_desktop(self):
+        draft = self.r.run(('store.set_sections', {'order': ['visit', 'market', 'newsletter', 'our-way'], 'hidden': ['our-way']}))
+        target, got = self.shot(draft, 'front.sections')
+        self.assertEqual(target['sections'], ['visit', 'market', 'newsletter'])
+        self.assertPassed(got, 'sectionsShown')
+
+    def test_future_banner_preview_shows_it_and_the_served_page_does_not(self):
+        start = shop_today() + timedelta(days=1)
+        draft = self.r.run(('store.set_banner', {'text': 'Come say hello', 'start': start.isoformat(),
+                                                 'end': (start + timedelta(days=3)).isoformat(), 'link': 'visit'}))
+        self.assertIn(' hidden style="display:none"><span>Come say hello', self.r.text(INDEX))  # served: real day, not yet
+        target, got = self.shot(draft, 'front.banner')
+        self.assertEqual((target['effectiveDay'], target['banner']), (start.isoformat(), {'text': 'Come say hello', 'link': '/#visit'}))
+        self.assertPassed(got, 'bannerShown')
+        real = {k: v for k, v in target.items() if k != 'effectiveDay'} | {'banner': None}
+        _, served = self.shot(draft, 'front.banner-served', real)
+        self.assertPassed(served, 'bannerGone')
