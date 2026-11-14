@@ -1,0 +1,172 @@
+"""The owner's command words: the parsers hass/conversation.py tries before the interpreter, and the help text.
+
+AVB-12: moved verbatim out of hass/conversation.py, which imports every name back (hass.conversation.<name> is
+unchanged). Pure functions; no state.
+"""
+import re
+
+from hass import memory as memory_mod
+from hass.chat.shared import ALIAS_NAME_MAX, q
+from hass.ops import catalog
+
+APPROVE, REJECT = ("yes", "approve", "approved"), ("no", "cancel", "reject")
+KEYWORD_RE = re.compile(r"(yes|approved|approve|no|cancel|reject)(?: ([0-9a-f]{4,12}))?")
+NEAR_RE = re.compile(r"(ok|okay|yes please|yep|yeah|sure|go ahead|do it|sounds good|looks good)(?: ([0-9a-f]{4,12}))?")  # H05
+COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"  # H06, same normalisation as KEYWORD_RE
+                        r"|(status|did (?:it|that|my change) work\??)|(pause|stop)(?: changes)?"  # H17; SHOP-4 phrases
+                        r"|(resume)(?: changes)?|(help|commands|\?)"
+                        r"|(find)(?:\s+(.*))?"  # AV1537-04; the query is re-read from the original text to keep its case
+                        r"|(show)(?:\s+(.*))?"  # AV0022-08 (H17): groups 10/11, earlier indices unchanged
+                        r"|((?:morning )?report)"  # AV1322-05 (F04): group 12; groups 1-11 keep their indices
+                        r"|(post)(?:\s+((?:hike\s+)?\S+(?:\s+\S+){0,5}))?"  # AV1322-07 (F07): groups 13/14; AV1222-11: or "hike <id>"; the id is re-read from the original text to keep its case
+                        r"|(margin)(?:\s+((?s:.*)))?"  # AV1102-12 (F03): groups 15/16; the rest is checked by MARGIN_RE
+                        r"|(hidden)"  # AV1222-13 (H03): group 17
+                        r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; multiword names need a catalog check
+                        r"|(photos to take)"  # AV0222-04 (H10/H17): group 20
+                        r"|(backlog)")  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
+
+HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: " + q('"Stop showing the eggs as sold out"') + ".",  # AV1537-03, test_help
+    "Other things you can say:",
+    q("yes") + " - go ahead with the change waiting for you",
+    q("no") + " - cancel it",
+    q("status") + " - what I did last and what is waiting for you",
+    q("history") + " - what we changed lately, or " + q("history hours") + " to look for one",
+    q("undo") + " - take back the last change",
+    q("stop changes") + " - I won't change anything until you say " + q("resume changes"),
+    q("report") + " - the morning shelf report",
+    q("find lion's mane") + " - look something up",
+    q("photos to take") + " - the products that still need a photo",
+    q("remember parking: back lot") + " - I'll keep a note; " + q("forget parking") + " removes it; " + q("notes") + " lists them",
+    q("alias jam: Linn's blueberry preserves") + " - a nickname for a product or maker",
+    q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",
+    q("margin Hass avocado at 35%") + " - a price idea from the cost you saved",
+    q("post Hass avocado") + " or " + q("post hike Point Buchon") + " - a caption to copy; I post nothing",
+    q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
+    q("show") + " and a word from the change - repeat a waiting change",
+    q("help") + " - this list"))
+HELP_TEXT = HELP_TEXT.replace(q("show") + " and a word from the change - repeat a waiting change\n",
+                              q("show") + " and a word from the change - repeat a waiting change\n"
+                              + q("backlog") + " - what I couldn't do yet; " + q("forget backlog.3") + " takes one off\n")  # SKILLS-FW-3
+# H15 owner memory. Verb and key are case-insensitive (the key is stored lower-cased); the text keeps its case.
+MEMORY_RE = re.compile(r"(remember)(?:\s+(.*))?|(forget)\s+(\S.*)|(memory|notes)|(alias)(?:\s+(.*))?"
+                       r"|(cost)(?:\s+(.*))?", re.IGNORECASE | re.DOTALL)  # AV1222-10: groups 8/9
+
+
+def parse_keyword(text: str):
+    """(verb, code or None) when the whole message is an approval keyword; otherwise None."""
+    match = KEYWORD_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
+    if not match: return None
+    return ("approve" if match[1] in APPROVE else "reject"), match[2]
+
+
+COURTESY = {"please", "thanks", "ok", "okay"}
+
+
+def parse_phone(text: str):
+    """AV1352-04 (H05): (verb or None, code or None, question) when, after dropping punctuation other than ?, emoji and
+    the courtesy words (please, thanks, thank you, ok, okay), the whole message is one approve/cancel word and one code in
+    either order, or one code alone, or (with a ?) one such word alone; otherwise None. `question` is True when the
+    original text held a ?. Only the candidate is normalised, never the message; a ? is never stripped into an answer."""
+    question = "?" in text
+    words = "".join(c if c.isalnum() else " " for c in text.lower()).split()
+    kept, i = [], 0
+    while i < len(words):
+        if words[i] == "thank" and words[i + 1:i + 2] == ["you"]: i += 2
+        else:
+            if words[i] not in COURTESY: kept.append(words[i])
+            i += 1
+    verbs = [w for w in kept if w in APPROVE or w in REJECT]
+    codes = [w for w in kept if re.fullmatch(r"[0-9a-f]{4,12}", w)]
+    if not kept or len(verbs) + len(codes) != len(kept) or len(verbs) > 1 or len(codes) > 1: return None
+    if not verbs: return None, codes[0], question  # a lone code is only ever a hint
+    if not codes and not question: return None  # courtesy never makes a new bare yes/no
+    return ("approve" if verbs[0] in APPROVE else "reject"), (codes[0] if codes else None), question
+
+
+def parse_near(text: str):
+    """AV2022-07 (H05): code or "" when the whole message is a casual yes (ok, go ahead, ...); otherwise None.
+    It never approves anything; Hass only answers with the exact `yes <code>` to send."""
+    match = NEAR_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()).removesuffix(","))
+    return None if not match else match[2] or ""
+
+
+def parse_command(text: str, *, listing_names=False):
+    """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
+    otherwise None."""
+    match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
+    if not match: return None
+    if match[21]: return "backlog", None  # SKILLS-FW-3
+    if match[20]: return "photos", None  # AV0222-04
+    if match[1]:  # AV2152-02: bare history stays (history, None); history <words> keeps the words in their own case
+        stripped = re.sub(r"[.!]+$", "", text.strip())
+        if stripped.lower() != "history": return "history", stripped[7:].strip()
+    if match[18]:
+        ident = re.sub(r"[.!]+$", "", text.strip())[7:].strip() if match[19] else ""
+        # Several words need a catalog check in the message flow, not just a syntax match.
+        return ("listing", ident) if listing_names or len(ident.split()) <= 1 else None
+    if match[17]: return "hidden", None  # AV1222-13
+    if match[15]: return "margin", match[16] or ""  # AV1102-12 (F03)
+    if match[13]: return "post", re.sub(r"[.!]+$", "", text.strip())[4:].strip() if match[14] else ""  # AV1322-07: the id in its own case
+    if match[12]: return "report", None  # AV1322-05 (F04)
+    if match[10]: return "show", match[11] or ""  # AV0022-08: the code is checked by _show, never guessed
+    if match[7]: return "help", None
+    if match[8]: return "find", re.sub(r"[.!]+$", "", text.strip())[4:].strip()  # ("find", query in its own case)
+    if match[2]: return "undo", match[3]
+    found = next(v for v in (match[1], match[4], match[5], match[6]) if v)  # SHOP-4: did it work = status, stop = pause
+    return ("status" if found.startswith("did ") else "pause" if found == "stop" else found), None
+
+
+def _note_key(name: str) -> str:
+    """AV1352-07: a note name as typed: trimmed, lower-cased, runs of spaces become one \"-\" (KEY_RE still decides)."""
+    return re.sub(" +", "-", name.strip().lower())
+
+
+def parse_memory(text: str):
+    """("remember", key, text), ("forget", key, None) or ("memory", None, None) when the whole message is an H15
+    memory command; otherwise None. `remember …` without `key:` still parses (as an empty text) so it is refused."""
+    match = MEMORY_RE.fullmatch(text.strip())
+    if match and match[1]:
+        key, colon, value = (match[2] or "").partition(":")
+        return "remember", _note_key(key), value.strip() if colon else ""
+    if match and match[6]:  # ("alias", name, product id or maker key); a missing part is refused, not guessed
+        name, colon, ident = (match[7] or "").partition(":")
+        return "alias", name.strip(), ident.strip() if colon else ""
+    if match and match[8]:  # AV1222-10 ("cost", product id, "<pack> for <units>"); a bad part is refused, not guessed
+        ident, colon, rest = (match[9] or "").partition(":")
+        return "cost", ident.strip().lower(), rest.strip() if colon else ""
+    match = MEMORY_RE.fullmatch(re.sub(r"!+$", "", text.strip()))  # a key may end in "." (KEY_RE), never "!"
+    if match and match[3]:  # AV1352-07: spaces in a note name become "-"; `forget alias <name>` removes alias.<name>
+        operand = match[4].strip()
+        if re.search(r"[^\S ]", operand) or re.fullmatch(r"it +all", operand, re.IGNORECASE): return None  # old routing
+        if re.match(r"alias +\S", operand, re.IGNORECASE):
+            name = operand[5:].strip()
+            ok = memory_mod._clean(name) and len(name) <= ALIAS_NAME_MAX
+            if not ok: return "forget", "alias. " + name.lower(), None
+            return "forget", "alias." + catalog._fold(name).replace(" ", "-"), "spaced"  # may also be the note alias-<name>
+        return "forget", _note_key(operand), None
+    match = MEMORY_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip()))
+    return ("memory", None, None) if match and match[5] else None
+
+
+READ_ONLY = {"history", "status", "help", "find", "show", "report", "post", "margin", "hidden", "listing", "backlog"}
+
+
+def _asked(text: str):
+    """AV1352-05 (H17): the message without its closing run of . ! ? when that run holds a ?, else None."""
+    cut = re.sub(r"[.!?]+$", "", text.strip())
+    return cut if cut != text.strip() and "?" in text.strip()[len(cut):] else None
+
+
+def read_command(text: str, *, listing_names=False):
+    """AV1352-05 (H17): parse_command, but a closing ? is dropped for a read-only command only (never yes/no, undo, stop,
+    resume); anything else keeps today's reading of the original text."""
+    cut = _asked(text)
+    found = parse_command(cut, listing_names=listing_names) if cut else None
+    return found if found and found[0] in READ_ONLY else parse_command(text, listing_names=listing_names)
+
+
+def read_memory(text: str):
+    """AV1352-05 (H17): `memory?` lists notes; remember, forget and alias never see a stripped text."""
+    cut = _asked(text)
+    found = parse_memory(cut) if cut else None
+    return found if found and found[0] == "memory" else parse_memory(text)

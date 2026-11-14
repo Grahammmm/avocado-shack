@@ -30,12 +30,14 @@ HASS = REPO_ROOT / "hass"
 
 # Where owner text is written. "all": every sentence-like string in the module; a list: only inside those functions.
 OWNER_FACING = {
-    "conversation.py": ["_choices", "_no_target", "_state_text", "_request", "_photo", "_outcome", "_history_search", "_command", "_report",
-                        "_margin", "_margin_saved", "_post", "_post_hike", "_pick", "_find", "_listing", "_photos_to_take", "_hidden",
-                        "_show", "_memory", "_memory_words", "_cost", "_alias", "_alias_lines", "_control", "_status", "_reader_failed_lines",
-                        "_waiting_lines", "_photo_lines", "_hike_lines", "_handle", "_for_g", "_proposal_reply", "_added", "_change_line",
-                        "_record_lines", "proposal_text", "_summary", "_plain", "_asked_again", "_late", "_delayed", "_handle_message",
-                        "_shown", "_subject"],
+    "conversation.py": ["_choices", "_no_target", "_state_text", "_request", "_photo", "_outcome", "_command", "_handle", "_for_g",
+                        "_proposal_reply", "_plain", "_asked_again", "_late", "_delayed", "_handle_message"],
+    # AVB-12: the pack commands and the proposal wording moved out of conversation.py into hass/chat/
+    "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_control", "_status",
+                          "_reader_failed_lines", "_waiting_lines", "_photo_lines", "_hike_lines"],
+    "chat/site_pack.py": ["_find", "_listing", "_photos_to_take", "_hidden"],
+    "chat/reports_pack.py": ["_report", "_margin", "_margin_saved", "_post", "_post_hike", "_pick", "_cost"],
+    "chat/wording.py": ["_added", "_change_line", "_record_lines", "proposal_text", "_summary", "_shown", "_subject"],
     "owner_answers.py": "all", "media.py": ["Refused"], "claims.py": ["question"], "live_policy.py": ["_plain_reason", "refusal"],
     "hike_chat.py": "all",  # HASS-CHAT-1
     "margins.py": ["say", "plain_input_error"], "morning_report.py": ["_hike_text", "check_line", "render", "restock_text"], "interpret_check.py": "all",
@@ -43,10 +45,13 @@ OWNER_FACING = {
     "skills/social.py": ["item_reply", "hike_reply", "maker_reply", "recap_reply", "preflight", "refusal"],
 }
 MODULE_CONSTANTS = {  # names of module-level owner text
-    "conversation.py": ["HELP_TEXT", "LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "HISTORY_USAGE", "FIND_USAGE", "POST_USAGE", "HIKE_USAGE",
-                        "HIKE_REFUSALS", "POST_REFUSALS", "POST_CANT", "COST_USAGE", "MARGIN_USAGE", "PAUSED_LINE", "ATTACHMENT_REPLY",
-                        "NOT_READ_REPLY", "PHOTO_QUESTION", "FETCH_FAILED", "DAILY_LIMIT", "TOO_LONG", "NOTHING", "SOCIAL_REPLY",
-                        "UNREADABLE", "HELD_REPLY", "CANT_READ", "HOSTILE_REPLY", "STATUS_PLAIN"],
+    "conversation.py": ["PAUSED_LINE", "ATTACHMENT_REPLY", "NOT_READ_REPLY", "PHOTO_QUESTION", "FETCH_FAILED", "DAILY_LIMIT", "TOO_LONG",
+                        "SOCIAL_REPLY", "UNREADABLE", "HELD_REPLY", "HOSTILE_REPLY"],
+    "chat/shared.py": ["COST_USAGE", "NOTHING", "CANT_READ", "STATUS_PLAIN"],  # AVB-12: moved with their commands
+    "chat/commands.py": ["HELP_TEXT"],
+    "chat/core_pack.py": ["HISTORY_USAGE"],
+    "chat/site_pack.py": ["LISTING_USAGE", "LISTING_NONE", "LISTING_MANY", "FIND_USAGE"],
+    "chat/reports_pack.py": ["POST_USAGE", "HIKE_USAGE", "HIKE_REFUSALS", "POST_REFUSALS", "POST_CANT", "MARGIN_USAGE"],
     "media.py": ["REPLIES"],
     "skills/social.py": ["COPY_HEAD", "PRODUCT_PHOTO", "NO_PHOTO", "NO_POSTING", "CANT_READ", "CANT_SEE_PHOTO", "NO_STORY", "ITEM_REFUSALS",
                          "HIKE_REFUSALS", "MAKER_REFUSALS", "SHARED_REFUSALS", "RESOLVER_REFUSALS", "RECAP_REFUSALS", "NO_RECAPS",
