@@ -347,6 +347,8 @@ class Scratch:
                 self.repo.cleanup()
                 raise
         self.conv = conversation.Conversation(str(self.repo.state), self.editor, self.interp, self._clock, self.previewer)
+        # Judge the original reply, not the safe fallback that hides a voice violation.
+        self.conv.outbox.strict = True
         self._proposal_reply = self.conv._proposal_reply
         self.conv._proposal_reply = self._with_set_line  # the stand-in dispatcher's job: the `I set:` line goes in front of the proposal (FW-3: prefix=...)
         self.Inbound = conversation.Inbound

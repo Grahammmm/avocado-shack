@@ -489,6 +489,7 @@ _CARDS = (("storefront-mockup/catalog-products.js", "products"),)
 
 SKILLS = (
     Skill(
+        pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
         name="maker.add", label="add a maker", version=1,
         summary="Add a maker with their town and a short about text; with no story, one line says where they are based.",
         triggers=(
@@ -520,6 +521,7 @@ SKILLS = (
         cases=_CASES.format("maker.add"),
     ),
     Skill(
+        pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
         name="maker.edit", label="change a maker or their about text", version=1,
         summary="Change a maker's name, town, about text or website link; a new story replaces the whole text.",
         triggers=(
@@ -556,6 +558,7 @@ SKILLS = (
         cases=_CASES.format("maker.edit"),
     ),
     Skill(
+        pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
         name="maker.hide", label="stop carrying a maker", version=1,
         summary="Hide a maker, and with your yes their products too; nothing is deleted.",
         triggers=(
@@ -585,6 +588,7 @@ SKILLS = (
         cases=_CASES.format("maker.hide"),
     ),
     Skill(
+        pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
         name="maker.restore", label="bring a maker back", version=1,
         summary="Bring a hidden maker back; their products come back one by one when you ask.",
         triggers=(

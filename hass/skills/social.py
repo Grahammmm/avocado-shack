@@ -251,6 +251,7 @@ _CASES = "hass/tests/fixtures/skills/social/{}.jsonl"
 
 def _read_only(name, label, summary, triggers, slot, refuse):
     return Skill(name=name, label=label, summary=summary, triggers=triggers, slots=(slot,), rules=(), plan=_plan, edits=(),
+                 pack='reports', targets=(), approval_class='A0', sandbox='none-needed', logs=(), who='owner',
                  side_effects=("none",), preview="none", approval="none", live_class="read-only", undo=Undo("none", "none"),
                  refuse=refuse, cases=_CASES.format(name), version=1)
 

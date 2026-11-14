@@ -615,6 +615,7 @@ REMOVE_RULES = ("specials-which",)
 CLEAR_RULES = ("specials-finished-to-clear",)
 
 SPECIALS_ADD = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="specials.add", label="put something on special",
     summary="Put an item or a deal in this week's specials box on the home page, shown until a last day.",
     triggers=(
@@ -645,6 +646,7 @@ SPECIALS_ADD = Skill(
     cases=_CASES.format("specials.add"), version=1)
 
 SPECIALS_EDIT = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="specials.edit", label="change a special",
     summary="Change one special: its title, deal line, product, first day or last day (for example extend it).",
     triggers=(
@@ -676,6 +678,7 @@ SPECIALS_EDIT = Skill(
     cases=_CASES.format("specials.edit"), version=1)
 
 SPECIALS_REMOVE = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="specials.remove", label="take a special off",
     summary="Take one special off the home page before its last day.",
     triggers=(
@@ -698,6 +701,7 @@ SPECIALS_REMOVE = Skill(
     cases=_CASES.format("specials.remove"), version=1)
 
 SPECIALS_CLEAR = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="specials.clear_expired", label="clear the finished specials",
     summary="Tidy the saved list by dropping specials whose last day has passed. They no longer show on the page.",
     triggers=(
@@ -714,6 +718,7 @@ SPECIALS_CLEAR = Skill(
     refuse=(("no special has finished", NOTHING_FINISHED),), cases=_CASES.format("specials.clear_expired"), version=1)
 
 SPECIALS_SHOW = Skill(
+    pack='site', targets=(), approval_class='A0', sandbox='none-needed', logs=(), who='owner',
     name="specials.show", label="show this week's specials",
     summary="Say which specials are on now and which are coming up, with each deal as it was typed.",
     triggers=(

@@ -34,7 +34,10 @@ def _skill(**over):
         rules=("shelf-check-today",), plan=lambda s, c: [], edits=(("hass/content/products.json", "products[id].available"),),
         side_effects=("inventory-word",), preview="product:eggs", approval="owner-yes", live_class="chat-live",
         undo=model.Undo("revert", "none"), refuse=(("price in message", "No prices on the site."),),
-        cases="hass/tests/fixtures/skills/inventory/stock.set.jsonl", version=1)
+        cases="hass/tests/fixtures/skills/inventory/stock.set.jsonl", version=1,
+        pack="site", targets=("site",), approval_class="A1", sandbox="full", logs=("subjects", "fields"), who="owner")
+    if over.get("approval") == "none":
+        base.update(targets=(), approval_class="A0", sandbox="none-needed")
     base.update(over)
     return model.Skill(**base)
 

@@ -324,6 +324,7 @@ def plan_photo(slots, ctx):
 
 # -- the skills ---------------------------------------------------------------------------------------------------
 PAGE_HOME = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="page.home", label="change the home page headline or intro",
     summary="Change the two-line headline or the intro on the home page, or put the shop's own words back.",
     triggers=(
@@ -352,6 +353,7 @@ PAGE_HOME = Skill(
     cases=_CASES.format("page.home"), version=1)
 
 PAGE_ABOUT = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="page.about", label="change the store story",
     summary="Change the “Come on in” story on the home page, the only About text the site has.",
     triggers=(
@@ -378,6 +380,7 @@ PAGE_ABOUT = Skill(
     cases=_CASES.format("page.about"), version=1)
 
 PAGE_PHOTO = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="page.photo", label="change the home page photo",
     summary="Use the photo he sent as the home page photo, or put the shop's own photo back.",
     triggers=(
