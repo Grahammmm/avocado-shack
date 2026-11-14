@@ -1,0 +1,12 @@
+{
+  "id": "FAKEITEM00007",
+  "hidden": false,
+  "available": true,
+  "name": "Sunshine olive oil",
+  "sku": "AS-PAN-SUNSHINE-OLIVE-OIL-02",
+  "price": 1250,
+  "priceType": "FIXED",
+  "defaultTaxRates": true,
+  "isRevenue": true,
+  "modifiedTime": 1794260000000
+}
