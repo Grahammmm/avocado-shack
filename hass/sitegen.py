@@ -4,6 +4,8 @@
     python3 hass/sitegen.py --write          # rewrite changed site files atomically
     python3 hass/sitegen.py --out DIR        # render into DIR (same relative paths)
     python3 hass/sitegen.py --publish DIR    # build the publishable static site into a new/empty DIR (allowlist)
+    python3 hass/sitegen.py --check-publish DIR  # read-only: exit 0 only if DIR holds exactly what --publish would write now
+                                             # (1 lists missing/changed/extra files; 2 refused DIR); not deploy approval
 
 The publishable site is never the storefront-mockup folder itself: --publish copies only the PUBLISH_* allowlist,
 a public community.json and the active catalog's images (see publish_files).
@@ -28,6 +30,7 @@ import html
 import json
 import os
 import re
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -437,6 +440,83 @@ def publish(content: Content, repo: Path, out: Path) -> list[str]:
     return write_files(files, out_abs)
 
 
+def _check_root(repo: Path, root: Path) -> Path:
+    """AV1622-08: the folder to compare must be an existing real directory outside the repository, reached through no
+    symlink (the folder itself, dangling links and every parent included). Metadata only; nothing is created."""
+    top = Path(os.path.abspath(root))
+    for i in range(1, len(top.parts) + 1):
+        if os.path.islink(Path(*top.parts[:i])):
+            raise OSError(errno.ELOOP, "folder or one of its parents is a symlink")
+    for found in (top, Path(os.path.realpath(top))):
+        for base in (Path(os.path.abspath(repo)), Path(os.path.realpath(repo))):
+            if found == base or base in found.parents:
+                raise ValueError("folder must be outside the repository")
+    if not stat.S_ISDIR(os.lstat(top).st_mode):
+        raise NotADirectoryError(errno.ENOTDIR, "folder is not a directory")
+    return top
+
+
+def _same_bytes(path: Path, data: bytes) -> bool:
+    """Compare an expected regular file with its bytes. Never follows a link: an entry that turned into a link or
+    special file since it was listed is refused (OSError), not read (O_NONBLOCK keeps a FIFO from hanging the open)."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+    with os.fdopen(fd, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise OSError(errno.EINVAL, "entry changed type during the check")
+        return handle.read(len(data) + 1) == data
+
+
+def check_publish(files: dict[str, bytes], root: Path) -> tuple[list[str], list[str], list[str]]:
+    """Compare ``root`` with the publish_files map without writing: (missing, changed, extra) site-relative paths, each
+    sorted. Expected files are exactly the keys, allowed folders their parents; anything else (links, special entries,
+    empty or hidden folders, private files) is extra. Links are never followed and only expected regular files are read."""
+    dirs = {"/".join(Path(rel).parts[:i]) for rel in files for i in range(1, len(Path(rel).parts))}
+    seen, changed, extra = set(), set(), set()
+
+    def visit(rel_dir: str) -> None:
+        with os.scandir(Path(root, rel_dir) if rel_dir else root) as entries:
+            found = sorted(entries, key=lambda e: e.name)
+        for entry in found:
+            rel = f"{rel_dir}/{entry.name}" if rel_dir else entry.name
+            mode = entry.stat(follow_symlinks=False).st_mode
+            if rel in files:
+                seen.add(rel)
+                if not stat.S_ISREG(mode) or not _same_bytes(Path(root, rel), files[rel]):
+                    changed.add(rel)
+            elif rel in dirs and not stat.S_ISDIR(mode):
+                changed.add(rel)
+            elif rel not in dirs:
+                extra.add(rel)
+            if stat.S_ISDIR(mode):  # a real folder only; a link has no S_ISDIR here and is never entered
+                visit(rel)
+
+    visit("")
+    return sorted(set(files) - seen), sorted(changed), sorted(extra)
+
+
+def _check_published(content: Content, repo: Path, root: Path) -> int:
+    """Exit 0 when ``root`` holds exactly what --publish would write now, 1 listing the differences, 2 when the folder
+    is refused or cannot be read. Never writes. Paths are JSON-quoted so a newline in a name cannot forge a line; no
+    file content is printed. Concurrent changes are unsupported: check a quiescent copy."""
+    try:
+        top = _check_root(repo, root)
+        files = publish_files(content, repo)
+        groups = check_publish(files, top)
+    except (OSError, ValueError) as exc:
+        print(f"sitegen: check-publish refused: {getattr(exc, 'strerror', None) or exc}", file=sys.stderr)
+        return 2
+    if not any(groups):
+        print(f"ok: {len(files)} published files match current content")
+        return 0
+    print("published folder differs from current content (not a deploy approval; nothing was changed):")
+    for label, paths in zip(("missing", "changed", "extra"), groups):
+        if paths:
+            print(f"{label} ({len(paths)}):")
+            for rel in paths:
+                print("  " + json.dumps(rel))
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         return _main(argv)
@@ -453,6 +533,9 @@ def _main(argv: list[str] | None) -> int:
     mode.add_argument("--out", type=Path, help="render all generated files into this directory")
     mode.add_argument("--publish", type=Path, metavar="DIR",
                       help="build the publishable static site (allowlist only) into a new or empty DIR outside the repo")
+    mode.add_argument("--check-publish", type=Path, metavar="DIR",
+                      help="read-only: exit 0 only if existing DIR (outside the repo, not a symlink) holds exactly what --publish "
+                           "would write now; 1 lists missing/changed/extra files; 2 refused. Check a quiescent copy")
     parser.add_argument("--repo", type=Path, default=REPO_ROOT, help="repository root (default: this checkout)")
     args = parser.parse_args(argv)
 
@@ -466,6 +549,8 @@ def _main(argv: list[str] | None) -> int:
             print("  " + problem, file=sys.stderr)
         return 2
 
+    if args.check_publish is not None:
+        return _check_published(content, repo, args.check_publish)
     if args.publish is not None:
         try:
             written = publish(content, repo, args.publish)
