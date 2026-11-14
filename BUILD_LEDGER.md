@@ -2227,6 +2227,17 @@ History: Sol built the first candidate and stopped twice on the skill-fixture sc
 
 Checks and limits are in the PR body. Not deployed; nothing live, no runtime, settings, credentials or records read or changed. Rollback: revert the PR; a banner or order already saved is removed with `undo` or "put the home parts back" / "take down the dated banner"; the ops stay private.
 
+## HASS-RELEASE-BUDGET-1: separate staging test budget — November 14, 2026
+
+The runtime release tool now gives acceptance plus parallel tests one shared
+1800-second staging deadline. Time spent in those tests is excluded from the
+unchanged 900-second normal work budget; the 180-second switch admission rule
+and separate 180-second recovery budget are unchanged. No timeout override or
+retry was added. Synthetic virtual-clock staging tests cover 1000-second success,
+shared-budget timeout before downtime, and preserved switch/recovery boundaries;
+all three new cases reject the old prepare implementation. No live release or
+service operation was performed. Full-tier Codex review is required before use.
+
 ## AVB-19-B2: four fixed template pages and Questions entries (private-only) — November 14, 2026
 
 Branch avb19-b2-pages-faq, built to the reviewed AVB-19 front-end pack design (sha256 ae6e151a…, sections 2, 3 `pageAbout`/`pageGettingHere`/`pagePolicies`/`pageFaq`, 4.3, 4.4). Two skills in `hass/skills/front.py` (`front.page`, `front.faq`) plan four new ops in `hass/ops/front.py` (`store.set_page`, `store.hide_page`, `store.set_faq`, `store.remove_faq`); all four are in `live_policy.PRIVATE` and none in `LIVE`. One template, `hass/templates/info/index.html`, renders `about/`, `getting-here/`, `policies/` and `faq/`; a page not shown is a `noindex` "Nothing here yet" placeholder that is never published, a shown page adds one footer link on every generated page, the header nav is unchanged. Questions entries are `<details><summary>`, at most 20, each question ends in `?`; the first entry shows the page and removing the last hides it. The four paths joined `editor.GENERATED_PATHS`/`REVISION_PATHS`, `sitegen.publish_files` (shown pages only), the release engine's store allow-list, `design_check.DESIGN`/`PAIRS` and the static-site page list; nothing else became allowed. The fixed 404 page is unchanged (no footer links, no new release path). `page.faq` is retired, so the dispatcher's exact-FAQ refusal path is off without a dispatcher edit; `page.about` (version 2) points its About-page refusal at `front.page`. The draft claims gate now reads page words (a dict store value was skipped before).
