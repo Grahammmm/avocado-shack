@@ -480,6 +480,7 @@ _STATUS = ("hass/content/products.json", "products[id].status")
 _GENERATED = (("storefront-mockup/catalog-products.js", "generated"),)
 
 ITEM_HIDE = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="item.hide", label="hide a product",
     summary="Take one or more products off the website. Nothing is deleted; they can come back.",
     triggers=(
@@ -506,6 +507,7 @@ ITEM_HIDE = Skill(
     cases=_CASES.format("item.hide"), version=1)
 
 ITEM_RESTORE = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="item.restore", label="bring a hidden product back",
     summary="Put one or more hidden products back on the website.",
     triggers=(
@@ -531,6 +533,7 @@ ITEM_RESTORE = Skill(
     cases=_CASES.format("item.restore"), version=1)
 
 ITEM_EDIT = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="item.edit", label="change a product",
     summary="Change a product's name, description, maker or shelf. Prices are not kept on the website.",
     triggers=(
