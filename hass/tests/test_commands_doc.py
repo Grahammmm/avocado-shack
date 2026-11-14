@@ -97,6 +97,17 @@ class CommandsDocTest(unittest.TestCase):
         self.assertEqual(conv.parse_memory("remember Parking: Use the back lot!"),
                          ("remember", "parking", "Use the back lot!"))
 
+    def test_again_row_contract(self):
+        """AV2152-03: `again <code>` is a parser verb with one row whose example parses back to it and names its rules."""
+        self.assertIn("again", self.verbs)
+        [(send, example, line)] = [r for r in self.table if r[0].startswith("`again")]
+        self.assertEqual((send, verb(re.findall(r"`([^`]+)`", example)[0])), ("`again <code>`", "again"))
+        self.assertEqual(conv.parse_command(re.findall(r"`([^`]+)`", example)[0]), ("again", "a1b2"))
+        cell = " ".join(line.split())
+        for phrase in ("at most 7 days ago", "exactly 7 days still counts", "fresh expiry", "never calls the interpreter",
+                       "the site changed since <code>; send the change again", "any photo draft", "works while paused", "needs `yes <new code>`"):
+            self.assertIn(phrase, cell)
+
     def test_commands_note_section(self):
         """AV2152-07: the prose after the table describes the optional hike.cancel note (it adds no parser verb)."""
         doc = " ".join(DOC.read_text("utf-8").split())
