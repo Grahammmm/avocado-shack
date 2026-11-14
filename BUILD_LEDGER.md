@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AVB-14 — cache-only Clover reports (November 14, 2026)
+
+Added private daily stock/mismatch Markdown files, cache-only CLI commands, an uninstalled 06:00 Pacific timer template, and G-only `till report` totals. No token loading, network, prices in chat, automatic fixes or new permission. Missing links remain explicit gaps; no guessed matches. The report folder is 0700, files 0600, and dated report files age out after 90 days. Source cache identity/age safeguards remain.
+
+Builder proof: synthetic #571 cache plus content/link fixtures exercised real CLI writes and Conversation/outbox routing; all 217 Clover tests and 48 deploy/voice tests passed. Review fix: non-G `till report` falls through to normal handling, preserving owner replies/records, unread edits and echo dispositions without generating a report. The regression failed before the fix; the report/deploy/conversation/voice selection then passed all 72 tests. The rendered stock sample in `docs/hass/CLOVER.md` came from those fixtures, not the live till. Exact-head CI and independent review are tracked on the PR/card. Nothing installed, enabled, sent, published or live-verified. Rollback: remove the timer and local reports folder (operator), or revert this PR for code.
+
 ## CI-5 — affected-tier cost budget (November 13, 2026)
 
 Raised the one measured-cost fallback in `hass/tests/ci_shards.py` from 240 to 480 seconds. This keeps safely mapped medium selections in the quick job instead of queueing four full-suite shards. Infrastructure/shared-library/unmapped fallbacks, mandatory smoke/private-file guards, aggregate verification and full main/nightly/manual runs are unchanged. Workflow comment updated; no job, timeout, runner or service changes.

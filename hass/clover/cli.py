@@ -10,6 +10,9 @@
   status  the cache facts (as of, item count, last result, failures) and the till they belong to (environment, merchantId); no
           network, no token. A cache of another till, or with no identity, prints result "identity" (HASS-CLOVER-1-FIX-2).
 
+  report stock|mismatch [--out DIR] (or report --all) writes private local Markdown files from the cache only.
+          No token or network. Stdout remains one redacted JSON status line; details stay in local files.
+
 Exit 0 ok (sync: also "skipped" by the backoff), 1 Clover failed or an unexpected error (class name only), 2 not configured, config,
 state, cache or token refused. Output never holds a header, the token, a response body, an item name, a price, a path, or any customer
 or sales data. The live `check` and `sync` are run by the operator after review and merge (docs/hass/CLOVER.md, "Go live: read-only").
@@ -173,6 +176,36 @@ def status(args):
     return ({"result": "ok", **facts} if facts else {"result": "no-cache"}), 0
 
 
+def report(args, clock=_now):
+    """Cache only: no client or token loading; stdout contains status/counts only."""
+    from hass import editor
+    from hass.clover import reports
+    clover, state = _setup(args.host)
+    snapshot, reachable = cache.read(state, cache.identity_of(clover))
+    if snapshot is None:
+        raise Stop({"result": "no-cache"})
+    worktree = editor._load(str(state))[2] if args.out or args.all or args.kind == "mismatch" else None
+    if args.out:
+        out = Path(args.out).absolute()
+        resolved = out.resolve()
+        if any(resolved == root or root in resolved.parents for root in (REPO_ROOT, worktree.resolve())):
+            raise Stop({"result": "report", "problem": "inside-repo"})
+    now = clock()
+    kinds = reports.KINDS if args.all else (args.kind,)
+    if not args.all and args.kind is None or args.all and args.kind is not None:
+        raise Stop({"result": "report", "problem": "choose-kind-or-all"})
+    prepared = []
+    for kind in kinds:
+        if kind == "stock":
+            prepared.append(reports.low_stock(snapshot, clover.low_stock_threshold))
+        else:
+            content, links = reports.read_inputs(state, worktree)
+            prepared.append(reports.till_vs_site(snapshot, content, links))
+    for doc in prepared:
+        reports.write_report(state, doc, now, reachable, args.out)
+    return {"result": "ok", "reports": len(prepared), "asOf": cache._iso(snapshot.fetched_at)}, 0
+
+
 def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotonic, clock=_now):
     ap = argparse.ArgumentParser(prog="hass/clover/cli.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -181,6 +214,11 @@ def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotoni
         p.add_argument("--host", required=True)
         if name == "sync":
             p.add_argument("--force", action="store_true")
+    p = sub.add_parser("report")
+    p.add_argument("kind", nargs="?", choices=("stock", "mismatch"))
+    p.add_argument("--all", action="store_true")
+    p.add_argument("--host", required=True)
+    p.add_argument("--out")
     args = ap.parse_args(argv)
     os.umask(0o077)
     try:
@@ -188,6 +226,8 @@ def main(argv=None, *, transport=None, sleep=time.sleep, monotonic=time.monotoni
             out, code = check(args, transport, sleep, monotonic)
         elif args.cmd == "sync":
             out, code = sync(args, transport, sleep, monotonic, clock)
+        elif args.cmd == "report":
+            out, code = report(args, clock)
         else:
             out, code = status(args)
     except Stop as stop:
