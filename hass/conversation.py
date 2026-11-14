@@ -35,7 +35,7 @@ from hass.chat.wording import (  # noqa: E402,F401
     proposal_text)
 from hass.chat.core_pack import (  # noqa: E402,F401
     MEMORY_LIST_MAX, HISTORY_MAX, ALIAS_LIST_MAX, HISTORY_STATES, HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX,
-    HISTORY_USAGE, CorePack)
+    HISTORY_USAGE, AGAIN_WINDOW_DAYS, AGAIN_USAGE, AGAIN_DRIFT, CorePack)
 from hass.chat.site_pack import (  # noqa: E402,F401
     PHOTOS_TO_TAKE_MAX, HIDDEN_MAX, LISTING_DESC_MAX, LISTING_USAGE, LISTING_NONE, LISTING_MANY, FIND_MAX,
     FIND_USAGE, SitePack)
@@ -49,8 +49,9 @@ ATTACHMENT_REPLY = ("I can't read photos, voice notes or files yet, so nothing c
                     "Could you type the change instead?")
 NOT_READ_REPLY = ("I only notice new messages, so I missed that tap or edit and nothing changed. "
                   "Please send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
-PHOTO_QUESTION = "Which product is this photo for, and what does it show? A few words is fine."  # NB-AV-09 (H12): asked by every new photo draft
-PHOTO_OPS = ("product.set_photo", "product.add")  # AV0022-04: ops in a photo-draft answer that get the draft's photo
+PHOTO_QUESTION = ("Is this photo for a product in the shop, a new product, or the home page? "
+                  "And what does it show, for people who cannot see it? A few words is fine.")  # NB-AV-09 (H12): asked by every new photo draft
+PHOTO_OPS = ("product.set_photo", "product.add", "store.set_home_image")  # AV0022-04, AV1937-01: ops in a photo-draft answer that get the draft's photo
 FETCH_FAILED = "I couldn't get that photo after trying three times, so nothing changed. Could you send it again?"
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
 # HASS-INTERP-OPENAI-1: which backend answered each message. Lazy like CONTROL; written only for an interpreter that names its
@@ -603,6 +604,16 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if not row["draft_hash"]: return False
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
+    def _named(self, row) -> bool:
+        """AV2152-03: a draft whose yes must name its code: a repeat of a closed hash (_repeat), or one made by `again <code>`
+        (reason `again:<old code>`), whose hash can differ from every earlier draft's when the site's base moved."""
+        return self._repeat(row) or str(row["reason"] or "").startswith("again:")
+
+    def _carry_again(self, old, new):
+        """AV2152-03: a proposal written up again from an `again` draft (stale, env-changed, failed) stays an `again` draft."""
+        if str(old["reason"] or "").startswith("again:") and new is not None:
+            self.db.execute("UPDATE drafts SET reason = ? WHERE row_id = ?", (old["reason"], new["row_id"]))
+
     _to = None  # HASS-LIVE-PLAN-1: the owner chat being answered (a message's chat, or an old draft's); None means ownerChat
 
     def _chat(self) -> str:
@@ -742,7 +753,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 else:
                     head, tail = PREVIEW_FAILED_HEAD, "\n" + PREVIEW_RETRY_LINE
                     self._queue_preview_retry(row)
-        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._repeat(row), head=head, undo=_is_undo(row),
+        text = prefix + proposal_text(row["code"], draft, row["expires_at"], self._named(row), head=head, undo=_is_undo(row),
                                       live_site=self.settings.get("liveSite") if draft.get("environment", {}).get("env") != "sandbox" else None,
                                       now=self._now(), notes=notes, routes=self._routes(), reasons=reasons) + tail
         if self._paused(): text += "\n" + PAUSED_LINE
@@ -1012,8 +1023,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(f"Your yes came before I had written that change up, so I haven't saved it. If you still want it, reply {q('yes ' + target['code'])}.")
             self._record(msg, "no-target")
             return "no-target", None
-        if code is None and self._repeat(target):  # a delayed bare `yes` must not approve a repeat of a closed draft
-            self._reply(f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it.")
+        if code is None and self._named(target):  # a delayed bare `yes` must not approve a repeat of a closed draft, or an `again` draft
+            again = str(target["reason"] or "").startswith("again:")
+            self._reply((f"That change was written up again from an expired one, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it." if again else
+                         f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it."))
             self._record(msg, "no-target")
             return "no-target", None
         if hasattr(self.editor, "check_environment") and (problem := self.editor.check_environment(target["change_id"])):
@@ -1406,11 +1419,11 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 else: self._asked_again(result[key], msg)
                 return "reader-failed" if failed and key == "unsupported" else key
         revised = self._by_code(result["revises"], ("proposed", "needs-details")) if result["revises"] else None
-        photo = next((c["args"].get("photo") for c in json.loads(revised["ops_json"]) if c["op"] == "product.set_photo"),
-                     None) if revised else None  # NB-AV-09: a fill keeps the draft's photo; another one is refused
+        photo = next((c["args"]["photo"] for c in json.loads(revised["ops_json"]) if c["op"] in PHOTO_OPS
+                      and isinstance(c["args"].get("photo"), str)), None) if revised else None  # NB-AV-09, AV1937-01: a fill keeps the draft's photo, whichever place it was heading for; another one is refused
         calls = [c for c in result["ops"] if c["op"] in PHOTO_OPS] if photo else []  # AV0022-04: a new product too
         if len(calls) > 1:  # AV0022-04: one photo, one product; nothing changes until the owner says which
-            return self._reply("A photo can go on one product at a time. Which product is it for?") or "photo-many-ops"
+            return self._reply("One photo can go in one place; say which.") or "photo-many-ops"
         if any(c["args"].setdefault("photo", photo) != photo for c in calls):
             return self._reply("That answer goes with a different photo, so nothing changed. Which product is this photo for?") or "photo-mismatch"
         notes = list(notes)
@@ -1541,7 +1554,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     def _reprepare(self, row):
         ops = json.loads(row['ops_json'])
-        return self.editor.reprepare(row['change_id'], ops) if hasattr(self.editor, 'reprepare') else self.editor.prepare(ops)
+        out = self.editor.reprepare(row['change_id'], ops) if hasattr(self.editor, 'reprepare') else self.editor.prepare(ops)
+        if str(row['reason'] or '').startswith('again:') and out.get('result') == 'ok' and not self._again_same(row, out['draft']):
+            return {'result': 'refused', 'reason': AGAIN_DRIFT.format(code=row['reason'][6:]), 'again-drift': True}  # AV2152-03: never a changed outcome
+        return out
 
     def _row_live_site(self, row):
         doc = self.editor.show(row['change_id'])
@@ -1564,6 +1580,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         elif result == "env-changed":
             again = self._reprepare(row)
             new = self._propose(again["draft"], row["sender"], now) if again["result"] == "ok" else None
+            self._carry_again(row, new)
             self._move(row, "rejected" if row["state"] == "proposed" else "failed", reason="env-changed",
                        **({"replaced_by": new["code"]} if new else {}))
             if new:
@@ -1575,12 +1592,15 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             again = self._reprepare(row)
             if again["result"] == "ok":
                 new = self._propose(again["draft"], row["sender"], now, like=row)
+                self._carry_again(row, new)
                 self._move(row, "rejected", reason="stale", replaced_by=new["code"])
                 self._proposal_reply(new, again["draft"], "The website changed while that was waiting, so I've written it up again. "
                                                           "Please look it over:\n")
             else:
                 self._move(row, "rejected", reason="stale")
-                self._reply("The website changed while that was waiting, and now I can't make this change. Nothing changed. "
+                self._reply("The website changed while that was waiting, and now that change would end differently, so nothing changed. "
+                            f"Send the change again (it was written up again from {q(row['reason'][6:])})." if again.get("again-drift") else
+                            "The website changed while that was waiting, and now I can't make this change. Nothing changed. "
                             + self._plain(_reason(again)))
         else:
             refused = self.settings.get("liveSite") and answers.live_refused(out.get("reason"))  # HASS-LIVE-PLAN-1: the real reason, in words
@@ -1589,6 +1609,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             again = None if refused else self._reprepare(row)
             self._audit("failed", row, "policy" if refused else result if result in ("refused", "busy") else "failed")  # AVB-10
             new = self._propose(again["draft"], row["sender"], now, like=row) if again and again["result"] == "ok" else None
+            self._carry_again(row, new)
             self._move(row, "failed", reason=_reason(out), **({"replaced_by": new["code"]} if new else {}))
             self._problem("error", "save-failed")
             if refused: self._reply(refused)
@@ -1693,6 +1714,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if verb == "photos": return self._photos_to_take()
         if verb == "backlog": return self._backlog_list()  # SKILLS-FW-3
         if verb == "history" and code is not None: return self._history_search(code)
+        if verb == "again": return self._again(msg, now, code)  # AV2152-03
         if verb == "history":
             lines = self._history_lines(HISTORY_MAX)
             self._reply("\n".join(["Here's what we changed lately:"] + lines) if lines else "We haven't made any changes yet.", long_ok=True)
