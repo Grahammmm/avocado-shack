@@ -105,6 +105,19 @@ class FrontTests(unittest.TestCase):
         self.content.store['banner']={**BANNER,'start':'2027-01-07','end':'2027-01-08'} # exactly 60 days ahead
         self.assertNotIsInstance(self.apply('store.set_banner',BANNER), Refused)
 
+    def test_malformed_banner_objects_report_problems_not_exceptions(self):
+        for bad in [{}, {'start':'2026-11-09','end':'2026-11-12'}, {'text':'Come say hello','end':'2026-11-12'},
+                    {'text':'Come say hello','start':'2026-11-09'}, {'link':'visit'}, 'banner', None, []]:
+            self.content.store['banner']=bad
+            problems=[]
+            validate_store(problems,self.content.store)
+            self.assertTrue(any('store.banner' in p or 'banner' in p.lower() for p in problems),(bad,problems))
+        self.content.store['banner']={}
+        problems=[]
+        validate_store(problems,self.content.store)
+        for field in ('text','start','end'):
+            self.assertIn(f"store.banner: missing field '{field}'",problems)
+
     def test_banner_initial_visibility_home_hike_and_404(self):
         baseline=sitegen.render(self.content,today=DAY)
         self.content.store['banner']=BANNER

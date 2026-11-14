@@ -584,19 +584,22 @@ def validate_sections(problems, rows):
 def validate_banner(problems, banner):
     if not _closed_keys(problems, "store.banner", banner, ("text", "start", "end", "link"), ("text", "start", "end")):
         return
-    _text(problems, "store.banner.text", banner["text"], limit=MAX_BANNER)
-    text = banner["text"]
+    # _closed_keys reports missing required fields but still returns True for an object, so read every field with .get.
+    if "text" in banner:
+        _text(problems, "store.banner.text", banner["text"], limit=MAX_BANNER)
+    text = banner.get("text")
     if isinstance(text, str):
         from hass.live_policy import URL, EMAIL, HANDLE
         if len(text) < 3 or sum(c.isalpha() for c in text) < 3 or len(text.splitlines()) != 1:
             problems.append("The banner needs one line with at least 3 letters.")
         if any(rx.search(text) for rx in (URL, EMAIL, HANDLE)):
             problems.append("The banner cannot contain a web address, email or handle.")
-    start, end = iso_day(banner["start"]), iso_day(banner["end"])
-    if start is None or end is None:
-        problems.append("The banner needs real dates YYYY-MM-DD.")
-    elif end < start or (end - start).days > MAX_BANNER_DAYS:
-        problems.append("The banner end must be on or after its start, at most 31 days apart.")
+    if "start" in banner and "end" in banner:  # a missing one is already reported by _closed_keys
+        start, end = iso_day(banner["start"]), iso_day(banner["end"])
+        if start is None or end is None:
+            problems.append("The banner needs real dates YYYY-MM-DD.")
+        elif end < start or (end - start).days > MAX_BANNER_DAYS:
+            problems.append("The banner end must be on or after its start, at most 31 days apart.")
     if "link" in banner and (not isinstance(banner["link"], str) or banner["link"] not in BANNER_LINKS):
         problems.append("The banner link must be one of the shop's own places.")
 
