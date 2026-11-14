@@ -1,0 +1,8 @@
+{
+  "elements": [
+    {"id": "FAKECAT000001", "name": "Pantry", "sortOrder": 1, "modifiedTime": 1794240000000},
+    {"id": "FAKECAT000002", "name": "Fruit", "sortOrder": 2, "modifiedTime": 1794240000000},
+    {"id": "FAKECAT000003", "name": "Dairy", "sortOrder": 3, "modifiedTime": 1794240000000},
+    {"id": "FAKECAT000004", "name": "Vegetables", "sortOrder": 4, "modifiedTime": 1794240000000}
+  ]
+}
