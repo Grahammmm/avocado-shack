@@ -72,7 +72,7 @@ class StoreSectionTest(unittest.TestCase):
     def test_rule_once_and_store_is_last_section_after_route_ideas(self):
         prompt = _prompt({"streetAddress": "6 Example St", "hours": ["Daily"]})
         self.assertEqual(prompt.count(RULE), 1)
-        self.assertLess(prompt.index("\nRoute ideas (id | title):\n"), prompt.index("\n\nStore.\n" + STORE + "\n"))
+        self.assertLess(prompt.index("\nRoute ideas (id | title | place | description):\n"), prompt.index("\n\nStore.\n" + STORE + "\n"))
         self.assertTrue(prompt.endswith('\n\nStore.\n' + STORE + '\n"streetAddress" | "6 Example St"\n"hours" | "Daily"\n' + DEFAULT_ROW + "\n"))
         self.assertEqual(_prompt({"hours": ["Daily"]}).encode("utf-8"), _prompt({"hours": ["Daily"]}).encode("utf-8"))
 
