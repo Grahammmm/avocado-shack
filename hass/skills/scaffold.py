@@ -29,8 +29,12 @@ import contextlib
 import copy
 import json
 import keyword
+import os
 import re
+import shutil
+import stat
 import sys
+import tempfile
 import types
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -595,10 +599,46 @@ def _write(root, spec, written):
         written.append(path)
 
 
-def _rollback(written):
-    for path in reversed(written):
+_IO_FAILURE = "the files could not be written (a local file error); nothing was kept"
+
+
+def _make_dir(path, owned):
+    """Create one directory and remember it as ours; a directory that is already there is the caller's and is never claimed."""
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        if not path.is_dir():
+            raise
+        return
+    owned.append(("dir", path, None))
+
+
+def _install(root, stage, spec, owned):
+    """Link each finished staging file at its final name. os.link refuses an occupied name (a file, a directory, or a
+    link, dangling or not) and never follows or replaces it, so a late arrival is refused, not overwritten."""
+    for rel in spec.paths().values():
+        dest = root / rel
+        for parent in reversed(dest.parents):
+            if parent != root and root in parent.parents:
+                _make_dir(parent, owned)
         try:
-            path.unlink() if path.is_file() else path.rmdir()
+            os.link(stage / rel, dest)
+        except FileExistsError as exc:
+            raise ScaffoldError(f"{rel} already exists; the scaffolder never overwrites") from exc
+        st = os.lstat(dest)
+        owned.append(("file", dest, (st.st_dev, st.st_ino)))
+
+
+def _rollback(owned):
+    """Remove only what this run made: an installed file that is still the same inode, a directory that is now empty."""
+    for kind, path, ident in reversed(owned):
+        try:
+            if kind == "dir":
+                path.rmdir()
+            else:
+                st = os.lstat(path)
+                if stat.S_ISREG(st.st_mode) and (st.st_dev, st.st_ino) == ident:
+                    path.unlink()
         except OSError:
             pass
 
@@ -645,30 +685,41 @@ def _scaffold(ns, out) -> int:
     root = Path(ns.root).resolve() if ns.root else REPO_ROOT
     spec = build_spec(ns, load_registry(), testkit.registry_skills())
     for rel in spec.paths().values():
-        if (root / rel).exists():
+        if os.path.lexists(root / rel):  # a dangling or valid link, a directory or a special file is as occupied as a file
             raise ScaffoldError(f"{rel} already exists; the scaffolder never overwrites")
-    if (root / "hass" / "skills" / f"{spec.module}.py").exists():
+    if os.path.lexists(root / "hass" / "skills" / f"{spec.module}.py"):
         raise ScaffoldError(f"module {spec.module} already exists")
     if ns.dry_run:
         out(f"would write under {root}:")
         for rel in spec.paths().values():
             out(f"  {rel}")
         return 0
-    written: list = []
+    owned: list = []  # what this run made, in order: (kind, path, inode); only these are ever removed
+    stage = None
     try:
-        _write(root, spec, written)  # first pass: empty expectations, to learn the diff, files and preview
-        spec.recorded = record(spec, root / spec.paths()["module"])
+        for missing in reversed([p for p in (root, *root.parents) if not os.path.lexists(p)]):
+            _make_dir(missing, owned)
+        # Everything is built and checked in a private folder under the root; the finished files are then linked in.
+        stage = Path(tempfile.mkdtemp(prefix=".scaffold-", dir=root))
+        _write(stage, spec, [])  # first pass: empty expectations, to learn the diff, files and preview
+        spec.recorded = record(spec, stage / spec.paths()["module"])
         for rel in spec.paths().values():
-            (root / rel).unlink()
-        _write(root, spec, [])
-        problems = check(spec, root)
+            (stage / rel).unlink()
+        _write(stage, spec, [])
+        problems = check(spec, stage)
         if problems:
             raise ScaffoldError("the new skill does not pass its own checks:\n  " + "\n  ".join(problems[:8]))
+        _install(root, stage, spec, owned)
     except Exception as exc:
-        _rollback(written)
+        if stage is not None:
+            shutil.rmtree(stage, ignore_errors=True)
+        _rollback(owned)
         if isinstance(exc, SyntaxError):  # words in --label/--say/--summary that break the generated Python (a quote run, a backslash)
             raise ScaffoldError(f"the generated Python is not valid ({exc.msg}); change the words you gave in --label, --say or --summary") from exc
+        if isinstance(exc, (OSError, NotImplementedError)):  # no raw exception or path text
+            raise ScaffoldError(_IO_FAILURE) from None
         raise
+    shutil.rmtree(stage, ignore_errors=True)
     out(f"scaffolded {spec.name} over {spec.op}: lint clean, {len(case_rows(spec))} rows pass (10 cases, 2 plans)")
     for rel in spec.paths().values():
         out(f"  wrote {rel}")
