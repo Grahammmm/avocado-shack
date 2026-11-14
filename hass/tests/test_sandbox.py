@@ -1,7 +1,9 @@
 """AVB-11 offline acceptance: real private writer, fake live transports, no credentials."""
 
 import json
+import subprocess
 import unittest
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 from hass import editor, host, sandbox, sandbox_editor
@@ -330,6 +332,48 @@ class LiveRoutingTests(pl.ReleaseCase):
         draft = ed.prepare([{'op': HOURS, 'args': {'hours': NEW_HOURS}}])['draft']
         self.assertEqual(ed.apply(draft['change_id'], draft['draft_hash'])['result'], 'applied')
         self.assertEqual(self.push_calls, 1)
+
+    def cli_retry(self, mode, ids, cid):
+        from hass import publish_live
+        cfg = {**mode, 'state': str(self.repo.state), 'release': self.cfg}
+        self.live.environment_guard = None
+        with patch.object(host, 'load_host', return_value=cfg), patch.object(host, 'site_gate', return_value=sandbox.Gate(lambda: mode, lambda: ids)), \
+             patch.object(publish_live, 'LiveEditor', return_value=self.live), patch('builtins.print') as out:
+            code = publish_live.main(['retry', cid, '--host', str(self.hostdir / 'host.json')])
+        return code, json.loads(out.call_args[0][0])
+
+    def stuck_live_change(self, mode, ids):
+        ed = self.adapter(mode)
+        draft = ed.prepare([{'op': HOURS, 'args': {'hours': NEW_HOURS}}])['draft']
+        def lose(cwd, args):
+            if args[0] == 'push': raise subprocess.TimeoutExpired('git', 60)
+        self.fault = lose
+        ed.apply(draft['change_id'], draft['draft_hash'])
+        self.live.reconcile()
+        self.now += timedelta(seconds=120)
+        self.live.reconcile()
+        self.fault = None
+        self.assertEqual(self.entry()['state'], 'not-published')
+        return draft, self.entry()['change_id'], self.push_calls
+
+    def test_cli_retry_holds_when_recorded_target_changed_or_journal_unbound(self):
+        mode = {'approvals': 'live', 'live': ['site']}
+        ids = {('site', 'sandbox'): str(self.repo.wt), ('site', 'live'): 'fixture-remote-main'}
+        draft, cid, pushes = self.stuck_live_change(mode, ids)
+        changed = {**ids, ('site', 'live'): 'another-checkout'}
+        self.assertEqual(self.cli_retry(mode, changed, cid)[1]['result'], 'env-gone')
+        self.assertEqual(self.push_calls, pushes)
+        path = self.repo.state / 'drafts' / f"{draft['change_id']}.json"
+        saved = path.read_text()
+        legacy = json.loads(saved)
+        del legacy['environment']
+        path.write_text(json.dumps(legacy))
+        self.assertEqual(self.cli_retry(mode, ids, cid)[1]['result'], 'env-gone')
+        self.assertEqual(self.push_calls, pushes)
+        path.write_text(saved)
+        code, result = self.cli_retry(mode, ids, cid)
+        self.assertEqual((code, result['result']), (0, 'ok'))
+        self.assertEqual(self.push_calls, pushes + 1)
 
 
 # Reuse the real bare-Git fixture, not all its already-covered inherited tests.

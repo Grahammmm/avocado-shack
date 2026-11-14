@@ -335,7 +335,7 @@ class LiveEditor(conversation.Editor):
 
     def pipeline(self, j):
         guard = getattr(self, 'environment_guard', None)
-        if guard and guard(j['change_id'], recorded=True):
+        if guard and j['kind'] != 'baseline' and guard(j['change_id'], recorded=True):
             self.alert('env-gone')
             return
         # A built record is the durable intent for mirroring and committing locally.
@@ -442,7 +442,7 @@ class LiveEditor(conversation.Editor):
         for j in entries:
             state, facts, fields = j['state'], {}, {}
             guard = getattr(self, 'environment_guard', None)
-            if guard and guard(j['change_id'], recorded=True):
+            if guard and j['kind'] != 'baseline' and guard(j['change_id'], recorded=True):
                 self.alert('env-gone')
                 continue
             if state == 'intent':
@@ -616,6 +616,10 @@ class LiveEditor(conversation.Editor):
                 if len(pending) == 1: cid = pending[0]['change_id']
             j = next((e for e in entries if e['change_id'] == cid), None)
             if not j: return {'result': 'not-found'}
+            guard = getattr(self, 'environment_guard', None)
+            if guard and j['kind'] != 'baseline' and guard(j['change_id'], recorded=True):
+                self.alert('env-gone')
+                return {'result': 'env-gone'}
             if command == 'retry':
                 if j['state'] != 'not-published' or self.stopped(): return {'result': 'held'}
                 if self.landed(j, self.remote()): return {'result': 'already-landed'}
@@ -653,6 +657,9 @@ def main(argv=None):
         if mode['hold'] or 'site' not in mode['live']:
             raise ValueError('sandbox')
         live = LiveEditor(cfg['state'], cfg['release'], Path(args.host).resolve().parent)
+        # Recovery and retry validate each journal's recorded target before any target I/O.
+        from hass.sandbox_editor import SiteEditor
+        live.environment_guard = SiteEditor(cfg['state'], host.site_gate(cfg), lambda: live).check_environment
         out = live.operate(args.command, args.change_id, args.confirm, args.resolution, args.from_remote)
         # CLI never emits paths, sender, owner text or push history.
         out = {k: v for k, v in out.items() if k not in ('pushes', 'latest_attempt')}

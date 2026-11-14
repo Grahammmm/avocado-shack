@@ -394,6 +394,24 @@ def clover_state(cfg) -> str:
     return inspect(cfg["clover"]["tokenFile"]) or "ok"
 
 
+def site_gate(cfg):
+    """The sandbox Gate bound to this host config's recorded target identities."""
+    def source():
+        try: current = load_host(cfg['hostPath'])
+        except HostConfigError: raise sandbox.ModeError('env-changed') from None
+        if current['state'] != cfg['state']: raise sandbox.ModeError('env-changed')
+        return current
+
+    def identities():
+        current = source()
+        ids = {('site', 'sandbox'): _worktree(current), ('local', 'sandbox'): current['state'], ('local', 'live'): current['state']}
+        if current.get('release'):
+            r = current['release']
+            ids[('site', 'live')] = json.dumps([_worktree(current), r['siteCheckout'], r['siteRemote'], 'main'])
+        return ids
+    return sandbox.Gate(source, identities)
+
+
 def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagelog.off) -> Worker:
     worktree = _worktree(cfg)
     build = build or interpreter_builder(cfg, worktree)
@@ -401,25 +419,11 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
         from hass.publish_live import LiveEditor
         from hass.sandbox_editor import SiteEditor
 
-        def source():
-            try: current = load_host(cfg['hostPath'])
-            except HostConfigError: raise sandbox.ModeError('env-changed') from None
-            if current['state'] != cfg['state']: raise sandbox.ModeError('env-changed')
-            return current
-
-        def identities():
-            current = source()
-            ids = {('site', 'sandbox'): _worktree(current), ('local', 'sandbox'): current['state'], ('local', 'live'): current['state']}
-            if current.get('release'):
-                r = current['release']
-                ids[('site', 'live')] = json.dumps([_worktree(current), r['siteCheckout'], r['siteRemote'], 'main'])
-            return ids
-
         def live_factory():
-            current = source()
+            current = site_gate(cfg).source()
             return LiveEditor(cfg['state'], current['release'], current['hostDir'], clock=clock)
 
-        editor = SiteEditor(cfg['state'], sandbox.Gate(source, identities), live_factory, clock=clock)
+        editor = SiteEditor(cfg['state'], site_gate(cfg), live_factory, clock=clock)
     conv = conversation.Conversation(cfg["state"], editor or conversation.Editor(cfg["state"]), build(), clock,
                                      previewer=preview.Previewer(worktree) if cfg["previewer"] else None)
     if hasattr(conv.editor, 'sync_settings'):
