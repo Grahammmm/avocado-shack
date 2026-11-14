@@ -62,6 +62,7 @@ class TillDesk:
 
     def __init__(self, state, settings, read=cache.read):
         self.state, self.config, self._read = state, from_settings(settings), read
+        self.identity = cache.identity_of(self.config)   # only this till's cache is read (RETURN t_54d7c993)
 
     def __repr__(self):
         return "TillDesk(read-only)"
@@ -101,8 +102,10 @@ class TillDesk:
         return (kind, query) if snapshot is not None and reads.names_something(query, snapshot) else None
 
     def _snapshot(self):
+        """(snapshot or None, reachable) for the configured till only. A cache of another environment or merchant, or one with no
+        identity, is refused by cache.read as (None, True), so the answer is NEVER_READ ("I haven't been able to read the till yet")."""
         try:
-            return self._read(self.state)
+            return self._read(self.state, self.identity)
         except Exception:  # noqa: BLE001 - an unreadable cache is "can't reach the till", never a crash of the conversation
             return None, False
 

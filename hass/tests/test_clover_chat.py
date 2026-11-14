@@ -5,6 +5,7 @@ Run: python3 -B -m unittest hass.tests.test_clover_chat
 """
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
 from datetime import timedelta
@@ -21,9 +22,13 @@ from hass.tests.test_conversation import CHAT, OWNER, STRANGER, ConversationTest
 BLOCK = {"environment": "production", "merchantId": "FAKEMERCH0001", "tokenFile": "/nowhere/production-read.token", "liveApproved": False}
 
 
-def seed(state, now=T0):
+def identity(block=BLOCK):
+    return cache.Identity(block["environment"], block["merchantId"])
+
+
+def seed(state, now=T0, block=BLOCK):
     rows, _ = sync.rows(fixture("items.json")["elements"], fixture("item_stocks.json")["elements"])
-    cache.write_items(state, rows, now)
+    cache.write_items(state, rows, now, identity(block))
 
 
 def strict(text):
@@ -91,13 +96,13 @@ class ParseTests(DeskCase):
 
     def test_an_exact_till_name_wins_over_the_other_topic_words(self):
         rows, _ = sync.rows([{"id": "FAKEITEM00009", "name": "Trail mix", "price": 500}], [{"item": {"id": "FAKEITEM00009"}, "quantity": 3}])
-        cache.write_items(self.state, rows, T0)
+        cache.write_items(self.state, rows, T0, identity())
         self.assertEqual(self.desk.parse("how many trail mix"), ("how_many", "trail mix"))
 
     def test_vague_or_short_words_never_ride_on_a_did_you_mean(self):
         rows, _ = sync.rows([{"id": "FAKEITEM00012", "name": "Biscuits", "price": 500}, {"id": "FAKEITEM00013", "name": "Pistachios", "price": 900}],
                             [{"item": {"id": "FAKEITEM00012"}, "quantity": 3}])
-        cache.write_items(self.state, rows, T0)
+        cache.write_items(self.state, rows, T0, identity())
         for text in ("how much is it", "how much does it cost", "how many is that", "how much are pistachios", "is it in stock"):
             with self.subTest(text=text):
                 self.assertIsNone(self.desk.parse(text))
@@ -138,7 +143,7 @@ class AnswerTests(DeskCase):
         self.assertEqual(sync.rows([half], [])[0][0]["stock"], "1.5")
         pears = {"id": "FAKEFALLBACK02", "name": "Fallback pears", "price": 200, "itemStock": {"quantity": 1}}
         rows += sync.rows([pears], [])[0]
-        cache.write_items(self.state, rows, T0)
+        cache.write_items(self.state, rows, T0, identity())
         self.assertEqual(self.ask("how many fallback apples do we have"), "Fallback apples: 7 in the till.")
         self.assertIn("Fallback pears 1", self.ask("low stock"))   # a known low count is reported, not "no count"
         # The numeric guards stay: non-finite and over-long Decimal values are still "no count".
@@ -154,7 +159,7 @@ class AnswerTests(DeskCase):
 
     def test_till_down_says_so_and_nothing_after_24_hours(self):
         seed(self.state)
-        cache.record_failure(self.state, "unreachable", T0 + timedelta(minutes=15))
+        cache.record_failure(self.state, "unreachable", T0 + timedelta(minutes=15), identity=identity())
         self.assertTrue(self.ask("how many hass avocado do we have", T0 + timedelta(minutes=16)).startswith(
             "I can't reach the till right now. The last count I have is from 12:00 pm, so treat it as old. Hass avocado: 40 in the till."))
         old = self.ask("how many hass avocado do we have", T0 + timedelta(hours=25))
@@ -164,7 +169,7 @@ class AnswerTests(DeskCase):
 
     def test_no_pull_yet_a_failing_first_pull_and_an_unsafe_cache(self):
         self.assertEqual(self.desk.answer(("low",), T0), chat.NEVER_READ)
-        cache.record_failure(self.state, "refused-key", T0)
+        cache.record_failure(self.state, "refused-key", T0, identity=identity())
         self.assertEqual(self.desk.answer(("low",), T0), "I can't reach the till right now, so I don't have a count to give you.")
         seed(self.state)
         os.chmod(cache.path_for(self.state), 0o644)
@@ -175,10 +180,32 @@ class AnswerTests(DeskCase):
         rows, _ = sync.rows([{"id": "FAKEITEM00010", "name": "Raw honey (error-free 500g) by api", "sku": "AS-PAN-HONEY-01", "price": 900},
                              {"id": "FAKEITEM00011", "name": "Raw honey (error-free 500g) by api", "sku": "AS-PAN-HONEY-02", "price": 900}],
                             [{"item": {"id": "FAKEITEM00010"}, "quantity": 0}, {"item": {"id": "FAKEITEM00011"}, "quantity": 4}])
-        cache.write_items(self.state, rows, T0)
+        cache.write_items(self.state, rows, T0, identity())
         text = self.ask("how many raw honey (error-free 500g) by api do we have")
         self.assertIn("More than one item is called that: Raw honey (error-free 500g) by api (SKU AS-PAN-HONEY-01): 0 in the till", text)
         self.assertEqual(self.desk.answer(("write",), T0), chat.WRITE_REPLY)
+
+    def test_a_cache_for_another_till_is_never_quoted(self):
+        # RETURN t_54d7c993: the desk reads only the cache of the till host.json names (environment + merchantId).
+        for other in ({**BLOCK, "merchantId": "FAKEMERCH0002"}, {**BLOCK, "environment": "sandbox"}):
+            with self.subTest(other=other["environment"] + "/" + other["merchantId"]):
+                seed(self.state, block=other)
+                self.assertEqual(self.desk.answer(("how_many", "hass avocado"), T0), chat.NEVER_READ)
+                self.assertEqual(self.desk.answer(("low",), T0), chat.NEVER_READ)
+                self.assertTrue(chat.NEVER_READ.startswith("I haven't been able to read the till yet"))
+                self.assertIsNone(self.desk.parse("how many hass avocado"))     # another till's item names claim nothing
+                self.assertEqual(strict(chat.TillDesk(str(self.state), other).answer(("how_many", "hass avocado"), T0)),
+                                 "Hass avocado: 40 in the till.")
+        seed(self.state)
+        self.assertEqual(self.ask("how many hass avocado do we have"), "Hass avocado: 40 in the till.")
+
+    def test_a_legacy_cache_without_identity_is_never_quoted(self):
+        seed(self.state)
+        db = sqlite3.connect(cache.path_for(self.state))
+        with db:
+            db.execute("DELETE FROM meta WHERE key IN ('environment', 'merchantId', 'schema')")
+        db.close()
+        self.assertEqual(self.desk.answer(("how_many", "hass avocado"), T0), chat.NEVER_READ)
 
     def test_the_desk_holds_no_token_and_never_touches_the_network(self):
         self.assertEqual(repr(self.desk), "TillDesk(read-only)")

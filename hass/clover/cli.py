@@ -7,7 +7,8 @@
           (tokenFileOk, tokenAccepted, merchantMatches). It writes nothing.
   sync    pulls every item and stock record into the PRIVATE cache <state>/clover/cache.sqlite3 (folder 0700, file 0600) with paging,
           pacing, retries and a backoff between failing runs. The hass-clover-sync.timer runs it every 15 minutes. --force ignores the backoff.
-  status  the cache facts (as of, item count, last result, failures); no network, no token.
+  status  the cache facts (as of, item count, last result, failures) and the till they belong to (environment, merchantId); no
+          network, no token. A cache of another till, or with no identity, prints result "identity" (HASS-CLOVER-1-FIX-2).
 
 Exit 0 ok (sync: also "skipped" by the backoff), 1 Clover failed or an unexpected error (class name only), 2 not configured, config,
 state, cache or token refused. Output never holds a header, the token, a response body, an item name, a price, a path, or any customer
@@ -128,18 +129,21 @@ FAILURES = ((cl.CloverAuthError, "refused-key"), (cl.RateLimited, "rate-limited"
 
 def sync(args, transport=None, sleep=time.sleep, monotonic=time.monotonic, clock=_now):
     clover, state = _setup(args.host)
+    identity = cache.identity_of(clover)
     now = clock()
     try:
-        before = cache.facts(state)
+        before = cache.facts(state, identity)
     except cache.CacheUnsafe:
         raise Stop({"result": "cache", "problem": "unsafe"}) from None
+    if before is not None and before.get("refused"):
+        before = None          # another till's (or an unidentified) backoff is never obeyed; this till's first pull replaces it
     nxt = cache._parse_iso((before or {}).get("nextAttempt"))
     if not args.force and nxt is not None and now < nxt:
         return {"result": "skipped", "reason": "backoff", "nextAttempt": before["nextAttempt"], "failures": before["failures"]}, 0
     try:
         token = _token(clover)
     except Stop as stop:
-        stop.out["failures"] = cache.record_failure(state, "token", now)
+        stop.out["failures"] = cache.record_failure(state, "token", now, identity=identity)
         raise
     client = _client(clover, token, transport, sleep, monotonic)
     start = monotonic()
@@ -147,20 +151,25 @@ def sync(args, transport=None, sleep=time.sleep, monotonic=time.monotonic, clock
         rows, skipped = syncmod.pull(client)
     except cl.CloverError as exc:
         word = next(w for kind, w in FAILURES if isinstance(exc, kind))
-        failures = cache.record_failure(state, word, clock(), getattr(exc, "retry_after", None))
+        failures = cache.record_failure(state, word, clock(), getattr(exc, "retry_after", None), identity=identity)
         return {"result": word, "status": _status_class(exc), "failures": failures}, 1
     done = clock()
-    cache.write_items(state, rows, done)
+    cache.write_items(state, rows, done, identity)
     return {"result": "ok", "items": len(rows), "counted": sum(1 for r in rows if r["stock"] is not None), "skipped": skipped,
             "asOf": cache._iso(done), "elapsedMs": int(round((monotonic() - start) * 1000))}, 0
 
 
 def status(args):
-    _, state = _setup(args.host)
+    """The cache facts for the configured till, with its identity (environment, merchantId). A cache of another till, or one with no
+    identity, is {"result": "identity"} with the configured identity and what the cache says it holds (cacheEnvironment/cacheMerchantId)."""
+    clover, state = _setup(args.host)
     try:
-        facts = cache.facts(state)
+        facts = cache.facts(state, cache.identity_of(clover))
     except cache.CacheUnsafe:
         raise Stop({"result": "cache", "problem": "unsafe"}) from None
+    if facts and facts.get("refused"):
+        return {"result": facts["refused"], "environment": clover.environment, "merchantId": clover.merchant_id,
+                "cacheEnvironment": facts["environment"], "cacheMerchantId": facts["merchantId"]}, 0
     return ({"result": "ok", **facts} if facts else {"result": "no-cache"}), 0
 
 

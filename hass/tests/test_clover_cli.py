@@ -18,13 +18,21 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from hass.clover import cache, cli
+from hass import voice
+from hass.clover import cache, chat, cli
 from hass.clover import client as cl
 from hass.clover.credential import Token
 from hass.clover.transport import ReplayTransport
 from hass.tests.test_clover_client import FAKE_TOKEN, FakeClock, NoNetwork, fixture
 
 MID = "FAKEMERCH0001"
+MID_B = "FAKEMERCH0002"
+
+
+def ident(environment="production", merchant_id=MID):
+    return cache.Identity(environment, merchant_id)
+
+
 BASE = f"/v3/merchants/{MID}"
 ITEMS = f"{BASE}/items?expand=itemStock,categories,tags&limit=1000&offset=0"
 STOCKS = f"{BASE}/item_stocks?limit=1000&offset=0"
@@ -33,9 +41,11 @@ FORBIDDEN = ("order", "payment", "customer", "employee", "refund", "credit", "ca
 ALLOWED_PATH = re.compile(rf"/v3/merchants/{MID}(?:/items(?:/[A-Za-z0-9]{{1,32}})?|/item_stocks(?:/[A-Za-z0-9]{{1,32}})?|/categories)?")
 
 
-def good():
-    return {BASE: (200, {}, fixture("merchant.json")), f"{BASE}/items?limit=1": (200, {}, {"elements": [fixture("items.json")["elements"][0]]}),
-            ITEMS: (200, {}, fixture("items.json")), STOCKS: (200, {}, fixture("item_stocks.json"))}
+def good(mid=MID):
+    base = f"/v3/merchants/{mid}"
+    return {base: (200, {}, fixture("merchant.json")), f"{base}/items?limit=1": (200, {}, {"elements": [fixture("items.json")["elements"][0]]}),
+            f"{base}/items?expand=itemStock,categories,tags&limit=1000&offset=0": (200, {}, fixture("items.json")),
+            f"{base}/item_stocks?limit=1000&offset=0": (200, {}, fixture("item_stocks.json"))}
 
 
 class CliCase(NoNetwork):
@@ -176,7 +186,8 @@ class SyncTests(CliCase):
         for leak in ("Sunshine", "1250", FAKE_TOKEN):
             self.assertNotIn(leak, text)
         self.assertEqual(self.run_cli("status")[1], {"result": "ok", "asOf": "2026-11-10T20:00:00+00:00", "lastAttempt": "2026-11-10T20:00:00+00:00",
-                                                     "lastResult": "ok", "failures": 0, "nextAttempt": None, "itemCount": 6})
+                                                     "lastResult": "ok", "failures": 0, "nextAttempt": None, "itemCount": 6,
+                                                     "environment": "production", "merchantId": MID})
 
     def test_a_failing_till_keeps_the_old_items_records_the_failure_and_backs_off(self):
         self.run_cli("sync", transport=ReplayTransport(good()))
@@ -186,7 +197,7 @@ class SyncTests(CliCase):
         self.assertEqual((code, doc), (1, {"result": "unreachable", "status": "5xx", "failures": 1}))
         self.assertEqual(len(down.seen), 4)                                 # the first try plus three retries, then gives up
         self.assertEqual(len(self.rows()), 6)                               # the last good pull is kept
-        facts = cache.facts(self.state)
+        facts = cache.facts(self.state, ident())
         self.assertEqual((facts["asOf"], facts["lastResult"], facts["nextAttempt"]), ("2026-11-10T20:00:00+00:00", "unreachable", "2026-11-10T20:30:00+00:00"))
         self.now = T0 + timedelta(minutes=20)
         self.assertEqual(self.run_cli("sync", transport=down)[:2], (0, {"result": "skipped", "reason": "backoff",
@@ -194,10 +205,10 @@ class SyncTests(CliCase):
         self.assertEqual(len(down.seen), 4)                                 # skipped: nothing asked
         code, doc, _ = self.run_cli("sync", "--force", transport=down)
         self.assertEqual((code, doc["failures"]), (1, 2))
-        self.assertEqual(cache.facts(self.state)["nextAttempt"], "2026-11-10T20:50:00+00:00")   # 30 minutes after the second failure
+        self.assertEqual(cache.facts(self.state, ident())["nextAttempt"], "2026-11-10T20:50:00+00:00")   # 30 minutes after the second failure
         self.now = T0 + timedelta(hours=1)
         self.assertEqual(self.run_cli("sync", transport=ReplayTransport(good()))[1]["result"], "ok")
-        self.assertEqual(cache.facts(self.state)["failures"], 0)
+        self.assertEqual(cache.facts(self.state, ident())["failures"], 0)
 
     def test_rate_limit_refused_key_and_token_problems_are_recorded_as_fixed_words(self):
         limited = ReplayTransport({ITEMS: (429, {"Retry-After": "30"}, {})})
@@ -210,7 +221,7 @@ class SyncTests(CliCase):
         self.put_token(0o644)
         code, doc, _ = self.run_cli("sync", transport=ReplayTransport(good()))
         self.assertEqual((code, doc), (2, {"result": "token", "problem": "mode", "tokenFileOk": False, "failures": 3}))
-        self.assertEqual(cache.facts(self.state)["lastResult"], "token")
+        self.assertEqual(cache.facts(self.state, ident())["lastResult"], "token")
 
     def test_the_cache_never_lands_in_the_repository_or_an_unsafe_folder(self):
         self.write_host(state=str(cli.REPO_ROOT / "hass"))
@@ -226,6 +237,79 @@ class SyncTests(CliCase):
 
     def test_status_with_no_cache(self):
         self.assertEqual(self.run_cli("status")[:2], (0, {"result": "no-cache"}))
+
+
+class IdentitySwitchTests(CliCase):
+    """RETURN t_54d7c993: the cache must say which till it holds. After host.json moves to another merchant or environment (same state
+    folder), the old till's counts are never reported as the new one's, and the old till's backoff never delays the new one's first pull."""
+
+    def answer(self, block):
+        return voice.plain(chat.TillDesk(str(self.state), block).answer(("how_many", "hass avocado"), self.now))
+
+    def strip_identity(self):
+        db = sqlite3.connect(cache.path_for(self.state))
+        with db:
+            db.execute("DELETE FROM meta WHERE key IN ('environment', 'merchantId', 'schema')")
+        db.close()
+
+    def test_merchant_a_to_b_never_reports_a_as_b(self):
+        self.assertEqual(self.run_cli("sync", transport=ReplayTransport(good()))[1]["result"], "ok")
+        self.write_host(clover=self.block(merchantId=MID_B))
+        self.assertEqual(self.answer(self.block(merchantId=MID_B)), chat.NEVER_READ)       # before B has ever synced
+        self.assertEqual(self.run_cli("status")[:2], (0, {"result": "identity", "environment": "production", "merchantId": MID_B,
+                                                          "cacheEnvironment": "production", "cacheMerchantId": MID}))
+        transport = ReplayTransport(good(MID_B))
+        code, doc, _ = self.run_cli("sync", transport=transport)
+        self.assertEqual((code, doc["result"], doc["items"]), (0, "ok", 6))
+        self.assertTrue(all(f"/merchants/{MID_B}/" in r.url for r in transport.seen))
+        code, doc, _ = self.run_cli("status")
+        self.assertEqual((code, doc["result"], doc["environment"], doc["merchantId"]), (0, "ok", "production", MID_B))
+        self.assertEqual(self.answer(self.block(merchantId=MID_B)), "Hass avocado: 40 in the till.")
+        self.assertEqual(self.answer(self.block()), chat.NEVER_READ)                       # and A's desk no longer reads B's rows
+
+    def test_sandbox_to_production_never_reports_sandbox_counts(self):
+        self.write_host(clover=self.block(environment="sandbox"))
+        transport = ReplayTransport(good())
+        self.assertEqual(self.run_cli("sync", transport=transport)[1]["result"], "ok")
+        self.assertTrue(transport.seen[0].url.startswith("https://apisandbox.dev.clover.com/"))
+        self.write_host()
+        self.assertEqual(self.answer(self.block()), chat.NEVER_READ)
+        self.assertEqual(self.run_cli("status")[1], {"result": "identity", "environment": "production", "merchantId": MID,
+                                                     "cacheEnvironment": "sandbox", "cacheMerchantId": MID})
+        self.assertEqual(self.answer(self.block(environment="sandbox")), "Hass avocado: 40 in the till.")
+        self.assertEqual(self.run_cli("sync", transport=ReplayTransport(good()))[1]["result"], "ok")
+        self.assertEqual(self.answer(self.block()), "Hass avocado: 40 in the till.")
+        self.assertEqual(self.answer(self.block(environment="sandbox")), chat.NEVER_READ)
+
+    def test_another_tills_backoff_is_not_inherited(self):
+        down = ReplayTransport({ITEMS: (503, {}, {}), STOCKS: (503, {}, {})})
+        self.assertEqual(self.run_cli("sync", transport=down)[:2], (1, {"result": "unreachable", "status": "5xx", "failures": 1}))
+        self.now = T0 + timedelta(minutes=5)                                 # A's backoff runs to 20:15
+        self.assertEqual(self.run_cli("sync", transport=down)[1]["result"], "skipped")
+        self.write_host(clover=self.block(merchantId=MID_B))
+        b_down = ReplayTransport({f"/v3/merchants/{MID_B}/items?expand=itemStock,categories,tags&limit=1000&offset=0": (503, {}, {})})
+        code, doc, _ = self.run_cli("sync", transport=b_down)
+        self.assertEqual((code, doc), (1, {"result": "unreachable", "status": "5xx", "failures": 1}))   # asked, and B's first failure
+        self.assertEqual(len(b_down.seen), 4)
+        self.write_host()                                                    # back to A: B's backoff is not A's either
+        transport = ReplayTransport(good())
+        self.assertEqual(self.run_cli("sync", transport=transport)[1]["result"], "ok")
+        self.assertEqual(len(transport.seen), 2)
+
+    def test_a_legacy_cache_without_identity_is_refused_then_replaced(self):
+        self.assertEqual(self.run_cli("sync", transport=ReplayTransport(good()))[1]["result"], "ok")
+        self.now = T0 + timedelta(minutes=15)
+        self.run_cli("sync", transport=ReplayTransport({ITEMS: (503, {}, {})}))   # a backoff to 20:30 in the same old cache
+        self.strip_identity()
+        self.assertEqual(self.answer(self.block()), chat.NEVER_READ)
+        self.assertEqual(self.run_cli("status")[1], {"result": "identity", "environment": "production", "merchantId": MID,
+                                                     "cacheEnvironment": None, "cacheMerchantId": None})
+        self.now = T0 + timedelta(minutes=20)
+        transport = ReplayTransport(good())
+        self.assertEqual(self.run_cli("sync", transport=transport)[1]["result"], "ok")     # the unidentified backoff is not obeyed
+        self.assertEqual(len(transport.seen), 2)
+        self.assertEqual(self.run_cli("status")[1]["result"], "ok")
+        self.assertEqual(self.answer(self.block()), "Hass avocado: 40 in the till.")
 
 
 class AllowListTests(CliCase):

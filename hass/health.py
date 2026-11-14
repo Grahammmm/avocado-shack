@@ -228,13 +228,16 @@ CLOVER_STALE_HOURS = 2  # HASS-CLOVER-2: the 15-minute sync has not worked for t
 def _clover_checks(cfg, now: datetime, problems: list) -> None:
     """HASS-CLOVER-2 (only with a `clover` block): clover-token = one credential.REASONS word for the token file (lstat only, never
     opened, never the path); clover-sync = the private till cache's last good pull is over CLOVER_STALE_HOURS old, or the pulls are
-    failing (the fixed result word). No cache yet = no problem (the timer may not have run)."""
+    failing (the fixed result word); or, by the word `identity`, the cache is for another environment or merchant than host.json names
+    (or has no identity) and the configured till has not had a good pull yet. No cache yet = no problem (the timer may not have run)."""
     from hass.clover import cache as clover_cache
     from hass.clover.credential import inspect
     if (word := inspect(cfg["clover"].get("tokenFile", ""))): problems.append(_problem("clover-token", word))
-    try: facts = clover_cache.facts(cfg["state"])
+    identity = clover_cache.Identity(cfg["clover"].get("environment"), cfg["clover"].get("merchantId"))
+    try: facts = clover_cache.facts(cfg["state"], identity)
     except (clover_cache.CacheUnsafe, OSError, sqlite3.Error): return problems.append(_problem("clover-sync", "cache not private or unreadable"))
     if not facts: return
+    if facts.get("refused"): return problems.append(_problem("clover-sync", f"{clover_cache.REFUSED}: the cache is not for the configured till"))
     as_of = clover_cache._parse_iso(facts["asOf"])
     if as_of is None or now - as_of > timedelta(hours=CLOVER_STALE_HOURS):
         last = facts["lastResult"] if facts["lastResult"] in clover_cache.RESULTS else "unknown"
