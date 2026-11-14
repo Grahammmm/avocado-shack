@@ -5,7 +5,7 @@
    10-record limit and undo are unchanged.
 2. maker.add is live only so that a new product can name the new maker: its name and place (town the owner said); its link
    (url) stays protected, and a maker on its own is refused.
-3. product.set_photo stays private; product.edit may never change brand, displayBrand or producerKey; a maker's place or link
+3. (product.set_photo went live in HASS-LIVE-ADD-2); product.edit may never change brand, displayBrand or producerKey; a maker's place or link
    on an existing maker, hiding and restoring makers stay private.
 
 Real production ops (hass.ops.load_registry), real live_policy, a throwaway writer repo (PhotoRepo) and, for the end-to-end
@@ -223,12 +223,10 @@ class TheRulesOnRealDrafts(LiveAddBase):
             {"collection": "makers", "key": "old", "before": {"place": "One"}, "after": {"place": "Two"}}]}
         self.assertIn("protected field: makers.place", policy.check(draft))
 
-    def test_3_set_photo_stays_private_and_a_new_product_needs_no_second_picture_request(self):
-        self.assertIn("product.set_photo", policy.PRIVATE)
-        self.assertNotIn("product.set_photo", policy.LIVE)
-        self.assertEqual(policy.PRIVATE["product.set_photo"], "changes a picture")
-        self.assertEqual(self.reasons(op("product.set_photo", id=PID, photo=self.sha, imageAlt=ALT)), ["not live: product.set_photo"])
-        self.assertIn("it changes a picture", policy._plain_reason("not live: product.set_photo"))
+    def test_3_set_photo_is_live_since_add_2_and_a_new_product_needs_no_second_picture_request(self):
+        self.assertNotIn("product.set_photo", policy.PRIVATE)  # HASS-LIVE-ADD-2 moved it to the live table
+        self.assertEqual(policy.LIVE["product.set_photo"], {"id", "photo", "imageAlt"})
+        self.assertEqual(self.reasons(op("product.set_photo", id=PID, photo=self.sha, imageAlt=ALT)), [])
 
     def test_4_brand_display_brand_and_producer_of_an_existing_product_stay_refused(self):
         for field, value in (("brand", "Someone Else"), ("displayBrand", "Someone Else"), ("producerKey", self.maker_key())):
@@ -259,7 +257,7 @@ class TheRulesOnRealDrafts(LiveAddBase):
             self.assertIn("protected field: makers.place", policy.check(draft))
 
     def test_the_new_product_op_text_of_every_private_operation_is_unchanged(self):
-        for name in ("product.set_photo", "maker.hide", "maker.restore", "store.set_phone", "store.set_hours", "route.add", "hike.samples"):
+        for name in ("maker.hide", "maker.restore", "store.set_phone", "store.set_hours", "route.add", "hike.samples"):
             with self.subTest(op=name):
                 self.assertIn(name, policy.PRIVATE)
                 self.assertIn("I've kept it on the list of changes to make by hand", policy.refusal([f"not live: {name}"]))

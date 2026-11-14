@@ -1,7 +1,8 @@
 # Running Hass on AgentOrange (HASS-SVC-1)
 
-Unit templates live in `deploy/hass/`. **Installing, enabling and starting them is G's runbook step, not code.** Nothing in the
-repo installs a unit, starts a timer or restarts a service.
+Unit templates live in `deploy/hass/`. **Installing and enabling them is G's runbook step, not code.** Nothing runs automatically.
+The explicitly attended [runtime release tool](RUNTIME-RELEASE.md) can stop/start the three existing runtime units only;
+it never installs/enables units or changes their definitions. Workers must not run its apply command.
 
 ## What runs
 
