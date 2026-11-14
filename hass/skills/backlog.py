@@ -169,7 +169,7 @@ PAGE_FAQ = Skill(
     ),
     slots=(), rules=("no-new-page",), plan=_plan, edits=(), side_effects=("backlog-row",), preview="none",
     approval="none", live_class="read-only", undo=Undo("forget", "none"),
-    refuse=(("a new page is asked for", NO_FAQ),), cases=_CASES.format("page.faq"), version=1)
+    refuse=(("a new page is asked for", NO_FAQ),), cases=_CASES.format("page.faq"), version=1, status="retired")
 
 SKILLS = (BACKLOG_LOG,)  # front-pack export lives in faq.py
 

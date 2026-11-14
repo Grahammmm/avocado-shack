@@ -355,7 +355,7 @@ PAGE_HOME = Skill(
 PAGE_ABOUT = Skill(
     pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="page.about", label="change the store story",
-    summary="Change the “Come on in” story on the home page, the only About text the site has.",
+    summary="Change the “Come on in” story on the home page. For the separate About template use front.page.",
     triggers=(
         Trigger("change the about text to: Michael has been buying produce for 30 years and knows every grower"),
         Trigger("update our story, we've been open since 2019"),
@@ -376,8 +376,8 @@ PAGE_ABOUT = Skill(
                         "before the first change; undoing the earlier change is the exact way back."),
     refuse=(("the story is more than one paragraph", ONE_PARAGRAPH), ("the story is over 400 characters", ABOUT_MAXED),
             ("a claim word he did not say", CLAIM_REPLY.format(word="certified")), ("a new About page is asked for",
-                                                           "The site has no About page, and adding a page is a design change I can't make by message yet. I wrote it down so it can be built.")),
-    cases=_CASES.format("page.about"), version=1)
+                                                           "Use front.page to fill the separate About template. This skill changes the home page story.")),
+    cases=_CASES.format("page.about"), version=2)
 
 PAGE_PHOTO = Skill(
     pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',

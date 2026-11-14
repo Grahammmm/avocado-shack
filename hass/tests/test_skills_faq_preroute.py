@@ -2,12 +2,17 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from hass import voice
 from hass.skills import backlog
 from hass.skills.backlog import NO_FAQ, PAGE_FAQ, explicit_page_request
 from hass.tests.test_conversation import CHAT, SETTINGS, STRANGER
 from hass.tests.test_skill_dispatch import HIKE_ADD, SkillCase, registry_of, skill_reply
+
+# Keep the old pre-route contract covered for an explicitly active historical fixture.
+# Production PAGE_FAQ is retired; the current registry is exercised by test_front_pages.
+PAGE_FAQ = replace(PAGE_FAQ, status="active")
 
 POSITIVE = ("FAQ", "add an FAQ", "Add a FAQ.", "FAQ: what are your hours? Nine to five", "frequently asked questions",
             "please add a frequently asked questions page", "add a questions page!", "  add a   delivery policy page?  ",

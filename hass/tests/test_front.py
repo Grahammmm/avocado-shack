@@ -163,7 +163,7 @@ class FrontTests(unittest.TestCase):
 
     def test_skills_lint_cases_private_policy_and_claims(self):
         reg=load_skills()
-        self.assertEqual(len(reg.active()),40)
+        self.assertEqual(len(reg.active()),41)
         self.assertEqual(skill_lint(reg,self.ops),[])
         self.assertEqual(skill_lint((FRONT_SECTIONS,FRONT_BANNER),self.ops,repo_root=REPO_ROOT),[])
         for skill in (FRONT_SECTIONS,FRONT_BANNER):

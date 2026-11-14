@@ -50,7 +50,9 @@ server.listen(0,'127.0.0.1',async()=>{
   page.on('request',r=>{if(new URL(r.url()).pathname.startsWith('/api/'))apiAsked.push(r.method()+' '+r.url())});
   page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
   const routes=htmlPages(root).map(f=>'/'+path.relative(root,f).split(path.sep).join('/').replace(/index\.html$/,''));
-  assert.deepEqual(routes.sort(),['/','/404.html','/hike/']);
+  const fixed=['/about/','/getting-here/','/policies/','/faq/'];
+  assert.ok(routes.every(r=>['/','/404.html','/hike/',...fixed].includes(r)),'only fixed pages');
+  assert.ok(['/','/404.html','/hike/'].every(r=>routes.includes(r)),'base pages present');
   for(const route of [...routes,'/hike']){
    await page.goto(base+route);await page.waitForLoadState('networkidle');
    assert.equal(await page.locator(COMMERCE_SELECTORS).count(),0,route+': commerce markup');

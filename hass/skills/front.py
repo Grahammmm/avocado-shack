@@ -125,4 +125,71 @@ FRONT_BANNER = Skill(
     refuse=(("outside link", "The banner cannot contain a web address, email or handle."),
             ("long window", "The banner end must be on or after its start, at most 31 days apart.")),
     cases="hass/tests/fixtures/skills/front/front.banner.jsonl", **_COMMON)
-SKILLS = (FRONT_SECTIONS, FRONT_BANNER)
+def _page_claims(values, ctx):
+    if stop := _claim_stop(values, texts_of(ctx)):
+        raise stop
+
+
+def plan_page(slots, ctx):
+    from hass.ops.front import page_value
+    page = slots.get("template")
+    args = {"page": page, **{k: slots[k] for k in ("title", "intro", "paragraphs") if k in slots}}
+    if slots.get("hide") and len(args) > 1:
+        raise SkillStop("Hide the page, or change its words? I can only do one.", "question")
+    if any(STYLE.search(t) or re.search(r"\b(?:layout|html)\b", t, re.I) for t in texts_of(ctx)):
+        raise _style_stop()
+    _, why = page_value(store_of(ctx) or {}, args, bool(slots.get("hide")))
+    if why:
+        raise SkillStop(why)
+    _page_claims([v for k, v in args.items() if k in ("title", "intro")] + args.get("paragraphs", []), ctx)
+    return [{"op": "store.hide_page" if slots.get("hide") else "store.set_page", "args": args}]
+
+
+def plan_faq(slots, ctx):
+    from hass.ops.front import faq_value
+    if not slots.get("question"):
+        raise SkillStop("What is the question?", "question")
+    remove = bool(slots.get("remove"))
+    if remove and slots.get("answer"):
+        raise SkillStop("Remove the question, or change its answer? I can only do one.", "question")
+    if not remove and not slots.get("answer"):
+        raise SkillStop("What should the answer say?", "question")
+    args = {"question": slots["question"], **({"answer": slots["answer"]} if not remove else {})}
+    _, why = faq_value(store_of(ctx) or {}, args, remove)
+    if why:
+        raise SkillStop(why)
+    if not remove:
+        _page_claims(list(args.values()), ctx)
+    return [{"op": "store.remove_faq" if remove else "store.set_faq", "args": args}]
+
+
+_PAGE_COMMON = {**_COMMON, "logs": ("subjects", "fields")}
+_PAGE_EDITS = tuple(("hass/content/store.json", key) for key in ("pageAbout", "pageGettingHere", "pagePolicies", "pageFaq")) + tuple(
+    ("storefront-mockup/" + path + "/index.html", "page and footer links") for path in ("about", "getting-here", "policies", "faq")) + (
+    ("storefront-mockup/index.html", "footer links"), ("storefront-mockup/hike/index.html", "footer links"))
+FRONT_PAGE = Skill(
+    name="front.page", label="fill or hide a fixed template page",
+    summary="Fill or hide About, Getting here, Our policies or Questions using the owner's words and a fixed template.",
+    triggers=(Trigger("create the Getting here page"), Trigger("fill the About template"), Trigger("hide Our policies page"),
+              Trigger("change a template page", "vague"), Trigger("fill the geting here page", "typo"),
+              Trigger("About template with a title and intro", "multi")),
+    slots=(Slot("template", "enum", True, ask="Which page: About, Getting here, Our policies or Questions?",
+                hint="about, getting-here, policies, faq"), Slot("title", "text", owner_words=True),
+           Slot("intro", "text", owner_words=True), Slot("paragraphs", "text_list", owner_words=True), Slot("hide", "bool")),
+    rules=("four-pages", "templates-only", "no-price", "no-outside-links", "claim-in-his-words", "not-already-true"),
+    plan=plan_page, edits=_PAGE_EDITS, refuse=(("another page", "I can make an About, Getting here, Our policies or Questions page. Which one?"),
+                                              ("outside link", "Page words cannot contain a web address, email or handle.")),
+    cases="hass/tests/fixtures/skills/front/front.page.jsonl", **_PAGE_COMMON)
+FRONT_FAQ = Skill(
+    name="front.faq", label="add, edit or remove a question and answer",
+    summary="Add or edit a question and answer on Questions, or remove a question; the first entry shows the page.",
+    triggers=(Trigger("add an FAQ entry"), Trigger("add a frequently asked question"), Trigger("Questions: Is parking nearby? Ask us at the shop."),
+              Trigger("remove the question about opening hours"), Trigger("change an answer on Questions", "vague"),
+              Trigger("add a frequntly asked queston", "typo"), Trigger("add a question and its answer", "multi")),
+    slots=(Slot("question", "text", True, ask="What is the question?", owner_words=True),
+           Slot("answer", "text", "unless:remove", ask="What should the answer say?", owner_words=True), Slot("remove", "bool")),
+    rules=("twenty-questions", "question-mark", "no-price", "no-outside-links", "claim-in-his-words", "not-already-true"),
+    plan=plan_faq, edits=_PAGE_EDITS, refuse=(("outside link", "Page words cannot contain a web address, email or handle."),
+                                           ("full page", "Questions: at most 20 entries are allowed.")),
+    cases="hass/tests/fixtures/skills/front/front.faq.jsonl", **_PAGE_COMMON)
+SKILLS = (FRONT_SECTIONS, FRONT_BANNER, FRONT_PAGE, FRONT_FAQ)

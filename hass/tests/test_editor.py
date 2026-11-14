@@ -55,6 +55,7 @@ class WriterRepo:
         shutil.copytree(REPO_ROOT / "hass", self.main / "hass", ignore=shutil.ignore_patterns("__pycache__"))
         (self.main / "storefront-mockup" / "hike").mkdir(parents=True)
         for rel in SITE_FILES:
+            (self.main / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO_ROOT / rel, self.main / rel)
         (self.main / "storefront-mockup" / "assets").symlink_to(SITE_DIR / "assets", target_is_directory=True)
         git(tmp, "init", "-q", "-b", "main", str(self.main))
