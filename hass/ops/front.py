@@ -27,6 +27,8 @@ def banner_problem(banner, store, today):
         return why
     if (date.fromisoformat(banner["start"]) - today).days > MAX_BANNER_AHEAD:
         return "The banner cannot start more than 60 days ahead."
+    if date.fromisoformat(banner["end"]) < today:
+        return "That banner would already be over. Which days should it show?"
     page = BANNER_PAGES.get(banner.get("link"))
     if page and not store.get(page, {}).get("shown"):
         return "That page is not shown. Choose a shown page for the banner link."

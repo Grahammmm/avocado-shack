@@ -20,6 +20,7 @@ from hass.ops import OpContext, Refused, load_registry
 from hass.skills import load_skills, router, skill_lint, testkit
 from hass.skills.front import FRONT_BANNER, FRONT_SECTIONS, plan_banner, plan_sections
 from hass.skills.shop import SkillStop
+from hass.tests import test_skills_router as router_fixture  # alias: do not import discoverable TestCase classes
 from hass.tests.test_editor import git
 from hass.tests.test_notice_specials_prestart import Tree, check, sp
 from hass.tests.test_store_ops import StoreTestCase
@@ -73,6 +74,7 @@ class FrontTests(unittest.TestCase):
                      {'text':'Hello {{name}}'}, {'text':'Hello\u200bworld'}, {'text':'Hello example.com'}, {'text':'Hello a@b.com'},
                      {'text':'Hello @someone'}, {'text':'Food $3'}, {'text':'Half-price food'}, {'end':'2026-02-30'},
                      {'end':'2026-11-08'}, {'end':'2026-12-11'}, {'start':'2027-02-01','end':'2027-02-02'},
+                     {'start':'2026-11-01','end':'2026-11-07'},
                      {'link':'https://example.com'}, {'link':'about'}):
             with self.subTest(edit=edit):
                 self.assertIsInstance(self.apply('store.set_banner', {**BANNER,**edit}), Refused)
@@ -162,11 +164,10 @@ class FrontTests(unittest.TestCase):
         self.assertEqual(claims.unstated(draft,'banner: Organic food',{}),[])
 
     def test_real_router_runs_the_front_plans_and_writes_no_backlog_row(self):
-        from hass.tests.test_skills_router import _backlog
         reg = load_skills()
         for name, slots in (('front.sections', {'hide': ['newsletter']}), ('front.banner', {'text': 'Come say hello', 'end': '2026-11-12'})):
             with self.subTest(name=name):
-                store = _backlog()
+                store = router_fixture._backlog()
                 route = router.route({'skill': name, 'slots': slots}, [(name, 3.0)], reg, text='x', store=store)
                 self.assertEqual((route.action, [n for n, _s in route.calls], store.rows()), ('run', [name], []))
 

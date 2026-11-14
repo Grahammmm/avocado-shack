@@ -12,8 +12,17 @@ PARTS = {"market": "market", "food": "market", "the food": "market", "food list"
          "visit": "visit", "visit us": "visit", "visit block": "visit",
          "newsletter": "newsletter", "the newsletter": "newsletter"}
 PART_REPLY = "I can move these parts: the food, why we do it, visit us, newsletter."
-STYLE_REPLY = "I can't change colours, fonts or sizes yet. I wrote it down."
+STYLE_REPLY = "I can't change colours, fonts or sizes yet. I wrote it down."  # the model's refusal sentence (refuse=)
+STYLE_STOP = "Colours, fonts, sizes and new kinds of parts can't be changed by message."  # dispatch adds the backlog line
 STYLE = re.compile(r"\b(?:colou?rs?|fonts?|sizes?|bigger|smaller|red|blue|new (?:part|section))\b", re.I)
+
+
+class _StyleStop(SkillStop):
+    backlog = "other"  # dispatch writes the request down and says so (dispatch.BACKLOG_REASONS)
+
+
+def _style_stop():
+    return _StyleStop(STYLE_STOP)
 
 
 def _parts(values):
@@ -21,7 +30,7 @@ def _parts(values):
     for value in values:
         key = " ".join(value.casefold().split())
         if STYLE.search(key):
-            raise SkillStop(STYLE_REPLY, reason="design")
+            raise _style_stop()
         if key not in PARTS:
             raise SkillStop(PART_REPLY)
         out.append(PARTS[key])
@@ -31,7 +40,7 @@ def _parts(values):
 def plan_sections(slots, ctx):
     store = store_of(ctx) or {}
     if any(STYLE.search(t) for t in texts_of(ctx)):
-        raise SkillStop(STYLE_REPLY, reason="design")
+        raise _style_stop()
     if slots.get("reset"):
         if any(slots.get(k) for k in ("order", "hide", "show")):
             raise SkillStop("Change the home parts, or put them back? I can only do one.", "question")
@@ -41,7 +50,10 @@ def plan_sections(slots, ctx):
     if not any(slots.get(k) for k in ("order", "hide", "show")):
         raise SkillStop("Which home part should I move, hide or show?", "question")
     current = store.get("homeSections", default_sections())
-    order = _parts(slots["order"]) if slots.get("order") else [r["id"] for r in current]
+    named = _parts(slots.get("order") or [])
+    if len(set(named)) != len(named):
+        raise SkillStop("Name each home part exactly once, in the new order.", "question")
+    order = named + [r["id"] for r in current if r["id"] not in named]  # the parts he named first, the rest as they are
     hide, show = _parts(slots.get("hide", [])), _parts(slots.get("show", []))
     if set(hide) & set(show):
         raise SkillStop("Hide or show that part?", "question")
@@ -87,7 +99,8 @@ FRONT_SECTIONS = Skill(
     triggers=(Trigger("hide the newsletter part"), Trigger("move visit us above the food"),
               Trigger("put the home parts back"), Trigger("move the home parts around", "vague"),
               Trigger("hide the newslter part", "typo"), Trigger("hide why we do it and show the newsletter", "multi")),
-    slots=(Slot("order", "text_list", hint="all four: the food, why we do it, visit us, newsletter"),
+    slots=(Slot("order", "text_list", hint="the parts from the top in the new order (the food, why we do it, visit us, "
+                                           "newsletter); parts not named follow in their order"),
            Slot("hide", "text_list"), Slot("show", "text_list"), Slot("reset", "bool")),
     rules=("four-parts", "food-and-visit-stay", "templates-only", "not-already-true"), plan=plan_sections,
     edits=(("hass/content/store.json", "homeSections"), ("storefront-mockup/index.html", "home parts and links"),
