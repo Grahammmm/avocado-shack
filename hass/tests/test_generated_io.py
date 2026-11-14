@@ -45,7 +45,7 @@ class GeneratedIoTests(unittest.TestCase):
     def test_clean_copy_passes_both_tools(self):
         code, out, err = self.sitegen("--check")
         self.assertEqual((code, err), (0, ""), out)
-        self.assertTrue(out.startswith("ok: 6 generated files match hass/content"), out)
+        self.assertTrue(out.startswith("ok: 10 generated files match hass/content"), out)
         code, out, err = self.migration()
         self.assertEqual((code, err), (0, ""), out)
         self.assertTrue(out.endswith("migration check passed\n"), out)
@@ -173,6 +173,6 @@ class GeneratedIoTests(unittest.TestCase):
             link = Path(link_dir) / "repo"
             link.symlink_to(self.root, target_is_directory=True)
             code, out, err = _run(sitegen.main, "--check", "--repo", str(link))
-            self.assertEqual((code, err, out[:32]), (0, "", "ok: 6 generated files match hass"), out)
+            self.assertEqual((code, err, out[:32]), (0, "", "ok: 10 generated files match has"), out)
             rel = SITE + "producers.json"  # the walk excludes the root link itself
             self.assertEqual(sitegen.diff_paths({rel: (self.root / rel).read_bytes()}, link), [])

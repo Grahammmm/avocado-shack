@@ -19,6 +19,8 @@ FILES = {"hass/templates/index.html": SHELL, "hass/templates/hike/index.html": S
          "storefront-mockup/index.html": SHELL, "storefront-mockup/hike/index.html": SHELL,
          "storefront-mockup/style.css": "body{color:black}", "storefront-mockup/hiking.css": "h1{color:black}",
          "storefront-mockup/trail-explorer.css": "p{color:black}"}
+FILES.update({"hass/templates/info/index.html": SHELL,  # AVB-19-B2: the shared template and its four fixed pages
+              **{p: SHELL for p in DESIGN if p.startswith("storefront-mockup/") and p.endswith("/index.html") and p not in FILES}})
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
 OK_CHECKS = {"pageLoaded": True, "noHorizontalOverflow": True, "noPageErrors": True, "noPosts": True,
              "desktop:pageLoaded": True, "desktop:noHorizontalOverflow": True, "desktop:noPageErrors": True,

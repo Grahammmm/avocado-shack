@@ -72,10 +72,11 @@ class Tree:
         for entry in (REPO_ROOT / "storefront-mockup").iterdir():
             if entry.name not in top:
                 os.symlink(entry, site / entry.name)
-        (site / "hike").mkdir()
-        for entry in (REPO_ROOT / "storefront-mockup" / "hike").iterdir():
-            if Path("hike", entry.name) not in generated:
-                os.symlink(entry, site / "hike" / entry.name)
+        for folder in sorted({p.parts[0] for p in generated if len(p.parts) > 1}):  # hike/ and the AVB-19 fixed pages
+            (site / folder).mkdir()
+            for entry in (REPO_ROOT / "storefront-mockup" / folder).iterdir():
+                if Path(folder, entry.name) not in generated:
+                    os.symlink(entry, site / folder / entry.name)
 
     def _remove(self):
         for path in sorted(self.root.rglob("*"), key=lambda p: len(p.parts), reverse=True):

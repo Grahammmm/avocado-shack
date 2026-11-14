@@ -170,7 +170,7 @@ _PAGE_EDITS = tuple(("hass/content/store.json", key) for key in ("pageAbout", "p
 FRONT_PAGE = Skill(
     name="front.page", label="fill or hide a fixed template page",
     summary="Fill or hide About, Getting here, Our policies or Questions using the owner's words and a fixed template.",
-    triggers=(Trigger("create the Getting here page"), Trigger("fill the About template"), Trigger("hide Our policies page"),
+    triggers=(Trigger("create the Getting here page"), Trigger("fill the About template"), Trigger("take Our policies page off the site"),
               Trigger("change a template page", "vague"), Trigger("fill the geting here page", "typo"),
               Trigger("About template with a title and intro", "multi")),
     slots=(Slot("template", "enum", True, ask="Which page: About, Getting here, Our policies or Questions?",

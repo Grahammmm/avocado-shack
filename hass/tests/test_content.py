@@ -20,7 +20,8 @@ from hass.content_model import (
 )
 
 GENERATED = [sitegen.SITE_PREFIX + name for name in (
-    "catalog-products.js", "producers.js", "producers.json", "community.json", "index.html", "hike/index.html")]
+    "catalog-products.js", "producers.js", "producers.json", "community.json", "index.html", "hike/index.html")] + [
+    sitegen.SITE_PREFIX + page + "/index.html" for page in sitegen.INFO_PAGES]  # AVB-19-B2: the four fixed pages
 
 
 def _sha(path):
@@ -43,7 +44,8 @@ class IsolatedRepo:
         shutil.copytree(REPO_ROOT / "hass" / "content", self.root / "hass" / "content")
         shutil.copytree(REPO_ROOT / "hass" / "templates", self.root / "hass" / "templates")
         site = self.root / "storefront-mockup"
-        (site / "hike").mkdir(parents=True)
+        for folder in ("hike", *sitegen.INFO_PAGES):
+            (site / folder).mkdir(parents=True)
         for rel in GENERATED + ["storefront-mockup/held-products.json", "storefront-mockup/hiking-preview.json"]:
             shutil.copyfile(REPO_ROOT / rel, self.root / rel)
         (site / "assets").symlink_to(SITE_DIR / "assets", target_is_directory=True)
