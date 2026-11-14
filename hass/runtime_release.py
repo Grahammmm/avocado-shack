@@ -125,7 +125,7 @@ class Release:
 
     def units(self, active):
         for unit in UNITS:
-            value = self.command("unit-state", ["systemctl", "--user", "is-active", unit], codes=(0, 3))
+            value = self.command("unit-state", ["systemctl", "--user", "is-active", unit], codes=(0,) if active else (3,))
             if value != ("active" if active else "inactive"):
                 raise Refused("unit-state")
         if active:
@@ -137,7 +137,7 @@ class Release:
         self.command("stop", ["systemctl", "--user", "stop", *reversed(UNITS)])
         self.units(False)
         # A timer's triggered service may still be running after the timer stops.
-        state = self.command("health-idle", ["systemctl", "--user", "is-active", "hass-health.service"], codes=(0, 3))
+        state = self.command("health-idle", ["systemctl", "--user", "is-active", "hass-health.service"], codes=(3,))
         if state != "inactive":
             raise Refused("health-not-idle")
 

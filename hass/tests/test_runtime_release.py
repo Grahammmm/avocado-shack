@@ -374,6 +374,21 @@ class PrimitiveTests(unittest.TestCase):
                 obj.command("probe", [sys.executable, script])
             self.assertNotIn("PRIVATE-SENTINEL", str(exc.exception))
 
+    def test_failed_or_inconsistent_unit_query_never_proves_state(self):
+        args = release.arguments(["--target", "a" * 40, "--expected-old", "b" * 40])
+        for active, text, code in ((True, "active", 3), (False, "inactive", 0), (True, "inactive", 0)):
+            with self.subTest(active=active, text=text, code=code), tempfile.TemporaryDirectory() as tmp:
+                script = Path(tmp) / "unit.py"
+                script.write_text(f'import sys\nprint({text!r})\nsys.exit({code})\n')
+                obj = release.Release(args)
+                command = obj.command
+                def query(label, argv, **kwargs):
+                    self.assertEqual(label, "unit-state")  # never invoke a live systemctl
+                    return command(label, [sys.executable, script], **kwargs)
+                obj.command = query
+                with self.assertRaisesRegex(release.Refused, "unit-state"):
+                    obj.units(active)
+
     def test_real_command_timeout(self):
         args = release.arguments(["--target", "a" * 40, "--expected-old", "b" * 40])
         obj = release.Release(args)
