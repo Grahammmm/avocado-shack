@@ -97,6 +97,12 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
         return {"kind": "maker", "key": record.get("key"), "name": after.get("name") or "",
                 "place": after.get("place") or "", "hidden": "hidden" in after}
     if collection == "store":
+        from hass.content_model import INFO_PAGES
+        for path, (key, _) in INFO_PAGES.items():
+            if (record.get("before") or {}).get(key) != after.get(key):
+                value = after.get(key, {})
+                return {"kind": "store", "page": path + "/index.html",
+                        "pageTitle": value["title"] if value.get("shown") else "Nothing here yet"}
         from hass.sitegen import checked_line, phone_text  # lazy: sitegen is the one place the selection words live
         before = record.get("before") or {}
         from hass.content_model import iso_day, default_sections

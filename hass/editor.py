@@ -24,9 +24,11 @@ from hass.ops import (  # noqa: E402
 CONTENT_PATHS = tuple(f"hass/content/{n}.json" for n in ("products", "makers", "community", "store"))
 HOME_PARTS = tuple(f"hass/templates/home/{n}.html" for n in (  # AVB-19-B1: the home/hike page parts (sitegen.front_parts)
     "banner", "footer", "hike-footer", "hike-nav", "market", "nav", "newsletter", "our-way", "strip", "visit"))
-REVISION_PATHS = tuple(sorted(CONTENT_PATHS + HOME_PARTS + ("hass/templates/index.html", "hass/templates/hike/index.html")))
+INFO_PATHS = tuple(page + "/index.html" for page in sitegen.INFO_PAGES)
+REVISION_PATHS = tuple(sorted(CONTENT_PATHS + HOME_PARTS + ("hass/templates/index.html", "hass/templates/hike/index.html",
+                                                        "hass/templates/info/index.html")))
 GENERATED_PATHS = tuple(sitegen.SITE_PREFIX + n for n in (
-    "catalog-products.js", "producers.js", "producers.json", "community.json", "index.html", "hike/index.html"))
+    "catalog-products.js", "producers.js", "producers.json", "community.json", "index.html", "hike/index.html") + INFO_PATHS)
 OWNED_PATHS = CONTENT_PATHS + GENERATED_PATHS
 COLLECTION_FILE = dict(products="products", makers="makers", events="community", routeIdeas="community", store="store", club="community")
 MAX_REQUEST, MAX_OPS = 64 * 1024, 20

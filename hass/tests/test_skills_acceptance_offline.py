@@ -455,6 +455,8 @@ FIRST_SENTENCES = {
     'answer.site': 'what time do we close saturday?',
     'backlog.log': 'can you order more eggs from the farm',
     'front.banner': 'banner: Come say hello from tomorrow through Sunday',
+    'front.faq': 'Questions: Is parking nearby? Yes, right behind the shop.',
+    'front.page': 'create the Getting here page: Parking is right behind the shop.',
     'front.sections': 'hide the newsletter part',
     'hike.add': 'add a hike Saturday at 8am, Mill Creek trailhead, easy, bring water',
     'hike.cancel': 'cancel the Point Buchon hike, rained out - we will pick a new date soon',
@@ -472,7 +474,6 @@ FIRST_SENTENCES = {
     'maker.hide': 'we stopped carrying Etto',
     'maker.restore': 'Etto is back',
     'page.about': 'change the about text to: Michael has been buying produce for 30 years and knows every grower',
-    'page.faq': 'add an FAQ',
     'page.home': 'change the headline to Fresh from the coast. Picked this week.',
     'page.photo': "use this for the home page, it's the front of the shop",
     'report.shelf': 'morning report',
@@ -513,7 +514,7 @@ class PrimaryCorpus(Base):
 
     def coverage_problems(self, rows):
         names = [r["skill"] for r in self.primaries(rows)]
-        reg = self.registry.skills
+        reg = {s.name: s for s in self.registry.active()}  # a retired skill (page.faq, AVB-19-B2) keeps its name, not a row
         problems = [f"missing {n}" for n in sorted(set(reg) - set(names))] + [f"unknown {n}" for n in sorted(set(names) - set(reg))]
         problems += [f"duplicate {n}" for n in sorted({n for n in names if names.count(n) > 1})]
         problems += [f"stale {r['skill']}" for r in self.primaries(rows) if r["skill"] in reg and r["skill_version"] != reg[r["skill"]].version]
@@ -521,7 +522,7 @@ class PrimaryCorpus(Base):
 
     def test_primary_set_equals_registry_once(self):
         self.assertEqual(self.coverage_problems(self.rows), [])
-        self.assertEqual(set(FIRST_SENTENCES), set(self.registry.skills))  # a skill added later needs its sentence here too
+        self.assertEqual(set(FIRST_SENTENCES), {s.name for s in self.registry.active()})  # a skill added later needs its sentence here too
         without = [r for r in self.rows if r["id"] != "primary-shop-hours"]
         self.assertEqual(self.coverage_problems(without), ["missing shop.hours"])
         stale = [dict(r, skill_version=2) if r["id"] == "primary-shop-hours" else r for r in self.rows]

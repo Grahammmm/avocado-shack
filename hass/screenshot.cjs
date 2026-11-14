@@ -10,6 +10,7 @@
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
 if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
 const base=process.env.PREVIEW_URL,target=JSON.parse(process.env.TARGET||'{}'),out=process.env.OUT;
+if(target.kind==='store'&&target.page&&!['about/index.html','getting-here/index.html','policies/index.html','faq/index.html'].includes(target.page)){console.error('bad template page');process.exit(1);}
 // AV1104-10 operator design preview: {kind:'design',page:'home'|'hike'}; the page is a fixed enum checked before any navigation.
 if(target.kind==='design'&&!['home','hike'].includes(target.page)){console.error('bad design page');process.exit(1);}
 // AVB-19: a preview-only browser day (a future banner start), checked before the browser library is even loaded.
@@ -35,6 +36,11 @@ const allowed=req=>{
     if(target.kind==='design'){  // pageLoaded: HTTP 200 and the page's own heading visible; noHorizontalOverflow at this viewport
       const hike=target.page==='hike',reply=await page.goto(base+(hike?'/hike':'/'),{waitUntil:'networkidle'});
       checks.pageLoaded=reply!==null&&reply.status()===200&&await page.locator(hike?'main h1':'.hero h1').first().isVisible();
+      checks.noHorizontalOverflow=await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth);
+    }else if(target.kind==='store'&&target.page){
+      const reply=await page.goto(base+'/'+target.page,{waitUntil:'networkidle'});
+      checks.pageLoaded=reply!==null&&reply.status()===200&&await page.locator('main h1').isVisible();
+      checks.pageTitle=await page.locator('main h1').textContent()===target.pageTitle;
       checks.noHorizontalOverflow=await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth);
     }else if(target.kind==='event'){
       await page.goto(base+'/hike',{waitUntil:'networkidle'});

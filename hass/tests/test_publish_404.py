@@ -72,12 +72,12 @@ class Published404(unittest.TestCase):
         self.assertNotIn("404.html", sitegen.TEMPLATES)
         self.assertFalse((REPO_ROOT / "storefront-mockup" / "404.html").exists())
 
-    def test_check_still_reports_six_generated_files(self):
+    def test_check_reports_every_generated_file(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = sitegen.main(["--check"])
         self.assertEqual(code, 0)
-        self.assertIn("ok: 6 generated files", out.getvalue())
+        self.assertIn("ok: 10 generated files", out.getvalue())  # six, plus the four fixed template pages (AVB-19-B2)
 
     def test_a_slot_in_the_page_is_refused(self):
         with self.assertRaises(sitegen.ContentError):

@@ -74,10 +74,10 @@ registered skill; skill coverage is enforced there, not here. `_selftest/` is th
 
 ## Primary corpus (AV1109-17)
 
-`messages.jsonl` holds one `tag=primary` row for every registered skill (40 at this commit, derived from `load_skills()` by
-`PrimaryCorpus`, never hard-coded) plus five `tag=photo` companions: 45 rows, 30 `expected/` goldens. The first owner text of each
+`messages.jsonl` holds one `tag=primary` row for every active registered skill (41 at this commit, derived from `load_skills()` by
+`PrimaryCorpus`, never hard-coded; the retired `page.faq` keeps its name but has no row) plus five `tag=photo` companions: 46 rows, 32 `expected/` goldens. The first owner text of each
 primary row is the first numbered example sentence of the skill's catalog entry (SKILLS-SPEC section 3; specials.md for the five
-specials skills; social.md for social.maker; skills/front.md for front.sections and front.banner), tags such as `(p)` removed. **This is a partial acceptance run (Primary only, not the
+specials skills; social.md for social.maker; skills/front.md for the four front skills), tags such as `(p)` removed. **This is a partial acceptance run (Primary only, not the
 historical 72 rows) and a passing run is not human acceptance.** The builder read each golden against the typed plan and the skill's
 declared edits and Undo sentence (for example hike.add keeps a cancelled event, page.photo keeps its hero file, stock.restock changes
 `products.json` only); that is a builder check, not a G or owner review.

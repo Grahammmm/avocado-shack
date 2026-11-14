@@ -64,7 +64,8 @@ EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 PHONE_DIGITS = 10  # US number: area code, exchange, line; LIMITS.md cites it
 PHONE_RE = re.compile(rf"[2-9][0-9]{{2}}[2-9][0-9]{{{PHONE_DIGITS - 4}}}", re.ASCII)
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone", "specials", "homeSections", "banner")  # all absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone", "specials", "homeSections", "banner",
+                  "pageAbout", "pageGettingHere", "pagePolicies", "pageFaq")  # all absent by default
 # AVO-SPECIALS-1: store.specials, a list of weekly specials (absent = none; the saved files do not change).
 SPECIAL_FIELDS = ("id", "title", "deal", "start", "end", "order")
 SPECIAL_OPTIONAL = ("product", "picture")  # product: an existing product id; picture: true reuses that product's picture
@@ -604,6 +605,62 @@ def validate_banner(problems, banner):
         problems.append("The banner link must be one of the shop's own places.")
 
 
+# Fixed routes only. Each optional value validates independently, including after selective undo.
+INFO_PAGES = {"about": ("pageAbout", "About"), "getting-here": ("pageGettingHere", "Getting here"),
+              "policies": ("pagePolicies", "Our policies"), "faq": ("pageFaq", "Questions")}
+
+
+def front_text(problems, where, value, low, high):
+    _text(problems, where, value, allow_empty=low == 0, limit=high)
+    if isinstance(value, str):
+        from hass.live_policy import URL, EMAIL, HANDLE
+        from hass.skills.shop import price_problem
+        if len(value) < low or len(value.splitlines()) > 1:
+            problems.append(f"{where}: needs one line of {low} to {high} characters")
+        if any(rx.search(value) for rx in (URL, EMAIL, HANDLE)):
+            problems.append("Page words cannot contain a web address, email or handle.")
+        if why := price_problem(value):
+            problems.append(why)
+
+
+def validate_page(problems, key, page):
+    faq = key == "pageFaq"
+    required = ("shown", "title", "entries") if faq else ("shown", "title", "intro", "paragraphs")
+    if not _closed_keys(problems, f"store.{key}", page, required + (("intro",) if faq else ()), required):
+        return
+    if type(page.get("shown")) is not bool:
+        problems.append(f"store.{key}.shown: must be true or false")
+    front_text(problems, f"store.{key}.title", page.get("title"), 3, 60)
+    if not faq or "intro" in page:
+        front_text(problems, f"store.{key}.intro", page.get("intro"), 0, 300)
+    if faq:
+        entries = page.get("entries")
+        if not isinstance(entries, list) or len(entries) > 20:
+            problems.append("Questions: at most 20 entries are allowed.")
+            return
+        seen = set()
+        for entry in entries:
+            if not _closed_keys(problems, "Questions entry", entry, ("q", "a"), ("q", "a")):
+                continue
+            q = entry.get("q")
+            front_text(problems, "Question", q, 5, 120)
+            front_text(problems, "Answer", entry.get("a"), 2, 600)
+            if isinstance(q, str):
+                folded = " ".join(q.casefold().split())
+                if not q.endswith("?"):
+                    problems.append("A question must end in ?")
+                if folded in seen:
+                    problems.append("That question occurs more than once.")
+                seen.add(folded)
+    else:
+        paragraphs = page.get("paragraphs")
+        if not isinstance(paragraphs, list) or not 1 <= len(paragraphs) <= 6:
+            problems.append("A page needs 1 to 6 paragraphs.")
+            return
+        for paragraph in paragraphs:
+            front_text(problems, "Page paragraph", paragraph, 20, 600)
+
+
 def validate_store(problems, store, today: date | None = None, product_ids=None):
     if not _closed_keys(problems, "store", store, STORE_FIELDS + STORE_OPTIONAL, STORE_FIELDS):
         return
@@ -653,6 +710,9 @@ def validate_store(problems, store, today: date | None = None, product_ids=None)
                 date.fromisoformat(notice["until"] if DATE_RE.fullmatch(str(notice["until"])) else "")
             except ValueError:
                 problems.append("store.notice.until: must be a real date YYYY-MM-DD")
+    for key, _ in INFO_PAGES.values():
+        if key in store:
+            validate_page(problems, key, store[key])
     if "homeSections" in store:
         validate_sections(problems, store["homeSections"])
     if "banner" in store:

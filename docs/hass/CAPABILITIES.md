@@ -30,7 +30,7 @@ Rebuild: `python3 hass/capabilities.py`. Check: `python3 hass/capabilities.py --
 | change a maker or their about text (maker.edit) | Change a maker's name, town, about text or website link; a new story replaces the whole text. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
 | stop carrying a maker (maker.hide) | Hide a maker, and with your yes their products too; nothing is deleted. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
 | bring a maker back (maker.restore) | Bring a hidden maker back; their products come back one by one when you ask. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
-| change the store story (page.about) | Change the “Come on in” story on the home page, the only About text the site has. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
+| change the store story (page.about) | Change the “Come on in” story on the home page, not the separate About page. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
 | change the home page headline or intro (page.home) | Change the two-line headline or the intro on the home page, or put the shop's own words back. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
 | change the home page photo (page.photo) | Use the photo he sent as the home page photo, or put the shop's own photo back. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
 | change the phone number or the address (shop.contact) | Change or remove the store phone number, or change the street address and town. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
@@ -51,8 +51,10 @@ Rebuild: `python3 hass/capabilities.py`. Check: `python3 hass/capabilities.py --
 | Skill | What it does | Gate, private test and status | Changing targets | Declared log fields |
 |---|---|---|---|---|
 | put a dated banner across the top (front.banner) | Schedule one short line across the top of home and hike, with an optional own-site link. | A1: your yes first; private preview only; private only; registered; owners | site | fields |
+| add, edit or remove a question and answer (front.faq) | Add or edit a question and answer on Questions, or remove a question; the first entry shows the page. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
+| fill or hide a fixed template page (front.page) | Fill or hide About, Getting here, Our policies or Questions using the owner's words and a fixed template. | A1: your yes first; private preview only; private only; registered; owners | site | subjects, fields |
 | move or hide a home page part (front.sections) | Reorder the four home parts, hide why we do it or newsletter, or put the original order back. | A1: your yes first; private preview only; private only; registered; owners | site | fields |
-| add a questions page (page.faq) | The site has no FAQ page and a new page is a design change: say so and write it down. | A0: no yes needed; no target changes; writes the request down, not the change; registered; owners | none | none |
+| add a questions page (page.faq) | The site has no FAQ page and a new page is a design change: say so and write it down. | A0: no yes needed; no target changes; writes the request down, not the change; retired; owners | none | none |
 
 ## Till
 

@@ -214,6 +214,8 @@ PRIVATE = {
     "store.set_headline": "changes the home page words", "store.set_intro": "changes the home page words",
     "store.set_sections": "changes the home page parts", "store.reset_sections": "changes the home page parts",
     "store.set_banner": "changes the dated top banner", "store.clear_banner": "changes the dated top banner",
+    "store.set_page": "changes a template page", "store.hide_page": "hides a template page",
+    "store.set_faq": "changes the Questions page", "store.remove_faq": "changes the Questions page",
     "store.set_story": "changes the home page words",
     "store.set_home_image": "changes the home page photo", "store.clear_home_image": "changes the home page photo",
     "route.add": "is trail details", "route.edit": "is trail details", "route.hide": "is trail details", "route.restore": "is trail details",

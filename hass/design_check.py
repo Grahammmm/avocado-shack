@@ -27,6 +27,9 @@ DESIGN = ("hass/templates/index.html", "hass/templates/hike/index.html", "storef
 PAIRS = (("hass/templates/index.html", "storefront-mockup/index.html"),
          ("hass/templates/hike/index.html", "storefront-mockup/hike/index.html"))
 PLAIN_MODE = "100644"  # anything else (symlink, submodule, executable) is outside
+INFO_PATHS = tuple("storefront-mockup/" + page + "/index.html" for page in ("about", "getting-here", "policies", "faq"))
+DESIGN += ("hass/templates/info/index.html",) + INFO_PATHS
+PAIRS += tuple(("hass/templates/info/index.html", path) for path in INFO_PATHS)
 
 
 class Usage(Exception):

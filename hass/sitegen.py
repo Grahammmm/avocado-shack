@@ -38,7 +38,7 @@ if __package__ in (None, ""):
 
 from hass.content_model import (  # noqa: E402
     DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
-    checked_on, iso_day, load_and_validate, shop_today,
+    checked_on, iso_day, load_and_validate, shop_today, INFO_PAGES,
 )
 from hass import specials  # noqa: E402
 from hass.notice import BANNER_JS, banner_link, NOTICE_JS, slots as notice_slots, stale_paths  # noqa: E402,F401
@@ -236,6 +236,23 @@ def front_banner(store, template_dir, rel, day):
     return {"front.bannerHtml": strip, "front.bannerScript": BANNER_JS if banner else ""}
 
 
+def info_footer(store, text):
+    links = "".join(f'<a href="/{page}/">{html.escape(value["title"], quote=False)}</a>'
+                    for page, (key, _) in INFO_PAGES.items() if (value := store.get(key, {})).get("shown"))
+    return text.replace('<button data-policy>', links + '<button data-policy>') if links else text
+
+
+def info_slots(value):
+    if not value.get("shown"):
+        return {"info.robots": '<meta name="robots" content="noindex">', "info.title": "Nothing here yet",
+                "info.wordsHtml": '<p>Nothing here yet.</p><p><a href="/">Back home</a></p>'}
+    esc = lambda text: html.escape(text, quote=False)
+    words = (f'<p>{esc(value["intro"])}</p>' if value.get("intro") else "")
+    words += "".join(f'<p>{esc(p)}</p>' for p in value.get("paragraphs", []))
+    words += "".join(f'<details><summary>{esc(e["q"])}</summary><p>{esc(e["a"])}</p></details>' for e in value.get("entries", []))
+    return {"info.robots": "", "info.title": esc(value["title"]), "info.wordsHtml": words}
+
+
 def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, notice_today=None,
            specials_today=None, banner_today=None) -> dict[str, bytes]:
     """Return {repo-relative path: bytes} for every generated site file. ``today`` (default: the shop's current date)
@@ -254,7 +271,15 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, n
         for key, value in front_parts(content.store, template_dir, rel).items():
             text = text.replace("{{" + key + "}}", value)
         page = {**slots, **front_banner(content.store, template_dir, rel, banner_today or today)}
-        files[SITE_PREFIX + rel] = render_template(text, page).encode("utf-8")
+        files[SITE_PREFIX + rel] = info_footer(content.store, render_template(text, page)).encode("utf-8")
+    for path, (key, _) in INFO_PAGES.items():
+        text = (Path(template_dir) / "info/index.html").read_text(encoding="utf-8")
+        value = content.store.get(key, {})
+        page_store = content.store if value.get("shown") else {}
+        for name, part in front_parts(page_store, template_dir, path).items():
+            text = text.replace("{{" + name + "}}", part)
+        page = {**info_slots(value), **front_banner(page_store, template_dir, path, banner_today or today)}
+        files[SITE_PREFIX + path + "/index.html"] = info_footer(page_store, render_template(text, page)).encode("utf-8")
     return files
 
 
@@ -380,6 +405,9 @@ def publish_files(content: Content, repo: Path, template_dir: Path | None = None
     site = repo / SITE_PREFIX
     rendered = render(content, template_dir or repo / "hass" / "templates", today=today)
     files = {rel: rendered[SITE_PREFIX + rel] for rel in PUBLISH_GENERATED}
+    for path, (key, _) in INFO_PAGES.items():
+        if content.store.get(key, {}).get("shown"):
+            files[path + "/index.html"] = rendered[SITE_PREFIX + path + "/index.html"]
     for rel in NO_CLUB_SERVICE_PAGES:
         files[rel] = _mark_no_club_service(rel, files[rel])
     files["community.json"] = _public_community_json(content)

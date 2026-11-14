@@ -348,6 +348,7 @@ class LiveEditor(conversation.Editor):
                 collections = {r['collection'] for r in record.get('records', [])}
                 allowed = {'community.json'}
                 if collections & {'products', 'store'}: allowed |= {'index.html', 'catalog-products.js', 'hike/index.html'}
+                if 'store' in collections: allowed |= {'about/index.html', 'getting-here/index.html', 'policies/index.html', 'faq/index.html'}
                 if 'makers' in collections: allowed |= {'index.html', 'producers.js', 'catalog-products.js'}
                 if collections & {'events', 'routeIdeas', 'club'}: allowed |= {'index.html', 'hike/index.html'}
                 for touched in record.get('records', []):

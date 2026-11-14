@@ -1,0 +1,30 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": {
+        "entries": [
+          {
+            "a": "Yes, right behind the shop.",
+            "q": "Is parking nearby?"
+          }
+        ],
+        "shown": true,
+        "title": "Questions"
+      },
+      "file": "hass/content/store.json",
+      "path": "pageFaq"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/faq/index.html",
+    "storefront-mockup/hike/index.html",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}
