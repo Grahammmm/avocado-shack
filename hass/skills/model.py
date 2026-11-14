@@ -247,7 +247,7 @@ def lint_plan_output(skill, ops, ops_registry) -> list:
 
 
 def lint_cases(skill, repo_root) -> list:
-    """Case file checks (spec 2.9 level 1): at least 10 rows, 2 refusals, 1 undo, version matches. A missing file is one problem."""
+    """Case file checks (spec 2.9 level 1): at least 10 rows, 2 refusals, 1 undo (not for a read-only skill), version matches. A missing file is one problem."""
     import json
     path = Path(repo_root) / skill.cases
     try:
@@ -269,7 +269,8 @@ def lint_cases(skill, repo_root) -> list:
         out.append(f"{skill.name}: cases: at least {MIN_CASE_ROWS} rows")
     if sum(1 for r in rows if r.get("kind") == "refuse") < MIN_REFUSAL_ROWS:
         out.append(f"{skill.name}: cases: at least {MIN_REFUSAL_ROWS} refusal rows")
-    if sum(1 for r in rows if r.get("undo") is True or r.get("kind") == "undo") < MIN_UNDO_ROWS:
+    # A read-only skill (approval 'none') changes nothing, so it has nothing to undo and needs no undo row.
+    if skill.approval != "none" and sum(1 for r in rows if r.get("undo") is True or r.get("kind") == "undo") < MIN_UNDO_ROWS:
         out.append(f"{skill.name}: cases: at least {MIN_UNDO_ROWS} undo row")
     if any(r.get("version") != skill.version for r in rows):
         out.append(f"{skill.name}: cases: rows were written for another version")
