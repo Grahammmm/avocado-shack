@@ -22,7 +22,7 @@ name: check
 #   hass/content/, hass/templates/ or package-lock.json; a hass module reached by more than half of the
 #   test modules (a shared library); any hass/ path no test reaches; or any unmapped path outside the
 #   known areas (docs, planning, reports, branding, commerce, storefront-mockup, inventory-intake, *.md).
-#   It also runs FULL when the selection would take longer than a full shard.
+#   It also runs FULL above 480 seconds of measured selected-test time (the affected-tier budget).
 #   The site and commerce checks run on every event.
 on:
   pull_request:

@@ -190,6 +190,7 @@ LIVE = {
     "specials.add": None, "specials.edit": None, "specials.remove": None, "specials.clear_expired": None,
     "hike.create": None, "hike.update": None, "hike.cancel": None,           # sign-up off only (see _signup)
     "maker.edit": {"key", "story"},                                          # the maker's about text only
+    "product.set_photo": {"id", "photo", "imageAlt"},                        # HASS-LIVE-ADD-2: a picture of a stored photo, house style
     # HASS-LIVE-ADD-1 (G, 2026-11-09): a NEW product may go live, with the brand, display brand and producer key the owner said in
     # this request (see unsaid) and with the picture that comes with it (the op needs one; the shop has no placeholder). Never the
     # `image` argument (an existing picture file). The brand fields pass the field gate only inside this op (see NEW_RECORD_FIELDS).
@@ -205,7 +206,6 @@ NEW_RECORD_FIELDS = {"products": ("product.add", {"brand", "displayBrand", "prod
 LONE_MAKER = "maker.add without a new product"
 # Why an operation stays private. Plain words, finishing "it ..."; an operation in neither table gets the general line.
 PRIVATE = {
-    "product.set_photo": "changes a picture",
     "maker.hide": "takes a maker off the website", "maker.restore": "brings a maker back onto the website",
     "hike.repeat": "copies a hike", "hike.complete": "records how a hike went", "hike.recap": "records how a hike went",
     "hike.samples": "changes the sample hikes",
