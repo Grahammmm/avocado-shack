@@ -190,8 +190,10 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(len(store.rows()), 1)
 
     def test_a_backlog_skill_uses_its_own_fixed_reply(self):
+        import dataclasses
         from hass.skills import backlog as b
-        reg = model.Registry({**SKILLS.skills, "page.faq": b.PAGE_FAQ, "backlog.log": b.BACKLOG_LOG})
+        # page.faq is retired (AVB-19-B2); an explicitly active copy keeps the fixed-reply contract covered
+        reg = model.Registry({**SKILLS.skills, "page.faq": dataclasses.replace(b.PAGE_FAQ, status="active"), "backlog.log": b.BACKLOG_LOG})
         store = _backlog()
         ranked = router.candidates("add an FAQ", skills=reg)
         result = router.route({"skill": "page.faq", "slots": {}}, ranked, reg, text="add an FAQ", store=store)

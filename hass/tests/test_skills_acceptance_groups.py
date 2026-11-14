@@ -63,7 +63,7 @@ class Groups(unittest.TestCase):
         return [o["op"] for o in json.loads(sess.drafts()[-1]["ops_json"])]
 
     def test_exact_forty_exclusive_groups(self):
-        names = set(self.registry.skills)
+        names = {s.name for s in self.registry.active()}  # the retired page.faq (AVB-19-B2) keeps its name, not a primary row
         self.assertEqual(group_problems(self.rows, names), [])
         self.assertEqual(collections.Counter(r["tag"] for r in self.new), collections.Counter(WANT))
         self.assertEqual(len(self.new), 40)
