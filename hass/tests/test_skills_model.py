@@ -69,6 +69,30 @@ class RegistryTests(unittest.TestCase):
             skills.load_skills()
 
 
+class UndoRowLintTests(unittest.TestCase):
+    """lint_cases asks for an undo row only from a skill that can change something."""
+
+    def _problems(self, skill):
+        import json, tempfile
+        from pathlib import Path
+        rows = [{"kind": "clean", "version": 1}] * 8 + [{"kind": "refuse", "version": 1}] * 2  # no undo row
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / skill.cases
+            path.parent.mkdir(parents=True)
+            path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+            return model.lint_cases(skill, tmp)
+
+    def test_read_only_skill_without_an_undo_row_passes(self):
+        ro = _skill(name="stock.look", approval="none", live_class="read-only", preview="none", edits=(),
+                    undo=model.Undo("none", "none"), cases="hass/tests/fixtures/skills/inventory/stock.look.jsonl")
+        self.assertEqual(self._problems(ro), [])
+
+    def test_skill_with_approval_and_no_undo_row_still_fails(self):
+        problems = self._problems(_skill())
+        self.assertEqual(len(problems), 1)
+        self.assertIn("undo row", problems[0])
+
+
 class ResolverTests(unittest.TestCase):
     def setUp(self):
         self.content = _content()
