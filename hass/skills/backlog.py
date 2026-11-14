@@ -128,6 +128,7 @@ def _plan(slots, ctx) -> list:
 _CASES = "hass/tests/fixtures/skills/catch-all/{}.jsonl"
 
 BACKLOG_LOG = Skill(
+    pack='core', targets=(), approval_class='A0', sandbox='none-needed', logs=(), who='owner',
     name="backlog.log", label="write it down for later",
     summary="Nothing fits: write the request down, say I can't do that yet, change nothing.",
     triggers=(
@@ -151,6 +152,7 @@ BACKLOG_LOG = Skill(
     cases=_CASES.format("backlog.log"), version=1)
 
 PAGE_FAQ = Skill(
+    pack='front', targets=(), approval_class='A0', sandbox='none-needed', logs=(), who='owner',
     name="page.faq", label="add a questions page",
     summary="The site has no FAQ page and a new page is a design change: say so and write it down.",
     triggers=(
@@ -169,7 +171,7 @@ PAGE_FAQ = Skill(
     approval="none", live_class="read-only", undo=Undo("forget", "none"),
     refuse=(("a new page is asked for", NO_FAQ),), cases=_CASES.format("page.faq"), version=1)
 
-SKILLS = (BACKLOG_LOG, PAGE_FAQ)
+SKILLS = (BACKLOG_LOG,)  # front-pack export lives in faq.py
 
 
 def _main(argv=None) -> int:

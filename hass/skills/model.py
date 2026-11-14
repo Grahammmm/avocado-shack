@@ -30,6 +30,12 @@ LIVE_CLASSES = ("chat-live", "private-only", "read-only")
 UNDO_MODES = ("revert", "forget", "none")
 TRIGGER_TAGS = ("clean", "vague", "typo", "multi")
 STATUSES = ("active", "retired")
+PACKS = ("site", "front", "till", "reports", "core")
+TARGETS = ("site", "till", "local")
+APPROVAL_CLASSES = ("A0", "A1", "A2", "A3")
+SANDBOXES = ("full", "preview", "none-needed")
+LOG_FIELDS = ("subjects", "fields", "counts_ref")
+WHO = ("owner", "g-only")
 
 NAME_RE = re.compile(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*")
 SLOT_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
@@ -87,6 +93,14 @@ class Skill:
     cases: str
     version: int
     status: str = "active"
+    # None is deliberately invalid: a new declaration must make each choice explicitly.
+    pack: str | None = None
+    targets: tuple | None = None
+    approval_class: str | None = None
+    sandbox: str | None = None
+    logs: tuple | None = None
+    who: str | None = None
+    patterns: tuple = ()
 
     @property
     def group(self) -> str:
@@ -228,6 +242,38 @@ def lint_skill(skill, ops_registry, coll_files=None) -> list:
         bad("preview", "'none' only for read-only skills, or a private-only skill that edits no site file")  # AV1109-04: stock.restock
     if skill.approval == "owner-yes" and not skill.edits:
         bad("edits", "a skill that asks for approval declares what it edits")
+    if skill.pack not in PACKS:
+        bad("pack", f"must be one of {PACKS}")
+    targets = skill.targets
+    if not isinstance(targets, tuple) or any(t not in TARGETS for t in targets) or len(set(targets)) != len(targets):
+        bad("targets", f"must be an ordered unique tuple from {TARGETS}")
+    elif skill.approval == "none":
+        if targets:
+            bad("targets", "read-only skills have no changing target")
+    else:
+        allowed = {"site": (("site",),), "front": (("site",),),
+                   "till": (("till",), ("till", "site"))}
+        if targets not in allowed.get(skill.pack or "", ()):
+            bad("targets", "executor must match pack; only till may carry a site companion")
+    if skill.approval_class not in APPROVAL_CLASSES:
+        bad("approval_class", f"must be one of {APPROVAL_CLASSES}")
+    elif skill.approval_class != ("A0" if skill.approval == "none" else "A1"):
+        bad("approval_class", "must match current approval; A2/A3 executors are not enabled")
+    if skill.sandbox not in SANDBOXES:
+        bad("sandbox", f"must be one of {SANDBOXES}")
+    elif skill.approval == "none":
+        if skill.sandbox != "none-needed":
+            bad("sandbox", "read-only skills use none-needed")
+    elif skill.sandbox == "none-needed" or ((skill.live_class == "chat-live" or skill.pack == "till") and skill.sandbox != "full"):
+        bad("sandbox", "writes need a sandbox; chat-live and till writes need full support")
+    if not isinstance(skill.logs, tuple) or any(k not in LOG_FIELDS for k in skill.logs) or len(set(skill.logs)) != len(skill.logs):
+        bad("logs", f"must be a unique tuple from {LOG_FIELDS}, never values or text")
+    if skill.who not in WHO:
+        bad("who", f"must be one of {WHO}")
+    if not isinstance(skill.patterns, tuple) or not all(isinstance(p, str) and p.strip() for p in skill.patterns):
+        bad("patterns", "must be a tuple of fixed phrases")
+    if any(s.kind in ("price", "count") for s in slots if isinstance(s, Slot)) and not skill.patterns:
+        bad("patterns", "price/count slots require a code-parsed phrase")
     return out
 
 

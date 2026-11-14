@@ -188,6 +188,22 @@ class PublishedSite(unittest.TestCase):
                 sitegen.publish(content, REPO_ROOT, Path(tmp))
             self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ["stale.txt"])
 
+    def test_published_club_pages_say_there_is_no_club_service(self):
+        # AV-08: the published pages carry the marker that stops community.js asking for /api/community (a 404 per load).
+        for rel in sitegen.NO_CLUB_SERVICE_PAGES:
+            with self.subTest(page=rel):
+                self.assertEqual(self.text[rel].count(sitegen.NO_CLUB_SERVICE_MARKER), 1)
+                self.assertLess(self.text[rel].index(sitegen.NO_CLUB_SERVICE_MARKER), self.text[rel].index("</head>"))
+                # the working pages the local club service serves never carry it, so the local page still asks
+                self.assertNotIn("club-service", (SITE_DIR / rel).read_text("utf-8"))
+        self.assertNotIn("club-service", self.text["404.html"])
+        self.assertIn('meta[name="club-service"]', self.text["community.js"])
+        self.assertIn('content="none"', self.text["community.js"])
+        with self.assertRaises(ValueError):
+            sitegen._mark_no_club_service("x.html", b"<html><head></head></html>")
+        with self.assertRaises(ValueError):
+            sitegen._mark_no_club_service("x.html", b'<meta charset="utf-8"><meta charset="utf-8">')
+
     def test_cli_publish(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = io.StringIO()

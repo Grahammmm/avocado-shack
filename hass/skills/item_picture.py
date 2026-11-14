@@ -410,6 +410,7 @@ def notes(name, slots, ctx) -> dict:
 
 # -- the skill ----------------------------------------------------------------------------------------------------------
 ITEM_PICTURE = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="item.picture", label="change a product's picture", version=2,
     summary="Put the photo he sent on one product, with a caption that says what it shows.",
     triggers=(

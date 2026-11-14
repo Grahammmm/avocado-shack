@@ -216,6 +216,7 @@ _WORD_EDITS = ((_PRODUCTS, "products[id].available"), (_PRODUCTS, "products[id].
 _PRODUCT_PREVIEW = "product:the first product named"
 
 STOCK_SET = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="stock.set", label="change what's in stock",
     summary="Mark one or more products in stock, low, or sold out after today's shelf check.",
     triggers=(
@@ -242,6 +243,7 @@ STOCK_SET = Skill(
     cases=_CASES.format("stock.set"), version=2)
 
 STOCK_CHECKED = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="stock.checked", label="record the shelf check",
     summary="Record that the shelves were checked today (or a day this week), with what was found.",
     triggers=(
@@ -269,6 +271,7 @@ STOCK_CHECKED = Skill(
     cases=_CASES.format("stock.checked"), version=3)
 
 STOCK_CLEAR = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="stock.clear", label="stop showing a word on a product",
     summary="Take the in stock, low or sold out label off a product's card. Never sets sold out.",
     triggers=(
