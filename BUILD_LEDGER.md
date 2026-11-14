@@ -2168,3 +2168,7 @@ Review fix (same branch): stored stamps are now compared to the cutoff as aware 
 Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it actually read (0 < length <= MAX_PHOTO) and raises the existing fixed refusal when a file shrank to empty or grew past the cap after fstat; live() still checks every photo before any transport call and writes nothing on refusal. A file shrinking to a nonempty allowed length is still admitted; no snapshot guarantee. Valid input and output are byte-identical.
 
 Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.
+
+## AVB-04: attended runtime release with automatic rollback — November 13, 2026
+
+`hass/runtime_release.py` builds on the operator's completed AVB-03 move notes. Default is a Git-metadata-only plan; explicit attended apply stages/tests the target, backs up, stops the existing runtime units, moves the checkout and matching host pin, then starts/self-tests or restores both. No unit installation, credentials, publishing, persistent-state migration or live worker action. See `docs/hass/RUNTIME-RELEASE.md` for recovery, budgets and retained gates. Temporary real-Git/synthetic-host tests cover success, failed and interrupted moves and refusals; service boundaries are simulated. The timed second live move and phone check remain operator-owned and unverified, not implied by the fixture tests.

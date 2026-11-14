@@ -1,0 +1,388 @@
+"""AVB-04 transaction tests: real temporary Git runtime, fake service boundary.
+
+No live services, host configuration, credentials or records are opened.
+"""
+import contextlib
+from collections.abc import Callable
+import io
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from unittest.mock import patch
+
+from hass import runtime_release as release
+
+
+class FixtureRelease(release.Release):
+    """Keep actual Git/file operations; simulate ONLY external service/test tools."""
+    def __init__(self, args, failures=()):
+        super().__init__(args)
+        self.failures = list(failures)
+        self.calls = []
+        self.active = True
+        self.restarts = "0"
+        self.health_state = "inactive"
+        self.pending_hook: Callable[[str], None] | None = None
+
+    def command(self, label, argv, cwd=None, timeout=60, codes=(0,)):
+        self.calls.append(label)
+        if self.pending_hook:
+            self.pending_hook(label)
+        if self.failures and label == self.failures[0]:
+            self.failures.pop(0)
+            if label == "stop":
+                self.active = False  # partial stop still requires rollback
+            raise release.Refused(label)
+        if str(argv[0]) == "git":
+            return super().command(label, argv, cwd=cwd, timeout=timeout, codes=codes)
+        if label == "stop":
+            self.active = False
+        elif label == "start":
+            self.active = True
+        elif label == "unit-state":
+            return "active" if self.active else "inactive"
+        elif label == "restart-count":
+            return self.restarts
+        elif label == "health-idle":
+            return self.health_state
+        elif label in ("backup-timer",):
+            return "active"
+        elif label == "backup-result":
+            return "success"
+        elif label == "selftest":
+            return "HASS-SELFTEST fixture pass=10 warn=0 fail=0 skip=1"
+        elif label == "inbox":
+            return '{"pending": 0}'
+        elif label == "host-check":
+            if json.loads(release.private_read(self.a.host))["runtimeCommit"] != self.git("rev-parse", "HEAD"):
+                raise release.Refused("host-check")
+        return ""
+
+
+class TransactionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="release-")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.rt = self.root / "runtime"
+        self.rt.mkdir()
+        self.git("init", "-q")
+        self.git("config", "user.name", "Fixture")
+        self.git("config", "user.email", "fixture@example.invalid")
+        (self.rt / "version.txt").write_text("old\n")
+        self.git("add", "version.txt")
+        self.git("commit", "-q", "-s", "-m", "old")
+        self.old = self.git("rev-parse", "HEAD")
+        (self.rt / "version.txt").write_text("new\n")
+        self.git("commit", "-q", "-s", "-a", "-m", "new")
+        self.new = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/main", self.new)
+        self.git("checkout", "-q", "--detach", self.old)
+        self.host = self.root / "host.json"
+        self.before = (json.dumps({"runtimeCommit": self.old, "approvals": "hold", "secretFile": "NEVER-OPEN",
+                                   "interpreter": {"model": "fixture"}}) + "\n").encode()
+        release.private_write(self.host, self.before)
+        self.args = release.arguments(["--runtime", str(self.rt), "--host", str(self.host),
+            "--state-root", str(self.root / "state"), "--receipts", str(self.root / "receipts"),
+            "--python", sys.executable, "--target", self.new, "--expected-old", self.old, "--apply", "--attended"])
+        self.out = io.StringIO()
+        self.addCleanup(patch.stopall)
+        patch("sys.stdin.isatty", return_value=True).start()
+        patch("hass.runtime_release.time.sleep").start()
+
+    def git(self, *args):
+        return subprocess.check_output(["git", "-C", str(self.rt), *args], stderr=subprocess.DEVNULL, text=True).strip()
+
+    def run_release(self, failures=()):
+        obj = FixtureRelease(self.args, failures)
+        with contextlib.redirect_stdout(self.out):
+            code = obj.run()
+        return obj, code
+
+    def phase(self, obj):
+        return json.loads(release.private_read(obj.run_dir / "receipt.json"))["phase"]
+
+    def assert_old(self):
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.old)
+        self.assertEqual(release.private_read(self.host), self.before)
+        self.assertEqual((self.rt / "version.txt").read_text(), "old\n")
+
+    def test_success_real_git_and_pin_only(self):
+        obj, code = self.run_release()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.phase(obj), "released")
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.new)
+        expected = json.loads(self.before)
+        expected["runtimeCommit"] = self.new
+        self.assertEqual(json.loads(release.private_read(self.host)), expected)
+        self.assertEqual(release.private_read(obj.run_dir / "host.before"), self.before)
+        self.assertTrue(obj.active)
+        self.assertFalse(obj.stage.exists())
+        self.assertLess(obj.calls.index("tests"), obj.calls.index("stop"))
+        self.assertLess(obj.calls.index("backup-result"), obj.calls.index("stop"))
+        self.assertEqual((obj.run_dir / "host.before").stat().st_mode & 0o777, 0o600)
+        self.assertNotIn("NEVER-OPEN", self.out.getvalue())
+        self.assertNotIn("NEVER-OPEN", (obj.run_dir / "receipt.json").read_text())
+
+    def test_default_plan_opens_no_private_files_or_services(self):
+        self.args.apply = False
+        self.host.unlink()
+        obj, code = self.run_release()
+        self.assertEqual(code, 0)
+        self.assertTrue(all(c in ("git", "detached") for c in obj.calls))
+        self.assertFalse(self.args.receipts.exists())
+        self.assertIn("plan-only", self.out.getvalue())
+
+    def test_non_tty_refuses_before_any_service(self):
+        with patch("sys.stdin.isatty", return_value=False):
+            with self.assertRaisesRegex(release.Refused, "attended"):
+                self.run_release()
+        self.assert_old()
+        self.assertFalse(self.args.receipts.exists())
+
+    def test_missing_attended_refuses(self):
+        self.args.attended = False
+        with self.assertRaisesRegex(release.Refused, "attended"):
+            self.run_release()
+        self.assert_old()
+
+    def test_pre_stop_failures_never_switch_or_stop(self):
+        for label in ("selftest", "host-check", "inbox", "acceptance", "tests", "backup", "backup-result"):
+            with self.subTest(label=label):
+                obj, code = self.run_release([label])
+                self.assertEqual(code, 1)
+                self.assertNotIn("stop", obj.calls)
+                self.assert_old()
+
+    def test_partial_stop_failure_rolls_back(self):
+        obj, code = self.run_release(["stop"])
+        self.assertEqual(code, 1)
+        self.assertEqual(self.phase(obj), "rolled-back")
+        self.assert_old()
+        self.assertTrue(obj.active)
+
+    def test_start_failure_restores_bytes_head_and_services(self):
+        obj, code = self.run_release(["start"])
+        self.assertEqual(code, 1)
+        self.assertEqual(self.phase(obj), "rolled-back")
+        self.assert_old()
+        self.assertTrue(obj.active)
+
+    def test_post_switch_validation_failure_restores(self):
+        for failure in ("selftest", "host-check"):
+            with self.subTest(failure=failure):
+                obj = FixtureRelease(self.args)
+                seen = 0
+                def hook(label):
+                    nonlocal seen
+                    if label == failure:
+                        seen += 1
+                        if seen == 2:
+                            raise release.Refused(failure)
+                obj.pending_hook = hook
+                with contextlib.redirect_stdout(self.out):
+                    self.assertEqual(obj.run(), 1)
+                self.assertEqual(self.phase(obj), "rolled-back")
+                self.assert_old()
+
+    def test_interrupt_during_start_rolls_back(self):
+        obj = FixtureRelease(self.args)
+        def hook(label):
+            if label == "start":
+                obj.pending_hook = None
+                raise KeyboardInterrupt
+        obj.pending_hook = hook
+        with contextlib.redirect_stdout(self.out):
+            self.assertEqual(obj.run(), 1)
+        self.assertEqual(self.phase(obj), "rolled-back")
+        self.assert_old()
+
+    def test_rollback_failure_is_not_success(self):
+        obj, code = self.run_release(["start", "stop"])
+        self.assertEqual(code, 2)
+        self.assertEqual(self.phase(obj), "rollback-failed")
+        self.assertFalse(obj.active)
+        self.args.expected_old, self.args.target = self.new, self.old
+        with self.assertRaisesRegex(release.Refused, "unfinished-release"):
+            self.run_release()
+
+    def test_host_edit_is_not_overwritten(self):
+        obj = FixtureRelease(self.args)
+        changed = self.before.replace(b'"hold"', b'"private"')
+        def hook(label):
+            if label == "stop":
+                obj.pending_hook = None
+                release.private_write(self.host, changed)
+        obj.pending_hook = hook
+        with contextlib.redirect_stdout(self.out):
+            self.assertEqual(obj.run(), 2)
+        self.assertEqual(release.private_read(self.host), changed)
+        self.assertFalse(obj.active)
+        self.assertEqual(self.phase(obj), "rollback-failed")
+
+    def test_dirty_runtime_refused_without_changes(self):
+        (self.rt / "untracked").write_text("keep")
+        with self.assertRaisesRegex(release.Refused, "runtime-identity"):
+            self.run_release()
+        self.assertEqual((self.rt / "untracked").read_text(), "keep")
+        self.assert_old()
+
+    def test_wrong_expected_head_refused(self):
+        self.args.expected_old = "a" * 40
+        with self.assertRaisesRegex(release.Refused, "runtime-identity"):
+            self.run_release()
+        self.assert_old()
+
+    def test_branch_runtime_refused(self):
+        self.git("checkout", "-q", "-b", "do-not-detach")
+        with self.assertRaisesRegex(release.Refused, "not-detached"):
+            self.run_release()
+        self.assertEqual(self.git("symbolic-ref", "--short", "HEAD"), "do-not-detach")
+
+    def test_target_not_on_main_refused(self):
+        self.git("update-ref", "refs/remotes/origin/main", self.old)
+        with self.assertRaises(release.Refused):
+            self.run_release()
+        self.assert_old()
+
+    def test_noop_refused(self):
+        self.args.target = self.old
+        with self.assertRaisesRegex(release.Refused, "no-move"):
+            self.run_release()
+
+    def test_host_pin_mismatch_no_service_stop(self):
+        release.private_write(self.host, self.before.replace(self.old.encode(), self.new.encode()))
+        obj, code = self.run_release()
+        self.assertEqual(code, 1)
+        self.assertNotIn("stop", obj.calls)
+
+    def test_shared_receipt_lock_refuses(self):
+        self.args.receipts.mkdir(mode=0o700)
+        lock_path = Path(self.git("rev-parse", "--absolute-git-dir")) / "runtime-release.lock"
+        with open(lock_path, "wb") as lock:
+            release.fcntl.flock(lock, release.fcntl.LOCK_EX | release.fcntl.LOCK_NB)
+            with self.assertRaisesRegex(release.Refused, "locked"):
+                self.run_release()
+        self.assert_old()
+
+    def test_pending_marker_blocks_alternate_receipt_root(self):
+        pending = Path(self.git("rev-parse", "--absolute-git-dir")) / "runtime-release.pending"
+        release.private_write(pending, b"interrupted-run\n")
+        self.args.receipts = self.root / "alternate"
+        with self.assertRaisesRegex(release.Refused, "unfinished-release"):
+            self.run_release()
+        self.assert_old()
+
+    def test_inbox_nonzero_or_invalid_report_refuses(self):
+        for report in ('{"pending":1}', '{"pending":false}', '{}', '[]', 'not JSON'):
+            with self.subTest(report=report):
+                obj = FixtureRelease(self.args)
+                command = obj.command
+                def with_report(label, argv, **kwargs):
+                    return report if label == "inbox" else command(label, argv, **kwargs)
+                obj.command = with_report
+                with contextlib.redirect_stdout(self.out):
+                    self.assertEqual(obj.run(), 1)
+                self.assertNotIn("stop", obj.calls)
+                self.assert_old()
+
+    def test_selftest_missing_or_failed_summary_refuses(self):
+        for output in ('', 'HASS-SELFTEST x pass=1 warn=0 fail=1 skip=0',
+                       'HASS-SELFTEST x pass=1 warn=0 fail=0 skip=0\nbad tail'):
+            with self.subTest(output=output):
+                obj = FixtureRelease(self.args)
+                command = obj.command
+                def with_output(label, argv, **kwargs):
+                    return output if label == "selftest" else command(label, argv, **kwargs)
+                obj.command = with_output
+                with contextlib.redirect_stdout(self.out):
+                    self.assertEqual(obj.run(), 1)
+                self.assertNotIn("stop", obj.calls)
+                self.assert_old()
+
+    def test_receipt_mode_refuses(self):
+        self.args.receipts.mkdir(mode=0o755)
+        self.args.receipts.chmod(0o755)
+        with self.assertRaisesRegex(release.Refused, "receipt-directory"):
+            self.run_release()
+
+    def test_active_health_service_prevents_switch(self):
+        obj = FixtureRelease(self.args)
+        obj.health_state = "active"
+        with contextlib.redirect_stdout(self.out):
+            self.assertEqual(obj.run(), 2)
+        self.assert_old()
+        self.assertFalse(obj.active)
+
+    def test_time_budget_reserves_rollback(self):
+        obj = FixtureRelease(self.args)
+        def hook(label):
+            if label == "backup-result":
+                obj.deadline = time.monotonic() + 10
+        obj.pending_hook = hook
+        with contextlib.redirect_stdout(self.out):
+            self.assertEqual(obj.run(), 1)
+        self.assertNotIn("stop", obj.calls)
+        self.assert_old()
+
+    def test_real_cli_plan(self):
+        argv = [sys.executable, str(Path(release.__file__).resolve()), "--target", self.new,
+                "--expected-old", self.old, "--runtime", str(self.rt)]
+        result = subprocess.run(argv, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["result"], "plan-only")
+        self.assert_old()
+
+
+class PrimitiveTests(unittest.TestCase):
+    def test_bad_commit_literal_refused(self):
+        for value in ("HEAD", "a" * 39, "A" * 40, "a" * 40 + "\n", "--help"):
+            with self.subTest(value=value), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                release.arguments(["--target", value, "--expected-old", "b" * 40])
+
+    def test_host_duplicates_and_nonfinite_refused(self):
+        for data in (b'{"runtimeCommit":"a","runtimeCommit":"a"}', b'{"runtimeCommit":"a","x":NaN}'):
+            with self.assertRaises(release.Refused):
+                release.host_pin(data, "a", "b")
+
+    def test_private_reader_refuses_symlink_and_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "host"
+            path.write_text("do-not-expose")
+            path.chmod(0o644)
+            with self.assertRaises(release.Refused):
+                release.private_read(path)
+            path.chmod(0o600)
+            link = Path(tmp) / "link"
+            link.symlink_to(path)
+            with self.assertRaises(OSError):
+                release.private_read(link)
+            self.assertEqual(release.private_read(path), b"do-not-expose")
+
+    def test_real_command_failure_does_not_expose_output(self):
+        args = release.arguments(["--target", "a" * 40, "--expected-old", "b" * 40])
+        obj = release.Release(args)
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "fail.py"
+            script.write_text('import sys\nprint("PRIVATE-SENTINEL")\nsys.exit(1)\n')
+            with self.assertRaisesRegex(release.Refused, "probe") as exc:
+                obj.command("probe", [sys.executable, script])
+            self.assertNotIn("PRIVATE-SENTINEL", str(exc.exception))
+
+    def test_real_command_timeout(self):
+        args = release.arguments(["--target", "a" * 40, "--expected-old", "b" * 40])
+        obj = release.Release(args)
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "wait.py"
+            script.write_text('import time\ntime.sleep(60)\n')
+            with self.assertRaisesRegex(release.Refused, "probe-timeout"):
+                obj.command("probe", [sys.executable, script], timeout=0.05)
+
+
+if __name__ == "__main__":
+    unittest.main()
