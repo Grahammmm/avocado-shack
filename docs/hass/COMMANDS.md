@@ -77,6 +77,19 @@ the card label only, not the maker link. Example: `Add Test Orchard quince, bran
 still asks for any other missing required fact and never invents one; the draft still needs `yes <code>`, and `undo`
 works as for any change.
 
+A new item from a photo (a change request, needs `yes <code>`): send the photo with a few words (what it is, who makes it,
+which shelf, whether it is in). Hass asks one short question at a time for what is missing and shows one draft: the product, the
+maker when new, the picture, the description and the shelf check. One `yes <code>` saves all of it and one `undo` takes all of
+it back. The picture is made to match the others (an ivory square, the item in the middle). A photo on a busy background, or one
+too dark, too blurry or too small, is not used: Hass asks you to take it again on a plain surface. The description is written in
+the shop's voice from your words, never with a price, a size, where it comes from, organic, a health claim or an award; wording
+of yours that carries one is replaced and listed under "Left off". Such a claim in the name, the maker's story or the picture
+caption is refused in plain words and written down for Graham. A maker already on the site is reused. For a new maker Hass asks
+"What should we say about <Maker>? A sentence is enough." and uses your words; if you send the maker's own web address it also
+writes one or two short sentences from facts on that page (what they make, since when; the site's robots file obeyed, no
+sentence copied), shown with the address and day; they go live only with your yes. Send `skip` to keep only the town line.
+The maker's web address is never published. One photo is one product, and the new item uses one of the day's live-change slots.
+
 Two kinds of whole message are not change requests and never reach the interpreter or the daily count: only thanks or
 a greeting (`thanks`, `thank you`, `great, thanks`, `hi`, `hello`, `good morning`, any case, with a final `.`, `!` or
 `?`), or only emoji. Emoji that are all thumbs-up, OK-hand or check marks get the near-approval answer (nothing is

@@ -77,15 +77,15 @@ draft_for("S5  hike.create (meeting point trailhead gate)", "ALLOWED", ("hike.cr
     "title": "Cass Hill walk", "date": "2026-11-14", "time": "09:00", "meetingPoint": "The trailhead gate", "rsvpEnabled": False}))
 draft_for("S6  store.set_notice", "REFUSED", ("store.set_notice", {"text": "Come say hi, we are testing a new way to update the shop", "until": "2026-11-10"}))
 draft_for("S8  store.set_phone (must be refused)", "REFUSED", ("store.set_phone", {"phone": "805 555 0100"}))
-draft_for("S1c product.set_photo on an EXISTING product (real op)", "REFUSED", ("product.set_photo", {"id": pid, "photo": sha, "imageAlt": ALT}))
+draft_for("S1c product.set_photo on an EXISTING product (real op)", "ALLOWED", ("product.set_photo", {"id": pid, "photo": sha, "imageAlt": ALT}))
 
 rec = {"collection": "products", "before": {"id": pid, "name": "x", "brand": "b", "image": "old.jpg"},
        "after": {"id": pid, "name": "x", "brand": "b", "image": "assets/products/photo-0123456789ab.jpg", "imageAlt": "A bowl of quinces"}}
 rec2 = {"collection": "products", "before": rec["before"], "after": {**rec["after"], "imageAlt": "Organic quinces from a farm"}}
-for label, record in (("S1c2 product.set_photo, record shape (picture words only)", rec), ("S1d same, but the picture words claim organic/farm", rec2)):
+for label, record, expect_refused in (("S1c2 product.set_photo, record shape (picture words only)", rec, False), ("S1d same, but the picture words claim organic/farm", rec2, True)):
     r = live_policy.check({"ops": [{"op": "product.set_photo", "args": {}}], "records": [record]})
     print(f"{label:62s} LIVE-POLICY: {'REFUSED ' + str(r) if r else 'ALLOWED'}")
-    if not r:
+    if bool(r) != expect_refused:
         bad.append(label)
 undo = live_policy.check({"ops": [{"op": "history.revert", "args": {}}], "records": [{"collection": "products", "key": "x", "before": {
     "brand": "Test Orchard"}, "after": None}]})

@@ -600,6 +600,15 @@ def _reason(out: dict) -> str:
     return out.get("reason") or "; ".join(out.get("problems") or []) or out.get("question") or str(out.get("result"))
 
 
+def _photo_sentence(technical):
+    """The sentence the house picture step wrote for Mike (hass.ops.photos: retake asks, a photo it cannot open, the picture it
+    cannot make), when ``technical`` is exactly one of them; None for any other reason."""
+    from hass.ops import photos  # lazy: the picture step is only read when a photo refused
+    text = str(technical or "").strip()
+    known = {*photos.RETAKE.values(), *photos.RENDER_REPLY.values(), photos.MAKE_FAILED, photos.ALREADY_RAW}
+    return text if text in known else None
+
+
 def _is_undo(row) -> bool:
     """AV0022-07 (H06): the draft's ops are a non-empty list of only history.revert calls; unparsable is not an undo."""
     try: ops = json.loads(row["ops_json"])
@@ -999,6 +1008,10 @@ class Conversation:
 
     def _plain(self, technical, doing="make that change") -> str:
         """The refusal text in everyday words; a reason we have no words for gets the generic line. Always logged."""
+        said = _photo_sentence(technical)  # the picture's own plain sentence (retake, too big, ...) is already for Mike: said as it is
+        if said:
+            self._problem("could-not-do", "photo-retake")
+            return said
         sentence, code = voice.explain(technical)
         self._problem("could-not-do", code)
         return sentence if code != "unmapped" else f"I couldn't {doing}, so nothing changed. Could you say it another way?"
@@ -1131,7 +1144,29 @@ class Conversation:
         self._asker = sender_key(msg.sender)
         self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)
         try: return self._handle_message(msg, last_try, apply)
-        finally: self._answering, self._forwarded, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, None, False
+        finally:
+            self._answering, self._forwarded, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, None, False
+            self._pages = {}
+
+    _pages: dict = {}  # HASS-SEC-3 (M2): the maker websites read for the message being handled, BEFORE its write transaction
+
+    def _read_sites(self, msg) -> dict:
+        """HASS-SEC-3 (M2): a maker's web address the owner typed (in this text or earlier in his open request) is read HERE,
+        before BEGIN IMMEDIATE, the whole read within maker_site.DEADLINE; inside the transaction the item.add plan only sees
+        this result (Dispatcher._ctx), so a slow site never holds the write lock and never hangs the reply. Only for the
+        owner's own new text with skills on; anything that goes wrong is the plain "could not read their site" reply later."""
+        if self.dispatch is None or msg.from_me or msg.kind != "new" or not self._is_owner(msg): return {}
+        text = (msg.text or "").replace("\ufffc", "")
+        if not text.strip() or len(text) > MAX_OWNER_TEXT: return {}
+        from hass import maker_site  # lazy: only a text that names a website needs it
+        try:
+            if self.db.execute("SELECT 1 FROM messages WHERE provider_id = ?", (msg.provider_id,)).fetchone(): return {}
+            req = self.requests.get(msg.chat, self._now())
+            texts = [*(req["texts"] if req else []), text]
+        except (sqlite3.Error, KeyError, TypeError):
+            texts = [text]
+        if not maker_site.addresses_in(texts): return {}
+        return maker_site.prefetch(texts, today=shop_today(self._now()))
 
     def _forwarded_late(self, msg) -> bool:
         """HASS-SEC-2 (L5): a yes is judged at the time it was sent (AV0022-06), so one the Mac held back and forwarded long
@@ -1149,6 +1184,7 @@ class Conversation:
         apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
         row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
         self._label_job = None
+        self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         try:
             with self._tx():
                 disposition, approved = self._handle(msg, last_try)
