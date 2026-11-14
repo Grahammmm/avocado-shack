@@ -334,13 +334,16 @@ class CorePack:
         return lines
 
     def _photo_lines(self, now) -> list:
-        """NB-AV-12: waiting photo drafts (every op product.set_photo) and pending inbox messages with tries > 0.
+        """NB-AV-12: waiting photo drafts (every op a photo op: AV1937-01 adds product.add and the home photo, each with a photo)
+        and pending inbox messages with tries > 0.
         The inbox is opened read-only (never created); no file or no tries column means no line."""
         def photo_only(raw):
             try: ops = json.loads(raw)
             except (TypeError, ValueError): return False
             return isinstance(ops, list) and bool(ops) and all(
-                isinstance(c, dict) and c.get("op") == "product.set_photo" for c in ops)
+                isinstance(c, dict) and c.get("op") in ("product.set_photo", "product.add", "store.set_home_image")
+                and isinstance(c.get("args"), dict) and isinstance(c["args"].get("photo"), str) and c["args"]["photo"] != ""
+                for c in ops)
         n = sum(self._expiry(r) > now and photo_only(r["ops_json"]) for r in self._drafts("state = 'needs-details'") if self._visible(r))
         lines, path = [f"{'A photo is' if n == 1 else 'Some photos are'} waiting for details from you."] if n else [], self.sdir / "inbox.sqlite3"
         if not path.is_file(): return lines
