@@ -34,7 +34,7 @@ class HelpTextTests(unittest.TestCase):
         self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs) - 3)  # one line per verb; AV1222-11: post has two (product, hike); SKILLS-FW-3: forget has two (a note, backlog.3)
 
     def test_limits_and_plain_text(self):
-        self.assertLessEqual(len(LINES), 24)  # earlier lines: photos to take, listing, hidden, post hike, cost, show, report, post, margin; SKILLS-FW-3: + the backlog line
+        self.assertLessEqual(len(LINES), 25)  # earlier lines: photos to take, listing, hidden, post hike, cost, show, report, post, margin; SKILLS-FW-3: + the backlog line; AV2152-03: + the again line
         for line in LINES:
             self.assertLessEqual(len(line), 92, line)  # plain-word commands now share lines; longest is the opening example
             self.assertFalse(set(line) & set("*_`#"), line)  # plain text, no markdown
