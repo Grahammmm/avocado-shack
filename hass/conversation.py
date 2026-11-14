@@ -17,7 +17,7 @@ from hass import claims, interpret_check, label_reader, margins, media, morning_
 from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text as checked_text, checked_on, load_and_validate, load_content, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
-from hass import audit as audit_mod, corrlog, hike_chat, live_policy, voice  # noqa: E402
+from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, voice  # noqa: E402
 from hass import capabilities  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, openreq  # noqa: E402
@@ -456,10 +456,14 @@ def load_settings(sdir, photos=False) -> dict:
     if mode not in dispatch_mod.MODES: problems.append("skills.mode must be ops-only, both or skills-first")
     house = settings.get("houseRender", False)  # SKILLS-FW-3: read here, used by the picture card (SKILLS-PIC-1); default off
     if type(house) is not bool: problems.append("houseRender must be true or false")
+    lookup = settings.get("hikeLookup")  # HIKE-LOOKUP-2: {"contact": address} (or the flat key "hikeLookup.contact"); absent = no map lookup, the plain hike flow
+    contact = settings.get("hikeLookup.contact") if lookup is None else lookup.get("contact") if isinstance(lookup, dict) else False
+    if contact is not None and hike_lookup.valid_contact(contact) is None: problems.append("hikeLookup.contact must be an e-mail address or an https link")
     if problems: raise ConfigError("; ".join(problems))
     return {"ownerSenders": tuple(senders), "ownerKeys": frozenset(keys), "ownerChat": chat, "approvalTtlSeconds": ttl,
             "mediaRoot": root, "guestCountsDb": settings.get("guestCountsDb"),  # guestCountsDb: H17, unchecked
             "interpreterDailyCap": cap, "skillsMode": mode, "houseRender": house,  # SKILLS-FW-3
+            **({"hikeLookupContact": contact} if contact is not None else {}),  # HIKE-LOOKUP-2: only when set
             **({k: settings[k] for k in ("liveSite", "approvalNeedsCode") if k in settings}),
             **({"gKeys": frozenset(g_keys), "gChat": g_chat, "gSenders": tuple(g_senders)} if g_keys and isinstance(g_chat, str) else {}),
             **({"gOwner": True} if g_owner is True else {}),
@@ -1258,6 +1262,10 @@ class Conversation:
         if till:  # HASS-CLOVER-2: a till question (or a till change, which is refused): read-only, from the private cache, no model
             self._reply(self.till.answer(till, now), long_ok=True)
             disposition = "till-write-refused" if till[0] == "write" else "till-read"
+            self._record(msg, disposition)
+            return disposition, None
+        if msg.attachments <= 0 and self.skills_mode != dispatch_mod.DEFAULT_MODE and self.dispatch.takes_answer(msg.text, now):
+            disposition = self._request(msg, now)  # HIKE-LOOKUP-2: a bare yes / no / number that answers the map's "Did you mean ...?" is that answer, never an approval
             self._record(msg, disposition)
             return disposition, None
         keyword = parse_keyword(msg.text) or coded

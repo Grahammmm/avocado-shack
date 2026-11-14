@@ -19,9 +19,6 @@ import argparse
 import json
 import os
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,47 +26,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from hass import hike_lookup as hl  # noqa: E402
+from hass.hike_fetch import LiveFetch  # noqa: E402  (the same fetch function the running Hass uses: HIKE-LOOKUP-2)
 
-ENDPOINTS = {
-    "overpass": "https://overpass-api.de/api/interpreter",
-    "nominatim_search": "https://nominatim.openstreetmap.org/search",
-    "nominatim_reverse": "https://nominatim.openstreetmap.org/reverse",
-    "elevation": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples",
-}
-TIMEOUT_S = 60
 KEEP_TAGS = {"name", "highway", "route", "access", "surface", "natural", "ele", "note", "description", "fixme", "warning",
              "construction", "disused:highway", "abandoned:highway", "access:note", "roundtrip", "distance", "length"}
-
-
-class LiveFetch:
-    def __init__(self, contact):
-        self.agent = f"avocado-shack-hass-hike-lookup/0.1 (contact: {contact})"
-
-    def __call__(self, service, request):
-        url = ENDPOINTS[service]
-        data = None
-        if service == "overpass":
-            data = urllib.parse.urlencode({"data": request["query"]}).encode()
-        elif service == "elevation":
-            geometry = json.dumps({"points": request["points"], "spatialReference": {"wkid": 4326}})
-            data = urllib.parse.urlencode({"geometry": geometry, "geometryType": "esriGeometryMultipoint",
-                                           "returnFirstValueOnly": "true", "interpolation": "RSP_BilinearInterpolation",
-                                           "f": "json"}).encode()
-        else:
-            url += "?" + urllib.parse.urlencode({**request, "format": "jsonv2"})
-        req = urllib.request.Request(url, data=data, headers={"User-Agent": self.agent})
-        try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
-                return json.loads(resp.read())
-        except urllib.error.HTTPError as exc:
-            raise hl.TransportError("busy" if exc.code in (429, 503, 504) else "network", str(exc.code))
-        except TimeoutError:
-            raise hl.TransportError("slow")
-        except urllib.error.URLError as exc:
-            raise hl.TransportError("slow" if "timed out" in str(exc.reason) else "network", str(exc.reason))
-        except ValueError:
-            raise hl.TransportError("bad")
-
 
 def trim(service, body):
     """Fixtures keep only what the code reads: the named tags and geometry, the elevation values."""
@@ -112,7 +72,11 @@ def main(argv=None):
     ap.add_argument("--record", help="write the answers as a fixture file")
     ap.add_argument("--note", default="", help="fixture note (why this name)")
     args = ap.parse_args(argv)
-    cached = hl.CachedTransport(LiveFetch(args.contact), args.cache,
+    try:
+        fetch = LiveFetch(args.contact)
+    except ValueError as exc:
+        sys.exit(f"hike_lookup_manual.py: {exc}")
+    cached = hl.CachedTransport(fetch, args.cache,
                                 log=lambda row: print("request:", json.dumps(row), file=sys.stderr))
     cached.begin_lookup()
     recorder = Recorder(cached) if args.record else None
