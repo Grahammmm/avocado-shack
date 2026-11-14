@@ -139,6 +139,7 @@ def shelf_reply(slots, ctx) -> str:
 
 # -- declaration -------------------------------------------------------------------------------------------------------
 REPORT_SHELF = Skill(
+    pack='reports', targets=(), approval_class='A0', sandbox='none-needed', logs=(), who='owner',
     name="report.shelf", label="morning shelf report",
     summary="Say what is sold out or running low from the last shelf check, and any hikes. Not stock counts; sends nothing.",
     triggers=(
@@ -346,6 +347,7 @@ def site_reply(slots, ctx):
 
 
 ANSWER_SITE = Skill(
+    pack='core', targets=(), approval_class='A0', sandbox='none-needed', logs=(), who='owner',
     name="answer.site", label="answer a site question",
     summary="Answer hours, products, makers and hikes from saved site content; confirmed sign-ups only, never prices or sales.",
     triggers=(Trigger("what time do we close Saturday"), Trigger("when is the next hike"),
@@ -361,7 +363,7 @@ ANSWER_SITE = Skill(
     cases="hass/tests/fixtures/skills/reports/answer.site.jsonl", version=1)
 
 
-SKILLS = (REPORT_SHELF, ANSWER_SITE)
+SKILLS = (REPORT_SHELF,)  # core-pack export lives in answer_site.py
 
 
 def _register() -> None:

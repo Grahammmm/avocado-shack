@@ -16,12 +16,15 @@ const TYPES={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'
  '.jpg':'image/jpeg','.png':'image/png','.webp':'image/webp'};
 const page404=fs.existsSync(path.join(root,'404.html'))?fs.readFileSync(path.join(root,'404.html')):'<!doctype html><title>Not found</title><p>Not found</p>'; // a static host serves the published 404.html (status 404) for a missing path
 const MISSING=['/no-such-page','/hike/nope/deeper'];
+const NO_SERVICE_MARKER='<meta name="club-service" content="none">';
 const server=http.createServer((req,res)=>{
  if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405,{'Content-Type':'text/html'});return res.end('<!doctype html><title>405</title>')}
  let rel=decodeURIComponent(new URL(req.url,'http://x').pathname);let file=path.join(root,rel);
  if(!file.startsWith(root)){res.writeHead(404,{'Content-Type':'text/html'});return res.end(page404)}
  try{if(fs.statSync(file).isDirectory())file=path.join(file,'index.html')}catch{}
  fs.readFile(file,(err,data)=>{if(err){res.writeHead(404,{'Content-Type':'text/html'});return res.end(page404)}
+  // AV-08: a page asked for with x-qa-club-service simulates a host that DOES run the club service: the published "no club service" marker is removed from it.
+  if(req.headers['x-qa-club-service']&&path.extname(file)==='.html')data=Buffer.from(data.toString('utf8').replace(NO_SERVICE_MARKER,''));
   res.writeHead(200,{'Content-Type':TYPES[path.extname(file)]||'application/octet-stream'});res.end(req.method==='HEAD'?undefined:data)});
 });
 const htmlPages=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?htmlPages(path.join(dir,e.name)):e.name.endsWith('.html')?[path.join(dir,e.name)]:[]);
@@ -43,6 +46,9 @@ server.listen(0,'127.0.0.1',async()=>{
   // Without the club service the forms must not send what visitors typed: no POST at all, and no email in any URL.
   const sent=[];page.on('request',r=>{if(r.method()!=='GET'||r.postData()||r.url().includes('example.com'))sent.push(r.method()+' '+r.url())});
   page.on('response',r=>{const p=new URL(r.url()).pathname;if(r.status()>=400&&!p.startsWith('/api/')&&!(r.request().resourceType()==='document'&&MISSING.includes(p)))bad.push(r.status()+' '+r.url())});
+  const apiAsked=[],consoleErrors=[];
+  page.on('request',r=>{if(new URL(r.url()).pathname.startsWith('/api/'))apiAsked.push(r.method()+' '+r.url())});
+  page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
   const routes=htmlPages(root).map(f=>'/'+path.relative(root,f).split(path.sep).join('/').replace(/index\.html$/,''));
   assert.deepEqual(routes.sort(),['/','/404.html','/hike/']);
   for(const route of [...routes,'/hike']){
@@ -55,6 +61,8 @@ server.listen(0,'127.0.0.1',async()=>{
    assert.match(policy,/doesn’t use cookies/);
    const noAlt=await page.locator('img').evaluateAll(a=>a.filter(e=>!(e.getAttribute('alt')||'').trim()).length);
    assert.equal(noAlt,0,route+': image without alt text');
+   // AV-08: the published site has no club service, so a page load asks for no /api path and logs no console error (a 404 on /api/community used to).
+   assert.deepEqual(apiAsked,[],route+': asked for an /api path');assert.deepEqual(consoleErrors,[],route+': console errors');
    result.pages.push({route,commerce:0,prelaunch:0,imagesWithoutAlt:0});
   }
   // Positive control: the same selector and wording checks see the archived commerce page in the working folder.
@@ -214,7 +222,7 @@ server.listen(0,'127.0.0.1',async()=>{
   }
   // AV1422-07 (review): a delayed unavailable service answers once per page, and a real submit made while that answer is pending leaves every control disabled.
   for(const [route,form,inputs,email] of [['/','#community-newsletter',['#newsletter-email'],'#newsletter-email'],['/hike/','#hike-updates',['#hike-email'],'#hike-email']]){
-   const p=await browser.newPage({viewport:{width:390,height:844}});let release,hits=0,posts=0;const gate=new Promise(r=>release=r);
+   const p=await browser.newPage({viewport:{width:390,height:844},extraHTTPHeaders:{'x-qa-club-service':'1'}});let release,hits=0,posts=0;const gate=new Promise(r=>release=r);
    p.on('request',r=>{if(r.method()==='POST')posts++});
    await p.route('**/api/community',async r=>{hits++;await gate;await r.fulfill({status:503,contentType:'application/json',body:'{}'})});
    await p.goto(base+route);await p.locator(email).fill('visitor@example.com');
@@ -233,7 +241,7 @@ server.listen(0,'127.0.0.1',async()=>{
   const clickPadding=async(p,where,why)=>{const pt=await box(p,where);assert.ok(pt.hitDialog&&pt.inside,why+': '+where+' point is the dialog itself, inside its box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),true,why+': '+where+' padding click closed the dialog')};
   const clickBackdrop=async(p,why)=>{const pt=await box(p,'backdrop');assert.ok(pt.hitDialog&&!pt.inside,why+': backdrop point is outside the box');await p.mouse.click(pt.x,pt.y);assert.equal(await isOpen(p),false,why+': backdrop click left the dialog open')};
   const rsvpApi={acceptsSubmissions:true,routeIdeas:[],events:[{id:'rf0854-walk',title:'Synthetic dialog walk',status:'scheduled',startsAt:'2026-12-06T09:00:00-08:00',timezone:'America/Los_Angeles',meetingPoint:'Synthetic trailhead',rsvpOpen:true,rsvpEnabled:true,remaining:6,confirmedGuests:0}]};
-  for(const [width,other] of [[390,1440],[1440,390]]){const ctx=await browser.newContext({viewport:{width,height:900}}),p=await ctx.newPage(),errs=[];let posts=0;
+  for(const [width,other] of [[390,1440],[1440,390]]){const ctx=await browser.newContext({viewport:{width,height:900},extraHTTPHeaders:{'x-qa-club-service':'1'}}),p=await ctx.newPage(),errs=[];let posts=0;
    p.on('pageerror',e=>errs.push(e.message));p.on('request',r=>{if(r.method()!=='GET'||r.postData())posts++});
    try{await p.clock.setFixedTime(new Date('2026-11-09T08:30:00Z'));await p.route('**/api/community',r=>r.fulfill(json(rsvpApi)));
     // privacy_inside_padding_and_border_stays_open (also after a viewport resize)
