@@ -110,7 +110,11 @@ def main(argv=None) -> int:
     for relative, text in files.items():
         path = ROOT / relative
         if args.check:
-            if not path.is_file() or path.read_text(encoding="utf-8") != text:
+            try:
+                fresh = path.is_file() and path.read_text(encoding="utf-8") == text
+            except (OSError, UnicodeDecodeError):
+                fresh = False  # unreadable or undecodable is at least as stale as missing
+            if not fresh:
                 stale.append(str(relative))
         else:
             path.write_text(text, encoding="utf-8")
