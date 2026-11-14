@@ -160,7 +160,7 @@ class NaturalLanguageRulesTest(unittest.TestCase):
             self.assertIn(phrase, self.rules)
 
     def test_rules_stay_small_enough_for_a_cpu_model_to_read(self):
-        self.assertLess(len(" ".join(RULES).encode("utf-8")), 9000)
+        self.assertLess(len(" ".join(RULES).encode("utf-8")), 9200)  # AV1937-01: the photo rule names three places
 
 
 if __name__ == "__main__":

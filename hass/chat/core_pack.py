@@ -4,8 +4,8 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). The methods run on the Conversation (self is the conversation): they use its store, replies and
 settings exactly as before. Command routing stays in Conversation._command.
 """
-import contextlib, json, re, sqlite3  # noqa: E401
-from datetime import datetime
+import contextlib, copy, json, re, sqlite3  # noqa: E401
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from hass import owner_answers as answers, audit as audit_mod, editor as editor_mod, memory as memory_mod, morning_report as shelf, voice
@@ -21,6 +21,11 @@ HISTORY_STATES = ("approved", "applied", "verified", "failed", "reverted")  # AV
 
 HISTORY_SEARCH_MAX, HISTORY_TEXT_MAX = 10, 60  # AV2152-02 (H06/H17): `history <words>`; docs/hass/COMMANDS.md
 HISTORY_USAGE = "Tell me a word or two to look for, like " + q("history opening hours") + "."
+
+AGAIN_WINDOW_DAYS = 7  # AV2152-03 (H05/H16): `again <code>` works for a proposal that expired at most this long ago; COMMANDS.md
+AGAIN_USAGE = "Send " + q("again") + " and an expired draft code, e.g. " + q("again a1b2") + "."
+AGAIN_PHOTO_OPS = ("product.set_photo", "store.set_home_image")  # ops that carry a stored photo; any op with args.photo does too
+AGAIN_DRIFT = "the site changed since {code}; send the change again"
 
 
 class CorePack:
@@ -68,6 +73,73 @@ class CorePack:
         self._reply("\n".join(["These match:"] + [self._history_line(r) for r in found]) if found else f"I found no changes that match {q(query)}.", long_ok=True)
         return "history"
 
+    # -- AV2152-03 (H05/H16): `again <code>` ----------------------------------------------------------------------
+    @staticmethod
+    def _again_final(records):
+        """{(collection, key): canonical JSON of the record's LAST `after`} for a well-shaped, non-empty record list; else None.
+        Only the end state counts: before, summaries and order of records are ignored; JSON scalar types, null and list order are not."""
+        if not isinstance(records, list) or not records: return None
+        final = {}
+        try:
+            for r in records:
+                if not (isinstance(r, dict) and isinstance(r.get("collection"), str) and isinstance(r.get("key"), str) and "after" in r): return None
+                final[(r["collection"], r["key"])] = json.dumps(r["after"], sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError, RecursionError): return None
+        return final
+
+    def _again_original(self, row):
+        """The stored draft an expired row proposed, copied, when it still matches the row (id, hash, base, ops) and holds
+        well-shaped records; else None."""
+        try:
+            out = self.editor.show(row["change_id"])
+            draft, ops = out.get("draft") if out.get("result") == "ok" else None, json.loads(row["ops_json"])
+            if not isinstance(draft, dict) or not isinstance(ops, list) or not ops or draft.get("ops") != ops: return None
+            if any(not (isinstance(c, dict) and isinstance(c.get("op"), str) and isinstance(c.get("args"), dict)) for c in ops): return None
+            if any(draft.get(k) != row[k] for k in ("change_id", "draft_hash", "base")) or self._again_final(draft.get("records")) is None: return None
+            return copy.deepcopy(draft)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError, editor_mod.UnsafeState): return None
+
+    def _again_same(self, row, new) -> bool:
+        """True when the draft `new` ends every record it touches with the values the draft of `row` showed (the same records, the
+        same whole `after`); an unreadable original is never the same."""
+        old = self._again_original(row)
+        final = self._again_final(new.get("records")) if isinstance(new, dict) else None
+        return old is not None and final is not None and final == self._again_final(old["records"])
+
+    def _again(self, msg, now, arg) -> str:
+        """AV2152-03 (H05/H16): re-draft a proposal that expired at most AGAIN_WINDOW_DAYS ago as a NEW proposal (new code, fresh
+        expiry), with no interpreter call, only when preparing its stored ops on the site as it is now ends every record it
+        touches with the values the expired draft showed. Nothing is revived or applied: the owner still sends `yes <new code>`."""
+        if not re.fullmatch(r"[0-9a-f]{4,12}", arg or ""): return self._reply(AGAIN_USAGE) or "again"
+        code, row = arg, self._by_code(arg)
+        if row is None: return self._reply(f"No draft {q(code)}.") or "again"
+        if row["state"] != "expired":  # a live, cancelled, replaced, saved or failed draft is refused with its own state
+            self._reply({"proposed": f"{q(code)} is still waiting for your yes, so there is nothing to draft again.",
+                         "needs-details": f"{q(code)} is still waiting for details, so there is nothing to draft again."}.get(row["state"]) or self._state_text(row))
+            return "again"
+        if not row["change_id"] or not row["draft_hash"]: return self._reply(f"{q(code)} expired before it was a proposal; send the change again.") or "again"
+        try:
+            expiry = datetime.fromisoformat(row["expires_at"])
+            age = now - expiry if expiry.tzinfo is not None else None
+        except (TypeError, ValueError): age = None
+        if age is None or age < timedelta(0): return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
+        if age > timedelta(days=AGAIN_WINDOW_DAYS): return self._reply(f"{q(code)} expired more than {AGAIN_WINDOW_DAYS} days ago; send the change again.") or "again"
+        old = self._again_original(row)
+        if old is None: return self._reply(f"{q(code)}: the draft details are not available any more.") or "again"
+        if old.get("assets") or any(c["op"] in AGAIN_PHOTO_OPS or "photo" in c["args"] for c in old["ops"]):
+            return self._reply(f"{q(code)} is a photo draft; send the photo again.") or "again"
+        if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)
+        try:  # the stored typed ops, on the site as it is now; never the interpreter, the message history or a claim check
+            out = self.editor.prepare(old["ops"], skills=()) if hasattr(self.editor, "gate") else self.editor.prepare(old["ops"])
+            new = out.get("draft") if out.get("result") == "ok" else None
+        except Exception: new = None  # noqa: BLE001,E701 - any failure to prepare is the same refusal below
+        if not self._again_same(row, new): return self._reply(AGAIN_DRIFT.format(code=q(code))) or "again"
+        fresh = self._propose(new, msg.sender, now)  # a new row and code, fresh expiry; the expired row stays expired
+        self.db.execute("UPDATE drafts SET reason = ? WHERE row_id = ?", (f"again:{code}", fresh["row_id"]))  # a named yes is required
+        self._last_draft_code = fresh["code"]
+        self._proposal_reply(self._row(fresh["row_id"]), new, f"Again {q(code)}:\n")
+        return "proposed"
+
     def _show(self, code, now) -> tuple:
         """AV0022-08 (H17): (text, attachments) repeating one draft's stored proposal lines and its saved screenshot.
         Read-only: no state move, no expiry sweep, never prepared or rendered again; works while paused."""
@@ -87,7 +159,7 @@ class CorePack:
             rec = (out.get("draft") or out.get("change") or {}) if out.get("result") == "ok" else {}
             draft = {"records": rec["records"], "warnings": rec.get("warnings"), "ops": rec.get("ops") or json.loads(row["ops_json"])}  # ops: the live check reads them
             if state == "proposed":
-                text = proposal_text(code, draft, row["expires_at"], self._repeat(row), "Here's the change that is waiting:", undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=now,
+                text = proposal_text(code, draft, row["expires_at"], self._named(row), "Here's the change that is waiting:", undo=_is_undo(row), live_site=self.settings.get("liveSite"), now=now,
                                      reasons=self._live_reasons(draft) if self.settings.get("liveSite") else None)
                 shot = self.sdir / "screenshots" / f"{row['change_id']}-proposal.png"
             else:
@@ -334,13 +406,16 @@ class CorePack:
         return lines
 
     def _photo_lines(self, now) -> list:
-        """NB-AV-12: waiting photo drafts (every op product.set_photo) and pending inbox messages with tries > 0.
+        """NB-AV-12: waiting photo drafts (every op a photo op: AV1937-01 adds product.add and the home photo, each with a photo)
+        and pending inbox messages with tries > 0.
         The inbox is opened read-only (never created); no file or no tries column means no line."""
         def photo_only(raw):
             try: ops = json.loads(raw)
             except (TypeError, ValueError): return False
             return isinstance(ops, list) and bool(ops) and all(
-                isinstance(c, dict) and c.get("op") == "product.set_photo" for c in ops)
+                isinstance(c, dict) and c.get("op") in ("product.set_photo", "product.add", "store.set_home_image")
+                and isinstance(c.get("args"), dict) and isinstance(c["args"].get("photo"), str) and c["args"]["photo"] != ""
+                for c in ops)
         n = sum(self._expiry(r) > now and photo_only(r["ops_json"]) for r in self._drafts("state = 'needs-details'") if self._visible(r))
         lines, path = [f"{'A photo is' if n == 1 else 'Some photos are'} waiting for details from you."] if n else [], self.sdir / "inbox.sqlite3"
         if not path.is_file(): return lines
