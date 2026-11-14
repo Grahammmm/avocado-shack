@@ -252,10 +252,9 @@ class HomeStatusTests(HomePhotoBase):
 
 class PromptTests(unittest.TestCase):
     def test_prompt_offers_one_of_three_destinations(self):
-        rule = ("- When a pending draft is a photo question (product.set_photo), answer with exactly one of product.set_photo "
-                "for a listed product, product.add when the owner says it is a new product, or store.set_home_image when he "
-                "says it is for the home page; never more than one. Take imageAlt from the owner's own words about what the "
-                "photo shows, never invent it; if he gave none, ask. Set revises to the draft's code.\n")
+        rule = ("- When a pending draft is a photo question (product.set_photo), answer with exactly one of product.set_photo (a "
+                "listed product), product.add (a new product) or store.set_home_image (the home page), and set revises to its "
+                "code. Take imageAlt from the owner's words about the photo; never invent it.\n")
         self.assertEqual(FIXTURE.read_text("utf-8").count(rule), 1)
         self.assertEqual(build(TEST_REGISTRY, tiny_content()), FIXTURE.read_text("utf-8"))
         self.assertNotIn("never both", FIXTURE.read_text("utf-8"))
