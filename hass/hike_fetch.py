@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import http.client
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -63,18 +64,39 @@ class LiveFetch:
             url += "?" + urllib.parse.urlencode({**request, "format": "jsonv2"})
         req = urllib.request.Request(url, data=data, headers={"User-Agent": self.agent})
         deadline = self.clock() + wait  # one elapsed-time limit over connect, headers and body: a trickle cannot outlast it
+        box, done, opened = {}, threading.Event(), []
+
+        def work():  # the blocking socket work runs here so the caller can stop waiting at the deadline whatever the peer does
+            try:
+                with self.opener(req, timeout=wait) as resp:
+                    opened.append(resp)
+                    parts, size = [], 0
+                    while size <= MAX_BODY_BYTES:
+                        if self.clock() >= deadline:
+                            raise hl.TransportError("slow", "time limit")
+                        chunk = resp.read(min(CHUNK_BYTES, MAX_BODY_BYTES + 1 - size))
+                        if not chunk:
+                            break
+                        parts.append(chunk)
+                        size += len(chunk)
+                    box["raw"] = b"".join(parts)
+            except BaseException as exc:  # handed to the caller, which maps it below
+                box["exc"] = exc
+            finally:
+                done.set()
+
         try:
-            with self.opener(req, timeout=wait) as resp:
-                parts, size = [], 0
-                while size <= MAX_BODY_BYTES:
-                    if self.clock() >= deadline:
-                        raise hl.TransportError("slow", "time limit")
-                    chunk = resp.read(min(CHUNK_BYTES, MAX_BODY_BYTES + 1 - size))
-                    if not chunk:
-                        break
-                    parts.append(chunk)
-                    size += len(chunk)
-                raw = b"".join(parts)
+            threading.Thread(target=work, daemon=True).start()
+            if not done.wait(wait):  # real elapsed time: a peer that trickles bytes inside one read or one header cannot hold the chat
+                for resp in opened:
+                    try:
+                        resp.close()
+                    except Exception:
+                        pass
+                raise hl.TransportError("slow", "time limit")
+            if "exc" in box:
+                raise box["exc"]
+            raw = box["raw"]
             if len(raw) > MAX_BODY_BYTES:
                 raise hl.TransportError("bad", "answer too large")
             return json.loads(raw)

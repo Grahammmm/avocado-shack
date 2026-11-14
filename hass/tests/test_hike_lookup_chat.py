@@ -725,6 +725,30 @@ class LiveClient(NoNetwork):
         self.assertEqual(cm.exception.kind if hasattr(cm.exception, "kind") else cm.exception.args[0], "slow")
         self.assertLessEqual(now[0], 40)
 
+    def test_a_read_that_never_returns_is_cut_off_at_the_time_limit(self):
+        import threading
+        import time as real_time
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        class Stuck(LiveClient.Resp):  # one read that stays blocked inside the receive loop (bytes trickling in)
+            def read(self, n=-1):
+                release.wait(30)
+                return b""
+
+        def stuck_headers(req, timeout=None):  # headers that never arrive
+            release.wait(30)
+            raise TimeoutError()
+
+        for opener in (lambda req, timeout=None: Stuck(b""), stuck_headers):
+            with self.subTest(opener=opener):
+                client = hike_fetch.LiveFetch(CONTACT, opener=opener)
+                started = real_time.monotonic()
+                with self.assertRaises(hike_fetch.hl.TransportError) as cm:
+                    client("overpass", {"query": "q"}, timeout=0.3)
+                self.assertEqual(cm.exception.kind, "slow")
+                self.assertLess(real_time.monotonic() - started, 5)
+
     def test_no_contact_no_client_and_none_is_built_in(self):
         for bad in (None, "", "nobody", "http://insecure.example.com", "a b@example.com"):
             with self.subTest(contact=bad), self.assertRaises(ValueError):
