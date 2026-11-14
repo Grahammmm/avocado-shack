@@ -526,7 +526,8 @@ class LiveEditor(conversation.Editor):
         target = next((j for j in reversed(entries) if j['kind'] == 'change' and j['state'] in journal.LANDED
                        and j['change_id'] not in undone), None)
         if target is None: return {'result': 'nothing-to-revert'}
-        made = self.prepare([{'op': 'history.revert', 'args': {'changeId': target['change_id']}}])
+        prepare = getattr(self, 'undo_preparer', None) or self.prepare
+        made = prepare([{'op': 'history.revert', 'args': {'changeId': target['change_id']}}])
         if made.get('result') != 'ok': return {'result': 'refused'}
         draft = made['draft']
         out = self.apply(draft['change_id'], draft['draft_hash'])
@@ -659,7 +660,9 @@ def main(argv=None):
         live = LiveEditor(cfg['state'], cfg['release'], Path(args.host).resolve().parent)
         # Recovery and retry validate each journal's recorded target before any target I/O.
         from hass.sandbox_editor import SiteEditor
-        live.environment_guard = SiteEditor(cfg['state'], host.site_gate(cfg), lambda: live).check_environment
+        site = SiteEditor(cfg['state'], host.site_gate(cfg), lambda: live)
+        live.environment_guard = site.check_environment
+        live.undo_preparer = site.prepare  # the operator's undo carries the recorded target binding
         out = live.operate(args.command, args.change_id, args.confirm, args.resolution, args.from_remote)
         # CLI never emits paths, sender, owner text or push history.
         out = {k: v for k, v in out.items() if k not in ('pushes', 'latest_attempt')}

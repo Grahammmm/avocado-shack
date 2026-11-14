@@ -333,6 +333,27 @@ class LiveRoutingTests(pl.ReleaseCase):
         self.assertEqual(ed.apply(draft['change_id'], draft['draft_hash'])['result'], 'applied')
         self.assertEqual(self.push_calls, 1)
 
+    def cli_run(self, mode, ids, *argv):
+        from hass import publish_live
+        cfg = {**mode, 'state': str(self.repo.state), 'release': self.cfg}
+        self.live.environment_guard = None
+        with patch.object(host, 'load_host', return_value=cfg), patch.object(host, 'site_gate', return_value=sandbox.Gate(lambda: mode, lambda: ids)), \
+             patch.object(publish_live, 'LiveEditor', return_value=self.live), patch('builtins.print') as out:
+            code = publish_live.main([*argv, '--host', str(self.hostdir / 'host.json')])
+        return code, json.loads(out.call_args[0][0])
+
+    def test_cli_revert_last_publishes_bound_undo_after_bound_live_change(self):
+        mode = {'approvals': 'live', 'live': ['site']}
+        ids = {('site', 'sandbox'): str(self.repo.wt), ('site', 'live'): 'fixture-remote-main'}
+        ed = self.adapter(mode)
+        draft = ed.prepare([{'op': HOURS, 'args': {'hours': NEW_HOURS}}])['draft']
+        self.assertEqual(ed.apply(draft['change_id'], draft['draft_hash'])['result'], 'applied')
+        pushes = self.push_calls
+        code, result = self.cli_run(mode, ids, 'revert-last')
+        self.assertEqual((code, result['result']), (0, 'ok'))
+        self.assertEqual(result['undid'], draft['change_id'])
+        self.assertEqual(self.push_calls, pushes + 1)
+
     def cli_retry(self, mode, ids, cid):
         from hass import publish_live
         cfg = {**mode, 'state': str(self.repo.state), 'release': self.cfg}
