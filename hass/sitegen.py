@@ -314,6 +314,21 @@ def _public_community_json(content: Content) -> bytes:
             + "\n").encode("utf-8")
 
 
+# AV-08: the published site is plain static files with no club service behind /api/community, so a page that asked for it
+# would log a 404 in the visitor's console on every load. The published club pages say so up front and community.js
+# (which reads this marker) goes straight to the published community.json. The source pages and the local server, which
+# do answer /api/community, never carry it; a host that adds the service drops this marker.
+NO_CLUB_SERVICE_MARKER = '<meta name="club-service" content="none">'
+NO_CLUB_SERVICE_PAGES = ("index.html", "hike/index.html")
+
+
+def _mark_no_club_service(rel: str, page: bytes) -> bytes:
+    text, anchor = page.decode("utf-8"), '<meta charset="utf-8">'
+    if text.count(anchor) != 1 or NO_CLUB_SERVICE_MARKER in text:
+        raise ValueError(f"publish: cannot place the club-service marker in {rel}")
+    return text.replace(anchor, anchor + NO_CLUB_SERVICE_MARKER).encode("utf-8")
+
+
 def publish_files(content: Content, repo: Path, template_dir: Path | None = None, today=None) -> dict[str, bytes]:
     """{site-relative path: bytes} for the publishable static site: generated pages and scripts, the allowlisted
     static files, a public community.json, and only the assets the pages and the active catalog use (the home
@@ -322,6 +337,8 @@ def publish_files(content: Content, repo: Path, template_dir: Path | None = None
     site = repo / SITE_PREFIX
     rendered = render(content, template_dir or repo / "hass" / "templates", today=today)
     files = {rel: rendered[SITE_PREFIX + rel] for rel in PUBLISH_GENERATED}
+    for rel in NO_CLUB_SERVICE_PAGES:
+        files[rel] = _mark_no_club_service(rel, files[rel])
     files["community.json"] = _public_community_json(content)
     for rel in PUBLISH_PAGES:
         files[rel] = render_template((Path(template_dir or repo / "hass" / "templates") / rel).read_bytes().decode("utf-8"), {}).encode("utf-8")
