@@ -104,7 +104,7 @@ class MacRunbookTests(unittest.TestCase):
         sandbox_keys = {'live', 'off', 'mode_gen'}  # optional per-target switch keys: documented in SANDBOX.md, absent from the first-install example
         for key in sandbox_keys:
             self.assertIn('\"' + key + '\"', sandbox_doc)
-        self.assertEqual(names(blocks[1]) - {'url', 'model'}, host.KEYS - {'release'} - sandbox_keys)
+        self.assertEqual(names(blocks[1]) - {'url', 'model'}, host.KEYS - {'release', 'clover'} - sandbox_keys)
         tree = ast.parse(inspect.getsource(publish_live.release_config))
         release_keys = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)
                             and any(isinstance(t, ast.Name) and t.id == 'keys' for t in n.targets))

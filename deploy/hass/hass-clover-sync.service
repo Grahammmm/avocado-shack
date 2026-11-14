@@ -1,0 +1,14 @@
+[Unit]
+Description=Hass Clover read-only till sync into the private cache (HASS-CLOVER-2; template, not installed by default)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/hass/runtime
+ExecStart=/usr/bin/python3 -B %h/.local/share/hass/runtime/hass/clover/cli.py sync --host %h/.local/state/hass/host/host.json
+# exit 1 = Clover could not be read this time (recorded in the cache, the chat says so); not a failed unit; exit 2 stays a failure
+SuccessExitStatus=1
+TimeoutStartSec=300
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

@@ -5,7 +5,8 @@
   work         drains the inbox through Receiver + Conversation; in `private` mode an owner `yes` is applied by the
                editor's single-writer path; every reply goes to the relay store for the Mac to pull.
   start-point  --at ISO: records the inbox start point once.
-  check        validates host.json, the key file and the runtime identity; opens no socket.
+  check        validates host.json, the key file and the runtime identity; opens no socket. HASS-CLOVER-2: also the optional
+               `clover` block and its token file by stat only ("clover": "not configured" | "ok" | one problem word).
   mode         MODE: HASS-LIVE-PLAN-1, the one-line switch: rewrites `approvals` (hold | private | live) in host.json, keeping it 0600,
                and refuses (changing nothing) if the result would not load. Then `systemctl --user restart hass-worker`.
 Exit 0 ok, 2 config / secret / start point / runtime refused (one JSON line, field names only), 1 any other error.
@@ -27,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
 MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay")
 METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
-KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "release", "live", "off", "mode_gen"}
+KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "release", "clover", "live", "off", "mode_gen"}
+OPTIONAL = {"previewer", "pictures", "release", "clover", "live", "off", "mode_gen"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
 PICTURES_PER_MIN = 10  # HASS-ATTACH-1: more picture requests in a minute get `gone` with no data
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 LIVE_REASON = "live release is not installed"
@@ -96,7 +98,7 @@ def _listen(value, allow_zero):
 def load_host(path, allow_port_zero=False) -> dict:
     """host.json: a regular 0600 file of this user, <= 64 KiB, closed keys. Returns the config plus `addr`, `peers`."""
     raw = _private_json(path)
-    bad = sorted(set(raw) - KEYS) + sorted(KEYS - {"previewer", "pictures", "release", "live", "off", "mode_gen"} - set(raw))
+    bad = sorted(set(raw) - KEYS) + sorted(KEYS - OPTIONAL - set(raw))
     try: sandbox.policy(raw)
     except sandbox.ModeError as exc: bad.append(exc.code)
     text = lambda v: isinstance(v, str) and 0 < len(v) <= 4096  # noqa: E731
@@ -111,6 +113,10 @@ def load_host(path, allow_port_zero=False) -> dict:
               "allowedPeers": isinstance(peers, list) and all(_ip(p) for p in peers),
               "listen": _listen(raw.get("listen"), allow_port_zero) is not None}
     bad += [name for name, ok in checks.items() if not ok and name not in bad]
+    if "clover" in raw:  # HASS-CLOVER-2: the read-only Clover block; field names only, never a value or the token path
+        from hass.clover.config import ConfigProblem, from_settings
+        try: from_settings(raw["clover"])
+        except ConfigProblem as exc: bad += [f"clover.{f}" if f != "clover" else "clover" for f in exc.fields]
     if not bad and not peers and not _listen(raw["listen"], allow_port_zero)[0].is_loopback: bad.append("allowedPeers")
     if raw.get("approvals") == "live" or isinstance(raw.get('live'), list) and "site" in raw['live']:
         from hass.publish_live import release_config
@@ -380,6 +386,14 @@ def interpreter_builder(cfg, worktree):
     return build
 
 
+def clover_state(cfg) -> str:
+    """HASS-CLOVER-2: 'not configured' (no `clover` block), 'ok', or one credential.REASONS word for the token file. stat only: the
+    token is never opened, and neither the path nor any byte is returned."""
+    if cfg.get("clover") is None: return "not configured"
+    from hass.clover.credential import inspect
+    return inspect(cfg["clover"]["tokenFile"]) or "ok"
+
+
 def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagelog.off) -> Worker:
     worktree = _worktree(cfg)
     build = build or interpreter_builder(cfg, worktree)
@@ -416,6 +430,9 @@ def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagel
     if cfg["approvals"] == "live" and not hasattr(conv.editor, 'gate'):
         conv.editor.conv = conv
         conv.editor.reconcile()
+    if cfg.get("clover") is not None:  # HASS-CLOVER-2: the owner's till questions, read from the private cache only (no token here)
+        from hass.clover.chat import TillDesk
+        conv.till = TillDesk(cfg["state"], cfg["clover"])
     rx = receiver.Receiver(state=inbox_mod.Inbox(cfg["state"], clock=clock), settings=conv,
                            apply=cfg["approvals"] in ("private", "live"))
     return Worker(conv, rx, store, worktree, build, clock, Path(cfg["state"]).resolve() / "screenshots" if cfg["pictures"] else None, stage)
@@ -477,6 +494,10 @@ def _run(args, root, clock):
         except ValueError: raise Refuse({"result": "start-point-refused"}) from None
         return {"result": "ok", "start_at": args.at}
     cfg, key = _ready(args, root, need_start=args.cmd != "check")
+    if args.cmd == "check":  # HASS-CLOVER-2: the Clover block and its token file, by stat only (the token is never opened here)
+        clover = clover_state(cfg)
+        if clover not in ("ok", "not configured"): raise Refuse({"result": "clover", "clover": clover})
+        return {"result": "ok", "clover": clover}
     host_dir = Path(args.host).resolve().parent
     stage = stagelog.StageLog(host_dir / "stages.jsonl")  # HASS-FAST-1: read-only stage times, ids hashed, no text
     if args.cmd == "work":

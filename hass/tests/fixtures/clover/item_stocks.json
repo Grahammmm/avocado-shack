@@ -1,0 +1,9 @@
+{
+  "elements": [
+    {"item": {"id": "FAKEITEM00001"}, "quantity": 11.0, "modifiedTime": 1794260100000},
+    {"item": {"id": "FAKEITEM00002"}, "quantity": 40.0, "modifiedTime": 1794250300000},
+    {"item": {"id": "FAKEITEM00003"}, "quantity": 0.0, "modifiedTime": 1794260500000},
+    {"item": {"id": "FAKEITEM00004"}, "quantity": 0.0, "modifiedTime": 1794250700000},
+    {"item": {"id": "FAKEITEM00005"}, "quantity": 7.5, "modifiedTime": 1794250900000}
+  ]
+}
