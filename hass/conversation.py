@@ -18,6 +18,7 @@ from hass.content_model import HOME_IMAGE_RE, SHELF_LABELS, ContentError, _text 
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
 from hass import corrlog, hike_chat, live_policy, voice  # noqa: E402
+from hass import capabilities  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, openreq  # noqa: E402
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
@@ -1862,7 +1863,8 @@ class Conversation:
 
     def _command(self, msg, now, verb, code) -> str:
         if verb == "help":
-            self._reply(HELP_TEXT, long_ok=True)
+            registry = self.dispatch.registry if self.dispatch else None
+            self._reply(HELP_TEXT + "\n\n" + capabilities.help_section(registry), long_ok=True)
             return "help"
         if verb in ("status", "pause", "resume"): return self._control(msg, now, verb)
         if verb == "find": return self._find(code) if 1 <= len(code) <= FIND_TEXT_MAX else (self._reply(FIND_USAGE), "find")[1]
