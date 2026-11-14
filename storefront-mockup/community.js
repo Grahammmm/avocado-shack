@@ -140,7 +140,10 @@ function render(){
 // The club service's GET (no visitor data) answers acceptsSubmissions:true; that is the only way a form may POST.
 // One GET /api/community at a time: callers that arrive while it is in flight (the probe, loadNext, liveData) share it.
 let serviceProbe,inflight;
+// AV-08: a published page carries <meta name="club-service" content="none"> (hass/sitegen.py publish): that host has no /api/community, so the page never asks and the console stays clean.
+const noService=!!document.querySelector('meta[name="club-service"][content="none"]');
 const apiCommunity=()=>inflight??=(async()=>{try{
+ if(noService)return null;
  const r=await fetch('/api/community',{cache:'no-store'});
  if(!r.ok||!(r.headers.get('Content-Type')||'').includes('application/json'))return null;
  return await r.json()}catch{return null}})().finally(()=>{inflight=null});
