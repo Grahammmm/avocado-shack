@@ -139,6 +139,14 @@ It was proved with the test kit and works with the dispatcher in PR 526 as writt
 * The spec says the dispatcher asks for a guest limit when sign-up is on and none was given. Here the editor already asks that
   (`needs-details`), so `capacity` is optional and a separate `no_limit` slot carries "no limit".
 
+### The map lookup (HIKE-LOOKUP-2, card A6)
+
+Off unless the operator sets `hikeLookup.contact`. `hikes.py` then offers a trail from OpenStreetMap and USGS in place of the
+meeting-place question of `hike.add` (the `question` hook), reads a bare yes, no or number to it itself (the `answer` hook, so the
+conversation does not take it for an approval) and plans `route.add` plus `hike.create` for a confirmed trail. This is the one place
+this skill module needs `dispatch.py` and `conversation.py` hooks; how it works, what it keeps on disk and how to turn it off is in
+`docs/hass/HIKE-LOOKUP.md`, section 7. The skill's slots, rules and prompt are unchanged.
+
 ## Tests
 
     python3 -B -m unittest hass.tests.test_skills_hikes hass.tests.test_skills_plans hass.tests.test_skills_cases -v
