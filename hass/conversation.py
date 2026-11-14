@@ -852,6 +852,23 @@ class Conversation:
         if self._audit_lines is not None: self._audit_lines.append((step, line))
         else: self.audit.record(step, **line)
 
+    def _audit_ask(self, msg, step, result, skills=(), n=0):
+        """AVB-10: one audit line for a skill request that makes no draft: a read-only answer (`answered`, A0) or a refusal
+        before any draft (`refused`). The action is one id per (message, skill call); the line holds the skill names, the
+        pack, the one-way message id and a fixed result word only: never the request, the answer, a price or a count."""
+        try:
+            names = [s.name if hasattr(s, "name") else s for s in skills if s is not None]
+            refs = [f"{s.name}@{s.version}" if hasattr(s, "name") else s for s in skills if s is not None]
+            skill = "+".join(dict.fromkeys(r for r in refs if isinstance(r, str))) or None
+            line = dict(action=audit_mod.new_action("ask", msg.provider_id, skill or "-", n), who=self._audit_role(msg.chat),
+                        pack=audit_mod.pack_of(names), target="local", env="live" if self.settings.get("liveSite") else "sandbox",
+                        result=result, skill=skill if skill and audit_mod.SKILL_RE.fullmatch(skill) else None,
+                        msg=_short(msg.provider_id), approval="A0" if step == "answered" else None)
+        except Exception:  # noqa: BLE001 - an audit line is never worth a lost reply
+            return
+        if self._audit_lines is not None: self._audit_lines.append((step, line))
+        else: self.audit.record(step, **line)
+
     def flush(self, adapter) -> int:
         return self.outbox.flush(adapter)
 

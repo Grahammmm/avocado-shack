@@ -24,7 +24,11 @@ One line per step of an action (HASS-ARCHITECTURE section 5):
 Never in a line: message text, owner words, prices, counts, phone numbers, addresses or tokens. Every key is on a closed
 list and every value must match its pattern; a digit run over 4 is refused outside the id keys (check()). A line that
 fails the check is not written. record() never raises unless strict=True: the chat must keep answering if a disk is
-full, but a till write (AVB-15) calls it with strict=True and stops when the line could not be written.
+full, but a till write (AVB-15) calls it with strict=True and stops when the line could not be written. record() says True
+only when every byte of the line is written and flushed (a short write is finished; no progress or an error raises).
+
+A skill request that makes no draft is an action of its own (`target: local`): `answered` for a read-only skill (A0) and
+`refused` for a refusal before any draft (hass/skills/dispatch.py, Conversation._audit_ask).
 
 Command line (on the box; prints ids and codes only):
   python3 hass/audit.py show --state DIR [--days N] [--action ID]   one JSON line per audit line
@@ -48,7 +52,9 @@ TARGETS = ("site", "till", "local")
 ENVS = ("sandbox", "live")
 APPROVALS = ("A0", "A1", "A2", "A3")
 RESULTS = ("ok", "stale", "cap", "policy", "stopped", "unknown", "said-no", "expired", "replaced", "refused", "busy",
-           "failed", "not-verified", "interrupted")
+           "failed", "not-verified", "interrupted", "backlog")
+# the pack of a skill group (HASS-ARCHITECTURE section 3) until AVB-09 puts `pack` on every skill; any other group is `site`
+GROUP_PACKS = {"report": "reports", "social": "reports", "answer": "core", "backlog": "core", "page.faq": "front", "till": "till"}
 MAX_SUBJECTS, MAX_FIELDS = 10, 20
 ROLE_RE = re.compile(r"owner(?::[a-z]{1,20})?|operator|timer")
 HEX12 = re.compile(r"[0-9a-f]{12}")
@@ -76,6 +82,12 @@ class AuditError(Exception):
 def new_action(*parts) -> str:
     """A one-way action id from things that identify the request (for example a draft code and its row)."""
     return "act-" + short(":".join(str(p) for p in parts))
+
+
+def pack_of(names) -> str:
+    """The one pack of these skill names (`report.shelf`, ...); skills of different packs together are `core`."""
+    packs = {GROUP_PACKS.get(n, GROUP_PACKS.get(n.split(".")[0], "site")) for n in names if isinstance(n, str)}
+    return packs.pop() if len(packs) == 1 else "core"
 
 
 def check(row) -> list:
@@ -178,7 +190,7 @@ class AuditLog:
             row["seq"] = lines + 1
             data = (("\n" if size and not _ends_with_newline(fd, size) else "") + json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
             if len(data) > MAX_LINE: raise AuditError("the audit line is too long")
-            os.write(fd, data)
+            _write_all(fd, data)
             os.fsync(fd)
         finally:
             os.close(fd)
@@ -218,16 +230,19 @@ class AuditLog:
 
     def approved(self, limit) -> list:
         """Up to `limit` actions with an `approved` step, newest approval first, each as
-        {"action", "draft", "target", "env", "at", "last": the newest line of that action, "undone_by": action or None}.
+        {"action", "draft", "target", "env", "at", "last": the newest line of that action, "undone_by": action or None,
+         "saved": True when a later line of the action says the write itself went through (applied, published or undone: ok)}.
         Day files are read newest first and reading stops once enough are found, so `history` stays quick."""
-        found, later, undone = [], {}, {}
+        found, later, undone, saved = [], {}, {}, set()
         for path in reversed(self.days()):
             for row in reversed(self.read_day(path)):
                 act = row["action"]
-                if row["step"] == "undone" and "undo_of" in row: undone.setdefault(row["undo_of"], act)
+                if row["step"] == "undone" and "undo_of" in row and row["result"] == "ok": undone.setdefault(row["undo_of"], act)
+                if row["step"] in ("applied", "published", "undone") and row["result"] == "ok": saved.add(act)
                 if row["step"] == "approved" and all(f["action"] != act for f in found):
                     found.append({"action": act, "draft": row.get("draft"), "target": row["target"], "env": row["env"],
-                                  "at": row["at"], "last": later.get(act, row), "undone_by": undone.get(act)})
+                                  "at": row["at"], "last": later.get(act, row), "undone_by": undone.get(act),
+                                  "saved": act in saved})
                 later.setdefault(act, row)
             if len(found) >= limit: break
         return found[:limit]
@@ -238,16 +253,35 @@ class AuditLog:
 
 
 # -- plain words for the owner's `history` and the command line ---------------------------------------------------------
-TILL_WORDS = {"applied": "saved", "undone": "saved (an undo)", "failed": "it didn't go through, so nothing changed",
-              "approved": "being saved", "verified": "saved and checked", "published": "saved"}
+# results that stop an action before anything is written: only these may say "nothing changed"
+NOT_WRITTEN = frozenset({"stale", "cap", "policy", "refused", "said-no", "expired", "replaced"})
+UNSURE = "I'm not sure where it stands, so please check it"
+
+
+def till_state(entry) -> str:
+    """Where an approved till action stands, from its newest line, that line's result and whether the write went through.
+    Only a check that passed says "checked"; only a failure that stopped it before any write says "nothing changed"; a
+    failure after the write, or one that does not say where it stopped, says so plainly instead of guessing."""
+    last, saved = entry["last"], entry.get("saved", False)
+    step, result = last["step"], last["result"]
+    if entry.get("undone_by"): return "undone"
+    if step == "approved": return "being saved" if result == "ok" else UNSURE
+    if step in ("applied", "published", "undone"):
+        return ("saved (an undo)" if step == "undone" else "saved") if result == "ok" else UNSURE
+    if step == "verified":
+        if result == "ok" and saved: return "saved and checked"
+        return "saved, but I couldn't check it, so please look at it" if saved else UNSURE
+    if step in ("failed", "refused"):
+        if saved: return "something went wrong after it was saved; " + UNSURE
+        return "it didn't go through, so nothing changed" if result in NOT_WRITTEN else UNSURE
+    return UNSURE
 
 
 def till_line(entry) -> str:
     """A till change in history. The till journal holds the details; this line says only where it was and where it stands
     (no code: the voice rules keep a bare code out of a reply)."""
     where = "the test till" if entry["env"] == "sandbox" else "the shop till"
-    state = "undone" if entry.get("undone_by") else TILL_WORDS.get(entry["last"]["step"], "I'm not sure where it stands")
-    return f"- A change on {where}: {state}."
+    return f"- A change on {where}: {till_state(entry)}."
 
 
 def _history_text(log, limit) -> str:
@@ -298,7 +332,20 @@ def _ends_with_newline(fd, size) -> bool:
     return os.pread(fd, 1, size - 1) == b"\n"
 
 
-__all__ = ["AuditLog", "AuditError", "check", "new_action", "subjects_of", "fields_of", "till_line", "FOLDER"]
+def _write_all(fd, data) -> None:
+    """Write every byte of `data` (a short write goes on from where it stopped). A write that makes no progress or fails
+    raises: the line is then not on disk in full, the earlier lines are untouched, and the torn end has no newline, so the
+    reader skips it, `check` counts it and the next line starts on a line of its own."""
+    view = memoryview(data)
+    while view:
+        done = os.write(fd, view)
+        if not isinstance(done, int) or done <= 0 or done > len(view):
+            raise AuditError("the audit line could not be written in full")
+        view = view[done:]
+
+
+__all__ = ["AuditLog", "AuditError", "check", "new_action", "pack_of", "subjects_of", "fields_of", "till_line", "till_state",
+           "FOLDER"]
 
 if __name__ == "__main__":
     raise SystemExit(main())

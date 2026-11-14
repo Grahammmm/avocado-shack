@@ -5,16 +5,20 @@ repo, linked writer worktree, private 0700 state dir, fake previewer, injected c
 Run: python3 -m unittest hass.tests.test_audit -v
 """
 
-import json, os, shutil, subprocess, sys, tempfile, unittest  # noqa: E401
+import errno, json, os, shutil, subprocess, sys, tempfile, unittest  # noqa: E401
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from hass import audit
 from hass.content_model import REPO_ROOT
 from hass.conversation import Inbound
+from hass.skills.hikes import Refusal
+from hass.skills.reports import REPORT_SHELF
 from hass.stagelog import short
 from hass.tests.test_conversation import CHAT, OWNER, _ops
 from hass.tests.test_editor import DESC
+from hass.tests.test_skill_dispatch import HIKE_ADD, LIVE1, MILL, SkillCase, skill_reply, toy
 from hass.tests.test_undo import H06TestCase
 
 T0 = datetime(2026, 11, 13, 21, 0, tzinfo=timezone.utc)
@@ -105,6 +109,67 @@ class AuditLogTests(unittest.TestCase):
         self.assertEqual(audit.subjects_of(records), ["products:photo-product-001", "store"])
         self.assertEqual(audit.fields_of(records), ["description", "hours", "record"])
 
+    # -- a write that does not finish (review round 1, finding 1) ---------------------------------------------------
+    def _writes(self, *plan):
+        """Patch os.write: each call takes the next of `plan` (n: write the first n bytes for real; an exception: raise it);
+        when the plan runs out, writes go through whole."""
+        real, steps = os.write, list(plan)
+
+        def fake(fd, data):
+            if not steps: return real(fd, data)
+            step = steps.pop(0)
+            if isinstance(step, BaseException): raise step
+            return real(fd, bytes(data[:step])) if step else 0
+        return mock.patch.object(audit.os, "write", fake)
+
+    def test_a_short_write_is_finished_before_record_says_yes(self):
+        act = audit.new_action("short")
+        with self._writes(20, 7, 1):  # three short writes, then the rest whole
+            self.assertTrue(self.log.record("approved", action=act, approval="A1", approved_by="owner", strict=True, **TILL))
+        [row] = self.log.rows()
+        self.assertEqual((row["action"], row["step"], row["seq"]), (act, "approved", 1))
+        day = self.state / audit.FOLDER / "2026-11-13.jsonl"
+        self.assertEqual(day.read_bytes().count(b"\n"), 1)
+
+    def test_a_write_that_stops_is_refused_keeps_earlier_lines_and_is_detectable(self):
+        act = audit.new_action("stops")
+        self.assertTrue(self.log.record("drafted", action=act, strict=True, **TILL))
+        day = self.state / audit.FOLDER / "2026-11-13.jsonl"
+        first = day.read_bytes()
+        for name, plan in {"partial then error": (20, OSError(errno.ENOSPC, "full")), "no progress": (0,),
+                           "error": (OSError(errno.EIO, "io"),)}.items():
+            with self.subTest(name):
+                with self._writes(*plan), self.assertRaises(audit.AuditError):
+                    self.log.record("approved", action=act, approval="A1", approved_by="owner", strict=True, **TILL)
+                with self._writes(*plan):
+                    self.assertFalse(self.log.record("approved", action=act, approval="A1", approved_by="owner", **TILL))
+                self.assertTrue(day.read_bytes().startswith(first))  # the earlier line is untouched
+                self.assertEqual([r["step"] for r in self.log.rows()], ["drafted"])  # no approved line was kept
+        self.assertTrue(self.log.record("approved", action=act, approval="A1", approved_by="owner", strict=True, **TILL))
+        self.assertEqual([r["step"] for r in self.log.rows()], ["drafted", "approved"])  # the next line stands on its own
+        run = subprocess.run([sys.executable, str(SCRIPT), "check", "--state", str(self.state)], capture_output=True, text=True)
+        self.assertEqual((run.returncode, json.loads(run.stdout)["lines"], json.loads(run.stdout)["bad"]), (1, 2, 2))  # the two torn ends
+
+    # -- where a till change stands (review round 1, finding 3) -----------------------------------------------------
+    def test_till_history_says_only_what_the_lines_show(self):
+        unsure = "I'm not sure where it stands, so please check it"
+        cases = {"checked": ([("applied", "ok"), ("verified", "ok")], "saved and checked"),
+                 "check failed": ([("applied", "ok"), ("verified", "not-verified")], "saved, but I couldn't check it, so please look at it"),
+                 "saved": ([("applied", "ok")], "saved"),
+                 "being saved": ([], "being saved"),
+                 "stale before the write": ([("failed", "stale")], "it didn't go through, so nothing changed"),
+                 "failed after the write": ([("applied", "ok"), ("failed", "failed")], "something went wrong after it was saved; " + unsure),
+                 "failed, not known where": ([("failed", "failed")], unsure),
+                 "interrupted": ([("failed", "interrupted")], unsure),
+                 "verified with no write": ([("verified", "ok")], unsure)}
+        for n, (name, (steps, words)) in enumerate(cases.items()):
+            with self.subTest(name):
+                act = audit.new_action("till-state", n)
+                self.log.record("approved", action=act, approval="A1", approved_by="owner", strict=True, **TILL)
+                for step, result in steps: self.log.record(step, action=act, strict=True, **{**TILL, "result": result})
+                [entry] = [e for e in self.log.approved(50) if e["action"] == act]
+                self.assertEqual(audit.till_line(entry), f"- A change on the test till: {words}.")
+
 
 class ConversationAuditTests(H06TestCase):
     def setUp(self):
@@ -189,6 +254,62 @@ class ConversationAuditTests(H06TestCase):
         self.assertEqual(len(shown), 2)
         self.assertIn(new["summary"], shown[0])
         self.assertIn(old["summary"], shown[1])
+
+    def test_owner_history_tells_a_failed_till_check_from_a_passed_one(self):
+        till = audit.AuditLog(self.repo.state, lambda: self.now)
+        for name, result in (("checked", "ok"), ("not-checked", "not-verified")):
+            act = audit.new_action("till", name)
+            till.record("approved", action=act, approval="A1", approved_by="owner", strict=True, **TILL)
+            till.record("applied", action=act, strict=True, **TILL)
+            till.record("verified", action=act, strict=True, **{**TILL, "result": result})
+        self.assertEqual(self.say("history"), "history")
+        [reply] = self.replies()
+        self.assertEqual(reply.splitlines(), ["Here's what we changed lately:",
+                                              "- A change on the test till: saved, but I couldn't check it, so please look at it.",
+                                              "- A change on the test till: saved and checked."])
+
+
+def _refuse(slots, ctx):
+    raise Refusal("I can't add a hike that long ago.")
+
+
+OLD_HIKE = toy("hike.old", "add an old hike", HIKE_ADD.slots, _refuse)
+
+
+class SkillAuditTests(SkillCase):
+    """Review round 1, finding 2: a skill that answers (read-only) or refuses before any draft is an action too."""
+    SKILLS = (HIKE_ADD, REPORT_SHELF, OLD_HIKE)
+
+    def test_a_report_answer_is_an_answered_line(self):
+        text = "please show the shelf report"
+        self.script(text, skill_reply("report.shelf"))
+        self.assertEqual(self.say(text), "answer")
+        [answer] = self.replies()
+        [row] = lines(self.repo.state)
+        self.assertEqual(audit.check(row), [])
+        self.assertEqual({k: row[k] for k in ("step", "result", "skill", "pack", "target", "env", "approval", "who", "msg")},
+                         {"step": "answered", "result": "ok", "skill": f"report.shelf@{REPORT_SHELF.version}", "pack": "reports",
+                          "target": "local", "env": "sandbox", "approval": "A0", "who": "owner", "msg": short("m1")})
+        raw = b"".join(p.read_bytes() for p in (self.repo.state / audit.FOLDER).iterdir())
+        for private in (text, "shelf report", *[w for w in answer.split() if len(w) > 5][:5], OWNER, CHAT):
+            self.assertNotIn(private.encode(), raw, private)
+        self.assertEqual(self.conv.audit.approved(5), [])  # an answer is not a change: history does not list it
+
+    def test_a_skill_refusal_before_any_draft_is_a_refused_line(self):
+        self.script(LIVE1, skill_reply("hike.old", **MILL))
+        self.assertEqual(self.say(LIVE1), "refused")
+        self.assertEqual(self.replies(), ["I can't add a hike that long ago."])
+        [row] = lines(self.repo.state)
+        self.assertEqual((row["step"], row["result"], row["skill"], row["pack"], row["target"]),
+                         ("refused", "refused", "hike.old@1", "site", "local"))
+        self.assertNotIn("approval", row)
+        self.nothing_written()
+
+    def test_a_drafted_skill_change_still_writes_its_site_steps(self):
+        self.script(LIVE1, skill_reply("hike.add", **MILL))
+        self.assertEqual(self.say(LIVE1), "proposed")
+        self.assertEqual([(r["step"], r["skill"], r["target"]) for r in lines(self.repo.state)],
+                         [("drafted", "hike.add@1", "site")])
 
 
 if __name__ == "__main__":
