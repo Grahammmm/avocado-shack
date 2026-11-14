@@ -88,6 +88,8 @@ class LiveFetch:
                         size += len(chunk)
                     box["raw"] = b"".join(parts)
             except BaseException as exc:  # handed to the caller, which maps it below
+                if isinstance(exc, urllib.error.HTTPError):  # the opener raised it, so no ``with`` owns its body: close it here, on the worker
+                    _close(exc)  # never read; a close that blocks only holds this worker, the caller's wait is already bounded
                 box["exc"] = exc
             finally:
                 done.set()
