@@ -13,6 +13,12 @@ Raised the one measured-cost fallback in `hass/tests/ci_shards.py` from 240 to 4
 
 Builder check: `python3 -m unittest hass.tests.test_ci_shards -v` ran 27 tests, OK, including old/new cost boundaries (240/241/480/481 seconds) and full coverage for push/schedule/manual events. This is build evidence, not a measured speedup. Post-merge acceptance remains the next 40 green PR runs (full-tier share below 40%, queue median below 5 minutes, wall median below 25 minutes) and seven days without a red-main episode caused by a skipped test. Rollback: restore the 240-second budget/revert this change. Not installed, merged or live-verified by the builder.
 
+## AVOC-MAIN-RED-SCAFFOLD: scaffold capability metadata — November 13, 2026
+
+Repaired the AVB-20 template after AVB-09 made capability metadata mandatory. Generated skills describe their existing owner-approved site write (`site`, site target, A1, subject/field-name audit declaration, owner); sandbox support follows the op and selected arguments' live boundary (`full` for chat-live, otherwise `preview`). The lint, live policy and approval path are unchanged. Added coverage for all metadata fields and a private-only product-name edit alongside the existing product, text and store cases; the review-required warning remains.
+
+Fresh proof: the four requested modules (`test_skills_scaffold`, `test_capabilities`, `test_skills_lint`, `test_help`) reproduced 4 failures and 10 errors on main, then passed all 49 tests with the repair. `python3 hass/capabilities.py --check` passes without regeneration: no registry skill was added. CI planner/required-check evidence is recorded in the PR and task handoff. No live edits, messages or publication.
+
 ## R4-AV-05: the skill test kit judges replies before the safe fallback — November 13, 2026
 
 The checker, not the control row, was wrong: its isolated Conversation used the normal voice fallback, replacing a jargon-filled question with a safe line before the kit examined it. The scratch conversation now sets its own outbox to strict voice checking, so the existing VoiceError handler records `jargon`. This does not change the live conversation, voice rules, or the negative control. No new meta-tests or workflow changes.
