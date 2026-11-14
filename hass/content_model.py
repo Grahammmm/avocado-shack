@@ -64,7 +64,7 @@ EVENT_STATUSES = ("scheduled", "completed", "cancelled")
 PHONE_DIGITS = 10  # US number: area code, exchange, line; LIMITS.md cites it
 PHONE_RE = re.compile(rf"[2-9][0-9]{{2}}[2-9][0-9]{{{PHONE_DIGITS - 4}}}", re.ASCII)
 STORE_FIELDS = ("schemaVersion", "name", "streetAddress", "town", "hours")
-STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone", "specials")  # all absent by default
+STORE_OPTIONAL = ("selection_checked_on", "intro", "headline", "story", "homeImage", "notice", "phone", "specials", "homeSections", "banner")  # all absent by default
 # AVO-SPECIALS-1: store.specials, a list of weekly specials (absent = none; the saved files do not change).
 SPECIAL_FIELDS = ("id", "title", "deal", "start", "end", "order")
 SPECIAL_OPTIONAL = ("product", "picture")  # product: an existing product id; picture: true reuses that product's picture
@@ -559,6 +559,51 @@ def validate_specials(problems, specials, product_ids, today: date | None = None
             break
 
 
+HOME_SECTIONS = ("market", "our-way", "visit", "newsletter")
+BANNER_LINKS = {"visit": "/#visit", "market": "/#market", "hike": "/hike",
+                "about": "/about/", "getting-here": "/getting-here/", "policies": "/policies/", "faq": "/faq/"}
+BANNER_PAGES = {"about": "pageAbout", "getting-here": "pageGettingHere", "policies": "pagePolicies", "faq": "pageFaq"}
+MAX_BANNER, MAX_BANNER_DAYS, MAX_BANNER_AHEAD = 80, 31, 60
+
+
+def default_sections():
+    return [{"id": part, "shown": True} for part in HOME_SECTIONS]
+
+
+def validate_sections(problems, rows):
+    if not isinstance(rows, list) or len(rows) != 4 or any(
+            not isinstance(r, dict) or set(r) != {"id", "shown"} or not isinstance(r["id"], str)
+            or type(r["shown"]) is not bool for r in rows):
+        problems.append("store.homeSections: exactly four id/shown rows are required")
+    elif set(r["id"] for r in rows) != set(HOME_SECTIONS):
+        problems.append("store.homeSections: each home part must occur exactly once")
+    elif any(not r["shown"] and r["id"] in ("market", "visit") for r in rows):
+        problems.append("The food list and the visit block always stay on the home page.")
+
+
+def validate_banner(problems, banner):
+    if not _closed_keys(problems, "store.banner", banner, ("text", "start", "end", "link"), ("text", "start", "end")):
+        return
+    # _closed_keys reports missing required fields but still returns True for an object, so read every field with .get.
+    if "text" in banner:
+        _text(problems, "store.banner.text", banner["text"], limit=MAX_BANNER)
+    text = banner.get("text")
+    if isinstance(text, str):
+        from hass.live_policy import URL, EMAIL, HANDLE
+        if len(text) < 3 or sum(c.isalpha() for c in text) < 3 or len(text.splitlines()) != 1:
+            problems.append("The banner needs one line with at least 3 letters.")
+        if any(rx.search(text) for rx in (URL, EMAIL, HANDLE)):
+            problems.append("The banner cannot contain a web address, email or handle.")
+    if "start" in banner and "end" in banner:  # a missing one is already reported by _closed_keys
+        start, end = iso_day(banner["start"]), iso_day(banner["end"])
+        if start is None or end is None:
+            problems.append("The banner needs real dates YYYY-MM-DD.")
+        elif end < start or (end - start).days > MAX_BANNER_DAYS:
+            problems.append("The banner end must be on or after its start, at most 31 days apart.")
+    if "link" in banner and (not isinstance(banner["link"], str) or banner["link"] not in BANNER_LINKS):
+        problems.append("The banner link must be one of the shop's own places.")
+
+
 def validate_store(problems, store, today: date | None = None, product_ids=None):
     if not _closed_keys(problems, "store", store, STORE_FIELDS + STORE_OPTIONAL, STORE_FIELDS):
         return
@@ -608,6 +653,10 @@ def validate_store(problems, store, today: date | None = None, product_ids=None)
                 date.fromisoformat(notice["until"] if DATE_RE.fullmatch(str(notice["until"])) else "")
             except ValueError:
                 problems.append("store.notice.until: must be a real date YYYY-MM-DD")
+    if "homeSections" in store:
+        validate_sections(problems, store["homeSections"])
+    if "banner" in store:
+        validate_banner(problems, store["banner"])
     if "specials" in store:
         validate_specials(problems, store["specials"], product_ids, today)
     for field in ("name", "streetAddress", "town"):

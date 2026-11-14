@@ -41,7 +41,7 @@ from hass.content_model import (  # noqa: E402
     checked_on, iso_day, load_and_validate, shop_today,
 )
 from hass import specials  # noqa: E402
-from hass.notice import NOTICE_JS, slots as notice_slots, stale_paths  # noqa: E402,F401
+from hass.notice import BANNER_JS, banner_link, NOTICE_JS, slots as notice_slots, stale_paths  # noqa: E402,F401
 
 TEMPLATE_DIR = REPO_ROOT / "hass" / "templates"
 SITE_PREFIX = "storefront-mockup/"
@@ -196,8 +196,48 @@ def render_template(text: str, slots: dict[str, str]) -> str:
     return out
 
 
+HIDDEN = ' hidden style="display:none"'
+
+
+def front_parts(store, template_dir, rel):
+    """AVB-19: the home parts in their saved order and the header/footer links of the shown parts. Template text
+    only (it may hold other slots, so it is put in before the slot pass); no owner word is in it."""
+    from hass.content_model import default_sections
+    home = Path(template_dir) / "home"
+    sections = store.get("homeSections", default_sections())
+    shown = {r["id"] for r in sections if r["shown"]}
+    read = lambda name: (home / (name + ".html")).read_bytes().decode("utf-8")  # noqa: E731
+    prefix = "" if rel == "index.html" else "hike-"
+
+    def links(name):
+        return re.sub(r'<a href="/?#([^"\s]+)"[^>]*>.*?</a>', lambda m: m[0] if m[1] in shown else "", read(prefix + name))
+
+    return {"home.sections": "".join(read(r["id"]) for r in sections if r["shown"]) if rel == "index.html" else "",
+            "home.navHtml": links("nav"), "home.footerLinksHtml": links("footer")}
+
+
+def front_banner(store, template_dir, rel, day):
+    """AVB-19: the top strip. Without a banner it is the shop's default line, byte for byte; with one, the default
+    line and the banner line are both rendered, the one for ``day`` visible, and BANNER_JS swaps them in the browser."""
+    home = Path(template_dir) / "home"
+    read = lambda name: (home / (name + ".html")).read_bytes().decode("utf-8")  # noqa: E731
+    banner = store.get("banner")
+    live = bool(banner) and banner["start"] <= day.isoformat() <= banner["end"]
+    visit = "#visit" if rel == "index.html" else "/#visit"
+    strip = render_template(read("strip"), {"front.stripAttrs": (" data-banner-default" + (HIDDEN if live else "")) if banner else "",
+                                            "front.visitHref": visit})
+    if banner:
+        link = banner_link(banner, store)
+        strip += render_template(read("banner"), {
+            "front.bannerHidden": "" if live else HIDDEN,
+            "front.start": html.escape(banner["start"], quote=True), "front.end": html.escape(banner["end"], quote=True),
+            "front.text": html.escape(banner["text"], quote=False),
+            "front.linkHtml": f'<a href="{html.escape(link, quote=True)}">Find out more ↗</a>' if link else ""})
+    return {"front.bannerHtml": strip, "front.bannerScript": BANNER_JS if banner else ""}
+
+
 def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, notice_today=None,
-           specials_today=None) -> dict[str, bytes]:
+           specials_today=None, banner_today=None) -> dict[str, bytes]:
     """Return {repo-relative path: bytes} for every generated site file. ``today`` (default: the shop's current date)
     decides selection staleness and notice expiry; ``notice_today`` and ``specials_today`` override only notice and specials expiry for artifact checks."""
     today = today or shop_today()
@@ -211,7 +251,10 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, n
              **specials.slots(content.store, content.products, specials_today or today)}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")
-        files[SITE_PREFIX + rel] = render_template(text, slots).encode("utf-8")
+        for key, value in front_parts(content.store, template_dir, rel).items():
+            text = text.replace("{{" + key + "}}", value)
+        page = {**slots, **front_banner(content.store, template_dir, rel, banner_today or today)}
+        files[SITE_PREFIX + rel] = render_template(text, page).encode("utf-8")
     return files
 
 

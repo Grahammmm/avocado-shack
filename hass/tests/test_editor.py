@@ -177,12 +177,15 @@ class ApplyTests(EditorTestCase):
         self.assertEqual(repo.status(), "")
 
 
+TEMPLATE = "hass/templates/home/market.html"  # AVB-19-B1: template_compat's recorded span now lives in the food part
+
+
 class TemplateCompatTests(EditorTestCase):
     """AVO-SHOP-CLEAN-1: a content draft prepared before the shop-notice template edit still applies."""
 
     def _install_template(self, repo, data):
         """Commit the template `data` and the site files generated from it, as a template-edit commit would."""
-        (repo.wt / "hass/templates/index.html").write_bytes(data)
+        (repo.wt / TEMPLATE).write_bytes(data)
         content = load_and_validate(repo.wt / "hass/content", repo.wt / "storefront-mockup")
         sitegen.write_files(sitegen.render(content, repo.wt / "hass/templates"), repo.wt)
         git(repo.wt, "add", "-A")
@@ -190,8 +193,8 @@ class TemplateCompatTests(EditorTestCase):
 
     def test_draft_prepared_before_template_edit_still_applies(self):
         repo = self.repo()
-        current = (repo.wt / "hass/templates/index.html").read_bytes()
-        previous = template_compat.previous_bytes("hass/templates/index.html", current)
+        current = (repo.wt / TEMPLATE).read_bytes()
+        previous = template_compat.previous_bytes(TEMPLATE, current)
         self.assertIsNotNone(previous, "the shipped template must match the recorded edit")
         self._install_template(repo, previous)
         draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
@@ -203,8 +206,8 @@ class TemplateCompatTests(EditorTestCase):
 
     def test_draft_still_stale_when_template_differs_from_the_recorded_edit(self):
         repo = self.repo()
-        current = (repo.wt / "hass/templates/index.html").read_bytes()
-        previous = template_compat.previous_bytes("hass/templates/index.html", current)
+        current = (repo.wt / TEMPLATE).read_bytes()
+        previous = template_compat.previous_bytes(TEMPLATE, current)
         self._install_template(repo, previous)
         draft = repo.prepare(_req((HOURS, {"hours": NEW_HOURS})))["draft"]
         self._install_template(repo, current + b"<!-- another edit -->\n")

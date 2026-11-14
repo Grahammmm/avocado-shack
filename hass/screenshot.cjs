@@ -9,11 +9,16 @@
 'use strict';
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
 if(!Object.hasOwn(VIEWPORTS,vp)){console.error('bad VIEWPORT');process.exit(1);}
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const base=process.env.PREVIEW_URL,target=JSON.parse(process.env.TARGET||'{}'),out=process.env.OUT;
-const origin=new URL(base).origin;
 // AV1104-10 operator design preview: {kind:'design',page:'home'|'hike'}; the page is a fixed enum checked before any navigation.
 if(target.kind==='design'&&!['home','hike'].includes(target.page)){console.error('bad design page');process.exit(1);}
+// AVB-19: a preview-only browser day (a future banner start), checked before the browser library is even loaded.
+if(Object.hasOwn(target,'effectiveDay')){
+  const d=target.effectiveDay;
+  if(typeof d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d)||!Number.isFinite(Date.parse(d+'T12:00:00Z'))||new Date(d+'T12:00:00Z').toISOString().slice(0,10)!==d){console.error('bad effectiveDay');process.exit(1);}
+}
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const origin=new URL(base).origin;
 const allowed=req=>{
   if(!['GET','HEAD'].includes(req.method()))return false;
   try{const url=new URL(req.url());return url.protocol==='data:'||(url.origin===origin&&url.hostname==='127.0.0.1');}
@@ -24,6 +29,7 @@ const allowed=req=>{
   const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
   try{
     const page=await browser.newPage({viewport:VIEWPORTS[vp]}),errors=[],blocked=[],checks={};let unshown=false;
+    if(target.effectiveDay)await page.clock.setFixedTime(new Date(target.effectiveDay+'T12:00:00-08:00'));
     page.on('pageerror',e=>errors.push(e.message));
     await page.route('**/*',route=>allowed(route.request())?route.continue():(blocked.push(route.request().method()),route.abort()));
     if(target.kind==='design'){  // pageLoaded: HTTP 200 and the page's own heading visible; noHorizontalOverflow at this viewport
@@ -139,6 +145,18 @@ const allowed=req=>{
           }
         }
       }else if(target.kind==='store'){
+        if(Array.isArray(target.sections)){
+          const ids=await page.locator('main > section[id]').evaluateAll(els=>els.map(e=>e.id));
+          checks.sectionsShown=JSON.stringify(ids)===JSON.stringify(target.sections);
+        }
+        if(Object.hasOwn(target,'banner')){
+          const b=page.locator('div.preview[data-banner]:visible'),d=page.locator('div.preview[data-banner-default]:visible');
+          if(target.banner){
+            const link=b.locator('a');
+            checks.bannerShown=await b.count()===1&&await b.locator('span').textContent()===target.banner.text&&await d.count()===0&&
+              (target.banner.link?await link.count()===1&&await link.getAttribute('href')===target.banner.link:await link.count()===0);
+          }else checks.bannerGone=await b.count()===0&&await page.locator('div.preview:visible').count()===1;
+        }
         const lines=target.hours||[],line=page.locator('#visit .visit p').first();
         await line.scrollIntoViewIfNeeded();
         const text=await page.locator('body').innerText();
@@ -164,6 +182,13 @@ const allowed=req=>{
         if(typeof target.notice==='string'){const n=page.locator('main > .home-notice');
           checks.noticeShown=await n.count()===1&&await n.isVisible()&&ws(await n.textContent())===ws(target.notice);}
       }
+    }
+    if(target.kind==='store'&&(Array.isArray(target.sections)||Object.hasOwn(target,'banner'))){  // AVB-19 front changes
+      checks.pageLoaded=await page.locator('.hero h1').first().isVisible();
+      checks.noHorizontalOverflow=await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth);
+      // the picture shows what changed: the first home part for a new order, else the top strip
+      if(Array.isArray(target.sections))await page.locator('main > section[id]').first().evaluate(e=>e.scrollIntoView({block:'start'}));
+      else await page.evaluate(()=>window.scrollTo(0,0));
     }
     await page.waitForTimeout(150);
     await page.screenshot({path:out});

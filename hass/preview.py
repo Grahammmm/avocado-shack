@@ -99,18 +99,29 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
     if collection == "store":
         from hass.sitegen import checked_line, phone_text  # lazy: sitegen is the one place the selection words live
         before = record.get("before") or {}
+        from hass.content_model import iso_day, default_sections
+        from hass.notice import banner_target
+        day, extra = today or shop_today(), {}
+        if before.get("homeSections") != after.get("homeSections"):
+            extra["sections"] = [r["id"] for r in after.get("homeSections", default_sections()) if r["shown"]]
+        if before.get("banner") != after.get("banner"):
+            start = iso_day((after.get("banner") or {}).get("start"))
+            if start and start > day:
+                day = start
+                extra["effectiveDay"] = start.isoformat()
+            extra["banner"] = banner_target(after.get("banner"), after, day)
         line = ({"selectionLine": checked_line(after, today)} if today is not None and
                 before.get("selection_checked_on") != after.get("selection_checked_on") else {})  # AV1222-03
         cleared = bool((record.get("before") or {}).get("homeImage")) and "homeImage" not in after  # shop photo back
         phone = ({"phone": phone_text(after["phone"]) if after.get("phone") else None}
                  if before.get("phone") != after.get("phone") else {})  # AV1222-04
-        shown = ({"specials": [{"title": sp["title"], "deal": sp["deal"]} for sp in active_specials(after, today)]}
+        shown = ({"specials": [{"title": sp["title"], "deal": sp["deal"]} for sp in active_specials(after, day)]}
                  if before.get("specials") != after.get("specials") else {})  # AVO-SPECIALS-1: what the page shows today
         return {"kind": "store", **phone, **shown, **({"homeImageCleared": True} if cleared else {}), "hours": list(after.get("hours") or []),
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
                 "intro": after.get("intro"), **line,
-                "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), today)}
+                "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), day), **extra}
     if collection == "routeIdeas":  # AV1222-06: /hike shows a route title only on a linked hike's Route line or the sample invitation
         return {"kind": "route", "id": record.get("key") or "", "title": after.get("title", ""), "hidden": after.get("status") == "hidden"}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons

@@ -171,7 +171,7 @@ def _said(phrase, lines: str) -> bool:
     return bool(isinstance(phrase, str) and phrase.strip() and _affirmed(_pattern(phrase), lines))
 
 
-NESTED_TEXT = {"homeImage": ("imageAlt",), "notice": ("text",)}  # RF0220-11: the only dict-valued store slots with free text
+NESTED_TEXT = {"homeImage": ("imageAlt",), "notice": ("text",), "banner": ("text",)}  # RF0220-11 (+AVB-19 banner): the only dict-valued store slots with free text
 
 
 def _fields(r: dict, before: dict, after: dict):

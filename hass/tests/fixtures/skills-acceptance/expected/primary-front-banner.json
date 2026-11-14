@@ -1,0 +1,24 @@
+{
+  "assets": {},
+  "diff": [
+    {
+      "after": {
+        "end": "2026-11-15",
+        "start": "2026-11-09",
+        "text": "Come say hello"
+      },
+      "file": "hass/content/store.json",
+      "path": "banner"
+    }
+  ],
+  "files": [
+    "hass/content/store.json",
+    "storefront-mockup/hike/index.html",
+    "storefront-mockup/index.html"
+  ],
+  "residue": {
+    "assets": {},
+    "content": []
+  },
+  "schema_version": 1
+}

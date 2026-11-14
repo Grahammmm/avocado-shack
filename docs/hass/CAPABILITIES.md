@@ -50,6 +50,8 @@ Rebuild: `python3 hass/capabilities.py`. Check: `python3 hass/capabilities.py --
 
 | Skill | What it does | Gate, private test and status | Changing targets | Declared log fields |
 |---|---|---|---|---|
+| put a dated banner across the top (front.banner) | Schedule one short line across the top of home and hike, with an optional own-site link. | A1: your yes first; private preview only; private only; registered; owners | site | fields |
+| move or hide a home page part (front.sections) | Reorder the four home parts, hide why we do it or newsletter, or put the original order back. | A1: your yes first; private preview only; private only; registered; owners | site | fields |
 | add a questions page (page.faq) | The site has no FAQ page and a new page is a design change: say so and write it down. | A0: no yes needed; no target changes; writes the request down, not the change; registered; owners | none | none |
 
 ## Till

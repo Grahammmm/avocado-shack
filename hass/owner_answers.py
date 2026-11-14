@@ -34,7 +34,8 @@ CHECK_WORDS = {  # AV1222-03: result-check key -> plain words (an unknown key is
     "selectionShown": "the shelf check line", "eventShown": "the hike", "pastShown": "the past hike",
     "recapShown": "the hike recap", "rsvpGone": "the sign-up button", "makerName": "the maker's name",
     "makerPlace": "the maker's place", "makerHidden": "the hidden maker",
-    "phoneShown": "the phone number"}
+    "phoneShown": "the phone number", "sectionsShown": "the order of the home-page parts", "bannerShown": "the top banner",
+    "bannerGone": "the usual top line"}
 RECORD_RE = re.compile(r"([a-z][a-z0-9_-]{0,40}) ([A-Za-z0-9][A-Za-z0-9._-]{0,80}): (.*)", re.S)  # no path characters
 NOT_COPIED = "Copying it to the website hasn't been done, or didn't finish"
 PARTIAL = ("If copying it started and stopped partway, some pages may already show it. "
