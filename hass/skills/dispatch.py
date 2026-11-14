@@ -573,6 +573,9 @@ class Dispatcher:
     # the common step: slots in -> question, refusal, backlog or draft ----------------------------------------
     def _advance(self, msg, now, req, skill, new_slots, revises, ctx=None, prior=None, resolved=False):
         conv, owner = self.conv, self._owner()
+        if hasattr(conv.editor, 'skill_allowed') and not conv.editor.skill_allowed(skill):
+            conv._reply("That's switched off, so nothing changed.")
+            return 'refused'
         base = prior or req  # the request whose texts and photo this one continues
         texts = _joined(base, msg)
         attachments = (base["attachments"] if base else [])
@@ -736,7 +739,7 @@ class Dispatcher:
         hooked = self._skill_notes(skill, slots, now, texts, ctx)  # the skill's own lines: what it said and did, and what to know before yes
         note = self._note_lines([(hooked, defaults)], left_off)
         conv._skill_ref = f"{skill.name}@{skill.version}"  # AVB-10: the audit line names the skill that planned this draft
-        try: disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False)
+        try: disposition = conv._draft(msg, now, {"ops": ops, "revises": revises}, earlier, prefix="\n".join(note) + "\n" if note else "", legacy=False, skill_names=(skill,))
         finally: conv._skill_ref = None
         rid = req["request_id"] if req else None
         code = conv._last_draft_code
@@ -789,6 +792,10 @@ class Dispatcher:
     # several asks in one message ------------------------------------------------------------------------------
     def _calls(self, msg, now, result, req):
         conv, owner = self.conv, self._owner()
+        if hasattr(conv.editor, 'skill_allowed') and any(
+                s is not None and not conv.editor.skill_allowed(s) for s in (self.registry.get(c['skill']) for c in result['calls'])):
+            conv._reply("That's switched off, so nothing changed.")
+            return 'refused'
         texts = _joined(req, msg)
         attachments = req["attachments"] if req else []
         asked = None if any(self.registry.get(c.get("skill")) is None for c in result["calls"]) else self._agreement(
@@ -860,7 +867,8 @@ class Dispatcher:
         note = self._note_lines(parts, left)
         conv._skill_ref = "+".join(dict.fromkeys(f"{s.name}@{s.version}" for s in used)) or None  # AVB-10
         try: disposition = conv._draft(msg, now, {"ops": ops, "revises": result.get("revises")}, _earlier(texts, msg),
-                                       prefix="\n".join(note) + "\n" if note else "", legacy=False)
+                                       prefix="\n".join(note) + "\n" if note else "", legacy=False,
+                                       skill_names=tuple(self.registry.get(c['skill']) for c in result['calls']))
         finally: conv._skill_ref = None
         if disposition == "proposed":  # HASS-SEC-3 (L3): each drafted call's own source record, as for one skill
             for called, called_slots in planned_calls:

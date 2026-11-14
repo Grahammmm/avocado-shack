@@ -1,0 +1,127 @@
+"""Host adapter for AVB-11's gate; the existing site writer/releaser remain sole executors."""
+from pathlib import Path
+from datetime import datetime, timezone
+
+from hass import conversation, editor, sandbox
+from hass.ops import load_registry
+
+
+class SiteEditor(conversation.Editor):
+    routes_chat = True
+
+    def __init__(self, state, gate, live_factory, registry=None, clock=lambda: datetime.now(timezone.utc)):
+        super().__init__(state, registry)
+        self.gate, self.live_factory = gate, live_factory
+        self.clock = clock
+        self.conv, self._live = None, None
+
+    def _draft(self, cid):
+        if not editor.CHANGE_ID_RE.fullmatch(str(cid)):
+            raise sandbox.ModeError('env-gone')
+        try:
+            return editor._read(Path(self.state) / 'drafts' / f'{cid}.json')
+        except (OSError, ValueError):
+            raise sandbox.ModeError('env-gone') from None
+
+    def _members(self, ops, skills):
+        members = sandbox.site_members(ops, self.registry or load_registry())
+        for skill in skills:
+            if isinstance(skill, str):
+                from hass.skills import load_skills
+                skill = load_skills().get(skill)
+            if skill is None: raise sandbox.ModeError('policy')
+            members.append({'pack': sandbox.skill_pack(skill), 'skill': skill.name, 'target': 'site'})
+        return members
+
+    def skill_allowed(self, skill):
+        try:
+            return self.gate.allowed(sandbox.skill_pack(skill), skill.name)
+        except (ValueError, OSError):
+            return False
+
+    def sync_settings(self, settings):
+        try:
+            cfg = sandbox.policy(self.gate.source())
+            live = 'site' in cfg['live'] and not cfg['hold']
+        except (ValueError, OSError):
+            live = False
+        if live:
+            settings['liveSite'] = 'theavocadoman.com'
+        else:
+            settings.pop('liveSite', None)
+
+    def prepare(self, ops, *, skills=(), members=None):
+        try:
+            members = members or self._members(ops, skills)
+            undos = [c['args']['changeId'] for c in ops if c['op'] == 'history.revert']
+            if undos:
+                if len(ops) != 1:
+                    raise sandbox.ModeError('policy')
+                original = self._draft(undos[0]).get('environment')
+                self.gate.check(original, recorded=True)
+                binding = self.gate.resolve(members, recorded=original)
+                binding['undo_of'] = undos[0]
+            else:
+                binding = self.gate.resolve(members)
+            return editor.prepare({'ops': ops}, state=self.state, registry=self.registry, environment=binding, now=self.clock())
+        except sandbox.ModeError as exc:
+            return {'result': 'env-gone' if exc.code == 'env-gone' else 'refused', 'reason': 'sandbox target unavailable or switched off'}
+        except (OSError, ValueError, KeyError):
+            return {'result': 'refused', 'reason': 'sandbox target unavailable or switched off'}
+
+    def check_environment(self, cid, *, recorded=False):
+        try:
+            draft = self._draft(cid)
+            if not editor.bound_hash_valid(draft): raise sandbox.ModeError('env-gone' if recorded else 'env-changed')
+            self.gate.check(draft.get('environment'), recorded=recorded)
+        except (sandbox.ModeError, OSError, ValueError) as exc:
+            return {'result': getattr(exc, 'code', 'env-gone' if recorded else 'env-changed')}
+        return None
+
+    def live(self):
+        self._live = self.live_factory()
+        self._live.environment_guard = self.check_environment
+        self._live.conv = self.conv
+        return self._live
+
+    def reprepare(self, cid, ops):
+        try:
+            members = self._draft(cid)['environment']['members']
+            return self.prepare(ops, members=members)
+        except (OSError, ValueError, KeyError):
+            return {'result': 'refused', 'reason': 'sandbox target unavailable or switched off'}
+
+    def apply(self, change_id, draft_hash, chat=None):
+        cid = change_id
+        if problem := self.check_environment(cid):
+            return problem
+        binding = self._draft(cid)['environment']
+        if binding['env'] == 'live':
+            return self.live().apply(cid, draft_hash, chat=chat)
+        return editor.apply(cid, draft_hash, state=self.state, registry=self.registry,
+                            guard=lambda: self.check_environment(cid), now=self.clock(),
+                            recovery_guard=lambda cid: self.check_environment(cid, recorded=True))
+
+    def recover(self):
+        # The private writer only settles its existing local journal, never publishes.
+        return editor.recover(state=self.state, now=self.clock(), guard=lambda cid: self.check_environment(cid, recorded=True))
+
+    def render_draft(self, change_id):
+        return editor.render_draft(change_id, state=self.state, registry=self.registry, now=self.clock())
+
+    def reconcile(self):
+        # Only an existing release journal can need publication recovery. Its identity
+        # is checked by LiveEditor before any remote call; never infer it from mode.
+        root = Path(self.gate.source()['hostDir'])
+        if (root / 'releases').is_dir():
+            self.live().reconcile()
+
+    def went_live(self, cid):
+        try:
+            if self._draft(cid).get('environment', {}).get('env') != 'live':
+                return False
+            if self.check_environment(cid, recorded=True):
+                return False
+            return self.live().went_live(cid)
+        except (OSError, ValueError):
+            return False

@@ -20,7 +20,7 @@ from pathlib import Path
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass import bridge, conversation, editor as editor_mod, inbox as inbox_mod, interpreter_local, interpreter_prompt  # noqa: E402
-from hass import nl_prep, preview, receiver, relay, stagelog  # noqa: E402
+from hass import nl_prep, preview, receiver, relay, sandbox, stagelog  # noqa: E402
 from hass.content_model import load_content  # noqa: E402
 from hass.ops import load_registry  # noqa: E402
 
@@ -28,8 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("hass.host")
 MAX_HOST_JSON, MAX_BODY, ROUTES = 64 * 1024, 64 * 1024, ("/v1/inbound", "/v1/relay")
 METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"})  # a logged method is one of these, never client text
-KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "release", "clover"}
-OPTIONAL = {"previewer", "pictures", "release", "clover"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
+KEYS = {"state", "secretFile", "listen", "allowedPeers", "approvals", "interpreter", "previewer", "runtimeCommit", "pictures", "release", "clover", "live", "off", "mode_gen"}
+OPTIONAL = {"previewer", "pictures", "release", "clover", "live", "off", "mode_gen"}  # HASS-CLOVER-2: `clover` absent = Clover not configured; nothing else changes
 PICTURES_PER_MIN = 10  # HASS-ATTACH-1: more picture requests in a minute get `gone` with no data
 TAILSCALE = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 LIVE_REASON = "live release is not installed"
@@ -99,6 +99,8 @@ def load_host(path, allow_port_zero=False) -> dict:
     """host.json: a regular 0600 file of this user, <= 64 KiB, closed keys. Returns the config plus `addr`, `peers`."""
     raw = _private_json(path)
     bad = sorted(set(raw) - KEYS) + sorted(KEYS - OPTIONAL - set(raw))
+    try: sandbox.policy(raw)
+    except sandbox.ModeError as exc: bad.append(exc.code)
     text = lambda v: isinstance(v, str) and 0 < len(v) <= 4096  # noqa: E731
     itp = raw.get("interpreter")
     peers = raw.get("allowedPeers")
@@ -116,7 +118,7 @@ def load_host(path, allow_port_zero=False) -> dict:
         try: from_settings(raw["clover"])
         except ConfigProblem as exc: bad += [f"clover.{f}" if f != "clover" else "clover" for f in exc.fields]
     if not bad and not peers and not _listen(raw["listen"], allow_port_zero)[0].is_loopback: bad.append("allowedPeers")
-    if raw.get("approvals") == "live":
+    if raw.get("approvals") == "live" or isinstance(raw.get('live'), list) and "site" in raw['live']:
         from hass.publish_live import release_config
         try: raw["release"] = release_config(raw.get("release"))
         except ValueError as exc: bad.append(str(exc))
@@ -130,7 +132,7 @@ def load_host(path, allow_port_zero=False) -> dict:
     if bad: raise HostConfigError(bad)
     ip, port = _listen(raw["listen"], allow_port_zero)
     return {**raw, "addr": (str(ip), port), "peers": frozenset(str(_ip(p)) for p in peers), "previewer": raw.get("previewer", False),
-            "pictures": raw.get("pictures", False), "hostDir": str(Path(path).resolve().parent)}
+            "pictures": raw.get("pictures", False), "hostDir": str(Path(path).resolve().parent), "hostPath": str(Path(path).resolve())}
 
 
 def runtime_problem(cfg, root=ROOT) -> bool:
@@ -392,17 +394,44 @@ def clover_state(cfg) -> str:
     return inspect(cfg["clover"]["tokenFile"]) or "ok"
 
 
+def site_gate(cfg):
+    """The sandbox Gate bound to this host config's recorded target identities."""
+    def source():
+        try: current = load_host(cfg['hostPath'])
+        except HostConfigError: raise sandbox.ModeError('env-changed') from None
+        if current['state'] != cfg['state']: raise sandbox.ModeError('env-changed')
+        return current
+
+    def identities():
+        current = source()
+        ids = {('site', 'sandbox'): _worktree(current), ('local', 'sandbox'): current['state'], ('local', 'live'): current['state']}
+        if current.get('release'):
+            r = current['release']
+            ids[('site', 'live')] = json.dumps([_worktree(current), r['siteCheckout'], r['siteRemote'], 'main'])
+        return ids
+    return sandbox.Gate(source, identities)
+
+
 def make_worker(cfg, store, *, editor=None, build=None, clock=_now, stage=stagelog.off) -> Worker:
     worktree = _worktree(cfg)
     build = build or interpreter_builder(cfg, worktree)
-    if cfg["approvals"] == "live" and editor is None:
+    if editor is None:
         from hass.publish_live import LiveEditor
-        editor = LiveEditor(cfg["state"], cfg["release"], cfg["hostDir"], clock=clock)
+        from hass.sandbox_editor import SiteEditor
+
+        def live_factory():
+            current = site_gate(cfg).source()
+            return LiveEditor(cfg['state'], current['release'], current['hostDir'], clock=clock)
+
+        editor = SiteEditor(cfg['state'], site_gate(cfg), live_factory, clock=clock)
     conv = conversation.Conversation(cfg["state"], editor or conversation.Editor(cfg["state"]), build(), clock,
                                      previewer=preview.Previewer(worktree) if cfg["previewer"] else None)
-    if cfg["approvals"] != "live":  # HASS-LIVE-PLAN-1: back in private mode the chat behaves privately even with liveSite still set
+    if hasattr(conv.editor, 'sync_settings'):
+        conv.editor.conv = conv
+        conv.editor.sync_settings(conv.settings)
+    elif 'site' not in cfg.get('live', []):
         conv.settings.pop("liveSite", None)
-    if cfg["approvals"] == "live":
+    if cfg["approvals"] == "live" and not hasattr(conv.editor, 'gate'):
         conv.editor.conv = conv
         conv.editor.reconcile()
     if cfg.get("clover") is not None:  # HASS-CLOVER-2: the owner's till questions, read from the private cache only (no token here)
@@ -430,25 +459,38 @@ def _stopper():
     return stop
 
 
-def set_mode(path, mode) -> dict:
+def set_mode(path, mode, target='site') -> dict:
+    _private_json(path)  # refuse an unsafe host before creating a lock beside it
+    with editor_mod._writer_lock(Path(path).resolve().parent) as held:
+        return _set_mode(path, mode, target) if held else {'result': 'busy'}
+
+
+def _set_mode(path, mode, target) -> dict:
     """Rewrite host.json `approvals` atomically (same folder, 0600, replaced in one step). The new file must load, so a switch to
     `live` without its release block, liveSite or pictures is refused and the old file stays."""
     raw = _private_json(path)
+    current = sandbox.policy(raw)
+    live = set(current['live'])
+    if target not in ('site', 'till') or mode not in ('hold', 'private', 'sandbox', 'live'): raise HostConfigError(['live'])
+    if mode == 'live': live.add(target)
+    elif mode != 'hold': live.discard(target)
+    approvals = 'hold' if mode == 'hold' else ('live' if 'site' in live else 'private')
+    updated = {**raw, 'approvals': approvals, 'live': sorted(live), 'mode_gen': current['mode_gen'] + 1}
     target = Path(path)
     tmp = target.with_name(target.name + ".mode.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh: json.dump({**raw, "approvals": mode}, fh, indent=2, sort_keys=True)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh: json.dump(updated, fh, indent=2, sort_keys=True)
         load_host(tmp)
         os.replace(tmp, target)
     except BaseException:
         with contextlib.suppress(OSError): os.unlink(tmp)
         raise
-    return {"result": "ok", "approvals": mode, "next": "systemctl --user restart hass-worker"}
+    return {"result": "ok", "approvals": approvals, "next": "systemctl --user restart hass-worker"}
 
 
 def _run(args, root, clock):
-    if args.cmd == "mode": return set_mode(args.host, args.value)  # no runtime or start point needed: the safe switch must always work
+    if args.cmd == "mode": return set_mode(args.host, args.value, args.target)
     if args.cmd == "start-point":
         cfg = load_host(args.host)
         _worktree(cfg)
@@ -479,7 +521,9 @@ def main(argv=None, *, root=ROOT, clock=_now) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("serve", "work", "check", "start-point", "mode"):
         p = sub.add_parser(name)
-        if name == "mode": p.add_argument("value", choices=("hold", "private", "live"))
+        if name == "mode":
+            p.add_argument("value", choices=("hold", "private", "sandbox", "live"))
+            p.add_argument("--target", choices=("site", "till"), default="site")
         p.add_argument("--host", required=True)
         if name == "start-point": p.add_argument("--at", required=True)
     args = ap.parse_args(argv)

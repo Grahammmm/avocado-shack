@@ -379,7 +379,8 @@ class SwitchBack(HostCase):
         path = self.host_json(approvals="private")
         worker = host.make_worker(host.load_host(path), self.store, build=lambda: self.interp, clock=self.clock)
         self.assertNotIn("liveSite", worker.conv.settings)
-        self.assertEqual(type(worker.conv.editor).__name__, "Editor")  # no release engine in private mode
+        self.assertEqual(type(worker.conv.editor).__name__, "SiteEditor")
+        self.assertIsNone(worker.conv.editor._live)  # no release engine in sandbox mode
 
 
 

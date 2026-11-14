@@ -100,7 +100,11 @@ class MacRunbookTests(unittest.TestCase):
         self.assertEqual(len(blocks), 3)
         names = lambda text: set(re.findall(r'"(\w+)"\s*:', text))
         self.assertEqual(names(blocks[0]), hass_forwarder.KEYS - {'gChat', 'ownerChats'})  # gChat and ownerChats are optional: documented in BRIDGE_WIRING.md
-        self.assertEqual(names(blocks[1]) - {'url', 'model'}, host.KEYS - {'release', 'clover'})  # clover: CLOVER.md
+        sandbox_doc = (ROOT / 'docs/hass/SANDBOX.md').read_text(encoding='utf-8')
+        sandbox_keys = {'live', 'off', 'mode_gen'}  # optional per-target switch keys: documented in SANDBOX.md, absent from the first-install example
+        for key in sandbox_keys:
+            self.assertIn('\"' + key + '\"', sandbox_doc)
+        self.assertEqual(names(blocks[1]) - {'url', 'model'}, host.KEYS - {'release', 'clover'} - sandbox_keys)
         tree = ast.parse(inspect.getsource(publish_live.release_config))
         release_keys = next(n.value for n in ast.walk(tree) if isinstance(n, ast.Assign)
                             and any(isinstance(t, ast.Name) and t.id == 'keys' for t in n.targets))
