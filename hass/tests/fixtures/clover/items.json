@@ -1,0 +1,79 @@
+{
+  "elements": [
+    {
+      "id": "FAKEITEM00001",
+      "hidden": false,
+      "available": true,
+      "autoManage": false,
+      "name": "Sunshine olive oil",
+      "code": "0123456789012",
+      "sku": "AS-PAN-SUNSHINE-OLIVE-OIL-01",
+      "price": 1250,
+      "priceType": "FIXED",
+      "defaultTaxRates": true,
+      "cost": 700,
+      "isRevenue": true,
+      "modifiedTime": 1794250000000,
+      "deleted": false,
+      "itemStock": {"item": {"id": "FAKEITEM00001"}, "quantity": 12.0, "modifiedTime": 1794250100000},
+      "categories": {"elements": [{"id": "FAKECAT000001", "name": "Pantry"}]},
+      "tags": {"elements": [{"id": "FAKETAG000001", "name": "Local"}]}
+    },
+    {
+      "id": "FAKEITEM00002",
+      "hidden": false,
+      "available": true,
+      "name": "Hass avocado",
+      "price": 150,
+      "priceType": "FIXED",
+      "defaultTaxRates": false,
+      "cost": 60,
+      "isRevenue": true,
+      "modifiedTime": 1794250200000,
+      "itemStock": {"item": {"id": "FAKEITEM00002"}, "quantity": 40.0, "modifiedTime": 1794250300000},
+      "categories": {"elements": [{"id": "FAKECAT000002", "name": "Fruit"}]}
+    },
+    {
+      "id": "FAKEITEM00003",
+      "hidden": false,
+      "available": true,
+      "name": "Eggs, dozen",
+      "sku": "EGG12",
+      "price": 700,
+      "priceType": "FIXED",
+      "modifiedTime": 1794250400000,
+      "itemStock": {"item": {"id": "FAKEITEM00003"}, "quantity": 2.0, "modifiedTime": 1794250500000},
+      "categories": {"elements": [{"id": "FAKECAT000003", "name": "Dairy"}]}
+    },
+    {
+      "id": "FAKEITEM00004",
+      "hidden": true,
+      "available": true,
+      "name": "Old honey jar",
+      "price": 1100,
+      "priceType": "FIXED",
+      "modifiedTime": 1794250600000,
+      "itemStock": {"item": {"id": "FAKEITEM00004"}, "quantity": 0.0, "modifiedTime": 1794250700000}
+    },
+    {
+      "id": "FAKEITEM00005",
+      "hidden": false,
+      "available": true,
+      "name": "Heirloom tomatoes",
+      "price": 399,
+      "priceType": "PER_UNIT",
+      "unitName": "lb",
+      "modifiedTime": 1794250800000,
+      "itemStock": {"item": {"id": "FAKEITEM00005"}, "quantity": 7.5, "modifiedTime": 1794250900000},
+      "categories": {"elements": [{"id": "FAKECAT000004", "name": "Vegetables"}]}
+    },
+    {
+      "id": "FAKEITEM00006",
+      "hidden": false,
+      "available": true,
+      "name": "Market special (ring up price)",
+      "priceType": "VARIABLE",
+      "modifiedTime": 1794251000000
+    }
+  ]
+}

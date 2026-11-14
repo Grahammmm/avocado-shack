@@ -190,7 +190,7 @@ class ConfigTests(HostCase):
             with contextlib.redirect_stdout(out):
                 code = host.main([cmd, "--host", str(self.host_json(runtimeCommit=sha))], root=root)
             return code, json.loads(out.getvalue())
-        self.assertEqual(run("check", head, ck), (0, {"result": "ok"}))
+        self.assertEqual(run("check", head, ck), (0, {"result": "ok", "clover": "not configured"}))
         for cmd in ("serve", "work", "check"):
             with self.subTest(cmd=cmd):
                 self.assertEqual(run(cmd, "1" * 40, ck), (2, {"result": "runtime-mismatch"}))  # another commit
