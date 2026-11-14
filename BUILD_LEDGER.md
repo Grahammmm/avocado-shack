@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## R4-AV-05: the skill test kit judges replies before the safe fallback — November 13, 2026
+
+The checker, not the control row, was wrong: its isolated Conversation used the normal voice fallback, replacing a jargon-filled question with a safe line before the kit examined it. The scratch conversation now sets its own outbox to strict voice checking, so the existing VoiceError handler records `jargon`. This does not change the live conversation, voice rules, or the negative control. No new meta-tests or workflow changes.
+
+Fresh builder proof: `python3 hass/skills/testkit.py selftest` changed from exit 1 (`bad-jargon-in-question` wrongly had no problems) to exit 0 (`testkit selftest: the kit behaves`); the unchanged deliberately jargon-filled question now fails with exactly `[jargon]`. The existing KitProvesItself checks passed under Python 3.12. A broader plan-test invocation reached its 180-second command limit after those checks; it is not claimed as a completed pass. Final affected-gate evidence is recorded in the PR and task handoff. No live service, data, send or publication touched. Rollback: revert this PR.
+
 ## Objective and scope
 Execute planning/Avocado_Shack_Website_Build_Goal.docx: a complete private branded commerce website using real owner photos, Astra text/photo updates, supported Medusa workflows, pickup checkout, packing, recovery and handoff. Work resumed on October 6 after authorization for local vision installation. Browser preview access now works. Completion is unproven.
 
