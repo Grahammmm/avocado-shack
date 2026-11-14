@@ -544,6 +544,7 @@ _CASES = "hass/tests/fixtures/skills/shop/{}.jsonl"
 _INDEX, _HIKE = "storefront-mockup/index.html", "storefront-mockup/hike/index.html"
 
 SHOP_HOURS = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="shop.hours", label="change the store hours",
     summary="Change the opening hours. Days he did not name keep exactly what the site says now.",
     triggers=(
@@ -568,6 +569,7 @@ SHOP_HOURS = Skill(
     cases=_CASES.format("shop.hours"), version=1)
 
 SHOP_NOTICE = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="shop.notice", label="put up a notice on the home page",
     summary="Put up, replace or take down the one dated notice at the top of the home page.",
     triggers=(
@@ -595,6 +597,7 @@ SHOP_NOTICE = Skill(
     cases=_CASES.format("shop.notice"), version=2)
 
 SHOP_CONTACT = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="shop.contact", label="change the phone number or the address",
     summary="Change or remove the store phone number, or change the street address and town.",
     triggers=(

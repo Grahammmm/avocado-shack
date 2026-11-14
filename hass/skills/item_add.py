@@ -778,6 +778,7 @@ SKILL_SLOTS = (
 )
 
 ITEM_ADD = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="item.add", label="add a new product", version=2,
     summary="Add a new product from a photo and a few words: its maker if new, the picture, and whether it is in stock.",
     triggers=(

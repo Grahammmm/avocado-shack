@@ -904,6 +904,7 @@ def _text_slot(name, required=False, **kw):
 
 
 ADD = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="hike.add", label="add a hike",
     summary="Put a new hike on the hike page: day, time and where to meet. Sign-up stays off unless you say so.",
     triggers=(
@@ -935,6 +936,7 @@ ADD = Skill(
     cases=_CASES.format("hike.add"), version=1)
 
 EDIT = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="hike.edit", label="change a hike",
     summary="Change a scheduled hike: its name, where to meet, how hard, what to bring, or sign-up.",
     triggers=(
@@ -960,6 +962,7 @@ EDIT = Skill(
     cases=_CASES.format("hike.edit"), version=1)
 
 RESCHEDULE = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="hike.reschedule", label="move a hike to another day or time",
     summary="Move a scheduled hike to a new day or time. Guests who signed up are not told.",
     triggers=(
@@ -984,6 +987,7 @@ RESCHEDULE = Skill(
     cases=_CASES.format("hike.reschedule"), version=1)
 
 CANCEL = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='full', logs=('subjects', 'fields'), who='owner',
     name="hike.cancel", label="cancel a hike",
     summary="Cancel a scheduled hike, with an optional one-line note on the page. Nobody is told.",
     triggers=(
@@ -1008,6 +1012,7 @@ CANCEL = Skill(
     cases=_CASES.format("hike.cancel"), version=1)
 
 REPEAT = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="hike.repeat", label="run a hike again",
     summary="Copy a hike onto a new day and time: its name, text, route and sign-up setting.",
     triggers=(
@@ -1032,6 +1037,7 @@ REPEAT = Skill(
     cases=_CASES.format("hike.repeat"), version=1)
 
 RECAP = Skill(
+    pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
     name="hike.recap", label="write down how a hike went",
     summary="Mark a hike that has happened as done and keep your words on how it went.",
     triggers=(

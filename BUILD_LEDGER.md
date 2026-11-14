@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## R4-AV-05: the skill test kit judges replies before the safe fallback — November 13, 2026
+
+The checker, not the control row, was wrong: its isolated Conversation used the normal voice fallback, replacing a jargon-filled question with a safe line before the kit examined it. The scratch conversation now sets its own outbox to strict voice checking, so the existing VoiceError handler records `jargon`. This does not change the live conversation, voice rules, or the negative control. No new meta-tests or workflow changes.
+
+Fresh builder proof: `python3 hass/skills/testkit.py selftest` changed from exit 1 (`bad-jargon-in-question` wrongly had no problems) to exit 0 (`testkit selftest: the kit behaves`); the unchanged deliberately jargon-filled question now fails with exactly `[jargon]`. The existing KitProvesItself checks passed under Python 3.12. A broader plan-test invocation reached its 180-second command limit after those checks; it is not claimed as a completed pass. Final affected-gate evidence is recorded in the PR and task handoff. No live service, data, send or publication touched. Rollback: revert this PR.
+
 ## Objective and scope
 Execute planning/Avocado_Shack_Website_Build_Goal.docx: a complete private branded commerce website using real owner photos, Astra text/photo updates, supported Medusa workflows, pickup checkout, packing, recovery and handoff. Work resumed on October 6 after authorization for local vision installation. Browser preview access now works. Completion is unproven.
 
@@ -2168,3 +2174,9 @@ Review fix (same branch): stored stamps are now compared to the cutoff as aware 
 Branch rb/rf1915-12. hass/label_eval.py: _read_photo now checks the bytes it actually read (0 < length <= MAX_PHOTO) and raises the existing fixed refusal when a file shrank to empty or grew past the cap after fstat; live() still checks every photo before any transport call and writes nothing on refusal. A file shrinking to a nonempty allowed length is still admitted; no snapshot guarantee. Valid input and output are byte-identical.
 
 Checks: `python3 -B -m unittest hass.tests.test_label_eval` on the builder clone (new changed-after-fstat and boundary tests; the empty/oversize ones fail without the fix). Not deployed; no live model run.
+
+## AVB-09: one generated capability inventory — November 13, 2026
+
+The skill declarations now explicitly name pack, changing targets, approval class, sandbox support, declared audit fields and audience. Missing/invalid fields fail the lint; mixed-pack `SKILLS` exports are rejected. The legacy approval execution field and all existing plans, previews and policy gates are unchanged. A2/A3 stay unavailable, not silently treated as A1. The new `hass/capabilities.py` generates `docs/hass/capabilities.json` and the owner page `CAPABILITIES.md`; `help` appends the same registry-derived skills to the existing fixed-command examples. CI tests reject missing/stale generated files. The FAQ is honestly labelled as request-recording only, and the empty till pack is visible. These describe source capabilities, not the installed runtime or permission to publish. AVB-10/11 retain the audit writer/per-target sandbox work.
+
+Builder evidence: generator `--check` passed; 63 focused metadata/help/model/lint/demo tests passed, including missing metadata, drift without writes, retired/new entries, target/approval inconsistencies, real conversation help parity in fixtures and no approval/control changes. The existing voice tests passed in the earlier 87-test focused selection. The first full CI found that the demo's independent plain-words checker rejects the heading word “Skills”; the heading now uses ordinary words and the metadata test also runs that checker. Both original failing demo assertions pass unchanged. An additional broad local compatibility run reached its fixed 1500-second limit without a final verdict and is not counted as passing. No host settings, live runtime, services, credentials, messages or records were read or changed. Rollback: revert this PR; no state migration or setting change is involved.
