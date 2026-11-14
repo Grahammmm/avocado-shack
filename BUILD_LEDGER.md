@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## CI-5 — affected-tier cost budget (November 13, 2026)
+
+Raised the one measured-cost fallback in `hass/tests/ci_shards.py` from 240 to 480 seconds. This keeps safely mapped medium selections in the quick job instead of queueing four full-suite shards. Infrastructure/shared-library/unmapped fallbacks, mandatory smoke/private-file guards, aggregate verification and full main/nightly/manual runs are unchanged. Workflow comment updated; no job, timeout, runner or service changes.
+
+Builder check: `python3 -m unittest hass.tests.test_ci_shards -v` ran 27 tests, OK, including old/new cost boundaries (240/241/480/481 seconds) and full coverage for push/schedule/manual events. This is build evidence, not a measured speedup. Post-merge acceptance remains the next 40 green PR runs (full-tier share below 40%, queue median below 5 minutes, wall median below 25 minutes) and seven days without a red-main episode caused by a skipped test. Rollback: restore the 240-second budget/revert this change. Not installed, merged or live-verified by the builder.
+
 ## Objective and scope
 Execute planning/Avocado_Shack_Website_Build_Goal.docx: a complete private branded commerce website using real owner photos, Astra text/photo updates, supported Medusa workflows, pickup checkout, packing, recovery and handoff. Work resumed on October 6 after authorization for local vision installation. Browser preview access now works. Completion is unproven.
 
