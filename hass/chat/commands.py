@@ -23,7 +23,8 @@ COMMAND_RE = re.compile(r"(history)(?:\s+(?s:.*))?|(undo)(?: ([0-9a-f]{4,12}))?"
                         r"|(hidden)"  # AV1222-13 (H03): group 17
                         r"|(listing)(?:\s+(\S+(?:\s+\S+){0,5}))?"  # AV1622-09 (H17): groups 18/19; multiword names need a catalog check
                         r"|(photos to take)"  # AV0222-04 (H10/H17): group 20
-                        r"|(backlog)")  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
+                        r"|(backlog)"  # SKILLS-FW-3: group 21 (what I could not do yet; read-only)
+                        r"|(again)(?:\s+((?s:.*)))?")  # AV2152-03 (H05/H16): groups 22/23; the code is checked by _again, never guessed
 
 HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: " + q('"Stop showing the eggs as sold out"') + ".",  # AV1537-03, test_help
     "Other things you can say:",
@@ -32,6 +33,7 @@ HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: 
     q("status") + " - what I did last and what is waiting for you",
     q("history") + " - what we changed lately, or " + q("history hours") + " to look for one",
     q("undo") + " - take back the last change",
+    q("again a1b2") + " - re-draft an expired change (within 7 days)",  # AV2152-03
     q("stop changes") + " - I won't change anything until you say " + q("resume changes"),
     q("report") + " - the morning shelf report",
     q("find lion's mane") + " - look something up",
@@ -95,6 +97,7 @@ def parse_command(text: str, *, listing_names=False):
     otherwise None."""
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
+    if match[22]: return "again", (match[23] or "").strip()  # AV2152-03: the rest as sent (lower-cased); _again accepts only a code
     if match[21]: return "backlog", None  # SKILLS-FW-3
     if match[20]: return "photos", None  # AV0222-04
     if match[1]:  # AV2152-02: bare history stays (history, None); history <words> keeps the words in their own case
