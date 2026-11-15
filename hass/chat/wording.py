@@ -4,8 +4,9 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). Pure functions; no state.
 """
 import json, re  # noqa: E401
+from datetime import datetime
 
-from hass import live_policy, voice
+from hass import live_policy, sitegen, voice
 from hass.chat.shared import q
 
 PHOTO_PATH_RE = re.compile(r"assets/products/photo-[0-9a-f]{16}\.(jpg|png)")
@@ -36,18 +37,48 @@ COLLECTION_WORDS = {"products": "product", "makers": "maker", "events": "hike", 
 WHOLE_WORDS = {"store": "the shop details", "home": "the home page"}
 
 
+def _side_name(side):
+    for key in ("name", "title"):
+        if isinstance(side, dict) and isinstance(side.get(key), str) and side[key].strip(): return " ".join(side[key].split())
+    return None
+
+
 def _name(record: dict):
-    """The record's own name or title as the shop writes it (spacing folded), or None."""
-    for side in (record.get("before"), record.get("after")):
-        for key in ("name", "title"):
-            if isinstance(side, dict) and isinstance(side.get(key), str) and side[key].strip(): return " ".join(side[key].split())
-    return record.get("key") if record.get("collection") == "makers" and isinstance(record.get("key"), str) else None
+    """The record's own name or title as the shop writes it (spacing folded), or None. AV0007-05: the new name wins over the old one."""
+    name = _side_name(record.get("after")) or _side_name(record.get("before"))
+    return name or (record.get("key") if record.get("collection") == "makers" and isinstance(record.get("key"), str) else None)
+
+
+def _was(record: dict):
+    """AV0007-05: the old name of a renamed record (both sides named, and differently); else None."""
+    old, new = _side_name(record.get("before")), _side_name(record.get("after"))
+    return old if old and new and old != new else None
+
+
+def _day(record: dict):
+    """AV0007-05: a hike's Pacific day (`Saturday, Nov 7`) from the snapshot that names it; None when the start is missing, naive or unreadable."""
+    if record.get("collection") != "events": return None
+    for side in (record.get("after"), record.get("before")):
+        if isinstance(side, dict) and _side_name(side) and isinstance(side.get("startsAt"), str):
+            try: start = datetime.fromisoformat(side["startsAt"])
+            except ValueError: return None
+            if start.tzinfo is None: return None
+            local = start.astimezone(voice.LOCAL_TZ)
+            return f"{local.strftime('%A, %b')} {local.day}"
+    return None
+
+
+def _label(record: dict):
+    """AV0007-05: the record as the site names it: `Ridge walk (Saturday, Nov 7) (was Dawn walk)`; None when it has no name."""
+    name = _name(record)
+    if not name: return None
+    return name + (f" ({_day(record)})" if _day(record) else "") + (f" (was {_was(record)})" if _was(record) else "")
 
 
 def _subject(record: dict) -> str:
     """Who or what a change is about, for Mike: the name he knows (marked as his words) or the part of the shop."""
-    name = _name(record)
-    return q(name) if name else WHOLE_WORDS.get(record.get("collection"), "this")
+    label = _label(record)
+    return q(label) if label else WHOLE_WORDS.get(record.get("collection"), "this")
 
 
 def _summary(draft: dict) -> str:
@@ -63,7 +94,7 @@ def _summary(draft: dict) -> str:
             continue
         fields = list(dict.fromkeys(voice.field_phrase(f) for f, _b, _a in _changes(r)))
         what = ", ".join(fields[:3]) + (" and more" if len(fields) > 3 else "")
-        parts.append(f"{what} for {name or WHOLE_WORDS.get(r.get('collection'), 'this')}")
+        parts.append(f"{what} for {_label(r) or WHOLE_WORDS.get(r.get('collection'), 'this')}")
     return _value("; ".join(parts) or "no changes")
 
 
@@ -90,6 +121,8 @@ def _shown_in(r: dict, k, v, routes=None, cut=True) -> str:
     if k == "trailId" and isinstance(v, str):
         route = (routes or {}).get(v)
         return route["title"] if isinstance(route, dict) and isinstance(route.get("title"), str) and route["title"].strip() else "a saved route"
+    if r.get("collection") == "products" and k == "available" and isinstance(v, str) and v in sitegen.AVAILABILITY_WORDS:
+        return sitegen.AVAILABILITY_WORDS[v]  # AV0007-05: the words the product card shows (yes/limited/no only on this field)
     shown = _shown(k, v, cut)
     return shown + " (Pacific time)" if r.get("collection") == "events" and k == "startsAt" and _when(k, v) and \
         isinstance(v, str) and _when(k, v) != UNREADABLE_TIME else shown
@@ -100,7 +133,7 @@ def _added(r: dict, routes=None) -> list:  # AV1737-06 (H05/H06): an added recor
     if r.get("collection") == "events":  # HASS-CHAT-1: name, when, where first; a new hike is scheduled, so that line says nothing
         rank = {k: i for i, k in enumerate(EVENT_ORDER)}
         rows = sorted((kv for kv in rows if kv != ("status", "scheduled")), key=lambda kv: (rank.get(kv[0], len(rank)), kv[0]))
-    word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _name(r)
+    word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _label(r)
     lines = [f"A new {word}" + (f": {q(name)}" if name else "")]
     for k, v in rows[:40]:
         photo = k == "image" and PHOTO_PATH_RE.fullmatch(str(v))
@@ -124,7 +157,7 @@ def _removed(r: dict) -> bool:
 
 def _removal(r: dict, done: bool = False) -> str:
     """A whole record going away (an undo of something added) is said as that, never as a list of fields going to nothing."""
-    word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _name(r)
+    word, name = COLLECTION_WORDS.get(r.get("collection"), "entry"), _label(r)
     if done: return f"The {word} {q(name)} was removed." if name else f"That {word} was removed."
     return f"Remove the {word} {q(name)}." if name else f"Remove this {word}."
 
