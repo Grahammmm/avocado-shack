@@ -494,6 +494,16 @@ await open('');
   await says('legacy_notice','2026-11-29T07:59:10Z','');                                   // Sat 23:59, its last day
   await says('legacy_notice','2026-11-29T20:00:10Z','Closed now - opens Monday 9am');      // Sun, it has ended
   await says('bad_notice_dates','2026-11-25T20:00:10Z','');
+  // Notice dates must be real days in order: an impossible day or a first day after the last silences the status, like any unreadable date (Mon Nov 16 noon Pacific, no valid notice reaches it).
+  const notice=(f,u)=>({edit:h=>h.replace(/data-from="2026-11-26" data-until="2026-11-26"/,(f===null?'':`data-from="${f}" `)+`data-until="${u}"`)});
+  await says('holiday_notice','2026-11-16T20:00:10Z','Open now - closes 6pm');                         // control: the real notice is days away
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-11-20','2026-11-10'));          // from after until
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-11-10','2026-11-31'));          // impossible last day
+  await says('holiday_notice','2026-12-02T20:00:10Z','',notice('2026-11-10','2026-11-31'));          // and still silent after that day
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-02-30','2026-11-20'));          // impossible first day
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice(null,'2026-02-29'));                  // 2026 is not a leap year
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-13-01','2026-13-02'));          // no month 13
+  await says('holiday_notice','2026-11-16T20:00:10Z','Open now - closes 6pm',notice('2026-11-20','2026-11-20')); // one real day in the future: status stays
   {const t=await open('holiday_notice','2026-11-27T07:59:30Z');assert.equal((await t.state()).text,'');await t.pg.clock.fastForward(60000);
    assert.equal((await t.state()).text,'Closed now - opens Friday 9am','the notice ends at Pacific midnight and the status returns');await t.ctx.close();}
   // Without JavaScript the empty node stays hidden and the hours are untouched; a broken schedule or missing Intl hides, quietly.

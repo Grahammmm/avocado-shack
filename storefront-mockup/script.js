@@ -28,7 +28,9 @@ if(document.querySelector('#market')&&['#hikes','#upcoming-hikes','#past-heading
  let fmt=null;try{fmt=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',calendar:'gregory',numberingSystem:'latn',hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',weekday:'long',hour:'2-digit',minute:'2-digit'})}catch(e){}
  const pacific=()=>{const now=new Date();if(!fmt||isNaN(now))return null;const p={};for(const x of fmt.formatToParts(now))p[x.type]=x.value;const dow=DAYS.indexOf(p.weekday),h=+p.hour,m=+p.minute,day=p.year+'-'+p.month+'-'+p.day;return dow>=0&&DATE.test(day)&&h>=0&&h<=24&&m>=0&&m<60?{day,dow,min:(h%24)*60+m}:null};
  // A notice showing today (any wording) silences the status; so does one whose dates cannot be read.
- const noticed=day=>[...document.querySelectorAll('.home-notice')].some(n=>{const f=n.dataset.from,u=n.dataset.until;return !DATE.test(u||'')||(f!==undefined&&!DATE.test(f))||((f===undefined||day>=f)&&day<=u)});
+ const real=s=>{if(!DATE.test(s||''))return false;const y=+s.slice(0,4),m=+s.slice(5,7),d=+s.slice(8),t=new Date(Date.UTC(y,m-1,d));t.setUTCFullYear(y);return t.getUTCFullYear()===y&&t.getUTCMonth()===m-1&&t.getUTCDate()===d};
+ // A notice date counts only if it is a real calendar day (2026-11-31 is not) and the first day is not after the last.
+ const noticed=day=>[...document.querySelectorAll('.home-notice')].some(n=>{const f=n.dataset.from,u=n.dataset.until;return !real(u)||(f!==undefined&&(!real(f)||f>u))||((f===undefined||day>=f)&&day<=u)});
  const clock=t=>{const h=Math.floor(t/60),m=t%60;return (h%12||12)+(m?':'+String(m).padStart(2,'0'):'')+(h<12?'am':'pm')};
  const say=()=>{
   const p=pacific();if(!p||noticed(p.day))return '';
