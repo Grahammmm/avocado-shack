@@ -94,7 +94,7 @@ RULES = (
     "If the message is a different, unrelated request, ignore \"recent\". If the answer does not settle the question, ask again.",
     "Availability words: sold out, out, gone, no more = \"no\"; low, running low, a few left = \"limited\"; back, in, got more "
     "= \"yes\". product.set_availability is for one product; store.confirm_selection only when the owner says he checked the "
-    "shelves. A whole shelf of at most 6 products is one change each; for more, ask and give the count.",
+    "shelves. A whole shelf or maker is one change per listed product (next rule), not capped at 6.",
     "Shelf is a product's listed shelf and maker is its listed maker key. When the owner clearly names a whole shelf or "
     "maker, change every listed product id with it, without asking only because several match. Ask if the group is unclear "
     "or incomplete (a more-rows line) or over the operation limit; never invent ids.",

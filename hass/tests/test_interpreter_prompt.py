@@ -152,7 +152,7 @@ class NaturalLanguageRulesTest(unittest.TestCase):
             self.assertIn(phrase, self.rules)
 
     def test_recent_question_availability_words_and_no_op_rule(self):
-        for phrase in ('"recent"', "sold out, out, gone", "running low", "at most 6 products", "alreadytrue", "it already says that",
+        for phrase in ('"recent"', "sold out, out, gone", "running low", "one change per listed product", "alreadytrue", "it already says that",
                        "never draft a change that changes nothing"):
             self.assertIn(phrase, self.rules)
 

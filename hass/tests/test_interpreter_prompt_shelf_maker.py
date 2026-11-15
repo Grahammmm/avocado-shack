@@ -64,6 +64,20 @@ class ShelfAndMakerColumnsTest(unittest.TestCase):
             self.assertIn(words, rule)
         self.assertEqual(sum(rule in line for line in build(TEST_REGISTRY, tiny_content()).splitlines()), 1)
 
+    def test_whole_shelf_of_seven_to_twenty_is_not_told_to_ask(self):
+        # The availability rule used to cap a whole shelf at 6 and say "ask and give the count"; the group rule now governs
+        # any unambiguous group up to MAX_OPS, so the two rules must not disagree on the 7..MAX_OPS boundary.
+        avail = next(r for r in RULES if r.startswith("Availability words:"))
+        group = next(r for r in RULES if r.startswith("Shelf is a product's listed shelf"))
+        self.assertNotIn("ask and give the count", avail)
+        self.assertNotIn("at most 6", avail)
+        self.assertIn("one change per listed product", avail)
+        self.assertIn("without asking only because several match", group)
+        for n in (7, MAX_OPS):
+            rows = _rows([_p(f"f-{i:03d}", "flowers") for i in range(n)])
+            self.assertEqual([_fields(r)[0] for r in rows], [f"f-{i:03d}" for i in range(n)])  # every id listed, none cut
+            self.assertEqual({_fields(r)[3] for r in rows}, {"flowers"})
+
     def test_missing_maker_empty_not_brand(self):
         for label, fields in (("absent", {}), ("none", {"producerKey": None}), ("empty", {"producerKey": ""})):
             with self.subTest(label):
