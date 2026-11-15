@@ -21,7 +21,7 @@ import json
 import re
 import unicodedata
 
-from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES, notice_days
+from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES, iso_day
 from hass.interpret_check import PRICE_REPLY
 from hass.sitegen import phone_text
 from hass.skills.prompt import skills_section
@@ -70,10 +70,9 @@ RULES = (
     f"One message may hold several ops (at most {MAX_OPS}).",
     "store.set_hours replaces every hours line: send the whole new list, repeating the lines the owner did not change, "
     "in the order shown.",
-    "store.set_notice has an optional from: its first day (Pacific). Without it the notice starts today. The notice shows "
-    "from that day through until, both days included. To change one part of the saved notice, send its whole text, from "
-    'and until, copying what the owner did not change from "notice.text", "notice.from" and "notice.until" under Store '
-    '("already started" means send no from). Ask if a day is unclear.",
+    "store.set_notice's optional from is its first day (Pacific; default today); it shows from then through until, both "
+    'included. To change one part, resend the whole notice: copy text, from and until from the "notice.*" Store rows '
+    '("already started" = send no from). Ask if a day is unclear.',
     "hike.update text fields (meetingPoint, bring, accessNote) replace the whole text: to add or change part, send the "
     "whole new text built from the current value listed under Scheduled hike details.",
     "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
@@ -298,12 +297,13 @@ def _home_text_lines(store) -> list:
     headline = store.get("headline")
     rows += [f"{_q('headline')} | {_q(line)}" for line in headline if text(line)] if isinstance(headline, list) else []
     rows += [f"{_q('story')} | {_q(store['story'])}"] if text(store.get("story")) else []
-    days = notice_days(store.get("notice"))  # AV2152-08: a valid saved notice (expired too), else no notice facts
-    if days and text(store["notice"]["text"]):
-        notice, first = store["notice"], days[0]
-        rows += [f"{_q('notice.text')} | {_q(notice['text'])}",
-                 f"{_q('notice.from')} | {_q(first.isoformat() if first else 'already started')}",
-                 f"{_q('notice.until')} | {_q(notice['until'])}"]
+    notice = store.get("notice") if isinstance(store.get("notice"), dict) else {}  # AV2152-08: text, first day, last day
+    if text(notice.get("text")):
+        first, last = iso_day(notice.get("from")), iso_day(notice.get("until"))  # a bad day lists nothing, never a guess
+        rows += [f"{_q('notice.text')} | {_q(notice['text'])}"]
+        if "from" in notice and first or "from" not in notice and last:  # no saved first day: it started already
+            rows += [f"{_q('notice.from')} | {_q(first.isoformat() if first else 'already started')}"]
+        rows += [f"{_q('notice.until')} | {_q(last.isoformat())}"] if last else []
     return rows
 
 

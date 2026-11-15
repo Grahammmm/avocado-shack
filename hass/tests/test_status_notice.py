@@ -165,8 +165,11 @@ class NoticeReadOnlyTests(NoticeTestCase):
         self.assertEqual(self.only(self.status()), [])
         done = self.apply(f"notice {TEXT}")
         self.assertEqual((done["state"], self.commits()), ("verified", 1))
-        self.assertEqual(self.only(self.status()), [LINE])
-        self.assertEqual(self.only(self.report().splitlines()), [LINE])
+        first = date.fromisoformat(json.loads(self.store_path().read_text("utf-8"))["notice"]["from"])  # AV2152-08: saved as set
+        self.at(first.year, first.month, first.day, 20)  # that Pacific day, midday: the notice is active
+        line = f"Home notice: {TEXT} - from {first.strftime('%A, %B')} {first.day} through Thursday, November 26"
+        self.assertEqual(self.only(self.status()), [line])
+        self.assertEqual(self.only(self.report().splitlines()), [line])
         self.assertEqual((self.commits(), len(self.calls)), (1, 1))  # reading adds no commit and no interpreter call
         self.assertEqual(self.say(f"undo {done['code']}"), "proposed")
         self.replies()
@@ -177,6 +180,48 @@ class NoticeReadOnlyTests(NoticeTestCase):
         self.assertEqual(self.only(self.status()), [])
         self.assertNotIn("Home notice", self.report())
         self.assertEqual(self.commits(), 2)
+
+
+class ScheduledNoticeTests(NoticeTestCase):  # AV2152-08: a notice with its own first day
+    RANGE = "from Friday, November 20 through Thursday, November 26"
+
+    def test_scheduled_active_ended_lines_in_status_and_report(self):
+        self.notice_from("2026-11-20", "2026-11-26")
+        for clock, suffix in (((2026, 11, 2, 17), "; not shown yet"), ((2026, 11, 20, 7, 59), "; not shown yet"),  # 23:59 PST on the 19th
+                              ((2026, 11, 20, 8, 0), ""), ((2026, 11, 27, 7, 59), ""),  # first day midnight; 23:59 on the last day
+                              ((2026, 11, 27, 8, 0), "; no longer shown")):
+            with self.subTest(clock=clock):
+                self.at(*clock)
+                line = f"Home notice: {TEXT} - {self.RANGE}{suffix}"
+                self.assertEqual(self.only(self.status()), [line])
+                report = self.report()
+                self.assertEqual((self.only(report.splitlines()), report.count("Home notice")), ([line], 1))
+
+    def test_same_day_legacy_and_invalid_first_day(self):
+        self.notice_from("2026-11-26", "2026-11-26")
+        self.assertEqual(self.only(self.status()),
+                         [f"Home notice: {TEXT} - from Thursday, November 26 through Thursday, November 26; not shown yet"])
+        self.notice()  # legacy wording stays
+        self.assertEqual(self.only(self.status()), [LINE])
+        for bad in ("2026-02-30", "2026-11-27", None, 20261120, "2026-11-20T00:00"):
+            with self.subTest(bad=bad):
+                self.put(notice={"text": TEXT, "from": bad, "until": "2026-11-26"})
+                self.assertEqual((self.only(self.status()), "Home notice" in self.report()), ([], False))
+
+    def test_read_only_and_paused_with_a_scheduled_notice(self):
+        self.notice_from("2026-11-20", "2026-11-26")
+        draft, _reply = self.propose("hours")
+        self.assertEqual(self.say("pause changes"), "pause")
+        self.replies()
+        before = (self.drafts(), self.store_path().read_bytes(), self.repo.head(), len(self.calls))
+        self.now += timedelta(hours=1)
+        self.assertEqual(self.only(self.status()), [f"Home notice: {TEXT} - {self.RANGE}; not shown yet"])
+        self.assertEqual((self.drafts(), self.store_path().read_bytes(), self.repo.head(), len(self.calls)), before)
+        self.assertEqual(self.drafts()[0]["state"], "proposed")
+        self.assertEqual(draft["state"], "proposed")
+
+    def notice_from(self, first, until):
+        self.put(notice={"text": TEXT, "from": first, "until": until})
 
 
 if __name__ == "__main__":

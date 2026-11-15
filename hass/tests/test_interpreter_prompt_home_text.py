@@ -30,7 +30,7 @@ class HomeTextRowsTest(unittest.TestCase):
                                 '"intro" | "Fresh and local."',
                                 '"headline" | "A small market."', '"headline" | "A lot to find."',
                                 '"story" | "Come in and say hello to everyone."',
-                                '"notice" | "Closed for the holiday"', '"notice last day" | "2026-12-26"'])
+                                '"notice.text" | "Closed for the holiday"', '"notice.from" | "already started"', '"notice.until" | "2026-12-26"'])
 
     def test_empty_store_is_exactly_the_default_intro_row(self):
         for store in ({}, None, ["not", "a", "dict"]):
@@ -61,9 +61,9 @@ class HomeTextRowsTest(unittest.TestCase):
         self.assertEqual(prompt.count(STORE + "\n"), 1)
 
     def test_notice_without_last_day_lists_text_only(self):
-        self.assertEqual(_rows({"notice": {"text": "Back soon"}}), [DEFAULT_ROW, '"notice" | "Back soon"'])
-        self.assertEqual(_rows({"notice": {"text": "Back soon", "until": ""}}), [DEFAULT_ROW, '"notice" | "Back soon"'])
-        self.assertEqual(_rows({"notice": {"text": "Back soon", "until": 20261226}}), [DEFAULT_ROW, '"notice" | "Back soon"'])
+        self.assertEqual(_rows({"notice": {"text": "Back soon"}}), [DEFAULT_ROW, '"notice.text" | "Back soon"'])
+        self.assertEqual(_rows({"notice": {"text": "Back soon", "until": ""}}), [DEFAULT_ROW, '"notice.text" | "Back soon"'])
+        self.assertEqual(_rows({"notice": {"text": "Back soon", "until": 20261226}}), [DEFAULT_ROW, '"notice.text" | "Back soon"'])
 
     def test_notice_last_day_alone_is_not_listed(self):
         self.assertEqual(_rows({"notice": {"until": "2026-12-26"}}), [DEFAULT_ROW])

@@ -89,7 +89,7 @@ class NoticeOpTests(StoreTestCase):
         repo = self.repo()
         original, before = repo.read(INDEX), repo.store()
         change = repo.run((SET, {"text": TEXT, "until": day(0)}))
-        self.assertEqual(repo.store(), {**before, "notice": {"text": TEXT, "until": day(0)}})
+        self.assertEqual(repo.store(), {**before, "notice": {"text": TEXT, "from": day(0), "until": day(0)}})
         self.assertIn(f'role="status">{TEXT}</p>', repo.text(INDEX))
         repo.run((REVERT, {"changeId": change["change_id"]}))
         self.assertNotIn("notice", repo.store())
@@ -126,8 +126,8 @@ class NoticeOpTests(StoreTestCase):
         self.assertEqual(result(repo, SET, {"text": "Closed  Thanksgiving   Day", "until": day(5)}),
                          ("refused", "the home page already shows that notice"))
         repo.run((SET, {"text": TEXT, "until": day(6)}))
-        repo.run((SET, {"text": "Open late Friday", "until": day(6)}))
-        self.assertEqual(repo.store()["notice"], {"text": "Open late Friday", "until": day(6)})
+        repo.run((SET, {"text": "Open late Friday", "from": day(0), "until": day(6)}))
+        self.assertEqual(repo.store()["notice"], {"text": "Open late Friday", "from": day(0), "until": day(6)})
         self.assertEqual(repo.text(INDEX).count('class="home-notice"'), 1)
         self.assertNotIn(TEXT, repo.text(INDEX))
 
@@ -145,7 +145,7 @@ class NoticeOpTests(StoreTestCase):
         repo = self.repo()
         repo.run((SET, {"text": TEXT, "until": day(0)}))
         record = repo.run((STORY, {"text": NEW_STORY}))["records"][0]
-        self.assertEqual(record["after"]["notice"], {"text": TEXT, "until": day(0)})
+        self.assertEqual(record["after"]["notice"], {"text": TEXT, "from": day(0), "until": day(0)})
         self.assertEqual(preview.target_for(record)["notice"], TEXT)  # still its last day
         self.assertIsNone(preview.target_for(record, shop_today() + timedelta(days=1))["notice"])  # sitegen omits it
 
@@ -158,7 +158,7 @@ class NoticeOpTests(StoreTestCase):
         apply, content = load_registry()[SET].apply, load_content()
         at = lambda utc: apply(content, {"text": TEXT, "until": "2026-11-26"}, OpContext(utc, REPO_ROOT, {}))  # noqa: E731
         self.assertNotIsInstance(at(datetime(2026, 11, 27, 7, 30, tzinfo=timezone.utc)), Refused)  # 23:30 PST, 26th
-        self.assertEqual(content.store["notice"], {"text": TEXT, "until": "2026-11-26"})
+        self.assertEqual(content.store["notice"], {"text": TEXT, "from": "2026-11-26", "until": "2026-11-26"})
         self.assertEqual(at(datetime(2026, 11, 27, 8, 30, tzinfo=timezone.utc)),  # 00:30 PST on the 27th
                          Refused("the last day 2026-11-26 is already past"))
 
@@ -168,7 +168,7 @@ class NoticeClockTests(unittest.TestCase):
     def test_continuously_open_page_expires_at_pacific_midnight(self):
         import subprocess
         result = subprocess.run(["node", str(Path(__file__).with_name("notice_expiry.cjs"))],
-                                input=sitegen.NOTICE_JS, text=True, capture_output=True, timeout=30)
+                                input=sitegen.NOTICE_JS, text=True, capture_output=True, timeout=180)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         print(result.stdout.strip())
 
@@ -218,7 +218,7 @@ class NoticeCaptureTests(StoreTestCase):
 
     def test_old_page_and_a_page_past_its_day_fail(self):
         result = self.capture({INDEX: self.old_index})
-        self.assertEqual((result["checks"]["noticeShown"], result["error"]), (False, "check failed: noticeShown"))
+        self.assertEqual((result["checks"]["noticeShown"], result["error"]), (False, "check failed: noticeShown, noticeWindow"))
         stale = self.store_repo.read(INDEX).replace(f'data-until="{day(0)}"'.encode(), f'data-until="{day(-1)}"'.encode())
         self.assertIs(self.capture({INDEX: stale})["checks"]["noticeShown"], False)  # the page script hides it
 

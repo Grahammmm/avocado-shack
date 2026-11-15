@@ -79,3 +79,31 @@ class StoreSectionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NoticeRowsTest(unittest.TestCase):  # AV2152-08: the saved notice's whole text, first day and last day
+    def _notice(self, notice):
+        return [r for r in _section(_prompt({"notice": notice}), STORE) if r.startswith('"notice.')]
+
+    def test_text_first_and_last_day_rows_json_escaped(self):
+        rows = self._notice({"text": 'Closed "Thursday"\u2028and\u2029Friday', "from": "2026-11-20", "until": "2026-11-26"})
+        self.assertEqual(rows, ['"notice.text" | "Closed \\"Thursday\\"\\u2028and\\u2029Friday"', '"notice.from" | "2026-11-20"',
+                                '"notice.until" | "2026-11-26"'])
+        self.assertEqual(self._notice({"text": "Back soon", "from": "2020-01-01", "until": "2020-01-05"})[1:],
+                         ['"notice.from" | "2020-01-01"', '"notice.until" | "2020-01-05"'])  # an expired notice is listed too
+
+    def test_legacy_marker_and_malformed_or_absent_values(self):
+        self.assertEqual(self._notice({"text": "Back soon", "until": "2026-11-26"}),
+                         ['"notice.text" | "Back soon"', '"notice.from" | "already started"', '"notice.until" | "2026-11-26"'])
+        self.assertEqual(self._notice({"text": "Back soon", "from": "2026-02-30", "until": "2026-11-26"}),
+                         ['"notice.text" | "Back soon"', '"notice.until" | "2026-11-26"'])  # never a guessed first day
+        self.assertEqual(self._notice({"text": "Back soon", "from": None, "until": 5}), ['"notice.text" | "Back soon"'])
+        for bad in (None, "closed", ["x"], {"until": "2026-11-26"}, {"text": " ", "until": "2026-11-26"}):
+            self.assertEqual(self._notice(bad), [])
+        self.assertEqual(_section(_prompt({}), STORE), [DEFAULT_ROW])  # no notice, no rows
+
+    def test_rule_and_cap_unchanged(self):
+        prompt = _prompt({"notice": {"text": "Back soon", "from": "2026-11-20", "until": "2026-11-26"}})
+        self.assertEqual(prompt.count("store.set_notice's optional from is its first day"), 1)
+        self.assertIn('copy text, from and until from the "notice.*" Store rows', prompt)
+        self.assertLess(len(prompt.encode("utf-8")), PROMPT_MAX_BYTES)
