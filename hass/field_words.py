@@ -18,6 +18,7 @@ FIELD_WORDS = {
     "clearProducer": "remove the maker",
     "clearImageAlt": "remove the photo description",
     "clearUrl": "remove the website link",
+    "clearStory": "remove the story",
     "url": "the website link",
     "image": "the photo",
     "photo": "the photo",

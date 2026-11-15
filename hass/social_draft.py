@@ -22,7 +22,7 @@ cancelled" | "hike already happened" (completed, or start before now) | "not sch
 --maker prints {"draft": true, "caption"}: "Meet the maker: <name>", "Based in <place>.", the stored story verbatim, the count of the
 maker's active products, then fixed #AvocadoShack #MeetTheMaker (no photo, url or derived text). Refusal (exit 1): "cannot read content" |
 "no such maker" (exact, case-sensitive key) | "not on the site" (hidden maker) | "no active products" | "maker record incomplete"
-(name/place not one line, story not text) | "free text has a hashtag or account name" | "caption too long".
+(name/place not one line, a present story not text) | "maker has no story" (no story key; no caption is guessed) | "free text has a hashtag or account name" | "caption too long".
 --recap prints {"draft": true, "caption"}: title, Pacific weekday date with year (no time), the owner's saved recap of a completed hike
 verbatim, then fixed #AvocadoShack #NorthCoastHikingClub. No people count, route or meeting point is added. A recap too long for the
 caption is cut after its last ".", "!" or "?" (followed by white space or the end) that fits; never mid-sentence, never an ellipsis.
@@ -168,7 +168,9 @@ def build_maker(content, maker_key: str) -> dict:
     count = sum(1 for p in products if p.get("producerKey") == maker_key and p.get("status") == "active")
     if count == 0: return refuse("no active products")
     name, place, story = maker.get("name"), maker.get("place"), maker.get("story")
-    if not (_line(name) and _line(place) and _block(story)): return refuse("maker record incomplete")
+    if not (_line(name) and _line(place)): return refuse("maker record incomplete")
+    if "story" not in maker: return refuse("maker has no story")  # AV0222-10: absent is no story; never a guessed biography
+    if not _block(story): return refuse("maker record incomplete")
     if any(_TAG_RE.search(t) for t in (name, place, story)): return refuse("free text has a hashtag or account name")
     total = f"{count} active product on our site." if count == 1 else f"{count} active products on our site."
     caption = f"Meet the maker: {name}\nBased in {place}.\n{story}\n{total}\n\n{MAKER_TAGS}"

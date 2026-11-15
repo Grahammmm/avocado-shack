@@ -73,7 +73,8 @@ class MakerDraftTests(unittest.TestCase):
                 m = dict(MAKER, **{field: bad})
                 self.assertEqual(social_draft.build_maker(content(makers={"m1": m}), "m1"), refused("maker record incomplete"), (field, bad))
             m = {k: v for k, v in MAKER.items() if k != field}
-            self.assertEqual(social_draft.build_maker(content(makers={"m1": m}), "m1"), refused("maker record incomplete"), field)
+            self.assertEqual(social_draft.build_maker(content(makers={"m1": m}), "m1"),
+                             refused("maker has no story" if field == "story" else "maker record incomplete"), field)  # AV0222-10
         for field in ("name", "place"):
             m = dict(MAKER, **{field: "a\nb"})
             self.assertEqual(social_draft.build_maker(content(makers={"m1": m}), "m1"), refused("maker record incomplete"), field)

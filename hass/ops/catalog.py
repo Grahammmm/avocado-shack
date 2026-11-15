@@ -263,7 +263,7 @@ def _maker_add(content, args, ctx):
     if twin := _maker_twin(content, args["name"]):
         verb = "restore" if content.makers[twin].get("hidden") is True else "edit"
         return Refused(f"maker {twin} already has this name; {verb} it instead")
-    content.makers[key] = {field: args[field] for field in MAKER_EDITABLE if field in args}  # url may be absent
+    content.makers[key] = {field: args[field] for field in MAKER_EDITABLE if field in args}  # url and story may be absent (AV0222-10: never invented)
     return _touch("makers", key, None, content.makers[key])
 
 
@@ -275,16 +275,19 @@ def _maker_edit(content, args, ctx):
         return problem
     if "url" in args and args.get("clearUrl"):
         return Refused("url and clearUrl cannot be combined")
+    if "story" in args and args.get("clearStory"):  # AV0222-10
+        return Refused("story and clearStory cannot be combined")
     changes = {field: args[field] for field in MAKER_EDITABLE if field in args}
-    clear_url = bool(args.get("clearUrl"))
-    if not changes and not clear_url:
-        fields = list(MAKER_EDITABLE) + ["clearUrl"]
+    asked_url, asked_story = bool(args.get("clearUrl")), bool(args.get("clearStory"))
+    if not changes and not asked_url and not asked_story:
+        fields = list(MAKER_EDITABLE) + ["clearUrl", "clearStory"]
         return NeedsDetails(fields, f"What would you like to change about {voice.quote(maker.get('name') or 'this maker')}? "
                             "You can change: " + field_list(fields))
-    clear_url = clear_url and "url" in maker  # clearing an absent url is no change
-    changes = _drop_unchanged(changes, maker, f"maker {args['key']}", more=clear_url) if changes else changes
-    if not changes and not clear_url:
-        return Refused(f"maker {args['key']} has no url set; nothing to clear")
+    clear_url, clear_story = asked_url and "url" in maker, asked_story and "story" in maker  # clearing an absent field is no change
+    changes = _drop_unchanged(changes, maker, f"maker {args['key']}", more=clear_url or clear_story) if changes else changes
+    if not changes and not clear_url and not clear_story:
+        return Refused(f"maker {args['key']} has no url set; nothing to clear" if asked_url
+                       else f"maker {args['key']} has no story; nothing to change")
     if isinstance(changes, Refused):
         return changes
     if "name" in changes and (twin := _maker_twin(content, changes["name"], args["key"])):
@@ -298,6 +301,8 @@ def _maker_edit(content, args, ctx):
     maker.update(changes)
     if clear_url:
         maker.pop("url")
+    if clear_story:
+        maker.pop("story")
     return _touch("makers", args["key"], before, maker)
 
 
@@ -385,11 +390,11 @@ OPS = (
     Op("product.restore", _ID, _product_restore),
     Op("product.set_availability", {**_ID, "available": Arg("enum", choices=AVAILABILITY)}, _product_set_availability),
     Op("product.clear_availability", _ID, _product_clear_availability),
-    Op("maker.add", {"key": Arg("text"), **{k: Arg("url", required=False) if k == "url" else Arg("text")
+    Op("maker.add", {"key": Arg("text"), **{k: Arg("url", required=False) if k == "url" else Arg("text", required=k != "story")
                                            for k in MAKER_EDITABLE}},
        _maker_add),
     Op("maker.edit", {**_KEY, **{k: Arg("url" if k == "url" else "text", required=False) for k in MAKER_EDITABLE},
-                      "clearUrl": Arg("bool", required=False)},
+                      "clearUrl": Arg("bool", required=False), "clearStory": Arg("bool", required=False)},
        _maker_edit),
     Op("maker.hide", {**_KEY, "withProducts": Arg("bool", required=False)}, _maker_hide),
     Op("maker.restore", _KEY, _maker_restore),
