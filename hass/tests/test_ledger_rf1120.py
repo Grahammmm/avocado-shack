@@ -19,6 +19,7 @@ UNITS += tuple(f"AV1102-{n:02d}" for n in range(1, 17))  # AV1102-17 roll-up (se
 UNITS += tuple(f"AV1222-{n:02d}" for n in range(1, 16))  # AV1222-16 roll-up (id order; the ledger has no issue headings)
 UNITS += tuple(f"AV2022-{n:02d}" for n in range(1, 15))  # AV2022-15 roll-up
 UNITS += tuple(f"AV1322-{n:02d}" for n in range(1, 16))  # AV1322-16 roll-up
+UNITS += tuple(f"AV0022-{n:02d}" for n in range(1, 17) if n != 5)  # AV0022-17 roll-up (id order; AV0022-05 was closed unmerged, see test_unmerged_unit_has_no_section)
 LABEL = ("Label facts are only a question", "Maker, organic and origin are never read from a photo")
 WORDS = {"AV1737-03": ("Reactions never approve", "Edited text is not read"), "AV1737-15": ("Live inbox replacement stays attended",),
          "AV1737-14": ("The detail is free MB and the store name, never a path",)}  # AV1737-16 edge path 5
@@ -31,6 +32,9 @@ WORDS |= {"AV1222-10": ("The cost is private; it is never on the website",), "AV
 WORDS |= {"AV2022-05": ("Audio is refused, never transcribed or stored",),
           "AV2022-09": ("BlueBubbles is loopback-only with no password in errors",),
           "AV2022-13": ("Retention reports counts only and deletes nothing",)}
+WORDS |= {"AV0022-01": ("sideways photos keep only the Orientation tag (no location, camera or date)",),
+          "AV0022-14": ("health only reports unused photo copies and deletes nothing",),
+          "AV0022-16": ("`--live` is operator-only and no model-quality claim is made",)}  # AV0022-17 edge path 5
 LEDGER = (REPO_ROOT / "BUILD_LEDGER.md").read_text(encoding="utf-8")
 SHA = re.compile(r"\b[0-9a-f]{40}\b")
 GIT_HEX = re.compile(r"\b(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b")  # commit ids are not phone numbers
@@ -132,6 +136,13 @@ class LedgerRF1120Tests(unittest.TestCase):
                   "AV2022-05: limit wording?": LEDGER.replace("Audio is refused, never transcribed or stored", "Audio is stored"),
                   "AV2022-09: limit wording?": LEDGER.replace("BlueBubbles is loopback-only with no password in errors", "BlueBubbles is remote"),
                   "AV2022-13: limit wording?": LEDGER.replace("Retention reports counts only and deletes nothing", "Retention deletes rows")}
+        cases |= {"AV0022-01: 2 headings": LEDGER + "\n" + sections(LEDGER, "AV0022-01")[0], "AV0022-16: 0 headings": LEDGER.replace("(AV0022-16)", "(AV0022-160)"),
+                  "AV0022-10: no merge sha": LEDGER.replace(SHA.findall(sections(LEDGER, "AV0022-10")[0])[0], "004998d"),
+                  "AV0022-09: missing test_proposal_photo_wordz.py": LEDGER.replace("hass.tests.test_proposal_photo_words ", "hass.tests.test_proposal_photo_wordz "),
+                  "AV0022-01: limit wording?": LEDGER.replace("keep only the Orientation tag", "keep the camera tags"),
+                  "AV0022-14: limit wording?": LEDGER.replace("health only reports unused photo copies and deletes nothing", "health deletes unused photo copies"),
+                  "AV0022-16: limit wording?": LEDGER.replace("is operator-only and no model-quality claim is made", "is run by CI"),
+                  "AV0022-12: private data": LEDGER.replace("(AV0022-12)", "(AV0022-12)\nmail owner@example.com")}
         cases |= {f"AV2022-08: private data|{leak}": LEDGER.replace("(AV2022-08)", "(AV2022-08)\n" + leak) for leak in
                   ("call +1 555 123 4567", "mail owner@example.com", "said quokka-canary-4242")}
         cases |= {f"RF1035-7: private data|{leak}": LEDGER.replace(one, one + leak + "\n") for leak in
@@ -139,6 +150,10 @@ class LedgerRF1120Tests(unittest.TestCase):
         cases["AV1537-15: private data"] = LEDGER.replace("(AV1537-15)", "(AV1537-15)\ncall +1 555 123 4567")
         for want, text in cases.items():
             self.assertIn(want.split("|")[0], problems(text), want)
+
+    def test_unmerged_unit_has_no_section(self):
+        self.assertEqual(sections(LEDGER, "AV0022-05"), [], "AV0022-05 (PR #224) was closed unmerged: no placeholder section")
+        self.assertIn("AV0022-05", sections(LEDGER, "AV0022-04")[0])  # the closure is named once, in AV0022-04's limits
 
     def test_superseded_unit_has_no_merge(self):
         found = sections(LEDGER, "RF1740-5")
