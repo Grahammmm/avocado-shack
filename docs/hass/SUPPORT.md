@@ -138,7 +138,16 @@ When Hass could not reach the model or got no usable answer, it replies "I could
 - **Next step:** the owner sends `resume changes` once the pause is no longer wanted; resuming never applies anything. Health never resumes by itself.
 - **Stop and ask:** nobody knows why changes were paused, or the pause time is unreadable (tell the operator).
 
+### `daily-limit`
+- **Means:** with `interpreterDailyCap` set: `<n> message(s) not read today, cap <CAP>`. That many of the owner's messages on the current Pacific day got the daily-limit reply, so Michael's new change requests are refused until Pacific midnight. Status, commands and approvals still work. Only the count is shown: no message text, sender, chat or id. The `interpreter` info line shows today's calls.
+- **Check first:** the `interpreter` info line (`<calls> of <CAP> today`); reaching the cap with no refused message raises nothing.
+- **Next step:** tell Michael his change requests resume after midnight Pacific; do not replay messages or edit rows. The problem clears itself the next Pacific day.
+- **Stop and ask:** before changing the cap: only G changes `interpreterDailyCap` (H22), never an operator workaround.
+
 ## Info lines
+
+### `interpreter`
+- **Means:** `<calls> of <CAP> today`, shown only when the private config sets `interpreterDailyCap`: how many interpreter calls were attempted on the current Pacific day (failed calls count too). Info only: reaching the cap alone is not a refusal; the problem `daily-limit` is raised only when a message was actually refused. A missing usage table or no row for today reads as 0.
 
 ### `backup-content`
 - **Means:** with `--backups`: the newest complete backup within `--backup-hours` lists no `content.bundle` (`content restores from Git only`; made before FAV-07 or without a content commit). Info only: it never changes `ok`, `notify` or the exit code, and older backups never raise it; the next `python3 hass/statebackup.py create` with a readable writer HEAD clears it.

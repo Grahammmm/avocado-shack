@@ -49,13 +49,13 @@ class LoadCasesRefusalTests(unittest.TestCase):
         with self.assertRaises(ev.EvalError): ev.load_cases(path)
 
     def assertLoads(self, path):
-        self.assertEqual(len(ev.load_cases(path)), 69)
+        self.assertEqual(len(ev.load_cases(path)), 75)
         code, out, err = self.run_main(path)
-        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 69))
+        self.assertEqual((code, err, json.loads(out)["cases"]), (0, "", 75))
 
     def test_real_fixture_loads_63_cases_unchanged(self):
         self.assertEqual(ev.load_cases(CASES), self.rows)
-        self.assertEqual(len(self.rows), 69)
+        self.assertEqual(len(self.rows), 75)
 
     def test_bad_pending_code_refused(self):
         bad = [{"code": ["a"]}, {"code": 7}, {"code": ""}, {"code": "a b"}, {"code": "x" * 17}, {},
@@ -148,7 +148,7 @@ class V4NotesTests(base.EvalTestCase):
 
     def test_real_fixture_has_8_new_unique_cases_and_two_with_notes(self):
         ids = [c["id"] for c in self.cases]
-        self.assertEqual((ids[55:63], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 69))
+        self.assertEqual((ids[55:63], len(set(ids))), ([f"e{n}" for n in range(56, 64)], 75))
         self.assertTrue(all(ev.ID_RE.fullmatch(i) for i in ids))
         self.assertEqual({c["id"] for c in self.cases if "notes" in c}, {"e62", "e63"})
         self.assertEqual([c["expect"] for c in self.cases[56:61:2]][:1], [{"question": True}])
@@ -169,7 +169,7 @@ class V4NotesTests(base.EvalTestCase):
         for notes in ([], [{"key": "k", "text": "t"}] * 20):
             with self.subTest(n=len(notes)):
                 path, _ = self.notes_file(notes)
-                self.assertEqual(len(ev.load_cases(path)), 69)
+                self.assertEqual(len(ev.load_cases(path)), 75)
 
     def captured_requests(self):
         bodies = []
@@ -179,7 +179,7 @@ class V4NotesTests(base.EvalTestCase):
             return 200, json.dumps({"done": True, "message": {"content": '{"question": "Which one?"}'}}).encode()
         out = self.tmp / "fresh.jsonl"
         code, _, _ = base.run("--live", "--url", base.URL, "--model", "m", "--out", out, transport=transport)
-        self.assertEqual((code, len(bodies)), (0, 69))
+        self.assertEqual((code, len(bodies)), (0, 75))
         return bodies
 
     def test_live_sends_notes_only_for_cases_that_have_them(self):
@@ -206,7 +206,7 @@ class V4NotesTests(base.EvalTestCase):
         path.write_text("\n".join(rows) + "\n", "utf-8")
         code, out, err = base.scored(CASES, path)
         summary = json.loads(out)
-        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 65))
+        self.assertEqual((code, err, summary["missing"], summary["passed"]), (0, "", ["e62"], 71))
 
 
 class V5PhoneAndHikeTextTests(base.EvalTestCase):
@@ -222,7 +222,7 @@ class V5PhoneAndHikeTextTests(base.EvalTestCase):
         return code, err, bodies
 
     def test_six_new_cases_follow_the_v4_ones_and_are_valid_for_the_registry(self):
-        new = self.cases[63:]
+        new = self.cases[63:69]
         self.assertEqual([c["id"] for c in new], [f"e{n}" for n in range(64, 70)])
         self.assertEqual([c["expect"].get("ops", [{}])[0].get("op") for c in new],
                          ["store.set_phone", "store.clear_phone", None, "hike.update", "hike.update", "hike.update"])
@@ -235,7 +235,7 @@ class V5PhoneAndHikeTextTests(base.EvalTestCase):
 
     def test_partial_edit_expectations_are_the_whole_fixture_text_plus_the_change(self):
         hike = json.loads(ev.EVENTS.read_text("utf-8"))[0]
-        args = {c["id"]: c["expect"]["ops"][0]["args"] for c in self.cases[66:]}
+        args = {c["id"]: c["expect"]["ops"][0]["args"] for c in self.cases[66:69]}
         self.assertEqual(args["e67"]["bring"], hike["bring"] + ", sunscreen")
         self.assertTrue(args["e68"]["accessNote"].startswith(hike["accessNote"]))
         self.assertNotEqual(args["e69"]["meetingPoint"], hike["meetingPoint"])
@@ -251,7 +251,7 @@ class V5PhoneAndHikeTextTests(base.EvalTestCase):
         watched = [p for p in (ev.REPO / "hass" / "content").rglob("*") if p.is_file()]
         before = {p: p.read_bytes() for p in watched}
         code, err, bodies = self.prompts()
-        self.assertEqual((code, err, len(bodies)), (0, "", 69))
+        self.assertEqual((code, err, len(bodies)), (0, "", 75))
         hike = json.loads(ev.EVENTS.read_text("utf-8"))[0]
         row = " | ".join(json.dumps(str(hike[k]), ensure_ascii=False) for k in ("id", "meetingPoint", "capacity", "bring", "accessNote"))
         self.assertTrue(row in bodies[0], "fixture hike details row missing from the live prompt")
@@ -275,6 +275,118 @@ class V5PhoneAndHikeTextTests(base.EvalTestCase):
                 self.assertRegex(number, r"^555\D{0,2}01\d\d$|^555\D{0,2}0123$", (case["id"], number))
         for line in ev.EVENTS.read_text("utf-8").splitlines():
             self.assertNotRegex(line, r"@\S+\.\S+")
+
+
+def _ops(*calls): return {"ops": [{"op": op, "args": args} for op, args in calls], "revises": None}
+
+
+class V8GroupAndCopySlotTests(base.EvalTestCase):
+    """AV2152-13: the six v8 cases (whole shelf, whole maker, partial description, cancel note, notice first day, club
+    intro) and the unchanged scorer's verdict on mutated replies. Synthetic replies only; no model call."""
+
+    NEW = [f"e{n}" for n in range(70, 76)]
+    OLD = ("Sourdough from Brian’s in Atascadero. A crust worth tearing, a loaf that belongs beside soup. "
+           "Butter is enough; the rest is optional.")
+    ETTO = [f"photo-product-{n}" for n in ("082", "171", "172", "173", "174")]
+    CANCEL = ("hike.cancel", {"id": "hike-2026-11-22-cass-hill", "note": "Rained out - we will pick a new date soon."})
+    NOTICE = ("store.set_notice", {"text": "Closed Thanksgiving Day", "from": "2026-11-26", "until": "2026-11-26"})
+    INTRO = "Walk with us along the coast, share the trail, and leave room for discovery."
+
+    def case(self, case_id): return next(c for c in self.cases if c["id"] == case_id)
+
+    def avail(self, ids, available="limited"):
+        return _ops(*[("product.set_availability", {"id": i, "available": available}) for i in ids])
+
+    def test_v8_six_cases_shapes_and_membership(self):
+        new = self.cases[69:]
+        self.assertEqual([c["id"] for c in new], self.NEW)
+        self.assertEqual(len({c["id"] for c in self.cases}), 75)
+        self.assertEqual([c["text"] for c in new], [
+            "Everything on the flowers shelf is limited.", "All the Etto products are limited.",
+            "Add \"Great on toast.\" to the end of Brian's sourdough bread description; keep every existing sentence.",
+            "Cancel hike hike-2026-11-22-cass-hill with the note: Rained out - we will pick a new date soon.",
+            "Set the home notice to \"Closed Thanksgiving Day\" from 2026-11-26 through 2026-11-26.",
+            "Set the hiking club opening paragraph to: " + self.INTRO])
+        self.assertTrue(all(set(c) == {"id", "text", "pending", "expect"} and c["pending"] == [] and
+                            c["expect"]["revises"] is None for c in new))
+        self.assertEqual([[o["op"] for o in c["expect"]["ops"]] for c in new],
+                         [["product.set_availability"], ["product.set_availability"] * 5, ["product.edit"],
+                          ["hike.cancel"], ["store.set_notice"], ["club.set_intro"]])
+        products = load_content().products  # membership frozen from the catalog on main, not from a reply
+        flowers = sorted(p["id"] for p in products if p["category"] == "flowers" and p["status"] == "active")
+        etto = sorted(p["id"] for p in products if p.get("producerKey") == "Etto" and p["status"] == "active")
+        self.assertEqual((flowers, etto), (["photo-product-006"], self.ETTO))  # the flowers shelf has ONE member on main
+        self.assertEqual([o["args"] for o in self.case("e70")["expect"]["ops"]],
+                         [{"id": "photo-product-006", "available": "limited"}])
+        self.assertEqual([o["args"] for o in self.case("e71")["expect"]["ops"]],
+                         [{"id": i, "available": "limited"} for i in self.ETTO])
+        for case in new:  # registry-valid, as every earlier case is
+            result = {"ops": case["expect"]["ops"], "revises": None}
+            self.assertIs(interpret_check.check(result, base.REGISTRY, set()), result, case["id"])
+        self.assertEqual([self.why(i, self.replies[i]) for i in self.NEW], [[]] * 6)
+
+    def test_v8_group_missing_extra_wrong_id_or_order_fails(self):
+        self.assertEqual(self.why("e71", self.avail(self.ETTO)), [])
+        for short in (self.ETTO[1:], self.ETTO[:-1]):  # first or last member left out
+            self.assertTrue(self.why("e71", self.avail(short))[0].startswith("ops "))
+        self.assertTrue(self.why("e71", self.avail(self.ETTO + ["photo-product-006"]))[0].startswith("ops "))  # extra op
+        self.assertEqual(self.why("e71", self.avail(["photo-product-006"] + self.ETTO[1:])), ["op 1 product.set_availability: arg id differs"])
+        self.assertEqual(self.why("e71", self.avail(self.ETTO[:-1] + ["photo-product-006"])), ["op 5 product.set_availability: arg id differs"])
+        self.assertEqual(self.why("e71", self.avail(self.ETTO, "no")), ["op 1 product.set_availability: arg available differs"])
+        self.assertEqual(self.why("e71", self.avail(self.ETTO[::-1])), ["op 1 product.set_availability: arg id differs"])
+        self.assertEqual(self.why("e70", self.avail(["photo-product-082"])), ["op 1 product.set_availability: arg id differs"])
+        self.assertEqual(self.why("e70", self.avail(["photo-product-006"], "no")), ["op 1 product.set_availability: arg available differs"])
+
+    def test_v8_description_preserves_all_old_text(self):
+        def edit(pid, text): return _ops(("product.edit", {"id": pid, "description": text}))
+        self.assertEqual(self.why("e72", edit("photo-product-015", self.OLD + " Great on toast.")), [])
+        for bad in ("Great on toast.", self.OLD, self.OLD.split(". ")[0] + ". Great on toast.", self.OLD + "Great on toast."):
+            self.assertEqual(self.why("e72", edit("photo-product-015", bad)), ["op 1 product.edit: arg description differs"])
+        self.assertEqual(self.why("e72", edit("photo-product-082", self.OLD + " Great on toast.")), ["op 1 product.edit: arg id differs"])
+        self.assertEqual(self.why("e72", _ops(("product.edit", {"id": "photo-product-015"}))), ["op 1 product.edit: missing arg description"])
+        self.assertEqual(self.why("e72", {"question": "Which sentences should stay?"}), ["expected ops, got question"])
+
+    def test_v8_cancel_note_required_in_reply(self):
+        self.assertEqual(self.why("e73", _ops(self.CANCEL)), [])
+        no_note = _ops(("hike.cancel", {"id": "hike-2026-11-22-cass-hill"}))
+        self.assertEqual(self.why("e73", no_note), ["op 1 hike.cancel: missing arg note"])
+        changed = _ops(("hike.cancel", {**self.CANCEL[1], "note": "Rained out"}))
+        self.assertEqual(self.why("e73", changed), ["op 1 hike.cancel: arg note differs"])
+        update = _ops(("hike.update", {"id": "hike-2026-11-22-cass-hill", "accessNote": self.CANCEL[1]["note"]}))
+        self.assertEqual(self.why("e73", update), ["ops hike.update but expected hike.cancel"])
+        self.assertEqual(self.why("e18", no_note), [])  # the inherited cancel without a note is unchanged
+
+    def test_v8_notice_requires_first_and_last_days(self):
+        self.assertEqual(self.why("e74", _ops(self.NOTICE)), [])
+        args = self.NOTICE[1]
+        no_from = {k: v for k, v in args.items() if k != "from"}
+        self.assertEqual(self.why("e74", _ops(("store.set_notice", no_from))), ["op 1 store.set_notice: missing arg from"])
+        for name, value in (("from", "2026-11-25"), ("until", "2026-11-27"), ("text", "Closed Thanksgiving")):
+            self.assertEqual(self.why("e74", _ops(("store.set_notice", {**args, name: value}))),
+                             [f"op 1 store.set_notice: arg {name} differs"])
+        no_until = {k: v for k, v in args.items() if k != "until"}
+        self.assertTrue(self.why("e74", _ops(("store.set_notice", no_until))))  # until is required by the op itself
+
+    def test_v8_club_intro_not_store_intro(self):
+        self.assertEqual(self.why("e75", _ops(("club.set_intro", {"text": self.INTRO}))), [])
+        self.assertEqual(self.why("e75", _ops(("store.set_intro", {"text": self.INTRO}))), ["ops store.set_intro but expected club.set_intro"])
+        self.assertEqual(self.why("e75", _ops(("club.set_intro", {"text": self.INTRO[:-1] + "!"}))), ["op 1 club.set_intro: arg text differs"])
+        self.assertEqual(self.why("e75", _ops(("club.set_intro", {"text": "Walk with us along the coast."}))), ["op 1 club.set_intro: arg text differs"])
+        self.assertTrue(self.why("e75", _ops(("club.set_intro", {}))))  # text is required by the op itself
+
+    def test_v8_prior_scores_and_refusals_unchanged(self):
+        code, out, err = base.scored(CASES, REPLIES)
+        summary = json.loads(out)
+        self.assertEqual((code, err, summary["passed"], [f["id"] for f in summary["failed"]]), (0, "", 72, ["e06", "e13", "e25"]))
+        old = ev.score(self.cases[:69], self.replies, base.REGISTRY)  # the 69 earlier cases score exactly as before
+        self.assertEqual((old["passed"], [f["id"] for f in old["failed"]]), (66, ["e06", "e13", "e25"]))
+        got = lambda skip=(), more=(): base.scored(CASES, self.write("r.jsonl", [{"id": k, "reply": v} for k, v in self.replies.items() if k not in skip] + list(more)))  # noqa: E731
+        code, out, _ = got(skip=("e75",))
+        self.assertEqual((code, json.loads(out)["missing"], json.loads(out)["passed"]), (0, ["e75"], 71))
+        code, out, _ = got(more=[{"id": "e76", "reply": {"question": "?"}}])
+        self.assertEqual((code, json.loads(out)["extra"], json.loads(out)["passed"]), (0, ["e76"], 72))
+        self.assertEqual(base.scored(self.write("c.jsonl", self.rows[:74]), REPLIES), (2, "", "cases: 74 cases, expected 75"))
+        self.assertEqual(base.scored(self.write("d.jsonl", self.rows[:74] + [self.rows[0]]), REPLIES), (2, "", "cases line 75: duplicate id"))
 
 
 if __name__ == "__main__":
