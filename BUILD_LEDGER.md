@@ -2245,3 +2245,123 @@ Branch avb19-b2-pages-faq, built to the reviewed AVB-19 front-end pack design (s
 History: Sol built the first candidate and stopped twice on `add an FAQ` answering `question` instead of `proposed`. Opus traced it: the refusal path is off and `front.faq` is picked after one model call, but the scripted question and answer are not in the owner's text, so the dispatcher's owner-words rule drops them and the skill asks "What is the question?". That is the intended behaviour; the test now expects it, and a second test drafts the entry when his message has the words. A page-undo test used banner dates that had ended on the real clock; they are now relative to today. Phone captures showed the page words flush to the left edge; the template section is inset. The Primary corpus lost the retired `page.faq` row (coverage now counts active skills) and gained `primary-front-page` and `primary-front-faq`, recorded and read by hand. `design_check.DESIGN` still does not list `hass/templates/home/*.html` (noted at B1); B2's design list names only the fixed pages, so that stays a follow-up. The first full local check then failed on tests that pin the old six generated files or copy partial site trees (`test_content`'s `IsolatedRepo` and the migration/generated-io tests that use it, `test_notice_specials_coherence`, `test_design_preview`); those fixtures now include the four pages. It also showed `hide an item` asking "hide a product, or add a new product?": the `front.page` trigger "hide Our policies page" made a fifth skill share the word "hide", and the router's name-ordered tie pushed `item.hide` out of its top three. The trigger is now "take Our policies page off the site", and that ranking is back to main's; a bare "hide the About page" now ties `front.page` with `page.about` and asks which (nothing wrong is drafted).
 
 Checks and limits are in the PR body. Not deployed; nothing live, no runtime, settings, credentials or records read or changed. Rollback: revert the PR; a page or entry already saved is removed with `undo` or hidden with "hide <page>"; the ops stay private.
+
+## H10 upright phone photos with a rotation tag are accepted (AV0022-01) — November 1, 2026
+
+Branch rb/av0022-01 (AV0022-01, PR #192, merged as 29a0d8089b45cb56f160be3226b61c845017f0d2). A JPEG with an EXIF Orientation of 2 to 8 is accepted: sideways photos keep only the Orientation tag (no location, camera or date) because the web copy gets one freshly built Orientation-only EXIF segment and the original EXIF is still dropped. A PNG eXIf rotation is still refused as needs-rotation.
+
+Checks: the PR body records no test run or count; the tests it added or changed are `python3 -m unittest hass.tests.test_media_orientation hass.tests.test_media_web hass.tests.test_photo_limits hass.tests.test_set_photo` (not rerun for this ledger).
+
+Limits: Issue #2 (media and photos). Pixels are never rotated or re-encoded; no HEIC, PNG rotation, thumbnails, LIMITS.md wording (AV0022-15) or live photo source.
+
+## H10 product.add can take a stored photo (AV0022-02) — November 1, 2026
+
+Branch rb/av0022-02 (AV0022-02, PR #152, merged as 76554c679b732fc3cac53ddf3301f9fcbc1ab203). `product.add` takes either `image` (an existing site file) or `photo` (a stored photo id) with an `imageAlt`; with `photo` the metadata-free web copy is installed and committed like `product.set_photo` does, through the new `photos.install`.
+
+Checks at PR head 831fd9c2: `python3 -m unittest discover -s hass/tests -t . -v` passed through prepush (PREPUSH-TESTS PASS, no count recorded); the new tests are in `hass.tests.test_product_add_photo` (recorded in PR #152).
+
+Limits: Issue #2 (media and photos). Turning a photo question into product.add is AV0022-04; no prompt rules, product.edit with photo, resizing or deleting old photos.
+
+## H05 pending drafts carry their ops (AV0022-03) — November 1, 2026
+
+Branch rb/av0022-03 (AV0022-03, PR #209, merged as d5e3ba5351fff25fe13cd1fb298e91d1b1a9078a). Each pending draft sent to the interpreter now includes its ops (or an omitted flag when over 4096 bytes or unreadable), plus one prompt rule so a correction resends the whole change with `revises` set.
+
+Checks at PR head f83137ee: `python3 -B -m unittest hass.tests.test_pending_ops hass.tests.test_needs_details_expiry hass.tests.test_interpreter_prompt hass.tests.test_conversation hass.tests.test_settings_config_file` — 48 tests in 44.977s, OK, after the last main merge; the full discover run before it was 1454 tests, OK (skipped=21); prepush NOT-RUN, host busy (recorded in PR #209).
+
+Limits: Issue #1 (conversation and ops). No model call (eval v2 is AV0022-16), no photo new-versus-existing rule (AV0022-04), and `_summary` and history or status text are unchanged.
+
+## H12 a photo of a new product becomes a product draft (AV0022-04) — November 1, 2026
+
+Branch rb/av0022-04 (AV0022-04, PR #216, merged as 8f9eab83bebc2a97b087508af0327d5bbabca7e8). An answer to a photo question that is `product.add` now gets the draft's photo; a photo naming another sha is refused as a mismatch, and more than one photo op in one fill gets the one-product reply and changes nothing. One prompt rule says when to use `product.set_photo` and when `product.add`.
+
+Checks: new tests in `hass.tests.test_photo_new_product` failed 7 subtests against main's conversation.py in the builder's RED check; the PR body records no passing run or count and none is invented here.
+
+Limits: Issue #2 (media and photos). A repeat photo already on a product (AV0022-05) was not built here: PR #224 was closed unmerged as superseded by AVB-12 (baf8eaf, operator card t_937c5838), so AV0022-05 has no section. Proposal wording for photos is AV0022-09; no label reader or live model.
+
+## H16 a yes sent in time still approves after a delay (AV0022-06) — November 1, 2026
+
+Branch rb/av0022-06 (AV0022-06, PR #194, merged as e8b8574e2365843b9a5db171d74fe8f40c4607f2). A yes or no sent before its draft expired but handled after the expiry is judged at the time it was sent; only the expiry sweep uses that time, and a future, naive, empty or unparseable time is judged at handling time. Approval time and apply stay on the handling time, and the stale-base check is unchanged.
+
+Checks at PR head 1651d597: `python3 -m unittest hass.tests.test_late_yes -v` — 10 tests, OK; the full discover run was 1391 tests, OK (skipped=21), both under memcap (recorded in PR #194).
+
+Limits: Issue #1 (conversation and ops). No approval of a yes sent before its draft existed, drain service, inbox order, expiry values or late-reply prefixes (AV0022-10).
+
+## H06 a second bare undo drafts the change before (AV0022-07) — November 1, 2026
+
+Branch rb/av0022-07 (AV0022-07, PR #206, merged as 9257731dfb4007b56e0b85d8a50091bc587e1c35). A bare `undo` now skips applied undos and drafts the change before; `undo <code>` naming an undo is still refused, and with nothing left it says there is nothing to undo. The one existing test `test_undo_twice` had two expected values updated.
+
+Checks at PR head 64cbf279: `python3 -m unittest discover -s hass/tests -t .` under memcap — 1453 tests, OK (skipped=21); new tests in `hass.tests.test_undo_skip_undo` (recorded in PR #206).
+
+Limits: Issue #1 (conversation and ops). No redo, undo of several changes at once, `history.revert` semantics or history text (AV2022-06).
+
+## H17 show <code> repeats a draft's full text and screenshot (AV0022-08) — November 1, 2026
+
+Branch rb/av0022-08 (AV0022-08, PR #218, merged as 28900431cfde142b9a5405ad94b02d444784a4c4). `show <code>` re-sends a stored proposal or applied change with its screenshot when one exists. It is read-only, works while paused and moves no state; a lapsed or damaged draft gets a plain reply. The help list gained one line, so one existing `test_help` bound moved from 14 to 15.
+
+Checks at PR head f8494eb8: `python3 -m unittest hass.tests.test_show hass.tests.test_help hass.tests.test_commands_doc` — 25 tests, OK; the full discover run at an earlier head was 1539 tests, OK (skipped=21) (recorded in PR #218).
+
+Limits: Issue #1 (conversation and ops). No photos of questions, regenerated screenshots, history wording (AV2022-06) or PHONE_GUIDE change (AV2022-14).
+
+## H05/H10 photo changes are worded, not shown as file paths (AV0022-09) — November 6, 2026
+
+Branch rb/av0022-09 (AV0022-09, PR #484, merged as 9afae1528c469a1600b3813c2dceaebb106c8c71). A proposal that installs a product photo says `photo: the photo from your message` and an undo says `photo: the previous photo`; the shared record renderer is reused for proposals and `show`.
+
+Checks at PR head 1e3033884f: `python3 -m unittest hass.tests.test_proposal_photo_words hass.tests.test_proposal_full_text hass.tests.test_proposal_added hass.tests.test_show -v` — 37 tests, OK; prepush NOT-RUN, its test budget ran out (recorded in PR #484).
+
+Limits: Issue #2 (media and photos). No screenshot change, alt-text wording or history and status text change; editor change records keep the real paths.
+
+## H16 late replies say which message they answer (AV0022-10) — November 4, 2026
+
+Branch rb/av0022-10 (AV0022-10, PR #362, merged as 004998d1db4046461f8f28f7dfcfa098c4fed613). Each outbox row remembers the owner message time it answers; a reply sent more than 15 minutes later is headed with the weekday and time of that message. The stored text is never rewritten, and the heading replaces the older delayed-reply heading when it applies. Five `test_late_yes` expected values were updated mechanically.
+
+Checks at PR head 50c107e0: `python3 -m unittest hass.tests.test_late_reply hass.tests.test_late_yes hass.tests.test_outbox_delayed hass.tests.test_limits_doc` — 41 tests in 24.524s, OK; prepush NOT-RUN, its test budget ran out (recorded in PR #362).
+
+Limits: Issue #1 (conversation and ops). No drain or resend service, quoting the owner's message, change of send order or retries.
+
+## claims: ask about hike access and safety claims the owner did not say (AV0022-11) — November 4, 2026
+
+Branch rb/av0022-11 (AV0022-11, PR #349, merged as a0289b65d1c975095d7fe4cdf336cab67121bfc5). `hass/claims.py` scans hike event and route-idea text for access and safety terms (dogs, wheelchair, permit, parking, public access, kid or family, restrooms, drinking water). A term the draft adds that the owner did not say asks the claims question and drafts nothing.
+
+Checks at PR head ce22defe: `python3 -m unittest hass.tests.test_claims_access hass.tests.test_claims hass.tests.test_claims_grades hass.tests.test_claims_sources` — 46 tests, OK; prepush NOT-RUN, host busy (recorded in PR #349).
+
+Limits: Issue #1 (conversation and ops). Numbers with units are AV0022-12; no route-source checking, prompt rule change or product-side terms.
+
+## claims: ask about trail numbers the owner did not give (AV0022-12) — November 4, 2026
+
+Branch rb/av0022-12 (AV0022-12, PR #359, merged as 6f20613ca836d49a02d9a0603082eaa45f90d32d). A hike draft that adds a number with a unit (miles, km, feet, hours, minutes) the owner did not say, and that the named route idea does not give, asks the claims question and drafts nothing; ranges check both ends.
+
+Checks: the 17 new tests are in `hass.tests.test_claims_numbers`; the PR body points to the review request for run output and records no count, and none is invented here.
+
+Limits: Issue #1 (conversation and ops). No number words, fractions, elevation labels without numbers, route.edit numbers or checking of route source pages.
+
+## H13 hours refusals number lines from 1 (AV0022-13) — November 1, 2026
+
+Branch rb/av0022-13 (AV0022-13, PR #154, merged as a82b8d2f5062ad64be90e680876073c95f300fc7). `store.set_hours` refusals count lines the way the owner does: the first long line is line 1, and the count refusal says how many lines were sent. Check order and the repeat refusal are unchanged; expected texts in `test_store_limits`, `test_store_hours_repeat` and `test_store_ops` were updated.
+
+Checks at PR head 406b17e5: `python3 -m unittest discover -s hass/tests -t . -v` — 1121 tests in 387.797s, OK (skipped=10); PREPUSH-TESTS PASS; new tests are in `hass.tests.test_store_hours_numbering` (recorded in PR #154).
+
+Limits: Issue #1 (conversation and ops). The limits themselves are unchanged (their values are G's); no address refusals, LIMITS.md or interpreter prompt change.
+
+## H19/H21 health --writer names photo copies no product uses (AV0022-14) — November 1, 2026
+
+Branch rb/av0022-14 (AV0022-14, PR #155, merged as 1227f0882b327b4459ae7cd9d4a48f2dc7d803a7). With `--writer`, health adds one info entry listing up to five sorted file names of web photo copies no product points at; health only reports unused photo copies and deletes nothing. It never changes the fingerprint, notify or exit code, and a missing or unreadable worktree gives no entry.
+
+Checks: the tests are `hass.tests.test_health_unused_photos` (edge paths 1 to 9) and `hass.tests.test_support_doc`; the PR body records no run output or count and none is invented here.
+
+Limits: Issue #3 (health and backup). No deleting or moving of any photo file (an attended operator step; retention deletion is G's), no change to undo, `set_photo` or the media store, and no notify or send.
+
+## H25 LIMITS.md names hours, message, find and alias limits and upright photos (AV0022-15) — November 1, 2026
+
+Branch rb/av0022-15 (AV0022-15, PR #196, merged as 188d3c640fcf637539c1a34eea86a00a7b036768). The owner limits page now names the message cap, the seven hours lines, the find and alias name lengths and that upright or sideways phone photos are fine; `conversation.py` gained `FIND_TEXT_MAX` and `ALIAS_NAME_MAX` with byte-identical replies, and `test_limits_doc` checks every number against its constant.
+
+Checks at PR head 7d0dec50: `python3 -m unittest hass.tests.test_limits_doc hass.tests.test_find hass.tests.test_memory_alias` — 29 tests, OK; `python3 -m unittest hass.tests.test_commands_doc hass.tests.test_phone_guide hass.tests.test_owner_text_cap` — 24 tests, OK; prepush NOT-RUN, host busy (recorded in PR #196).
+
+Limits: Issue #3 (health and backup). No limit value changed (they are G's), and no reply wording, photo code (AV0022-01) or message cap code (AV1737-04) change.
+
+## H09 interpreter eval set v2, 40 cases (AV0022-16) — November 2, 2026
+
+Branch rb/av0022-16 (AV0022-16, PR #225, merged as 7a4850feb321579c5da5db629f1498fe03589bd7). The synthetic eval set grows from 30 to 40 cases (route edits, recap, clear, full-op revises, photo answers, unconfirmed claims); the recorded run scores 37 of 40 with the same three named failures, and the scorer is unchanged. `--live` is operator-only and no model-quality claim is made.
+
+Checks at PR head 645be367: `python3 -m unittest hass.tests.test_interpreter_eval -v` — 11 tests, OK; the full discover run was 1576 tests with one failure in `hass.tests.test_demo_negative`, which also failed at the merge base; PREPUSH-TESTS PASS (recorded in PR #225).
+
+Limits: Issue #1 (conversation and ops). Running `--live` is an operator step; no prompt change or scorer rule change, and cases use synthetic text only.
