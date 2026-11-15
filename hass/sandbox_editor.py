@@ -19,9 +19,12 @@ class SiteEditor(conversation.Editor):
         if not editor.CHANGE_ID_RE.fullmatch(str(cid)):
             raise sandbox.ModeError('env-gone')
         try:
-            return editor._read(Path(self.state) / 'drafts' / f'{cid}.json')
+            draft = editor._read(Path(self.state) / 'drafts' / f'{cid}.json')
         except (OSError, ValueError):
             raise sandbox.ModeError('env-gone') from None
+        if not isinstance(draft, dict):  # valid JSON of another root type is as unusable as a missing draft
+            raise sandbox.ModeError('env-gone')
+        return draft
 
     def _members(self, ops, skills):
         members = sandbox.site_members(ops, self.registry or load_registry())
