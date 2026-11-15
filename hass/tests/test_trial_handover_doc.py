@@ -66,6 +66,25 @@ def local_links(text: str) -> list:
     return out
 
 
+def h21_problems(handover: str) -> list:
+    """Why the H21 row does not link the retention options page while staying an open Owner / G decision."""
+    rows = handover_rows(handover)
+    if "H21" not in rows:
+        return ["no H21 row"]
+    _, text, whose, source = rows["H21"]
+    problems = []
+    if whose.split(" (")[0] != "Owner / G":
+        problems.append("H21 is not Owner / G")
+    if "retention" not in text.lower():
+        problems.append("H21 no longer names retention")
+    for link in ("[FEATURES.md line 49](FEATURES.md#L49)", "[Retention options](RETENTION-OPTIONS.md)"):
+        if link not in source:
+            problems.append(f"H21 source lacks {link}")
+    problems += [f"{key} links the retention options page" for key, cells in rows.items()
+                 if key != "H21" and "RETENTION-OPTIONS" in cells[3]]
+    return problems
+
+
 class TrialHandoverDocTests(unittest.TestCase):
     def setUp(self):
         self.trial, self.handover = TRIAL.read_text("utf-8"), HANDOVER.read_text("utf-8")
@@ -171,6 +190,30 @@ class TrialHandoverDocTests(unittest.TestCase):
                 self.assertTrue((ROOT / path).is_file(), path)
                 if anchor:
                     self.assertLessEqual(anchor, len((ROOT / path).read_text("utf-8").splitlines()), f"{path}#L{anchor}")
+
+    def test_h21_links_retention_options_without_closing_decision(self):
+        self.assertEqual(h21_problems(self.handover), [])
+        options = (DOCS / "RETENTION-OPTIONS.md").read_text("utf-8")
+        self.assertTrue(options.startswith("# How long to keep private data (H21)"))
+        self.assertIn("This page records no decision", options)
+        feature_line = (ROOT / "docs/hass/FEATURES.md").read_text("utf-8").splitlines()[48]
+        self.assertTrue(feature_line.startswith("| H21 |") and "Needs G: owner retention periods" in feature_line)
+        rows = handover_rows(self.handover)
+        self.assertEqual(rows["H21"][1], "Message and media retention periods")
+        self.assertEqual(list(rows), list(OLD_DECISIONS) + list(PUBLIC_ROWS))  # no new row, same order
+        self.assertIn(("docs/hass/RETENTION-OPTIONS.md", None), local_links(rows["H21"][3]))
+        link = "[Retention options](RETENTION-OPTIONS.md)"
+        self.assertEqual(self.handover.count(link), 1)
+        moved = self.handover.replace(f", {link}", "").replace("| H22 | Usage and spending limit; support, recovery"
+                                                              " and account record kept privately | Owner / G | ",
+                                                              f"| H22 | Usage and spending limit; support, recovery and account record kept privately"
+                                                              f" | Owner / G | {link}, ")
+        self.assertEqual(h21_problems(moved), [f"H21 source lacks {link}", "H22 links the retention options page"])
+        wrong_anchor = self.handover.replace("FEATURES.md#L49)", "FEATURES.md#L50)")
+        self.assertIn("H21 source lacks [FEATURES.md line 49](FEATURES.md#L49)", h21_problems(wrong_anchor))
+        self.assertEqual(h21_problems(self.handover.replace(link, "")),
+                         [f"H21 source lacks {link}"])
+        self.assertEqual(h21_problems(self.handover.replace("| H21 |", "| H21x |")), ["no H21 row"])
 
     def test_no_public_site_decision_is_recorded(self):
         new_rows = "\n".join(" ".join(handover_rows(self.handover)[d]) for d in PUBLIC_ROWS).lower()
