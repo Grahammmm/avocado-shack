@@ -17,11 +17,12 @@ DOCS = ROOT / "docs" / "hass"
 TRIAL, HANDOVER = DOCS / "TRIAL.md", DOCS / "HANDOVER.md"
 NEW_TASKS = {22: "notice", 23: "notice", 24: "photo", 25: "route idea", 26: "route idea", 27: "route idea"}
 OLD_DECISIONS = ("H07", "H19", "H21", "H22", "H23")
-PUBLIC_ROWS = {"H25-domain": 3, "H25-forms": 3, "H25-logo": 1}
+PUBLIC_ROWS = {"H25-domain": 3, "H25-forms": 4, "H25-logo": 1}
 # (file the link points to, line) -> text that line must contain, so a moved anchor fails here.
 ANCHORS = {("docs/hass/FEATURES.md", 53): "| H25 |", ("HERMES_HANDOFF.txt", 47): "logo",
            ("HERMES_HANDOFF.txt", 50): "DNS change", ("HERMES_HANDOFF.txt", 129): "PUBLIC TRIAL SUNSET",
-           ("storefront-mockup/README.md", 47): "no email delivery", ("storefront-mockup/README.md", 49): "unsubscribe"}
+           ("storefront-mockup/README.md", 47): "no email delivery", ("storefront-mockup/README.md", 49): "unsubscribe",
+           ("docs/hass/SIGNUP-OPTIONS.md", 1): "# Signup options"}
 
 
 def task_rows(doc: str) -> dict:
@@ -82,6 +83,26 @@ def h21_problems(handover: str) -> list:
             problems.append(f"H21 source lacks {link}")
     problems += [f"{key} links the retention options page" for key, cells in rows.items()
                  if key != "H21" and "RETENTION-OPTIONS" in cells[3]]
+    return problems
+
+
+def h25_forms_problems(handover: str) -> list:
+    """Why the H25-forms row does not link the signup options page while staying an open Owner / G decision."""
+    rows = handover_rows(handover)
+    if "H25-forms" not in rows:
+        return ["no H25-forms row"]
+    _, text, whose, source = rows["H25-forms"]
+    problems = []
+    if whose != "Owner / G":
+        problems.append("H25-forms is not Owner / G")
+    if "signup forms send to" not in text:
+        problems.append("H25-forms no longer asks what the forms send to")
+    for link in ("[Signup options](SIGNUP-OPTIONS.md#L1)", "[storefront-mockup/README.md line 47](../../storefront-mockup/README.md#L47)",
+                 "[line 49](../../storefront-mockup/README.md#L49)", "[FEATURES.md line 53](FEATURES.md#L53)"):
+        if link not in source:
+            problems.append(f"H25-forms source lacks {link}")
+    problems += [f"{key} links the signup options page" for key, cells in rows.items()
+                 if key != "H25-forms" and "SIGNUP-OPTIONS" in cells[3]]
     return problems
 
 
@@ -214,6 +235,29 @@ class TrialHandoverDocTests(unittest.TestCase):
         self.assertEqual(h21_problems(self.handover.replace(link, "")),
                          [f"H21 source lacks {link}"])
         self.assertEqual(h21_problems(self.handover.replace("| H21 |", "| H21x |")), ["no H21 row"])
+
+    def test_h25_forms_links_signup_options_without_closing_decision(self):
+        self.assertEqual(h25_forms_problems(self.handover), [])
+        options = (DOCS / "SIGNUP-OPTIONS.md").read_text("utf-8")
+        self.assertTrue(options.startswith("# Signup options — an open decision\n"))
+        self.assertIn("records no decision", options)
+        rows = handover_rows(self.handover)
+        self.assertEqual(list(rows), list(OLD_DECISIONS) + list(PUBLIC_ROWS))  # no new row, same order
+        self.assertEqual(rows["H25-forms"][1], "What the signup forms send to, how delivery and unsubscribe are handled, and the matching privacy text")
+        self.assertIn((("docs/hass/SIGNUP-OPTIONS.md"), 1), local_links(rows["H25-forms"][3]))
+        self.assertTrue(rows["H25-forms"][3].index("FEATURES.md#L53") < rows["H25-forms"][3].index("SIGNUP-OPTIONS.md#L1"))
+        self.assertIn("[Retention options](RETENTION-OPTIONS.md)", rows["H21"][3])  # the H21 link is left as it was
+        link = "[Signup options](SIGNUP-OPTIONS.md#L1)"
+        self.assertEqual(self.handover.count(link), 1)
+        self.assertEqual(h25_forms_problems(self.handover.replace(f", {link}", "")), [f"H25-forms source lacks {link}"])
+        moved = self.handover.replace(f", {link}", "").replace("| H25-logo | Which logo is the final one | Owner / G | ",
+                                                               f"| H25-logo | Which logo is the final one | Owner / G | {link}, ")
+        self.assertEqual(h25_forms_problems(moved), [f"H25-forms source lacks {link}", "H25-logo links the signup options page"])
+        self.assertEqual(h25_forms_problems(self.handover.replace("| H25-forms |", "| H25-formsx |")), ["no H25-forms row"])
+        self.assertIn("H25-forms is not Owner / G", h25_forms_problems(self.handover.replace(
+            "matching privacy text | Owner / G |", "matching privacy text | Michael |")))
+        shifted = options.replace("# Signup options", "Intro\n# Signup options", 1).splitlines()[0]
+        self.assertNotIn(ANCHORS[("docs/hass/SIGNUP-OPTIONS.md", 1)].lower(), shifted.lower())  # a shifted heading fails the anchor check
 
     def test_no_public_site_decision_is_recorded(self):
         new_rows = "\n".join(" ".join(handover_rows(self.handover)[d]) for d in PUBLIC_ROWS).lower()
