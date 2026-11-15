@@ -187,6 +187,11 @@ const allowed=req=>{
           checks.specialsShown=JSON.stringify(shown)===JSON.stringify(want)&&(want.length>0?await page.locator('main > .weekly-specials h2').isVisible():await page.locator('.weekly-specials').count()===0);}
         if(typeof target.notice==='string'){const n=page.locator('main > .home-notice');
           checks.noticeShown=await n.count()===1&&await n.isVisible()&&ws(await n.textContent())===ws(target.notice);}
+        const w=target.noticeWindow;  // AV2152-08: a notice with its own first day: hidden before it, visible through the last day
+        if(w&&typeof w==='object'){const n=page.locator('main > .home-notice'),c=await n.count();
+          const same=async()=>ws(await n.textContent())===ws(w.text)&&await n.getAttribute('data-from')===w.from&&await n.getAttribute('data-until')===w.until;
+          checks.noticeWindow=w.state==='ended'?(c===0||c===1&&await same()&&!await n.isVisible())
+            :c===1&&await same()&&await n.isVisible()===(w.state==='active');}
       }
     }
     if(target.kind==='store'&&(Array.isArray(target.sections)||Object.hasOwn(target,'banner'))){  // AVB-19 front changes

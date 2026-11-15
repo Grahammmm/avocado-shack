@@ -1,14 +1,14 @@
 """Dated home-page notice rendering, preview text and historical artifact checks.
 
-Without JavaScript an expired notice remains until the next regeneration.
-Consistency checks accept the exact pre-expiry artifact, never unrelated drift.
+Without JavaScript a notice appears on its first day, and an expired one goes, at the next regeneration.
+Consistency checks accept the exact earlier notice-phase artifact (before its first day, on its last), never unrelated drift.
 """
 
 import html
 from datetime import date
 from pathlib import Path
 
-from hass.content_model import iso_day, shop_today
+from hass.content_model import iso_day, notice_days, shop_today
 
 BANNER_JS = ("<script>(()=>{const swap=()=>{const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});"
              "document.querySelectorAll('[data-banner]').forEach(b=>{const live=day>=b.dataset.start&&day<=b.dataset.end;"
@@ -31,25 +31,45 @@ def banner_target(banner, store, today):
     return {"text": banner["text"], **({"link": link} if link else {})}
 
 
-NOTICE_JS = ("<script>(()=>{const expire=()=>document.querySelectorAll('.home-notice').forEach(n=>{"
-             "if(new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'})>n.dataset.until)n.hidden=true});"
-             "expire();setInterval(expire,1000);document.addEventListener('visibilitychange',expire);"
-             "window.addEventListener('pageshow',expire)})()</script>\n")
+NOTICE_JS = ("<script>(()=>{const show=()=>{const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});"
+             "document.querySelectorAll('.home-notice').forEach(n=>{const f=n.dataset.from;n.hidden=(f!==undefined&&day<f)||day>n.dataset.until})};"
+             "show();setInterval(show,1000);document.addEventListener('visibilitychange',show);"
+             "window.addEventListener('pageshow',show)})()</script>\n")
 
 
 def live_text(notice, today=None) -> str | None:
-    """The preview expects no notice once its last day is before Pacific today."""
+    """The preview expects the notice only from its first day (none saved: already started) through its last Pacific day."""
     notice = notice or {}
-    live = isinstance(notice.get("until"), str) and notice["until"] >= (today or shop_today()).isoformat()
+    day = (today or shop_today()).isoformat()
+    first = notice.get("from")
+    live = isinstance(notice.get("until"), str) and notice["until"] >= day and not (isinstance(first, str) and first > day)
     return notice.get("text") if live else None
 
 
+def window_target(notice, today=None) -> dict | None:
+    """AV2152-08: {text, from, until, state} for a notice with an explicit first day (state scheduled, active or ended on
+    ``today``), None for a legacy or absent one; an invalid schedule raises ValueError (the preview target is unreadable)."""
+    if not isinstance(notice, dict) or "from" not in notice:
+        return None
+    days = notice_days(notice)
+    if days is None:
+        raise ValueError("bad notice schedule")
+    first, last = days
+    day = today or shop_today()
+    return {"text": notice["text"], "from": first.isoformat(), "until": last.isoformat(),
+            "state": "scheduled" if day < first else "active" if day <= last else "ended"}
+
+
 def slots(notice, today: str) -> dict[str, str]:
-    """No notice, or an expired notice: both template slots stay empty."""
-    paragraph = (f'<p class="home-notice" data-until="{html.escape(notice["until"])}" role="status">'
-                 if notice and notice["until"] >= today else "")
-    return {"store.noticeHtml": paragraph and paragraph + html.escape(notice["text"], quote=False) + "</p>",
-            "store.noticeScript": paragraph and NOTICE_JS}
+    """No notice, or an expired notice: both template slots stay empty. Before its explicit first day the paragraph is
+    carried hidden with ``data-from``; the page script reveals it that day (no JavaScript: at the next regeneration)."""
+    if not notice or notice["until"] < today:
+        return {"store.noticeHtml": "", "store.noticeScript": ""}
+    first = notice.get("from")
+    attrs = (f' data-from="{html.escape(first)}"' if first else "") + f' data-until="{html.escape(notice["until"])}"'
+    hidden = " hidden" if first and today < first else ""
+    return {"store.noticeHtml": f'<p class="home-notice"{hidden}{attrs} role="status">' + html.escape(notice["text"], quote=False) + "</p>",
+            "store.noticeScript": NOTICE_JS}
 
 
 def stale_paths(content, root: Path) -> list[str]:
@@ -78,7 +98,10 @@ def stale_paths(content, root: Path) -> list[str]:
             days.add(date.fromordinal(start.toordinal() - 1))
     notice = content.store.get("notice")
     last = iso_day(notice.get("until")) if isinstance(notice, dict) else None
-    if last is not None and last < today:
+    first = iso_day(notice.get("from")) if isinstance(notice, dict) else None
+    if first is not None and date.min < first <= today:  # AV2152-08: the render before its first day (hidden)
+        days.add(date.fromordinal(first.toordinal() - 1))
+    if last is not None and last < today:  # ... and the active render on its last day
         days.add(last)
         if last < date.max:
             days.add(date.fromordinal(last.toordinal() + 1))

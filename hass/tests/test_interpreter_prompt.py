@@ -161,7 +161,7 @@ class NaturalLanguageRulesTest(unittest.TestCase):
             self.assertIn(phrase, self.rules)
 
     def test_rules_stay_small_enough_for_a_cpu_model_to_read(self):
-        self.assertLess(len(" ".join(RULES).encode("utf-8")), 9800)  # AV1937-01: the photo rule names three places; AV1937-06: the maker and route rule; AV2152-05: the shelf and maker group rule
+        self.assertLess(len(" ".join(RULES).encode("utf-8")), 10100)  # AV2152-08: the notice first-day rule; AV1937-01: the photo rule names three places; AV1937-06: the maker and route rule; AV2152-05: the shelf and maker group rule
 
 
 if __name__ == "__main__":

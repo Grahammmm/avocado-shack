@@ -447,6 +447,19 @@ def checked_on(store) -> date | None:
     return iso_day(store.get("selection_checked_on") if isinstance(store, dict) else None)
 
 
+def notice_days(notice) -> tuple[date | None, date] | None:
+    """AV2152-08: a saved notice's (first day or None for a legacy record, last day), or None when the record is not a
+    valid {text, until} / {text, from, until} object. Never compared with today's clock (an expired notice is valid)."""
+    if not isinstance(notice, dict) or set(notice) not in ({"text", "until"}, {"text", "from", "until"}) \
+            or not isinstance(notice["text"], str):
+        return None
+    last = iso_day(notice["until"])
+    first = iso_day(notice["from"]) if "from" in notice else None
+    if last is None or ("from" in notice and (first is None or first > last)):
+        return None
+    return first, last
+
+
 def iso_day(value) -> date | None:
     """``value`` as a date when it is a real YYYY-MM-DD string, else None."""
     if not isinstance(value, str) or not DATE_RE.fullmatch(value):
@@ -700,16 +713,18 @@ def validate_store(problems, store, today: date | None = None, product_ids=None)
         problems.append("store.phone: must be 10 digits")  # AV1222-04: stored as exactly 10 ASCII digits, never coerced
     if "notice" in store:
         notice = store["notice"]
-        if not isinstance(notice, dict) or set(notice) != {"text", "until"}:
-            problems.append("store.notice: must be an object with exactly text and until")
+        if not isinstance(notice, dict) or set(notice) not in ({"text", "until"}, {"text", "from", "until"}):
+            problems.append("store.notice: must be an object with exactly text and until, or text, from and until")  # AV2152-08
         else:
             _text(problems, "store.notice.text", notice["text"], limit=MAX_NOTICE)
             if isinstance(notice["text"], str) and sum(c.isalpha() for c in notice["text"]) < 3:
                 problems.append("store.notice.text: needs at least 3 letters")
-            try:  # a real calendar date
-                date.fromisoformat(notice["until"] if DATE_RE.fullmatch(str(notice["until"])) else "")
-            except ValueError:
-                problems.append("store.notice.until: must be a real date YYYY-MM-DD")
+            for name in ("from", "until"):
+                if name in notice and iso_day(notice[name]) is None:  # a real calendar date
+                    problems.append(f"store.notice.{name}: must be a real date YYYY-MM-DD")
+            first, last = iso_day(notice.get("from")), iso_day(notice["until"])
+            if first and last and first > last:  # never compared with today's clock: expired records must load
+                problems.append("store.notice.from: must not be after until")
     for key, _ in INFO_PAGES.values():
         if key in store:
             validate_page(problems, key, store[key])

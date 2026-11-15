@@ -16,10 +16,13 @@ one hero ``<img>`` (``store.homeImage``), through ``photos.install`` exactly as 
 whatever store changes came after it was set, is refused when no home photo is set, and keeps the committed photo file;
 undo of the clear restores the owner's photo.
 
-``store.set_notice`` ({"text": "Closed Thanksgiving Day", "until": "2026-11-26"}) puts one dated notice at the top of the
-home page (``store.notice``; at most 160 characters, 3 letters; last day today to 60 days ahead, Pacific); a second notice
-replaces it and ``store.clear_notice`` removes it. The generated page drops it once ``until`` is past; between
-regenerations a page script hides it after that day, so without JavaScript it stays until the next change regenerates.
+``store.set_notice`` ({"text": "Closed Thanksgiving Day", "from": "2026-11-20", "until": "2026-11-26"}) puts one dated
+notice at the top of the home page (``store.notice``; at most 160 characters, 3 letters; last day today to 60 days ahead,
+Pacific); a second notice replaces it and ``store.clear_notice`` removes it. The optional ``from`` is its first day, Pacific
+today up to ``until`` (no ``from`` means today, saved with the notice); the notice shows from that day through ``until``,
+both inclusive. Before its first day the generated page carries it hidden with ``data-from``; the page script shows it on
+that day and hides it after the last day, so without JavaScript it appears or goes at the next regeneration. The generated
+page drops it once ``until`` is past.
 
 Selective undo (as hass/ops/store.py): ``history.revert`` of an older store change sets back only the store fields that
 change wrote (a notice with its dates is one field) and keeps later changes to other fields; a later change to the same
@@ -92,21 +95,28 @@ def _clear_home_image(content, args, ctx):
 
 
 def _set_notice(content, args, ctx):
-    """The one dated owner notice (store.notice); a second notice replaces the first."""
+    """The one dated owner notice (store.notice); a second notice replaces the first. AV2152-08: an optional first day
+    (``from``, Pacific today up to the last day; missing = today) is saved with every new notice."""
     text, until, today = args["text"], date.fromisoformat(args["until"]), shop_today(ctx.now)
+    first = date.fromisoformat(args["from"]) if "from" in args else today
     if until < today:
         return Refused(f"the last day {args['until']} is already past")
     if (until - today).days > MAX_NOTICE_DAYS:
         return Refused(f"the last day is more than {MAX_NOTICE_DAYS} days ahead")
+    if first < today:
+        return Refused(f"the first day {first.isoformat()} is already past")
+    if first > until:
+        return Refused(f"the first day {first.isoformat()} is after the last day {args['until']}")
     if len(text) > MAX_NOTICE:
         return Refused(f"the notice is longer than {MAX_NOTICE} characters")
     if sum(c.isalpha() for c in text) < 3:
         return Refused("the notice needs at least 3 letters")
     current = content.store.get("notice") or {}
-    if _spaced(text) == _spaced(current.get("text", "")) and args["until"] == current.get("until"):
+    if (_spaced(text) == _spaced(current.get("text", "")) and args["until"] == current.get("until")
+            and first.isoformat() == current.get("from", today.isoformat())):  # a legacy record started already: today
         return Refused("the home page already shows that notice")
     before = copy.deepcopy(content.store)
-    content.store["notice"] = {"text": text, "until": args["until"]}
+    content.store["notice"] = {"text": text, "from": first.isoformat(), "until": args["until"]}
     return _touch(before, content.store)
 
 
@@ -122,5 +132,5 @@ OPS = (Op("store.set_headline", {"first": Arg("text"), "second": Arg("text")}, _
        Op("store.set_story", {"text": Arg("text")}, _set_story),
        Op("store.set_home_image", {"photo": Arg("id"), "imageAlt": Arg("text")}, _set_home_image),
        Op("store.clear_home_image", {}, _clear_home_image),
-       Op("store.set_notice", {"text": Arg("text"), "until": Arg("date")}, _set_notice),
+       Op("store.set_notice", {"text": Arg("text"), "until": Arg("date"), "from": Arg("date", required=False)}, _set_notice),
        Op("store.clear_notice", {}, _clear_notice))

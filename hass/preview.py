@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 
 from hass.content_model import DEFAULT_INTRO, shop_today
 from hass.content_model import active_specials
-from hass.notice import live_text
+from hass.notice import live_text, window_target
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
 SITE, ASSETS = "storefront-mockup", "storefront-mockup/assets"
 VIEWPORTS = ("phone", "desktop")
@@ -54,6 +54,11 @@ def _readable(record) -> bool:
     notice = after.get("notice") if collection == "store" else None
     if not (notice is None or isinstance(notice, dict) and isinstance(notice.get("text"), (str, type(None)))):
         return False
+    if isinstance(notice, dict) and "from" in notice:  # AV2152-08: an explicit first day needs a whole valid schedule
+        try:
+            window_target(notice)
+        except ValueError:
+            return False
     if collection == "events" and "cancelNote" in after and not isinstance(after["cancelNote"], str):
         return False
     return all(isinstance(after.get(name), (str, type(None))) for name in _FIELDS.get(collection, ("title",)))
@@ -127,7 +132,8 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
                 "streetAddress": after.get("streetAddress", ""), "town": after.get("town", ""),
                 "headline": list(after.get("headline") or []), "story": after.get("story"),
                 "intro": after.get("intro"), **line,
-                "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), day), **extra}
+                "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), day), **extra,
+                **({"noticeWindow": w} if (w := window_target(after.get("notice"), day)) else {})}
     if collection == "routeIdeas":  # AV1222-06: /hike shows a route title only on a linked hike's Route line or the sample invitation
         return {"kind": "route", "id": record.get("key") or "", "title": after.get("title", ""), "hidden": after.get("status") == "hidden"}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons

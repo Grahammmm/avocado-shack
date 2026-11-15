@@ -43,7 +43,7 @@ class NoticeBounds(unittest.TestCase):
         if isinstance(result, Refused):
             self.assertEqual(content.store, before)
         else:
-            self.assertEqual(content.store, {**before, "notice": slots(until)})
+            self.assertEqual(content.store, {**before, "notice": {**slots(until), "from": today}})  # AV2152-08: no from = today
             self.assertEqual(len(result), 1)
             self.assertEqual((result[0].collection, result[0].before, result[0].after),
                              ("store", before, content.store))
@@ -104,7 +104,7 @@ class EditorBounds(StoreTestCase):
                 out = editor.prepare(_req((SET, slots())), state=str(repo.state), now=noon(today))
                 self.assertEqual(out["result"], "ok", out)
                 self.assertEqual(out["draft"]["ops"], [{"op": SET, "args": slots()}])
-                self.assertEqual(out["draft"]["records"][0]["after"]["notice"], slots())
+                self.assertEqual(out["draft"]["records"][0]["after"]["notice"], {**slots(), "from": UNTIL})  # AV2152-08: no from = the first prepare's today (its draft is reused)
                 self.assertEqual((repo.head(), repo.store(), repo.status()), before)
 
     def test_invalid_typed_date_writes_no_draft(self):
@@ -137,7 +137,7 @@ class NoticeDispatch(fixture.SkillCase):
         self.nothing_written()
         self.assertEqual(self.say(f"yes {draft['code']}"), "approved")
         self.assertEqual(self.commits(), 1)
-        self.assertEqual(json.loads((self.repo.wt / "hass/content/store.json").read_bytes())["notice"], slots("2026-11-02"))
+        self.assertEqual(json.loads((self.repo.wt / "hass/content/store.json").read_bytes())["notice"], {**slots("2026-11-02"), "from": "2026-11-02"})
         undo = editor.prepare(_req(("history.revert", {"changeId": draft["change_id"]})),
                               state=str(self.repo.state), now=self.now)
         self.assertEqual(undo["result"], "ok", undo)

@@ -231,6 +231,7 @@
 "test_needs_details_expiry": 2,
 "test_noscript": 1,
 "test_not_read_reply": 2,
+"test_notice_start": 25,
 "test_organic_sync": 2,
 "test_outbox_delayed": 1,
 "test_output_hygiene": 2,

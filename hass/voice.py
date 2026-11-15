@@ -317,15 +317,18 @@ def value_words(value, field=None) -> str:
     if isinstance(value, list) and all(isinstance(v, str) for v in value): return "; ".join(value)
     if isinstance(value, (int, float)): return str(value)
     if isinstance(value, str): return value
-    if isinstance(value, dict) and set(value) == {"text", "until"} and isinstance(value["text"], str) and value["text"].strip():
+    if isinstance(value, dict) and set(value) in ({"text", "until"}, {"text", "from", "until"}) and isinstance(value["text"], str) and value["text"].strip():
         return _notice_words(value)  # HASS-QA-1: the notice draft showed "more than I can show here"
     return "more than I can show here"
 
 
 def _notice_words(notice) -> str:
-    """A shop notice {text, until} as the owner reads it: its words, then its last day in plain words."""
+    """A shop notice {text, until} or {text, from, until} as the owner reads it: its words, then its days in plain words
+    (AV2152-08: the first day too, so a notice set ahead is not read as showing today)."""
     try:
         day = datetime.strptime(str(notice["until"]), "%Y-%m-%d")
+        first = datetime.strptime(str(notice["from"]), "%Y-%m-%d") if "from" in notice else None
     except ValueError:
         return notice["text"].strip()
-    return f"{notice['text'].strip()} (until {day.strftime('%B')} {day.day})"
+    start = f"from {first.strftime('%B')} {first.day} " if first else ""
+    return f"{notice['text'].strip()} ({start}until {day.strftime('%B')} {day.day})"
