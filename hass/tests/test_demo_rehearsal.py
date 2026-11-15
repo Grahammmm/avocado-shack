@@ -24,8 +24,7 @@ demo = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(demo)
 
 # What 02-DEMO-PLAN promises and main does not do yet (each is a named gap, never a silent pass).
-KNOWN_GAPS = {"s02-what-can-you-do": "QA1-03", "s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12", "s15-whats-sold-out": "ROUTER-15",
-              "s05x-undo-names-the-draft": "QA1-10", "s05x-thanks": "QA1-10"}
+KNOWN_GAPS = {"s02-what-can-you-do": "QA1-03", "s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12", "s15-whats-sold-out": "ROUTER-15"}
 
 
 class Run:
