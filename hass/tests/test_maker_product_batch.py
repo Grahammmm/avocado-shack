@@ -124,7 +124,7 @@ class AddMakerThenProductTests(BatchTestCase):
     def test_invalid_or_incomplete_maker_add(self):
         repo = self.repo()
         product = ("product.add", HONEY)
-        no_story = {k: v for k, v in MAKER.items() if k != "story"}
+        no_story = {k: v for k, v in MAKER.items() if k != "place"}  # AV0222-10: story is optional, so a missing place stands for 'incomplete'
         result = self.rejected(repo, "invalid", ("maker.add", no_story), product)  # invalid beats missing
         self.assertEqual(result["problems"], [f"ops[1] 'product.add': product.add.producerKey: {NOT_A_MAKER}"])
         self.rejected(repo, "needs-details", ("maker.add", no_story), ("product.add", {k: v for k, v in HONEY.items()

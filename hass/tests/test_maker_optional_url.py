@@ -57,7 +57,7 @@ class OptionalUrlTests(CatalogTestCase):
                 self.assertTrue(problems_for({**{k: FARM[k] for k in ("name", "place", "story")}, "url": bad}))
         self.assertEqual(problems_for({k: FARM[k] for k in ("name", "place", "story")}), [])
         self.assertEqual(problems_for({"name": "A", "place": "B", "story": "C", "url": URL, "hidden": True}), [])
-        for missing in ("name", "place", "story"):
+        for missing in ("name", "place"):  # AV0222-10: story is optional now (test_maker_optional_story)
             with self.subTest(missing=missing):
                 rec = {k: FARM[k] for k in ("name", "place", "story")}
                 del rec[missing]
@@ -133,7 +133,7 @@ class RealRegistryTests(CatalogTestCase):
         self.assertTrue(all(m["url"].startswith("https://") for m in makers.values()))
         self.assertEqual(makers, json.loads((REPO_ROOT / MAKERS).read_text("utf-8"))["makers"])
         prompt = build(load_registry(), repo.content())
-        line = next(x for x in prompt.splitlines() if "maker.add" in x)
+        line = next(x for x in prompt.splitlines() if x.startswith("maker.add("))  # AV0222-10: the prompt rule also names maker.add
         self.assertIn("url: url", line)
         self.assertNotIn("url: url, required", line)
         self.assertIn("clearUrl: bool", next(x for x in prompt.splitlines() if x.startswith("maker.edit(")))  # the operation line; AV1937-06's rule also names maker.edit
@@ -142,7 +142,7 @@ class RealRegistryTests(CatalogTestCase):
 NODE_CHECK = r"""
 const fs=require('fs');const src=fs.readFileSync(process.argv[2],'utf8');
 const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const start=src.indexOf('function card(p){'),end=src.indexOf('\n}\n',start)+3;
+const start=src.indexOf('function makerStory(p){'),end=src.indexOf('\n}\n',src.indexOf('function card(p){'))+3;
 const makerCounts=new Map([['A',3],['B',1]]);
 const producers={A:{name:'Fiction <Farm>',place:'Nowhere',story:'Beans & more.',url:'https://example.com/a?x=1&y="2"'},
  B:{name:'No Site Farm',place:'Elsewhere',story:'No website here.'}};

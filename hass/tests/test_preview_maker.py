@@ -20,6 +20,7 @@ from hass.tests.test_editor import git
 
 TEMPLETON = "Templeton, California"
 CATALOG, PRODUCERS = "storefront-mockup/catalog-products.js", "storefront-mockup/producers.js"
+IMAGE = "assets/products/photo-product-001.webp"
 QUOTED, ODD_NAME = 'Etto "Pasta"', 'Etto "Pasta" <b>Paso</b>'
 
 
@@ -113,7 +114,29 @@ class MakerCaptureTests(CatalogTestCase):
         self.assertNotEqual(odd, new)
         self.assertMakerChecks(self.capture({**target, "name": ODD_NAME}, {PRODUCERS: odd}),
                                {"makerName": True, "makerPlace": True})
-        self.assertMakerChecks(self.capture({**target, "name": "Etto"}), {})  # old name on no card: exact text only
+        # AV0222-10: the card is found by its maker key, so a name the site does not show is an explicit false, never dropped
+        stale = self.capture({**target, "name": "Etto"})
+        self.assertEqual((stale["ok"], stale["error"], stale["checks"]["noPageErrors"]), (False, "check failed: makerName", True), stale)
+        self.assertEqual(self.maker_checks(stale), {"makerName": False, "makerPlace": True})
+
+    def test_preview_storyless_maker_keeps_identity_checks(self):
+        # AV0222-10: a maker with no story and no website has no Meet the maker panel, yet its card still names it
+        self.r.run(("maker.add", {"key": "Bare Farm", "name": "Bare Farm", "place": TEMPLETON}),
+                   ("product.add", {"name": "Bare beans", "brand": "Bare Farm", "category": "vegetables", "image": IMAGE,
+                                    "description": "Beans.", "displayBrand": "Bare Farm", "producerKey": "Bare Farm"}))
+        self.assertEqual(self.r.makers()["Bare Farm"], {"name": "Bare Farm", "place": TEMPLETON})
+        target = self.change(("maker.edit", {"key": "Bare Farm", "place": "Cayucos, California"}))
+        self.assertEqual((target["key"], target["name"]), ("Bare Farm", "Bare Farm"))
+        self.assertMakerChecks(self.capture(target), {"makerName": True, "makerPlace": True})
+        wrong_place = self.capture({**target, "place": "Elsewhere, California"})
+        self.assertEqual(self.maker_checks(wrong_place), {"makerName": True, "makerPlace": False})
+        wrong_name = self.capture({**target, "name": "Another Farm"})
+        self.assertEqual(self.maker_checks(wrong_name), {"makerName": False, "makerPlace": True})
+        self.assertFalse(wrong_name["ok"])
+        # hidden: the key is still on the cards of a stale site, so makerHidden fails; no active product adds no maker check
+        stale_hidden = self.capture({**target, "hidden": True})
+        self.assertEqual(self.maker_checks(stale_hidden), {"makerHidden": False})
+        self.assertEqual(self.maker_checks(self.capture({**target, "key": "No Such Farm", "name": "No Such Farm"})), {})
 
     def assertMakerChecks(self, result, expected):
         self.assertEqual((result["ok"], result["checks"].get("noPageErrors")), (True, True), result)
