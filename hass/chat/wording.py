@@ -8,6 +8,7 @@ from datetime import datetime
 
 from hass import live_policy, sitegen, voice
 from hass.chat.shared import q
+from hass.content_model import PHONE_RE
 
 PHOTO_PATH_RE = re.compile(r"assets/products/photo-[0-9a-f]{16}\.(jpg|png)")
 
@@ -81,6 +82,22 @@ def _subject(record: dict) -> str:
     return q(label) if label else WHOLE_WORDS.get(record.get("collection"), "this")
 
 
+def _is_phone(r: dict, k) -> bool:
+    return r.get("collection") == "store" and k == "phone"
+
+
+def _phone_site(v):
+    """AV2007-07: a stored ten-digit store phone as the site spells it ('(805) 555-0142'); None for anything else."""
+    return sitegen.phone_text(v) if isinstance(v, str) and PHONE_RE.fullmatch(v) else None
+
+
+def _phone_phrase(r: dict, b, a) -> str:
+    """The summary fragment for a store phone change; carries the numbers, since history shows only the summary."""
+    old, new = _phone_site(b), _phone_site(a)
+    if not (old or new): return voice.field_phrase("phone")
+    return f"{voice.field_phrase('phone')} from {old or _shown('phone', b)} to {new or _shown('phone', a)}"
+
+
 def _summary(draft: dict) -> str:
     """One plain phrase for a draft, stored with it and shown in status and history: `the description for Hass avocado`."""
     parts = []
@@ -92,7 +109,7 @@ def _summary(draft: dict) -> str:
         if _removed(r):
             parts.append(f"taking away the {word or 'entry'}" + (f": {name}" if name else ""))
             continue
-        fields = list(dict.fromkeys(voice.field_phrase(f) for f, _b, _a in _changes(r)))
+        fields = list(dict.fromkeys(_phone_phrase(r, b, a) if _is_phone(r, f) else voice.field_phrase(f) for f, b, a in _changes(r)))
         what = ", ".join(fields[:3]) + (" and more" if len(fields) > 3 else "")
         parts.append(f"{what} for {_label(r) or WHOLE_WORDS.get(r.get('collection'), 'this')}")
     return _value("; ".join(parts) or "no changes")
@@ -123,6 +140,8 @@ def _shown_in(r: dict, k, v, routes=None, cut=True) -> str:
         return route["title"] if isinstance(route, dict) and isinstance(route.get("title"), str) and route["title"].strip() else "a saved route"
     if r.get("collection") == "products" and k == "available" and isinstance(v, str) and v in sitegen.AVAILABILITY_WORDS:
         return sitegen.AVAILABILITY_WORDS[v]  # AV0007-05: the words the product card shows (yes/limited/no only on this field)
+    if _is_phone(r, k) and (site := _phone_site(v)):
+        return site  # AV2007-07: the number as the site shows it; storage stays ten digits
     shown = _shown(k, v, cut)
     return shown + " (Pacific time)" if r.get("collection") == "events" and k == "startsAt" and _when(k, v) and \
         isinstance(v, str) and _when(k, v) != UNREADABLE_TIME else shown
