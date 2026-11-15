@@ -136,6 +136,13 @@ class SearchTests(StoreMixin, HistoryTestCase):
         self.assertEqual(self.say(f"undo {a['code']}"), "proposed")  # undo only proposes
         self.assertEqual([d["state"] for d in self.drafts()][-1], "proposed")
 
+    def test_history_eggs_finds_the_stored_name(self):  # AV0007-05: the stored summary carries the record's name
+        draft = {"records": [{"collection": "products", "key": "photo-product-024", "before": {"name": "Cal Poly eggs", "available": None},
+                              "after": {"name": "Cal Poly eggs", "available": "no"}}], "warnings": []}
+        self.row("e1", "applied", conversation._summary(draft))
+        self.row("e2", "applied", "Open the Café at nine")
+        self.assertEqual([ln.split(":")[0] for ln in self.search("history eggs")[1:]], ["- the shelf word for Cal Poly eggs"])
+
 
 if __name__ == "__main__":
     unittest.main()
