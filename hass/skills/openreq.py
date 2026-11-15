@@ -306,11 +306,15 @@ class OpenRequests:
         if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
             raise ValueError("not a sha256")
         req = self.get(owner, now)
-        if req is not None and sha not in req["attachments"]:
+        if req is not None:
+            # List dedup and answering the asked slot are separate: a SHA already retained still fills an unfilled asked slot.
             skill = registry.get(req["skill"]) if registry is not None and req["skill"] else None
             slot = next((s for s in getattr(skill, "slots", ()) if s.name == req["asked_slot"]), None)
-            attachments = [*req["attachments"], sha]
-            if slot is not None and slot.kind == "attachment" and slot.from_attachment and not req["slots"].get(slot.name):
+            fills = slot is not None and slot.kind == "attachment" and slot.from_attachment and not req["slots"].get(slot.name)
+            if sha in req["attachments"] and not fills:
+                return "attached", req
+            attachments = list(req["attachments"]) if sha in req["attachments"] else [*req["attachments"], sha]
+            if fills:
                 self.put(owner, provider_id, now, texts=req["texts"], request_id=req["request_id"], state=req["state"],
                          skill=req["skill"], slots={**req["slots"], slot.name: sha}, calls=req["calls"], asked_slot=None,
                          question=req["question"], ask=None, attachments=attachments, draft_code=req["draft_code"],
@@ -321,8 +325,6 @@ class OpenRequests:
                      question=req["question"], ask=req["ask"], attachments=attachments, draft_code=req["draft_code"],
                      asks=req["asks"], pending=req["pending"])
             return "attached", self.get(owner, now)
-        if req is not None:
-            return "attached", req
         self.put(owner, provider_id, now, texts=[], attachments=[sha])
         return "opened", self.get(owner, now)
 
