@@ -19,7 +19,10 @@ rows breaking its rules: two active rows for one key, or text left on a forgotte
 backup lists no content bundle; content restores from Git only), media-store (--media DIR: media.py
 verify of the photo store, read-only, never inside the state dir; count only), disk-low (--min-free-mb: the state
 or --backups filesystem has under that many MB free; `<store>: <n> MB free` in 50-MB steps, no path), model (--model:
-one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed). Problems carry a
+one loopback GET /api/tags, 3 s; --model-name must be listed; no URL or reply printed), daily-limit (with a valid
+interpreterDailyCap: owner messages that got the daily-limit reply on the current Pacific day, `<n> message(s) not
+read today, cap <CAP>`; only received_at is read, never text, sender, chat or id; info interpreter `<calls> of <CAP>
+today` from the usage table; a missing table counts 0). Problems carry a
 check id and short detail only (no message text, sender or number). One JSON line: ok, problems, info, fingerprint
 (sha256 of sorted problems), notify. --host-dir DIR (HASS-SVC-1, read-only, no secret opened): relay-stuck,
 mac-silent, release-open, release-books, live-unconfirmed, host-config, publishing-stopped / stopped-long; with a host.json `clover` block
@@ -35,7 +38,7 @@ from pathlib import Path
 
 if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hass import bridge, editor, interpreter_local, statebackup  # noqa: E402
+from hass import bridge, conversation, editor, interpreter_local, statebackup  # noqa: E402
 from hass import release_journal as journal  # noqa: E402
 from hass.content_model import REPO_ROOT  # noqa: E402
 from hass.conversation import ConfigError, load_settings  # noqa: E402
@@ -73,10 +76,24 @@ def _regular(path) -> bool | None:  # RF1520-12: lstat only, a link is never fol
     except OSError as exc:
         return None if isinstance(exc, FileNotFoundError) else False
 
+def _daily_limit(db, tables: set, now: datetime, cap: int, problems: list, info: list) -> None:
+    """AV1922-03 (H19/H22): owner messages that got the daily-limit reply today (Pacific day) and today's interpreter calls.
+    Only received_at is read from messages (never text, sender, chat or id); a missing table counts 0."""
+    today, refused = now.astimezone(conversation.LOCAL_TZ).date(), 0
+    if "messages" in tables:
+        for (raw,) in db.execute("SELECT received_at FROM messages WHERE disposition = 'daily-limit'"):
+            try: when = datetime.fromisoformat(raw)
+            except (TypeError, ValueError): continue  # no known day: not today
+            refused += when.utcoffset() is not None and when.astimezone(conversation.LOCAL_TZ).date() == today
+    if refused: problems.append(_problem("daily-limit", f"{refused} message(s) not read today, cap {cap}"))
+    row = db.execute("SELECT calls FROM usage WHERE day = ?", (today.isoformat(),)).fetchone() if "usage" in tables else None
+    info.append(_problem("interpreter", f"{row[0] if row and type(row[0]) is int else 0} of {cap} today"))
+
 def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, info: list, unverified_hours=72,
-               paused_hours=24) -> None:
+               paused_hours=24, cap=None) -> None:
     if (kind := _regular(path := sdir / DB)) is None:
-        return info.append(_problem("conversation", "no conversation yet"))
+        info.append(_problem("conversation", "no conversation yet"))
+        return info.append(_problem("interpreter", f"0 of {cap} today")) if cap is not None else None
     if not kind: return problems.append(_problem("state-db", f"{DB} is not a regular file"))
     try:
         with contextlib.closing(sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True)) as db:
@@ -104,6 +121,7 @@ def _db_checks(sdir: Path, now: datetime, outbox_minutes: int, problems: list, i
                         problems.append(_problem("memory-invariant", f"{n} row(s)"))
                 except sqlite3.DatabaseError:
                     problems.append(_problem("memory-invariant", "memory table unreadable"))
+            if cap is not None: _daily_limit(db, tables, now, cap, problems, info)
     except sqlite3.DatabaseError:
         problems.append(_problem("db-integrity", "database unreadable"))
 
@@ -363,13 +381,15 @@ def check(state, backups=None, outbox_minutes=15, backup_hours=26, now=None, inb
         sdir = editor.open_state(state)
     except UnsafeState as exc:
         return [_problem("state", str(exc))], info, True
+    cap = None  # AV1922-03: only a validated interpreterDailyCap turns the daily-limit checks on
     try:
         settings = load_settings(sdir)
     except ConfigError as exc:
         problems.append(_problem("settings", str(exc)))
     else:
         _guest_check(sdir, settings, now, problems, info)
-    _db_checks(sdir, now, outbox_minutes, problems, info, unverified_hours, paused_hours)
+        cap = settings.get("interpreterDailyCap")
+    _db_checks(sdir, now, outbox_minutes, problems, info, unverified_hours, paused_hours, cap)
     _inbox_check(sdir, now, inbox_minutes, problems, inbox_unreadable_hours)
     if backups is not None and (newest := _backup_check(backups, now, backup_hours, problems)):
         _verify_backup(newest, problems)
