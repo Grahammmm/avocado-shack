@@ -51,6 +51,7 @@ NOT_READ_REPLY = ("I only notice new messages, so I missed that tap or edit and 
                   "Please send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
 PHOTO_QUESTION = ("Is this photo for a product in the shop, a new product, or the home page? "
                   "And what does it show, for people who cannot see it? A few words is fine.")  # NB-AV-09 (H12): asked by every new photo draft
+NONE_SAVED = "Nothing from this message was saved."  # AV2152-04: voice rules ban "None" and "drafted"
 PHOTO_OPS = ("product.set_photo", "product.add", "store.set_home_image")  # AV0022-04, AV1937-01: ops in a photo-draft answer that get the draft's photo
 FETCH_FAILED = "I couldn't get that photo after trying three times, so nothing changed. Could you send it again?"
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
@@ -441,7 +442,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         when the setting skills.mode is not ops-only, and then loaded with load_skills() when None."""
         sdir = editor_mod.open_state(state_dir)
         self.settings, self.photos = load_settings(sdir, photos is not None), photos  # fetch(provider_id, n) -> [bytes]
-        self.editor, self.interpreter, self.clock, self.labels, self._label_job = editor, interpreter, clock, labels, None
+        self.editor, self.interpreter, self.clock, self.labels, self._label_jobs = editor, interpreter, clock, labels, []
         self.sdir, self.previewer = sdir, previewer
         path = memory_mod.private_db(sdir, "conversation.sqlite3")
         self.db = sqlite3.connect(path, isolation_level=None)
@@ -873,7 +874,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         apply=False (SHOP-3 fixture receiver): an owner approval is rolled back before anything is written (no approval
         row, the draft stays proposed) and the message is recorded as `approval-held`; editor.apply is never called."""
         if hasattr(self.editor, "sync_settings"): self.editor.sync_settings(self.settings)
-        self._label_job = None
+        self._label_jobs = []  # AV2152-04: one job per new photo draft, in the order sent; reset on every message
         self._pages = self._read_sites(msg)  # HASS-SEC-3 (M2): any website read happens now, never inside the transaction
         try:
             with self._tx():
@@ -884,7 +885,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 self._reply(HELD_REPLY.format(code=held.code))
                 self._record(msg, "approval-held")
             return "approval-held"
-        if self._label_job: self._read_label(*self._label_job)  # AV1537-15: after the commit, never holding the lock
+        for job in self._label_jobs:  # AV1537-15: after the commit, never holding the lock; AV2152-04: a failed one never stops the next
+            try: self._read_label(*job)
+            except Exception: continue  # noqa: BLE001 - no label is today's reply exactly
         if approved is None: return disposition
         out = self.editor.apply(approved["change_id"], approved["draft_hash"], chat=approved["chat"]) \
             if getattr(self.editor, "routes_chat", False) else self.editor.apply(approved["change_id"], approved["draft_hash"])
@@ -1509,48 +1512,95 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         return "proposed"
 
     def _photo(self, msg, now, last_try=False) -> str:  # NB-AV-09: store one photo, then open (or name) its needs-details draft
-        if msg.attachments != 1: return self._reply(media.REPLIES["many"]) or "attachment-many"
+        count = msg.attachments
+        if not 1 <= count <= media.MAX_PHOTOS_PER_MESSAGE: return self._reply(media.REPLIES["many"]) or "attachment-many"
         if (busy := self._writer_busy(now)) is not None: return self._busy_reply(busy)  # HASS-OWNERS-2: nothing fetched or stored
-        try: data = self.photos.fetch(msg.provider_id, 1)[0]  # NB-AV-11: an empty/short answer is a failure too
+        try:
+            if count == 1: photos = [self.photos.fetch(msg.provider_id, 1)[0]]  # NB-AV-11: an empty/short answer is a failure too
+            else:  # AV2152-04: exactly count byte entries, in the order sent, or it is a fetch failure
+                photos = self.photos.fetch(msg.provider_id, count)
+                if not isinstance(photos, list) or len(photos) != count or not all(isinstance(p, (bytes, bytearray)) for p in photos):
+                    raise ValueError("fetch")
         except Exception:  # never applied or read without the photo: retry via the inbox, or one reply on the last try
             if not last_try: raise AttachmentPending("fetch") from None
             return self._reply(FETCH_FAILED) or "attachment-failed"
+        refused = []
+        for position, data in enumerate(photos, 1):  # NB-AV-10: every photo is checked before any is written
+            try: media.check_photo(data)
+            except media.Refused as exc: refused.append((position, exc))
+        if refused: return self._photos_refused(refused, count)
         try:
-            media.check_photo(data)  # NB-AV-10: all checks before any write
-            sha = media.store_original(self.settings["mediaRoot"], data,
-                                       received_at=msg.received_at or _iso(now), source="owner-chat")["sha256"]
+            stored = ([media.store_original(self.settings["mediaRoot"], photos[0], received_at=msg.received_at or _iso(now), source="owner-chat")]
+                      if count == 1 else media.store_originals(self.settings["mediaRoot"], photos, received_at=msg.received_at or _iso(now),
+                                                               source="owner-chat"))
+        except media.BatchRefused as exc:
+            return self._photos_refused([(exc.position, exc)], count)
         except media.Refused as exc:
-            return self._reply(exc.reply) or f"photo-refused:{exc.code}"
+            return self._photos_refused([(1, exc)], count)
+        if count > 1: return self._photo_batch(msg, now, [s["sha256"] for s in stored])
+        sha = stored[0]["sha256"]
         dup = self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%')
         if dup: return self._reply("I already have that photo, and I'm waiting on you. " + (
             dup[0]["summary"] if dup[0]["state"] == "needs-details" else "It's in a change waiting for your yes.")) or "photo-duplicate"
         caption = msg.text.replace("\ufffc", "").strip()  # handled as the next text, in this same transaction
-        try:  # H12: a photo that is an active or hidden product's picture opens no draft; unreadable worktree: as before
-            image = re.compile(rf"assets/products/photo-{sha[:16]}\.(jpg|png)")
-            on = next((p for p in sorted((p for p in load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
-                       .products if isinstance(p, dict)), key=lambda p: str(p.get("id")))
-                       if p.get("status") in ("active", "hidden") and isinstance(p.get("image"), str)
-                       and image.fullmatch(p["image"])), None)
-            if on is not None and "id" not in on: raise KeyError("id")  # a matching record must still be readable
-            said = on and f"That photo is already on {q(on['name'])}. To change that product, tell me what to change."
-        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): said = None  # no id/name: as unreadable
-        if said:
+        if said := self._photo_on_product(sha):
             self._reply(said)
             return self._request(Inbound(**{**vars(msg), "text": caption}), now) if caption else "photo-on-product"
         if self.skills_mode != dispatch_mod.DEFAULT_MODE and self.dispatch.photo_skills():  # SKILLS-FW-3 (spec 2.7): the photo joins the open request
             as_text = Inbound(**{**vars(msg), "text": caption})
             done = self.dispatch.photo(as_text, now, sha, caption)
             return done if done is not None else self._request(as_text, now)  # no skill yet: the caption is the next text of that request
-        self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, missing_json) VALUES"
-                        " (?, 'needs-details', ?, ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
-                            [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now),
-                            json.dumps(["id", "imageAlt"])))  # AV0007-03: set_photo's required args besides the photo
+        code = self._photo_row(sha, msg, now)
         self._reply(PHOTO_QUESTION)
-        if self.labels is not None: self._label_job = (code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0])
+        if self.labels is not None: self._label_jobs.append((code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0]))
         if not caption: return "photo-draft"
         self._photo_draft = code  # AV1052-10: if the reader fails on this caption, status names this draft
         try: return self._request(Inbound(**{**vars(msg), "text": caption}), now)
         finally: self._photo_draft = None
+
+    def _photos_refused(self, refused, count) -> str:  # AV2152-04: one reply naming each refused photo; none of the message was kept
+        if count == 1: return self._reply(refused[0][1].reply) or f"photo-refused:{refused[0][1].code}"
+        lines = [f"Photo {position} out of {count}: {exc.reply}" for position, exc in refused]  # voice rules forbid "1 of 4"
+        self._reply("\n".join([*lines, NONE_SAVED]), long_ok=True)  # four named refusals can pass voice.LONG_AFTER; each must be named
+        return f"photo-refused:{refused[0][1].code}"
+
+    def _photo_on_product(self, sha):
+        """H12: the sentence naming the active or hidden product whose picture this photo is, else None (unreadable worktree: None)."""
+        try:
+            image = re.compile(rf"assets/products/photo-{sha[:16]}\.(jpg|png)")
+            on = next((p for p in sorted((p for p in load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+                       .products if isinstance(p, dict)), key=lambda p: str(p.get("id")))
+                       if p.get("status") in ("active", "hidden") and isinstance(p.get("image"), str)
+                       and image.fullmatch(p["image"])), None)
+            if on is not None and "id" not in on: raise KeyError("id")  # a matching record must still be readable
+            return on and f"That photo is already on {q(on['name'])}. To change that product, tell me what to change."
+        except (OSError, ValueError, KeyError, TypeError, editor_mod.UnsafeState): return None  # no id/name: as unreadable
+
+    def _photo_row(self, sha, msg, now) -> str:
+        self.db.execute("INSERT INTO drafts(code, state, ops_json, summary, sender, chat, created_at, missing_json) VALUES"
+                        " (?, 'needs-details', ?, ?, ?, ?, ?, ?)", (code := self._code(sha), json.dumps(
+                            [{"op": "product.set_photo", "args": {"photo": sha}}]), PHOTO_QUESTION, msg.sender, msg.chat, _iso(now),
+                            json.dumps(["id", "imageAlt"])))  # AV0007-03: set_photo's required args besides the photo
+        return code
+
+    def _photo_batch(self, msg, now, shas) -> str:
+        """AV2152-04 (H12): 2 to 4 stored photos, in the order sent: each new one opens its own coded needs-details draft and
+        question (and, after the commit, its own label job); a photo already in a draft or on a product is named and opens
+        nothing. The caption is never read, whatever it says."""
+        n = len(shas)
+        for i, sha in enumerate(shas, 1):
+            head = f"Photo {i} out of {n}: "  # voice rules forbid "1 of 4"
+            if dup := self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%'):
+                self._reply(head + "I already have that photo, and I'm waiting on you. " + (
+                    dup[0]["summary"] if dup[0]["state"] == "needs-details" else "It's in a change waiting for your yes."))
+            elif said := self._photo_on_product(sha): self._reply(head + said)
+            else:
+                code = self._photo_row(sha, msg, now)
+                self._reply(f"{head}{PHOTO_QUESTION} Reply with the code {q(code)}.")
+                if self.labels is not None: self._label_jobs.append((code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0]))
+        skipped = "I did not read the caption because there is more than one photo. " if msg.text.replace("\ufffc", "").strip() else ""
+        self._reply(skipped + "Reply to each draft with its code, place and description.")
+        return "photo-drafts"
 
     def _read_label(self, code, sha, reply_id):  # AV1537-15: a read label joins the waiting question; never ops
         try:

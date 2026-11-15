@@ -12,7 +12,7 @@ CLAIM_RE = re.compile(r"\*\*(\d+)(?: ([A-Za-z]+))?\*\*\s*<!--\s*([\w.]+)\.(\w+)(
 BOLD_NUMBER_RE = re.compile(r"\*\*\d")
 UNITS = {None: 1, "characters": 1, "MB": 2**20, "digits": 1, "dollars": 1}
 IMAGE_TYPES = ("jpeg", "jpg", "png", "gif", "webp", "heic", "heif", "tiff", "bmp")
-REQUIRED = {"media.MAX_BYTES", "conversation.HISTORY_MAX", "conversation.MEMORY_LIST_MAX", "conversation.ALIAS_LIST_MAX", "ops.catalog.MAX_CANDIDATES",
+REQUIRED = {"media.MAX_BYTES", "media.MAX_PHOTOS_PER_MESSAGE", "conversation.HISTORY_MAX", "conversation.MEMORY_LIST_MAX", "conversation.ALIAS_LIST_MAX", "ops.catalog.MAX_CANDIDATES",
             "memory.MAX_VALUE", "editor.MAX_OPS", "content_model.MAX_HOURS_LINES", "conversation.MAX_OWNER_TEXT",
             "conversation.FIND_TEXT_MAX", "conversation.ALIAS_NAME_MAX", "content_model.MAX_INTRO",
             "content_model.MAX_HEADLINE_LINE", "content_model.MAX_STORY", "content_model.MAX_NOTICE",
@@ -118,6 +118,15 @@ class LimitsDocTest(unittest.TestCase):
                 source = f"{mod.__name__.removeprefix('hass.')}.{name}"
                 self.assertEqual(problems(self.doc), [f"line {lines[name]}: doc says {said}, {source} is {value}"])
         self.assertEqual(store.PHONE_DIGITS, content_model.PHONE_DIGITS)
+
+    def test_photo_limit_docs_follow_constant(self):  # AV2152-04
+        lines = {c[4]: c[0] for c in claims(self.doc)}
+        with mock.patch.object(media, "MAX_PHOTOS_PER_MESSAGE", 5):
+            self.assertEqual(problems(self.doc), [f"line {lines['MAX_PHOTOS_PER_MESSAGE']}: doc says 4, media.MAX_PHOTOS_PER_MESSAGE is 5"])
+        commands = (DOC.parent / "COMMANDS.md").read_text("utf-8")
+        for text in (self.doc, commands):
+            self.assertNotRegex(text, r"(?i)one photo per message|one photo at a time")
+        self.assertIn("1 to 4 photos per message", commands)
 
     def test_bold_number_without_comment_names_its_line(self):
         self.assertEqual(problems("Intro.\nAt most **7** things."), ["line 2: bold number without a source comment"])

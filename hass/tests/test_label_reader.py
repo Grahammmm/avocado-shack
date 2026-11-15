@@ -219,7 +219,7 @@ class LabelConversationTests(unittest.TestCase):
         for data in (b"", JPG[:-2], b"GIF89a\x01\x00\x01\x00"):
             self.photos.data = data
             self.assertTrue(self.say().startswith("photo-refused:"))
-        self.assertEqual(self.say(attachments=2), "attachment-many")
+        self.assertEqual(self.say(attachments=5), "attachment-many")
         self.assertEqual(self.transport.calls, [])
         self.photos.data = JPG
         self.assertEqual(self.say(pid="p1"), "photo-draft")

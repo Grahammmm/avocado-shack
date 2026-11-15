@@ -24,7 +24,7 @@ UNSUPPORTED = "I can't use that kind of photo, so nothing was saved. Could you s
 UNREADABLE = "I couldn't read that photo safely, so nothing changed. Could you send it again as a screenshot?"
 SIDEWAYS = "That photo is sideways and I can't turn it, so nothing changed. Could you send it again as a screenshot?"
 EMPTY, INCOMPLETE = 'That photo came through empty. Could you send it again?', 'That photo only came through partly. Could you send it again?'
-MANY = "Please send one photo at a time. I haven't saved any of these."
+MANY = "Please send up to 4 photos per message; nothing was saved."
 AUDIO = "That looks like a voice note. I can't understand voice notes yet, so nothing was saved. Could you type the change instead?"
 
 BAD_IDAT = PNG_DATA[0][:-1] + bytes([PNG_DATA[0][-1] ^ 1])  # one CRC bit flipped
@@ -118,7 +118,7 @@ class PhotoLimitsTests(unittest.TestCase):
         self.assertTrue((self.repo.media / "originals" / sha[:2] / f"{sha}.jpg").is_file())
 
     def test_several_attachments_reply_many_and_fetch_nothing(self):
-        for count in (2, 5):
+        for count in (5, 11):
             with self.subTest(count=count):
                 self.assertEqual(self.say("yes", attachments=count), "attachment-many")
                 self.assertEqual(self.replies(), [MANY])
@@ -155,12 +155,12 @@ class CheckPhotoTests(unittest.TestCase):
             with self.subTest(code):
                 self.assertNotIn("/", reply)
                 self.assertNotRegex(reply, r"[0-9a-f]{8}")
-                self.assertEqual(re.findall(r"\d", reply.replace("20 MB", "")), [])  # no number but the 20 MB limit
+                self.assertEqual(re.findall(r"\d", reply.replace("20 MB", "").replace("up to 4 photos", "")), [])  # no number but the 20 MB and 4 photo limits
         for name, (data, _, reply) in CASES.items():
             with self.subTest(name):
                 self.assertNotIn(hashlib.sha256(data).hexdigest()[:8], reply)
         for reply, limit in ((TOO_LARGE, "smaller copy"), (UNREADABLE, "screenshot"),
-                             (UNSUPPORTED, "Most Compatible"), (SIDEWAYS, "sideways"), (MANY, "one photo at a time")):
+                             (UNSUPPORTED, "Most Compatible"), (SIDEWAYS, "sideways"), (MANY, "up to 4 photos")):
             self.assertIn(limit, reply)
 
 
