@@ -10,11 +10,7 @@ from pathlib import Path
 
 from hass.content_model import iso_day, notice_days, shop_today
 
-BANNER_JS = ("<script>(()=>{const swap=()=>{const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});"
-             "document.querySelectorAll('[data-banner]').forEach(b=>{const live=day>=b.dataset.start&&day<=b.dataset.end;"
-             "b.hidden=!live;b.style.display=live?'':'none';const d=b.previousElementSibling;"
-             "d.hidden=live;d.style.display=live?'none':''})};swap();setInterval(swap,1000);"
-             "document.addEventListener('visibilitychange',swap);window.addEventListener('pageshow',swap)})()</script>\n")
+BANNER_JS = '<script src="/banner.js"></script>\n'  # AV1052-03: the runtime is storefront-mockup/banner.js, never inline (CSP)
 
 
 def banner_link(banner, store):
@@ -31,10 +27,7 @@ def banner_target(banner, store, today):
     return {"text": banner["text"], **({"link": link} if link else {})}
 
 
-NOTICE_JS = ("<script>(()=>{const show=()=>{const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});"
-             "document.querySelectorAll('.home-notice').forEach(n=>{const f=n.dataset.from;n.hidden=(f!==undefined&&day<f)||day>n.dataset.until})};"
-             "show();setInterval(show,1000);document.addEventListener('visibilitychange',show);"
-             "window.addEventListener('pageshow',show)})()</script>\n")
+NOTICE_JS = '<script src="/notice.js"></script>\n'  # AV1052-03: the runtime is storefront-mockup/notice.js, never inline (CSP)
 
 
 def live_text(notice, today=None) -> str | None:

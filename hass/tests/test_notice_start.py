@@ -178,7 +178,7 @@ class PhaseCheckTests(StoreTestCase):
         for name, edit in (("first day", lambda b: b.replace(f'data-from="{day(3)}"'.encode(), f'data-from="{day(2)}"'.encode())),
                            ("last day", lambda b: b.replace(f'data-until="{day(5)}"'.encode(), f'data-until="{day(6)}"'.encode())),
                            ("text", lambda b: b.replace(TEXT.encode(), b"Wrong notice")),
-                           ("script", lambda b: b.replace(b"day<f", b"day<g")),
+                           ("script", lambda b: b.replace(b'src="/notice.js"', b'src="/notice-old.js"')),  # AV1052-03: the runtime is an external tag
                            ("unrelated", lambda b: b + b"<!-- drift -->")):
             with self.subTest(name):
                 (self.repo_.wt / INDEX).write_bytes(edit(self.hidden))
@@ -205,8 +205,8 @@ class PhaseCheckTests(StoreTestCase):
 class NoticeClockTests(unittest.TestCase):
     def test_open_page_enters_and_leaves_window_pacific(self):
         import subprocess
-        out = subprocess.run(["node", str(Path(__file__).with_name("notice_expiry.cjs"))], input=sitegen.NOTICE_JS, text=True,
-                             capture_output=True, timeout=180)
+        out = subprocess.run(["node", str(Path(__file__).with_name("notice_expiry.cjs"))], input="<script>" + (REPO_ROOT / "storefront-mockup/notice.js").read_text("utf-8") + "</script>",
+                             text=True, capture_output=True, timeout=180)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         for phrase in ("appears at its first Pacific midnight", "first and last day are inclusive", "both directions on load",
                        "background and pageshow recovery"):

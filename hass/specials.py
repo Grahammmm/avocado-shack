@@ -21,11 +21,7 @@ from datetime import date
 
 from hass.content_model import active_specials, iso_day
 
-SPECIALS_JS = ("<script>(()=>{const hide=()=>{const t=new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});"
-               "document.querySelectorAll('.weekly-specials').forEach(s=>{let n=0;"
-               "s.querySelectorAll('li[data-end]').forEach(c=>{const on=c.dataset.start<=t&&t<=c.dataset.end;c.hidden=!on;if(on)n++});"
-               "s.hidden=n===0})};hide();setInterval(hide,1000);document.addEventListener('visibilitychange',hide);"
-               "window.addEventListener('pageshow',hide)})()</script>\n")
+SPECIALS_JS = '<script src="/specials.js"></script>\n'  # AV1052-03: the runtime is storefront-mockup/specials.js, never inline (CSP)
 
 
 def _card(sp: dict, products: dict) -> str:

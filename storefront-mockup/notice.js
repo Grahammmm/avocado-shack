@@ -1,0 +1,1 @@
+(()=>{const show=()=>{const day=new Date().toLocaleDateString('en-CA',{timeZone:'America/Los_Angeles'});document.querySelectorAll('.home-notice').forEach(n=>{const f=n.dataset.from;n.hidden=(f!==undefined&&day<f)||day>n.dataset.until})};show();setInterval(show,1000);document.addEventListener('visibilitychange',show);window.addEventListener('pageshow',show)})()

@@ -418,7 +418,7 @@ class OpTests(StoreTestCase):
 @unittest.skipUnless(os.environ.get("PLAYWRIGHT_MODULE"), "PLAYWRIGHT_MODULE is not set")
 class BrowserTests(unittest.TestCase):
     def test_script_hides_a_card_after_its_last_day_and_the_section_with_it(self):
-        out = subprocess.run(["node", str(Path(__file__).with_name("specials_expiry.cjs"))], input=specials.SPECIALS_JS,
+        out = subprocess.run(["node", str(Path(__file__).with_name("specials_expiry.cjs"))], input="<script>" + (REPO_ROOT / "storefront-mockup/specials.js").read_text("utf-8") + "</script>",
                              text=True, capture_output=True, timeout=60)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         print(out.stdout.strip())
