@@ -40,7 +40,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hass.content_model import (  # noqa: E402
-    DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
+    DEFAULT_CLUB_INTRO, DEFAULT_HEADLINE, DEFAULT_INTRO, DEFAULT_STORY, PRODUCT_OPTIONAL_PUBLIC, PRODUCT_PUBLIC_FIELDS, REPO_ROOT, Content, ContentError,
     checked_on, iso_day, load_and_validate, shop_today, INFO_PAGES,
 )
 from hass import specials  # noqa: E402
@@ -337,6 +337,7 @@ def render(content: Content, template_dir: Path = TEMPLATE_DIR, today=None, *, n
         SITE_PREFIX + "community.json": _community_json(content),
     }
     slots = {**store_slots(content.store, notice_today or today), "selection.checkedNote": checked_note(content.store, today),
+             "club.introHtml": html.escape(content.community["club"].get("intro", DEFAULT_CLUB_INTRO), quote=False),  # AV2152-09
              **specials.slots(content.store, content.products, specials_today or today)}
     for rel in TEMPLATES:
         text = (Path(template_dir) / rel).read_bytes().decode("utf-8")

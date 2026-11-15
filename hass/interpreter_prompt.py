@@ -14,6 +14,8 @@ whole-maker request resolves to listed ids.
 AV1937-06: each maker row adds its place and story, each route idea row its place and description, each whole or the
 unquoted marker <omitted>, never cut. Over the byte cap the maker stories go first, then route descriptions, maker
 places and route places (reverse key/id order), then product descriptions; only if that cannot fit is the prompt refused.
+AV2152-09: a Club (field | value) subsection after the route ideas always lists the whole /hike intro paragraph (the default
+when none is saved, <unavailable> when the saved one is not text); it is never cut, so it is counted before anything is dropped.
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ import json
 import re
 import unicodedata
 
-from hass.content_model import DEFAULT_INTRO, MAX_HOURS_LINES, iso_day
+from hass.content_model import DEFAULT_CLUB_INTRO, DEFAULT_INTRO, MAX_HOURS_LINES, iso_day
 from hass.interpret_check import PRICE_REPLY
 from hass.sitegen import phone_text
 from hass.skills.prompt import skills_section
@@ -30,6 +32,7 @@ MAX_PRODUCTS, MAX_MAKERS, MAX_OPS = 400, 200, 20
 MAX_HIKES, MAX_ROUTES, MAX_HIKE_DETAILS = 60, 60, 12
 PROMPT_MAX_BYTES = 64 * 1024
 OMITTED = "<omitted>"  # AV2152-06: stands for a product description left out; never an argument value
+UNAVAILABLE = "<unavailable>"  # AV2152-09: stands for a saved club intro that is not text; never an argument value
 PRODUCT_ID_RE = re.compile(r"photo-product-(\d+)")
 DESIGN_UNSUPPORTED = "design changes cannot be made by message yet"  # AV1102-08 (H24): the fixed design-request reply
 _LINE_BREAKS = {"\x85": "\\u0085", "\u2028": "\\u2028", "\u2029": "\\u2029"}  # json.dumps keeps these raw
@@ -82,6 +85,10 @@ RULES = (
     f"change part, send the whole new text built from the value under Makers or Route ideas. \"\" is empty; {OMITTED} is "
     "unseen here, so ask the owner for the full new text, never guess it, and never send " + OMITTED + " as an argument. "
     "A full replacement the owner wrote is fine.",
+    "club.set_intro replaces the whole opening paragraph of the hiking club page (one paragraph, 20 letters to 400 characters): "
+    'to add or change part, send the whole new text built from the "intro" value under Club, copying the unchanged words '
+    f"exactly. If it shows {UNAVAILABLE}, ask the owner for the full new paragraph, never guess it, and never send "
+    + UNAVAILABLE + " as an argument.",
     # HASS-NL-1: how the owner writes, and what to do when unsure
     "The owner texts from a phone: casual, misspelt, dictated, in fragments, sometimes several asks in one message. Read for "
     "meaning, and make one op per ask.",
@@ -307,6 +314,13 @@ def _home_text_lines(store) -> list:
     return rows
 
 
+def _club_lines(club) -> list:
+    """AV2152-09: the whole current /hike intro paragraph, so a partial edit resends it whole. No saved intro is the
+    default text; a saved one that is not text is shown as the marker, never as stringified copy."""
+    intro = club.get("intro", DEFAULT_CLUB_INTRO)
+    return [f"{_q('intro')} | {_q(intro) if isinstance(intro, str) else UNAVAILABLE}"]
+
+
 def build(registry, content, skills=None, candidates=()) -> str:
     """The system prompt for ``registry`` (name -> Op) and ``content`` (.products, .makers, .community, .store).
 
@@ -336,7 +350,8 @@ def build(registry, content, skills=None, candidates=()) -> str:
             + "\n".join(_hike_detail_lines(community.get("events")))
             + "\nRoute ideas (id | title | place | description):\n"
             + "\n".join(_route_lines(community.get("routeIdeas"), omitted))
-            + ("\nsamples | hidden" if club.get("showSamples") is False else ""),
+            + ("\nsamples | hidden" if club.get("showSamples") is False else "")
+            + "\nClub (field | value):\n" + "\n".join(_club_lines(club)),
             "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),
         ]
         if skills_block:

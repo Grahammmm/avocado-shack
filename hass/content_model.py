@@ -44,7 +44,9 @@ HOLD_FIELDS = ("reason", "source", "evidence", "record")
 
 MAKER_FIELDS = ("name", "place", "story", "url")
 CLUB_FIELDS = ("clubName", "organizer", "intendedSender", "emailConnected")
-CLUB_OPTIONAL = ("showSamples",)  # AV1422-10: false hides the sample hikes; absent = shown
+CLUB_OPTIONAL = ("showSamples", "intro")  # AV1422-10: false hides the sample hikes; absent = shown. AV2152-09: intro = /hike manifesto
+MAX_CLUB_INTRO = 400  # characters in the optional community.club.intro (the /hike opening paragraph; ops/club.py imports this)
+DEFAULT_CLUB_INTRO = "A good morning doesn’t need much. Something fresh to eat, a stretch of coast, and time to get to know the people walking beside you."  # shown when club.intro is absent
 ROUTE_IDEA_FIELDS = (
     "id", "title", "place", "character", "distance", "difficulty", "elevation", "elevationLabel",
     "duration", "routeType", "terrain", "description", "sourceUrl", "sourceName", "status", "rsvpEnabled",
@@ -89,7 +91,7 @@ TEXT_LIMITS = {
     "event": {f: 400 for f in EVENT_TEXT_FIELDS} | {"title": 80, "description": 800, "meetingPoint": 160, "recap": 2000,
               "cancelNote": 160},
     "routeIdea": {f: 600 for f in ROUTE_IDEA_FIELDS if f not in ("id", "sourceUrl", "status", "rsvpEnabled")},
-    "club": {f: 400 for f in ("clubName", "organizer", "intendedSender")},
+    "club": {f: 400 for f in ("clubName", "organizer", "intendedSender")} | {"intro": MAX_CLUB_INTRO},
     "store": {"streetAddress": MAX_ADDRESS_PART, "town": MAX_ADDRESS_PART, "hoursLine": MAX_HOURS_LINE},
 }
 
@@ -360,6 +362,10 @@ def validate_community(problems, community):
             problems.append("community.club.emailConnected: email delivery is not connected; must be false")
         if "showSamples" in club and not isinstance(club["showSamples"], bool):
             problems.append("community.club.showSamples: must be true or false")
+        if "intro" in club:  # AV2152-09: one paragraph of plain text, 20 letters to MAX_CLUB_INTRO characters
+            _text(problems, "community.club.intro", club["intro"], limit=MAX_CLUB_INTRO)
+            if isinstance(club["intro"], str) and (sum(c.isalpha() for c in club["intro"]) < 20 or club["intro"].splitlines() != [club["intro"]]):
+                problems.append("community.club.intro: needs one paragraph with at least 20 letters")
     ideas = community.get("routeIdeas")
     idea_ids, hidden = set(), []  # hidden: AV1322-03 ideas left out of the generated route list
     if not isinstance(ideas, list):

@@ -144,6 +144,17 @@ Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`
 shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when
 no photo of yours is set; `undo` puts your photo back.
 
+Hiking club opening paragraph (a change request, needs `yes <code>`; not a command, so it has no table row and no help line):
+`club.set_intro`, for example "change the hiking club intro to: Mornings on the coast are for friends, fresh bread and a
+long walk.", replaces the whole paragraph that opens the hiking club page (the line above "At the Shack, we care about what
+feeds us"); nothing else on that page changes. Send the whole new paragraph. For a partial edit Hass starts from the
+current words it keeps for the page and resends everything you did not change exactly, or asks you if it cannot see them.
+It must be one paragraph of plain text, 20 letters to 400 characters: tags, links, `$`, `{{ }}` and line breaks are refused,
+and so are the same words as now (extra spaces do not count as a change). Until you set one the page keeps its usual words.
+Hass checks the page on a phone and on a desktop screen after it saves. `undo` puts the previous words (or the usual ones)
+back; it is refused when the hiking club settings changed again after that change, so undo the later change first. Saved is
+not published: the words are on the website only after the separate step that copies the saved site there.
+
 Stop carrying a maker (a change request, needs `yes <code>`): `maker.hide` with `withProducts: true`, for example "we stopped
 carrying Etto", hides the maker and all of its active products in one change. The proposal lists the maker and every
 product id it will hide. Hidden and held products are left exactly as they are. Without `withProducts`, a maker that
