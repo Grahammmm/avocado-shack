@@ -1561,7 +1561,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
     def _photos_refused(self, refused, count) -> str:  # AV2152-04: one reply naming each refused photo; none of the message was kept
         if count == 1: return self._reply(refused[0][1].reply) or f"photo-refused:{refused[0][1].code}"
         lines = [f"Photo {position} out of {count}: {exc.reply}" for position, exc in refused]  # voice rules forbid "1 of 4"
-        self._reply("\n".join([*lines, NONE_SAVED]))
+        self._reply("\n".join([*lines, NONE_SAVED]), long_ok=True)  # four named refusals can pass voice.LONG_AFTER; each must be named
         return f"photo-refused:{refused[0][1].code}"
 
     def _photo_on_product(self, sha):

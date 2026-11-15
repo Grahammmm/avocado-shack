@@ -12,7 +12,7 @@ import unittest
 from datetime import timedelta
 from unittest import mock
 
-from hass import conversation, media
+from hass import conversation, media, voice
 from hass.conversation import FETCH_FAILED, PHOTO_QUESTION, AttachmentPending, Inbound
 from hass.fixture_chat import FixtureAdapter
 from hass.label_reader import LabelReader
@@ -156,6 +156,16 @@ class BatchDraftTests(Base):
         self.assertEqual(self.say(attachments=4), "photo-refused:empty")
         self.assertEqual(self.replies(), [f"Photo 1 out of 4: {EMPTY}\nPhoto 3 out of 4: {UNSUPPORTED}\nPhoto 4 out of 4: {SIDEWAYS}\n{NONE_SAVED}"])
         self.assertEqual((self.kept(), self.disposition("m1")), (([], [], []), "photo-refused:empty"))
+
+    def test_four_unsupported_photos_are_all_named_past_the_length_guard(self):
+        gif = CASES["gif"][0]
+        self.photos.items = [gif, gif, gif, gif]
+        self.assertEqual(self.say(attachments=4), "photo-refused:unsupported-type")
+        want = "\n".join([*(f"Photo {i} out of 4: {UNSUPPORTED}" for i in range(1, 5)), NONE_SAVED])
+        self.assertGreater(len(want), voice.LONG_AFTER)  # the guard would have swapped this for SAFE_LINE
+        self.assertEqual(self.replies(), [want])
+        self.assertEqual(voice.check(want, long_ok=True), [])
+        self.assertEqual(self.kept(), ([], [], []))
 
     def test_refused_photo_leaves_earlier_stored_files_and_drafts_alone(self):
         self.photos.items = [PICS[0]]
