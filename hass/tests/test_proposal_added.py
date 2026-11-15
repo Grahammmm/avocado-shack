@@ -57,7 +57,7 @@ class AddedRecordProposalTests(unittest.TestCase):
     def test_edit_byte_identical(self):
         text = conversation.proposal_text("ab12", _draft(("products", "p1", {"name": "Hass", "price": 2},
                                                           {"name": "Reed", "price": 3})), EXPIRES)
-        self.assertEqual(voice.plain(text), "Here's the change I'd make:\nHass, the name: from Hass to Reed\nHass, a detail: from 2 to 3\nI'll hold this for you until Monday, Nov 2 at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.")
+        self.assertEqual(voice.plain(text), "Here's the change I'd make:\nReed (was Hass), the name: from Hass to Reed\nReed (was Hass), a detail: from 2 to 3\nI'll hold this for you until Monday, Nov 2 at 9:10 am.\nReply yes to save it, or no to cancel. If something's wrong, tell me what to fix.")
 
     def test_edit_from_empty_dict_is_not_new(self):
         self.assertEqual(_lines(("products", "p1", {}, {"name": "Reed"}))[1:-2], ["Reed, the name: from nothing to Reed"])
@@ -81,7 +81,7 @@ class AddedRecordProposalTests(unittest.TestCase):
         lines = _lines(("hikes", "h2", None, {"title": "Dawn", "bring": ["torch"]}),
                        ("products", "p1", {"name": "Hass"}, {"name": "Reed"}),
                        ("makers", "m3", None, {"name": "Grove Co"}), warnings=["w1", "w2"])
-        self.assertEqual(lines, ["Here's the change I'd make:", "A new entry: Dawn", "  what to bring: torch", "  the title: Dawn", "Hass, the name: from Hass to Reed", "A new maker: Grove Co", "  the name: Grove Co", "Heads up: There is one thing to double-check before you say yes.", "Heads up: There is one thing to double-check before you say yes."] + TAIL)
+        self.assertEqual(lines, ["Here's the change I'd make:", "A new entry: Dawn", "  what to bring: torch", "  the title: Dawn", "Reed (was Hass), the name: from Hass to Reed", "A new maker: Grove Co", "  the name: Grove Co", "Heads up: There is one thing to double-check before you say yes.", "Heads up: There is one thing to double-check before you say yes."] + TAIL)
 
     def test_repeat_reply_hint_kept(self):
         text = conversation.proposal_text("ab12", _draft(("makers", "m1", None, {"name": "G"})), EXPIRES, repeat=True)

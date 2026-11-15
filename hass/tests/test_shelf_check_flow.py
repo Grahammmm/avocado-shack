@@ -115,7 +115,7 @@ class AskThenYesTests(ShelfCase):
         self.assertEqual([c["op"] for c in json.loads(draft["ops_json"])], ["store.confirm_selection", "product.set_availability"])
         self.assertIn("Got it. This draft also records that the shelf list was checked today.", reply)
         self.assertIn("the shelf check: from nothing to", reply)
-        self.assertIn("the shelf word: from nothing to no", reply)
+        self.assertIn("the shelf word: from nothing to Sold out", reply)
         self.assertIn("Reply yes to save it, or no to cancel", reply)
         self.assertEqual(self.open_asks(), [])
         self.nothing_written()  # the draft is not applied: his normal approval is still needed
