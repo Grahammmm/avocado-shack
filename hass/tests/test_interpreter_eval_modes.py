@@ -72,11 +72,11 @@ class ScoreModeTests(base.EvalTestCase):
             code, out, err = base.run(*argv)
             summary = json.loads(out)
             self.assertEqual((code, err, {k: summary[k] for k in ("cases", "passed", "missing", "extra")}),
-                             (0, "", {"cases": 69, "passed": 66, "missing": [], "extra": []}))
+                             (0, "", {"cases": 75, "passed": 72, "missing": [], "extra": []}))
             self.assertEqual([f["id"] for f in summary["failed"]], ["e06", "e13", "e25"])
         short = self.write("short.jsonl", [{"id": "e01", "reply": {"unsupported": "x"}}])
         code, out, _ = base.run("score", "--replies", short)
-        self.assertEqual((code, json.loads(out)["passed"] < 66), (0, True))  # wrong/missing replies still exit 0
+        self.assertEqual((code, json.loads(out)["passed"] < 72), (0, True))  # wrong/missing replies still exit 0
 
     def test_valid_compare_and_fake_recording_forms_remain(self):
         code, out, err = base.run("compare", "--before", base.REPLIES, "--after", base.REPLIES)
