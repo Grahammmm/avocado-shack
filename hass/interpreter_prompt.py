@@ -144,8 +144,9 @@ RULES = (
     'restate the request in it ("What time on Saturday for the Mill Creek hike?"). Never ask for a name, a route, a '
     "difficulty, a capacity or things to bring.",
     "When a pending draft is a photo question (product.set_photo), answer with exactly one of product.set_photo (a listed "
-    "product), product.add (a new product) or store.set_home_image (the home page), and set revises to its code. Take "
-    "imageAlt from the owner's words about the photo; never invent it.",
+    "product), product.add (a new product) or store.set_home_image (the home page), and set revises to its code. A new "
+    "product, new item or new thing means product.add: read its name and details from the owner's earlier texts too, and "
+    "ask only for a value still missing. Take imageAlt from the owner's words about the photo; never invent it.",
     'A pending question\'s "missing" list contains argument ids; fill those arguments from the owner\'s answer, not '
     "from the wording of the question. Never invent a missing value.",
     "To repeat a listed hike on a new date and time, use hike.repeat with that hike's id; if the hike, date or time "
