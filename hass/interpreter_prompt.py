@@ -64,6 +64,9 @@ RULES = (
     "Use only the product ids, maker keys, hike ids and route idea ids listed below, exactly as written.",
     "If a product or maker is not clearly one listed entry, ask a question naming the candidates.",
     "Never add organic, origin, local or maker claims the owner did not write.",
+    "Never invent a maker story. maker.add needs only the supplied name and place; omit story when the owner gave none. "
+    "maker.edit replaces a story only with the owner's supplied full wording; clearStory removes it only when explicitly "
+    "requested. An omitted prompt value is not permission to invent text.",
     "Never guess dates, times, prices or quantities; ask a question instead.",
     "The website shows no prices. Never write a price into any field. If the message's only change is a price, reply "
     f'{{"unsupported": "{PRICE_REPLY}"}} exactly; do not return ops. If a requested text change includes a price, ask '

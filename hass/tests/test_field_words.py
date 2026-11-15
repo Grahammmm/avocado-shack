@@ -13,6 +13,7 @@ PINNED = {
     "sourceUrl": "the source link", "sourceName": "the source name", "meetingPoint": "the meeting place",
     "noCapacityLimit": "no guest limit", "trailId": "the route idea", "clearProducer": "remove the maker",
     "clearImageAlt": "remove the photo description", "clearUrl": "remove the website link",
+    "clearStory": "remove the story",  # AV0222-10
     "url": "the website link", "image": "the photo", "photo": "the photo", "routeType": "the route type",
     "elevationLabel": "the elevation label", "streetAddress": "the street address", "name": "the name",
     "brand": "the brand", "category": "the category", "description": "the description", "place": "the place",

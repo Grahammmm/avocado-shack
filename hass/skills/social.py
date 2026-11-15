@@ -46,6 +46,7 @@ MAKER_REFUSALS = {
     "not on the site": "That maker isn't on the website right now, so I can't write a post about them.",
     "no active products": "That maker has nothing on the website right now, so I can't write a post about them.",
     "maker record incomplete": "That maker is missing a name or place, so I can't write a post about them.",
+    "maker has no story": NO_STORY,
 }
 RECAP_REFUSALS = {
     "no such hike": "I don't know that hike, so I can't write a post for it.",

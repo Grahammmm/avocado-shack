@@ -51,7 +51,8 @@ class QuestionWordsTests(HikeTestCase):
         self.assertEqual(voice.check(question), [])
         missing, question = self.missing_of(repo, "maker.edit", {"key": "Etto"})
         self.assertIn("clearUrl", missing)
-        self.assertTrue(question.endswith("remove the website link"), question)
+        self.assertIn("clearStory", missing)  # AV0222-10
+        self.assertTrue(question.endswith("remove the website link, remove the story"), question)
         missing, question = self.missing_of(repo, "hike.update", {"id": HIKE_ID})
         self.assertIn("noCapacityLimit", missing)
         self.assertIn("no guest limit", question)
@@ -62,9 +63,9 @@ class QuestionWordsTests(HikeTestCase):
         result = self.assertRejected(repo, "needs-details", ("product.set_photo", {"id": PID, "photo": pd.SHA}))
         self.assertEqual(result["missing"], ["imageAlt"])
         self.assertEqual(result["question"], f"Please provide: {ALT_WORDS}")
-        result = self.assertRejected(repo, "needs-details", ("maker.add", {"key": "K", "name": "K", "place": "P"}))
-        self.assertEqual(result["missing"], ["story"])
-        self.assertEqual(result["question"], "Please provide: the story")
+        result = self.assertRejected(repo, "needs-details", ("maker.add", {"key": "K", "name": "K", "story": "S"}))  # AV0222-10: story is optional, place is not
+        self.assertEqual(result["missing"], ["place"])
+        self.assertEqual(result["question"], "Please provide: the place")
 
     def assertSurvivesGuard(self, question, expected):
         self.assertEqual(question, expected)

@@ -134,11 +134,18 @@ Checking the selection (change requests, not commands; each still needs `yes <co
   the last check is more than a week old when the site is generated, the line adds "(more than a week ago - call or
   visit to confirm)" and the product words become "Last confirmed <day>". Hidden and held products never show them.
 
-A maker without a website: `maker.add` needs only the key, name, place and story; leave `url` out and the maker's
-card shows its story and place with no "Visit" link. `maker.edit` with `clearUrl: true` removes a maker's website (it
-cannot be combined with `url`); a maker with no website and nothing else changed is refused. Both are change requests that
-need `yes <code>`, and `undo` restores the website exactly as it was. A website recorded as a migrated source link
-cannot be removed: the change is blocked.
+A maker without a website: `maker.add` needs only the key, name and place (the story is optional, see below); leave `url`
+out and the maker's card shows its story and place with no "Visit" link. `maker.edit` with `clearUrl: true` removes a
+maker's website (it cannot be combined with `url`); a maker with no website and nothing else changed is refused. Both are
+change requests that need `yes <code>`, and `undo` restores the website exactly as it was. A website recorded as a
+migrated source link cannot be removed: the change is blocked.
+
+A maker without a story: a maker needs no story and no website, and Hass never writes a story you did not give. Say only
+the name and place and the maker is added without one (a maker change request, no new command). The card's "Meet the
+maker" panel then shows the place and the website link, or no panel at all when there is neither a story nor a website.
+`maker.edit` with `clearStory: true` removes a story only when you explicitly ask (it cannot be combined with `story`; a
+maker with no story and nothing else changed is refused). Both need the ordinary `yes <code>`, and `undo` restores the
+story exactly as it was. `post maker <key>` for a maker with no story says so and writes no caption.
 
 Home-page photo (a change request, needs `yes <code>`): `store.clear_home_image`, for example "put the old photo back",
 shows the shop's own photo on the home page again, whatever store changes came after you set yours. It is refused when
