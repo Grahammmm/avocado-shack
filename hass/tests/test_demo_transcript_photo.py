@@ -31,7 +31,7 @@ ASKED = PHOTO_QUESTION
 QUESTION = "Please provide: a few words saying what the photo shows"  # the editor's question when the caption names only the product
 KINDS = (ASKED, QUESTION, "I already have that photo, and I'm waiting on you. ", "Here's the change I'd make:", "Saved and checked: ", "Saved: ",
          "Here's what we changed lately:", "To undo that, I'd change it back:")
-EXPECTED = [ASKED, QUESTION, "I already have that photo, and I'm waiting on you. ", "Here's the change I'd make:", "Saved: ", "Here's what we changed lately:", "To undo that, I'd change it back:",
+EXPECTED = [QUESTION, "I already have that photo, and I'm waiting on you. ", "Here's the change I'd make:", "Saved: ", "Here's what we changed lately:", "To undo that, I'd change it back:",
             "Saved: "]
 REFUSED = "fixture_chat: fixture line 1: photos must name regular files directly inside --photos\n"
 
@@ -85,12 +85,12 @@ class PhotoDemoTranscriptTests(unittest.TestCase):
         self.assertEqual([self.kind(t) for t in texts], EXPECTED)
         edit, undo = self.query(repo, "SELECT * FROM drafts ORDER BY row_id")  # the second sending: no second draft
         self.assertEqual(edit["code"], CODE)
-        self.assertEqual(texts[2], f"I already have that photo, and I'm waiting on you. {texts[1]}")
-        self.assertTrue(texts[3].startswith("Here's the change I'd make:"), texts[3])
-        self.assertTrue(texts[4].startswith("Saved: the photo, the photo description for Hass avocado"), texts[4])
-        self.assertIn("the photo, the photo description for Hass avocado: saved", texts[5])
-        self.assertTrue(texts[6].startswith("To undo that, I'd change it back:\nHere's the change I'd make:"), texts[6])
-        self.assertTrue(texts[7].startswith("Saved:"), texts[7])
+        self.assertEqual(texts[1], f"I already have that photo, and I'm waiting on you. {texts[0]}")
+        self.assertTrue(texts[2].startswith("Here's the change I'd make:"), texts[2])
+        self.assertTrue(texts[3].startswith("Saved: the photo, the photo description for Hass avocado"), texts[3])
+        self.assertIn("the photo, the photo description for Hass avocado: saved", texts[4])
+        self.assertTrue(texts[5].startswith("To undo that, I'd change it back:\nHere's the change I'd make:"), texts[5])
+        self.assertTrue(texts[6].startswith("Saved:"), texts[6])
         self.assertEqual((edit["state"], json.loads(undo["ops_json"])[0]["op"]), ("reverted", "history.revert"))
         after = repo.product(PID)
         self.assertEqual((after["image"], after.get("imageAlt")), (before["image"], before.get("imageAlt")))
@@ -103,7 +103,7 @@ class PhotoDemoTranscriptTests(unittest.TestCase):
     def test_yes_installs_the_photo_with_the_owners_text(self):
         repo = self.fresh()
         texts = self.transcript(repo, self.lines(repo, self.demo_rows()[:4]))
-        self.assertEqual([self.kind(t) for t in texts], EXPECTED[:5])
+        self.assertEqual([self.kind(t) for t in texts], EXPECTED[:4])
         self.assertEqual((repo.product(PID)["image"], repo.product(PID)["imageAlt"]), (INSTALLED, ALT))
         self.assertTrue((repo.wt / "storefront-mockup" / INSTALLED).is_file())
 
