@@ -178,7 +178,7 @@ class PhaseCheckTests(StoreTestCase):
         for name, edit in (("first day", lambda b: b.replace(f'data-from="{day(3)}"'.encode(), f'data-from="{day(2)}"'.encode())),
                            ("last day", lambda b: b.replace(f'data-until="{day(5)}"'.encode(), f'data-until="{day(6)}"'.encode())),
                            ("text", lambda b: b.replace(TEXT.encode(), b"Wrong notice")),
-                           ("script", lambda b: b.replace(b"day<f", b"day<g")),
+                           ("script", lambda b: b.replace(b'src="/notice.js"', b'src="/notice-old.js"')),  # AV1052-03: the runtime is an external tag
                            ("unrelated", lambda b: b + b"<!-- drift -->")):
             with self.subTest(name):
                 (self.repo_.wt / INDEX).write_bytes(edit(self.hidden))

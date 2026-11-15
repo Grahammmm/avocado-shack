@@ -128,6 +128,7 @@ const json = body => ({contentType: 'application/json', body: JSON.stringify(bod
       const ran = await page.evaluate(() => ({inline: window.__inline, handler: window.__handler, base: document.baseURI}));
       assert.equal(ran.inline, undefined, 'inline script ran'); assert.equal(ran.handler, undefined, 'inline handler ran');
       assert.equal(ran.base, site.base + '/', 'foreign base applied');
+      for (let i = 0; i < 50 && !seen.violations.includes('form-action'); i++) await page.waitForTimeout(100);  // the blocked navigation reports a moment after the click
       const got = new Set(seen.violations);
       for (const d of ['script-src-elem', 'script-src-attr', 'style-src-attr', 'style-src-elem', 'img-src', 'object-src', 'form-action', 'base-uri', 'connect-src'])
         assert.ok(got.has(d), 'expected a ' + d + ' violation, saw ' + [...got].join(','));
