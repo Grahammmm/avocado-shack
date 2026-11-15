@@ -325,12 +325,17 @@ class ClubCaptureTests(StoreTestCase):
             "wrong words": page.replace(para, MANIFESTO.format(OTHER)),
             "cut words": page.replace(para, MANIFESTO.format("Mornings on the &quot;North Coast&quot;")),
             "duplicate": page.replace(para, para + para),
-            "hidden": page.replace(para, para.replace("<p ", '<p style="display:none" ')),
-            "invisible": page.replace(para, para.replace("<p ", '<p style="visibility:hidden" ')),
         }
-        for name, text in cases.items():
+        hide = page.replace('<link rel="stylesheet" href="/style.css">',
+                            '<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/hide-test.css">')
+        self.assertNotEqual(hide, page)
+        sheets = {"hidden": b"p.club-manifesto{display:none}", "invisible": b"p.club-manifesto{visibility:hidden}"}
+        files = {name: {HIKE: text.encode("utf-8")} for name, text in cases.items()}
+        # AV1052-03: the page CSP blocks inline style="", so hiding comes from a same-origin stylesheet
+        files.update({name: {HIKE: hide.encode("utf-8"), "storefront-mockup/hide-test.css": css} for name, css in sheets.items()})
+        for name, overlay in files.items():
             with self.subTest(name=name):
-                self.assert_failed(self.capture(files={HIKE: text.encode("utf-8")}))
+                self.assert_failed(self.capture(files=overlay))
 
     def test_malformed_target_cannot_produce_success(self):
         for intro in (5, None, ["x"]):
