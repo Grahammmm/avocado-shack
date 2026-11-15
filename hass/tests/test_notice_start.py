@@ -104,6 +104,15 @@ class SetFirstDayTests(StoreTestCase):
             self.assertTrue(found and all(p.startswith("store.notice") for p in found), (bad, found))
 
 
+class DraftWordsTests(unittest.TestCase):
+    def test_owner_reads_the_first_day_of_a_notice_set_ahead(self):
+        from hass.voice import value_words
+        notice = {"text": TEXT, "from": "2026-11-20", "until": "2026-11-26"}
+        self.assertEqual(value_words(notice, "notice"), f"{TEXT} (from November 20 until November 26)")
+        self.assertEqual(value_words({"text": TEXT, "until": "2026-11-26"}, "notice"), f"{TEXT} (until November 26)")
+        self.assertEqual(value_words({**notice, "extra": 1}, "notice"), "more than I can show here")
+
+
 class RenderTests(unittest.TestCase):
     def render(self, notice, today):
         content = load_content()
