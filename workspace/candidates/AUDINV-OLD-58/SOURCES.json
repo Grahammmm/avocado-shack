@@ -1,0 +1,234 @@
+{
+  "schema_version": 1,
+  "base": "b83d3615a2ff8802c5b82339b7802e6e62c8d97d",
+  "captured_at": "2026-11-15T23:20:57.355961+00:00",
+  "digests": {
+    "hass/__init__.py": "e75032048a53d5032a5c5fd9b1f0158a704e36a9eb27ebcf3992c45e0269bb5e",
+    "hass/content_model.py": "61e0ac69b09f75bfc87a68928b0d59d20ef45712cdbbf7bcfd4baedf9dd1c192",
+    "hass/notice.py": "e5fd8dd8f3be123541bd9d96e042180d0aa754258e63e29291ccdfd0d391f3aa",
+    "hass/preview.py": "73c7aad13efb2552e9d56515115e744c0c4a736b39e23b8d3f46ab1aa9eed867",
+    "hass/screenshot.cjs": "0bb12c91e388f2de90a71eba571598aa5db1e86ad7a27d30ddfac015cf870176",
+    "storefront-mockup/community-server.py": "7da0fb5d639efc0ebd28765c5c15e16ba6328eb7b8f8bbd3833ff22355378e30"
+  },
+  "receipt": {
+    "browser": "156.0.8078.4",
+    "rows": [
+      {
+        "id": "synthetic-a",
+        "viewport": "phone",
+        "got": {
+          "name": "Synthetic apple",
+          "description": "Synthetic crisp apple",
+          "maker": "Fixture Orchard A",
+          "place": "Based in Fixture Town A",
+          "story": "Grown for the synthetic browser trial A.",
+          "src": "assets/products/synthetic-a.png",
+          "current": "http://127.0.0.1:42021/assets/products/synthetic-a.png",
+          "width": 2,
+          "height": 2,
+          "status": 200,
+          "sha256": "c83a11ef877d346e794ea7d36c0d41921243c0498a25e4badc13975fa1d4291b"
+        },
+        "checks": {
+          "name": true,
+          "description": true,
+          "maker": true,
+          "place": true,
+          "story": true,
+          "src": true,
+          "response": true,
+          "decoded": true,
+          "identity": true
+        },
+        "ok": true
+      },
+      {
+        "id": "synthetic-b",
+        "viewport": "phone",
+        "got": {
+          "name": "Synthetic bean",
+          "description": "Synthetic green bean",
+          "maker": "Fixture Orchard B",
+          "place": "Based in Fixture Town B",
+          "story": "Grown for the synthetic browser trial B.",
+          "src": "assets/products/synthetic-b.png",
+          "current": "http://127.0.0.1:42021/assets/products/synthetic-b.png",
+          "width": 2,
+          "height": 2,
+          "status": 200,
+          "sha256": "2230a7cdaee208f76f0907ada8f3f918f08586cdd2ea33bad82735eed1b22e57"
+        },
+        "checks": {
+          "name": true,
+          "description": true,
+          "maker": true,
+          "place": true,
+          "story": true,
+          "src": true,
+          "response": true,
+          "decoded": true,
+          "identity": true
+        },
+        "ok": true
+      },
+      {
+        "id": "synthetic-a",
+        "viewport": "desktop",
+        "got": {
+          "name": "Synthetic apple",
+          "description": "Synthetic crisp apple",
+          "maker": "Fixture Orchard A",
+          "place": "Based in Fixture Town A",
+          "story": "Grown for the synthetic browser trial A.",
+          "src": "assets/products/synthetic-a.png",
+          "current": "http://127.0.0.1:42021/assets/products/synthetic-a.png",
+          "width": 2,
+          "height": 2,
+          "status": 200,
+          "sha256": "c83a11ef877d346e794ea7d36c0d41921243c0498a25e4badc13975fa1d4291b"
+        },
+        "checks": {
+          "name": true,
+          "description": true,
+          "maker": true,
+          "place": true,
+          "story": true,
+          "src": true,
+          "response": true,
+          "decoded": true,
+          "identity": true
+        },
+        "ok": true
+      },
+      {
+        "id": "synthetic-b",
+        "viewport": "desktop",
+        "got": {
+          "name": "Synthetic bean",
+          "description": "Synthetic green bean",
+          "maker": "Fixture Orchard B",
+          "place": "Based in Fixture Town B",
+          "story": "Grown for the synthetic browser trial B.",
+          "src": "assets/products/synthetic-b.png",
+          "current": "http://127.0.0.1:42021/assets/products/synthetic-b.png",
+          "width": 2,
+          "height": 2,
+          "status": 200,
+          "sha256": "2230a7cdaee208f76f0907ada8f3f918f08586cdd2ea33bad82735eed1b22e57"
+        },
+        "checks": {
+          "name": true,
+          "description": true,
+          "maker": true,
+          "place": true,
+          "story": true,
+          "src": true,
+          "response": true,
+          "decoded": true,
+          "identity": true
+        },
+        "ok": true
+      }
+    ],
+    "blocked": [
+      {
+        "url": "https://example.invalid/never",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:42021/api/community/subscriptions",
+        "method": "POST"
+      },
+      {
+        "url": "http://127.0.0.1:1/never",
+        "method": "GET"
+      },
+      {
+        "url": "https://example.invalid/never",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:42021/api/community/subscriptions",
+        "method": "POST"
+      },
+      {
+        "url": "http://127.0.0.1:1/never",
+        "method": "GET"
+      }
+    ],
+    "cases": {
+      "phone:wrong_maker": true,
+      "phone:stale_story": true,
+      "phone:broken_image": true,
+      "phone:wrong_src": true,
+      "phone:wrong_bytes": true,
+      "phone:external_get": true,
+      "phone:post": true,
+      "phone:other_loopback_port": true,
+      "desktop:wrong_maker": true,
+      "desktop:stale_story": true,
+      "desktop:broken_image": true,
+      "desktop:wrong_src": true,
+      "desktop:wrong_bytes": true,
+      "desktop:external_get": true,
+      "desktop:post": true,
+      "desktop:other_loopback_port": true
+    },
+    "run_state": "completed",
+    "baseline": {
+      "synthetic-a:phone": {
+        "productShown": true,
+        "description": true,
+        "imageShown": true,
+        "noPageErrors": true,
+        "noPosts": true
+      },
+      "synthetic-a:desktop": {
+        "productShown": true,
+        "description": true,
+        "imageShown": true,
+        "noPageErrors": true,
+        "noPosts": true
+      },
+      "synthetic-b:phone": {
+        "productShown": true,
+        "description": true,
+        "imageShown": true,
+        "noPageErrors": true,
+        "noPosts": true
+      },
+      "synthetic-b:desktop": {
+        "productShown": true,
+        "description": true,
+        "imageShown": true,
+        "noPageErrors": true,
+        "noPosts": true
+      }
+    },
+    "baseline_wrong_second_record": {
+      "phone": {
+        "productShown": true,
+        "description": true,
+        "imageShown": true,
+        "noPageErrors": true,
+        "noPosts": true
+      },
+      "desktop": {
+        "productShown": true,
+        "description": true,
+        "imageShown": true,
+        "noPageErrors": true,
+        "noPosts": true
+      }
+    },
+    "empty_database": true,
+    "writer_unchanged": true,
+    "status": "PASS"
+  },
+  "missing": [
+    "physical phone",
+    "live site",
+    "owner semantic acceptance",
+    "editor-to-proposal journey"
+  ]
+}
