@@ -73,6 +73,74 @@ def _phone_html(d) -> str:  # only validated digits reach the href; "" without a
     return f'<p class="visit-phone"><a href="tel:+1{d}">{phone_text(d)}</a></p>' if d else ""
 
 
+_HOURS_DAY = "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)"
+_HOURS_RANGE = f"{_HOURS_DAY}(?: *[-\u2013] *{_HOURS_DAY})?"
+_HOURS_TIME = "(1[0-2]|[1-9])(?::([0-5][0-9]))?(am|pm)"
+_HOURS_OPEN = re.compile(f"{_HOURS_RANGE} +{_HOURS_TIME} *[-\u2013] *{_HOURS_TIME}")
+_HOURS_CLOSED = re.compile(f"Closed +{_HOURS_RANGE}")
+
+
+def _hours_minutes(hour: str, minute: str | None, half: str) -> int:
+    return (int(hour) % 12 + (12 if half == "pm" else 0)) * 60 + int(minute or 0)
+
+
+def _hours_clause(clause: str) -> dict | None:
+    """{day index: {"closed": True} or {"opens", "closes"}} for one clause, None when it does not read."""
+    m = _HOURS_CLOSED.fullmatch(clause)
+    entry = {"closed": True}
+    if not m:
+        m = _HOURS_OPEN.fullmatch(clause)
+        if not m:
+            return None
+        opens, closes = _hours_minutes(*m.group(3, 4, 5)), _hours_minutes(*m.group(6, 7, 8))
+        if opens >= closes:
+            return None
+        entry = {"opens": opens, "closes": closes}
+    start = _DAYS.index(m.group(1))
+    end = _DAYS.index(m.group(2)) if m.group(2) else start
+    if m.group(2) and start >= end:  # a range climbs Monday to Sunday: no wrap, no one-day "range"
+        return None
+    return {day: dict(entry) for day in range(start, end + 1)}
+
+
+def parse_hours(lines) -> dict:
+    """AV1104-03: read the weekly hours lines with one strict rule. Returns {"days": seven Monday-first entries (None = day
+    not named, {"closed": True}, or {"opens": minutes, "closes": minutes}) or None, "errors": [{"line": 1-based, "text": line}]}.
+
+    A line is clauses joined by U+00B7: ``<Day>`` or ``<Day>-<Day>`` (ascending; hyphen or en dash) then ``<time>-<time>``
+    (hour 1-12, optional :MM, lowercase am/pm, opening before closing), or ``Closed <Day or range>``. One line that does
+    not read, or a day named twice anywhere, leaves ``days`` None: never a partial week. Bad input never raises."""
+    if not isinstance(lines, list):
+        return {"days": None, "errors": []}
+    week: dict[int, dict] = {}
+    errors = []
+    for number, line in enumerate(lines, 1):
+        found: dict[int, dict] = {}
+        ok = isinstance(line, str)
+        for clause in line.split("\u00b7") if ok else ():
+            got = _hours_clause(clause.strip())
+            if got is None or found.keys() & got.keys() or week.keys() & got.keys():
+                ok = False
+                break
+            found.update(got)
+        if ok:
+            week.update(found)
+        else:
+            errors.append({"line": number, "text": line})
+    if errors or not week:
+        return {"days": None, "errors": errors}
+    return {"days": [week.get(day) for day in range(7)], "errors": []}
+
+
+def _hours_status_html(hours) -> str:
+    """The weekly times as data for the page script, never a finished Open/Closed sentence; empty when a line does not read."""
+    days = parse_hours(hours)["days"]
+    if days is None:
+        return ""
+    data = json.dumps(days, separators=(",", ":"))
+    return f'<p class="micro visit-open-status" hidden data-weekly-hours="{html.escape(data, quote=True)}"></p>'
+
+
 def _check_state(store: dict, today):
     """(check date or None, stale?) where stale means older than STALE_AFTER_DAYS at generation date ``today``."""
     day = checked_on(store)
@@ -171,6 +239,7 @@ def store_slots(store: dict, today=None) -> dict[str, str]:
         "store.addressLine": html.escape(f"{street}, {town}", quote=False),
         "store.addressShort": html.escape(f"{street} · {town}", quote=False),
         "store.hoursHtml": "<br>".join(html.escape(line, quote=False) for line in store["hours"]),
+        "store.hoursStatusHtml": _hours_status_html(store["hours"]),
         "store.phoneHtml": _phone_html(store.get("phone")),
         "store.jsonLd": local_business_json(store),
         "store.mapsUrl": html.escape(maps, quote=True),

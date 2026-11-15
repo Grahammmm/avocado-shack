@@ -427,6 +427,98 @@ await open('');
   const mk=await page.evaluate(()=>{const m={};catalog.forEach(p=>{if(p.category==='pantry')m[p.brand]=(m[p.brand]||0)+1});return Object.keys(m).sort()[0]});
   await page.locator('#brand-filter').selectOption(mk);r=await cards();assert.ok(r.length>0&&r.every(c=>!isProduce(c.cat,c.id)),'maker filter inside packaged');await page.locator('#clear-filters').click();
  }
+ // AV1104-03: the sentence under the Visit hours. Real sitegen output (hass.tests.visit_hours_fixtures) is served for its own ?visitfixture= document requests only (assets stay same-origin), under fixed browser clocks and visitor zones; each expected sentence is written out here, not derived from the data.
+ {const fixtures=JSON.parse(require('child_process').execFileSync('python3',['-B','-m','hass.tests.visit_hours_fixtures'],{cwd:require('path').resolve(__dirname,'..'),maxBuffer:1<<26,encoding:'utf8'}));
+  const all=[];
+  const open=async(name,iso,o={})=>{
+   const ctx=await browser.newContext({viewport:{width:o.width||390,height:900},timezoneId:o.tz||'UTC',javaScriptEnabled:o.js!==false}),pg=await ctx.newPage(),errs=[],reqs=[];all.push(errs);
+   pg.on('pageerror',e=>errs.push(e.message));pg.on('request',r=>reqs.push(r.url()));
+   const html=o.edit?o.edit(fixtures[name]):fixtures[name];
+   await pg.route(u=>new URL(u).searchParams.get('visitfixture')===name,r=>r.request().resourceType()==='document'?r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:html}):r.continue());
+   if(o.js!==false)await pg.clock.install({time:new Date(iso)});
+   if(o.init)await pg.addInitScript(o.init);
+   await pg.goto(base+'/?visitfixture='+name);await pg.waitForSelector('#catalog-grid article',{state:'attached',timeout:o.js===false?1:10000}).catch(()=>{});
+   const state=()=>pg.evaluate(()=>{const e=document.querySelector('.visit-open-status');return e?{text:e.textContent,hidden:e.hidden,nodes:document.querySelectorAll('.visit-open-status').length}:null});
+   return {ctx,pg,errs,reqs,state};
+  };
+  const says=async(name,iso,want,o)=>{const t=await open(name,iso,o);const s=await t.state();
+   if(want===null)assert.equal(s,null,`${name} ${iso}: no status node`);
+   else if(want==='')assert.ok(s&&s.hidden&&s.text==='',`${name} ${iso}: hidden and empty, got ${JSON.stringify(s)}`);
+   else assert.ok(s&&!s.hidden&&s.text===want,`${name} ${iso}: want "${want}", got ${JSON.stringify(s)}`);
+   await t.ctx.close();return t.errs;};
+  // Boundaries on the canonical hours (Monday-Friday 9am-6pm, Saturday 9am-5pm, closed Sunday). Pacific is UTC-8 from Nov 1 2026.
+  await says('main','2026-11-16T16:59:10Z','Closed now - opens Monday 9am');   // Mon 08:59
+  await says('main','2026-11-16T17:00:10Z','Open now - closes 6pm');           // Mon 09:00 (opening is open)
+  await says('main','2026-11-17T01:59:10Z','Open now - closes 6pm');           // Mon 17:59
+  await says('main','2026-11-17T02:00:10Z','Closed now - opens Tuesday 9am');  // Mon 18:00 (closing is closed)
+  await says('main','2026-11-21T02:00:10Z','Closed now - opens Saturday 9am'); // Fri 18:00
+  await says('main','2026-11-21T20:00:10Z','Open now - closes 5pm');           // Sat 12:00
+  await says('main','2026-11-22T01:00:10Z','Closed now - opens Monday 9am');   // Sat 17:00
+  await says('main','2026-11-22T20:00:10Z','Closed now - opens Monday 9am');   // Sun 12:00
+  await says('minutes','2026-11-16T17:29:10Z','Closed now - opens Monday 9:30am');
+  await says('minutes','2026-11-16T17:30:10Z','Open now - closes 12pm');
+  await says('minutes','2026-11-16T20:00:10Z','Closed now - opens Tuesday 9:30am');
+  await says('minutes','2026-11-21T04:00:10Z','Closed now - opens Monday 9:30am'); // Fri 20:00, Saturday and Sunday closed
+  // Nothing said: all closed, a day no line names (today, or between now and the next opening), a line that does not read.
+  await says('all_closed','2026-11-16T20:00:10Z','');
+  await says('no_sunday','2026-11-22T20:00:10Z','');
+  await says('no_sunday','2026-11-21T20:00:10Z','Open now - closes 5pm');
+  await says('no_saturday','2026-11-21T20:00:10Z','');
+  await says('no_saturday','2026-11-21T02:00:10Z','');                         // Fri 18:00: next day unnamed
+  await says('no_saturday','2026-11-20T20:00:10Z','Open now - closes 6pm');
+  await says('unreadable','2026-11-16T20:00:10Z',null);                        // another line read; the page still says nothing
+  await says('unreadable_first','2026-11-16T20:00:10Z',null);
+  // The visitor's own zone changes nothing: the same instant, three zones; and the Pacific date, not the UTC one, picks the day.
+  for(const tz of ['UTC','Asia/Tokyo','America/New_York'])await says('main','2026-11-17T04:00:10Z','Closed now - opens Tuesday 9am',{tz});  // Mon 20:00 Pacific; Tue in UTC and Tokyo
+  for(const tz of ['UTC','Asia/Tokyo'])await says('main','2026-11-16T17:00:10Z','Open now - closes 6pm',{tz});
+  // Pacific daylight time: Mar 9 2026 is PDT (UTC-7), Nov 2 2026 is PST (UTC-8); a fixed offset would get one of each wrong.
+  await says('main','2026-03-08T00:59:10Z','Open now - closes 5pm');           // Sat Mar 7 16:59 PST
+  await says('main','2026-03-09T16:00:10Z','Open now - closes 6pm');           // Mon Mar 9 09:00 PDT
+  await says('main','2026-03-09T15:30:10Z','Closed now - opens Monday 9am');   // 08:30 PDT
+  await says('main','2026-11-02T16:30:10Z','Closed now - opens Monday 9am');   // Mon Nov 2 08:30 PST
+  await says('main','2026-10-31T23:59:10Z','Open now - closes 5pm');           // Sat Oct 31 16:59 PDT
+  // A page left open: it follows the clock across closing and across Pacific midnight, with no new node or request.
+  {const t=await open('main','2026-11-17T01:59:00Z');assert.equal((await t.state()).text,'Open now - closes 6pm');
+   const seen=t.reqs.length;await t.pg.clock.fastForward(90000);assert.equal((await t.state()).text,'Closed now - opens Tuesday 9am');
+   await t.pg.evaluate(()=>{window.dispatchEvent(new Event('pageshow'));document.dispatchEvent(new Event('visibilitychange'))});
+   const s=await t.state();assert.equal(s.text,'Closed now - opens Tuesday 9am');assert.equal(s.nodes,1);assert.equal(t.reqs.length,seen,'no request after updates');await t.ctx.close();}
+  // Home notice: any wording silences it on each of its days (inclusive), never before or after; an unreadable notice date silences it.
+  await says('holiday_notice','2026-11-25T04:00:10Z','Closed now - opens Wednesday 9am');  // Tue 20:00, two days before
+  await says('holiday_notice','2026-11-26T04:00:10Z','Closed now - opens Thursday 9am');  // Wed 20:00, the day before
+  await says('holiday_notice','2026-11-26T07:59:10Z','Closed now - opens Thursday 9am');  // Wed 23:59
+  await says('holiday_notice','2026-11-26T08:00:10Z','');                                  // Thu 00:00, first day
+  await says('holiday_notice','2026-11-26T20:00:10Z','');                                  // Thu noon
+  await says('holiday_notice','2026-11-27T07:59:10Z','');                                  // Thu 23:59, last day
+  await says('holiday_notice','2026-11-27T08:00:10Z','Closed now - opens Friday 9am');     // Fri 00:00, restored
+  await says('legacy_notice','2026-11-25T20:00:10Z','');                                   // notice with no first day: already started
+  await says('legacy_notice','2026-11-29T07:59:10Z','');                                   // Sat 23:59, its last day
+  await says('legacy_notice','2026-11-29T20:00:10Z','Closed now - opens Monday 9am');      // Sun, it has ended
+  await says('bad_notice_dates','2026-11-25T20:00:10Z','');
+  // Notice dates must be real days in order: an impossible day or a first day after the last silences the status, like any unreadable date (Mon Nov 16 noon Pacific, no valid notice reaches it).
+  const notice=(f,u)=>({edit:h=>h.replace(/data-from="2026-11-26" data-until="2026-11-26"/,(f===null?'':`data-from="${f}" `)+`data-until="${u}"`)});
+  await says('holiday_notice','2026-11-16T20:00:10Z','Open now - closes 6pm');                         // control: the real notice is days away
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-11-20','2026-11-10'));          // from after until
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-11-10','2026-11-31'));          // impossible last day
+  await says('holiday_notice','2026-12-02T20:00:10Z','',notice('2026-11-10','2026-11-31'));          // and still silent after that day
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-02-30','2026-11-20'));          // impossible first day
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice(null,'2026-02-29'));                  // 2026 is not a leap year
+  await says('holiday_notice','2026-11-16T20:00:10Z','',notice('2026-13-01','2026-13-02'));          // no month 13
+  await says('holiday_notice','2026-11-16T20:00:10Z','Open now - closes 6pm',notice('2026-11-20','2026-11-20')); // one real day in the future: status stays
+  {const t=await open('holiday_notice','2026-11-27T07:59:30Z');assert.equal((await t.state()).text,'');await t.pg.clock.fastForward(60000);
+   assert.equal((await t.state()).text,'Closed now - opens Friday 9am','the notice ends at Pacific midnight and the status returns');await t.ctx.close();}
+  // Without JavaScript the empty node stays hidden and the hours are untouched; a broken schedule or missing Intl hides, quietly.
+  {const t=await open('main','2026-11-16T20:00:10Z',{js:false});const s=await t.state();assert.ok(s&&s.hidden&&s.text==='','no JavaScript: nothing shown');
+   assert.match(await t.pg.locator('.visit').innerText(),/Monday–Friday 9am–6pm\nSaturday 9am–5pm · Closed Sunday/);await t.ctx.close();}
+  await says('main','2026-11-16T20:00:10Z','',{edit:h=>h.replace(/data-weekly-hours="[^"]*"/,'data-weekly-hours="[1,2]"')});
+  await says('main','2026-11-16T20:00:10Z','',{edit:h=>h.replace(/data-weekly-hours="[^"]*"/,'data-weekly-hours="[]"')});
+  await says('main','2026-11-16T20:00:10Z','',{edit:h=>h.replace(/data-weekly-hours="[^"]*"/,'')});
+  await says('main','2026-11-16T20:00:10Z','',{init:()=>{const D=Intl.DateTimeFormat;Intl.DateTimeFormat=function(l,o){if(o&&o.hourCycle==='h23')throw new RangeError('no formatter');return new D(l,o)}}});
+  // Layout at both widths with the original lines still there.
+  for(const width of [390,1440]){const t=await open('main','2026-11-16T20:00:10Z',{width});
+   assert.equal((await t.state()).text,'Open now - closes 6pm');assert.match(await t.pg.locator('.visit').innerText(),/Monday–Friday 9am–6pm\nSaturday 9am–5pm · Closed Sunday\n+Open now - closes 6pm/);
+   assert.equal(await t.pg.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal overflow at '+width);await t.ctx.close();}
+  assert.ok(all.every(e=>e.length===0),'visit hours pages raise no page errors: '+JSON.stringify(all.flat()));
+ }
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
  const result={checkedAt:new Date().toISOString(),staleAvailabilityChecks,makerAvailabilityChecks,all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
