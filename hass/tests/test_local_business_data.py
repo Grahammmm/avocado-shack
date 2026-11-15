@@ -34,6 +34,10 @@ class LocalBusinessJsonLd(unittest.TestCase):
         expected = {"@context": "https://schema.org", "@type": "GroceryStore", "name": store["name"],
                     "address": {"@type": "PostalAddress", "streetAddress": store["streetAddress"],
                                 "addressLocality": store["town"], "addressRegion": "CA", "addressCountry": "US"}}
+        expected["openingHoursSpecification"] = [  # AV1922-05: the two canonical hours lines, pinned in test_opening_hours_data
+            {"@type": "OpeningHoursSpecification", "dayOfWeek": "https://schema.org/" + day,
+             "opens": "09:00", "closes": "17:00" if day == "Saturday" else "18:00"}
+            for day in ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")]
         self.assertEqual(json.loads(_block(_render(phone=None)[HOME])), expected)
 
     def test_phone_set_and_cleared(self):
@@ -41,7 +45,7 @@ class LocalBusinessJsonLd(unittest.TestCase):
         self.assertEqual(data["telephone"], "+1-805-555-0123")
         self.assertIn('"telephone":"+1-805-555-0123"', _block(_render(phone="8055550123")[HOME]))
         self.assertNotIn("telephone", json.loads(_block(_render(phone=None)[HOME])))
-        self.assertNotIn("hours", _block(_render()[HOME]))
+        self.assertNotIn("hours", _block(_render(hours=["Open when we are"])[HOME]))  # AV1922-05: unreadable hours add nothing
 
     def test_hostile_store_text_cannot_close_the_script(self):
         name = "</script><script>alert(1)</script>"
