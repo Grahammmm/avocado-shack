@@ -40,7 +40,11 @@ class FixtureChatLabelTests(unittest.TestCase):
         _settings(self.repo, **SETTINGS, mediaRoot=str(self.repo.media))
 
     def run_main(self, *extra, photos=True, patched=True):
-        argv = ["--state", str(self.repo.state), "--fixture", str(DEMO), "--interpreter", str(MAPPING), *extra]
+        rows = [json.loads(line) for line in DEMO.read_text("utf-8").splitlines()]
+        rows[0]["text"] = ""  # a caption that identifies the product no longer needs the label reader
+        fixture = self.repo.state.parent / "label-photo.jsonl"
+        fixture.write_text("".join(json.dumps(row) + "\n" for row in rows), "utf-8")
+        argv = ["--state", str(self.repo.state), "--fixture", str(fixture), "--interpreter", str(MAPPING), *extra]
         if photos: argv += ["--photos", str(MEDIA)]
         out, err = io.StringIO(), io.StringIO()
         with contextlib.ExitStack() as stack:
