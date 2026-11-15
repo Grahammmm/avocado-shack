@@ -14,7 +14,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 
 from hass import editor as editor_mod, memory as memory_mod, migration_check, preview as preview_mod, sitegen  # noqa: E402
 from hass import claims, interpret_check, label_reader, margins, media, morning_report, morning_report as shelf, owner_answers as answers, social_draft  # noqa: E402
-from hass.content_model import HOME_IMAGE_RE, MAX_NOTICE, SHELF_LABELS, ContentError, _read_json, _text as checked_text, checked_on, iso_day, load_and_validate, load_content, shop_today, validate  # noqa: E402
+from hass.content_model import HOME_IMAGE_RE, MAX_NOTICE, SHELF_LABELS, ContentError, _read_json, _text as checked_text, checked_on, load_and_validate, load_content, notice_days, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, voice  # noqa: E402
@@ -1249,17 +1249,22 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         """AV1937-07 (H13/H17): the one saved home-page notice and its last day for `status` and `report`, or None.
         Read-only: the writer worktree's store.json only (never the generated page, the interpreter or a write). Active through
         its last Pacific day, then it says it is no longer shown; the saved notice is never changed. A missing, unreadable or
-        invalid notice gives None, and a product-facts failure elsewhere does not matter."""
+        invalid notice gives None, and a product-facts failure elsewhere does not matter.
+        AV2152-08: a notice with its own first day names both days (before the first day: "not shown yet")."""
         try:
             notice = _read_json(editor_mod._load(str(self.sdir))[2] / "hass" / "content" / "store.json")["notice"]
             problems = []
-            if not isinstance(notice, dict) or set(notice) != {"text", "until"}: return None
+            days = notice_days(notice)
+            if days is None: return None
             checked_text(problems, "text", notice["text"], limit=MAX_NOTICE)
-            last = iso_day(notice["until"])
-            if problems or last is None or sum(c.isalpha() for c in notice["text"]) < 3: return None
+            first, last = days
+            if problems or sum(c.isalpha() for c in notice["text"]) < 3: return None
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError): return None
-        day = sitegen._day_text(last)
-        return f"Home notice: {notice['text']} - " + (f"through {day}" if last >= shop_today(now) else f"ended {day}; no longer shown")
+        day, today = sitegen._day_text(last), shop_today(now)
+        if first is None:
+            return f"Home notice: {notice['text']} - " + (f"through {day}" if last >= today else f"ended {day}; no longer shown")
+        span = f"from {sitegen._day_text(first)} through {day}"
+        return f"Home notice: {notice['text']} - {span}" + ("; not shown yet" if today < first else "" if today <= last else "; no longer shown")
 
     def _ask_shelf(self, msg, now, result, earlier, skill_names=()) -> str:
         """HASS-SHELFCHECK-FLOW-1: the change was refused only because today's shelf check is missing (none, or older than
