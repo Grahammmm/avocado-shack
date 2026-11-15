@@ -31,7 +31,7 @@ class HelpTextTests(unittest.TestCase):
                 self.assertEqual(example.split()[0], word)  # the example belongs to its own line
                 self.assertIsNotNone(verb(example))
         self.assertEqual({verb(ex) for _, ex in pairs}, parser_verbs())  # incl. alias and help; no extra verb
-        self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs) - 3)  # one line per verb; AV1222-11: post has two (product, hike); SKILLS-FW-3: forget has two (a note, backlog.3)
+        self.assertEqual(len({verb(ex) for _, ex in pairs}), len(pairs) - 3)  # one line per verb; AV1222-11: post has two examples on its one line (AV1937-10: the id forms, then the maker one); SKILLS-FW-3: forget has two (a note, backlog.3)
 
     def test_limits_and_plain_text(self):
         self.assertLessEqual(len(LINES), 25)  # earlier lines: photos to take, listing, hidden, post hike, cost, show, report, post, margin; SKILLS-FW-3: + the backlog line; AV2152-03: + the again line
@@ -40,6 +40,14 @@ class HelpTextTests(unittest.TestCase):
             self.assertFalse(set(line) & set("*_`#"), line)  # plain text, no markdown
         self.assertIsNone(verb(re.search(r'"([^"]+)"', LINES[0])[1]))  # the plain-words example is a change
         self.assertIn('"Stop showing the eggs as sold out"', LINES[0])  # AV1622-05
+
+    def test_one_post_line_names_product_hike_and_maker(self):
+        """AV1937-10: one post line (no second verb line, no new line), at most 70 characters, whose maker example parses as post."""
+        [line] = [ln for ln in LINES if ln.startswith("post ")]
+        self.assertEqual(line, "post <id>/hike <id>/maker <key> - drafts: post maker fixture-farm")
+        self.assertLessEqual(len(line), 70)
+        self.assertEqual([verb(ex) for w, ex in examples() if w == "post"], ["post", "post"])
+        self.assertEqual(conversation.parse_command("post maker fixture-farm"), ("post", "maker fixture-farm"))
 
     def test_help_wordings_parse_and_lookalikes_do_not(self):
         for text in ("help", "Help!", "commands.", "?", " HELP ", "Commands!"):

@@ -4,6 +4,7 @@ AVB-12: moved verbatim out of hass/conversation.py, which imports every name bac
 unchanged). Pure functions; no state.
 """
 import re
+import unicodedata
 
 from hass import memory as memory_mod
 from hass.chat.shared import ALIAS_NAME_MAX, q
@@ -42,7 +43,7 @@ HELP_TEXT = "\n".join(("Tell me what to change, in your own words. For example: 
     q("alias jam: Linn's blueberry preserves") + " - a nickname for a product or maker",
     q("cost Hass avocado: 24 for 12") + " - the price you pay, kept private",
     q("margin Hass avocado at 35%") + " - a price idea from the cost you saved",
-    q("post Hass avocado") + " or " + q("post hike Point Buchon") + " - a caption to copy; I post nothing",
+    q("post <id>/hike <id>/maker <key>") + " - drafts: " + q("post maker fixture-farm"),  # AV1937-10: one post line; nothing is posted
     q("listing Etto") + " - what's shown for one thing; " + q("hidden") + " lists what's hidden",
     q("show") + " and a word from the change - repeat a waiting change",
     q("help") + " - this list"))
@@ -92,9 +93,26 @@ def parse_near(text: str):
     return None if not match else match[2] or ""
 
 
+POST_MAKER_RE = re.compile(r"post\s+maker(?:(\s+)(.*))?", re.IGNORECASE | re.DOTALL)  # AV1937-10: whole words only
+
+
+def _post_maker(text: str):
+    """AV1937-10 (F07): ("post", "maker <key>") when the message is `post maker <key>`, else None. The key is the whole rest
+    of the message with outer white space trimmed, in its own case with its spaces, apostrophes and a final . or !; it is
+    read from the original text, before any punctuation is removed. No key, or a line break or control character
+    anywhere after `maker`, gives ("post", "maker"): the usage reply."""
+    found = POST_MAKER_RE.fullmatch(text.strip())
+    if not found: return None
+    rest = (found[1] or "") + (found[2] or "")
+    key = (found[2] or "").strip()
+    if not key or any(unicodedata.category(c) in ("Cc", "Zl", "Zp") for c in rest): return "post", "maker"
+    return "post", "maker " + key
+
+
 def parse_command(text: str, *, listing_names=False):
     """("undo", code or None) or (history|status|pause|resume|help, None) when the whole message is that command;
     otherwise None."""
+    if maker := _post_maker(text): return maker  # AV1937-10: before the general punctuation rule, which would cut a key's . or !
     match = COMMAND_RE.fullmatch(re.sub(r"[.!]+$", "", text.strip().lower()))
     if not match: return None
     if match[22]: return "again", (match[23] or "").strip()  # AV2152-03: the rest as sent (lower-cased); _again accepts only a code
@@ -163,6 +181,7 @@ def _asked(text: str):
 def read_command(text: str, *, listing_names=False):
     """AV1352-05 (H17): parse_command, but a closing ? is dropped for a read-only command only (never yes/no, undo, stop,
     resume); anything else keeps today's reading of the original text."""
+    if maker := _post_maker(text): return maker  # AV1937-10: a key keeps even a closing ?
     cut = _asked(text)
     found = parse_command(cut, listing_names=listing_names) if cut else None
     return found if found and found[0] in READ_ONLY else parse_command(text, listing_names=listing_names)
