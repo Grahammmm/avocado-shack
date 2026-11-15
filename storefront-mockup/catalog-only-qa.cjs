@@ -11,8 +11,114 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  assert.doesNotMatch(await page.locator('body').innerText(),/\$\d|add to basket|pickup|local delivery|weekly boxes|online shop|merchandise|Discover this food|Food & maker story/i);
  const countText=async()=>(await page.locator('#catalog-count').textContent()).split(' \u00b7 ')[0],fullCount=await countText();assert.equal(fullCount,(await page.evaluate(()=>catalog.length))+' selections');
  const defaultCount=(await page.evaluate(()=>catalog.filter(p=>!['fruit','vegetables','flowers'].includes(p.category)||p.id==='photo-product-018').length))+' selections';
+ // AV1052-01: description search on synthetic catalogs (served for catalog-products.js and producers.js only; no file on disk changes). Expected ids are written out, not read from filteredProducts().
+ const descriptionSearchChecks=[];
+ {
+  const IMG='assets/products/photo-product-001.webp',dAgo=n=>{const d=new Date(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-n);return d.toISOString().slice(0,10)};
+  const P=(id,name,o={})=>({id,name,brand:'Acme',category:'pantry',image:IMG,description:'Plain.',producerKey:null,...o});
+  const PRODUCERS={GoatRock:{name:'Rock Dairy',place:'Goat Rock, California'},Straus:{name:'Straus',place:'Marshall, California'},ZF:{name:'Zed Farm',place:'Zorbville, California'}};
+  const dropRoutes=async()=>{for(const f of ['catalog-products','producers'])await page.unroute(`**/${f}.js`).catch(()=>{});await page.unroute('**/assets/logo-header.png').catch(()=>{});await (await page.context().newCDPSession(page)).send('Network.clearBrowserCache')};
+  const serve=async(prods,fresh=null)=>{await dropRoutes();
+   await page.route('**/catalog-products.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;catalog.length=0;catalog.push(...${JSON.stringify(prods)});${fresh?`catalogFreshness.selectionCheckedOn=${JSON.stringify(fresh)};`:''}`})});
+   await page.route('**/producers.js',async r=>{const res=await r.fetch();r.fulfill({response:res,body:(await res.text())+`;Object.assign(producers,${JSON.stringify(PRODUCERS)});`})})};
+  const go=async qs=>{await page.goto(base+'/'+qs);await page.waitForSelector('#catalog-grid article, #catalog-sentinel')};
+  const st=()=>page.evaluate(()=>({box:$('#product-search').value,q:new URLSearchParams(location.search).get('q'),order:filteredProducts().map(p=>p.id),cards:[...document.querySelectorAll('#catalog-grid article')].map(a=>a.dataset.productId),count:$('#catalog-count').textContent,visible:visibleCount}));
+  const params=()=>page.evaluate(()=>{const o=Object.fromEntries(new URLSearchParams(location.search));delete o.view;return {params:o,hash:location.hash}});
+  const same=(a,b)=>require('util').isDeepStrictEqual(a,b);
+  const search=async(t,want,label)=>{await page.locator('#product-search').fill(t);const s=await st();
+   assert.ok(same(s.order,want),`${label}: '${t}' wants ${want.join(',')} got ${s.order.join(',')}`);assert.ok(same(s.cards,want.slice(0,12)),`${label}: '${t}' draws the same cards in the same order`);
+   assert.equal(s.count,`${want.length} selections · ${Math.min(12,want.length)} shown`,`${label}: '${t}' count line`);return s};
+  // Source order interleaves description-only (s01, s05, s10), metadata-only (s02 name, s06 brand, s07 town, s08 shelf, s09 badge), both (s03) and neither (s04).
+  const F1=[P('s01','Plain Loaf',{category:'bread',description:'Made with goat milk and honey.'}),P('s02','Goat Cheese',{category:'dairy',description:'Fresh and mild.'}),P('s03','Honey Goat Jar',{description:'Goat honey, gluten free.'}),P('s04','Rye',{category:'bread',description:'Seeded.'}),
+   P('s05','Oat Bar',{description:'Sweet with Goat milk caramel.'}),P('s06','Butter',{brand:'Goatsbeard Farm',category:'dairy',description:'Cultured.'}),P('s07','Soap',{producerKey:'GoatRock',description:'Lavender.'}),P('s08','Cold Brew',{category:'drinks',description:'Smooth.'}),
+   P('s09','Plain Milk',{category:'dairy',producerKey:'Straus',description:'Raw whole milk.'}),P('s10','Flour',{description:'Gluten-free flour mix.'})];
+  const F1ALL=F1.map(p=>p.id);
+  const checks={
+   descriptionSearchTiers:async()=>{await serve(F1);await go('?view=all');const before=await page.evaluate(()=>JSON.stringify(catalog));
+    await search('goat',['s02','s03','s06','s07','s01','s05'],'name, both, brand and town first; description-only after, each in source order');
+    await search('honey',['s03','s01'],'a card in both groups appears once, in the first');
+    await search('gluten',['s03','s10'],'description-only');
+    await search('goatsbeard',['s06'],'brand');await search('goat rock',['s07'],'town');await search('drinks',['s08'],'shelf');await search('dairy',['s02','s06','s09'],'shelf');await search('organic',['s09'],'badge');
+    await search('organic raw',[],'no match across the badge and the description');await search('coffee smooth',[],'no match across the shelf and the description');await search('zzzz',[],'unmatched');
+    await search('',F1ALL,'empty term');await search('   ',F1ALL,'blank term');
+    assert.ok(same(await page.evaluate(()=>JSON.stringify(catalog)),before),'the catalog records are unchanged');
+    assert.ok(same(await page.evaluate(()=>catalog.map(p=>p.id)),F1ALL),'the catalog order is unchanged');
+    await dropRoutes();await go('?view=all');const base0=await page.evaluate(()=>catalog.map(p=>p.id));
+    for(const t of ['goat','honey','gluten']){const meta=await page.evaluate(t=>catalog.filter(p=>`${p.name} ${p.brand} ${maker(p)?.place||''}`.toLowerCase().includes(t)).map(p=>p.id),t),desc=await page.evaluate(([t,m])=>catalog.filter(p=>!m.includes(p.id)&&p.description.toLowerCase().includes(t)).map(p=>p.id),[t,meta]);
+     if(t!=='gluten')assert.ok(desc.length>0,t+' has description-only cards in the real catalog');
+     const want=[...base0.filter(i=>meta.includes(i)),...base0.filter(i=>desc.includes(i))];await page.locator('#product-search').fill(t);const s=await st();assert.ok(same(s.order,want),'real catalog '+t);}
+    await page.locator('#product-search').fill('');},
+   descriptionSearchFoldAndCap:async()=>{const A='\u{1f951}',dlg=[];const onDialog=d=>{dlg.push(d.message());d.dismiss()};page.on('dialog',onDialog);
+    const F2=[P('f01','Log',{category:'dairy',description:'Tangy Ch\u00e8vre rounds, GOAT milk.'}),P('f02','Loaf',{category:'bread',description:'Baker\u2019s sourdough.'}),P('f03','Roll',{category:'bread',description:"Baker's glaze."}),(()=>{const p=P('f04','Mystery');delete p.description;return p})(),P('f05','Blank',{description:''}),
+     P('f06','Pit',{description:A.repeat(80)+'z'}),P('f07','Stone',{description:A.repeat(79)+'q'}),P('f08','Glaze',{description:'<img src=x onerror=alert(1)> glaze'}),P('f09','Granola',{description:'Honey, gluten-free and GLUTEN safe.'})],ALL=F2.map(p=>p.id);
+    try{await serve(F2);await go('?view=all');
+     for(const t of ['chevre','CHEVRE','Ch\u00e8vre','CH\u00c8VRE'])await search(t,['f01'],'accents and case fold');await search('goat',['f01'],'case');
+     for(const t of ["baker's",'baker\u2019s','BAKER\u2018S','baker\u02bcs'])await search(t,['f02','f03'],'straight and curly apostrophes fold alike');await search('bakers',[],'no apostrophe stays unmatched');
+     for(const t of ['gluten','GLUTEN','Gluten-Free'])await search(t,['f09'],'case');await search('honey',['f09'],'honey');
+     await search('undefined',[],'an absent description is searchable as nothing');await search('null',[],'an absent description is searchable as nothing');
+     await search('',ALL,'empty term');await search('  \t ',ALL,'blank term');assert.equal(await page.locator('[data-product-id="f04"] .food-description').textContent(),'');
+     await search('zzz',[],'unmatched');
+     // The 80 code point limit: the box, the results and the address agree; typed, pasted and ?q= give one result.
+     const live=async enter=>{await go('?view=all');await page.locator('#product-search').focus();await enter();return st()};
+     const typed=await live(()=>page.keyboard.insertText(A.repeat(80)+'y'));
+     assert.equal([...typed.box].length,80,'box cut to 80 code points');assert.equal(typed.q,A.repeat(80));assert.ok(same(typed.order,['f06']),'the 81st code point is ignored');
+     await page.reload();await page.waitForSelector('#catalog-grid article, #catalog-sentinel');assert.ok(same(await st(),typed),'reload restores the same search');
+     await go('?view=all&q='+encodeURIComponent(A.repeat(100)));{const r=await st();assert.ok(same([r.box,r.order,r.cards,r.count],[typed.box,typed.order,typed.cards,typed.count]),'?q= and typed text agree');}
+     const exact=await live(()=>page.keyboard.insertText(A.repeat(79)+'q'));assert.equal([...exact.box].length,80);assert.ok(same(exact.order,['f07']),'exactly 80 code points is kept whole');
+     await go('?view=all&q='+encodeURIComponent(A.repeat(79)+'q'));assert.ok(same(await st(),exact),'?q= with 80 code points agrees');
+     // Hostile text is data: nothing is drawn as markup and no dialog opens.
+     await go('?view=all');await search('onerror',['f08'],'hostile description');
+     assert.equal(await page.locator('#catalog-grid img[src="x"]').count(),0);assert.equal(await page.locator('[data-product-id="f08"] .food-description').textContent(),'<img src=x onerror=alert(1)> glaze');
+     await go('?view=all&q='+encodeURIComponent('<img src=x onerror=alert(1)>'));await page.waitForTimeout(150);assert.ok(same((await st()).order,['f08']),'hostile ?q= matches the description as text');assert.equal(await page.locator('#catalog-grid img[src="x"]').count(),0);
+     assert.equal(dlg.length,0,'no dialog: '+dlg.join('|'));
+    }finally{page.off('dialog',onDialog)}},
+   descriptionSearchKeepsNewOrder:async()=>{const N=(id,name,ago,o={})=>P(id,name,{...(ago===null?{}:{addedOn:dAgo(ago)}),...o});
+    // Source order: o1 old/name, nd1 New 3 days/description, nm1 + nm2 New 1 day/name (tie), nd2 New today/description, od1 old/description, om1 old/name.
+    const F3=[N('o1','Goat Soap',null),N('nd1','Plain Jar',3,{description:'Goat milk.'}),N('nm1','Goat Fudge',1),N('nm2','Goat Butter',1),N('nd2','Plain Tin',0,{description:'Goat milk.'}),N('od1','Plain Pot',null,{description:'Goat milk.'}),N('om1','Goat Lotion',null)];
+    await serve(F3);await go('?view=all');const before=await page.evaluate(()=>JSON.stringify(catalog)),src=await page.evaluate(()=>catalog.map(p=>p.id));
+    await search('',['nd2','nm1','nm2','nd1','o1','od1','om1'],'New first, newest first, ties in source order');
+    await search('goat',['nm1','nm2','o1','om1','nd2','nd1','od1'],'older metadata hits come before New description-only hits; New first inside each group');
+    await search('milk',['nd2','nd1','od1'],'description-only group keeps New first');await search('lotion',['om1'],'metadata');
+    assert.ok(same(await page.evaluate(()=>catalog.map(p=>p.id)),src),'the source array order is unchanged');assert.ok(same(await page.evaluate(()=>JSON.stringify(catalog)),before),'the records are unchanged');
+    await go('?view=all&q=goat');assert.ok(same((await st()).order,['nm1','nm2','o1','om1','nd2','nd1','od1']),'?q= restores the same two groups');
+    await page.locator('#product-search').fill('goat');assert.ok(same((await st()).cards,['nm1','nm2','o1','om1','nd2','nd1','od1']),'drawn in the same order');},
+   descriptionSearchFiltersAndPaging:async()=>{const T=dAgo(0),G=[];
+    for(let i=0;i<60;i++){const k=i%4;G.push(P('g'+String(i).padStart(2,'0'),k===0?`Honey item ${i}`:`Plain item ${i}`,{brand:i%2?'Acme':'Bolt',category:['pantry','dairy','bread'][i%3],producerKey:i%5===0?'ZF':null,description:k===3?'Salty.':`Sweet honey ${i}.`,availabilityState:i%7<3?'yes':'no',availabilityCheckedOn:T}))}
+    const want=(f={})=>{const rows=G.filter(p=>(!f.shelf||p.category===f.shelf)&&(!f.brand||p.brand===f.brand)&&(!f.from||p.producerKey===f.from)&&(!f.avail||p.availabilityState==='yes'));
+     return [...rows.filter(p=>p.name.toLowerCase().includes('honey')),...rows.filter(p=>!p.name.toLowerCase().includes('honey')&&p.description.toLowerCase().includes('honey'))].map(p=>p.id)};
+    await serve(G,T);
+    const cases=[{},{shelf:'pantry'},{brand:'Acme'},{from:'ZF'},{avail:true},{shelf:'dairy',brand:'Bolt',avail:true},{shelf:'bread',brand:'Acme',from:'ZF',avail:true}];
+    assert.ok(want().length>24,'fixture: more than two pages across both groups');assert.ok(cases.some(f=>want(f).length===0)&&cases.some(f=>want(f).length>0),'fixture: a combined filter with no match, and some with matches');
+    for(const f of cases){const w=want(f),label=JSON.stringify(f);
+     await go('?view=all'+(f.from?'&from='+f.from:''));if(f.shelf)await page.locator(`[data-filter="${f.shelf}"]`).click();if(f.brand)await page.locator('#brand-filter').selectOption(f.brand);if(f.avail)await page.locator('#avail-filter').check();
+     await page.locator('#product-search').fill('honey');let s=await st();
+     assert.ok(same(s.order,w),label+': both groups, filters applied');assert.ok(same(s.cards,w.slice(0,12)),label+': first page');assert.equal(s.count,`${w.length} selections · ${Math.min(12,w.length)} shown`,label+': count line');
+     while(s.visible<w.length){await page.evaluate(()=>loadMore());s=await st();assert.ok(same(s.cards,w.slice(0,s.visible)),label+': each page continues the same order');}
+     assert.equal(new Set(s.cards).size,s.cards.length,label+': no duplicates');assert.ok(same(s.cards,w),label+': no gaps');assert.equal(s.count,`${w.length} selections · ${w.length} shown`,label+': all shown');
+     await page.locator('#product-search').fill('zzz');s=await st();assert.equal(s.count,'0 selections · 0 shown');assert.equal(s.cards.length,0);
+     await page.locator('#product-search').fill('honey');s=await st();assert.ok(same(s.cards,w.slice(0,12)),label+': a new search starts again at the first page');}},
+   descriptionSearchRestoreAndItem:async()=>{await serve(F1);const GOAT=['s02','s03','s06','s07','s01','s05'];
+    for(const width of [390,1440]){await page.setViewportSize({width,height:900});
+     await go('?utm=x&q=goat&view=all#market');let s=await st();assert.equal(s.box,'goat');assert.ok(same(s.order,GOAT)&&same(s.cards,GOAT),width+': ?q= restores the two groups');
+     assert.ok(same(await params(),{params:{utm:'x',q:'goat'},hash:'#market'}),'unrelated params and hash untouched');
+     await page.reload();await page.waitForSelector('#catalog-grid article');assert.ok(same((await st()).cards,GOAT),'reload keeps the order');
+     await page.locator('#product-search').fill('honey');assert.ok(same(await params(),{params:{utm:'x',q:'honey'},hash:'#market'}));assert.ok(same((await st()).cards,['s03','s01']));
+     // A valid item wins over the search, exactly as before; an invalid one leaves the two-group search.
+     await go('?item=s05&q=goat&view=all');await page.waitForFunction(()=>document.activeElement?.dataset?.productId==='s05',null,{timeout:5000});s=await st();assert.equal(s.box,'','a valid item clears the search');assert.ok(same(s.cards,F1ALL));
+     await go('?item=nope&q=goat&view=all');s=await st();assert.ok(same(s.cards,GOAT),'an unknown item leaves the two-group search');assert.equal(await page.locator('#catalog-item-status').isVisible(),true);
+     // A filter edit before the page finishes loading cancels the pending item focus.
+     let release;const held=new Promise(r=>{release=r});await page.route('**/assets/logo-header.png',async route=>{await held;await route.continue()});
+     await page.goto(base+'/?item=s05&view=all#market',{waitUntil:'domcontentloaded'});await page.locator('#product-search').fill('goat');release();await page.waitForLoadState('load');await page.waitForTimeout(300);
+     s=await st();assert.ok(same(s.order,GOAT),'typing after an item link searches both groups');assert.equal(await page.evaluate(()=>document.activeElement?.dataset?.productId??null),null,'no deferred focus');assert.equal((await params()).params.item,undefined);
+     await page.unroute('**/assets/logo-header.png');}}
+  };
+  try{for(const [name,check] of Object.entries(checks)){await check();descriptionSearchChecks.push(name)}}finally{await dropRoutes()}
+  await page.setViewportSize({width:390,height:844});await go('?view=all');assert.equal(await countText(),fullCount,'real catalog restored after the description search fixtures');
+ }
  await page.locator('#product-search').fill('Cambria');const count=await page.locator('#catalog-grid article').count();assert.ok(count>0);
- assert.ok((await page.locator('#catalog-grid .origin-label').allTextContents()).every(t=>t.includes('Cambria')));
+ {const cam=await page.evaluate(()=>catalog.filter(p=>maker(p)?.place.includes('Cambria')).length),labels=await page.locator('#catalog-grid .origin-label').allTextContents();
+  assert.ok(cam>0&&labels.slice(0,cam).every(t=>t.includes('Cambria')),'every Cambria card comes first');
+  assert.ok(await page.evaluate(()=>[...document.querySelectorAll('#catalog-grid article')].slice(catalog.filter(p=>maker(p)?.place.includes('Cambria')).length).every(a=>fold(catalog.find(p=>p.id===a.dataset.productId).description).includes('cambria'))),'any card after them is there for its description');}
  assert.ok(await page.locator('#catalog-grid .maker-story a[href^="https://"]').count());
  const story=page.locator('#catalog-grid details.maker-story').first(),summary=story.locator('summary');
  assert.equal(await story.evaluate(e=>e.open),false);assert.equal(await story.locator('p').isVisible(),false);
@@ -22,21 +128,24 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  // Product imagery no longer opens a separate dialog.
  await page.locator('#catalog-grid .product-image').first().click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),false);
  // RF1650-8: accents and curly apostrophes are folded in both the search term and the product text.
- const q=async t=>{await page.locator('#product-search').fill(t);return page.evaluate(()=>({n:filteredProducts().length,ids:filteredProducts().map(p=>p.id).sort(),cards:document.querySelectorAll('#catalog-grid article').length,names:[...document.querySelectorAll('#catalog-grid article h3')].map(e=>e.textContent)}))};
+ const q=async t=>{await page.locator('#product-search').fill(t);return page.evaluate(()=>({n:filteredProducts().length,ids:filteredProducts().map(p=>p.id).sort(),cards:document.querySelectorAll('#catalog-grid article').length,names:[...document.querySelectorAll('#catalog-grid article h3')].map(e=>e.textContent),order:filteredProducts().map(p=>p.id)}))};
  for(const [t,want] of [['jalapenos','Jalape\u00f1os'],['JALAPE\u00d1OS','Jalape\u00f1os'],['chevre','Ch\u00e8vre'],['montana','Monta\u00f1a']]){const r=await q(t);assert.ok(r.cards>0&&r.names.some(n=>n.includes(want)),t);}
-// AV1222-01: search also matches the shelf name and the Organic badge, never descriptions.
+// AV1222-01: search matches the shelf name and the Organic badge; AV1052-01: and descriptions, but only after every card whose own words match.
  const ids=(f)=>page.evaluate(f),sameSet=(a,b)=>JSON.stringify([...a].sort())===JSON.stringify([...b].sort());
+ // The first tier is exactly the cards whose name, brand, town, shelf or badge match (meta); the second is exactly the other cards whose description says it.
+ const tiered=async(t,meta,label)=>{const r=await q(t),n=meta.length,extra=await page.evaluate(([t,meta])=>catalog.filter(p=>!meta.includes(p.id)&&fold(p.description).includes(fold(t))).map(p=>p.id),[t,meta]);
+  assert.ok(sameSet(r.order.slice(0,n),meta),label+': metadata hits come first');assert.ok(sameSet(r.order.slice(n),extra),label+': then exactly the description-only cards');assert.equal(r.cards,Math.min(12,r.order.length),label+': drawn cards');return r};
  const orgWant=await ids(()=>catalog.filter(p=>organic(p)||/organic/i.test(`${p.name} ${p.brand} ${maker(p)?.place||''}`)).map(p=>p.id));assert.ok(orgWant.length>3);
- for(const t of ['organic','ORGANIC','Organic'])assert.ok(sameSet((await q(t)).ids,orgWant),t+' finds exactly the badged cards');
+ for(const t of ['organic','ORGANIC','Organic'])await tiered(t,orgWant,t+' finds the badged cards');
  const shelfWant=(s,w)=>page.evaluate(([s,w])=>catalog.filter(p=>p.category===s||`${p.name} ${p.brand} ${maker(p)?.place||''}`.toLowerCase().includes(w)).map(p=>p.id),[s,w]);
- assert.ok(sameSet((await q('flowers')).ids,await shelfWant('flowers','flowers')),'flowers');
- for(const [t,s] of [['dairy & cheese','dairy'],['drinks','drinks']]){const want=await shelfWant(s,t),got=(await q(t)).ids;assert.ok(want.length&&sameSet(got,want),t);}
+ await tiered('flowers',await shelfWant('flowers','flowers'),'flowers');
+ for(const [t,s] of [['dairy & cheese','dairy'],['drinks','drinks']]){const want=await shelfWant(s,t);assert.ok(want.length,t);await tiered(t,want,t);}
  for(const t of ['shelves','all shelves'])assert.equal((await q(t)).n,0,t+' matches no card');
  const descOnly=await ids(()=>{const labels=[...document.querySelectorAll('[data-filter]')].map(b=>b.textContent).join(' ');const h=p=>`${p.name} ${p.brand} ${maker(p)?.place||''} ${labels} organic`.toLowerCase();return catalog.flatMap(p=>String(p.description).toLowerCase().match(/[a-z]{6,}/g)||[]).find(w=>!catalog.some(p=>h(p).includes(w)))||''});
- assert.ok(descOnly);assert.equal((await q(descOnly)).n,0,'description-only word matches nothing');
+ assert.ok(descOnly);{const want=await page.evaluate(w=>catalog.filter(p=>fold(p.description).includes(w)).map(p=>p.id),descOnly),r=await q(descOnly);assert.ok(want.length>0&&sameSet(r.order,want)&&r.cards>0,'a word only in descriptions finds exactly those cards');}
  await page.locator('#product-search').fill('');
  const lion=await page.evaluate(()=>catalog.filter(p=>/lion\u2019s mane/i.test(p.name)).map(p=>p.id).sort());assert.equal(lion.length,2);
- for(const t of ["lion's",'lion\u2019s','LION\u2018S','lion\u02bcs']){const r=await q(t);assert.deepEqual(r.ids,lion,t);assert.equal(r.cards,2,t);}
+ for(const t of ["lion's",'lion\u2019s','LION\u2018S','lion\u02bcs']){const r=await tiered(t,lion,t);assert.ok(sameSet(r.order.slice(0,2),lion),t);}
  assert.equal((await q('lions')).n,0,'lions without an apostrophe stays unmatched (pinned)');
  const ca=await page.evaluate(()=>catalog.filter(p=>producers[p.producerKey]?.place.includes('California\u2019s')).map(p=>p.id));
  if(ca.length){const r=await q("california's");assert.ok(ca.every(id=>r.ids.includes(id)),"california's");}else console.log("NOTE: no catalog product's maker is placed in California\u2019s; california's check skipped");
@@ -521,5 +630,5 @@ await open('');
  }
  await page.getByRole('button',{name:'Privacy',exact:true}).click();assert.equal(await page.locator('#dialog').evaluate(e=>e.open),true);await page.keyboard.press('Escape');
  assert.deepEqual(errors,[]);
- const result={checkedAt:new Date().toISOString(),staleAvailabilityChecks,makerAvailabilityChecks,all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
+ const result={checkedAt:new Date().toISOString(),staleAvailabilityChecks,makerAvailabilityChecks,descriptionSearchChecks,all,duplicates:0,townSearch:count,sourceFiltersRemoved:true,introductionUpdated:true,productFacts,commerceRemoved:true,fullFoodAndMakerStoriesInline:true,makerStoriesCollapsed:true,disclosureKeyboardAndClick:true,producerLinksPreserved:true,productDialogRemoved:true,privacyDialogPreserved:true,viewports,errors};fs.writeFileSync(out+'/catalog-only-QA.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

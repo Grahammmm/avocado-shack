@@ -75,7 +75,14 @@ const searchText=s=>[...String(s||'').trim()].slice(0,80).join('').trim();
 function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew(p,now)}));
  d.sort((x,y)=>x.n!==y.n?(x.n?-1:1):x.n&&x.p.addedOn!==y.p.addedOn?(x.p.addedOn>y.p.addedOn?-1:1):x.i-y.i);return d.map(x=>x.p)}
 function drawCards(l){pinNow=renderNow;try{return l.map(card).join('')}finally{pinNow=null}}
-function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;return orderedProducts().filter(p=>inView(p)&&(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability))&&fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))}
+// AV1052-01: a search term also matches the description, after the card's own words. One stable pass splits the ordered list:
+// name, brand, town, shelf or Organic badge first, then description-only hits (a card in both groups appears once, in the first).
+// The two texts are folded and searched separately, so a term never matches across the end of one and the start of the other.
+function filteredProducts(){const term=fold(searchText($('#product-search').value)),brand=$('#brand-filter').value;
+ const list=orderedProducts().filter(p=>inView(p)&&(!activeFrom||p.producerKey===activeFrom)&&(activeCategory==='all'||p.category===activeCategory)&&(!brand||p.brand===brand)&&(!availBox?.checked||AVAIL.has(p.availability)));
+ if(!term)return list;const first=[],second=[];
+ for(const p of list){if(fold(`${p.name} ${p.brand} ${maker(p)?.place||''} ${SHELF[p.category]||''} ${organic(p)?'Organic':''}`).includes(term))first.push(p);else if(fold(p.description).includes(term))second.push(p)}
+ return first.concat(second)}
 // RF0854-13: once a render re-ages every word to Last confirmed, the Available today control is retired as a reload would:
 // unchecked, removed, and only ?avail dropped (replaceState; other params, hash and item state untouched). Whole catalog, not the results.
 function retireStaleAvail(){if(!availBox||catalog.some(p=>CURRENT.has(p.availability)))return false;availBox.checked=false;availBox.closest('.avail-filter').remove();availBox=null;
