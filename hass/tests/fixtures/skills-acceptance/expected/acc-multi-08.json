@@ -15,6 +15,7 @@
     },
     {
       "after": {
+        "from": "2026-11-08",
         "text": "New tamales on Fridays",
         "until": "2026-11-20"
       },

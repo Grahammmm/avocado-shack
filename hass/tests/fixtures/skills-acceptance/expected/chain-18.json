@@ -5,6 +5,7 @@
       "file": "hass/content/store.json",
       "path": "notice",
       "after": {
+        "from": "2026-11-08",
         "text": "We're closed Thanksgiving, back Friday.",
         "until": "2026-11-27"
       }
