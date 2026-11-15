@@ -441,7 +441,7 @@ PUBLISH_GENERATED = ("index.html", "hike/index.html", "catalog-products.js", "pr
 # Slot-free pages rendered only for the published site (never by render(): the editor and --check pin its output).
 PUBLISH_PAGES = ("404.html",)
 PUBLISH_STATIC = ("style.css", "hiking.css", "trail-explorer.css", "script.js", "shop.js", "community.js",
-                  "trail-explorer.js", "hiking-preview.json")
+                  "trail-explorer.js", "hiking-preview.json", "notice.js", "specials.js", "banner.js")
 PUBLISH_ASSETS = ("assets/logo-header.png", "assets/favicon.png", "assets/store.jpg", "assets/michael.jpg", "assets/trails/point-buchon.json",
                   "assets/trails/point-buchon-coast.webp", "assets/trails/point-buchon-aerial.webp",
                   "assets/trails/point-buchon-topo.webp")
