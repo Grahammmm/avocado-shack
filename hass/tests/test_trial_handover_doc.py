@@ -120,7 +120,7 @@ class TrialHandoverDocTests(unittest.TestCase):
 
     def test_documented_ops_exist_with_current_arguments(self):
         registry = load_registry()
-        expected = {"store.set_notice": {"text", "until"}, "store.clear_notice": set(),
+        expected = {"store.set_notice": {"text", "from", "until"},  # AV2152-08: optional first day "store.clear_notice": set(),
                     "store.set_home_image": {"photo", "imageAlt"}, "route.hide": {"id"}, "route.restore": {"id"},
                     "route.add": set(ROUTE_EDITABLE) | {"sourceUrl", "sourceName"}}
         for name, args in expected.items():
