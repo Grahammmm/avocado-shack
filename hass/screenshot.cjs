@@ -94,6 +94,12 @@ const allowed=req=>{
           checks.cancelNoteShown=notes.length===1&&notes[0].shown&&notes[0].text===target.cancelNote&&notes[0].next==='This hike is cancelled. Nothing else is needed from you.';
         }
       }
+    }else if(target.kind==='club'){  // AV2152-09: exactly one visible manifesto paragraph on /hike, equal to the whole expected text
+      await page.goto(base+'/hike',{waitUntil:'networkidle'});
+      const ws=v=>String(v).replace(/\s+/g,' ').trim();
+      const found=await page.$$eval('p.club-manifesto',els=>els.map(p=>({text:p.textContent,shown:!!(p.offsetWidth||p.offsetHeight)&&getComputedStyle(p).visibility!=='hidden'})));
+      await page.evaluate(()=>{const p=[...document.querySelectorAll('p.club-manifesto')].find(e=>e.offsetWidth||e.offsetHeight);if(p)p.scrollIntoView({block:'center'});});
+      checks.clubIntroShown=typeof target.intro==='string'&&found.length===1&&found[0].shown&&ws(found[0].text)===ws(target.intro);
     }else if(target.kind==='route'){  // AV1222-06: every place /hike shows this route (linked hike cards' Route line, the sample invitation) reads the title; compared as text in page JS
       await page.goto(base+'/hike',{waitUntil:'networkidle'});
       const got=await page.evaluate(async id=>{

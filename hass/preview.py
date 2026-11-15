@@ -11,7 +11,7 @@ A damaged change record gives the target ``{"kind": "unreadable"}``, refused bef
 import http.client, json, os, re, shutil, socket, stat, subprocess, sys, tempfile, time  # noqa: E401
 from pathlib import Path, PurePosixPath
 
-from hass.content_model import DEFAULT_INTRO, shop_today
+from hass.content_model import DEFAULT_CLUB_INTRO, DEFAULT_INTRO, shop_today
 from hass.content_model import active_specials
 from hass.notice import live_text, window_target
 SCRIPT = Path(__file__).resolve().parent / "screenshot.cjs"
@@ -43,6 +43,8 @@ def _readable(record) -> bool:
     if not (headline is None or isinstance(headline, list) and all(isinstance(h, str) for h in headline)):
         return False
     if collection == "store" and not all(isinstance(after.get(k), (str, type(None))) for k in ("story", "intro")):
+        return False
+    if collection == "club" and "intro" in after and not isinstance(after["intro"], str):  # AV2152-09: a stored non-text intro
         return False
     home = after.get("homeImage") if collection == "store" else None
     if not (home is None or isinstance(home, dict) and isinstance(home.get("image"), (str, type(None)))):
@@ -134,6 +136,8 @@ def target_for(record: dict, today=None, *, store=None) -> dict:
                 "intro": after.get("intro"), **line,
                 "homeImage": (after.get("homeImage") or {}).get("image"), "notice": live_text(after.get("notice"), day), **extra,
                 **({"noticeWindow": w} if (w := window_target(after.get("notice"), day)) else {})}
+    if collection == "club":  # AV2152-09: /hike's one manifesto paragraph (no intro stored = the default); never the event fallback
+        return {"kind": "club", "intro": after.get("intro", DEFAULT_CLUB_INTRO)}
     if collection == "routeIdeas":  # AV1222-06: /hike shows a route title only on a linked hike's Route line or the sample invitation
         return {"kind": "route", "id": record.get("key") or "", "title": after.get("title", ""), "hidden": after.get("status") == "hidden"}
     event = collection == "events"  # a hike: its key and recap let the check find it in past hikes / RSVP buttons
