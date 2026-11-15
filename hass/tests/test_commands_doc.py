@@ -97,6 +97,20 @@ class CommandsDocTest(unittest.TestCase):
         self.assertEqual(conv.parse_memory("remember Parking: Use the back lot!"),
                          ("remember", "parking", "Use the back lot!"))
 
+    def test_post_maker_row_and_key_punctuation(self):
+        """AV1937-10: `post maker <key>` is one row whose example parses back to post; its key keeps . ! ? and its case."""
+        [(send, example, line)] = [r for r in self.table if r[0].startswith("`post maker")]
+        self.assertEqual((send, verb(re.findall(r"`([^`]+)`", example)[0])), ("`post maker <key>`", "post"))
+        self.assertEqual(conv.parse_command("post maker fixture-farm"), ("post", "maker fixture-farm"))
+        cell = " ".join(line.split())
+        for phrase in ("Draft post (not posted; copy it yourself):", "Nothing is posted, scheduled or saved", "works while paused",
+                       "a final `.`, `!` or `?` is part of the key", "no interpreter call", "There is no photo"):
+            self.assertIn(phrase, cell)
+        doc = " ".join(DOC.read_text("utf-8").split())
+        self.assertIn("`post maker <key>` is the one other exception", doc)
+        self.assertEqual(conv.parse_command("post maker Bang Farm!"), ("post", "maker Bang Farm!"))
+        self.assertEqual(conv.parse_command("post Hass avocado!"), ("post", "Hass avocado"))  # every other post still loses a final ! or .
+
     def test_again_row_contract(self):
         """AV2152-03: `again <code>` is a parser verb with one row whose example parses back to it and names its rules."""
         self.assertIn("again", self.verbs)

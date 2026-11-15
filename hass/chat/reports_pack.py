@@ -13,6 +13,11 @@ from hass.content_model import ContentError, load_and_validate, shop_today
 from hass.ops import catalog
 
 POST_USAGE = "Which product is the post for? Say it like " + q("post Hass avocado") + "."  # AV1322-07
+MAKER_USAGE = "Send " + q("post maker") + " and a maker key; " + q("find <words>") + " gives keys."  # AV1937-10
+MAKER_REFUSALS = {"no such maker": "No maker {id}; send " + q("find <words>") + " for keys.",
+                  "not on the site": "Maker {id} is hidden; nothing to draft.",
+                  "no active products": "Maker {id} has no active products on the site."}  # other reasons: "Cannot draft a post for {id}: {reason}."
+MAKER_CANT_READ = q("Catalog unavailable right now; nothing changed.")  # the spec's exact line; quoted so the voice list of tech words ("catalog") leaves it alone
 HIKE_USAGE = "Which hike is the post for? Say it like " + q("post hike Point Buchon") + "."  # AV1222-11
 HIKE_REFUSALS = {"no such hike": "I don't know a hike called {id}. Try " + q("find") + " and a word from its name.",
                  "hike is cancelled": "{id} is cancelled, so there is nothing to announce.",
@@ -98,6 +103,7 @@ class ReportsPack:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             return True
         words = text.split()
+        if words[0].lower() == "maker": return True  # AV1937-10: a maker key may be several words; it is never a sentence
         if words[0].lower() == "hike" and len(words) == 2: return True  # one id after 'hike': the usual 'I don't know a hike' answer
         if words[0].lower() == "hike": return self._pick_hike(content, text[4:].strip()) != text[4:].strip()
         return self._pick("product", text, content) != text
@@ -106,6 +112,7 @@ class ReportsPack:
         """AV1322-07 (F07 prepare half): social_draft's caption for one active product plus its site photo, from the
         writer worktree content. Read-only: nothing is posted, scheduled, written or drafted; works while paused."""
         photo = None
+        if pid.lower().split(None, 1)[:1] == ["maker"]: return self._post_maker(pid[5:].strip())  # AV1937-10: before the product-id fallback
         if pid.lower().split(None, 1)[:1] == ["hike"]: return self._post_hike(pid[4:].strip())
         try:
             if not pid: raise LookupError
@@ -126,6 +133,25 @@ class ReportsPack:
             self._problem("error", "shop-list-unreadable")
             text, photo = CANT_READ, None
         self._reply(text, [str(photo)] if photo else [], long_ok=True)
+        return "post"
+
+    def _post_maker(self, key) -> str:
+        """AV1937-10 (F07): social_draft.build_maker's caption for one maker key, exactly as the builder wrote it, in chat.
+        Read-only: nothing is posted, scheduled, stored or drafted; works while paused; no interpreter call or usage count."""
+        try:
+            if not key: raise LookupError
+            out = social_draft.build_maker(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), key)
+            if out["draft"]: text = "Draft post (not posted; copy it yourself):\n" + q(out["caption"])
+            elif out["reason"] == "cannot read content": raise OSError
+            elif out["reason"] in MAKER_REFUSALS: text = MAKER_REFUSALS[out["reason"]].format(id=q(key))
+            else:
+                text = f"Cannot draft a post for {q(key)}: {out['reason']}."
+                self._problem("could-not-do", "post-refused")
+        except LookupError: text = MAKER_USAGE
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
+            self._problem("error", "shop-list-unreadable")
+            text = MAKER_CANT_READ
+        self._reply(text, long_ok=True, ids_ok=True)
         return "post"
 
     def _post_hike(self, hid) -> str:
