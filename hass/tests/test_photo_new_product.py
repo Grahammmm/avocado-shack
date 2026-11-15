@@ -130,7 +130,7 @@ class PhotoNewProductTests(unittest.TestCase):
     def test_prompt_snapshot_holds_the_new_vs_existing_rule_once(self):
         rule = ("- When a pending draft is a photo question (product.set_photo), answer with exactly one of product.set_photo (a "
                 "listed product), product.add (a new product) or store.set_home_image (the home page), and set revises to its "
-                "code. Take imageAlt from the owner's words about the photo; never invent it.\n")
+                "code. A new product, new item or new thing means product.add: read its name and details from the owner's earlier texts too, and ask only for a value still missing. Take imageAlt from the owner's words about the photo; never invent it.\n")
         self.assertEqual(FIXTURE.read_text("utf-8").count(rule), 1)
         self.assertEqual(build(TEST_REGISTRY, tiny_content()).count(rule), 1)
 
