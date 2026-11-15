@@ -605,6 +605,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if not row["draft_hash"]: return False
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
+    def _earlier_outcome(self, row) -> str:
+        """AV2007-06: what became of the newest earlier draft with this row's hash: timed out, cancelled, couldn't save,
+        replaced, or (anything else) a neutral description. Only words the repeat warning uses; never changes admission."""
+        if not row["draft_hash"]: return "was written up"
+        earlier = self.db.execute("SELECT * FROM drafts WHERE draft_hash = ? AND row_id < ? ORDER BY row_id DESC LIMIT 1",
+                                  (row["draft_hash"], row["row_id"])).fetchone()
+        if earlier is None: return "was written up"
+        state = earlier["state"]
+        if state == "expired": return "timed out"
+        if state == "failed": return "I couldn't save"
+        if state == "rejected":
+            return "was replaced" if earlier["reason"] == "revised" or earlier["replaced_by"] else "you cancelled"
+        return "I wrote up"
+
     def _named(self, row) -> bool:
         """AV2152-03: a draft whose yes must name its code: a repeat of a closed hash (_repeat), or one made by `again <code>`
         (reason `again:<old code>`), whose hash can differ from every earlier draft's when the site's base moved."""
@@ -1029,7 +1043,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if code is None and self._named(target):  # a delayed bare `yes` must not approve a repeat of a closed draft, or an `again` draft
             again = str(target["reason"] or "").startswith("again:")
             self._reply((f"That change was written up again from an expired one, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it." if again else
-                         f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it."))
+                         f"That is the same change that {self._earlier_outcome(target)} earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it."))
             self._record(msg, "no-target")
             return "no-target", None
         if hasattr(self.editor, "check_environment") and (problem := self.editor.check_environment(target["change_id"])):
