@@ -275,7 +275,17 @@ EXACT_WARNINGS = (  # AV2137-04 (H04): on the original text, so the hike title k
 )
 
 
+_BRAND_LEFT = re.compile(r"(\d+) active product cards? of maker (.+?) still show (.+) as their brand; ask to change them too", re.S)
+
+
+def _brand_left(m) -> str:  # AV2137-03: the old name is the owner's own word, quoted as written; the internal maker key is not shown
+    one = m[1] == "1"
+    return (f"{m[1]} product {'card still shows' if one else 'cards still show'} {quote(m[3])} as the brand. "
+            f"Ask me to change {'it' if one else 'those'} too.")
+
+
 def explain_warning(technical) -> str:
+    if m := _BRAND_LEFT.fullmatch(str(technical or "")): return _brand_left(m)
     for rx, build in EXACT_WARNINGS:
         if m := rx.fullmatch(str(technical or "")): return build(m)
     text = str(technical or "").lower()
