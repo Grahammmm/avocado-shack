@@ -136,7 +136,7 @@ class RealRegistryTests(CatalogTestCase):
         line = next(x for x in prompt.splitlines() if "maker.add" in x)
         self.assertIn("url: url", line)
         self.assertNotIn("url: url, required", line)
-        self.assertIn("clearUrl: bool", next(x for x in prompt.splitlines() if "maker.edit" in x))
+        self.assertIn("clearUrl: bool", next(x for x in prompt.splitlines() if x.startswith("maker.edit(")))  # the operation line; AV1937-06's rule also names maker.edit
 
 
 NODE_CHECK = r"""
