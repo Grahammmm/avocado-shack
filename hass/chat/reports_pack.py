@@ -46,6 +46,8 @@ class ReportsPack:
         except (OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState, ContentError):
             self._problem("error", "report-unreadable")
             text = "I can't read the shelf report right now, so I can't tell you what's on the shelves. Nothing has changed."
+        notice = self._notice_line(now)  # AV1937-07: the home notice and its last day, once, before the waiting block
+        text += f"\n{notice}" if notice else ""
         waiting = self._waiting_lines(now) + [l for l in self._photo_lines(now) if "waiting for details" in l]
         self._reply(f"{text}\n\n" + "\n".join(["Waiting for you:"] + waiting if waiting else ["Nothing is waiting for you."])
                     + (f"\n\n{SHELF_ASK}" if ask else ""), long_ok=True)
