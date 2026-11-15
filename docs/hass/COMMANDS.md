@@ -67,7 +67,10 @@ exactly as written, above "This hike is cancelled." It is checked like other hik
 characters), and any claim in it, such as a distance or "organic", must come from your own message. Without a note the
 card is unchanged. Cancelling notifies nobody. `undo` brings the hike back as scheduled and removes the note.
 
-Photos: send one photo per message, as JPEG or PNG, up to 20 MB. A phone photo's rotation is kept, so it shows upright
+Photos: send 1 to 4 photos per message, as JPEG or PNG, up to 20 MB each. Each photo gets its own question and its own
+code, in the order you sent them; answer each one with its code, the place and what it shows. A caption sent with
+several photos is not read (the reply says so). If any one photo cannot be used, none of them is saved, and the reply
+names which. Five or more photos in one message are refused. A phone photo's rotation is kept, so it shows upright
 (only that rotation tag is kept, never its location, camera or date); only a PNG with a rotation tag is refused. Any
 other file, or a photo that is too large, incomplete or unreadable,
 gets a reply naming the limit, and nothing is saved or drafted.

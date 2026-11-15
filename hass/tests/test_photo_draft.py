@@ -150,7 +150,7 @@ class PhotoDraftTests(unittest.TestCase):
         self.assertEqual(old["state"], "applied")
 
     def test_several_attachments_and_refused_photos_store_and_draft_nothing(self):
-        self.assertEqual(self.say(attachments=2), "attachment-many")
+        self.assertEqual(self.say(attachments=5), "attachment-many")
         self.assertEqual(self.replies(), [media.REPLIES["many"]])
         self.assertEqual(self.photos.calls, [])
         for data, code in ((b"", "empty"), (b"GIF89a\x01\x00\x01\x00", "unsupported-type"), (JPG[:-2], "truncated")):

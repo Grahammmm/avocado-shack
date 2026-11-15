@@ -21,6 +21,7 @@ if __package__ in (None, ""): sys.path.insert(0, str(Path(__file__).resolve().pa
 from hass import editor  # noqa: E402
 
 MAX_BYTES = 20 * 1024 * 1024
+MAX_PHOTOS_PER_MESSAGE = 4  # AV2152-04 (H12): one message opens one coded draft per photo, up to this many
 SIDECAR_MAX = 64 * 1024  # a store-written sidecar is ~200 bytes; anything longer is invalid, never parsed
 KINDS = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG\r\n\x1a\n"}
 EXT = {"jpeg": "jpg", "png": "png"}
@@ -36,7 +37,7 @@ REPLIES = {
     "not-found": "I can't find that photo any more, so nothing changed. Could you send it again?",
     "unreadable": "I couldn't read that photo safely, so nothing changed. Could you send it again as a screenshot?",
     "needs-rotation": "That photo is sideways and I can't turn it, so nothing changed. Could you send it again as a screenshot?",
-    "many": "Please send one photo at a time. I haven't saved any of these.",  # NB-AV-10 (H12)
+    "many": f"Please send up to {MAX_PHOTOS_PER_MESSAGE} photos per message; nothing was saved.",  # NB-AV-10, AV2152-04 (H12)
     "audio": "That looks like a voice note. I can't understand voice notes yet, so nothing was saved. "
              "Could you type the change instead?",  # AV2022-05 (H11/H12)
 }
@@ -51,6 +52,12 @@ class Refused(Exception):
     def __init__(self, code: str):
         super().__init__(code)
         self.code, self.reply = code, REPLIES[code]
+
+class BatchRefused(Refused):
+    """AV2152-04: store_originals refused (or could not write) the photo at .position (1-based); the batch left no new file."""
+    def __init__(self, code: str, position: int):
+        super().__init__(code)
+        self.position = position
 
 def _prefix(data: bytes):
     return next((kind for kind, magic in KINDS.items() if data.startswith(magic)), None)
@@ -97,15 +104,19 @@ def _existing(path: Path):
         if not stat.S_ISREG(os.fstat(fd).st_mode): raise Refused("corrupt-store")
         return fh.read()
 
-def _write_new(final: Path, data: bytes) -> None:
-    """Write via a 0600 temp file in the same dir, fsync, then hard-link; never overwrites or follows a symlink."""
+def _write_new(final: Path, data: bytes, created=None) -> None:
+    """Write via a 0600 temp file in the same dir, fsync, then hard-link; never overwrites or follows a symlink.
+    created (AV2152-04): a list that gets (path, device, inode) once the new file is linked, for a batch rollback."""
     fd, tmp = tempfile.mkstemp(dir=final.parent, prefix=".tmp-")
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        try: os.link(tmp, final, follow_symlinks=False)
+            ident = os.fstat(fh.fileno())
+        try:
+            os.link(tmp, final, follow_symlinks=False)
+            if created is not None: created.append((final, ident.st_dev, ident.st_ino))
         except FileExistsError: raise Refused("corrupt-store") from None
     finally:
         try: os.unlink(tmp)
@@ -133,8 +144,8 @@ def _aware(value) -> str:
     if dt.tzinfo is None or dt.utcoffset() is None: raise ValueError(msg)
     return value
 
-def store_original(root, data: bytes, *, received_at: str, source: str) -> dict:
-    """Keep data once under its sha256; a repeat returns the existing entry with duplicate=True."""
+def store_original(root, data: bytes, *, received_at: str, source: str, _created=None) -> dict:
+    """Keep data once under its sha256; a repeat returns the existing entry with duplicate=True. (_created: see store_originals.)"""
     if not isinstance(source, str) or not SOURCE_RE.fullmatch(source):
         raise ValueError("source must match ^[a-z0-9-]{1,32}$")
     _aware(received_at)  # before _open_root: a refused time creates nothing
@@ -153,11 +164,34 @@ def store_original(root, data: bytes, *, received_at: str, source: str) -> dict:
     have = _existing(final)
     if have is not None and hashlib.sha256(have).hexdigest() != sha: raise Refused("corrupt-store")
     duplicate = have is not None
-    if not duplicate: _write_new(final, data)
+    if not duplicate: _write_new(final, data, _created)
     if _existing(sidecar) is None:  # also repairs a sidecar lost between the two writes
         meta = {"sha256": sha, "kind": kind, "bytes": len(data), "received_at": received_at, "source": source}
-        _write_new(sidecar, json.dumps(meta, indent=2, sort_keys=True).encode("utf-8") + b"\n")
+        _write_new(sidecar, json.dumps(meta, indent=2, sort_keys=True).encode("utf-8") + b"\n", _created)
     return {"sha256": sha, "kind": kind, "bytes": len(data), "path": str(final), "duplicate": duplicate}
+
+def store_originals(root, items, *, received_at: str, source: str) -> list:
+    """AV2152-04 (H12): store_original for each of items in order, all or nothing. The caller has already run check_photo on every
+    item. On a refusal or a write fault at item n, only the originals and sidecars THIS call created (matched by their recorded
+    device and inode) are removed, never a duplicate or sidecar that was already there; BatchRefused names position n (1-based).
+    Any other error removes the same files and is raised as it was."""
+    created, out = [], []
+    try:
+        for data in items: out.append(store_original(root, data, received_at=received_at, source=source, _created=created))
+    except (Refused, OSError) as exc:
+        _unwind(created)
+        raise BatchRefused(exc.code if isinstance(exc, Refused) else "corrupt-store", len(out) + 1) from None
+    except BaseException:
+        _unwind(created)
+        raise
+    return out
+
+def _unwind(created) -> None:
+    for path, dev, ino in reversed(created):
+        try:
+            st = os.lstat(path)
+            if stat.S_ISREG(st.st_mode) and (st.st_dev, st.st_ino) == (dev, ino): os.unlink(path)
+        except OSError: pass
 
 def check_photo(data: bytes) -> str:
     """NB-AV-10 (H12): the kind, after every store_original and web_copy check on the bytes in memory; writes nothing."""
