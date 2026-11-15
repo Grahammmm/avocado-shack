@@ -1419,6 +1419,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         has already counted the model call, if there was one. Returns the disposition."""
         self._last_draft_code = None
         pending = [r for r in self._drafts("state IN ('proposed', 'needs-details')") if self._expiry(r) > now and self._visible(r)]  # HASS-OWNERS-2
+        own = getattr(self, "_photo_draft", None)  # AV2007-01: this message's own photo row, trusted only while its caption is read
+        if own and legacy and result.get("ops") and not result.get("revises") and any(r["code"] == own and r["state"] == "needs-details" for r in pending) \
+                and sum(1 for c in result["ops"] if isinstance(c, dict) and c.get("op") in PHOTO_OPS) == 1:
+            result = {**result, "revises": own}  # a null revision from a photo's own caption is about that photo, never another waiting one
         codes = {p["code"] for p in pending}
         named = self._by_code(result["revises"]) if result.get("revises") and result["revises"] not in codes else None
         cancelled_question = named is not None and named["state"] == "rejected" and named["reason"] == "owner" \
@@ -1468,6 +1472,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 return "question"
             result, notes = {**result, "ops": shaped.ops}, [*notes, *shaped.notes]
         out = self.editor.prepare(result["ops"], skills=skill_names) if hasattr(self.editor, "gate") else self.editor.prepare(result["ops"])
+        if own and revised is not None and revised["code"] == own and out["result"] == "refused" and out.get("reason") == "imageAlt is required with photo" and calls:
+            out = {"result": "needs-details", "missing": ["imageAlt"],  # AV2007-01: the caption named the product but not what the photo shows: ask only that
+                   "question": "What does the photo show, for people who cannot see it? A few words is fine."}
         if out["result"] == "needs-details":
             ops_json = json.dumps(result["ops"], sort_keys=True)
             expires = _iso(now + timedelta(seconds=self.settings["approvalTtlSeconds"]))  # H16: questions lapse too
@@ -1556,12 +1563,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             done = self.dispatch.photo(as_text, now, sha, caption)
             return done if done is not None else self._request(as_text, now)  # no skill yet: the caption is the next text of that request
         code = self._photo_row(sha, msg, now)
+        if not caption:
+            self._photo_question(code, sha)
+            return "photo-draft"
+        self._photo_draft = code  # AV1052-10: if the reader fails on this caption, status names this draft; AV2007-01: and it is this message's own photo row
+        try: done = self._request(Inbound(**{**vars(msg), "text": caption}), now)
+        finally: self._photo_draft = None
+        if done not in ("proposed", "needs-details", "question"): self._photo_question(code, sha)  # AV2007-01: asked once, and only if the caption did not already answer
+        return done
+
+    def _photo_question(self, code, sha):
         self._reply(PHOTO_QUESTION)
         if self.labels is not None: self._label_jobs.append((code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0]))
-        if not caption: return "photo-draft"
-        self._photo_draft = code  # AV1052-10: if the reader fails on this caption, status names this draft
-        try: return self._request(Inbound(**{**vars(msg), "text": caption}), now)
-        finally: self._photo_draft = None
 
     def _photos_refused(self, refused, count) -> str:  # AV2152-04: one reply naming each refused photo; none of the message was kept
         if count == 1: return self._reply(refused[0][1].reply) or f"photo-refused:{refused[0][1].code}"
