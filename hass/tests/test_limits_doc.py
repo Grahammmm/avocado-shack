@@ -119,6 +119,15 @@ class LimitsDocTest(unittest.TestCase):
                 self.assertEqual(problems(self.doc), [f"line {lines[name]}: doc says {said}, {source} is {value}"])
         self.assertEqual(store.PHONE_DIGITS, content_model.PHONE_DIGITS)
 
+    def test_photo_limit_docs_follow_constant(self):  # AV2152-04
+        lines = {c[4]: c[0] for c in claims(self.doc)}
+        with mock.patch.object(media, "MAX_PHOTOS_PER_MESSAGE", 5):
+            self.assertEqual(problems(self.doc), [f"line {lines['MAX_PHOTOS_PER_MESSAGE']}: doc says 4, media.MAX_PHOTOS_PER_MESSAGE is 5"])
+        commands = (DOC.parent / "COMMANDS.md").read_text("utf-8")
+        for text in (self.doc, commands):
+            self.assertNotRegex(text, r"(?i)one photo per message|one photo at a time")
+        self.assertIn("1 to 4 photos per message", commands)
+
     def test_bold_number_without_comment_names_its_line(self):
         self.assertEqual(problems("Intro.\nAt most **7** things."), ["line 2: bold number without a source comment"])
         self.assertEqual(problems("**5** <!-- not a source -->"), ["line 1: bold number without a source comment"])

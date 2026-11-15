@@ -51,6 +51,7 @@ NOT_READ_REPLY = ("I only notice new messages, so I missed that tap or edit and 
                   "Please send yes, no or the change as a new message.")  # AV1737-03 (H08/H17): owner reaction or edit
 PHOTO_QUESTION = ("Is this photo for a product in the shop, a new product, or the home page? "
                   "And what does it show, for people who cannot see it? A few words is fine.")  # NB-AV-09 (H12): asked by every new photo draft
+NONE_SAVED = "Nothing from this message was saved."  # AV2152-04: voice rules ban "None" and "drafted"
 PHOTO_OPS = ("product.set_photo", "product.add", "store.set_home_image")  # AV0022-04, AV1937-01: ops in a photo-draft answer that get the draft's photo
 FETCH_FAILED = "I couldn't get that photo after trying three times, so nothing changed. Could you send it again?"
 USAGE = "CREATE TABLE IF NOT EXISTS usage(day TEXT PRIMARY KEY, calls INTEGER NOT NULL)"  # H22; lazy like CONTROL
@@ -1543,8 +1544,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     def _photos_refused(self, refused, count) -> str:  # AV2152-04: one reply naming each refused photo; none of the message was kept
         if count == 1: return self._reply(refused[0][1].reply) or f"photo-refused:{refused[0][1].code}"
-        lines = [f"Photo {position} of {count}: {exc.reply}" for position, exc in refused]
-        self._reply("\n".join([*lines, "None of these photos was saved or drafted."]))
+        lines = [f"Photo {position} out of {count}: {exc.reply}" for position, exc in refused]  # voice rules forbid "1 of 4"
+        self._reply("\n".join([*lines, NONE_SAVED]))
         return f"photo-refused:{refused[0][1].code}"
 
     def _photo_on_product(self, sha):
@@ -1572,14 +1573,14 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         nothing. The caption is never read, whatever it says."""
         n = len(shas)
         for i, sha in enumerate(shas, 1):
-            head = f"Photo {i} of {n}: "
+            head = f"Photo {i} out of {n}: "  # voice rules forbid "1 of 4"
             if dup := self._drafts("state IN ('proposed', 'needs-details') AND ops_json LIKE ?", f'%"photo": "{sha}"%'):
                 self._reply(head + "I already have that photo, and I'm waiting on you. " + (
                     dup[0]["summary"] if dup[0]["state"] == "needs-details" else "It's in a change waiting for your yes."))
             elif said := self._photo_on_product(sha): self._reply(head + said)
             else:
                 code = self._photo_row(sha, msg, now)
-                self._reply(f"{head}{PHOTO_QUESTION} Reply with the code {code}.")
+                self._reply(f"{head}{PHOTO_QUESTION} Reply with the code {q(code)}.")
                 if self.labels is not None: self._label_jobs.append((code, sha, self.db.execute("SELECT last_insert_rowid()").fetchone()[0]))
         skipped = "I did not read the caption because there is more than one photo. " if msg.text.replace("\ufffc", "").strip() else ""
         self._reply(skipped + "Reply to each draft with its code, place and description.")
