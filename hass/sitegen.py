@@ -218,6 +218,19 @@ def _community_json(content: Content) -> bytes:
 _JSON_LD_ESCAPES = {"<": "\\u003c", ">": "\\u003e", "&": "\\u0026", "\u2028": "\\u2028", "\u2029": "\\u2029"}
 
 
+_SCHEMA_DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def _opening_hours_specification(hours) -> list[dict]:
+    """AV1922-05: one OpeningHoursSpecification per open day from AV1104-03's parse_hours (Monday first); closed and unnamed
+    days left out. Empty (nothing added, never guessed) when any hours line does not read or no day is open."""
+    days = parse_hours(hours)["days"]
+    return [{"@type": "OpeningHoursSpecification", "dayOfWeek": f"https://schema.org/{_SCHEMA_DAYS[i]}",
+             "opens": f"{day['opens'] // 60:02d}:{day['opens'] % 60:02d}",
+             "closes": f"{day['closes'] // 60:02d}:{day['closes'] % 60:02d}"}
+            for i, day in enumerate(days or ()) if day and "opens" in day]
+
+
 def local_business_json(store: dict) -> str:
     """schema.org JSON-LD for the home page <script>; no store text can close the script (AV1422-11)."""
     obj = {"@context": "https://schema.org", "@type": "GroceryStore", "name": store["name"],
@@ -226,6 +239,9 @@ def local_business_json(store: dict) -> str:
     if store.get("phone"):
         d = store["phone"]
         obj["telephone"] = f"+1-{d[:3]}-{d[3:6]}-{d[6:]}"
+    specs = _opening_hours_specification(store.get("hours"))
+    if specs:
+        obj["openingHoursSpecification"] = specs
     text = json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     return "".join(_JSON_LD_ESCAPES.get(c, c) for c in text)
 
