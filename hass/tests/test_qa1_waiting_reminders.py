@@ -38,6 +38,7 @@ class WaitingReminderTests(H06TestCase):
         self.assertIn(draft["summary"], reply)
         self.assertIn(f"no {draft['code']}", reply)
         self.assertNotIn("nothing to undo", reply.lower())
+        self.assertNotIn("To undo that", reply)  # pending-only undo must not propose reverting a saved change
         self.untouched(before)
         self.assertEqual(self.say(f"no {draft['code']}"), "rejected")  # the explicit coded no is what drops it
         self.assertEqual(self.drafts()[-1]["state"], "rejected")
