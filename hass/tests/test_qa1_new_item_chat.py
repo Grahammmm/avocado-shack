@@ -10,7 +10,6 @@ import unittest
 from hass.conversation import PHOTO_QUESTION
 from hass.tests import test_photo_new_product as base
 from hass.tests.test_photo_draft import SHA
-from hass.tests.test_set_photo import ALT
 
 ADD, _op = base.ADD, base._op
 
@@ -51,18 +50,46 @@ class NewItemChatTests(unittest.TestCase):
         self.assertIn(SHA[:16], product["image"])
 
     def test_caption_with_missing_alt_asks_only_that_and_keeps_the_photo(self):
-        bare = {k: v for k, v in ADD.items() if k != "imageAlt"}
-        self.reply("new product Test quince", {"ops": [_op("product.add", **bare)], "revises": None})
-        self.assertEqual(self.say("new product Test quince", attachments=1), "needs-details")
+        bare = {**{k: v for k, v in ADD.items() if k != "imageAlt"},
+                "brand": "Sunny Orchard Co", "displayBrand": "Sunny Orchard Co"}
+        caption = "new product: Test quince by Sunny Orchard Co"
+        self.reply(caption, {"ops": [_op("product.add", **bare)], "revises": None})
+        self.assertEqual(self.say(caption, attachments=1), "needs-details")
         [reply] = self.replies()
         self.assertNotIn(PHOTO_QUESTION, reply)
         [row] = self.drafts()
         args = json.loads(row["ops_json"])[0]["args"]
         self.assertEqual((args["photo"], args["name"], "imageAlt" in args), (SHA, bare["name"], False))
-        answer = f"it's a new product: Test quince. {ALT}"  # as in test_photo_new_product: the answer states what the draft claims
-        self.reply(answer, {"ops": [_op("product.add", **bare, imageAlt=ALT)], "revises": row["code"]})
+        answer = "A jar on the counter"  # only the missing detail; the caption already named the product and brand
+        self.reply(answer, {"ops": [_op("product.add", **bare, imageAlt=answer)], "revises": row["code"]})
         self.assertEqual(self.say(answer), "proposed")  # the same row, filled: no second photo, no re-send
-        self.assertEqual([r["state"] for r in self.drafts()], ["proposed"])
+        [filled] = self.drafts()
+        self.assertEqual((filled["state"], filled["code"]), ("proposed", row["code"]))
+        args = json.loads(filled["ops_json"])[0]["args"]
+        self.assertEqual((args["photo"], args["brand"], args["imageAlt"]), (SHA, "Sunny Orchard Co", answer))
+        self.assertEqual(self.added(), [])
+        self.assertEqual(self.say("yes"), "approved")
+        [product] = self.added()
+        self.assertEqual((product["brand"], product["imageAlt"]), ("Sunny Orchard Co", answer))
+
+    def test_missing_alt_answer_keeps_text_before_the_caption(self):
+        request = "new product: Test quince by Sunny Orchard Co"
+        self.reply(request, {"question": "Can you send its photo?"})
+        self.assertEqual(self.say(request), "question")
+        self.replies()
+        bare = {**{k: v for k, v in ADD.items() if k != "imageAlt"},
+                "brand": "Sunny Orchard Co", "displayBrand": "Sunny Orchard Co"}
+        self.reply("Here it is", {"ops": [_op("product.add", **bare)], "revises": None})
+        self.assertEqual(self.say("Here it is", attachments=1), "needs-details")
+        self.replies()
+        [row] = self.drafts()
+        answer = "A jar on the counter"
+        self.reply(answer, {"ops": [_op("product.add", **bare, imageAlt=answer)], "revises": row["code"]})
+        self.assertEqual(self.say(answer), "proposed")
+        [filled] = self.drafts()
+        self.assertEqual((filled["state"], filled["code"]), ("proposed", row["code"]))
+        self.assertEqual(json.loads(filled["ops_json"])[0]["args"]["photo"], SHA)
+        self.assertEqual(self.added(), [])
 
     def test_photo_first_and_text_first_keep_the_same_original(self):
         self.assertEqual(self.say(attachments=1), "photo-draft")

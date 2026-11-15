@@ -1190,18 +1190,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
 
     def _recent_question(self, now):
         """HASS-NL-1: {"question": text} when the newest owner message was answered with a question of ours at most
-        RECENT_MINUTES ago (so the next short text is its answer); else None. HASS-HIKE-FLOW-1: plus "earlier", the owner's
-        texts of the open request, oldest first, when they are still kept (see _open_ask)."""
+        RECENT_MINUTES ago (so the next short text is its answer); else None. A needs-details answer also counts when its
+        request texts were kept. HASS-HIKE-FLOW-1: plus "earlier", the owner's texts of that request (see _open_ask)."""
         try:
             last = self.db.execute("SELECT provider_id, disposition, received_at FROM messages WHERE received_at IS NOT NULL"
                                    " AND COALESCE((SELECT chat FROM message_chats c WHERE c.provider_id = messages.provider_id), ?) = ?"
                                    " ORDER BY rowid DESC LIMIT 1", (self.settings["ownerChat"], self._chat())).fetchone()
-            if last is None or last["disposition"] != "question": return None
+            if last is None: return None
+            earlier = self._ask_texts(last["provider_id"], now)
+            if last["disposition"] != "question" and not (last["disposition"] == "needs-details" and earlier): return None
             row = self.db.execute("SELECT text, created_at FROM outbox WHERE reply_to = ? AND chat = ? ORDER BY id DESC LIMIT 1",
                                   (last["received_at"], self._chat())).fetchone()
             if row is None or not row["text"] or len(row["text"]) > RECENT_MAX: return None
             if now - datetime.fromisoformat(row["created_at"]) > timedelta(minutes=RECENT_MINUTES): return None
-            return {"question": row["text"], **({"earlier": earlier} if (earlier := self._ask_texts(last["provider_id"], now)) else {})}
+            return {"question": row["text"], **({"earlier": earlier} if earlier else {})}
         except (sqlite3.Error, ValueError, TypeError, KeyError): return None
 
     def _ask_texts(self, provider_id, now) -> list:
@@ -1494,6 +1496,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 if revised is not None:
                     if revised["state"] == "proposed": self._audit("refused", revised, "replaced")  # AVB-10
                     self._move(revised, "rejected", reason="revised", replaced_by=code)
+            if legacy and photo and "imageAlt" in out.get("missing", []) and any(c["op"] == "product.add" for c in calls):
+                self._open_ask(msg, now, earlier)  # keep the caption/request evidence through the photo-description answer
             self._reply(out["question"])
             self._asked_again(out["question"], msg)
             return "needs-details"
