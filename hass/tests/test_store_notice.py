@@ -168,7 +168,8 @@ class NoticeClockTests(unittest.TestCase):
     def test_continuously_open_page_expires_at_pacific_midnight(self):
         import subprocess
         result = subprocess.run(["node", str(Path(__file__).with_name("notice_expiry.cjs"))],
-                                input=sitegen.NOTICE_JS, text=True, capture_output=True, timeout=180)
+                                input="<script>" + (REPO_ROOT / "storefront-mockup/notice.js").read_text("utf-8") + "</script>",
+                                text=True, capture_output=True, timeout=180)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         print(result.stdout.strip())
 

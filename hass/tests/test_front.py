@@ -131,7 +131,7 @@ class FrontTests(unittest.TestCase):
                 self.assertIn(notice.BANNER_JS,text)
                 self.assertNotIn('effectiveDay',text)
                 self.assertNotIn('setFixedTime',text)
-        self.assertIn('new Date()',notice.BANNER_JS)
+        self.assertIn('new Date()',(REPO_ROOT/'storefront-mockup/banner.js').read_text('utf-8'))
 
     def test_dated_artifacts_share_one_earlier_day(self):
         self.content.store['banner']=BANNER
@@ -298,7 +298,7 @@ class FrontCaptureTests(StoreTestCase):
         start = shop_today() + timedelta(days=1)
         draft = self.r.run(('store.set_banner', {'text': 'Come say hello', 'start': start.isoformat(),
                                                  'end': (start + timedelta(days=3)).isoformat(), 'link': 'visit'}))
-        self.assertIn(' hidden style="display:none"><span>Come say hello', self.r.text(INDEX))  # served: real day, not yet
+        self.assertIn(' hidden><span>Come say hello', self.r.text(INDEX))  # served: real day, not yet
         target, got = self.shot(draft, 'front.banner')
         self.assertEqual((target['effectiveDay'], target['banner']), (start.isoformat(), {'text': 'Come say hello', 'link': '/#visit'}))
         self.assertPassed(got, 'bannerShown')

@@ -39,6 +39,12 @@ const closedUpfront=async(page,form,inputs)=>{const st=page.locator(form+' .form
 server.listen(0,'127.0.0.1',async()=>{
  const base=`http://127.0.0.1:${server.address().port}`;
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
+ // AV1052-03: every context in this run (also the invitation and notice checks) records securitypolicyviolation events from the first
+ // script on, keeping only the violated directive (no visitor values); a normal run must end with none.
+ const cspViolations=[],cspListener=()=>document.addEventListener('securitypolicyviolation',e=>console.debug('CSPVIOLATION '+e.effectiveDirective));
+ const newContext=browser.newContext.bind(browser);
+ browser.newContext=async o=>{const c=await newContext(o);await c.addInitScript(cspListener);c.on('console',m=>{if(m.text().startsWith('CSPVIOLATION'))cspViolations.push(m.text())});return c};
+ browser.newPage=async o=>{const c=await browser.newContext(o),p=await c.newPage();p.on('close',()=>c.close().catch(()=>{}));return p};
  const result={checkedAt:new Date().toISOString(),pages:[]};
  try{
   const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[],bad=[];
@@ -274,6 +280,7 @@ server.listen(0,'127.0.0.1',async()=>{
   await require('./invitation-qa.cjs')(browser,base,true);
   result.dialogPaddingKeepsOpen=true;
   assert.deepEqual(errors,[]);assert.deepEqual(bad,[]);assert.deepEqual(sent,[],'a form sent visitor data without the club service');
+  assert.deepEqual(cspViolations,[],'CSP violations on the published pages');result.cspViolations=0;
   Object.assign(result,{hikeStatic:true,formsFailGracefully:true,formsSendNothing:true,noticesGone:true,defaultView:"packaged",catalog:170,errors});
   fs.writeFileSync(path.join(out,'static-site-QA.json'),JSON.stringify(result,null,1));
   console.log('Static published site passed');console.log(JSON.stringify(result));

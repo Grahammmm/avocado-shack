@@ -268,7 +268,7 @@ def render_template(text: str, slots: dict[str, str]) -> str:
     return out
 
 
-HIDDEN = ' hidden style="display:none"'
+HIDDEN = " hidden"  # AV1052-03: no inline style (CSP); style.css gives .preview[hidden] its display:none
 
 
 def front_parts(store, template_dir, rel):

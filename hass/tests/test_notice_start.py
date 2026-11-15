@@ -205,8 +205,8 @@ class PhaseCheckTests(StoreTestCase):
 class NoticeClockTests(unittest.TestCase):
     def test_open_page_enters_and_leaves_window_pacific(self):
         import subprocess
-        out = subprocess.run(["node", str(Path(__file__).with_name("notice_expiry.cjs"))], input=sitegen.NOTICE_JS, text=True,
-                             capture_output=True, timeout=180)
+        out = subprocess.run(["node", str(Path(__file__).with_name("notice_expiry.cjs"))], input="<script>" + (REPO_ROOT / "storefront-mockup/notice.js").read_text("utf-8") + "</script>",
+                             text=True, capture_output=True, timeout=180)
         self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
         for phrase in ("appears at its first Pacific midnight", "first and last day are inclusive", "both directions on load",
                        "background and pageshow recovery"):
