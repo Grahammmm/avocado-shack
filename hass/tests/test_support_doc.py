@@ -81,6 +81,13 @@ class SupportDocTest(unittest.TestCase):
         self.assertEqual(bad_commands(DOC.read_text("utf-8")), [])
         self.assertIn("python3 hass/health.py", DOC.read_text("utf-8"))
 
+    def test_daily_limit_entries_are_documented(self):  # AV1922-03
+        doc = DOC.read_text("utf-8")
+        self.assertGreaterEqual(documented_ids(doc), {"daily-limit", "interpreter"})
+        section = doc.split("### `daily-limit`")[1].split("\n## ")[0].split("\n### ")[0]
+        for words in ("Michael", "Pacific midnight", "tell Michael", "only G changes", "H22"):
+            self.assertIn(words, section)
+
     def test_no_private_data(self):
         self.assertEqual(private_data(DOC.read_text("utf-8")), [])
         self.assertEqual(len(private_data("mail a@b, call 5551234567, see http://x")), 3)
