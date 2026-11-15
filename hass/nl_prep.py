@@ -61,7 +61,7 @@ RELATIVE_RE = re.compile(r"\b(today|tonight|tomorrow|tmrw|tmr|yesterday|day afte
 IN_RE = re.compile(r"\bin\s+(\d{1,2}|" + "|".join(WORD_NUMBERS) + r")\s+(day|week)s?\b")
 PREFIX_MIN, FUZZY_MIN, FUZZY_CUTOFF = 4, 5, 0.8
 SLIPS = {"leak": "leek", "egs": "egg", "agg": "egg", "morale": "morel", "chevy": "chevre", "tumeric": "turmeric", "bok": "bok",
-         "avacado": "avocado", "guac": "guacamole", "mango": "mango"}  # voice-to-text and phone slips the spelling match cannot reach
+         "avacado": "avocado", "guac": "guacamole", "mango": "mango", "bluberei": "blueberry", "blubereis": "blueberry"}  # voice-to-text and phone slips the spelling match cannot reach
 
 
 def fold(text) -> str:
@@ -90,7 +90,8 @@ class _Index:
             name = tokens(p.get("name") or "")
             desc = tokens(p.get("description") or "") if isinstance(p.get("description"), str) else []
             if name: self.products.append({"id": p["id"], "name": str(p.get("name")), "tokens": name, "set": frozenset(name), "head": name[-1],
-                                           "desc": frozenset(desc), "status": p.get("status"), "category": p.get("category"), "maker": p.get("producerKey")})
+                                           "desc": frozenset(desc), "status": p.get("status"), "category": p.get("category"), "maker": p.get("producerKey"),
+                                           "brand": p.get("brand") if isinstance(p.get("brand"), str) else ""})
         self.makers = []
         makers = content.makers if isinstance(getattr(content, "makers", None), dict) else {}
         for key, m in makers.items():
@@ -141,7 +142,7 @@ def _decide(span, products):
     if not cands:  # only a word inside names (or in none): products whose description uses the word are candidates too (coffee)
         contains = contains + [p for p in products if p not in contains and want <= p["desc"]]
     if not contains: return None
-    if len(exact) == 1 and not kind: return "is", exact
+    if len(exact) == 1: return "is", exact  # AV2007-12: one whole name that is exactly what was said beats the kind siblings (raspberries / golden raspberries)
     if not cands: return ("is", contains) if len(contains) == 1 else ("ambiguous", contains)
     if len(cands) == 1:  # one product of that kind; a same-shelf, same-maker sibling that merely mentions the word makes it unclear
         lone = cands[0]
@@ -462,6 +463,85 @@ def hours_hints(text, index):
         same.append(f"{WEEKDAY_NAMES[wd]} already {shown}")
     if len(used) != len(ranges): return None  # a requested range no day was matched to
     return list(dict.fromkeys(same)) or None
+
+
+# -- AV2007-12: one stock product named whole ("out of raspberries", "raspberries are back", "blubereis sold out") ----------
+LEMONS_RE = re.compile("(?:\U0001F34B\ufe0f?)+")  # one or more lemon emoji read as the one word \"lemons\": never a count
+LEAD_RE = re.compile(r"^(?:(?:we|they)'?re |we are |i'?m |im |all )*")
+OUT_OF_RE = re.compile(r"^out of (?P<p>.+)$")
+BACK_RE = re.compile(r"^(?P<p>.+?) (?:(?:is|are) )?back(?: in)?$")
+SOLD_RE = re.compile(r"^(?P<p>.+?) (?:(?:is|are) )?(?:sold out|out)$")
+STOCK_NOISE = frozenset("""and or but also then plus nor not no never dont doesnt isnt arent wasnt werent cant wont low limited available hide hidden hold
+ out sold back gone left today tomorrow tonight yesterday if when until maybe""".split())
+NO_PRODUCT = "I don't know a product called that. What is it called on the site?"
+HELD_WORDS = {"held": "I can't change {name} right now. It is on hold until someone has looked at it.",
+              "hidden": "{name} is hidden. Do you want me to bring it back first?"}
+
+
+def _label(p, same) -> str:
+    return f"{p['name']} ({p['brand']})" if p.get("brand") and sum(1 for q in same if q["name"] == p["name"]) > 1 else p["name"]
+
+
+def resolve_stock_choice(text, content, aliases=None):
+    """AV2007-12: {"ops": [...], "revises": None} or {"question": ...} for a whole message that only says one product is out
+    ("out of raspberries", "raspberries are sold out") or back ("raspberries are back"); None for anything else (a question, a
+    negation, a price, a date, several products or clauses, leftover words, a shelf or maker): the interpreter's reading stands.
+    Never raises; reads only the catalogue and the owner's own aliases."""
+    try:
+        if not isinstance(text, str) or not text.strip() or len(text) > 200: return None
+        t = LEMONS_RE.sub(" lemons ", fold(text))
+        if "?" in t or PRICE_CUE_RE.search(t) or RELATIVE_RE.search(t) or WEEKDAY_RE.search(t): return None
+        t = " ".join(re.sub(r"[^\w']+", " ", t).split())
+        t = LEAD_RE.sub("", t, count=1)
+        if m := OUT_OF_RE.match(t): phrase, available = m.group("p"), "no"
+        elif m := BACK_RE.match(t): phrase, available = m.group("p"), "yes"
+        elif m := SOLD_RE.match(t): phrase, available = m.group("p"), "no"
+        else: return None
+        words = [w for w in TOKEN_RE.findall(phrase) if w not in NAME_STOP and w not in ("our", "my", "all", "some", "any")]
+        if not words or len(words) > 6 or re.search(r"\d", phrase) or any(w in STOCK_NOISE or w.endswith("n't") for w in TOKEN_RE.findall(phrase)): return None
+        index = _Index(content)
+        alias_seqs = []
+        for a in aliases or []:
+            if isinstance(a, dict) and isinstance(a.get("name"), str):
+                seq = tuple(tokens(a["name"], stop=NAME_STOP | {"the"}))
+                if seq: alias_seqs.append((seq, a))
+        alias_words = {w for seq, _ in alias_seqs for w in seq}
+        canon, guessed = [], False
+        for w in words:
+            token = stem(w)
+            word, guess = (token, False) if token in alias_words else index.canon(token)
+            canon.append(word)
+            guessed = guessed or guess
+        known = [c for c in canon if c is not None]
+        if not known: return {"question": NO_PRODUCT}  # nothing in it is on the site: never offer a name the shop does not carry
+        if len(known) != len(canon): return None  # a leftover word: not a whole product name
+        span = tuple(canon)
+        alias = next((a for seq, a in alias_seqs if seq == span), None)
+        if alias is not None:
+            hit = next((p for p in index.products if p["id"] == alias.get("id")), None) if alias.get("kind") == "product" else None
+            found = [hit] if hit else []
+            if not found: return None  # a maker alias or a stale one: nothing to invent
+            decision = ("is", found)
+        elif any(m["tokens"] == list(span) for m in index.makers) or (len(span) == 1 and span[0] in SHELVES and not any(p["set"] == frozenset(span) for p in index.products)):
+            return None  # a maker or a whole shelf: not one product
+        else:
+            decision = _decide(list(span), index.products)
+            if decision is not None and guessed:
+                named = [p for p in decision[1] if frozenset(span) <= p["set"]]  # a corrected spelling picks only by name, never by a description
+                decision = (decision[0], named) if named else None
+                if decision and len(named) == 1: decision = ("is", named)
+        if decision is None: return {"question": NO_PRODUCT}
+        kind, found = decision
+        if kind == "is":
+            p = found[0]
+            if p["status"] in HELD_WORDS: return {"question": HELD_WORDS[p["status"]].format(name=p["name"])}
+            if p["status"] not in (None, "active"): return None
+            return {"ops": [{"op": "product.set_availability", "args": {"id": p["id"], "available": available}}], "revises": None}
+        usable = [p for p in found if p["status"] in (None, "active")] or found
+        names = [_label(p, usable) for p in sorted(usable, key=lambda p: (p["name"], p["id"]))][:MAX_LIST]
+        return {"question": "Which one do you mean: " + (names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]) + "?"}
+    except (TypeError, ValueError, KeyError, AttributeError, IndexError, RecursionError):
+        return None
 
 
 def make_hinter(content):
