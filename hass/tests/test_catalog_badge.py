@@ -86,5 +86,6 @@ class OrganicBadgeRemovalTests(CatalogTestCase):
         text = conversation.proposal_text("K7Q", draft["draft"], "2026-10-31T19:00:00+00:00")
         self.assertIn("\nHeads up: This takes off the Organic badge.\n", text)
 
-    def test_maker_rename_gives_no_warning(self):
-        self.assertEqual(self.warnings(("maker.edit", {"key": "Straus", "name": "Straus Family Creamery"})), [])
+    def test_maker_rename_gives_no_badge_warning(self):  # AV2137-03: only the old-brand warning, never an Organic badge one
+        self.assertEqual(self.warnings(("maker.edit", {"key": "Straus", "name": "Straus Family Creamery"})),
+                         ["7 active product cards of maker Straus still show Straus as their brand; ask to change them too"])
