@@ -11,7 +11,7 @@ from hass.interpreter_local import LocalInterpreter
 from hass.interpreter_prompt import OMITTED, PROMPT_MAX_BYTES, build
 from hass.tests.test_interpreter_prompt import TEST_REGISTRY, tiny_content
 
-HEADER = "Products (id | name | brand | status | description):"
+HEADER = "Products (id | name | brand | shelf | maker | status | description):"
 
 
 def _section(prompt, header):
@@ -41,7 +41,7 @@ class WholeDescriptionTest(unittest.TestCase):
     def test_whole_description_and_partial_edit_rule(self):
         tail = "Sourdough, baked daily. " * 20 + "END-OF-TEXT"
         prompt = build(TEST_REGISTRY, tiny_content([_product("photo-product-001", tail, "Sourdough")]))
-        self.assertEqual(_section(prompt, HEADER), [json.dumps("photo-product-001") + ' | "Sourdough" | "" | "active" | '
+        self.assertEqual(_section(prompt, HEADER), [json.dumps("photo-product-001") + ' | "Sourdough" | "" | "" | "" | "active" | '
                                                     + json.dumps(tail)])
         self.assertIn("product.edit description replaces the whole text", prompt)
         self.assertIn(f"never send {OMITTED} as an argument", prompt)
@@ -65,7 +65,7 @@ class WholeDescriptionTest(unittest.TestCase):
     def test_json_escapes_one_line(self):
         text = 'say "hi" | a/b\nline\u0085\u2028\u2029end'
         row = _section(build(TEST_REGISTRY, tiny_content([_product("p", text)])), HEADER)
-        self.assertEqual(row, ['"p" | "n" | "" | "active" | "say \\"hi\\" | a/b\\nline\\u0085\\u2028\\u2029end"'])
+        self.assertEqual(row, ['"p" | "n" | "" | "" | "" | "active" | "say \\"hi\\" | a/b\\nline\\u0085\\u2028\\u2029end"'])
 
 
 class BudgetTest(unittest.TestCase):

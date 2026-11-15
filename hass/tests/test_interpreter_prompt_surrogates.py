@@ -63,7 +63,7 @@ class BuildTest(unittest.TestCase):
         self.assertGreaterEqual(prompt.count(f'"{esc}"'), 10)
         self.assertNotIn(HI, prompt)
         self.assertNotIn(LO, prompt)
-        self.assertIn('"ok" | "Fine" | "" | "active" | "fine"', prompt)
+        self.assertIn('"ok" | "Fine" | "" | "" | "" | "active" | "fine"', prompt)
 
     def test_existing_golden_and_skills_block_unchanged(self):
         self.assertEqual(ip.build(TEST_REGISTRY, tiny_content()), FIXTURE.read_text("utf-8"))
@@ -86,7 +86,7 @@ class CapTest(unittest.TestCase):
         self.assertIn(ip.OMITTED, prompt)
         for i in range(3):  # every description is whole or omitted, never cut
             whole = ip._q(HI * 40 + f"{i}") in prompt
-            self.assertTrue(whole or f'"p{i}" | "n" | "" | "active" | {ip.OMITTED}' in prompt)
+            self.assertTrue(whole or f'"p{i}" | "n" | "" | "" | "" | "active" | {ip.OMITTED}' in prompt)
 
     def test_non_description_overcap_still_refuses(self):
         content = tiny_content(products=[{"id": "a", "name": HI * 200, "status": "active"}], makers={})

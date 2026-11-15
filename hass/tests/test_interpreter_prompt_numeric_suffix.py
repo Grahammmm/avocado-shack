@@ -12,7 +12,7 @@ from hass.interpreter_prompt import MAX_PRODUCTS, OMITTED, PROMPT_MAX_BYTES, PRO
 from hass.tests.test_interpreter_prompt import TEST_REGISTRY, tiny_content
 
 PREFIX = "photo-product-"
-HEADER = "Products (id | name | brand | status | description):"
+HEADER = "Products (id | name | brand | shelf | maker | status | description):"
 LONG_A, LONG_B, LONG_C = "1" + "0" * 4999, "1" + "0" * 4998 + "1", "9" * 5000  # each > the 4300-digit default limit
 DEC = json.JSONDecoder()
 

@@ -158,8 +158,9 @@ class HikeDetailsTest(unittest.TestCase):
 
     def test_worst_case_builds_under_cap(self):
         # Counts at every cap, hike detail text at its content limits; other catalog text kept short (at its own
-        # content limits the catalog alone is ~106 KB, over the cap before AV1222-08).
-        products = [{"id": f"p-{i:03d}", "name": "n" * 10, "brand": "b" * 10, "status": "active"} for i in range(400)]
+        # content limits the catalog alone is ~106 KB, over the cap before AV1222-08). AV2152-05: two more columns per product row, so
+        # the product name and brand are shorter here.
+        products = [{"id": f"p-{i:03d}", "name": "n" * 8, "brand": "b" * 5, "status": "active"} for i in range(400)]
         makers = {f"m{i:03d}": {"name": "m" * 10} for i in range(200)}
         events = [_sched(f"h-{i:02d}", f"2026-11-{1 + i % 28:02d}T09:00:00-08:00", meetingPoint="m" * 160,
                          bring="b" * 400, accessNote="a" * 400, capacity=1000)

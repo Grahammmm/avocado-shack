@@ -9,6 +9,8 @@ AV2022-02: a last Store section lists the street address, town and every hours l
 store.set_hours replaces the whole list.
 AV2152-06: each product row ends with its current description, whole or the unquoted marker <omitted>, never cut.
 RF1100-7: damaged catalog rows are skipped, like hikes and route ideas (a non-object maker keeps its key, empty name).
+AV2152-05: each product row also names its shelf (category) and maker key, "" when it has none, so a whole-shelf or
+whole-maker request resolves to listed ids.
 AV1937-06: each maker row adds its place and story, each route idea row its place and description, each whole or the
 unquoted marker <omitted>, never cut. Over the byte cap the maker stories go first, then route descriptions, maker
 places and route places (reverse key/id order), then product descriptions; only if that cannot fit is the prompt refused.
@@ -92,7 +94,10 @@ RULES = (
     "If the message is a different, unrelated request, ignore \"recent\". If the answer does not settle the question, ask again.",
     "Availability words: sold out, out, gone, no more = \"no\"; low, running low, a few left = \"limited\"; back, in, got more "
     "= \"yes\". product.set_availability is for one product; store.confirm_selection only when the owner says he checked the "
-    "shelves. A whole shelf of at most 6 products is one change each; for more, ask and give the count.",
+    "shelves. A whole shelf or maker is one change per listed product (next rule), not capped at 6.",
+    "Shelf is a product's listed shelf and maker is its listed maker key. When the owner clearly names a whole shelf or "
+    "maker, change every listed product id with it, without asking only because several match. Ask if the group is unclear "
+    "or incomplete (a more-rows line) or over the operation limit; never invent ids.",
     'If the message asks for what the Store or Hikes tables already show (the same hours, a hike already cancelled), or '
     'a hint says "alreadyTrue", reply {"question": "It already says that: <the current value>. Did you mean something '
     'else?"}; never draft a change that changes nothing.',
@@ -198,9 +203,11 @@ def _product_lines(products, omitted=frozenset()) -> list:
     """``omitted``: positions (in id-sorted order) whose description is replaced by the marker."""
     rows = sorted(products, key=lambda p: str(p.get("id", "")))
     shown = [next((v for v in (p.get("displayBrand"), p.get("brand")) if isinstance(v, str) and v), "") for p in rows]
-    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(b)} | {_q(p.get('status'))} | "
+    # AV1102-06: displayBrand, else brand; AV2152-05: then shelf (category) and maker (producerKey), exact and "" when absent
+    return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(b)} | {_q(p.get('category'))} | "
+                    f"{_q(p.get('producerKey'))} | {_q(p.get('status'))} | "
                     f"{_rich(p.get('description'), ('product', i) in omitted)}"
-                    for i, (p, b) in enumerate(zip(rows, shown))], MAX_PRODUCTS)  # AV1102-06: displayBrand, else brand
+                    for i, (p, b) in enumerate(zip(rows, shown))], MAX_PRODUCTS)
 
 
 def _omission_order(products) -> list:
@@ -315,7 +322,7 @@ def build(registry, content, skills=None, candidates=()) -> str:
             CONTRACT,
             "Rules:\n" + "\n".join(f"- {rule}" for rule in RULES),
             "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
-            "Catalog.\nProducts (id | name | brand | status | description):\n"
+            "Catalog.\nProducts (id | name | brand | shelf | maker | status | description):\n"
             + "\n".join(_product_lines(products, omitted))
             + "\nMakers (key | name | place | story):\n" + "\n".join(_maker_lines(makers, omitted)),
             "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
