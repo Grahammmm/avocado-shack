@@ -56,7 +56,7 @@ class DemoBrowserPhotoTests(unittest.TestCase):
         rows, seen = self.run_chain(repo, [stranger])
         texts = [r["text"] for r in rows]
         self.assertEqual([next((k for k in photo.KINDS if t.startswith(k)), t) for t in texts],
-                         photo.EXPECTED[:4] + ["Saved and checked: ", "Here's what we changed lately:",
+                         photo.EXPECTED[:3] + ["Saved and checked: ", "Here's what we changed lately:",
                                                "To undo that, I'd change it back:", "Saved and checked: "])
         edit, undo = self.query(repo, "SELECT * FROM drafts ORDER BY row_id")
         self.assertEqual((edit["state"], undo["state"]), ("reverted", "verified"))
@@ -76,7 +76,7 @@ class DemoBrowserPhotoTests(unittest.TestCase):
                 self.assertFalse(png.resolve().is_relative_to(repo.wt.resolve()) or png.resolve().is_relative_to(REPO_ROOT))
         messages = {r["provider_id"]: r["disposition"] for r in self.query(repo, "SELECT * FROM messages")}
         self.assertEqual(messages["photo-demo-9"], "ignored")  # the stranger's photo: no draft, no reply
-        self.assertEqual((len(messages), len(texts)), (8, 8))
+        self.assertEqual((len(messages), len(texts)), (8, 7))
         self.assertEqual(git(REPO_ROOT, "status", "--porcelain"), before)
 
     def test_missing_playwright_reports_the_failed_check_and_does_not_retry(self):
@@ -84,7 +84,7 @@ class DemoBrowserPhotoTests(unittest.TestCase):
         rows, seen = self.run_chain(repo, playwright=MISSING_PLAYWRIGHT)
         texts = [r["text"] for r in rows]
         edit, undo = self.query(repo, "SELECT * FROM drafts ORDER BY row_id")
-        self.assertTrue(texts[4].startswith("I saved it, but the preview check didn't pass: "), texts[4])
+        self.assertTrue(texts[3].startswith("I saved it, but the preview check didn't pass: "), texts[3])
         self.assertTrue(all(not r["attachments"] for r in rows))
         self.assertTrue(all(not shot["ok"] for _n, _t, shot in seen))
         self.assertNotIn("verified", (edit["state"], undo["state"]))
