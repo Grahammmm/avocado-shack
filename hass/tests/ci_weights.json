@@ -255,6 +255,7 @@
 "test_photo_store_oserror": 3,
 "test_post_command": 1,
 "test_post_hike_command": 1,
+"test_post_maker_command": 1,
 "test_preview": 14,
 "test_preview_cancel_note": 27,
 "test_preview_checks_shape": 7,
