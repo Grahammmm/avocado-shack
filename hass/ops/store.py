@@ -34,7 +34,7 @@ from hass.content_model import (
 )
 from hass.ops import Arg, NeedsDetails, Op, Refused, Touched
 from hass.ops.catalog import _product
-from hass.sitegen import STALE_AFTER_DAYS
+from hass.sitegen import STALE_AFTER_DAYS, parse_hours
 
 
 _DASHES = {c: "-" for c in [*range(0x2010, 0x2016), 0x2212]}
@@ -71,6 +71,10 @@ def _set_hours(content, args, ctx):
             return Refused(f"hours lines {j + 1} and {i + 1} say the same thing")
     if [_spaced(h) for h in hours] == [_spaced(h) for h in content.store["hours"]]:
         return Refused("store hours are already " + " / ".join(content.store["hours"]))
+    if errors := parse_hours(hours)["errors"]:  # AV1104-04: the one rule of the open/closed line; a warning, never a refusal
+        bad = errors[0]
+        ctx.warnings.append(f'The website will not say open or closed now with these hours: line {bad["line"]} "{bad["text"]}"'
+                            ' is not like "Saturday 9am-5pm" or "Closed Sunday".')
     before = copy.deepcopy(content.store)
     content.store["hours"] = hours
     return _touch(before, content.store)
