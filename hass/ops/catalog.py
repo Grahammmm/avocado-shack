@@ -83,6 +83,17 @@ def _maker_twin(content, name, key=None):
     return next((k for k, m in content.makers.items() if k != key and _same(m.get("name", ""), name)), None)
 
 
+def _brand_fold(text) -> str:
+    """Shown brand compared ignoring case and spacing only (no look-alike, accent or substring matching)."""
+    return " ".join(str(text or "").split()).casefold()
+
+
+def _shown_brand(product):
+    """The brand the card shows: a nonempty displayBrand, else the brand."""
+    shown = product.get("displayBrand")
+    return shown if isinstance(shown, str) and shown.strip() else product.get("brand")
+
+
 def _key_fold(key) -> str:
     """Maker key compared ignoring case, spacing and look-alike Unicode forms (NFKC)."""
     return " ".join(unicodedata.normalize("NFKC", key).split()).casefold()
@@ -297,6 +308,13 @@ def _maker_edit(content, args, ctx):
         ctx.warnings.append(f"changes the \"Based in\" line on {n} active product card{'s' if n != 1 else ''} of maker "
                             f"{args['key']} (town search follows it)" if n else
                             f"maker {args['key']} has no active products; no product card changes")
+    if "name" in changes:  # AV2137-03: the cards keep showing the old name as their brand; only a warning, no product is touched
+        old_name = maker.get("name")
+        n = sum(1 for p in content.active_products() if p.get("producerKey") == args["key"]
+                and _brand_fold(_shown_brand(p)) == _brand_fold(old_name))
+        if n:
+            ctx.warnings.append(f"{n} active product card{'s' if n != 1 else ''} of maker {args['key']} still show "
+                                f"{old_name} as their brand; ask to change them too")
     before = copy.deepcopy(maker)
     maker.update(changes)
     if clear_url:

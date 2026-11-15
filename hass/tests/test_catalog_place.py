@@ -88,9 +88,12 @@ class PlaceWarningTests(CatalogTestCase):
                          [based_in(self.three, 3)])
 
     def test_other_fields_give_no_warning(self):
-        for args in ({"story": "A new story."}, {"url": "https://example.org/maker"}, {"name": "A Fresh Maker Name"}):
+        for args in ({"story": "A new story."}, {"url": "https://example.org/maker"}):
             with self.subTest(args=args):
                 self.assertEqual(self.warnings(("maker.edit", {"key": self.three, **args})), [])
+        self.assertEqual(self.warnings(("maker.edit", {"key": self.three, "name": "A Fresh Maker Name"})),  # AV2137-03: the rename warning
+                         [f"3 active product cards of maker {self.three} still show {self.three} as their brand; "
+                          "ask to change them too"])
 
     def test_unknown_maker_and_refused_rename_give_no_warning(self):
         result = self.assertRejected(self.r, "not-found", ("maker.edit", {"key": "No Such Maker", "place": "Here"}))
