@@ -24,7 +24,7 @@ Each row stays open until its owner records an answer. Source links go to the ro
 | --- | --- | --- | --- |
 | H07 | Which Mac and which Apple account run the bridge | Owner / G | [FEATURES.md line 25](FEATURES.md#L25) |
 | H19 | How the service and its health checks run on the Mac and Agent Orange, and where alerts go | Operator / G | [FEATURES.md line 47](FEATURES.md#L47) |
-| H21 | Message and media retention periods | Owner / G | [FEATURES.md line 49](FEATURES.md#L49) |
+| H21 | Message and media retention periods | Owner / G | [FEATURES.md line 49](FEATURES.md#L49), [Retention options](RETENTION-OPTIONS.md) |
 | H22 | Usage and spending limit; support, recovery and account record kept privately | Owner / G | [FEATURES.md line 50](FEATURES.md#L50), [SUPPORT.md line 7](SUPPORT.md#L7) |
 | H23 | Which action types, if any, Michael opts into | Michael | [FEATURES.md line 51](FEATURES.md#L51) |
 | H25-domain | Which domain and host a public site would use, and whether and when a public site is authorized (the older trial host is separate and is not a chosen destination) | Owner / G (the operator may advise on hosting) | [FEATURES.md line 53](FEATURES.md#L53), [HERMES_HANDOFF.txt line 50](../../HERMES_HANDOFF.txt#L50), [line 129](../../HERMES_HANDOFF.txt#L129) |
