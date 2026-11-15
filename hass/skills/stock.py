@@ -191,6 +191,17 @@ def _checked_plan(slots, ctx) -> list:
     return [{"op": "store.confirm_selection", "args": args}]
 
 
+PLAIN_SHELF_CHECKS = frozenset({"did the shelf check, all good", "shelf check done", "shelf check: all good"})
+
+
+def plain_shelf_check(text) -> bool:
+    """AV2007-15: True only for a whole message that is one of the three plain 'shelf check done' sentences (case, spacing and one
+    closing . or ! aside). Anything else (a question, a negation, a date, a name, an `except` tail) is False and goes the usual way."""
+    if not isinstance(text, str):
+        return False
+    return re.sub(r"[.!]$", "", " ".join(text.lower().split())) in PLAIN_SHELF_CHECKS
+
+
 # -- stock.clear --------------------------------------------------------------------------------------------------
 def _clear_plan(slots, ctx) -> list:
     raw = slots.get("items")
@@ -257,6 +268,9 @@ STOCK_CHECKED = Skill(
         Trigger("checked on Monday last month"),
         Trigger("checked, nothing changed"),
         Trigger("shelf chek done. milk in, cheese out", "typo"),
+        Trigger("did the shelf check, all good"),
+        Trigger("shelf check done"),
+        Trigger("shelf check: all good"),
     ),
     slots=(Slot("day", "day"), Slot("in", "text_list"), Slot("limited", "text_list"), Slot("out", "text_list")),
     rules=("check-day-window", "each-product-once", "not-already-true", "held-or-hidden-refused"),

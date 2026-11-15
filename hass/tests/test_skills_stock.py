@@ -82,6 +82,14 @@ class Declarations(unittest.TestCase):
                 self.assertEqual(result.facts.get("undo"), "identical", result.id)  # the check day goes back with the words
         self.assertGreaterEqual(drafted, 6)
 
+    def test_the_plain_shelf_check_sentences_are_declared_and_plan_the_empty_check(self):  # AV2007-15
+        texts = [t.text for t in stock.STOCK_CHECKED.triggers]
+        for phrase in sorted(stock.PLAIN_SHELF_CHECKS):
+            self.assertIn(phrase, texts)
+            self.assertTrue(stock.plain_shelf_check(phrase))
+        self.assertEqual(stock.STOCK_CHECKED.plan({}, _ctx(store={})), [{"op": "store.confirm_selection", "args": {}}])
+        self.assertEqual(stock.STOCK_CHECKED.version, 3)
+
     def test_the_skill_does_not_reach_into_the_files_it_does_not_own(self):
         imports = [ln for ln in Path(stock.__file__).read_text("utf-8").splitlines() if ln.startswith(("import ", "from "))]
         for name in ("conversation", "interpreter_prompt", "router", "editor"):
