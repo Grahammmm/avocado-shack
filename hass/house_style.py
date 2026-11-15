@@ -428,7 +428,7 @@ def check_product(rec: dict, makers: dict, spec=None) -> dict:
               _c("displayBrand follows brand", shown_ok, f"{rec.get('brand')} -> {rec.get('displayBrand')}", 2),
               _c("maker link", (key is None) or key in makers, str(key), 3, True),
               _c("unknown producer has no maker key", not (unknown and key), str(key), 1),
-              _c("picture path", bool(CATALOG_IMAGE_RE.fullmatch(img) or OWNER_IMAGE_RE.fullmatch(img)), img, 2, True),
+              _c("picture path", isinstance(img, str) and bool(CATALOG_IMAGE_RE.fullmatch(img) or OWNER_IMAGE_RE.fullmatch(img)), img, 2, True),
               _c("name and brand text", not text_problems, "invalid name or brand" if text_problems else "ok", 1, True)]
     return _result(checks)
 
