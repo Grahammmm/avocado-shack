@@ -229,11 +229,12 @@ class LabelConversationTests(unittest.TestCase):
 
     def test_a_caption_proposal_never_carries_the_label(self):
         self.assertEqual(self.say(ANSWER), "proposed")
-        replies = self.replies()
-        self.assertEqual(replies[0], self.asked())  # the question was already answered in the same message
+        [reply] = self.replies()
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
+        self.assertEqual(self.transport.calls, [])  # the caption already answered the question
         [row] = self.drafts()
         self.assertEqual(row["state"], "proposed")
-        for text in (replies[1], row["summary"], row["ops_json"]):
+        for text in (reply, row["summary"], row["ops_json"]):
             self.assertNotIn("Far West Fungi", text)
 
     def test_no_reader_is_never_called(self):
