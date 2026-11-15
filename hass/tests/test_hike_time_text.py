@@ -65,7 +65,7 @@ class ProposalHikeTimeTests(unittest.TestCase):
     def test_added_hike_field_line(self):
         after = {"id": "h1", "startsAt": "2026-11-07T09:00:00-08:00", "title": "Ridge walk"}
         self.assertEqual(_lines(("events", "h1", None, after)),
-                         ["Here's the change I'd make:", "A new hike: Ridge walk", "  the title: Ridge walk",
+                         ["Here's the change I'd make:", "A new hike: Ridge walk (Saturday, Nov 7)", "  the title: Ridge walk",
                           "  the start time: Saturday, Nov 7 at 9 am (Pacific time)"] + TAIL)
         self.assertIn("  the start time: at a time I can't read", _lines(("events", "h1", None, {**after, "startsAt": "soon"})))
 

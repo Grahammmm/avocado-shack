@@ -79,14 +79,15 @@ class ProposalTextTests(unittest.TestCase):
     def test_every_product_field_at_its_limit_is_uncut_and_reply_lines_last(self):
         after = {f: f[0] * n for f, n in TEXT_LIMITS["product"].items()}
         lines = _text(("products", "p1", {f: "old" for f in after}, after)).splitlines()
+        who = f"{after['name']} (was old)"  # AV0007-05: a renamed record shows its new name with the old one
         for field, value in after.items():
             phrase = {"name": "the name", "brand": "the brand", "category": "the shelf",
                       "description": "the description", "displayBrand": "the brand shown on the card",
                       "imageAlt": "the photo description"}[field]
             if len("old") + len(value) > 70:
-                self.assertIn(f"old, {phrase}:\n  was: old\n  now: {value}", "\n".join(lines))
+                self.assertIn(f"{who}, {phrase}:\n  was: old\n  now: {value}", "\n".join(lines))
             else:
-                self.assertIn(f"old, {phrase}: from old to {value}", lines)
+                self.assertIn(f"{who}, {phrase}: from old to {value}", lines)
         self.assertEqual(len(lines), 1 + sum(3 if len("old") + len(v) > 70 else 1 for v in after.values()) + 2)
         self.assertEqual(_tail(lines), TAIL)
 
