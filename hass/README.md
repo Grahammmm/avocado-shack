@@ -250,6 +250,22 @@ Operator only, never in CI: `python3 hass/label_eval.py --live --url http://127.
 - Retention reports approval and closed-memory counts only, deletes nothing (AV2022-13).
 - Owner phone guide: `docs/hass/PHONE_GUIDE.md`, with quoted commands checked against the parser (AV2022-14).
 
+## Owner-visible behaviour added by AV0022 (ledger: `BUILD_LEDGER.md`)
+
+- Phone photos with a rotation tag are accepted; the web copy keeps only the Orientation tag, no location, camera or date (AV0022-01).
+- `product.add` can take a stored photo, and an answer to a photo question can add a new product with it (AV0022-02, -04).
+- A waiting draft's ops go to the interpreter, so a correction resends the whole change (AV0022-03).
+- A yes sent in time still approves after a delay, and a late reply says which message it answers (AV0022-06, -10).
+- A bare `undo` after an undo drafts the change before it (AV0022-07).
+- `show <code>` repeats a draft's text and screenshot, read-only (AV0022-08).
+- Photo changes are worded ("the photo from your message"), not shown as file paths (AV0022-09).
+- Hike drafts ask when they add an access or safety term, or a number with a unit, the owner did not say (AV0022-11, -12).
+- Hours refusals count lines from 1 (AV0022-13).
+- `health --writer` lists unused photo copies as info only and deletes nothing (AV0022-14).
+- `docs/hass/LIMITS.md` names the hours, message, find, alias and upright-photo limits (AV0022-15).
+- Eval set v2 has 40 synthetic cases; `--live` stays operator-only (AV0022-16).
+- AV0022-05 was closed unmerged as superseded by AVB-12, so it has no ledger section.
+
 ## Weekly specials (AVO-SPECIALS-1)
 
 `store.specials` is an optional list (absent = none; the saved files and the generated page are byte-identical without it). Each special has `id`, `title`, `deal` (the owner's own deal line, shown exactly as typed; the only text that may hold a price), `start`, `end` (required, last day inclusive), `order` (0-99, lower first) and optionally `product` (an existing product id) and `picture: true` (reuse that product's picture). Limits: title and deal at most 60 characters; no markup, links, email or phone numbers; end not before start; at most 31 days long; at most 6 active on any one day (checked for every future day, so valid content cannot turn invalid later); at most 20 saved.

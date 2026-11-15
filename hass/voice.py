@@ -270,6 +270,8 @@ EXACT_WARNINGS = (  # AV2137-04 (H04): on the original text, so the hike title k
      lambda m: f"The Route line on {quote(m[1])} ({m[2]}) changes too."),
     (re.compile(r"the trail journal entry for (.+) changes too", re.S),
      lambda m: f"The trail journal entry for {quote(m[1])} changes too."),
+    (re.compile(r'The website will not say open or closed now with these hours: line \d+ ".*" is not like "Saturday 9am-5pm" '
+                r'or "Closed Sunday"\.', re.S), lambda m: m[0]),  # AV1104-04: already plain; the generic line would hide the line
 )
 
 

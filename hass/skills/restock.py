@@ -54,7 +54,8 @@ UNITS = ("jars?|bottles?|boxes|box|bags?|cartons?|dozens?|cases?|crates?|units?|
          "trays?|pints?|quarts?|gallons?|liters?|litres?|lbs?|pounds?|oz|ounces?|kg|kilos?|kilograms?|grams?|items?|bunch(?:es)?")
 # a spelled-out run ("forty", "twenty-one", "one hundred and five", "two", "dozen") right before a unit of goods; a bare number word is not a count
 SPOKEN = "|".join(sorted({*WORD_NUMBERS, "seventy", "eighty", "ninety", "hundred", "thousand"}, key=len, reverse=True))
-QUANTITY = re.compile(rf"(?<![\w.])\d[\d,]*(?:\.\d+)?\s*(?:x\s*)?(?:{UNITS})\b|\b[x×]\s*\d+\b|\b\d+\s*[x×](?!\w)"
+# RF0721-9: a leading-point decimal (".5 kg") is the same quantity as "0.5 kg"; it must start at a safe left boundary (not "v.5", not "..5")
+QUANTITY = re.compile(rf"(?<![\w.])(?:\d[\d,]*(?:\.\d+)?|\.\d+)\s*(?:x\s*)?(?:{UNITS})\b|\b[x×]\s*\d+\b|\b\d+\s*[x×](?!\w)"
                       rf"|\b(?:{SPOKEN})(?:[\s-]+(?:and[\s-]+)?(?:{SPOKEN}))*[\s-]+(?:{UNITS})\b", re.IGNORECASE)
 
 
@@ -162,7 +163,7 @@ _PRODUCTS = "hass/content/products.json"
 
 STOCK_RESTOCK = Skill(
     pack='site', targets=('site',), approval_class='A1', sandbox='preview', logs=('subjects', 'fields'), who='owner',
-    name="stock.restock", label="record when more is coming", version=2,
+    name="stock.restock", label="record when more is coming", version=3,
     summary="Note the day more of one product is expected. A day only; never a count, never the shelf word.",
     triggers=(
         Trigger("more honey coming Thursday"),

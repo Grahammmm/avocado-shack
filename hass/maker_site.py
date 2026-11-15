@@ -407,7 +407,13 @@ def _http_get(url: str, headers: dict, timeout: float, budget=None, cap: int = M
         with opener.open(urllib.request.Request(url, headers=headers), timeout=timeout) as resp:
             return resp.status, resp.headers.get("Content-Type", ""), _body(resp, cap, budget), ""
     except urllib.error.HTTPError as exc:
-        return exc.code, "", b"", (exc.headers.get("Location", "") if exc.headers and exc.code in REDIRECTS else "")
+        try:
+            return exc.code, "", b"", (exc.headers.get("Location", "") if exc.headers and exc.code in REDIRECTS else "")
+        finally:  # the error is a live response: release it explicitly (body never read), best effort
+            try:
+                exc.close()
+            except Exception:
+                pass
     except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
         return 0, "", b"", ""
     finally:
