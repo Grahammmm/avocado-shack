@@ -115,9 +115,8 @@ class PhotoDraftTests(unittest.TestCase):
         self.assertEqual(self.say(ANSWER, attachments=1), "proposed")
         [row] = self.drafts()
         self.assertEqual((row["state"], row["code"]), ("proposed", SHA[:4]))
-        replies = self.replies()
-        self.assertEqual(replies[0], self.asked(SHA[:4]))
-        self.assertTrue(replies[1].startswith("Here's the change I'd make:"), replies)
+        [reply] = self.replies()  # AV2007-01: the caption answered it, so the photo question is not asked first
+        self.assertTrue(reply.startswith("Here's the change I'd make:"), reply)
         self.assertEqual(self.interp.texts, [ANSWER])
 
     def test_caption_is_never_a_keyword_or_command(self):
