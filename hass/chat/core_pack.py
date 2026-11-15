@@ -367,6 +367,7 @@ class CorePack:
         with contextlib.suppress(OSError, ValueError, KeyError, TypeError, AttributeError, editor_mod.UnsafeState):
             f = shelf.facts(load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content"), shelf.shop_today(now))
             lines.append(shelf.check_line(f))  # AV1102-05
+        lines += [line] if (line := self._notice_line(now)) else []  # AV1937-07: the home notice, once, after the shelf check
         lines += reader
         if self.skills_mode != dispatch_mod.DEFAULT_MODE:  # SKILLS-FW-3: one plain line per open request
             lines += self.requests.status_lines(self._chat(), now, self.dispatch.registry if self.dispatch else None)
