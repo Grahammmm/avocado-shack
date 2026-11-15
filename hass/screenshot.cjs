@@ -3,8 +3,9 @@
 // env: PREVIEW_URL (http://127.0.0.1:<port>), TARGET (JSON from hass/preview.py target_for), OUT (png path),
 // PLAYWRIGHT_MODULE / CHROMIUM_PATH as in the storefront QA scripts. Only GET/HEAD to the preview origin is
 // allowed; every other request (any POST, anything off 127.0.0.1) is aborted. Prints {"checks": {...}}.
-// Maker: its place search, then all cards if none names it; card text compared (never a selector built from the name).
-// hidden → makerHidden (no card names it); else makerName + makerPlace; a maker with no active card adds no maker check.
+// Maker: its place search, then all cards if none carries its key; cards are found by data-maker-key and read from their own
+// .maker-name and .origin-label (never a selector built from the name; a maker with no story or link has no panel but keeps both).
+// hidden → makerHidden (no card carries the key); else makerName + makerPlace on every such card; a maker with no active card adds no maker check.
 // Hike: scheduled → eventShown; completed → pastShown (journal entry, exact h3 title) (+ recapShown if a recap, in .trail-journal-recap); cancelled → rsvpGone (no RSVP button).
 'use strict';
 const VIEWPORTS={phone:{width:390,height:844},desktop:{width:1280,height:900}},vp=process.env.VIEWPORT||'phone';
@@ -133,13 +134,13 @@ const allowed=req=>{
             for(let i=0;i<30&&!/^(\d+) selections · \1 shown$/.test(await count.textContent());i++){
               await sentinel.scrollIntoViewIfNeeded();await page.waitForTimeout(100);
             }
-            places=await page.locator('#catalog-grid article').evaluateAll((arts,label)=>arts.filter(a=>[...a.querySelectorAll(
-              '.maker-story summary .sr-only')].some(s=>s.textContent===label)).map(a=>a.querySelector('.origin-label')?.textContent),
-            `: ${target.name}`);
+            // AV0222-10: cards are found by the maker key every card carries (never by a panel, which a storyless maker may not have)
+            places=await page.locator('#catalog-grid article').evaluateAll((arts,key)=>arts.filter(a=>a.dataset.makerKey===key).map(a=>({
+              name:a.querySelector('.food-identity .maker-name')?.textContent??null,place:a.querySelector('.origin-label')?.textContent??null})),String(target.key??''));
             if(places.length)break;
           }
           if(target.hidden)checks.makerHidden=places.length===0;
-          else if(places.length){checks.makerName=true;checks.makerPlace=places[0]===`Based in ${target.place}`;}
+          else if(places.length){checks.makerName=places.every(c=>c.name===target.name);checks.makerPlace=places.every(c=>c.place===`Based in ${target.place}`);}
           await cards.scrollIntoViewIfNeeded();
         }
         if(target.kind==='product'){
