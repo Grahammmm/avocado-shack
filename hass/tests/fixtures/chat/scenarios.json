@@ -134,7 +134,7 @@
    "has": ["The website can't take sign-ups yet, so I can't turn sign-up on for Cass Hill hike. I can add Limited to 10 people. Ask at the Shack to save a place. to its description instead, so people ask you at the shop. Want that? Reply yes or no."],
    "lacks": ["Here's the change"]},
   {"owner": "yes", "model": null, "disposition": "proposed",
-   "has": ["Cass Hill hike, the description", "Limited to 10 people. Ask at the Shack to save a place.", "Reply yes {code} to put it on the website"]},
+   "has": ["Cass Hill hike (Saturday, Nov 7), the description", "Limited to 10 people. Ask at the Shack to save a place.", "Reply yes {code} to put it on the website"]},
   {"owner": "yes {code}", "model": null, "disposition": "approved",
    "event": {"rsvpEnabled": false, "capacity": null, "description": "Limited to 10 people. Ask at the Shack to save a place."}}]},
 
