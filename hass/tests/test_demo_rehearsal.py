@@ -24,7 +24,7 @@ demo = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(demo)
 
 # What 02-DEMO-PLAN promises and main does not do yet (each is a named gap, never a silent pass).
-KNOWN_GAPS = {"s02-what-can-you-do": "QA1-03", "s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12", "s15-whats-sold-out": "ROUTER-15",
+KNOWN_GAPS = {"s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12", "s15-whats-sold-out": "ROUTER-15",
               "s05x-undo-names-the-draft": "QA1-10", "s05x-thanks": "QA1-10"}
 
 
@@ -47,6 +47,12 @@ class OfflineRehearsal(unittest.TestCase):
         self.assertEqual(bad, [])
         gaps = {r.row["id"]: r.row["known_gap"] for r in results if r.status == "GAP"}
         self.assertEqual(gaps, KNOWN_GAPS)  # a gap that now passes is reported PASS: delete its known_gap field
+
+    def test_s02_is_code_help_with_no_known_gap_or_model_call(self):  # AV2007-04
+        res = {r.row["id"]: r for r in Run.get()}["s02-what-can-you-do"]
+        self.assertEqual((res.status, res.problems), ("PASS", []))
+        self.assertNotIn("known_gap", res.row)
+        self.assertEqual(res.row["expect"]["model_calls"], 0)
 
     def test_the_demo_steps_are_all_there(self):
         Run.get()
