@@ -9,7 +9,7 @@ from hass.interpreter_prompt import build
 from hass.tests.test_interpreter_prompt import FIXTURE, TEST_REGISTRY, tiny_content
 
 PRODUCTS = "Products (id | name | brand | status | description):"
-MAKERS = "Makers (key | name):"
+MAKERS = "Makers (key | name | place | story):"
 GOOD = {"id": "zz-honey", "name": "Wildflower honey", "status": "active"}
 GOOD2 = {"id": "aa-avocado", "name": "Hass avocado", "status": "sold-out"}
 
@@ -47,14 +47,14 @@ class ProductShapeTest(unittest.TestCase):
             with self.subTest(products=products):
                 prompt = _prompt(products, raw_products=True)
                 self.assertEqual(_section(prompt, PRODUCTS), ["(none)"])
-                self.assertIn('"Stepladder" | "Stepladder Ranch"', _section(prompt, MAKERS))
+                self.assertIn('"Stepladder" | "Stepladder Ranch" | "" | ""', _section(prompt, MAKERS))
 
 
 class MakerShapeTest(unittest.TestCase):
     def test_non_object_maker_keeps_key_with_empty_name(self):
         prompt = _prompt(makers={"m1": "x", "m2": [1], "m3": {"name": "Ojai Farm"}, "m4": None, "m5": 0})
-        self.assertEqual(_section(prompt, MAKERS), ['"m1" | ""', '"m2" | ""', '"m3" | "Ojai Farm"',
-                                                    '"m4" | ""', '"m5" | ""'])
+        self.assertEqual(_section(prompt, MAKERS), ['"m1" | "" | "" | ""', '"m2" | "" | "" | ""', '"m3" | "Ojai Farm" | "" | ""',
+                                                    '"m4" | "" | "" | ""', '"m5" | "" | "" | ""'])
 
     def test_non_dict_makers_give_none(self):
         for makers in (["m1"], None, "m1", 3, [{"name": "Ojai Farm"}]):

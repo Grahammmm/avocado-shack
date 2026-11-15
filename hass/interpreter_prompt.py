@@ -9,6 +9,9 @@ AV2022-02: a last Store section lists the street address, town and every hours l
 store.set_hours replaces the whole list.
 AV2152-06: each product row ends with its current description, whole or the unquoted marker <omitted>, never cut.
 RF1100-7: damaged catalog rows are skipped, like hikes and route ideas (a non-object maker keeps its key, empty name).
+AV1937-06: each maker row adds its place and story, each route idea row its place and description, each whole or the
+unquoted marker <omitted>, never cut. Over the byte cap the maker stories go first, then route descriptions, maker
+places and route places (reverse key/id order), then product descriptions; only if that cannot fit is the prompt refused.
 """
 from __future__ import annotations
 
@@ -70,6 +73,10 @@ RULES = (
     "product.edit description replaces the whole text: to add or change part, send the whole new text built from the "
     f"current description listed under Products; if the description shows {OMITTED}, ask the owner for the full new "
     "description instead of guessing the unseen part, and never send " + OMITTED + " as an argument.",
+    "maker.edit (name, place, story) and route.edit (title, place, description) replace the whole text too: to add or "
+    f"change part, send the whole new text built from the value under Makers or Route ideas. \"\" is empty; {OMITTED} is "
+    "unseen here, so ask the owner for the full new text, never guess it, and never send " + OMITTED + " as an argument. "
+    "A full replacement the owner wrote is fine.",
     # HASS-NL-1: how the owner writes, and what to do when unsure
     "The owner texts from a phone: casual, misspelt, dictated, in fragments, sometimes several asks in one message. Read for "
     "meaning, and make one op per ask.",
@@ -169,9 +176,8 @@ def _capped(rows, cap) -> list:
     return rows[:cap] + ([f"… and {len(rows) - cap} more (ask the owner)"] if len(rows) > cap else [])
 
 
-def _description(p, omit) -> str:
-    """The whole stored description as one JSON string; the marker, unquoted, when left out or not text."""
-    value = p.get("description")
+def _rich(value, omit) -> str:
+    """A whole stored text as one JSON string; the marker, unquoted, when left out or not text (None is empty)."""
     if omit or (value is not None and not isinstance(value, str)):
         return OMITTED
     return _q(value)
@@ -193,22 +199,48 @@ def _product_lines(products, omitted=frozenset()) -> list:
     rows = sorted(products, key=lambda p: str(p.get("id", "")))
     shown = [next((v for v in (p.get("displayBrand"), p.get("brand")) if isinstance(v, str) and v), "") for p in rows]
     return _capped([f"{_q(p.get('id'))} | {_q(p.get('name'))} | {_q(b)} | {_q(p.get('status'))} | "
-                    f"{_description(p, i in omitted)}"
+                    f"{_rich(p.get('description'), ('product', i) in omitted)}"
                     for i, (p, b) in enumerate(zip(rows, shown))], MAX_PRODUCTS)  # AV1102-06: displayBrand, else brand
 
 
 def _omission_order(products) -> list:
     """Positions of the displayed rows whose description could shrink, in the order they are given up."""
     rows = sorted(products, key=lambda p: str(p.get("id", "")))[:MAX_PRODUCTS]
-    saves = [i for i, p in enumerate(rows)
-             if isinstance(p.get("description"), str) and len(_q(p["description"]).encode("utf-8")) > len(OMITTED)]
-    return sorted(saves, key=lambda i: _retention_key(rows[i]))
+    return sorted((i for i, p in enumerate(rows) if _saves(p.get("description"))), key=lambda i: _retention_key(rows[i]))
 
 
-def _maker_lines(makers) -> list:
-    rows = [f"{_q(key)} | {_q(m.get('name') if isinstance(m := makers[key], dict) else None)}"
-            for key in sorted(makers, key=str)]
-    return _capped(rows, MAX_MAKERS)
+def _saves(value) -> bool:
+    """True for a text whose escaped form is longer than the marker, so leaving it out makes the prompt smaller."""
+    return isinstance(value, str) and len(_q(value).encode("utf-8")) > len(OMITTED)
+
+
+def _sorted_makers(makers) -> list:
+    """(key, maker object) in key order; a damaged maker is an empty object, so it shows its key and empty fields."""
+    return [(key, makers[key] if isinstance(makers[key], dict) else {}) for key in sorted(makers, key=str)]
+
+
+def _sorted_routes(ideas) -> list:
+    return sorted(_dicts(ideas), key=lambda r: str(r.get("id", "")))
+
+
+def _context_order(makers, ideas) -> list:
+    """AV1937-06: the maker and route texts that could shrink, in the order they are given up: maker stories (reverse key
+    order), route descriptions (reverse id order), maker places, route places. Only displayed rows with a text longer
+    than the marker are listed, so skipping a short value can never make the prompt bigger."""
+    maker_rows = [m for _, m in _sorted_makers(makers)[:MAX_MAKERS]]
+    route_rows = _sorted_routes(ideas)[:MAX_ROUTES]
+    order = []
+    for kind, rows, field in (("maker", maker_rows, "story"), ("route", route_rows, "description"),
+                              ("maker", maker_rows, "place"), ("route", route_rows, "place")):
+        order += [(kind, i, field) for i in reversed(range(len(rows))) if _saves(rows[i].get(field))]
+    return order
+
+
+def _maker_lines(makers, omitted=frozenset()) -> list:
+    """key | name | place | story; ``omitted``: ("maker", position, field) texts replaced by the marker."""
+    return _capped([f"{_q(key)} | {_q(m.get('name'))} | {_rich(m.get('place'), ('maker', i, 'place') in omitted)} | "
+                    f"{_rich(m.get('story'), ('maker', i, 'story') in omitted)}"
+                    for i, (key, m) in enumerate(_sorted_makers(makers))], MAX_MAKERS)
 
 
 def _dicts(items) -> list:
@@ -232,9 +264,11 @@ def _hike_detail_lines(events) -> list:
                     f"{_q(text(e.get('bring')))} | {_q(text(e.get('accessNote')))}" for e in rows], MAX_HIKE_DETAILS)
 
 
-def _route_lines(ideas) -> list:
-    rows = sorted(_dicts(ideas), key=lambda r: str(r.get("id", "")))
-    return _capped([f"{_q(r.get('id'))} | {_q(r.get('title'))}" for r in rows], MAX_ROUTES)
+def _route_lines(ideas, omitted=frozenset()) -> list:
+    """id | title | place | description; ``omitted``: ("route", position, field) texts replaced by the marker."""
+    return _capped([f"{_q(r.get('id'))} | {_q(r.get('title'))} | {_rich(r.get('place'), ('route', i, 'place') in omitted)} | "
+                    f"{_rich(r.get('description'), ('route', i, 'description') in omitted)}"
+                    for i, r in enumerate(_sorted_routes(ideas))], MAX_ROUTES)
 
 
 def _store_lines(store) -> list:
@@ -266,7 +300,8 @@ def build(registry, content, skills=None, candidates=()) -> str:
     SKILLS-FW-2: with active ``skills`` (a hass.skills Registry or iterable) a generated Skills section is appended last,
     in full for the router's ``candidates``; with none the output is byte-identical to a build without skills.
 
-    AV2152-06: over the byte cap, whole product descriptions become <omitted> oldest first until the prompt fits."""
+    AV2152-06: over the byte cap, whole product descriptions become <omitted> oldest first until the prompt fits.
+    AV1937-06: before those, whole maker stories, route descriptions, maker places and route places do (``_context_order``)."""
     community = getattr(content, "community", None) or {}
     community = community if isinstance(community, dict) else {}
     club = club if isinstance(club := community.get("club"), dict) else {}  # RF0111-10: a non-dict club is absent
@@ -281,11 +316,13 @@ def build(registry, content, skills=None, candidates=()) -> str:
             "Rules:\n" + "\n".join(f"- {rule}" for rule in RULES),
             "Operations (name(arg: kind[, required][, one of ...][, >= n]; ...)):\n" + "\n".join(_op_lines(registry)),
             "Catalog.\nProducts (id | name | brand | status | description):\n"
-            + "\n".join(_product_lines(products, omitted)) + "\nMakers (key | name):\n" + "\n".join(_maker_lines(makers)),
+            + "\n".join(_product_lines(products, omitted))
+            + "\nMakers (key | name | place | story):\n" + "\n".join(_maker_lines(makers, omitted)),
             "Community.\nHikes (id | title | starts at | status):\n" + "\n".join(_hike_lines(community.get("events")))
             + "\nScheduled hike details (id | meeting point | capacity | bring | access note):\n"
             + "\n".join(_hike_detail_lines(community.get("events")))
-            + "\nRoute ideas (id | title):\n" + "\n".join(_route_lines(community.get("routeIdeas")))
+            + "\nRoute ideas (id | title | place | description):\n"
+            + "\n".join(_route_lines(community.get("routeIdeas"), omitted))
             + ("\nsamples | hidden" if club.get("showSamples") is False else ""),
             "Store.\nStore (field | value):\n" + "\n".join(_store_lines(getattr(content, "store", None) or {})),
         ]
@@ -294,10 +331,11 @@ def build(registry, content, skills=None, candidates=()) -> str:
         return "\n\n".join(sections) + "\n"
 
     omitted, prompt = set(), assemble(frozenset())
-    for position in _omission_order(products):
+    steps = _context_order(makers, community.get("routeIdeas")) + [("product", i) for i in _omission_order(products)]
+    for step in steps:  # each step is measured on the whole prompt; the first fit stops it
         if len(prompt.encode("utf-8")) <= PROMPT_MAX_BYTES:
             break
-        omitted.add(position)
+        omitted.add(step)
         prompt = assemble(frozenset(omitted))
     if len(prompt.encode("utf-8")) > PROMPT_MAX_BYTES:
         raise ValueError("prompt too large")

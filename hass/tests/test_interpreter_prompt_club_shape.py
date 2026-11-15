@@ -60,13 +60,13 @@ class ClubShapeTests(unittest.TestCase):
         valid = _prompt(rows=True)
         self.assertEqual(_section(valid, "Hikes (id | title | starts at | status):"),
                          ['"buchon-nov" | "Buchon" | "2026-11-07T08:30:00-08:00" | "scheduled"'])
-        self.assertEqual(_section(valid, "Route ideas (id | title):"), ['"idea-a" | "Coast walk"'])
+        self.assertEqual(_section(valid, "Route ideas (id | title | place | description):"), ['"idea-a" | "Coast walk" | "" | ""'])
         self.assertIn('"buchon-nov" | "Gate" | "12" | "" | ""', valid)
         for club in TRUTHY_DAMAGED:
             with self.subTest(club=club):
                 self.assertEqual(_prompt(club, rows=True), valid)
         self.assertEqual(_prompt({"showSamples": False}, rows=True), valid.replace(
-            '"idea-a" | "Coast walk"', '"idea-a" | "Coast walk"' + HIDDEN, 1))
+            '"idea-a" | "Coast walk" | "" | ""', '"idea-a" | "Coast walk" | "" | ""' + HIDDEN, 1))
 
     def test_input_unchanged_repeat_build_and_skills(self):
         skills = model.Registry({"a.b": _skill("a.b")})
