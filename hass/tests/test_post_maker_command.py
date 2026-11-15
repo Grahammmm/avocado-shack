@@ -213,7 +213,8 @@ class PostMakerTests(StoreMixin, ConversationTestCase):
         [line] = lines
         plain = line.replace("\ue000", "").replace("\ue001", "")
         self.assertLessEqual(len(plain), 70)
-        self.assertTrue(plain.endswith(" - drafts: post maker fixture-farm"), plain)
+        self.assertEqual(plain, "post Hass avocado or post maker fixture-farm - a caption to copy")
+        for bad in ("<id>", "<$>", "<code>"): self.assertNotIn(bad, plain)
         [(_, example, row)] = [r for r in rows(DOC.read_text("utf-8")) if r[0].startswith("`post maker")]
         self.assertEqual(verb(re.findall(r"`([^`]+)`", example)[0]), "post")
         self.assertEqual(conversation.parse_command(re.findall(r"`([^`]+)`", example)[0]), ("post", "maker fixture-farm"))
