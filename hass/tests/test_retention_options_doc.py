@@ -42,9 +42,14 @@ CAVEATS = {
     "support rules": "stop and ask before deleting or editing a database or a backup",
 }
 ANCHORS = {("hass/retention.py", 11): "owner action 4", ("docs/hass/FEATURES.md", 49): "| H21 |",
-           ("docs/hass/SUPPORT.md", 96): "Recreating the queue", ("docs/hass/SUPPORT.md", 117): "memory-invariant",
-           ("docs/hass/SUPPORT.md", 133): "never delete or rotate backups", ("docs/hass/SUPPORT.md", 220): "## Restore",
            ("docs/hass/TRIAL.md", 128): "## What counts as done", ("docs/hass/TRIAL.md", 141): "## Reviewing the trial"}
+# SUPPORT.md is edited often, so it is linked by heading, never by line number. Each heading anchor must exist and its
+# section must still say the phrase the page relies on. (TRIAL.md and the source files keep checked line anchors above.)
+HEADING_ONLY = ("docs/hass/SUPPORT.md",)
+SECTIONS = {("docs/hass/SUPPORT.md", "inbox-integrity"): "Recreating the queue needs a new start point",
+            ("docs/hass/SUPPORT.md", "memory-invariant"): "forgotten fact's text still stored",
+            ("docs/hass/SUPPORT.md", "disk-low"): "never delete or rotate backups",
+            ("docs/hass/SUPPORT.md", "restore"): "statebackup.py verify BACKUP"}
 CORE_SOURCES = ("hass/retention.py", "hass/conversation.py", "hass/statebackup.py", "docs/hass/SUPPORT.md")
 READERS = ("hass/inbox.py", "hass/memory.py", "hass/media.py", "hass/editor.py", "hass/ops/history.py", "hass/health.py",
            "hass/trial_summary.py", "docs/hass/TRIAL.md")
@@ -111,9 +116,22 @@ def question_problems(doc: str) -> list:
     return problems + [f"nobody is asked about {w}" for w in QUESTION_WORDS if w not in block.lower()]
 
 
+def sections(text: str) -> dict:
+    """Markdown headings -> section text, keyed by the GitHub-style slug of the heading."""
+    out, slug = {}, None
+    for line in text.splitlines():
+        m = re.match(r"#{1,6}\s+(.*?)\s*$", line)
+        if m:
+            slug = re.sub(r"[^\w\s-]", "", m.group(1).lower()).strip().replace(" ", "-")
+            out[slug] = ""
+        elif slug is not None:
+            out[slug] += line + "\n"
+    return out
+
+
 def link_problems(doc: str) -> list:
     problems, seen = [], set()
-    for path, anchor in re.findall(r"\]\(([^)#\s]+)(?:#L(\d+))?\)", doc):
+    for path, anchor in re.findall(r"\]\(([^)#\s]+)(?:#([\w-]+))?\)", doc):
         if path.startswith(("http", "mailto")):
             continue
         target = (DOCS / path).resolve()
@@ -121,7 +139,19 @@ def link_problems(doc: str) -> list:
         seen.add(rel)
         if not target.is_file():
             problems.append(f"{path} is not a file")
+        elif anchor and rel in HEADING_ONLY:
+            body = sections(target.read_text("utf-8")).get(anchor)
+            if body is None:
+                problems.append(f"{path}#{anchor} is not a heading (link SUPPORT.md by heading, not line number)")
+            elif (rel, anchor) not in SECTIONS:
+                problems.append(f"{path}#{anchor} is not a checked section")
+            elif SECTIONS[rel, anchor].lower() not in body.lower():
+                problems.append(f"{path}#{anchor} moved")
         elif anchor:
+            if not re.fullmatch(r"L\d+", anchor):
+                problems.append(f"{path}#{anchor} is not a line anchor")
+                continue
+            anchor = anchor[1:]
             lines = target.read_text("utf-8").splitlines()
             if not 1 <= int(anchor) <= len(lines):
                 problems.append(f"{path}#L{anchor} is past the end")
@@ -190,7 +220,10 @@ class RetentionOptionsDocTests(unittest.TestCase):
         self.assertNotEqual(link_problems(self.doc + "\n[x](../../hass/no_such_file.py)"), [])
         self.assertNotEqual(link_problems(self.doc.replace("retention.py#L11", "retention.py#L99999")), [])
         self.assertNotEqual(link_problems(self.doc.replace("retention.py#L11", "retention.py#L12")), [])
-        self.assertNotEqual(link_problems(self.doc.replace("](SUPPORT.md#L220)", "](SUPPORT.md#L221)")), [])
+        self.assertNotEqual(link_problems(self.doc.replace("](SUPPORT.md#restore)", "](SUPPORT.md#restore-steps)")), [])
+        self.assertNotEqual(link_problems(self.doc.replace("](SUPPORT.md#restore)", "](SUPPORT.md#paused-long)")), [])
+        self.assertNotEqual(link_problems(self.doc.replace("](SUPPORT.md#restore)", "](SUPPORT.md#L220)")), [])
+        self.assertNotEqual(link_problems(self.doc.replace("](SUPPORT.md#restore)", "](SUPPORT.md#problems)")), [])
         self.assertNotEqual(link_problems(self.doc.replace("(../../hass/statebackup.py)", "(../../hass/statebackup.pyx)")), [])
         trial = squash(self.doc.split("## The trial review", 1)[1].split("\n## ", 1)[0])
         for phrase in ("It is a proposal; no real-phone trial has been completed", "accept ranges up to 31 days",
