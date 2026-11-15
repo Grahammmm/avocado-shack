@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "approval": {"schema_version": 1, "owner": "synthetic-owner", "chat": "synthetic-chat", "message": "synthetic-message", "attachment": "synthetic-attachment", "count": 1, "status": "approved", "received_at": "2026-11-15T22:59:00+00:00", "expires_at": "2026-11-15T23:04:00+00:00"},
+  "orientation_pixels": {"2": [[2,1,0],[5,4,3]], "3": [[5,4,3],[2,1,0]], "4": [[3,4,5],[0,1,2]], "5": [[0,3],[1,4],[2,5]], "6": [[3,0],[4,1],[5,2]], "7": [[5,2],[4,1],[3,0]], "8": [[2,5],[1,4],[0,3]]},
+  "negative": [
+    {"name":"wrong-owner", "approval":{"owner":"other"}, "expected":"value-error", "max_calls":0},
+    {"name":"wrong-chat", "approval":{"chat":"other"}, "expected":"value-error", "max_calls":0},
+    {"name":"wrong-message", "approval":{"message":"other"}, "expected":"value-error", "max_calls":0},
+    {"name":"wrong-attachment", "approval":{"attachment":"other"}, "expected":"value-error", "max_calls":0},
+    {"name":"cancelled", "approval":{"status":"cancelled"}, "expected":"value-error", "max_calls":0},
+    {"name":"expired", "approval":{"expires_at":"2026-11-15T23:00:00+00:00"}, "expected":"value-error", "max_calls":0},
+    {"name":"stale", "approval":{"received_at":"2026-11-15T22:54:59+00:00"}, "expected":"value-error", "max_calls":0},
+    {"name":"future", "approval":{"received_at":"2026-11-15T23:00:01+00:00"}, "expected":"value-error", "max_calls":0},
+    {"name":"bad-count", "approval":{"count":0}, "expected":"value-error", "max_calls":0},
+    {"name":"extra-count", "approval":{"count":2}, "expected":"value-error", "max_calls":0},
+    {"name":"boolean-count", "approval":{"count":true}, "expected":"value-error", "max_calls":0},
+    {"name":"redirect", "status":302, "expected":"http-error", "max_calls":1},
+    {"name":"declared-oversize", "declared":20971521, "expected":"too-large", "max_calls":1},
+    {"name":"byte-cap", "expected":"too-large", "max_calls":2},
+    {"name":"truncated", "expected":"size-mismatch", "max_calls":2},
+    {"name":"response-owner", "response":{"owner":"other"}, "expected":"transport-error", "max_calls":1},
+    {"name":"response-chat", "response":{"chat":"other"}, "expected":"transport-error", "max_calls":1},
+    {"name":"response-message", "response":{"guid":"other"}, "expected":"transport-error", "max_calls":1},
+    {"name":"response-attachment", "response":{"attachments":[{"guid":"other","totalBytes":1}]}, "expected":"transport-error", "max_calls":1},
+    {"name":"response-count", "response":{"attachments":[]}, "expected":"transport-error", "max_calls":1}
+  ],
+  "missing": ["real-phone", "needed-owner-format", "live-fetch", "replacement-trial", "owner-acceptance"]
+}
