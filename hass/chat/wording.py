@@ -141,7 +141,24 @@ def _added(r: dict, routes=None) -> list:  # AV1737-06 (H05/H06): an added recor
     return lines + (["  and a few more details"] if len(rows) > 40 else [])
 
 
+def _aware(v):
+    """AV2007-17: the instant of a timezone-aware ISO time string, else None."""
+    try: t = datetime.fromisoformat(v) if isinstance(v, str) else None
+    except ValueError: return None
+    return t if t is not None and t.tzinfo is not None else None
+
+
 def _change_line(r: dict, field, b, a, undo: bool, full_before: bool, routes=None) -> str:
+    who, phrase = _subject(r), voice.field_phrase(field)
+    if r.get("collection") == "events" and field == "status":  # AV2007-17: a hike says what happens to it, not the field
+        if a == "cancelled" and b != "cancelled": return f"{who}: cancelled"
+        if b == "cancelled" and a == "scheduled": return f"{who}: scheduled again"
+    if r.get("collection") == "events" and field == "startsAt" and _aware(b) and _aware(a) and _aware(b) != _aware(a):
+        return f"{who}: rescheduled\n" + _plain_change(r, field, b, a, undo, full_before, routes)
+    return _plain_change(r, field, b, a, undo, full_before, routes)
+
+
+def _plain_change(r: dict, field, b, a, undo: bool, full_before: bool, routes=None) -> str:
     who, phrase = _subject(r), voice.field_phrase(field)
     if field == "image" and (PHOTO_PATH_RE.fullmatch(str(a)) or undo and PHOTO_PATH_RE.fullmatch(str(b))):
         return f"{who}: the photo goes back to the previous one" if undo else f"{who}: the photo will be the one from your message"
