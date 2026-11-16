@@ -133,9 +133,11 @@ class PhoneAnswerTests(H06TestCase):
         self.assertEqual(self.drafts()[-1]["state"], "proposed")
 
     def test_yes_please_stays_the_near_approval(self):
-        code = self.proposal()["code"]
+        draft = self.proposal()
+        code = draft["code"]
         self.assertEqual(self.say("yes please"), "near-approval")
-        self.assertEqual(self.replies(), [f"I haven't changed anything yet. To go ahead, reply yes {code}."])
+        self.assertEqual(self.replies(),
+                         [f"I haven't changed anything yet. To go ahead with {draft['summary']}, reply yes {code}."])
         self.assertEqual((self.approvals(), self.interp.texts), (0, []))
 
     def test_delayed_decorated_yes_is_judged_at_the_time_it_was_sent(self):
