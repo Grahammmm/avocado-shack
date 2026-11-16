@@ -36,8 +36,8 @@ MAX_ITEMS = 6  # spec 3.2 / 3.3: more than six products at once asks with the co
 PRICE_SLOTS = frozenset({"price", "prices", "cost", "amount", "pricing"})
 CLEAR_CHOICES = ("clearProducer", "clearImageAlt")
 UNKNOWN_BRAND, UNKNOWN_SHOWN = "Producer not identified", "From the market"  # the house words for an unknown producer
-_NUM = (r"(?:\d+(?:[.,]\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|"
-        r"forty|fifty|hundred)")
+_NUM = (r"(?:\d+(?:[.,]\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|"
+        r"forty|fifty|sixty|seventy|eighty|ninety|hundred)")
 PRICE_TEXT = re.compile(
     r"\$|\bper +(?:lb|pound|ounce|oz|dozen|each)\b|\bcents?\b|\bdollars?\b|\d\s?¢"
     + rf"|\b{_NUM}\s+for\s+{_NUM}(?=\s*(?:[.,;:!?)]|$|\s(?:each|a piece|apiece|ea|bucks?|and|or)\b))"  # 'two for five.', '2 for 5.'
