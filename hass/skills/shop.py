@@ -259,7 +259,7 @@ _PART_RE = re.compile(r"[,&]|\b(?:and|but|then|while|plus|though|although|wherea
 
 def _line_problem(i, line):
     if len(line) > MAX_HOURS_LINE:
-        return f"Line {i} of the hours is too long. Could you keep each line under {MAX_HOURS_LINE} characters?"
+        return HOURS_LINE_LONG.format(i=i)
     if not any(c.isalnum() for c in line):
         return f"Line {i} of the hours has no day or time in it. What should it say?"
     return None
@@ -372,6 +372,9 @@ def plan_hours(slots, ctx):
 NOTICE_ASK, UNTIL_ASK = "What should the notice say?", "Until what day?"
 NOTICE_PAST = "That day has already passed. What is the last day for the notice?"
 NOTICE_LONG = f"A notice can stay up for {MAX_NOTICE_DAYS} days at the most. Could you pick an earlier last day?"
+HOURS_LINE_LONG = ("Line {i} of the hours is too long. Could you shorten it to "
+                   f"{MAX_HOURS_LINE} characters or fewer?")
+ADDRESS_LONG = f"That is too long. Could you shorten it to {MAX_ADDRESS_PART} characters or fewer?"
 NOTICE_TEXT_LONG = f"That notice is too long. Could you shorten it to {MAX_NOTICE} characters or fewer?"
 NOTICE_SHORT = "That notice is too short to mean anything. What should it say?"
 NO_NOTICE = "There is no notice up right now, so there is nothing to take down."
@@ -510,7 +513,7 @@ def plan_contact(slots, ctx):
         raise SkillStop(CONTACT_ASK, "question")
     for value in (street, town):
         if len(value) > MAX_ADDRESS_PART:
-            raise SkillStop(f"That is too long. Could you keep it under {MAX_ADDRESS_PART} characters?", "question")
+            raise SkillStop(ADDRESS_LONG, "question")
         if value and not any(c.isalpha() for c in value):
             raise SkillStop("The street and the town each need some letters. What should it say?", "question")
         if "$" in value:
