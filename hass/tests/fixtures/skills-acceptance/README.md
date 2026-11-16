@@ -84,7 +84,8 @@ declared edits and Undo sentence (for example hike.add keeps a cancelled event, 
 
 Exchanges: where the router ties two skills (SKILLS-SPEC 2.5) or a first example is incomplete, the row is a short honest exchange:
 item.add (stock?), item.hide (plums are not on the site, then "the lemons"), item.picture, stock.restock (three honeys, then the pick),
-maker.add (state), specials.add (end day), specials.show, social.item/hike/recap. `more honey coming Thursday` is Thursday 2026-11-12.
+maker.add (state), specials.add (end day), social.item/hike/recap. `more honey coming Thursday` is Thursday 2026-11-12.
+The two `specials.show` questions each answer immediately: AV2007-03 gives a unique exact read-only trigger preference over shared words.
 `morning report` is an existing command, so its row is command-covered (no model call, disposition `report`).
 
 RF0535-13 refreshes only the house-render JPEG hashes for jar-white-sheet.jpg and bottle-grey-wall-tilted.jpg,

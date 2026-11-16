@@ -1,4 +1,4 @@
-"""HASS-DEMO-REHEARSAL-1 (A4): the owner demo script (02-DEMO-PLAN steps 1-8 and 11-16) as a reproducible offline run.
+"""HASS-DEMO-REHEARSAL-1 (A4): the owner demo script (02-DEMO-PLAN steps 1-16; steps 9-10 read the recorded till fixture, read-only) as a reproducible offline run.
 
 hass/tests/fixtures/demo/g-demo.jsonl is replayed by scripts/hass/demo_rehearsal.py through the real Conversation, Editor,
 sitegen and claims on a throwaway writer worktree with recorded interpreter replies. No model, no network, no browser.
@@ -24,7 +24,7 @@ demo = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(demo)
 
 # What 02-DEMO-PLAN promises and main does not do yet (each is a named gap, never a silent pass).
-KNOWN_GAPS = {"s02-what-can-you-do": "QA1-03", "s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12", "s15-whats-sold-out": "ROUTER-15"}
+KNOWN_GAPS = {"s02-what-can-you-do": "QA1-03", "s11-notice-live": "PLAN-11", "s14-pause-please": "QA1-12"}
 
 
 class Run:
@@ -50,10 +50,58 @@ class OfflineRehearsal(unittest.TestCase):
     def test_the_demo_steps_are_all_there(self):
         Run.get()
         steps = {r["step"] for r in Run.rows}
-        self.assertEqual(steps, set(range(1, 9)) | set(range(11, 17)))
+        self.assertEqual(steps, set(range(1, 17)))
         ids = {r["id"] for r in Run.rows}
-        for needed in ("s16-stranger", "s14-reused-code", "s14-yes-while-paused", "s07-undo-yes", "s12-undo-yes"):
+        for needed in ("s16-stranger", "s14-reused-code", "s14-yes-while-paused", "s07-undo-yes", "s12-undo-yes",
+                       "s09-how-many", "s09-low-stock", "s09-sold-out", "s09-plural", "s10-price", "s10-received"):
             self.assertIn(needed, ids)
+
+    TILL = {"s09-how-many": "Hass avocado: 40 in the till.", "s09-low-stock": "Sold out: Eggs, dozen. 1 item(s) have no count in the till, so I can't tell.",
+            "s09-sold-out": "No, Heirloom tomatoes is not sold out: 7.5 in the till.",
+            "s09-plural": "I can't find exactly that. The closest is Hass avocado: 40 in the till.",
+            "s10-price": "I can read the till but I can't change it yet.", "s10-received": "I can read the till but I can't change it yet."}
+
+    def test_till_rows_are_exact_read_only_and_never_reach_the_model(self):
+        by_id = {r.row["id"]: r for r in Run.get()}
+        with mock.patch("socket.create_connection", side_effect=AssertionError("network")), \
+                mock.patch("hass.clover.credential.load_token", side_effect=AssertionError("token")):
+            world, rows = demo.load_fixture()
+            demo.run(world, rows, only={"s09-plural"})
+        for key, reply in self.TILL.items():
+            with self.subTest(row=key):
+                self.assertEqual(by_id[key].replies, [reply])
+                self.assertEqual(by_id[key].status, "PASS", by_id[key].problems)
+                expect = next(r for r in Run.rows if r["id"] == key)["expect"]
+                self.assertEqual((expect["model_calls"], expect.get("commit")), (0, None))
+
+    def test_till_rows_quote_no_price(self):
+        by_id = {r.row["id"]: r for r in Run.get()}
+        for key in self.TILL:
+            joined = " ".join(by_id[key].replies)
+            for price in ("$", "12.50", "1.50", "7.00", "11.00", "3.99"): self.assertNotIn(price, joined, key)
+
+    def test_the_till_is_only_attached_for_till_rows(self):
+        by_id = {r.row["id"]: r for r in Run.get()}
+        self.assertNotEqual(by_id["s15-whats-sold-out"].disposition, "till-read")
+        self.assertEqual(by_id["s15-whats-sold-out"].row["known_gap"], "ROUTER-15")
+        world, rows = demo.load_fixture()
+        shop = demo.Shop(world)
+        try:
+            shop.say(next(r for r in rows if r["id"] == "s09-how-many"), "how many hass avocado")
+            self.assertIsNone(shop.conv.till)
+        finally: shop.close()
+
+    def test_a_till_row_without_world_till_is_refused(self):
+        row = '{"id": "x", "step": 9, "say": "low stock", "till": %s, "expect": {"disposition": "till-read"}}\n'
+        world = '{"world": {"start": "2026-11-16T09:00:00-08:00", "ttl_seconds": 1800%s}}\n'
+        for label, text in (("no world till", world % "" + row % "true"), ("till yes", world % ', "till": true' + row % '"yes"')):
+            with self.subTest(label), tempfile.TemporaryDirectory() as tmp:
+                bad = Path(tmp) / "bad.jsonl"
+                bad.write_text(text, "utf-8")
+                err = io.StringIO()
+                with redirect_stderr(err), redirect_stdout(io.StringIO()): code = demo.main(["--fixture", str(bad)])
+                self.assertEqual(code, 2)
+                self.assertIn("fixture line 2", err.getvalue())
 
     def test_the_stranger_gets_no_reply_and_no_model_call(self):
         by_id = {r.row["id"]: r for r in Run.get()}
@@ -96,6 +144,11 @@ class RowsReallyAssert(unittest.TestCase):
         self.assertEqual(res.status, "FAIL")
         self.assertIn("wrong-count", [c for c, _ in res.problems])
 
+    def test_whats_sold_out_is_pass_not_a_known_gap(self):
+        res = {r.row["id"]: r for r in Run.get()}["s15-whats-sold-out"]
+        self.assertEqual(res.status, "PASS")
+        self.assertNotIn("known_gap", res.row)
+
     def test_a_wrong_saved_change_fails(self):
         def change(r):
             r["expect"]["diff"] = [{**r["expect"]["diff"][0], "after": "no"}] + r["expect"]["diff"][1:]
@@ -110,6 +163,10 @@ class RowsReallyAssert(unittest.TestCase):
     def test_a_message_that_wrote_before_its_yes_would_be_caught(self):
         res = self.mutated("s06-yes", lambda r: {**r, "expect": {k: v for k, v in r["expect"].items() if k not in ("commit", "files", "diff")}})
         self.assertIn("write-before-yes", [c for c, _ in res.problems])
+
+    def test_a_till_reply_that_quotes_a_count_it_should_not_fails(self):
+        res = self.mutated("s09-how-many", lambda r: {**r, "expect": {**r["expect"], "reply_lacks": ["40"]}})
+        self.assertEqual((res.status, [c for c, _ in res.problems]), ("FAIL", ["wrong-reply"]))
 
     def test_a_known_gap_that_fails_is_a_gap_not_a_fail(self):
         res = self.mutated("s14-pause-please", lambda r: r)
