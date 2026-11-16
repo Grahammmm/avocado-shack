@@ -753,7 +753,10 @@ def _undo(sess, registry, res, expected, observe, base, after, chosen, duplicate
     if done["status"]: problems.append("the worktree is not clean")
     if [f for f in ufiles if not (f.startswith("hass/content/") and f.endswith(".json")) and f not in GENERATED_PATHS and f not in left_assets]: problems.append("a file outside content, site and assets differs")
     if [p for p in base["files"] if p.startswith(ASSET_DIR) and p not in done["files"]]: problems.append("a starting picture file is gone")
-    try: stale = sitegen.stale_paths(load_and_validate(wt / "hass" / "content", wt / "storefront-mockup"), wt)  # the site equals a fresh render of the restored content
+    try:
+        # Check the restored site on the same fixture day that rendered it, not the host's later day.
+        with testkit._clock_scope(sess._clock):
+            stale = sitegen.stale_paths(load_and_validate(wt / "hass" / "content", wt / "storefront-mockup"), wt)
     except ContentError: stale = ["content invalid"]
     if stale: problems.append("generated site files are stale")
     residue = bool(leftover or left_assets)
