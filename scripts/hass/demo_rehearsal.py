@@ -4,8 +4,8 @@
     python3 -B scripts/hass/demo_rehearsal.py [--fixture FILE] [--only ID[,ID...]] [--show]
     python3 -B scripts/hass/demo_rehearsal.py --live --url http://127.0.0.1:8010 --model NAME [--api openai|ollama] [--timeout 60]
 
-The fixture (hass/tests/fixtures/demo/g-demo.jsonl) is reports/hass-demo-clover/02-DEMO-PLAN.md steps 1-8 and 11-16
-(steps 9-10 are Clover and need #571) as one JSON row per step: what the owner sends, the interpreter reply a correct
+The fixture (hass/tests/fixtures/demo/g-demo.jsonl) is reports/hass-demo-clover/02-DEMO-PLAN.md steps 1-16
+(steps 9-10 read the recorded Clover till fixture, read-only) as one JSON row per step: what the owner sends, the interpreter reply a correct
 model gives for it, and what must be true afterwards. The first row (`world`) names the scratch shop and its clock.
 
 Offline (default; what CI runs): every row goes through the REAL Conversation, the production Editor and op registry,
@@ -64,10 +64,10 @@ LIVE_SITE = "demo.example.invalid"  # a hostname the scratch editor never publis
 CODES = ("bad-row", "wrong-disposition", "wrong-reply", "wrong-count", "wrong-calls", "write-before-yes", "wrong-files", "wrong-diff",
          "wrong-preview", "wrong-state", "undo-not-identical", "jargon", "wrong-turn", "no-code", "slow")
 ROW_KEYS = {"id", "step", "title", "say", "as", "kind", "from_me", "photo", "caption", "minutes", "reply", "expect", "mark", "keep", "restores",
-            "residue", "qa2", "known_gap", "note", "mode"}
+            "residue", "qa2", "known_gap", "note", "mode", "till"}
 EXPECT_KEYS = {"disposition", "replies", "reply_has", "reply_lacks", "reply_has_any", "model_calls", "plain", "allow_words", "commit",
                "files", "diff", "diff_paths", "preview", "draft_state", "tree", "max_seconds"}
-WORLD_KEYS = {"world", "about", "start", "ttl_seconds", "skills_mode", "photos", "seed", "setup", "never", "seconds"}
+WORLD_KEYS = {"world", "about", "start", "ttl_seconds", "skills_mode", "photos", "seed", "setup", "never", "seconds", "till"}
 SENDERS = {"owner": (OWNER, CHAT), "stranger": (STRANGER, CHAT), "group": (OWNER, GROUP), "stranger-chat": (STRANGER, GROUP)}
 WORDS = re.compile(r"\{code(?::([a-z0-9-]+))?\}")
 
@@ -94,6 +94,7 @@ def load_fixture(path=FIXTURE):
         if key not in world: raise RehearsalError(f"fixture line 1: world.{key} is required")
     try: datetime.fromisoformat(world["start"]).astimezone(timezone.utc)
     except (TypeError, ValueError): raise RehearsalError("fixture line 1: world.start must be an ISO time with an offset") from None
+    if "till" in world and world["till"] is not True: raise RehearsalError("fixture line 1: till must be true")
     rows, seen = [], set()
     for n, row in items[1:]:
         def bad(what): raise RehearsalError(f"fixture line {n}: {what}")
@@ -103,6 +104,8 @@ def load_fixture(path=FIXTURE):
         seen.add(row["id"])
         if type(row.get("step")) is not int: bad("step must be the demo-plan step number")
         if not isinstance(row.get("say"), str) or not row["say"].strip(): bad("say must be the owner's message")
+        if "till" in row and (row["till"] is not True or not world.get("till")):
+            bad("till must be true" if row["till"] is not True else "till needs world.till")
         if row.get("as", "owner") not in SENDERS: bad("as must be one of " + ", ".join(SENDERS))
         if not isinstance(row.get("expect"), dict) or "disposition" not in row["expect"]: bad("expect.disposition is required")
         if set(row["expect"]) - EXPECT_KEYS: bad("unknown expect field " + ", ".join(sorted(set(row["expect"]) - EXPECT_KEYS)))
@@ -169,7 +172,7 @@ class Shop:
         self.world, self.live = world, live
         self.now = datetime.fromisoformat(world["start"]).astimezone(timezone.utc)
         self._clock = lambda: self.now
-        self.n, self.photos, self.media_root = 0, PhotoSource(), None
+        self.n, self.photos, self.media_root, self.till_seeded = 0, PhotoSource(), None, False
         from hass.fixture_chat import FixtureAdapter
         from hass.tests.test_editor import WriterRepo
         self.out = FixtureAdapter()
@@ -236,16 +239,25 @@ class Shop:
         msg = self.Inbound(pid, chat, sender, text, row.get("from_me", False), row.get("kind", "new"), self.now.isoformat(),
                            attachments=1 if photo is not None else 0)
         before = len(self.out.sent)
+        if row.get("till"): self._attach_till()
         site = self.conv.settings.pop("liveSite", None) if row.get("mode") == "private" else None  # as the host does in private mode
         start = time.monotonic()
         try:
             with tk._clock_scope(self._clock): disposition = self.conv.handle(msg)
         finally:
             if site is not None: self.conv.settings["liveSite"] = site
+            self.conv.till = None  # the desk is only ever there for a `till` row
         seconds = time.monotonic() - start
         self.conv.flush(self.out)
         sent = self.out.sent[before:]
         return disposition, [voice.plain(r["text"]) for r in sent], [a for r in sent for a in r["attachments"]], seconds
+
+    def _attach_till(self):
+        """Fill the private till cache once from main's recorded Clover fixture (no network, no token), then give the Conversation a read-only desk."""
+        from hass.clover import chat as till_chat
+        from hass.tests.test_clover_chat import BLOCK, seed
+        if not self.till_seeded: seed(Path(self.repo.state), now=self.now); self.till_seeded = True
+        self.conv.till = till_chat.TillDesk(str(self.repo.state), BLOCK)
 
     def close(self):
         try: self.conv.db.close()

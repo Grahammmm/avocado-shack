@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "unit": "AUDINV-CIW-06",
+  "inspected_main": "b83d3615a2ff8802c5b82339b7802e6e62c8d97d",
+  "candidate_only": true,
+  "installed": false,
+  "no_apply_boundary": "No production file, workflow, runner count, cap or registry is edited; read-only evidence report only.",
+  "reused_sources": [
+    {"path": ".github/workflows/check.yml", "sha256": "cc91cfaaaf826c693ab0f1d06ae1af18129bc917f44fb6d05df5fd74273471dd", "use": "read-only: runner labels and concurrency/cancel semantics"}
+  ],
+  "own_hashes": "candidate.py/fixtures.json/report hashes are the git blobs of the signed-off commit; not self-referenced here to avoid a circular digest."
+}

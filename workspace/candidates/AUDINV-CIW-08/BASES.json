@@ -1,0 +1,29 @@
+{
+ "schema_version": 1,
+ "status": "CANDIDATE_ONLY / NOT_INSTALLED",
+ "apply": "none: offline read-only report; no live mode, no workflow/queue/policy edit",
+ "inspected_main": "b83d3615a2ff8802c5b82339b7802e6e62c8d97d",
+ "repo": "Grahammmm/avocado-shack",
+ "reused_sources": [
+  {
+   "path": ".github/workflows/check.yml",
+   "repo": "Grahammmm/avocado-shack",
+   "sha256": "cc91cfaaaf826c693ab0f1d06ae1af18129bc917f44fb6d05df5fd74273471dd",
+   "use": "read-only context: cancel-in-progress only for pull_request (#332 policy, excluded from measurement)"
+  },
+  {
+   "path": "/home/user/agent-work/bin/ship-queue",
+   "sha256": "8a86a9d6deb6db66548e058ecec4dd92693ef9021d976448762db4e6bf06fa83",
+   "use": "read-only: defines the MERGED / \"merge group of N\" log lines parsed here"
+  },
+  {
+   "path": "SOURCES.json",
+   "sha256": "def1bc9834376ee5e2e4488e503c751e6e354d7737e9b5c8f303dc5009d030a2",
+   "use": "candidate receipts"
+  }
+ ],
+ "candidate_source_sha256": {
+  "candidate.py": "1da1b2ad8be67a51cc86e4fc5dce7ec3ddb74ab3cfdca786a44017e27a4ef06c",
+  "fixtures.json": "293339fba7571600e47d6af7bbeb835e0185f7b0a49dc8a803faa9f30479627f"
+ }
+}
