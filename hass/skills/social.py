@@ -99,7 +99,7 @@ _UNITS = "one|two|three|four|five|six|seven|eight|nine"
 _COMPOUND = r"(?:" + _TENS + r")(?:\s+|-)(?:" + _UNITS + r")"  # "twenty one", "twenty-one": one whole count
 _SMALL = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen"
 _HUNDREDS = (r"(?:" + _UNITS + r")\s+hundred(?:\s+(?:and\s+)?(?:" + _COMPOUND + "|(?:" + _TENS + r")(?![\s-]+(?:" + _UNITS + r")\b)|(?:"
-             + _SMALL + r")))?")  # "two hundred", "two hundred and twenty-one": one whole count
+             + _SMALL + r"))\b)?+")  # possessive remainder: rejecting its unit must not fall back to bare hundreds
 _NUM = r"(\d[\d,]*|" + _HUNDREDS + "|" + _COMPOUND + "|(?:" + _TENS + r")(?![\s-]+(?:" + _UNITS + r")\b)|" + "|".join(w for w in _NUM_WORDS if w not in _TENS.split("|")) + r")(?![\s-]+(?:hundred|thousand|million|billion)\b)"  # never the front of a longer number
 _UNIT_OF_COMPOUND = re.compile(r"\b(?:" + _TENS + r")[\s-]+$")  # a unit word right after a tens word belongs to that compound
 _WHO = r"(?:people|persons?|folks|hikers|walkers|members|guests|attendees|participants|friends|locals|adults|kids|children|of us|" \

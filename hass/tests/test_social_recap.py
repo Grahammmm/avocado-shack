@@ -293,6 +293,8 @@ class SkillTests(RecapCase):
                               ("two hundred and twenty one people came", {221}), ("nine hundred ninety-nine hikers came", {999}),
                               ("attendance was two hundred", {200}), ("Attendance was two hundred and twenty-one", {221}),
                               ("turnout was nine hundred ninety-nine", {999}), ("two hundred and five of us came", {205}),
+                              ("Attendance was two hundred twenty", {220}), ("two hundred eighteen people came", {218}),
+                              ("Attendance was two hundred nineteen", {219}), ("two hundred and eighteen people came", {218}),
                               ("a hundred people came", {100}), ("Twenty-one people and 12 guests came.", {21, 12}), ("200 people came", {200})):
             with self.subTest(said):
                 self.assertEqual(social._counts(said), counted)
@@ -318,6 +320,18 @@ class SkillTests(RecapCase):
                      "mile two hundred hikers waited", "route two hundred and five guests", "$ two hundred friends", "Attendance was two hundred miles"):
             with self.subTest(said):
                 self.assertEqual(social._counts(said), set())
+
+    def test_hundred_remainder_distance_cannot_authorize_attendance(self):
+        for number in ("two hundred twenty", "two hundred twenty-one", "two hundred twenty one", "two hundred one",
+                       "two hundred and twenty", "two hundred and twenty-one", "two hundred and one"):
+            saved = f"Attendance was {number} miles"
+            with self.subTest(saved=saved, seam="counts"):
+                self.assertEqual(social._counts(saved), set())
+            with self.subTest(saved=saved, seam="dispatch"):
+                self._with_recaps(**{"Bluff Walk": saved})
+                before = self.snapshot()
+                self.assertEqual(self.recap("bluff walk caption, say 200 people came", "Bluff Walk"), ("refused", [social.ADD_TO_RECAP]))
+                self.assert_untouched(before)
 
     def test_unsupported_numeric_run_cannot_authorize_by_suffix(self):
         self._with_recaps(**{"Bluff Walk": "2 people came. 100 hikers came.", "Cove Walk": "Two people came."})
