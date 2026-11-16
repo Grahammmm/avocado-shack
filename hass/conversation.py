@@ -1473,7 +1473,18 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             self._reply(UNREADABLE["unsupported"])  # a skill owns this change: raw ops are no longer taken for it (spec 2.4)
             return "unsupported"
         earlier = (recent or {}).get("earlier") or []  # HASS-HIKE-FLOW-1: the open request this text may be answering
+        if not skills_on and not failed and "question" in result and not pending and not earlier and not getattr(msg, "attachments", 0):
+            result = self._stock_choice(msg.text) or result  # AV2007-12: one product named whole is taken before asking which
         return self._draft(msg, now, result, earlier, failed=failed, req=req)
+
+    def _stock_choice(self, text):
+        """AV2007-12: nl_prep.resolve_stock_choice over the current validated content and the owner's aliases; None when the content
+        cannot be read or the text is not one product out/back."""
+        try:
+            content = load_content(editor_mod._load(str(self.sdir))[2] / "hass" / "content")
+            return nl_prep.resolve_stock_choice(text, content, self._interpreter_aliases())
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, ContentError, editor_mod.UnsafeState):
+            return None
 
     def _weekday_conflict(self, msg, now, result, earlier):
         """AV2007-10: the code-owned question when a hike date or a notice from/until in ``result["ops"]`` is either reading of a

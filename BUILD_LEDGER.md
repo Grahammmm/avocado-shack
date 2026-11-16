@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AV2007-12 — exact-name stock-choice CI follow-up (November 15, 2026)
+
+PR #875's returned head `7d648a3f2187789b72df15b565804485f0433a8b` was reported as five failed checks. The underlying GitHub run `43786932197` instead records `cancelled` for every job: quick (`133036569666`), site community (`133036569537`), site static (`133036569300`), hass shard (`133037986612`) and check (`133037986766`). Each job has an empty steps list, and the failed-log command returns no output. This is missing CI evidence, not a demonstrated stock-choice or site-test failure; no test, workflow, timeout or gate was changed to manufacture green.
+
+Merged main `1b0f5b87` into the PR without rebasing; the merge was clean and retains the recorded exact-name cases and main's demo-rehearsal changes. Fresh offline verification on the merged tree: 156 focused stock-choice, natural-language preparation, shelf-check, conversation and QA1 tests passed; the owner-battery replay passed all 20 rows, and item.restore passed all 16 rows including restore-9-vague. Existing diff, preview, approval and undo assertions are unchanged. The normal push requests fresh CI; these local results do not establish passing required CI. No server, installation, live data, send or publication was used. Rollback: revert this follow-up's ledger entry and main merge if needed.
+
 ## AV2007-06 — repeat-draft CI RETURN investigation (November 16, 2026 UTC)
 
 The RETURN at `4b712ffc572f14dcbceb9e7654305bd068433b28` listed five failed checks. GitHub run `43786796958`, attempt 1, records `site static` (job `133036154690`), `site community` (`133036154901`), `quick` (`133036155020`), `hass shard ${{ matrix.shard }}` (`133037965733`) and `check` (`133037966978`) as **cancelled**, each with an empty step list. The failed-log command returned no output; the direct quick-job log endpoint returned 404 BlobNotFound. These are not observed behavioral failures and do not establish a green gate. An independently started attempt 2 was queued during investigation; this fix did not request a rerun.
