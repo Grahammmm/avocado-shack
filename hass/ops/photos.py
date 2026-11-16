@@ -18,6 +18,11 @@ same input gives the same bytes, so the previewed bytes are the committed bytes.
 and NOT faked: ``install`` returns ``Retake`` (a ``Refused`` whose ``reason`` is a plain sentence asking for a retake and
 whose ``problems`` names every defect found). With the flag off (the default), absent or anything but ``True``, the bytes
 are exactly what they were before. The home page hero photo asks for ``style=False`` and keeps today's behaviour (D6).
+
+HASS-IMAGE-1 (behind ``photo_polish``, which needs ``houseRender``): when ``photo_polish`` settled a cleaned picture for
+this photo (it passed the fidelity gate), that picture is published instead of the house render, also for a photo the
+house render alone would have asked to retake. In every other case (not run, still running, failed, rejected) install
+does exactly what it did before, and that choice is settled so prepare, apply and verify agree.
 """
 
 from __future__ import annotations
@@ -30,7 +35,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from hass import editor, house_style, media, newitem_render
+from hass import editor, house_style, media, newitem_render, photo_polish
 from hass.content_model import TEXT_LIMITS
 from hass.ops import Arg, Op, Refused, Touched
 from hass.ops.catalog import _product
@@ -234,7 +239,15 @@ def install(ctx, sha, alt, *, style=True):
         return found
     data, ext = found
     house = style and ctx.settings.get(HOUSE_FLAG) is True
-    if house:
+    cleaned = None
+    if house and photo_polish.enabled(ctx.settings):  # HASS-IMAGE-1: the settled cleaned picture, if it passed the gate
+        try:
+            cleaned = photo_polish.polished(root, sha)
+        except (OSError, media.Refused, editor.UnsafeState):  # the polish store is unusable: today's behaviour
+            cleaned = None
+    if cleaned is not None:
+        data, ext = cleaned, "jpg"
+    elif house:
         verdict = _verdict(data)
         if isinstance(verdict, Refused):
             return verdict

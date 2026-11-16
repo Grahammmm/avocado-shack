@@ -1,0 +1,495 @@
+"""HASS-IMAGE-1: a new-item photo cleaned up by OpenAI gpt-image-2 through Hermes, behind the ``photo_polish`` switch.
+
+What it does: when Mike sends a new photo, ``start`` runs in the background (a daemon thread, started after the reply is
+queued, so the interview never waits). It asks Hermes to edit the photo into a catalog picture (plain warm ivory
+background, even light, centred, true colours), checks that the product is still the same product (``gate``) and settles
+ONE decision for the photo in the private media store. ``photos.install`` then publishes the settled picture: the
+cleaned one when it passed the gate (framed by the house render, 800x800 JPEG, no metadata), otherwise exactly what it
+published before this card (the house-style render of Mike's own photo, or the retake ask when that cannot be made).
+Every failure (no Hermes, timeout after ``TIMEOUT_S``, refusal, wrong size or type, huge file, gate rejection) ends in
+that fallback, silently for Mike; a short ``polish-<code>`` row goes to the correspondence log.
+
+The switch: settings ``photo_polish`` (JSON true/false, absent = false). It only has an effect together with
+``houseRender`` true (the polished picture replaces the house render); conversation.load_settings refuses it alone.
+The model: ``MODEL`` below is the one line to change (``<Hermes image plugin>:<model id>``).
+
+Credentials: Hass never sees, reads or stores a key. The image call runs inside a Hermes process
+(``hass/photo_polish_hermes.py`` under the Hermes interpreter) through Hermes' own image plugin and sign-in.
+
+Determinism: ``photos.install`` runs at prepare, apply and verify and must give the same bytes each time. The decision
+is written once (never overwritten, ``media._write_new``); if install comes first it settles the fallback itself and a
+late answer is dropped (``polish-late``). Storage, all private, outside the repository and the site:
+  <mediaRoot>/polish/<sha[:2]>/<sha>.json   {"use": "polished" | "house", "code", "model", "seconds", "jpeg_sha256"}
+  <mediaRoot>/polish/<sha[:2]>/<sha>.jpg    the picture to publish, only for "polished"
+The original photo stays where media.py keeps it; only the settled JPEG is ever copied into the site.
+
+The fidelity gate (``gate``) needs no model: the edited product, cut from its clean background, must be found again in
+Mike's photo (grey-level correlation over position and scale), with the same colour there, and the label words that
+tesseract reads (when installed) must not change. Thresholds were calibrated on real gpt-image-2 edits and deliberate
+bad outputs (HASS-IMAGE-1 T2/T3).
+"""
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import math
+import os
+import re
+import shutil
+import stat
+import subprocess
+import tempfile
+import threading
+import time
+from pathlib import Path
+
+from hass import media, newitem_render
+
+MODEL = "openai-codex:gpt-image-2-high"  # THE model line: <Hermes image plugin>:<model id> (gpt-image-2, quality high)
+SETTING = "photo_polish"  # settings key; only the JSON value true turns the polish on (with houseRender true)
+TIMEOUT_S = 90  # the whole Hermes call; after this the fallback is used
+FOLDER = "polish"
+MAX_OUTPUT_BYTES = 25 * 1024 * 1024  # the plugin's own input cap; a bigger answer is refused unread
+SIDE = (512, 4096)  # the edited picture's smallest and largest side in px
+SQUARE = 0.9  # shorter side / longer side at least this: the cards are square
+PROMPT = (
+    "Clean up this product photo for a small shop's online catalog. Keep the product exactly as it is: the same single "
+    "item or group, the same shape, size proportions, colours, materials, lid or cap, and every letter of the label "
+    "exactly as printed. Do not add, remove or change any item, label, text, logo, sticker or packaging, and add no "
+    "props, hands, text, watermark, border or price. Only change the setting: place the product, upright and complete, "
+    "large and centred, on a smooth seamless warm ivory background (about RGB 245 240 230) with soft even diffuse light "
+    "from the upper left and a soft natural contact shadow under it. Remove the room, wall, counter and any clutter. "
+    "True, natural colours; no stylising. Square picture.")
+
+MATCH_MIN = 0.55  # grey-level correlation of the edited product with the best place in Mike's photo
+HUE_SHIFT_MAX = 30  # degrees the product's mean hue may move (relighting moves it a little; a recolour a lot)
+CHROMA_MAX = 0.080  # largest mean chromaticity (r, g share) difference: catches a recolour the mean hue misses
+COLOURED = 0.15  # share of the product's pixels that must be clearly coloured for the hue comparison
+STRETCH = (0.85, 0.92, 1.0, 1.08, 1.17)  # width stretches tried: a product turned a little looks narrower or wider
+TEXT_CONF = 60  # tesseract confidence a word on the edited picture needs to count
+TEXT_TOKEN = re.compile(r"[A-Z0-9]{3,}")
+WORD_MIN = 0.35  # each label word on the edited picture must correlate this well with the same spot of Mike's photo
+WORD_PX = 8  # a word under this many px high in Mike's photo is too small to judge
+WORD_HEIGHT = 24  # both word patches are compared at this height
+WORD_SEARCH = 0.6  # the search around the mapped spot, as a share of the word's size
+WORD_ZOOM = (0.85, 1.0, 1.15)  # word sizes tried around the mapped one
+WORK = 200  # Mike's photo is searched on a copy this many px on its long side
+ALLOWED_STYLE = {"no photo background left inside the product (patterned cloth, planks)"}  # a white label panel on a
+# generated seamless background is not left-over photo background; every other house-style hard failure rejects
+
+_running: set = set()
+_lock = threading.Lock()
+
+
+def enabled(settings) -> bool:
+    return settings.get(SETTING) is True and settings.get("houseRender") is True
+
+
+# ---------------------------------------------------------------- the Hermes transport
+class HermesTransport:
+    """``transport(src, out, timeout) -> {"ok": bool, "code": str}``: one Hermes image EDIT of ``src`` written to
+    ``out``. The Hermes interpreter and source root are read from the installed ``hermes`` launcher script."""
+
+    def __init__(self, model=MODEL, python=None, root=None, launcher=None):
+        self.model, self.python, self.root, self.launcher = model, python, root, launcher
+
+    def _locate(self):
+        if not (self.python and self.root):
+            found = find_hermes(self.launcher or shutil.which("hermes"))
+            if found is None:
+                return None, None
+            self.python, self.root = found
+        return self.python, self.root
+
+    def __call__(self, src, out, timeout=TIMEOUT_S):
+        python, root = self._locate()
+        if python is None or root is None:
+            return {"ok": False, "code": "no-hermes"}
+        runner = Path(__file__).with_name("photo_polish_hermes.py")
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", dir=Path(out).parent, delete=False, encoding="utf-8") as fh:
+            fh.write(PROMPT)
+        try:
+            done = subprocess.run([python, str(runner), root, self.model, str(src), str(out), fh.name],
+                                  capture_output=True, text=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "code": "timeout"}
+        except OSError:
+            return {"ok": False, "code": "no-hermes"}
+        finally:
+            os.unlink(fh.name)
+        try:
+            said = json.loads(done.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            return {"ok": False, "code": "hermes"}
+        if not isinstance(said, dict) or said.get("ok") is not True:
+            code = said.get("code") if isinstance(said, dict) else None
+            return {"ok": False, "code": code if isinstance(code, str) and re.fullmatch(r"[a-z-]{1,20}", code) else "failed"}
+        return {"ok": True, "code": "ok"}
+
+
+_EXEC_RE = re.compile(r"exec (/\S*/python3[\w.]*) ")
+_ROOT_RE = re.compile(r"sys\.path\.insert\(0, '\"'\"'(/[^'\"]+)'\"'\"'\)")
+_RELEASE_RE = re.compile(r"release_root=\$\(readlink -f (/\S+)\)")
+
+
+def find_hermes(launcher, _hops=2):
+    """(python, root) of the Hermes install behind a ``hermes`` launcher script, or None. Reads launcher text only."""
+    try:
+        text = Path(launcher).read_text("utf-8")[:20000] if launcher else ""
+    except (OSError, UnicodeDecodeError):
+        return None
+    py, root = _EXEC_RE.search(text), _ROOT_RE.search(text)
+    if py and root and Path(py[1]).is_file() and Path(root[1]).is_dir():
+        return py[1], root[1]
+    release = _RELEASE_RE.search(text)
+    if release and _hops:
+        return find_hermes(str(Path(release[1]).resolve() / ".hermes" / "bin" / "hermes"), _hops - 1)
+    return None
+
+
+# ---------------------------------------------------------------- the decision store
+def _folder(root, sha) -> Path:
+    base = media._open_root(root)
+    media._private_dir(base / FOLDER)
+    folder = base / FOLDER / sha[:2]
+    media._private_dir(folder)
+    return folder
+
+
+def decision(root, sha):
+    """The settled decision dict for a stored photo, or None when nothing is settled yet."""
+    raw = media._existing(_folder(root, sha) / f"{sha}.json")
+    if raw is None:
+        return None
+    try:
+        got = json.loads(raw) if len(raw) <= media.SIDECAR_MAX else None
+    except ValueError:
+        got = None
+    return got if isinstance(got, dict) and got.get("use") in ("polished", "house") else {"use": "house", "code": "bad-record"}
+
+
+def _settle(root, sha, use, code, *, jpeg=None, seconds=None) -> bool:
+    """Write the decision once. False when one was already there (a later answer never replaces it)."""
+    folder = _folder(root, sha)
+    record = {"use": use, "code": code, "model": MODEL, "seconds": seconds,
+              "jpeg_sha256": hashlib.sha256(jpeg).hexdigest() if jpeg else None}
+    if media._existing(folder / f"{sha}.json") is not None:
+        return False
+    if jpeg is not None and media._existing(folder / f"{sha}.jpg") is None:
+        media._write_new(folder / f"{sha}.jpg", jpeg)
+    try:
+        media._write_new(folder / f"{sha}.json", json.dumps(record, sort_keys=True).encode("utf-8") + b"\n")
+    except media.Refused:  # the other side settled between the check and the link
+        return False
+    return True
+
+
+def polished(root, sha):
+    """The cleaned picture ``photos.install`` publishes for this photo, or None for the fallback. Settles the fallback
+    when nothing is settled yet, so prepare, apply and verify always agree."""
+    got = decision(root, sha)
+    if got is None:
+        _settle(root, sha, "house", "late" if sha in _running else "not-run")
+        got = decision(root, sha)
+    if got and got.get("use") == "polished":
+        jpeg = media._existing(_folder(root, sha) / f"{sha}.jpg")
+        if jpeg is not None and hashlib.sha256(jpeg).hexdigest() == got.get("jpeg_sha256"):
+            return jpeg
+    return None
+
+
+# ---------------------------------------------------------------- the run
+def start(root, sha, *, log=None, transport=None, timeout=TIMEOUT_S):
+    """Polish one stored photo in a daemon thread; the thread, or None when it is settled or running already.
+    Never raises and never waits."""
+    try:
+        if not isinstance(sha, str) or not media.SHA_RE.fullmatch(sha) or decision(root, sha) is not None:
+            return None
+        media.web_copy(root, sha)  # made here, in the caller's thread: install never races the worker writing it
+        with _lock:
+            if sha in _running:
+                return None
+            _running.add(sha)
+        worker = threading.Thread(target=run, args=(root, sha), kwargs={"log": log, "transport": transport, "timeout": timeout},
+                                  daemon=True, name=f"polish-{sha[:8]}")
+        worker.start()
+        return worker
+    except Exception:  # noqa: BLE001 - a store problem means no polish, never a failed reply
+        with _lock:
+            _running.discard(sha)
+        return None
+
+
+def run(root, sha, *, log=None, transport=None, timeout=TIMEOUT_S) -> str:
+    """The whole step for one photo, in the caller's thread; returns the code settled (or "late")."""
+    began = time.monotonic()
+    with _lock:
+        _running.add(sha)
+    try:
+        code, jpeg = _attempt(root, sha, transport or HermesTransport(), timeout)
+        if not _settle(root, sha, "polished" if jpeg else "house", code, jpeg=jpeg,
+                       seconds=round(time.monotonic() - began, 1)):
+            code = "late"
+    except Exception:  # noqa: BLE001 - never crash the worker; install falls back on its own
+        code = "error"
+    finally:
+        with _lock:
+            _running.discard(sha)
+    if code != "ok" and log is not None:
+        log.record("error", f"polish-{code}", seconds=round(time.monotonic() - began, 1))
+    return code
+
+
+def _attempt(root, sha, transport, timeout):
+    """(code, picture to publish or None)."""
+    web = media.web_copy(root, sha)
+    original = Path(web["path"]).read_bytes()
+    with tempfile.TemporaryDirectory(prefix="work-", dir=_folder(root, sha).parent) as work:
+        out = Path(work) / "out.img"
+        try:
+            said = transport(Path(web["path"]), out, timeout)
+        except Exception:  # noqa: BLE001
+            return "transport", None
+        if not isinstance(said, dict) or said.get("ok") is not True:
+            code = said.get("code") if isinstance(said, dict) else None
+            return (code if isinstance(code, str) and re.fullmatch(r"[a-z-]{1,20}", code) else "failed"), None
+        try:
+            st = os.lstat(out)
+            if not stat.S_ISREG(st.st_mode) or st.st_size == 0:
+                return "empty", None
+            if st.st_size > MAX_OUTPUT_BYTES:
+                return "huge", None
+            edited = out.read_bytes()
+        except OSError:
+            return "empty", None
+    result = gate(original, edited)
+    return ("ok", result["jpeg"]) if result["ok"] else (result["code"], None)
+
+
+# ---------------------------------------------------------------- the fidelity gate
+def gate(original, edited, *, ocr=None) -> dict:
+    """Is ``edited`` the same product as Mike's photo ``original``? {"ok", "code", "jpeg" (the edited picture framed by
+    the house render), "metrics"}. ``ocr``: framed JPEG -> [(word, (left, top, width, height))] or None; default
+    tesseract when installed. Every measure is taken before deciding, so a rejection still reports all of them."""
+    fail = lambda code, **m: {"ok": False, "code": code, "jpeg": None, "metrics": m}  # noqa: E731
+    if len(edited) > MAX_OUTPUT_BYTES:
+        return fail("huge")
+    if media.sniff(edited) is None:
+        return fail("type")
+    try:
+        im = newitem_render._decode(edited)
+        short, long_ = sorted(im.size)
+        if short < SIDE[0] or long_ > SIDE[1] or short / long_ < SQUARE:
+            return fail("size", size=f"{im.width}x{im.height}")
+        made = newitem_render.render(edited)
+    except (media.Refused, newitem_render.Refused):
+        return fail("type")
+    hard = set(made["check"].get("hard_failures") or ())
+    if made["report"].get("isolation") != "cutout" or hard - ALLOWED_STYLE or (not hard and not made["check"]["pass"]):
+        return fail("style", hard=sorted(hard), score=made["check"].get("score"))
+    m = match(original, made["jpeg"])
+    if m is None:
+        return fail("match")
+    mapping = m.pop("_map")
+    found = words(made["jpeg"]) if ocr is None else ocr(made["jpeg"])
+    if found is not None:
+        m["words"] = word_scores(original, made["jpeg"], mapping, found)
+        m["text_changed"] = text_changed(m["words"])
+    colour_off = (m["hue_shift"] is not None and m["hue_shift"] > HUE_SHIFT_MAX) or m["chroma"] > CHROMA_MAX
+    code = "match" if m["match"] < MATCH_MIN else "colour" if colour_off else "text" if m.get("text_changed") else "ok"
+    if code != "ok":
+        return fail(code, **m)
+    return {"ok": True, "code": "ok", "jpeg": made["jpeg"], "metrics": m}
+
+
+def _pil():
+    from PIL import Image, ImageChops, ImageStat  # noqa: PLC0415 - Pillow is optional for Hass, required for pictures
+    return Image, ImageChops, ImageStat
+
+
+def _product(jpeg):
+    """(RGB crop, L mask, box) of the product on a house-framed picture, at 400 px: what differs from the ivory corner
+    colour; (None, None, None) without a product."""
+    Image, ImageChops, _ = _pil()
+    im = Image.open(io.BytesIO(jpeg)).convert("RGB").resize((400, 400), Image.Resampling.BOX)
+    diff = ImageChops.difference(im, Image.new("RGB", im.size, im.getpixel((4, 4)))).split()
+    mask = ImageChops.lighter(ImageChops.lighter(diff[0], diff[1]), diff[2]).point(lambda v: 255 if v > 30 else 0)
+    box = mask.getbbox()
+    return (None, None, None) if box is None else (im.crop(box), mask.crop(box), box)
+
+
+def _ncc(ImageChops, ImageStat, crop, tmpl, mask, t_stat):
+    """Masked normalised cross-correlation of two L images. The covariance comes from the variance of their mean
+    (var((c+t)/2) = (var c + var t + 2 cov) / 4): Pillow has no exact product, and ImageChops.multiply truncates."""
+    c = ImageStat.Stat(crop, mask)
+    if c.stddev[0] < 2 or t_stat.stddev[0] < 2:  # a flat patch matches nothing
+        return -1.0
+    both = ImageStat.Stat(ImageChops.add(crop, tmpl, 2.0), mask).var[0]
+    cov = (4 * both - c.var[0] - t_stat.var[0]) / 2
+    return cov / (c.stddev[0] * t_stat.stddev[0])
+
+
+def _template(Image, grey, mask, tw, th):
+    t = grey.resize((tw, th), Image.Resampling.BOX)
+    m = mask.resize((tw, th), Image.Resampling.BOX).point(lambda v: 255 if v > 127 else 0)
+    return t, m
+
+
+def _channels(rgb):
+    """The images the product is matched on: grey, plus colour saturation (steadier than brightness when the light
+    changes, e.g. amber honey or a blue box under new light)."""
+    return [rgb.convert("L"), rgb.convert("HSV").getchannel("S")]
+
+
+def match(original, framed):
+    """Find the edited product (cut from the house-framed ``framed``) in Mike's photo: the best mean correlation of grey
+    and saturation over position, size and stretch (a product turned a little looks narrower or wider), then the colour
+    of Mike's photo there against the edited product (mean hue shift; mean chromaticity when it has no clear hue).
+    None without a product."""
+    Image, ImageChops, ImageStat = _pil()
+    rgb, mask, box = _product(framed)
+    if rgb is None:
+        return None
+    photo, _alpha, _turned = newitem_render._upright(original)
+    full = photo.size
+    photo = photo.copy()
+    photo.thumbnail((WORK, WORK), Image.Resampling.BOX)
+    (w, h) = photo.size
+    chans, tchans = _channels(photo), _channels(rgb)
+    if ImageStat.Stat(tchans[1], mask).stddev[0] < 8:  # a colourless product: grey only
+        chans, tchans = chans[:1], tchans[:1]
+
+    def score(x, y, tms, tss):
+        return sum(_ncc(ImageChops, ImageStat, c.crop((x, y, x + tms[0][0].width, y + tms[0][0].height)), t, m, s)
+                   for c, (t, m), s in zip(chans, tms, tss)) / len(chans)
+
+    def templates(tw, th):
+        tms = [_template(Image, c, mask, tw, th) for c in tchans]
+        return tms, [ImageStat.Stat(t, m) for t, m in tms]
+    best = (-2.0, None)
+    for i in range(16):
+        size = round(min(w, h) * 0.22 * 1.11 ** i)
+        for stretch in STRETCH:
+            tw = round(size * rgb.width / max(rgb.size) * stretch)
+            th = round(size * rgb.height / max(rgb.size))
+            if not (8 <= tw <= w and 8 <= th <= h):
+                continue
+            tms, tss = templates(tw, th)
+            step = max(2, min(tw, th) // 8)
+            for y in range(0, h - th + 1, step):
+                for x in range(0, w - tw + 1, step):
+                    s = score(x, y, tms, tss)
+                    if s > best[0]:
+                        best = (s, (x, y, tw, th, step))
+    if best[1] is None:
+        return None
+    x0, y0, tw, th, step = best[1]
+    tms, tss = templates(tw, th)
+    for y in range(max(0, y0 - step), min(h - th, y0 + step) + 1):  # refine around the coarse best, one px at a time
+        for x in range(max(0, x0 - step), min(w - tw, x0 + step) + 1):
+            s = score(x, y, tms, tss)
+            if s > best[0]:
+                best = (s, (x, y, tw, th, step))
+    x, y, tw, th, _ = best[1]
+    m = tms[0][1]
+    here, there = photo.crop((x, y, x + tw, y + th)), rgb.resize((tw, th), Image.Resampling.BOX)
+    chroma = lambda c: (c[0] / max(1, sum(c)), c[1] / max(1, sum(c)))  # noqa: E731
+    a, b = chroma(ImageStat.Stat(here, m).mean), chroma(ImageStat.Stat(there, m).mean)
+    ha, hb = _hue(here, m), _hue(there, m)
+    shift = round(min(abs(ha - hb), 360 - abs(ha - hb)), 1) if ha is not None and hb is not None else None
+    return {"match": round(best[0], 3), "hue_shift": shift, "chroma": round(max(abs(a[0] - b[0]), abs(a[1] - b[1])), 4),
+            "where": [round(x / w, 3), round(y / h, 3), round(tw / w, 3), round(th / h, 3)],
+            "_map": (full, (x / w, y / h, tw / w, th / h), tuple(v * 2 for v in box))}  # framed 800 px -> photo px
+
+
+def _hue(rgb, mask):
+    """Saturation-weighted circular mean hue (degrees) of the clearly coloured pixels under mask, or None when fewer than
+    COLOURED of the pixels are clearly coloured (a white, grey or black product has no hue to keep)."""
+    sx = sy = weight = 0.0
+    total = found = 0
+    for (hh, s, v), keep in zip(rgb.convert("HSV").getdata(), mask.getdata()):
+        if not keep:
+            continue
+        total += 1
+        if s >= 70 and v >= 50:
+            found += 1
+            angle = hh * 2 * math.pi / 256
+            sx, sy, weight = sx + s * math.cos(angle), sy + s * math.sin(angle), weight + s
+    if not total or found < COLOURED * total or math.hypot(sx, sy) < 0.2 * weight:  # no dominant hue
+        return None
+    return math.degrees(math.atan2(sy, sx)) % 360
+
+
+def words(framed):
+    """[(word, (left, top, width, height))] for the label words tesseract reads on the house-framed 800 px edited picture
+    (read at twice the size, where small label print is still legible; boxes in 800 px coordinates; capital letters and
+    digits, 3+ long, at least TEXT_CONF sure), or None without tesseract."""
+    exe = shutil.which("tesseract")
+    if exe is None:
+        return None
+    Image, _, _ = _pil()
+    big = Image.open(io.BytesIO(framed)).convert("L")
+    big = big.resize((big.width * 2, big.height * 2), Image.Resampling.LANCZOS)
+    with tempfile.NamedTemporaryFile(suffix=".png") as fh:
+        big.save(fh, "PNG")
+        fh.flush()
+        try:
+            done = subprocess.run([exe, fh.name, "-", "--psm", "11", "tsv"], capture_output=True, text=True, timeout=30,
+                                  check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+    out = []
+    for line in done.stdout.splitlines()[1:]:
+        cols = line.split("\t")
+        try:
+            conf, box = float(cols[10]), tuple(int(v) // 2 for v in cols[6:10])
+        except (IndexError, ValueError):
+            continue
+        token = "".join(TEXT_TOKEN.findall(cols[11].upper()))
+        if conf >= TEXT_CONF and len(token) >= 3:
+            out.append((token, box))
+    return out
+
+
+def word_scores(original, framed, mapping, found):
+    """For each word read on the edited picture: how well the same spot of Mike's photo shows the same marks (the best
+    grey correlation within a small search around where ``match`` maps it), or None when it is too small there to
+    judge. A changed, added or invented word does not look like what is in the photo at that spot."""
+    Image, ImageChops, ImageStat = _pil()
+    (fw, fh), (rx, ry, rw, rh), (bx0, by0, bx1, by1) = mapping
+    photo = newitem_render._upright(original)[0].convert("L")
+    grey = Image.open(io.BytesIO(framed)).convert("L")
+    sx, sy = rw * fw / max(1, bx1 - bx0), rh * fh / max(1, by1 - by0)  # photo px per framed px
+    out = []
+    for word, (left, top, width, height) in found:
+        if height * sy < WORD_PX:
+            out.append((word, None))
+            continue
+        k = WORD_HEIGHT / height  # both patches go to this scale: the word WORD_HEIGHT px high
+        tmpl = grey.crop((left, top, left + width, top + height))
+        tmpl = tmpl.resize((max(4, round(width * k)), WORD_HEIGHT), Image.Resampling.LANCZOS)
+        if ImageStat.Stat(tmpl).stddev[0] < 2:  # no marks in the box: nothing to compare
+            out.append((word, None))
+            continue
+        cx, cy = rx * fw + (left - bx0) * sx, ry * fh + (top - by0) * sy  # the word's top-left in Mike's photo
+        pad_x, pad_y = width * sx * WORD_SEARCH, height * sy * WORD_SEARCH
+        area = (round(cx - pad_x), round(cy - pad_y), round(cx + width * sx + pad_x), round(cy + height * sy + pad_y))
+        best = -1.0
+        for zoom in WORD_ZOOM:  # the mapping is only as exact as the match's size steps: try a little bigger and smaller
+            region = photo.crop(area).resize((max(1, round((area[2] - area[0]) * k * zoom / sx)),
+                                              max(1, round((area[3] - area[1]) * k * zoom / sy))), Image.Resampling.LANCZOS)
+            full = Image.new("L", tmpl.size, 255)
+            ts = ImageStat.Stat(tmpl, full)
+            for y in range(0, max(1, region.height - tmpl.height + 1)):
+                for x in range(0, max(1, region.width - tmpl.width + 1), 2):
+                    best = max(best, _ncc(ImageChops, ImageStat, region.crop((x, y, x + tmpl.width, y + tmpl.height)),
+                                          tmpl, full, ts))
+        out.append((word, round(best, 3)))
+    return out
+
+
+def text_changed(scores) -> bool:
+    """True when a word the edited label shows is not in Mike's photo at that spot (judgeable words only)."""
+    judged = [s for _w, s in scores if s is not None]
+    return any(s < WORD_MIN for s in judged)
