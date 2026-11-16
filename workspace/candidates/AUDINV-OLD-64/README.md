@@ -36,6 +36,13 @@ remain in the task execution output. Both tests and checker read only package fi
 
 All fixture receipts are synthetic, not real transport evidence. Synthetic observed
 matching receipt means technical receipt only, never owner acceptance/permission.
+Qualification requires the class-specific period identity in `PERIODS` and an
+observed, valid, dated receipt with a measured nonnegative integer count. Missing
+counts are not zero. Period identities follow the report's recorded proposals;
+`relay-pictures` retains the fixture's `clear-at-ack` identity for picture bytes
+only, not its separate metadata cleanup period. Equal missing, malformed, unknown
+or other-class periods stay HOLD. These synthetic identities do not configure or
+approve policy, and a measured count does not by itself prove deletion.
 No production modules are imported. No filesystem fixture setup or cleanup is needed.
 No network/model/board/transport, credential/config/database read, send, service action,
 owner contact, live deletion or access change. Current enforcement remains HOLD.

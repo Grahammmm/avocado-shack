@@ -23,7 +23,7 @@
     "operator-local/decisions/G-DECISIONS.log:L1931 (sanitized excerpt)": "dff9c8226bc077113d8e2da5a890808a9e5ee0cd300df7a08be49a347f8bedf0"
   },
   "package_hashes": {
-    "candidate.py": "249e31ff67bd66fd152a08906fb79e8ff899d7605988b9fa3e5505b2d0156bff",
+    "candidate.py": "4e7f58b5ffe75993504570c556796ce6f0b2b60455e4a69b14bc50abd6ddc347",
     "SOURCES.json": "978a235e2d103196b62d425359f18ad944688d50ee63e7b4bf0a67285ed02ff3",
     "fixtures.json": "993bdc2b9f545425a7ad285a221576112ea0b6af27ab278ac4d09a529614b1d2"
   }

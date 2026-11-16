@@ -15,6 +15,20 @@ ROOT = Path(__file__).resolve().parent
 CLASSES = ('inbox-payloads', 'inbox-ids', 'mac-spool', 'relay-rows', 'relay-pictures',
            'screenshots', 'conversation-outbox', 'approval-change-release',
            'photo-originals', 'backups', 'mac-messages')
+# Synthetic period identities only; no policy agreement or live enforcement.
+PERIODS = {
+    'inbox-payloads': 'erased when handled',
+    'inbox-ids': '90 days',
+    'mac-spool': '7 days after delivery',
+    'relay-rows': '30 days after ack',
+    'relay-pictures': 'clear-at-ack',
+    'screenshots': '90 days',
+    'conversation-outbox': '1 year',
+    'approval-change-release': '2 years',
+    'photo-originals': '1 year after last use',
+    'backups': '30 daily',
+    'mac-messages': 'Keep messages: 1 Year',
+}
 HEX = re.compile(r'[0-9a-f]{64}')
 ACCEPTANCE = '\n## Actual local acceptance receipt\n'
 EXPECTED_RECEIPT = ("\n```console\n"
@@ -127,7 +141,9 @@ def assess(case):
     stamp(case['at'])
     require(case['count'] is None or type(case['count']) is int and case['count'] >= 0, 'count')
     return ('TECHNICAL-RECEIPT-ONLY' if case['layer'] == 'observed' and case['status'] == 'valid'
-            and case['receipt_class'] == case['class'] and case['period'] == case['receipt_period']
+            and case['receipt_class'] == case['class']
+            and case['period'] == case['receipt_period'] == PERIODS[case['class']]
+            and case['count'] is not None
             else 'UNVERIFIED/HOLD')
 
 
@@ -201,6 +217,21 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(len(self.s['rows']), 11)
         for row in self.f['cases']:
             self.assertEqual(assess(row['input']), row['expected'], row['name'])
+        for row in self.s['rows']:
+            c = copy.deepcopy(self.f['cases'][0]['input'])
+            c['class'] = c['receipt_class'] = row['class']
+            if row['class'] != 'relay-pictures':
+                c['period'] = c['receipt_period'] = row['period']
+            with self.subTest(data_class=row['class']):
+                for count in (0, 12):
+                    c['count'] = count
+                    self.assertEqual(assess(c), 'TECHNICAL-RECEIPT-ONLY')
+                c['count'] = None
+                self.assertEqual(assess(c), 'UNVERIFIED/HOLD')
+                c['count'] = 0
+                for period in (None, '', ' ', 'arbitrary', [], {}):
+                    c['period'] = c['receipt_period'] = period
+                    self.assertEqual(assess(c), 'UNVERIFIED/HOLD')
         bad = copy.deepcopy(self.s)
         bad['rows'][1] = bad['rows'][0]
         with self.assertRaises(ValueError): validate(bad)
@@ -235,6 +266,20 @@ class Acceptance(unittest.TestCase):
         c = copy.deepcopy(self.f['cases'][0]['input'])
         c['receipt_period'] = 'conflicting-period'
         self.assertEqual(assess(c), 'UNVERIFIED/HOLD')
+        # Equality is not policy identity, even with a measured zero.
+        for period in (None, '', ' ', 'arbitrary', '90-days', '90 days', 0, False, [], {}):
+            for fields in (('period',), ('receipt_period',), ('period', 'receipt_period')):
+                with self.subTest(period=period, fields=fields):
+                    c = copy.deepcopy(self.f['cases'][0]['input'])
+                    for field in fields:
+                        c[field] = period
+                    self.assertEqual(assess(c), 'UNVERIFIED/HOLD')
+        c = copy.deepcopy(self.f['cases'][0]['input'])
+        c['count'] = None
+        self.assertEqual(assess(c), 'UNVERIFIED/HOLD')
+        for count in (0, 12):
+            c['count'] = count
+            self.assertEqual(assess(c), 'TECHNICAL-RECEIPT-ONLY')
 
     def test_no_private_identifiers_or_write_side_effects_in_report(self):
         before = {p: local(p).read_bytes() for p in ('SOURCES.json', 'fixtures.json', 'retention-access-enforcement-gap.md')}
