@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AV2007-13 — stock-choice merge and question-fixture setup (November 16, 2026)
+
+Merged current main `73769b17c33fbb2427463ceadf69fc4ca2d6ad38` into PR #878 without rebasing. Retained both ledger histories and the 31 unique owner-battery rows; independently verified the original row-byte union against both parents, removing only an identical duplicated phone row. Main's stock-choice reconciliation now turns the old raspberry setup into a shelf check, so the unchanged cancellation oracle initially failed with `shelf-no` instead of `cancelled`. Added explicit synthetic scratch-catalogue setup to all three non-hike rows (regular/organic raspberry names) so they again exercise a genuinely ambiguous non-shelf question. Original owner texts, canned replies and exact expectations remain unchanged; main's exact-name stock-choice behavior remains intact.
+
+Fresh offline proof: 86 focused non-hike/candidate/phone/request/commands/stock-choice tests and 252 adjacent conversation/NL/shelf/hike/dispatch/voice tests passed; all 31 owner-battery rows passed after the setup correction. Original-head CI run `43947785146` had all seven execution jobs successful and only the aggregate `check` queued; failed logs were unavailable while the run was incomplete. No review RETURN or inline findings were present. No production changes beyond the main merge, no workflow edits, installs, servers, live data or publication. Exact-head CI is checked separately, not claimed green from local evidence. Rollback: revert this merge and its fixture setup together.
+
 ## AV2007-13 — phone-row conflict and current-main refresh (November 16, 2026)
 
 Merged main `2a793749a6b26c33292c3cc77151fbe60152c52a` into PR #878 without rebasing, resolving the sole owner-battery conflict by retaining the three non-hike question rows and main's phone-format row unchanged. Independently verified the complete byte-for-byte union: 27 unique rows, from parents with 25 and 24 rows. Main advanced during verification; merged `485576daa257dca1f2becdc9c87ac80639583d35` too, cleanly, retaining its front/maker literal-word safeguards. No additional production, oracle or workflow changes. Original-head run `43925448922` completed successfully at `f7853a17bb031f5c9532d9320ec21614fa1fa20a`; failed logs were empty and no review RETURN or inline findings were present.
@@ -36,6 +42,11 @@ Fresh local proof: all 21 demo rehearsal tests, 285 focused question/candidate/c
 Reproduced PR #878's exact shard-3 failure: the candidate safety fixture still expected `no-target` for bare `no` after this PR intentionally made it `cancelled`. Updated only that fixture to require the exact dropped-question reply, no interpreter call and no remaining open request. The subsequent numeric answer must still reach the interpreter without drafting or writing. Merged current main (b83d3615a2ff8802c5b82339b7802e6e62c8d97d) without conflicts, preserving its Clover matching changes.
 
 Fresh local proof: 197 focused candidate/question/request/dispatch/conversation/hike/shelf tests and 52 Clover mapper/chat tests passed. Exact-head CI is checked separately on the PR; these local results are not an all-green CI claim. No workflow changes, installs, servers, live data or publication. Rollback: revert the fixture/ledger correction.
+## AV2007-12 — exact-name stock-choice CI follow-up (November 15, 2026)
+
+PR #875's returned head `7d648a3f2187789b72df15b565804485f0433a8b` was reported as five failed checks. The underlying GitHub run `43786932197` instead records `cancelled` for every job: quick (`133036569666`), site community (`133036569537`), site static (`133036569300`), hass shard (`133037986612`) and check (`133037986766`). Each job has an empty steps list, and the failed-log command returns no output. This is missing CI evidence, not a demonstrated stock-choice or site-test failure; no test, workflow, timeout or gate was changed to manufacture green.
+
+Merged main `1b0f5b87` into the PR without rebasing; the merge was clean and retains the recorded exact-name cases and main's demo-rehearsal changes. Fresh offline verification on the merged tree: 156 focused stock-choice, natural-language preparation, shelf-check, conversation and QA1 tests passed; the owner-battery replay passed all 20 rows, and item.restore passed all 16 rows including restore-9-vague. Existing diff, preview, approval and undo assertions are unchanged. The normal push requests fresh CI; these local results do not establish passing required CI. No server, installation, live data, send or publication was used. Rollback: revert this follow-up's ledger entry and main merge if needed.
 
 ## AV2007-06 — repeat-draft CI RETURN investigation (November 16, 2026 UTC)
 
