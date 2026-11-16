@@ -53,8 +53,9 @@ class NearApprovalTests(H06TestCase):
         last = self.conv.db.execute("SELECT disposition FROM messages ORDER BY rowid DESC LIMIT 1").fetchone()[0]
         self.assertEqual(last, "near-approval")
 
-    def one(self, code):
-        return f"I haven't changed anything yet. To go ahead, reply yes {code}."
+    def one(self, code):  # AV2007-02: the single waiting change is named too
+        summary = self.conv.db.execute("SELECT summary FROM drafts WHERE code = ?", (code,)).fetchone()[0]
+        return f"I haven't changed anything yet. To go ahead with {summary}, reply yes {code}."
 
     def test_ok_with_one_proposal_names_its_yes_code(self):
         draft = self.proposal()

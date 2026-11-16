@@ -30,7 +30,7 @@ HASS = REPO_ROOT / "hass"
 
 # Where owner text is written. "all": every sentence-like string in the module; a list: only inside those functions.
 OWNER_FACING = {
-    "conversation.py": ["_choices", "_no_target", "_state_text", "_request", "_photo", "_outcome", "_command", "_handle", "_for_g",
+    "conversation.py": ["_choices", "_waiting_note", "_no_target", "_state_text", "_request", "_photo", "_outcome", "_command", "_handle", "_for_g",
                         "_proposal_reply", "_plain", "_asked_again", "_late", "_delayed", "_handle_message"],
     # AVB-12: the pack commands and the proposal wording moved out of conversation.py into hass/chat/
     "chat/core_pack.py": ["_history_search", "_show", "_memory", "_memory_words", "_alias", "_alias_lines", "_control", "_status",
