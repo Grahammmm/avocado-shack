@@ -176,6 +176,8 @@ def day(text, today: date) -> Resolved:
         except ValueError:
             return Resolved("invalid", reply="That date doesn't look right. Which day do you mean?")
     rows, _hits = nl_prep.date_hints(text, today)
+    for r in rows:  # AV2007-10: a weekday that disagrees with the date beside it is asked, never picked
+        if r.get("weekday_mismatch"): return Resolved("none", reply=nl_prep.weekday_mismatch_question(r))
     dates = {r["date"] for r in rows if "date" in r}
     unclear = [d for r in rows for d in r.get("unclear", ())]
     named = {r["next"] for r in rows if "next" in r}
