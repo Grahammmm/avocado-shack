@@ -210,6 +210,30 @@ class ApplyTests(NoNetwork):
             self.yes(code)
         self.assertEqual(len(self.writes()), 1)
 
+    def test_set_sku_rechecks_other_items_sku_and_barcode(self):
+        self.till.items['FAKEITEM00001']['sku'] = ''
+        for field in ('sku', 'code'):
+            with self.subTest(field=field):
+                items = [parse_item(i) for i in self.till.items.values()]
+                draft = d.build_set_sku(self.item(), items, self.cfg)
+                code = self.offer(draft)
+                self.till.items['CLASH'] = {'id': 'CLASH', 'name': 'Another', field: draft.after['sku'].lower(), 'hidden': True}
+                with self.assertRaisesRegex(d.DraftRefused, 'SKU is now taken'):
+                    self.yes(code)
+                self.assertEqual(self.item().sku, '')
+                self.assertFalse(self.writes())
+                with self.engine.journal.locked() as db:
+                    self.assertEqual(db.execute('SELECT status FROM changes WHERE code=?', (code,)).fetchone()[0], 'failed')
+                del self.till.items['CLASH']
+
+        draft = d.build_set_sku(self.item(), [parse_item(i) for i in self.till.items.values()], self.cfg)
+        self.till.items[self.item().id]['code'] = draft.after['sku']
+        code = self.offer(draft)
+        self.assertEqual(self.yes(code), 'applied')
+        undo, _ = self.engine.undo(code, sender='mike', chat='private')
+        self.assertEqual(self.yes(undo), 'applied')
+        self.assertEqual(self.item().sku, '')
+
     def test_failed_readback_and_ambiguous_write_are_not_retried(self):
         code = self.offer(d.build_set_price(self.item(), 100, self.cfg))
         self.till.mismatch = True

@@ -66,9 +66,12 @@ class ApplyEngine:
                     fresh = parse_item(client.get_item(item_id))
                     if d.is_stale(draft, fresh):
                         raise d.DraftRefused("The till changed; ask for a fresh draft and approve its new code.")
-                elif any(i.get("sku", "").casefold() == entry["after"]["sku"].casefold() or
-                         i.get("code", "").casefold() == entry["after"]["sku"].casefold() for i in client.list_items()):
-                    raise d.DraftRefused("That SKU is now taken; ask for a fresh draft.")
+                sku = entry["after"].get("sku")
+                if sku and (draft.kind == "set_sku" or not item_id):
+                    if any(i.get("id") != item_id and any(
+                            (i.get(field) or "").casefold() == sku.casefold() for field in ("sku", "code"))
+                           for i in client.list_items()):
+                        raise d.DraftRefused("That SKU is now taken; ask for a fresh draft.")
                 for request in draft.requests:
                     payload = json.loads(json.dumps(request["json"]).replace("{newItemId}", item_id or "{newItemId}"))
                     result = client.write(request["method"], request["path"], payload)

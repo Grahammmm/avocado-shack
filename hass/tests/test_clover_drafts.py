@@ -72,6 +72,7 @@ class PriceTests(unittest.TestCase):
         dr = d.build_set_price(till()["FAKEITEM00005"], 349, CFG)
         self.assertIn("Price: $3.99 -> $3.49 per lb (-12.5%)", dr.render("x"))
 
+    # The fixture engine uses one yes; retain the large-move warning coverage.
     def test_a_big_move_keeps_warning_but_one_yes_up_or_down(self):
         oil = till()["FAKEITEM00001"]
         for cents in (1563, 1700, 900, 100):          # +25.04%, +36%, -28%, -92%
