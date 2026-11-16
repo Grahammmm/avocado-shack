@@ -39,6 +39,15 @@ def identity(descriptor):
     return hashlib.sha256(descriptor.encode()).hexdigest()[:12]
 
 
+def _members_ok(members):
+    """Shape and type admission before any hash/regex use, so bad input never raises TypeError."""
+    return (isinstance(members, (list, tuple)) and bool(members)
+            and all(isinstance(m, dict) and set(m) == {'pack', 'skill', 'target'}
+                    and all(isinstance(m[k], str) for k in m)
+                    and m['pack'] in PACKS and m['target'] in TARGETS and OFF.fullmatch(m['skill'])
+                    for m in members))
+
+
 class Gate:
     """source() -> host dict; identities() -> {(target, env): non-secret descriptor}.
 
@@ -56,8 +65,7 @@ class Gate:
         cfg = policy(self.source())
         if cfg['hold']:
             raise ModeError('stopped')
-        if not members or any(set(m) != {'pack', 'skill', 'target'} or m['pack'] not in PACKS
-                              or m['target'] not in TARGETS or not OFF.fullmatch(m['skill']) for m in members):
+        if not _members_ok(members):
             raise ModeError('policy')
         members = sorted([dict(m) for m in members], key=lambda m: (m['target'], m['pack'], m['skill']))
         if any(m['pack'] in cfg['off'] or m['skill'] in cfg['off'] for m in members):
