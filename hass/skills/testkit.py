@@ -666,7 +666,8 @@ def _undo_problems(sc, ufiles, leftover):
     other = [f for f in ufiles if not contentish(f) and f not in GENERATED_PATHS and not f.startswith(ASSET_DIR)]
     if other: out.append("undo left these files different from the start: " + ", ".join(other))
     try:
-        stale = sitegen.stale_paths(load_and_validate(sc.wt / "hass" / "content", sc.wt / "storefront-mockup"), sc.wt)
+        with _clock_scope(sc._clock):  # the kit's day, never the real day (MAIN-RED-AVO-3)
+            stale = sitegen.stale_paths(load_and_validate(sc.wt / "hass" / "content", sc.wt / "storefront-mockup"), sc.wt)
     except ContentError as exc:
         stale = [f"content invalid after undo: {exc}"]
     if stale: out.append("site files do not match the restored content: " + ", ".join(stale))

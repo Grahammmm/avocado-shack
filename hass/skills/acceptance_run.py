@@ -754,9 +754,8 @@ def _undo(sess, registry, res, expected, observe, base, after, chosen, duplicate
     if [f for f in ufiles if not (f.startswith("hass/content/") and f.endswith(".json")) and f not in GENERATED_PATHS and f not in left_assets]: problems.append("a file outside content, site and assets differs")
     if [p for p in base["files"] if p.startswith(ASSET_DIR) and p not in done["files"]]: problems.append("a starting picture file is gone")
     try:
-        # Check the restored site on the same fixture day that rendered it, not the host's later day.
-        with testkit._clock_scope(sess._clock):
-            stale = sitegen.stale_paths(load_and_validate(wt / "hass" / "content", wt / "storefront-mockup"), wt)
+        with testkit._clock_scope(sess._clock):  # the render's selection-freshness day is the kit's day, never the real day (MAIN-RED-AVO-3)
+            stale = sitegen.stale_paths(load_and_validate(wt / "hass" / "content", wt / "storefront-mockup"), wt)  # the site equals a fresh render of the restored content
     except ContentError: stale = ["content invalid"]
     if stale: problems.append("generated site files are stale")
     residue = bool(leftover or left_assets)
@@ -886,7 +885,9 @@ def _chain_final(sess, res, baseline, initial_head, golden, chosen, registry):
     if (done["status"] or any(f not in GENERATED_PATHS and not f.startswith("hass/content/") and f not in assets for f in files)
             or any(done["files"].get(p) != h for p, h in baseline["files"].items() if p.startswith(ASSET_DIR))):
         res.fail("undo-not-identical")
-    if sitegen.stale_paths(load_and_validate(sess.wt / "hass/content", sess.wt / "storefront-mockup"), sess.wt): res.fail("undo-not-identical")
+    with testkit._clock_scope(sess._clock):  # the kit's day, never the real day (MAIN-RED-AVO-3)
+        stale = sitegen.stale_paths(load_and_validate(sess.wt / "hass/content", sess.wt / "storefront-mockup"), sess.wt)
+    if stale: res.fail("undo-not-identical")
     # Only newly added hidden/cancelled records are public content residue; never an old field edit.
     for e in diff:
         after = e.get("after")
