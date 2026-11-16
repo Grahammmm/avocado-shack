@@ -188,7 +188,7 @@ class OpenRequests:
         if req["texts"]:
             out["earlier"] = list(req["texts"])
         if req.get("skill"):
-            out["skill"], out["slots"] = req["skill"], dict(req["slots"])
+            out["skill"], out["slots"] = req["skill"], {k: v for k, v in req["slots"].items() if k != "intake"}  # HASS-INTAKE-2: his private answers (prices, counts) are never shown to the reader
             if req.get("asked_slot"):
                 out["asked_slot"] = req["asked_slot"]
             if req.get("draft_code"):
