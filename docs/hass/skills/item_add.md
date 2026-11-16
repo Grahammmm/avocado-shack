@@ -127,18 +127,32 @@ network (the test kit gives recorded pages, so no test touches the network).
   is not published.
 * **Known limit:** a page "We make ..." is credited to whatever maker name he gave; he reads the story and the address before
   his yes.
-* **Full intake interview (HASS-INTAKE-2, setting `itemIntake: true`, default off like `houseRender`):** a photo with no words
-  gets the first question at once (fixed words, no model call, no preview): "Got the photo. A few quick questions: ..." and
-  "What is it called?". After the name, maker, town and shelf, Hass asks one question at a time: the maker's website (new makers),
-  how many bought and in what, sold per item, pound, bag or bundle, the price, what he paid, ingredients, flavor/size/variety,
-  origin, label claims (kept as his unverified word), allergens, storage, best-by date, day received, low-stock number, one
-  sentence for customers (it becomes the description when the house checks pass) and the New label. Every question takes `skip` or
-  `don't know` and is then left blank, never guessed; `cancel` drops the request. Answers are read by fixed parsing (a third
-  unreadable answer is left blank), so only the maker's story ever needs the model. The answers stay in the open request, are not
-  joined to his texts and are not shown to the reader. The draft shows the public listing as before (no price, cost or count) and a
-  separate "Kept private, not on the website" block. After `yes <code>` the record is appended to `item-intake.jsonl` in the state
-  folder (0600, beside `maker-sources.jsonl`); undo is its own draft and adds an "undone" line. The stock word is worked out from
-  the count and the low-stock number and shown as "I set". Test: `hass/tests/test_item_intake_conversation.py`.
+* **Full intake interview (HASS-INTAKE-2, setting `itemIntake: true`, default off like `houseRender`):**
+  * **First question on receipt.** A photo with no words is answered the moment it arrives, before the photo is fetched, checked or
+    stored: fixed words, no model call, no preview, and the whole list in one line ("Got the photo. A few quick questions: name,
+    maker, how many, how it's sold, price, details, dates and a note for customers. First, what is it called?"). The reply is sent
+    at once (`Conversation._intake_receipt`, `early_flush`); the slow work (fetch, checks, storing, the picture, a maker's website)
+    runs after it and before the final draft. A photo that must be fetched again is not asked twice (table `intake_receipt`).
+  * **Questions.** After the name, maker, town and shelf, one question at a time: the maker's website (new makers), how many bought
+    and in what, sold per item, pound, bag or bundle, the price, what he paid, ingredients, flavor/size/variety, origin, label claims
+    (kept as his unverified word), allergens, storage, best-by date, day received, low-stock number, one sentence for customers (it
+    becomes the description when the house checks pass) and the New label (yes or no).
+  * **Skip and don't know** work at every question, the first four included, and are never kept as a value. A skipped name, shelf or
+    packaging is said honestly ("I can't list it without a name, and I won't make one up") and asked once more (`cancel` drops
+    the request). A skipped maker is listed as not identified; a skipped town leaves the maker not identified too, and the name he
+    gave stays in the private record only (`maker_unknown`, `maker`).
+  * **Reading an answer.** Fixed code takes only a COMPLETE, unambiguous answer ("12 jars", "9 dollars and 57 cents", "nine dollars",
+    "by the pound", "no"). Anything else ("12 or maybe 24 jars", "yes, actually no", "9 dollars and a bit") is never cut down to
+    its first part: on the first try it goes once to the interpreter (`hass/answer_reader.py`, the same local model service as the
+    interpreter, one answer and its question key only), whose value is checked again by the same rules; if that gives nothing exact,
+    he is asked again in plain words, and a third unreadable answer is left blank and said so. Exact answers cost no model call.
+  * **The New label.** His yes or no reaches the listing: with `no` the change adds the product without its added-on day
+    (`product.add` argument `showNew: false`), so the shop shows no New label; the draft says "no New label on it, as you asked".
+  * **Private.** The answers stay in the open request, are not joined to his texts and are not shown to the reader. The draft shows
+    the public listing as before (no price, cost or count) and a separate "Kept private, not on the website" block. After
+    `yes <code>` the record is appended to `item-intake.jsonl` in the state folder (0600, beside `maker-sources.jsonl`); undo is its
+    own draft and adds an "undone" line. The stock word is worked out from the count and the low-stock number and shown as
+    "I set". Test: `hass/tests/test_item_intake_conversation.py`.
 
 ## The live gate (HASS-LIVE-ADD-2 B)
 

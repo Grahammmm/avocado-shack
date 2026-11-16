@@ -4,8 +4,14 @@ One conversation test file for the skill (the existing item.add tests stay as th
 editor and release path on a throwaway repo (the same Chat harness as test_item_add_dispatch): a fake photo, then every answer
 Mike would give, with skips among them. It proves:
 
+* the first question goes out on receipt, BEFORE the (slow) photo is fetched, checked or stored, from fixed words with no model
+  call, and a photo that is fetched again is not asked twice;
 * one question per turn, in plain words, and no model call for an answer to an intake question;
-* ``skip`` and ``don't know`` work for any question and are never replaced by a guess;
+* ``skip`` and ``don't know`` work for any question, the first public ones (name, maker, town) included, and are never replaced by
+  a guess or kept as a maker's name;
+* fixed reading takes only complete, unambiguous answers; an odd one costs one interpreter call (first try only), is checked again,
+  and is otherwise asked again (a third try is left blank and said so), never cut down to its first part;
+* the New label yes/no reaches the listing (and undo restores);
 * the draft Mike is shown (the exact change) has no price, cost or quantity, and neither do the files, the draft record or the
   preview the change would publish; a separate "kept private" block holds them;
 * nothing is saved before his ``yes <code>``; after it the private record (state folder, ``item-intake.jsonl``, 0600) holds every
@@ -18,7 +24,10 @@ Run: python3 -B -m unittest hass.tests.test_item_intake_conversation -v
 import json
 import time
 import unittest
+from datetime import date
+from unittest import mock
 
+from hass import conversation, media
 from hass.skills import item_intake as ii
 from hass.skills import testkit
 from hass.tests import test_item_add_dispatch as base
@@ -45,6 +54,7 @@ class Interview(unittest.TestCase):
     def chat(self, settings=ON, photo=JAR):
         chat = base.Chat([photo], None, settings)
         chat.base_commits = int(testkit._git(chat.kit.wt, "rev-list", "--count", "HEAD"))
+        chat.conv.early_flush = lambda: chat.conv.flush(chat.out)  # what host.Worker does: the first question goes out on receipt
         self.addCleanup(chat.close)
         return chat
 
@@ -171,7 +181,7 @@ class Interview(unittest.TestCase):
         d, first = chat.say("new rigatoni from Etto", JAR)
         self.assertEqual((d, chat.live()["asked_slot"]), ("question", ii.PREFIX + "qty"))  # a known maker: no website question
         again = self.answer(chat, "lots", "qty")
-        self.assertIn("I didn't catch a number", again)
+        self.assertIn("I didn't catch an exact number", again)
         self.answer(chat, "plenty", "qty")  # asked a second time
         self.answer(chat, "tons", "sold_by")  # the third unreadable answer is left blank, never guessed
         self.assertIsNone(chat.live()["slots"]["intake"]["qty"])
@@ -183,6 +193,263 @@ class Interview(unittest.TestCase):
         self.assertIsNone(chat.live())
         self.assertEqual((chat.drafts(), chat.commits()), ([], 0))
         self.assertEqual(len(chat.asked), 1)  # the model read only the first message
+
+    # -- the first question is sent before the photo is fetched, checked or stored ---------------------------------------
+    def test_the_first_question_is_sent_before_the_slow_photo_work(self):
+        chat = self.chat()
+        events, delay = [], 0.4
+        fetch, send, check = chat.photos.fetch, chat.out.send, media.check_photo
+
+        def slow_fetch(*args):
+            events.append(("fetch", time.monotonic()))
+            time.sleep(delay)
+            return fetch(*args)
+
+        def slow_check(data):
+            time.sleep(delay)
+            return check(data)
+
+        def timed_send(chat_id, text, attachments=()):
+            events.append(("sent", time.monotonic(), text))
+            return send(chat_id, text, attachments)
+
+        chat.photos.fetch, chat.out.send = slow_fetch, timed_send
+        with mock.patch.object(media, "check_photo", slow_check):
+            started = time.monotonic()
+            disposition, replies = chat.say("", JAR)
+            total = time.monotonic() - started
+        self.assertEqual((disposition, replies), ("question", [ii.START]))
+        kinds = [e[0] for e in events]
+        self.assertEqual(kinds[0], "sent", kinds)  # the question left BEFORE the photo was fetched
+        first_send = events[0][1] - started
+        self.assertLess(first_send, 0.25, first_send)
+        self.assertGreaterEqual(total, 2 * delay)  # the slow work really ran, after the question
+        self.assertEqual(sum(1 for e in events if e[0] == "sent"), 1)  # exactly one question
+        self.assertEqual(chat.asked, [])  # no model call
+        self.assertEqual(chat.live()["asked_slot"], "name")
+        for topic in ("name", "maker", "how many", "price", "dates", "customers"):  # the whole list, in one short line
+            self.assertIn(topic, ii.START)
+        self.assertEqual(ii.START.count("?"), 1)
+
+    def test_a_photo_that_is_tried_again_is_not_asked_twice_and_a_second_photo_message_is_not_either(self):
+        chat = self.chat()
+        fails = {"left": 1}
+        fetch = chat.photos.fetch
+
+        def flaky(*args):
+            if fails["left"]:
+                fails["left"] -= 1
+                raise OSError("not yet")
+            return fetch(*args)
+
+        chat.photos.fetch = flaky
+        chat.n += 1
+        chat.photos.files["again-1"] = JAR
+        msg = conversation.Inbound("again-1", base.testkit.CHAT, base.testkit.OWNER, "", False, "new", chat.now.isoformat(), 1)
+        with self.assertRaises(conversation.AttachmentPending):
+            chat.conv.handle(msg)
+        chat.conv.flush(chat.out)
+        self.assertEqual([r["text"] for r in chat.out.sent], [ii.START])  # asked once, before the failed fetch
+        self.assertEqual(chat.conv.handle(msg, last_try=True), "question")  # the retry fetches the photo and opens the request
+        chat.conv.flush(chat.out)
+        self.assertEqual([r["text"] for r in chat.out.sent], [ii.START])  # ... without a second question
+        self.assertEqual(chat.live()["asked_slot"], "name")
+
+    def test_a_caption_or_a_busy_request_keeps_the_old_path(self):
+        chat = self.chat()
+        chat.script("new rigatoni from Etto", base.reply(name="Rigatoni", maker="Etto", shelf="pantry", availability="yes"))
+        d, replies = chat.say("new rigatoni from Etto", JAR)  # a caption: the model reads it, no early question
+        self.assertNotIn(ii.START, replies)
+        self.assertEqual(d, "question")
+        self.assertEqual(len(chat.asked), 1)
+
+    # -- skip and don't know at the PUBLIC questions --------------------------------------------------------------------
+    def test_skip_and_dont_know_at_the_first_questions_never_become_a_name_or_a_maker(self):
+        chat = self.chat()
+        chat.say("", JAR)
+        d, said = chat.say("skip")  # a name is needed: said honestly, asked once more, nothing invented
+        self.assertEqual((d, len(said), questions_in(said)), ("question", 1, 1))
+        self.assertIn("without a name", said[0])
+        self.assertEqual(chat.live()["asked_slot"], "name")
+        self.assertIsNone(chat.live()["slots"].get("name"))
+        d, said = chat.say("I don't know")
+        self.assertEqual((d, chat.live()["asked_slot"]), ("question", "name"))
+        self.assertIn("won't make one up", said[0])
+        self.assertEqual(chat.asked, [])
+        d, said = chat.say("Wildflower honey")
+        self.assertIn("Who makes this wildflower honey?", said[0])
+        d, said = chat.say("don't know")  # an unknown maker is not a maker's name
+        self.assertEqual((d, chat.live()["asked_slot"]), ("question", ii.PREFIX + "qty"))
+        self.assertEqual(chat.live()["slots"]["maker"], "unknown")
+        self.assertEqual(chat.asked, [])
+        while (live := chat.live()) and (live["asked_slot"] or "").startswith(ii.PREFIX):
+            d, said = chat.say("skip")
+        self.assertEqual(said, ["Is it in stock right now?"])  # no count given: the stock word is asked, never worked out
+        d, said = chat.say("in stock")
+        self.assertEqual(d, "proposed", said)
+        text = "\n".join(said)
+        self.assertIn("I couldn't tell who makes it", text)
+        self.assertNotIn("don't know", self.public_part(said).replace("I couldn't tell", ""))
+        (draft,) = chat.drafts()
+        chat.say(f"yes {draft['code']}")
+        row = json.loads((chat.conv.sdir / ii.STORE).read_text("utf-8").splitlines()[0])
+        self.assertEqual((row["maker"], row["maker_unknown"], row["name"]), (None, True, "Wildflower honey"))
+        self.assertEqual(set(row["skipped"]), set(ii.ORDER) - {"qty_unit", "maker_site"})  # every question asked was skipped: all named, none made up
+
+    def test_skipping_the_town_of_a_new_maker_leaves_the_maker_not_identified(self):
+        chat = self.chat()
+        chat.say("", JAR)
+        chat.say("Wildflower honey")
+        d, said = chat.say("Bee Happy Farm")
+        self.assertEqual(said, ["Where is Bee Happy Farm based (town and state)?"])
+        d, said = chat.say("skip")
+        self.assertEqual((d, chat.live()["asked_slot"]), ("question", ii.PREFIX + "qty"))  # a new maker with no town is never added
+        self.assertEqual(chat.live()["slots"]["maker"], "unknown")
+        while (live := chat.live()) and (live["asked_slot"] or "").startswith(ii.PREFIX):
+            d, said = chat.say("skip")
+        self.assertEqual(said, ["Is it in stock right now?"])  # no count given: the stock word is asked, never worked out
+        d, said = chat.say("in stock")
+        self.assertEqual(d, "proposed", said)
+        self.assertNotIn("is new on the site", "\n".join(said))
+        (draft,) = chat.drafts()
+        chat.say(f"yes {draft['code']}")
+        row = json.loads((chat.conv.sdir / ii.STORE).read_text("utf-8").splitlines()[0])
+        self.assertEqual((row["maker"], row["maker_unknown"]), ("Bee Happy Farm", False))  # his word is kept privately, never published
+        products = json.loads((chat.kit.wt / "hass/content/products.json").read_text("utf-8"))["products"]
+        self.assertNotIn("Bee Happy Farm", json.dumps(products))
+
+    # -- complete, unambiguous fixed reading; anything else goes to the interpreter once, then is asked again -----------
+    def test_fixed_reading_takes_only_complete_answers(self):
+        today = date(2026, 11, 16)
+        ok = lambda key, text: ii.read(key, text, {}, today=today)[:2]  # noqa: E731
+        self.assertEqual(ok("price", "9 dollars and 57 cents"), ("ok", {"price": "9.57"}))
+        self.assertEqual(ok("price", "nine dollars"), ("ok", {"price": "9.00"}))
+        self.assertEqual(ok("price", "$9.5"), ("ok", {"price": "9.50"}))
+        self.assertEqual(ok("price", "nine dollars and fifty seven cents"), ("ok", {"price": "9.57"}))
+        self.assertEqual(ok("qty", "12 jars"), ("ok", {"qty": 12, "qty_unit": "jar"}))
+        self.assertEqual(ok("qty", "twelve"), ("ok", {"qty": 12}))
+        self.assertEqual(ok("qty", "a dozen"), ("ok", {"qty": 12, "qty_unit": "each"}))
+        self.assertEqual(ok("new_badge", "no"), ("ok", {"new_badge": False}))
+        self.assertEqual(ok("sold_by", "by the pound"), ("ok", {"sold_by": "pound"}))
+        for key, text in (("price", "9.575"), ("price", "9 dollars and a bit"), ("price", "$9 or $12"), ("qty", "12 or maybe 24 jars"),
+                          ("qty", "about 12"), ("qty", "12 jars of honey"), ("qty", "lots"), ("new_badge", "yes, actually no"),
+                          ("new_badge", "yes but no"), ("sold_by", "per pound or per bag"), ("best_by", "sometime next spring"),
+                          ("low_stock", "5 or 6"), ("received", "last tuesday or so")):
+            got = ii.read(key, text, {}, today=today)
+            self.assertEqual(got[0], "again", (key, text, got))  # never cut down to its first part
+        # the interpreter: asked once, on the first try only, and its value is checked again
+        calls = []
+
+        def reader(answer):
+            def read(key, words):
+                calls.append((key, words))
+                return answer
+            return read
+
+        got = ii.read("price", "about nine fifty", {}, today=today, reader=reader({"value": "9.50"}))
+        self.assertEqual((got[0], got[1], len(calls)), ("ok", {"price": "9.50"}, 1))
+        calls.clear()
+        for bad in ({"value": None}, {"value": "lots"}, {"value": -3}, {"value": "9.5.5"}, {"value": [9, 12]}, {}, None, "x"):
+            got = ii.read("price", "about nine fifty", {}, today=today, reader=reader(bad))
+            self.assertEqual(got[0], "again", bad)
+        self.assertEqual(len(calls), 8)  # one call each, never more
+        calls.clear()
+        self.assertEqual(ii.read("price", "about nine fifty", {}, today=today, asks=2, reader=reader({"value": "9.50"}))[0], "again")
+        self.assertEqual(calls, [])  # only the first try is interpreted
+        self.assertEqual(ii.read("price", "9.57", {}, today=today, reader=reader({"value": "1.00"}))[1], {"price": "9.57"})
+        self.assertEqual(calls, [])  # an exact answer never costs a model call
+        self.assertEqual(ii.read("qty", "12 or maybe 24 jars", {}, today=today, reader=reader({"value": {"number": 12, "unit": "jar"}}))[1],
+                         {"qty": 12, "qty_unit": "jar"})  # an exact value from the interpreter is taken after the same checks
+        raising = mock.Mock(side_effect=RuntimeError("down"))
+        self.assertEqual(ii.read("price", "about nine fifty", {}, today=today, reader=raising)[0], "again")
+        # the third unreadable answer is left blank, and he is told so
+        third = ii.read("price", "about nine fifty", {}, today=today, asks=3)
+        self.assertEqual(third, ("ok", {"price": None}, {}, "I couldn't read that, so I left the price blank."))
+
+    def test_an_odd_answer_in_the_conversation_costs_one_interpreter_call_and_is_never_guessed(self):
+        chat = self.chat()
+        calls = []
+
+        class Reader:
+            def read(self, key, words, today):
+                calls.append((key, words))
+                return {"value": None}  # "I cannot tell"
+
+        chat.conv.answer_reader = Reader()
+        chat.script("new rigatoni from Etto", base.reply(name="Rigatoni", maker="Etto", shelf="pantry", availability="yes"))
+        d, first = chat.say("new rigatoni from Etto", JAR)
+        self.assertEqual(chat.live()["asked_slot"], ii.PREFIX + "qty")
+        self.answer(chat, "12 or maybe 24 jars", "qty")  # asked again; the interpreter said it cannot tell
+        self.assertEqual(calls, [("qty", "12 or maybe 24 jars")])
+        self.assertNotIn("qty", chat.live()["slots"].get("intake", {}))  # 12 was NOT kept
+        self.answer(chat, "24 jars please maybe", "qty")  # a second odd answer: not interpreted again
+        self.assertEqual(len(calls), 1)
+        reply = self.answer(chat, "24 jars", "sold_by")
+        self.assertEqual(chat.live()["slots"]["intake"]["qty"], 24)
+        self.answer(chat, "per item", "price")
+        self.answer(chat, "9 dollars and 57 cents", "cost")  # exact words: fixed reading, no call
+        self.assertEqual(chat.live()["slots"]["intake"]["price"], "9.57")
+        self.assertEqual(len(calls), 1)
+        for text, key in (("skip", "ingredients"), ("skip", "variety"), ("skip", "origin"), ("skip", "claims"), ("skip", "allergens"),
+                          ("skip", "storage"), ("skip", "best_by")):
+            self.answer(chat, text, key)
+        for tries in range(2):  # an unreadable date twice, then a third time: left blank and said so
+            self.answer(chat, "some time in spring", "best_by")
+        said = self.answer(chat, "some time in spring", "received")
+        self.assertTrue(said.startswith("I couldn't read that, so I left the best-by date blank."), said)
+        self.assertIsNone(chat.live()["slots"]["intake"]["best_by"])
+        self.assertEqual(len(chat.asked), 1)  # the one model call is the shop's own first read of his caption
+
+    # -- the New label: his yes or no reaches the public listing -------------------------------------------------------
+    def _etto_interview(self, chat, new_badge):
+        chat.script("new rigatoni from Etto", base.reply(name="Rigatoni", maker="Etto", shelf="pantry", availability="yes"))
+        chat.say("new rigatoni from Etto", JAR)
+        answers = {"qty": "12 bags", "sold_by": "per bag", "price": "$9.57", "cost": "$4.31",
+                   "customer_note": "Lovely with a simple tomato sauce.", "new_badge": new_badge}
+        while (live := chat.live()) and (live["asked_slot"] or "").startswith(ii.PREFIX):
+            d, said = chat.say(answers.get(live["asked_slot"][len(ii.PREFIX):], "skip"))
+        self.assertEqual(d, "proposed", said)
+        return said, chat.drafts()[-1]
+
+    def test_the_new_label_answer_is_honored_in_the_listing_and_undo_restores(self):
+        for answer, shows in (("no", False), ("yes", True)):
+            with self.subTest(answer):
+                chat = self.chat()
+                said, draft = self._etto_interview(chat, answer)
+                public = self.public_part(said)
+                self.assertEqual("no New label on it, as you asked" in "\n".join(said), not shows, said)
+                self.assertNotIn("New label", public)  # the line is in what I set, not in the listing text itself
+                self.assertEqual('"showNew"' in draft["ops_json"], not shows)
+                before = chat.kit.head()
+                chat.say(f"yes {draft['code']}")
+                products = json.loads((chat.kit.wt / "hass/content/products.json").read_text("utf-8"))["products"]
+                product = next(p for p in products if p["name"] == "Rigatoni")
+                self.assertEqual("addedOn" in product, shows, product)  # with no day the shop shows no New label (shop.js isNew)
+                self.assertEqual(product.get("addedOn"), "2026-11-08" if shows else None)
+                self.assertNotIn("showNew", json.dumps(products))  # the flag is not itself a public field
+                for name in testkit._git(chat.kit.wt, "diff", "--name-only", before, "HEAD").split():
+                    data = (chat.kit.wt / name).read_bytes()
+                    for secret in ("9.57", "4.31", "12 bags"):
+                        self.assertFalse(secret.encode() in data, f"{secret} in {name}")
+                d, undo = chat.say("undo")
+                self.assertEqual(d, "proposed", undo)
+                chat.say(f"yes {chat.drafts()[-1]['code']}")
+                products = json.loads((chat.kit.wt / "hass/content/products.json").read_text("utf-8"))["products"]
+                self.assertEqual(next(p for p in products if p["name"] == "Rigatoni")["status"], "hidden")
+                self.assertEqual(chat.kit.dirty(), "")
+
+    def test_on_the_live_site_a_no_to_the_new_label_is_said_not_hidden(self):
+        # G's live table of allowed arguments has no argument for it, so the live draft says so before his yes and writes his no down
+        chat = self.chat()
+        with mock.patch.object(base.ia, "_live", return_value=True):
+            said, draft = self._etto_interview(chat, "no")
+        text = "\n".join(said)
+        self.assertIn("Left off: your no to the New label", text)
+        self.assertIn("I wrote your no down for Graham", text)
+        self.assertNotIn("showNew", draft["ops_json"])
+        chat.say(f"yes {draft['code']}")
+        row = json.loads((chat.conv.sdir / ii.STORE).read_text("utf-8").splitlines()[0])
+        self.assertIs(row["answers"]["new_badge"], False)
 
     def test_with_the_setting_off_nothing_changes(self):
         chat = self.chat(settings={})

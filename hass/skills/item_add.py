@@ -59,6 +59,7 @@ from hass.skills.model import Skill, Slot, Trigger, Undo
 
 LIMITS = TEXT_LIMITS["product"]
 UNKNOWN_BRAND = "Producer not identified"  # the house words for a product with no known maker
+UNKNOWN_SAID = "unknown"  # what the maker slot holds when he skipped the maker (DONT_KNOW reads it; no denial word, so it stays traceable)
 NOT_NEEDED = "not needed"  # what the town slot holds when there is no maker to place (unknown or already saved)
 FORMS = ("packaged", "fresh")
 DONT_KNOW = re.compile(r"^(?:i\s+)?(?:don'?t|do\s+not|dont)\s+know\b|^(?:dunno|not\s+sure|no\s+idea|unknown|nobody|no\s+one"
@@ -477,15 +478,35 @@ def _new_maker(slots, ctx) -> bool:
 
 def answer(req, text, ctx):
     """HASS-INTAKE-2: with the interview on, a plain short answer to the name, maker or town question is read by fixed code (no
-    model call, so the questions come at once). Anything longer, with a number or a list in it, is left to the model."""
-    if not intake_mod.enabled(ctx) or req.get("state") != "open" or req.get("asked_slot") not in ("name", "maker", "place"):
+    model call, so the questions come at once). Anything longer, with a number or a list in it, is left to the model.
+    ``skip`` and ``don't know`` mean the same here as at every other question and are never kept as a value: a name, shelf or
+    packaging he skips is asked once more (see ``intake_skip``); a maker he skips is listed as not identified; a town he skips
+    leaves the maker not identified too, and the name he gave stays in his private record only."""
+    slot = req.get("asked_slot")
+    if not intake_mod.enabled(ctx) or req.get("state") != "open" or slot not in ("name", "maker", "place", "shelf", "form"):
         return None
     words = _clean(text)
+    if words and intake_mod.SKIP.match(words):
+        if slot == "maker":
+            return {"maker": UNKNOWN_SAID, "place": NOT_NEEDED, "_text": UNKNOWN_SAID}
+        if slot == "place":
+            return {"maker": UNKNOWN_SAID, "place": NOT_NEEDED, "_text": UNKNOWN_SAID,
+                    "intake": {**_intake(req.get("slots")), "maker_named": _clean((req.get("slots") or {}).get("maker"))}}
+        return {"skipped": slot}
+    if slot not in ("name", "maker", "place"):
+        return None
     if not words or len(words.split()) > 6 or re.search(r"[\d$@/]", words) or "\n" in text or len(words) > 60:
         return None
-    if re.fullmatch(r"(?:yes|no|ok|okay|skip|cancel|stop)[.!]*", words, re.IGNORECASE) or (req["asked_slot"] == "name" and (TWO_IN_NAME.search(words) or "," in words)):
+    if re.fullmatch(r"(?:yes|no|ok|okay|cancel|stop)[.!]*", words, re.IGNORECASE) or (slot == "name" and (TWO_IN_NAME.search(words) or "," in words)):
         return None
-    return {req["asked_slot"]: words}
+    return {slot: words}
+
+
+def intake_skip(req, slot, ctx) -> str:
+    """The one honest reply to a skipped name, shelf or packaging: nothing is invented, the same question comes once more."""
+    why = intake_mod.PUBLIC_NEEDED.get(slot, "I can't go on without that.")
+    ask = question(slot, req.get("slots") or {}, ctx)
+    return f"{why} {ask[:-1] if ask.endswith('?') else ask}, or say cancel?"
 
 
 def intake_next(slots, ctx):
@@ -503,16 +524,17 @@ def intake_next(slots, ctx):
 
 def intake_read(req, text, ctx) -> dict:
     """His answer to the open intake question: {"abort": True}, {"again": the question again} or {"slots": the slots it sets,
-    "public": whether the answer may join his texts (only a maker's website)}."""
+    "public": whether the answer may join his texts (only a maker's website), "note": a sentence to say first or None}."""
     key = (req.get("asked_slot") or "")[len(intake_mod.PREFIX):]
     today = _today(ctx) or date.today()
-    got = intake_mod.read(key, text, _intake(req["slots"]), today=today, asks=req.get("asks") or 1)
+    got = intake_mod.read(key, text, _intake(req["slots"]), today=today, asks=req.get("asks") or 1,
+                          reader=(lambda k, words: ctx.intake_reader(k, words, today)) if getattr(ctx, "intake_reader", None) else None)
     if got[0] == "abort":
         return {"abort": True}
     if got[0] == "again":  # what was wrong, then the same one question again
         return {"again": f"{got[1]} {intake_mod.question(key, clean_name(req['slots'].get('name')), _intake(req['slots']))}"}
-    answers, extra = got[1], got[2]
-    return {"slots": {"intake": {**_intake(req["slots"]), **answers}, **extra}, "public": "maker_url" in extra}
+    answers, extra, note = got[1], got[2], got[3]
+    return {"slots": {"intake": {**_intake(req["slots"]), **answers}, **extra}, "public": "maker_url" in extra, "note": note}
 
 
 def intake_record(skill_name, slots, ctx, code, now):
@@ -521,7 +543,9 @@ def intake_record(skill_name, slots, ctx, code, now):
     if not got:
         return None
     content = _content(ctx)
-    return intake_mod.record(code, clean_name(slots.get("name")), _clean(slots.get("maker")) or None, _clean(slots.get("shelf")) or None,
+    maker = _clean(slots.get("maker"))
+    maker = None if not maker or DONT_KNOW.match(maker) else maker  # "I don't know" is not a maker's name
+    return intake_mod.record(code, clean_name(slots.get("name")), maker, _clean(slots.get("shelf")) or None,
                              _next_id(ctx, content), slots.get("photo"), got, now)
 
 
@@ -862,6 +886,13 @@ def describe_add(slots: dict, ctx=None) -> Outcome:
     display = _clean(slots.get("display_brand"))
     if display:
         args["displayBrand"] = _text(display, "displayBrand", "maker line")
+    if _intake(slots).get("new_badge") is False:  # HASS-INTAKE-2: his "no" to the New label
+        if _live(ctx):  # the live table of allowed arguments is G's own list and has no such argument: said, never hidden
+            left.append("your no to the New label, because the live website adds it by itself for two weeks and I can't turn it off from "
+                        "chat. I wrote your no down for Graham")
+        else:  # added without its day: the shop shows no label for a product with no addedOn (shop.js isNew)
+            args["showNew"] = False
+            set_lines.append("no New label on it, as you asked")
     ops.append({"op": "product.add", "args": args})
 
     # 9. the inventory word and today's shelf check (D2): the check goes in the same change, on its own line

@@ -79,8 +79,8 @@ class Chat:
         if photo:
             self.photos.files[pid] = photo
         msg = conversation.Inbound(pid, testkit.CHAT, testkit.OWNER, text, False, "new", self.now.isoformat(), 1 if photo else 0)
+        before = len(self.out.sent)  # before handle(): a reply may be sent on receipt (HASS-INTAKE-2 early_flush)
         disposition = self.conv.handle(msg)
-        before = len(self.out.sent)
         self.conv.flush(self.out)
         return disposition, [row["text"] for row in self.out.sent[before:]]
 
