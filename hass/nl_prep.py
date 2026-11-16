@@ -8,7 +8,7 @@ them as "hints"; the prompt tells the model to use them and that a hint never su
   makers     a maker named on its own, with its products
   shelves    a whole shelf (bread, meat, dairy ...) with its active products, so the model drafts one change each or asks
   hikes      a hike or route idea named in the message, or the scheduled hikes on a weekday the owner named
-  dates      today/tomorrow/weekday/"the 29th"/"dec 5" worked out in Pacific time (an unclear day lists both readings)
+  dates      today/tomorrow/weekday/"the 29th"/"dec 5"/a named US holiday (Thanksgiving ...) worked out in Pacific time (an unclear day lists both readings)
   times      explicit clock times as HH:MM; numbers   spoken numbers as digits; price   money words and amounts
 
 Pure and deterministic: no clock, no I/O, no network. Anything the matching cannot settle is left out, never guessed; a
@@ -319,6 +319,35 @@ def _slash_year(m):
     return (m.group(0), d) if d is not None else None
 
 
+HOLIDAY_RE = re.compile(r"(?<![a-z0-9])(thanksgiving(?: day)?|christmas(?: day| eve)?|new year's (?:day|eve)|memorial day|labor day)(?![a-z0-9])")
+HOLIDAY_PAST_RE = re.compile(r"(?:last|past|previous|since)\s+$")  # words before a holiday that mean a day gone by
+HOLIDAY_YEAR_BEFORE_RE, HOLIDAY_YEAR_AFTER_RE = re.compile(r"\b(?:19|20)\d\d\s+$"), re.compile(r"\s*(?:of |in )?(?:(?:19|20)\d\d\b|'\d\d\b)")
+
+
+def _holiday_date(word, year):
+    """The date of the US holiday ``word`` (a folded HOLIDAY_RE match) in ``year``: the real day, not the observed one; None past year 9999."""
+    try:
+        if word.startswith("thanksgiving"): return date(year, 11, 1) + timedelta(days=(3 - date(year, 11, 1).weekday()) % 7 + 21)
+        if word.startswith("memorial"): return date(year, 5, 31) - timedelta(days=date(year, 5, 31).weekday())
+        if word.startswith("labor"): return date(year, 9, 1) + timedelta(days=(-date(year, 9, 1).weekday()) % 7)
+        month, day = {"christmas eve": (12, 24), "christmas": (12, 25), "christmas day": (12, 25), "new year's eve": (12, 31), "new year's day": (1, 1)}[word]
+        return date(year, month, day)
+    except (ValueError, OverflowError):
+        return None
+
+
+def _holiday_hints(text, today: date) -> list:
+    """Rows for each US holiday the folded ``text`` names: its coming date on or after ``today`` (Pacific), so the model never
+    works the day out. Last/past or explicitly yeared phrases get no row; July 4th is read by the month-day pass."""
+    rows = []
+    for m in HOLIDAY_RE.finditer(text):
+        before, after = text[:m.start()], text[m.end():]
+        if HOLIDAY_PAST_RE.search(before) or HOLIDAY_YEAR_BEFORE_RE.search(before) or HOLIDAY_YEAR_AFTER_RE.match(after): continue
+        found = [d for d in (_holiday_date(m.group(1), y) for y in (today.year, today.year + 1)) if d is not None and d >= today]
+        if found: rows.append(_date_row(m.group(1), min(found)))
+    return rows
+
+
 def date_hints(text, today: date):
     """(rows, [(said weekday, weekday number)]): every day the message names, in Pacific time (``today`` is the Pacific day)."""
     t, rows, hits = fold(text), [], []
@@ -368,6 +397,7 @@ def date_hints(text, today: date):
         n = int(m.group(1)) if m.group(1).isdigit() else WORD_NUMBERS[m.group(1)]
         d = _shift(today, n * (7 if m.group(2) == "week" else 1))
         if d is not None: rows.append({"said": m.group(0), "date": day(d), "weekday": WEEKDAY_NAMES[d.weekday()]})
+    rows.extend(_holiday_hints(t, today))
     if re.search(r"\b(next week|this weekend|next month|couple (?:of )?(?:days|weeks)|few (?:days|weeks)|sometime|soon)\b", t):
         rows.append({"said": "a loose time", "date": None, "note": "not one day: ask which day"})
     return rows[:MAX_LIST], hits
