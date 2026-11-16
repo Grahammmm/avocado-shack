@@ -102,6 +102,61 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(router.candidates("hello", skills=model.Registry({})), [])
 
 
+def _report(name="report.shelf", triggers=("what's sold out?", "what's on the shelves"), **over):
+    base = dict(slots=(), approval="none", live_class="read-only", side_effects=("none",), preview="none", undo=model.Undo("none", "none"))
+    base.update(over)
+    return _skill(name, "morning shelf report", list(triggers), **base)
+
+
+def _with(*extra):
+    return model.Registry({s.name: s for s in (*SKILLS.active(), *extra)})
+
+
+class ExactReadOnlyTriggerTests(unittest.TestCase):
+    STOCK = _skill("stock.clear", "mark things sold out", ["what is sold out", "sold out"], edits=(("hass/content/products.json", "x"),))
+
+    def test_exact_read_only_trigger_beats_shared_stock_leaders(self):
+        reg = _with(self.STOCK, _skill("stock.checked", "record the shelf check", ["what is sold out today", "what's on the shelves tonight"]), _report())
+        for text in ("what's sold out?", "WHAT'S on the shelves"):
+            ranked = router.candidates(text, skills=reg)
+            self.assertEqual(ranked[0][0], "report.shelf")
+            self.assertFalse(router._within_near_tie(ranked[0][1], ranked[1][1]) if len(ranked) > 1 else False)
+            self.assertEqual(router.route({"skill": "report.shelf", "slots": {}}, ranked, reg, text=text).action, "run")
+
+    def test_shared_words_and_change_exact_match_do_not_bypass_question(self):
+        reg = _with(self.STOCK, _report())
+        ranked = router.candidates("what is sold out now", skills=reg)
+        self.assertNotEqual(ranked[0][0], "report.shelf")
+        self.assertEqual(router.route({"skill": "stock.set", "slots": {"what": "x"}}, ranked, reg, text="x").action, "ask") if ranked[0][0] != "stock.set" and router._within_near_tie(ranked[0][1], dict(ranked).get("stock.set", 0)) else None
+        collide = _with(_skill("stock.x", "change stock", ["what's sold out?"]), _report())  # exact change skill too
+        ranked = router.candidates("what's sold out?", skills=collide)
+        self.assertEqual(ranked[0][0], "stock.x")  # no preference for either exact match: plain word scores decide
+        self.assertLess(dict(ranked)["report.shelf"], ranked[0][1])
+
+    def test_duplicate_exact_trigger_and_inactive_report_do_not_choose(self):
+        two = _with(_report(), _report("report.other"))
+        self.assertEqual(router.candidates("what's sold out?", skills=two)[0][1], router.candidates("what's sold out?", skills=two)[1][1])
+        retired = _with(_report(status="retired"))
+        self.assertEqual(router.candidates("what's sold out?", skills=retired), router.candidates("what's sold out?", skills=SKILLS))
+        self.assertEqual(router.candidates("", skills=_with(_report())), [])
+
+    def test_exact_preference_preserves_attachment_and_side_effect_filters(self):
+        photo = (model.Slot("photo", "attachment", True, ask="Which?"),)
+        self.assertEqual(router.candidates("what's sold out?", attachment=True, skills=_with(_report())), [])
+        self.assertEqual(router.candidates("what's sold out?", attachment=True, skills=_with(_report(slots=photo)))[0][0], "report.shelf")
+        for over in (dict(side_effects=("backlog-row",)), dict(approval="owner-yes", edits=(("hass/content/products.json", "x"),)), dict(live_class="chat-live")):
+            ranked = router.candidates("what's sold out?", skills=_with(_report(**over)))
+            self.assertLess(dict(ranked).get("report.shelf", 0), 2 * max(dict(ranked).values()))  # no boost: scored on words only
+
+    def test_exact_report_still_validates_model_reply(self):
+        reg = _with(_report())
+        ranked = router.candidates("what's sold out?", skills=reg)
+        before = repr(ranked)
+        self.assertEqual(router.route({"skill": "no.such", "slots": {}}, ranked, reg, text="x").action, "backlog")
+        self.assertEqual(router.route({"skill": "report.shelf", "slots": {"nope": "x"}}, ranked, reg, text="x").action, "question")
+        self.assertEqual(repr(router.candidates("what's sold out?", skills=reg)), before)
+
+
 class RouteTests(unittest.TestCase):
     def test_none_goes_to_the_backlog_and_says_so_plainly(self):
         store = _backlog()

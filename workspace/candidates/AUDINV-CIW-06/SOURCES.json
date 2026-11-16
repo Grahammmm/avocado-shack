@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "captured_utc": "2026-11-15T23:30:00Z",
+  "note": "Immutable metadata of read-only local exports only. No new gh/network query was made for this unit.",
+  "sources": [
+    {"id": "ci-audit-raw-avocado-shack", "path": "/home/user/agent-work/reports/ci-audit-raw-avocado-shack.json", "sha256": "5a5f737790f629e547f45421dd9af31e1bb744d0a5e381f96cdc0fbe7d2161e4", "covers": "avocado-shack runs created 2026-11-03T14:18:16Z..2026-11-04T01:16:20Z (80 runs, 76 jobs, job created+started present)", "in_day_window": false},
+    {"id": "ci-minutes-1-runs", "path": "/home/user/agent-work/ci-minutes-1/runs.json", "sha256": "7202727277ceff07a1126782fbd553f2fc5e2cf57ac338859a10fbe21d60077b", "covers": "hermes-ops (NOT avocado-shack) runs 2026-10-20..2026-11-14T15:36:41Z; 1 run in the day window, a hermes-ops schedule run", "in_day_window": false},
+    {"id": "ci-minutes-1-jobs", "path": "/home/user/agent-work/ci-minutes-1/jobs.json", "sha256": "267ffbc34225cc748edb8d1993297bb30282cdc102847d4f32c20b75588f9548", "covers": "hermes-ops jobs for the runs above; no job created_at field", "in_day_window": false},
+    {"id": "ci-weight-audit-2026-11-03", "path": "/home/user/agent-work/reports/CI-WEIGHT-AUDIT-2026-11-03.md", "sha256": "a7245bb415d4ad9bc64d35ea94089eec3d8906dfc3392f22c30b7e452702e68a", "covers": "lines 426-440: n=48 before / n=2 after cutover queue sample, stated as weak by the audit itself", "in_day_window": false}
+  ],
+  "missing_coverage": [
+    "No avocado-shack workflow run or job export for created_at in [2026-11-14T00:00:00Z, 2026-11-15T00:00:00Z) exists in the local sanitized sources.",
+    "No pagination/completeness evidence (page counts, total_count) exists for any day-window avocado-shack export.",
+    "Existing hermes-ops export has no job created_at; true queue wait cannot be computed from it and it is the wrong repository.",
+    "A fresh read-only gh run/job export is the custodian action; this unit may not run network queries."
+  ]
+}

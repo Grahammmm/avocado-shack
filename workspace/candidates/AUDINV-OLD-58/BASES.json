@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "base": "b83d3615a2ff8802c5b82339b7802e6e62c8d97d",
+  "candidate": true,
+  "installed": false,
+  "no_apply": true,
+  "digests": {
+    "hass/__init__.py": "e75032048a53d5032a5c5fd9b1f0158a704e36a9eb27ebcf3992c45e0269bb5e",
+    "hass/content_model.py": "61e0ac69b09f75bfc87a68928b0d59d20ef45712cdbbf7bcfd4baedf9dd1c192",
+    "hass/notice.py": "e5fd8dd8f3be123541bd9d96e042180d0aa754258e63e29291ccdfd0d391f3aa",
+    "hass/preview.py": "73c7aad13efb2552e9d56515115e744c0c4a736b39e23b8d3f46ab1aa9eed867",
+    "hass/screenshot.cjs": "0bb12c91e388f2de90a71eba571598aa5db1e86ad7a27d30ddfac015cf870176",
+    "storefront-mockup/community-server.py": "7da0fb5d639efc0ebd28765c5c15e16ba6328eb7b8f8bbd3833ff22355378e30"
+  },
+  "candidate_sha256": "348f1345b3a5267e047bf8c6aa416d9df6b8b38cff94884dc7f4927788ddcf99",
+  "fixtures_sha256": "d7462be08620c99b45a042087592f94211f14fe82da8ddeea0c0dd1d88b9f5c8"
+}
