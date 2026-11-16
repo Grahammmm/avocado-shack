@@ -451,8 +451,8 @@ class RealDispatch(ShelfCase):
 
 class RealRouter(ShelfCase):
     """With the real router and the whole catalog: a typo, a vague and a multi ask reach the skill and are answered at once; a
-    plain `what's sold out?` shares its words with three stock skills, so the owner is asked which he means first (the router's
-    own rule, not changed here) and the pick he then makes stands."""
+    plain `what's sold out?` is a whole-message exact trigger of the read-only shelf report, so it is answered at once even though
+    it shares its words with stock skills; shared words alone (no exact trigger) still ask which."""
     STUB_ROUTER = False
 
     def test_typo_vague_and_multi_asks_route_to_the_skill_and_are_answered(self):
@@ -466,18 +466,23 @@ class RealRouter(ShelfCase):
                 self.assertEqual(status, "answer")
                 self.assertTrue(reply)
         for text in ("what did I check last", "what's on the shelves", "what's sold out?"):
-            self.assertTrue(names[text])  # the lead of these is shared with the stock skills
+            self.assertTrue(names[text])  # these share their lead words with the stock skills
 
-    def test_a_plain_sold_out_question_is_asked_once_then_answered(self):
+    def test_plain_sold_out_is_answered_immediately_without_side_effects(self):
         self.scenario("fresh")
-        status, [question] = self.ask("what's sold out?")
-        self.assertEqual(status, "question")
-        self.assertTrue(question.startswith("Do you want to ") and "morning shelf report" in question, question)
+        status, replies = self.ask("what's sold out?")
+        self.assertEqual((status, replies), ("answer", [PLAIN(self.expected())]))  # one reply, no "Do you want to ..."
         self.untouched()
-        status, [reply] = self.ask("the shelf report")
-        self.assertEqual((status, reply), ("answer", PLAIN(self.expected())))
+        status, replies = self.ask("what's sold out?")  # a later fresh repeat answers again
+        self.assertEqual((status, replies), ("answer", [PLAIN(self.expected())]))
         self.untouched()
 
+    def test_shared_words_without_an_exact_trigger_still_ask_which(self):
+        self.scenario("fresh")
+        status, [question] = self.ask("what is sold out now")
+        self.assertEqual(status, "question")
+        self.assertTrue(question.startswith("Do you want to "), question)
+        self.untouched()
 
 
 # -- AV1109-09 site answers --------------------------------------------------------------------------------------

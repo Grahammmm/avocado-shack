@@ -1,0 +1,505 @@
+{
+ "schema_version": 1,
+ "repo": "Grahammmm/avocado-shack",
+ "window_start": "2026-11-14T00:00:00Z",
+ "window_end": "2026-11-15T00:00:00Z",
+ "pass_enumeration": "none",
+ "passes": [],
+ "timezone_assumption": "ship.log timestamps are host-local PST (UTC-8; DST ended 2026-11-01); window is 2026-11-13 16:00:00 to 2026-11-14 16:00:00 local",
+ "sources": [
+  {
+   "id": "ship.log",
+   "path_at_capture": "/home/user/agent-work/modes/ship.log (live append-only ship-queue log)",
+   "captured_utc": "2026-11-15T23:16:13Z",
+   "file_bytes_at_capture": 31614583,
+   "file_lines_at_capture": 190520,
+   "cited": "avocado-shack MERGED receipt lines within +-6h of the window (receipt_lines) and multi-merge group lines (groups)"
+  }
+ ],
+ "merges": [
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 808,
+   "head": "706c19d55241ca79861ed78c057ddfd118c06e8b",
+   "ts": "2026-11-13T20:43:46Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr808",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 809,
+   "head": "3e51bbf56f5bfef0abd9652344660a73bd4b5d8e",
+   "ts": "2026-11-13T20:52:16Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr809",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 811,
+   "head": "d1d8911254bca8e83dab7b006f24fde87c04ac58",
+   "ts": "2026-11-14T02:53:16Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr811",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 816,
+   "head": "f46233a8c10b5ecb30946b267ad65f8a88ce6d03",
+   "ts": "2026-11-14T02:53:24Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr816",
+   "group_position": 2
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 818,
+   "head": "aeea70d3314e3065864863b5985b681d40fdaefb",
+   "ts": "2026-11-14T02:53:38Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr818",
+   "group_position": 3
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 813,
+   "head": "a39fe43b890330506c7facbb4a48923e1456eba3",
+   "ts": "2026-11-14T03:03:30Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr813",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 819,
+   "head": "3ba9874d39d4bbaf1b7e039688745b0066513718",
+   "ts": "2026-11-14T03:03:46Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr819",
+   "group_position": 2
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 820,
+   "head": "a591655c881d6cf458d863d01815e48102f1498f",
+   "ts": "2026-11-14T03:04:01Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr820",
+   "group_position": 3
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 821,
+   "head": "1d05adabd6fa12a79a49d99c5e38ec24ab1221ae",
+   "ts": "2026-11-14T03:12:50Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr821",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 823,
+   "head": "7f4eee40a0160212f1d6885ad43dd413696e955d",
+   "ts": "2026-11-14T03:13:04Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr823",
+   "group_position": 2
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 825,
+   "head": "c02382d9290e8ce5a1bc9b26fcc8bc60433a9ec2",
+   "ts": "2026-11-14T04:34:52Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr825",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 822,
+   "head": "c081b823f74804d778728e2b55bc7bde67be10ac",
+   "ts": "2026-11-14T04:42:40Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr822",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 571,
+   "head": "b82d711fb68919fd47223569bb7a2dee21ed0780",
+   "ts": "2026-11-14T04:52:47Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr571",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 815,
+   "head": "452f80270d762001c6e2f9b7b8e361fb5924eaaa",
+   "ts": "2026-11-14T05:22:46Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr815",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 559,
+   "head": "1ff697b32c5a9c223f69c25bf2874323008dd579",
+   "ts": "2026-11-14T05:52:51Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr559",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 817,
+   "head": "c0d55989dab2706223d9f5249e29b06b8f9c4d63",
+   "ts": "2026-11-14T06:02:51Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr817",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 814,
+   "head": "2d330107e3d97b1f95a1983fc1d2c2d01763d507",
+   "ts": "2026-11-14T06:52:42Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr814",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 810,
+   "head": "86b43c1c75fbd870408239e99e51ba4ee2d2071b",
+   "ts": "2026-11-14T08:22:53Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr810",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 812,
+   "head": "6abd773fb18d574ce9f5912d0c064d90795410f8",
+   "ts": "2026-11-14T09:02:51Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr812",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 827,
+   "head": "b974638c4de6d40d5c91fda2f36fc412d62363ec",
+   "ts": "2026-11-14T09:12:52Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr827",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 826,
+   "head": "0c372b53c2405766937bd8387f1ff3fee068a15e",
+   "ts": "2026-11-14T09:22:51Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr826",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 828,
+   "head": "9f5e1602b92e00f565a41b7c195787052a0fa476",
+   "ts": "2026-11-14T11:34:00Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr828",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 829,
+   "head": "532972e37b99665912a14e0f98fadf51a86f1bd9",
+   "ts": "2026-11-14T14:25:23Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr829",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 830,
+   "head": "c44793989fa441bbe7c1ad111ad998048db48dc4",
+   "ts": "2026-11-14T14:55:32Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr830",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 832,
+   "head": "e6cba5a94cf656471b1a21066e61c3022564ebb4",
+   "ts": "2026-11-14T19:06:54Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr832",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 833,
+   "head": "cd95f88aab067079a7aafb0f8e132176fc92bfda",
+   "ts": "2026-11-14T19:17:13Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr833",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 831,
+   "head": "48d0c32307b300ad1fda1fe9ae4698cdbeea6bcd",
+   "ts": "2026-11-14T19:17:28Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr831",
+   "group_position": 2
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 834,
+   "head": "08ee44f87bc898addfc5189824b6315bf8360c6f",
+   "ts": "2026-11-14T20:36:28Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr834",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 839,
+   "head": "7b26ce71d89f4c6ccf2f9619915fcc54c3f74ba4",
+   "ts": "2026-11-14T20:36:42Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr839",
+   "group_position": 2
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 835,
+   "head": "d545eeaaac7d1e61bdb576676c761aaf4ecb431d",
+   "ts": "2026-11-14T20:46:50Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr835",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 836,
+   "head": "cfe6090a4ee8ae72c1bba7bb68367c90e09efa57",
+   "ts": "2026-11-14T20:47:04Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr836",
+   "group_position": 2
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 838,
+   "head": "17db1ca0cf67acc8bd699c758b275107dd781fbf",
+   "ts": "2026-11-14T20:47:20Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr838",
+   "group_position": 3
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 837,
+   "head": "ff9825ce5c4a7363dc93e929a86bbdacfda48083",
+   "ts": "2026-11-14T20:56:34Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr837",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 840,
+   "head": "299278c21f4ad9b61e28a1f8e8be78e26bfd7020",
+   "ts": "2026-11-14T20:56:47Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr840",
+   "group_position": 2
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 841,
+   "head": "84331abb78045d2a0bf4fd56e90ca7bbcede9a8b",
+   "ts": "2026-11-14T20:57:00Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr841",
+   "group_position": 3
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 842,
+   "head": "ad7fbc392722e7644de51976cbdb335c930eeb60",
+   "ts": "2026-11-14T21:45:55Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr842",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 843,
+   "head": "2cbd9c21c492da6481b34446e64fa1d9d89e623f",
+   "ts": "2026-11-15T01:36:00Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr843",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 844,
+   "head": "998b847da2621d0575cc4cb8755617497477732a",
+   "ts": "2026-11-15T02:26:02Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr844",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 845,
+   "head": "4cde81735acea827bf8c46d4bd4df82974ee9854",
+   "ts": "2026-11-15T03:56:52Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr845",
+   "group_position": 1
+  },
+  {
+   "repo": "Grahammmm/avocado-shack",
+   "pr": 846,
+   "head": "dc30052007fdc671f06beb71b8121a8fc2b864e5",
+   "ts": "2026-11-15T05:26:22Z",
+   "pass_id": null,
+   "row_id": "avocado-shack-pr846",
+   "group_position": 1
+  }
+ ],
+ "receipt_lines": [
+  "2026-11-13 12:43:46 avocado-shack-pr808 MERGED Grahammmm/avocado-shack#808 at 706c19d55241ca79861ed78c057ddfd118c06e8b (CI2-A group position 1)",
+  "2026-11-13 12:52:16 avocado-shack-pr809 MERGED Grahammmm/avocado-shack#809 at 3e51bbf56f5bfef0abd9652344660a73bd4b5d8e (CI2-A group position 1)",
+  "2026-11-13 18:53:16 avocado-shack-pr811 MERGED Grahammmm/avocado-shack#811 at d1d8911254bca8e83dab7b006f24fde87c04ac58 (CI2-A group position 1)",
+  "2026-11-13 18:53:24 avocado-shack-pr816 MERGED Grahammmm/avocado-shack#816 at f46233a8c10b5ecb30946b267ad65f8a88ce6d03 (CI2-A group position 2)",
+  "2026-11-13 18:53:38 avocado-shack-pr818 MERGED Grahammmm/avocado-shack#818 at aeea70d3314e3065864863b5985b681d40fdaefb (CI2-A group position 3)",
+  "2026-11-13 19:03:30 avocado-shack-pr813 MERGED Grahammmm/avocado-shack#813 at a39fe43b890330506c7facbb4a48923e1456eba3 (CI2-A group position 1)",
+  "2026-11-13 19:03:46 avocado-shack-pr819 MERGED Grahammmm/avocado-shack#819 at 3ba9874d39d4bbaf1b7e039688745b0066513718 (CI2-A group position 2)",
+  "2026-11-13 19:04:01 avocado-shack-pr820 MERGED Grahammmm/avocado-shack#820 at a591655c881d6cf458d863d01815e48102f1498f (CI2-A group position 3)",
+  "2026-11-13 19:12:50 avocado-shack-pr821 MERGED Grahammmm/avocado-shack#821 at 1d05adabd6fa12a79a49d99c5e38ec24ab1221ae (CI2-A group position 1)",
+  "2026-11-13 19:13:04 avocado-shack-pr823 MERGED Grahammmm/avocado-shack#823 at 7f4eee40a0160212f1d6885ad43dd413696e955d (CI2-A group position 2)",
+  "2026-11-13 20:34:52 avocado-shack-pr825 MERGED Grahammmm/avocado-shack#825 at c02382d9290e8ce5a1bc9b26fcc8bc60433a9ec2 (CI2-A group position 1)",
+  "2026-11-13 20:42:40 avocado-shack-pr822 MERGED Grahammmm/avocado-shack#822 at c081b823f74804d778728e2b55bc7bde67be10ac (CI2-A group position 1)",
+  "2026-11-13 20:52:47 avocado-shack-pr571 MERGED Grahammmm/avocado-shack#571 at b82d711fb68919fd47223569bb7a2dee21ed0780 (CI2-A group position 1)",
+  "2026-11-13 21:22:46 avocado-shack-pr815 MERGED Grahammmm/avocado-shack#815 at 452f80270d762001c6e2f9b7b8e361fb5924eaaa (CI2-A group position 1)",
+  "2026-11-13 21:52:51 avocado-shack-pr559 MERGED Grahammmm/avocado-shack#559 at 1ff697b32c5a9c223f69c25bf2874323008dd579 (CI2-A group position 1)",
+  "2026-11-13 22:02:51 avocado-shack-pr817 MERGED Grahammmm/avocado-shack#817 at c0d55989dab2706223d9f5249e29b06b8f9c4d63 (CI2-A group position 1)",
+  "2026-11-13 22:52:42 avocado-shack-pr814 MERGED Grahammmm/avocado-shack#814 at 2d330107e3d97b1f95a1983fc1d2c2d01763d507 (CI2-A group position 1)",
+  "2026-11-14 00:22:53 avocado-shack-pr810 MERGED Grahammmm/avocado-shack#810 at 86b43c1c75fbd870408239e99e51ba4ee2d2071b (CI2-A group position 1)",
+  "2026-11-14 01:02:51 avocado-shack-pr812 MERGED Grahammmm/avocado-shack#812 at 6abd773fb18d574ce9f5912d0c064d90795410f8 (CI2-A group position 1)",
+  "2026-11-14 01:12:52 avocado-shack-pr827 MERGED Grahammmm/avocado-shack#827 at b974638c4de6d40d5c91fda2f36fc412d62363ec (CI2-A group position 1)",
+  "2026-11-14 01:22:51 avocado-shack-pr826 MERGED Grahammmm/avocado-shack#826 at 0c372b53c2405766937bd8387f1ff3fee068a15e (CI2-A group position 1)",
+  "2026-11-14 03:34:00 avocado-shack-pr828 MERGED Grahammmm/avocado-shack#828 at 9f5e1602b92e00f565a41b7c195787052a0fa476 (CI2-A group position 1)",
+  "2026-11-14 06:25:23 avocado-shack-pr829 MERGED Grahammmm/avocado-shack#829 at 532972e37b99665912a14e0f98fadf51a86f1bd9 (CI2-A group position 1)",
+  "2026-11-14 06:55:32 avocado-shack-pr830 MERGED Grahammmm/avocado-shack#830 at c44793989fa441bbe7c1ad111ad998048db48dc4 (CI2-A group position 1)",
+  "2026-11-14 11:06:54 avocado-shack-pr832 MERGED Grahammmm/avocado-shack#832 at e6cba5a94cf656471b1a21066e61c3022564ebb4 (CI2-A group position 1)",
+  "2026-11-14 11:17:13 avocado-shack-pr833 MERGED Grahammmm/avocado-shack#833 at cd95f88aab067079a7aafb0f8e132176fc92bfda (CI2-A group position 1)",
+  "2026-11-14 11:17:28 avocado-shack-pr831 MERGED Grahammmm/avocado-shack#831 at 48d0c32307b300ad1fda1fe9ae4698cdbeea6bcd (CI2-A group position 2)",
+  "2026-11-14 12:36:28 avocado-shack-pr834 MERGED Grahammmm/avocado-shack#834 at 08ee44f87bc898addfc5189824b6315bf8360c6f (CI2-A group position 1)",
+  "2026-11-14 12:36:42 avocado-shack-pr839 MERGED Grahammmm/avocado-shack#839 at 7b26ce71d89f4c6ccf2f9619915fcc54c3f74ba4 (CI2-A group position 2)",
+  "2026-11-14 12:46:50 avocado-shack-pr835 MERGED Grahammmm/avocado-shack#835 at d545eeaaac7d1e61bdb576676c761aaf4ecb431d (CI2-A group position 1)",
+  "2026-11-14 12:47:04 avocado-shack-pr836 MERGED Grahammmm/avocado-shack#836 at cfe6090a4ee8ae72c1bba7bb68367c90e09efa57 (CI2-A group position 2)",
+  "2026-11-14 12:47:20 avocado-shack-pr838 MERGED Grahammmm/avocado-shack#838 at 17db1ca0cf67acc8bd699c758b275107dd781fbf (CI2-A group position 3)",
+  "2026-11-14 12:56:34 avocado-shack-pr837 MERGED Grahammmm/avocado-shack#837 at ff9825ce5c4a7363dc93e929a86bbdacfda48083 (CI2-A group position 1)",
+  "2026-11-14 12:56:47 avocado-shack-pr840 MERGED Grahammmm/avocado-shack#840 at 299278c21f4ad9b61e28a1f8e8be78e26bfd7020 (CI2-A group position 2)",
+  "2026-11-14 12:57:00 avocado-shack-pr841 MERGED Grahammmm/avocado-shack#841 at 84331abb78045d2a0bf4fd56e90ca7bbcede9a8b (CI2-A group position 3)",
+  "2026-11-14 13:45:55 avocado-shack-pr842 MERGED Grahammmm/avocado-shack#842 at ad7fbc392722e7644de51976cbdb335c930eeb60 (CI2-A group position 1)",
+  "2026-11-14 17:36:00 avocado-shack-pr843 MERGED Grahammmm/avocado-shack#843 at 2cbd9c21c492da6481b34446e64fa1d9d89e623f (CI2-A group position 1)",
+  "2026-11-14 18:26:02 avocado-shack-pr844 MERGED Grahammmm/avocado-shack#844 at 998b847da2621d0575cc4cb8755617497477732a (CI2-A group position 1)",
+  "2026-11-14 19:56:52 avocado-shack-pr845 MERGED Grahammmm/avocado-shack#845 at 4cde81735acea827bf8c46d4bd4df82974ee9854 (CI2-A group position 1)",
+  "2026-11-14 21:26:22 avocado-shack-pr846 MERGED Grahammmm/avocado-shack#846 at dc30052007fdc671f06beb71b8121a8fc2b864e5 (CI2-A group position 1)"
+ ],
+ "receipt_lines_sha256": "d5662076f39cd3da84b3e3b4cd74fc7a812334cfcca1105fc88093aa30d268b0",
+ "groups": [
+  {
+   "ts": "2026-11-14T02:53:38Z",
+   "size": 3,
+   "prs": [
+    811,
+    816,
+    818
+   ],
+   "receipt": "2026-11-13 18:53:38 Grahammmm/avocado-shack merge group of 3 back to back: avocado-shack-pr811 avocado-shack-pr816 avocado-shack-pr818 (CI2-A)"
+  },
+  {
+   "ts": "2026-11-14T03:04:02Z",
+   "size": 3,
+   "prs": [
+    813,
+    819,
+    820
+   ],
+   "receipt": "2026-11-13 19:04:02 Grahammmm/avocado-shack merge group of 3 back to back: avocado-shack-pr813 avocado-shack-pr819 avocado-shack-pr820 (CI2-A)"
+  },
+  {
+   "ts": "2026-11-14T03:13:05Z",
+   "size": 2,
+   "prs": [
+    821,
+    823
+   ],
+   "receipt": "2026-11-13 19:13:05 Grahammmm/avocado-shack merge group of 2 back to back: avocado-shack-pr821 avocado-shack-pr823 (CI2-A)"
+  },
+  {
+   "ts": "2026-11-14T19:17:29Z",
+   "size": 2,
+   "prs": [
+    833,
+    831
+   ],
+   "receipt": "2026-11-14 11:17:29 Grahammmm/avocado-shack merge group of 2 back to back: avocado-shack-pr833 avocado-shack-pr831 (CI2-A)"
+  },
+  {
+   "ts": "2026-11-14T20:36:43Z",
+   "size": 2,
+   "prs": [
+    834,
+    839
+   ],
+   "receipt": "2026-11-14 12:36:43 Grahammmm/avocado-shack merge group of 2 back to back: avocado-shack-pr834 avocado-shack-pr839 (CI2-A)"
+  },
+  {
+   "ts": "2026-11-14T20:47:21Z",
+   "size": 3,
+   "prs": [
+    835,
+    836,
+    838
+   ],
+   "receipt": "2026-11-14 12:47:21 Grahammmm/avocado-shack merge group of 3 back to back: avocado-shack-pr835 avocado-shack-pr836 avocado-shack-pr838 (CI2-A)"
+  },
+  {
+   "ts": "2026-11-14T20:57:01Z",
+   "size": 3,
+   "prs": [
+    837,
+    840,
+    841
+   ],
+   "receipt": "2026-11-14 12:57:01 Grahammmm/avocado-shack merge group of 3 back to back: avocado-shack-pr837 avocado-shack-pr840 avocado-shack-pr841 (CI2-A)"
+  }
+ ],
+ "informational_counts_in_window": {
+  "ship_lock_busy_SKIPPED_run_lines_all_repos": 0,
+  "main_red_at_pass_start_lines_avocado": 11
+ },
+ "missing_coverage": [
+  "ship.log records no pass ID; ship-queue run starts/ends are not logged as discrete events, so the pass population cannot be enumerated",
+  "zero-merge passes are not recorded as such (no per-pass summary line), so the denominator is UNKNOWN, not zero",
+  "only multi-merge groups have an explicit group line (7 in window); single-merge groups are identified only by \"group position 1\" and are not pass-linked",
+  "no per-pass CI/main-verdict export (check runs for main pushes) was available as an existing sanitized receipt; main verdict coverage is UNKNOWN",
+  "merge heads are as logged by ship-queue at merge time; not re-verified against GitHub (no network allowed)",
+  "timezone of ship.log is inferred from the host clock (PST), not recorded in the log"
+ ]
+}

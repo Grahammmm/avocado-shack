@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "records": [
+    {"id":"synthetic-a","name":"Synthetic apple","description":"Synthetic crisp apple","maker":"Fixture Orchard A","place":"Fixture Town A","story":"Grown for the synthetic browser trial A.","src":"assets/products/synthetic-a.png","rgb":[210,20,30]},
+    {"id":"synthetic-b","name":"Synthetic bean","description":"Synthetic green bean","maker":"Fixture Orchard B","place":"Fixture Town B","story":"Grown for the synthetic browser trial B.","src":"assets/products/synthetic-b.png","rgb":[20,180,40]}
+  ],
+  "cases": {"positive":true,"wrong_maker":false,"stale_story":false,"broken_image":false,"wrong_src":false,"wrong_bytes":false,"external_get":false,"post":false,"other_loopback_port":false}
+}
