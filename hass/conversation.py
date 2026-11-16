@@ -18,7 +18,7 @@ from hass.content_model import HOME_IMAGE_RE, MAX_NOTICE, SHELF_LABELS, ContentE
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
 from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
-from hass import capabilities  # noqa: E402
+from hass import capabilities, transcript  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, item_intake, openreq  # noqa: E402
 # AVB-12: the pack commands (hass/chat/*_pack.py) and the words they share moved to hass/chat/; every moved name is
@@ -215,8 +215,10 @@ class Outbox:
 
     def add(self, chat, text, attachments=(), reply_to=None, *, long_ok=False, ids_ok=False):
         text = self.clean(text, long_ok, ids_ok)
+        attachments = list(attachments)
         self.db.execute("INSERT INTO outbox(chat, text, attachments, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
-                        (chat, text, json.dumps(list(attachments)), _iso(self._now()), reply_to))
+                        (chat, text, json.dumps(attachments), _iso(self._now()), reply_to))
+        transcript.outgoing(self, chat, text, attachments, reply_to)
 
     def unsent(self):
         return self.db.execute("SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY id").fetchall()
@@ -850,7 +852,10 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self._to = msg.chat if self._is_owner(msg) else None
         self._asker = sender_key(msg.sender)
         self.outbox.msg_id, self.outbox.emoji_ok = msg.provider_id, voice.has_emoji(msg.text)
-        try: return self._handle_message(msg, last_try, apply)
+        try:
+            with transcript.Capture(self, msg) as record:
+                record.result = self._handle_message(msg, last_try, apply)
+                return record.result
         finally:
             self._answering, self._forwarded, self._to, self._asker, self.outbox.msg_id, self.outbox.emoji_ok = None, None, None, None, None, False
             self._pages = {}
