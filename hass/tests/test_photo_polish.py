@@ -322,6 +322,48 @@ def bare_web(bare, sha):
 
 
 @unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
+class OCRFailureTests(unittest.TestCase):
+    """The real ``words`` reader through ``run``: a read that does not work settles the house fallback (``ocr``)."""
+
+    def test_unavailable_ocr_uses_the_house_fallback(self):
+        data = photo("jar-white-sheet")
+        edited = edit_of(data)
+        failures = (
+            (None, None, None),  # executable absent
+            ("tesseract", OSError("unavailable"), None),
+            ("tesseract", photo_polish.subprocess.TimeoutExpired("tesseract", 30), None),
+            ("tesseract", None, SimpleNamespace(returncode=1, stdout="")),
+        )
+        for executable, error, done in failures:
+            with self.subTest(executable=executable, error=error, done=done):
+                bare = Bare(self)
+                sha = bare.store(data)
+                log = Log()
+                with mock.patch.object(photo_polish.shutil, "which", return_value=executable), mock.patch.object(
+                    photo_polish.subprocess, "run", side_effect=error, return_value=done
+                ):
+                    code = photo_polish.run(bare.media, sha, log=log, transport=Stub(edited))
+                self.assertEqual(code, "ocr")
+                self.assertEqual(log.rows, [("error", "polish-ocr")])
+                self.assertEqual(bare.install(sha)[1], photos.house_picture(bare_web(bare, sha))["jpeg"])
+                self.assertEqual(photo_polish.decision(bare.media, sha)["use"], "house")
+                self.assertFalse((bare.media / "polish" / sha[:2] / f"{sha}.jpg").exists())
+
+    def test_unavailable_source_ocr_also_uses_the_house_fallback(self):
+        data = photo("jar-white-sheet")
+        bare = Bare(self)
+        sha = bare.store(data)
+        log = Log()
+        found = [("HONEY", (250, 300, 100, 20))]
+        with mock.patch.object(photo_polish, "words", side_effect=[found, None]):  # the edit reads, the photo does not
+            code = photo_polish.run(bare.media, sha, log=log, transport=Stub(edit_of(data)))
+        self.assertEqual(code, "ocr")
+        self.assertEqual(log.rows, [("error", "polish-ocr")])
+        self.assertEqual(bare.install(sha)[1], photos.house_picture(bare_web(bare, sha))["jpeg"])
+        self.assertEqual(photo_polish.decision(bare.media, sha)["use"], "house")
+
+
+@unittest.skipUnless(HAVE_PIL, "Pillow is not installed")
 @mock.patch.object(photo_polish, "words", NO_LABEL)
 class BackgroundTests(unittest.TestCase):
     def test_start_never_waits_and_a_late_answer_is_dropped(self):

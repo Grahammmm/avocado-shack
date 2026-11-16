@@ -9,7 +9,7 @@ text-to-image.
 
 | Test | Result | Evidence |
 |---|---|---|
-| T1 contract (stub transport) | 20/20 | `python3 -m unittest hass.tests.test_photo_polish` |
+| T1 contract (stub transport) | 22/22 | `python3 -m unittest hass.tests.test_photo_polish` |
 | T2 real calls (6 photos x high + medium) | 12/12 calls returned an edit | `t2-results.json`, `contact-sheet-t2.jpg` |
 | T3 fidelity gate | 12/12 real edits kept; 42/43 deliberate bad outputs rejected (the one pass is not a label change, see below) | `t3-results.json`, `t3-results-recolour-product.json`, `t3-bad-samples.jpg` |
 | T4 site card | 2/2 | `t4-card-phone-on.png`, `t4-card-plain-on.png`, `t4-*.json` |
