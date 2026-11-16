@@ -66,7 +66,7 @@ exit: 0
 
 ```json
 {
-  "bases_sha256": "ea7cd99f48918b2515d516244ca8077caefc2e34041273dfd029be5a6f2e1d62",
+  "bases_sha256": "28b4209877e3f7515ae476128349b97b93df0a0164eabe6cda539e3e6968c8d9",
   "coverage": {
     "assistant_state": "FIXTURE_PROVEN",
     "content": "FIXTURE_PROVEN",
@@ -117,6 +117,20 @@ changed. Its pin and this report's BASES digest were refreshed; the original
 inspection revision, candidate code, fixtures, source citations and live holds
 remain unchanged. Current restore acceptance is recorded in the PR repair
 handoff, separately from the builder receipts above.
+
+A subsequent CI repair merged main
+`6fc75b5b` and reproduced run 43806918209's acceptance `undo-not-identical`
+failure. Restored fixture bytes were correct, but the freshness check used the
+host day instead of the session clock. The narrow fix from PR #891
+(`0a1ef76ac5ab9a9ad41be9c4da653688c8b19257`) scopes that check to the same fixture
+clock, preserving stale-byte rejection and all exact undo/residue assertions.
+All 1,332 existing source pins were compared: 14 changed files were verified
+byte-identical to that main revision, and `hass/skills/acceptance_run.py` was
+verified byte-identical to #891's fix before refreshing those 15 pins and the
+bound BASES digest. The original inspection revision, source citations, candidate
+code, fixtures, package inventory and live UNVERIFIED/HOLD gates are unchanged.
+New proof is reported in the repair handoff, not substituted for historical
+builder output above.
 
 ## Handoff and limits
 
