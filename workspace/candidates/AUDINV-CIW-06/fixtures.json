@@ -2,7 +2,7 @@
   "schema_version": 1,
   "note": "Synthetic report-data cases. expected = number of checker problems must be zero (ok) or nonzero (fail). Expected outcomes are stated independently of candidate.py.",
   "source_ids": ["a"],
-  "base": {"source_ids": ["a"], "window": ["2026-11-14T00:00:00Z", "2026-11-15T00:00:00Z"], "coverage": "INCOMPLETE", "n_jobs_in_window": 0, "status": "HOLD", "queue_improvement_claim": "NOT_ESTABLISHED", "true_queue_s": "UNKNOWN", "run_to_start_s": "UNKNOWN"},
+  "base": {"schema_version": 1, "source_ids": ["a"], "window": ["2026-11-14T00:00:00Z", "2026-11-15T00:00:00Z"], "coverage": "INCOMPLETE", "n_jobs_in_window": 0, "status": "HOLD", "queue_improvement_claim": "NOT_ESTABLISHED", "true_queue_s": "UNKNOWN", "run_to_start_s": "UNKNOWN"},
   "cases": [
     {"name": "honest-hold", "patch": {}, "missing": ["gap"], "expected": "ok"},
     {"name": "improvement-claimed-on-incomplete", "patch": {"queue_improvement_claim": "IMPROVED"}, "missing": ["gap"], "expected": "fail"},

@@ -127,9 +127,9 @@ def check_report(report_rel, sources_rel):
     if not m:
         return ["no report-data block"]
     try:
-        d = json.loads(m.group(1))
-    except json.JSONDecodeError:
-        return ["report-data not json"]
+        d = _parse(m.group(1))
+    except Bad as e:
+        return ["report-data: %s" % e]
     bad = []
     ids = sorted(s["id"] for s in src.get("sources", []))
     if sorted(d.get("source_ids", [])) != ids:
@@ -140,12 +140,15 @@ def check_report(report_rel, sources_rel):
     if cov not in ("COMPLETE", "INCOMPLETE") or not isinstance(n, int) or n < 0:
         bad.append("coverage/n_jobs_in_window invalid")
         return bad
-    if cov == "INCOMPLETE":
+    missing = src.get("missing_coverage")
+    if cov == "COMPLETE" and missing:
+        bad.append("COMPLETE coverage contradicts missing source coverage")
+    if cov == "INCOMPLETE" or missing:
         if d.get("status") != "HOLD":
             bad.append("incomplete coverage must be status HOLD")
         if d.get("queue_improvement_claim") != "NOT_ESTABLISHED":
             bad.append("improvement claimed without full-day coverage")
-        if not src.get("missing_coverage"):
+        if not missing:
             bad.append("SOURCES.json lists no missing coverage for an INCOMPLETE report")
     if n == 0 and (d.get("true_queue_s") != "UNKNOWN" or d.get("run_to_start_s") != "UNKNOWN"):
         bad.append("zero jobs must report UNKNOWN metrics, not numbers")
@@ -205,6 +208,39 @@ class Tests(unittest.TestCase):
         self.assertEqual(sorted(e["reason"] for e in m["exclusions"]),
                          ["duplicate identity", "run created outside day", "run created outside day"])
 
+    def test_missing_source_coverage_cannot_be_reported_complete(self):
+        fx = _json("fixtures.json")
+        complete = dict(fx["base"], coverage="COMPLETE")
+        self.assertEqual(_problems(dict(complete, n_jobs_in_window=1), fx["source_ids"], []), [])
+        for patch in ({}, {"status": "OK"}, {"queue_improvement_claim": "IMPROVED"},
+                      {"status": "OK", "queue_improvement_claim": "IMPROVED"}):
+            with self.subTest(patch=patch):
+                got = _problems(dict(complete, **patch), fx["source_ids"], ["missing export"])
+                self.assertIn("COMPLETE coverage contradicts missing source coverage", got)
+                if patch.get("status") == "OK":
+                    self.assertIn("incomplete coverage must be status HOLD", got)
+                if patch.get("queue_improvement_claim") == "IMPROVED":
+                    self.assertIn("improvement claimed without full-day coverage", got)
+
+    def test_report_data_uses_strict_schema_and_duplicate_key_validation(self):
+        fx = _json("fixtures.json")
+        valid = json.dumps(fx["base"])
+        self.assertEqual(_problems(fx["base"], fx["source_ids"], ["gap"]), [])
+        cases = [
+            (json.dumps(dict(fx["base"], schema_version=2)), "unknown schema_version"),
+            (json.dumps({k: v for k, v in fx["base"].items() if k != "schema_version"}),
+             "unknown schema_version"),
+            ('{"schema_version": 1,' + valid[1:], "duplicate key 'schema_version'"),
+            ('{"schema_version": 2,' + valid[1:], "duplicate key 'schema_version'"),
+            ('{"status": "OK",' + valid[1:], "duplicate key 'status'"),
+            (valid[:-1] + ', "extra": {"n": 1, "n": 2}}', "duplicate key 'n'"),
+            ("{bad", "malformed json:"),
+        ]
+        for text, reason in cases:
+            with self.subTest(text=text):
+                got = _problems(fx["base"], fx["source_ids"], ["gap"], report_text=text)
+                self.assertTrue(any(reason in problem for problem in got), got)
+
     def test_schema_path_escape_symlink_and_side_effect_boundary(self):
         del IO_LOG[:]
         for bad in ("../x", "/etc/passwd", "a/../../x", "", None):
@@ -245,11 +281,11 @@ def _parse(text):
     return d
 
 
-def _problems(d, ids, missing):
+def _problems(d, ids, missing, report_text=None):
     """In-memory variant of check_report's rules for the negative tests."""
     global _read
     saved = _read
-    md = "```json report-data\n%s\n```" % json.dumps(d)
+    md = "```json report-data\n%s\n```" % (json.dumps(d) if report_text is None else report_text)
     src = json.dumps({"schema_version": 1, "sources": [{"id": i} for i in ids], "missing_coverage": missing})
     _read = lambda rel: md if rel.endswith(".md") else src
     try:
