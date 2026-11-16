@@ -77,7 +77,7 @@ function orderedProducts(now=renderNow){const d=catalog.map((p,i)=>({p,i,n:isNew
 function drawCards(l){pinNow=renderNow;try{return l.map(card).join('')}finally{pinNow=null}}
 // AV1052-01: a search term also matches the description, after the card's own words. One stable pass splits the ordered list:
 // name, brand, town, shelf or Organic badge first, then description hits (a card in both groups appears once, in the first).
-// AV1104-01: the term is split into words; a card matches when EVERY word is found, in any order, each in any searched field. A word is found
+// AV1104-01: the term is split into words; a card matches when EVERY word is found, regardless of sequence, each in any searched field. A word is found
 // in a field as literal text, or as a whole field word with the same one-step -ies/-y, -es or -s form (words of 4+ letters, reductions of 3+). Fields are folded and searched separately.
 const wordsOf=t=>t.match(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)*/gu)||[];
 const forms=w=>{const f=new Set([w]);if(/^\p{L}+$/u.test(w)&&[...w].length>=4){const add=x=>{if([...x].length>=3)f.add(x)};if(w.endsWith('ies'))add(w.slice(0,-3)+'y');if(w.endsWith('es'))add(w.slice(0,-2));if(w.endsWith('s'))add(w.slice(0,-1))}return f};
