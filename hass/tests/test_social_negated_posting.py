@@ -14,7 +14,7 @@ COPY = ("Don't post it now; write a caption for the honey", "Do not publish it; 
         "DON\u2019T POST IT NOW; write a caption", "write a caption. Don't email it to the club", "don't post it",
         "write a caption, but never share it", "write a caption and do not schedule it")
 STILL_REFUSED = ("Don't post it now; send it to the club", "send it to the club; don't post it now", "don't post it, but send it to everyone",
-                 "don't post it and email this", "don't post it, then publish it", "Don't just post it now", "not only post it now",
+                 "don't post it and email this to everyone", "don't post it, then publish it", "Don't just post it now", "not only post it now",
                  "post it now", "don't post it now. Post it now.")
 
 
