@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "synthetic-old62",
+  "at": "2026-11-15T23:00:00+00:00",
+  "photo_hex": "ffd8ff73796e746865746963ffd9",
+  "expected": {
+    "identity": "PASS",
+    "before_commit": "PASS",
+    "after_commit": "PASS",
+    "before_accept": {"status": "HOLD", "attempted": 1, "accepted": 0},
+    "after_accept": {"status": "HOLD", "attempted": 1, "accepted": 1},
+    "forced_retry": {"status": "FAIL", "attempted": 2, "accepted": 2},
+    "incomplete_release": "HOLD",
+    "assistant_negative_paths": "PASS",
+    "isolation": "PASS",
+    "schema_paths": "PASS"
+  }
+}
