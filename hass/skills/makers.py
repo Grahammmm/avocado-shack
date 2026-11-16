@@ -168,7 +168,10 @@ _PRESENT = {"make", "keep", "grow", "roast", "bake", "sell", "brew", "press", "p
             "forage", "tap", "bottle", "carry", "treat", "show", "look", "begin", "think", "know", "like", "stir", "mix"}
 _AUX = {"can", "could", "will", "would", "should", "may", "might", "must", "shall", "can't", "won't", "do", "does", "did",
         "don't", "doesn't", "didn't"}
-_PRONOUN = re.compile(r"(They(?:['\u2019](?:re|ve|ll))?|She|He|His|Her|Their)(?=[\s,]|$)")
+_PRONOUN_RE = r"(They(?:['\u2019](?:re|ve|ll))?|She|He|His|Her|Their)(?=[\s,]|$)"
+_PRONOUN = re.compile(_PRONOUN_RE, re.I)  # any capitalization; only the matched pronoun is canonicalized below
+# a sentence starts at a capital or quote, or at a supported pronoun in any case (not any lowercase word: abbreviations)
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"\u201c]|(?i:" + _PRONOUN_RE.replace("(They", "(?:They", 1) + "))")
 _STRICT = "make|keep|grow|roast|bake|sell|brew|harvest|raise|own|serve|offer|produce|ship|supply|gather|preserve|ferment|forage|bring|build|choose|carry"
 # the second verb of "They bake and sell": a verb that is rarely a noun, or any listed verb after an adverb ("and now dry")
 _CONJ = re.compile(rf"\b(and|but|or) (?:(?P<adv>(?:now|also|still|then|often|always|only|just|even) )?)(?P<verb>(?(adv)(?:{'|'.join(sorted(_PRESENT))})|(?:{_STRICT})))\b")
@@ -202,10 +205,10 @@ def _sentence(text: str, name: str) -> str:
     m = _PRONOUN.match(text)
     if not m:
         return text
-    pro, rest = m.group(1), text[m.end():]
-    if pro in ("His", "Her", "Their"):
+    pro, rest = m.group(1).lower(), text[m.end():]
+    if pro in ("his", "her", "their"):
         return f"{name}\u2019s{rest}"
-    if pro in ("She", "He"):
+    if pro in ("she", "he"):
         return name + rest
     if len(pro) > 4:  # They're / They've / They'll
         word = {"re": "is", "ve": "has", "ll": "will"}[pro[-2:]]
@@ -234,7 +237,7 @@ def story_words(text: str, name: str) -> str:
     text = _clean(text)
     if not text:
         return ""
-    out = " ".join(_sentence(s, name) for s in re.split(r"(?<=[.!?])\s+(?=[A-Z\"\u201c])", text))
+    out = " ".join(_sentence(s, name) for s in _SENT_SPLIT.split(text))
     return out if out[-1] in ".!?\"\u201d" else out + "."
 
 
