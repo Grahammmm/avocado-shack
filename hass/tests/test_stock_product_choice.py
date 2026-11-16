@@ -65,7 +65,7 @@ class Helper(unittest.TestCase):
         for text in ("", "   ", None, 7, "\U0001F34B\U0001F34B", "lemons", "are we out of raspberries?", "we're not out of raspberries",
                      "raspberries are $4 and out", "raspberries sold out tomorrow", "out of raspberries and limes", "raspberries are out and lemons are back",
                      "raspberries are back but limes sold out", "we're out of raspberries for the week", "out of fruit", "raspberries are low",
-                     "out of 3 raspberries", "raspberries aren't back"):
+                     "out of 3 raspberries", "raspberries aren't back", "put it back", "it is back", "that is back"):
             self.assertIsNone(nl_prep.resolve_stock_choice(text, content()), repr(text))
 
     def test_status_and_alias_boundaries(self):

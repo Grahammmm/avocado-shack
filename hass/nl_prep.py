@@ -502,7 +502,7 @@ OUT_OF_RE = re.compile(r"^out of (?P<p>.+)$")
 BACK_RE = re.compile(r"^(?P<p>.+?) (?:(?:is|are) )?back(?: in)?$")
 SOLD_RE = re.compile(r"^(?P<p>.+?) (?:(?:is|are) )?(?:sold out|out)$")
 STOCK_NOISE = frozenset("""and or but also then plus nor not no never dont doesnt isnt arent wasnt werent cant wont low limited available hide hidden hold
- out sold back gone left today tomorrow tonight yesterday if when until maybe""".split())
+ out sold back gone left today tomorrow tonight yesterday if when until maybe it them this that these those""".split())
 NO_PRODUCT = "I don't know a product called that. What is it called on the site?"
 HELD_WORDS = {"held": "I can't change {name} right now. It is on hold until someone has looked at it.",
               "hidden": "{name} is hidden. Do you want me to bring it back first?"}
