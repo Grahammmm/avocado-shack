@@ -12,7 +12,7 @@
    "pass_enumeration": "none", "passes": [],
    "merges": [{"repo": "o/r", "pr": 7, "head": "1111111111111111111111111111111111111111", "ts": "2026-11-14T01:00:10Z", "pass_id": null},
               {"repo": "o/r", "pr": 8, "head": "2222222222222222222222222222222222222222", "ts": "2026-11-14T01:10:10Z", "pass_id": null}],
-   "expect": {"numerator": 0, "denominator": null, "ratio": null, "overall_status": "UNKNOWN"}},
+   "expect": {"numerator": null, "denominator": null, "ratio": null, "overall_status": "UNKNOWN"}},
   {"name": "merge exactly at window end is excluded",
    "pass_enumeration": "complete",
    "passes": [{"pass_id": "p1", "repo": "o/r", "ts": "2026-11-14T01:00:00Z"}],

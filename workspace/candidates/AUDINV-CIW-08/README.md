@@ -18,7 +18,7 @@ python3 workspace/candidates/AUDINV-CIW-08/candidate.py --self-test
 python3 workspace/candidates/AUDINV-CIW-08/candidate.py --check avocado-merges-per-pass-20261114.md --sources SOURCES.json
 ```
 
-No arguments prints usage and exits 2. `--check` exits 1 on a malformed report/sources, a digest or receipt mismatch, or a numeric ratio the sources do not support.
+No arguments prints usage and exits 2. `--check` exits 1 on a malformed report/sources, a digest or receipt mismatch, or a presented ratio, numerator, denominator or unique-merge count that differs from the source-bound summary (including Markdown bullets, bold and code spans). Receipt binding includes row ID and group position. Unlinked merges or conflicting heads leave the numerator and ratio UNKNOWN even with complete pass enumeration; a supported zero-merge population still yields a known zero.
 
 ## Boundaries
 

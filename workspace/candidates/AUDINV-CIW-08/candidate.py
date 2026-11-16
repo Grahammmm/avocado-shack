@@ -123,15 +123,17 @@ def analyze(d):
     linked = [u for u in unique if u[2] in pass_ids]  # explicit pass link only, never timestamp proximity
     unlinked = [u for u in unique if u[2] not in pass_ids]
     denom = len(pass_ids) if denom_ok else None
+    numerator = len(linked) if not unlinked and not conflict_prs else None
+    ratio = numerator / denom if numerator is not None and denom else None
     return {
         'schema_version': SCHEMA, 'repo': repo, 'window': [d['window_start'], d['window_end']],
         'passes_recorded': len(pass_ids), 'passes_missing_id': missing_id,
         'pass_enumeration': d['pass_enumeration'],
         'denominator': denom,
         'unique_merges_in_window': len(unique),
-        'numerator': len(linked),
-        'ratio': (len(linked) / denom) if denom else None,
-        'overall_status': 'KNOWN' if denom else 'UNKNOWN',
+        'numerator': numerator,
+        'ratio': ratio,
+        'overall_status': 'KNOWN' if ratio is not None else 'UNKNOWN',
         'unlinked_merges': [{'pr': p, 'head': h} for p, h, _ in unlinked],
         'conflicting_head_prs': conflict_prs,
         'excluded_other_repo': excluded_repo, 'excluded_outside_window': outside,
@@ -144,8 +146,9 @@ def check_sources(d):
     if not isinstance(lines, list) or d.get('receipt_lines_sha256') != lines_digest(lines):
         raise Bad('receipt_lines digest mismatch')
     parsed = [parse_receipt(l) for l in lines]
-    got = sorted((p['repo'], p['pr'], p['head'], p['ts']) for p in parsed)
-    want = sorted((m['repo'], m['pr'], m['head'], m['ts']) for m in d['merges'])
+    fields = ('repo', 'pr', 'head', 'ts', 'row_id', 'group_position')
+    got = sorted(json.dumps([p[k] for k in fields]) for p in parsed)
+    want = sorted(json.dumps([m.get(k) for k in fields]) for m in d['merges'])
     if got != want:
         raise Bad('merges do not match their receipt lines')
     if not d.get('missing_coverage'):
@@ -165,8 +168,24 @@ def check_report(report_text, sources):
     got = report_block(report_text)
     if got != want:
         raise Bad('report summary differs from recomputed source summary')
-    if want['ratio'] is None and re.search(r'(?im)^\s*(ratio|merges per pass)\s*[:=]\s*\d', report_text):
-        raise Bad('report asserts a numeric ratio the sources do not support')
+    # Validate displayed claims too, not just the machine block. Ignore fenced
+    # historical command receipts; normalize the report's bullets/bold/code spans.
+    prose = re.sub(r'^```[^\n]*\n.*?^```\s*$', '', report_text, flags=re.M | re.S)
+    labels = {'ratio': 'ratio', 'merges per pass': 'ratio', 'denominator': 'denominator',
+              'numerator': 'numerator', 'verified unique merges in window': 'unique_merges_in_window'}
+    for line in prose.splitlines():
+        plain = re.sub(r'[*`_]', '', line)
+        plain = re.sub(r'^\s*(?:[-+>]\s+|#{1,6}\s+)*', '', plain)
+        claim = re.match(r'(ratio|merges per pass|denominator|numerator|verified unique merges in window)'
+                         r'(?:\s*\([^\n:]*\))?\s*[:=]\s*(.*)', plain, re.I)
+        if not claim:
+            continue
+        value = re.match(r'(UNKNOWN|[+-]?\d+(?:\.\d+)?)(?=$|[\s.,;)])', claim[2], re.I)
+        if not value:
+            raise Bad('unrecognized presented result: %s' % claim[0])
+        actual = None if value[1].upper() == 'UNKNOWN' else float(value[1])
+        if actual != want[labels[claim[1].lower()]]:
+            raise Bad('presented result differs from source summary: %s' % claim[0])
     return want
 
 
@@ -174,8 +193,9 @@ def cmd_check(report, sources):
     text = _open(safe_path(report)).read()
     s = load_json(sources)
     w = check_report(text, s)
-    print('CHECK OK: %s merges=%d numerator=%d denominator=%s ratio=%s status=%s' % (
-        w['repo'], w['unique_merges_in_window'], w['numerator'], 'UNKNOWN' if w['denominator'] is None else w['denominator'],
+    print('CHECK OK: %s merges=%d numerator=%s denominator=%s ratio=%s status=%s' % (
+        w['repo'], w['unique_merges_in_window'], 'UNKNOWN' if w['numerator'] is None else w['numerator'],
+        'UNKNOWN' if w['denominator'] is None else w['denominator'],
         'UNKNOWN' if w['ratio'] is None else w['ratio'], w['overall_status']))
 
 
@@ -223,8 +243,21 @@ class Cases(unittest.TestCase):
         r = analyze(doc(passes=[ps('p1', '2026-11-14T12:00:05Z')],
                         merges=[mg(1, H('a'), pid='p1'), mg(1, H('b'), pid='p1'), mg(2, H('c'), '2026-11-14T12:00:06Z')]))
         self.assertEqual(r['conflicting_head_prs'], [1])
-        self.assertEqual(r['numerator'], 0)  # conflict not counted, near-in-time PR 2 not joined
+        self.assertIsNone(r['numerator'])  # conflict and near-in-time PR 2 remain unresolved
         self.assertEqual(r['unlinked_merges'], [{'pr': 2, 'head': H('c')}])
+
+    def test_unresolved_numerator_keeps_ratio_unknown_with_complete_passes(self):
+        for merges in ([mg(1, H('a'))],
+                       [mg(1, H('a'), pid='p1'), mg(1, H('b'), pid='p1')],
+                       [mg(1, H('a'), pid='p1'), mg(2, H('b'))]):
+            with self.subTest(merges=merges):
+                r = analyze(doc(passes=[ps('p1')], merges=merges))
+                self.assertEqual(r['denominator'], 1)
+                self.assertIsNone(r['numerator'])
+                self.assertIsNone(r['ratio'])
+                self.assertEqual(r['overall_status'], 'UNKNOWN')
+        r = analyze(doc(passes=[ps('p1')]))
+        self.assertEqual((r['numerator'], r['ratio'], r['overall_status']), (0, 0.0, 'KNOWN'))
 
     def test_window_start_inclusive_end_exclusive_and_other_repo_excluded(self):
         ms = [mg(1, H('a'), '2026-11-14T00:00:00Z'), mg(2, H('b'), '2026-11-15T00:00:00Z'),
@@ -261,10 +294,47 @@ class Cases(unittest.TestCase):
             for k, v in case['expect'].items():
                 self.assertEqual(r[k], v, '%s: %s' % (case['name'], k))
 
+    def test_presented_markdown_results_match_source_summary(self):
+        src = load_json('SOURCES.json')
+        with _open(safe_path('avocado-merges-per-pass-20261114.md')) as f:
+            report = f.read()
+        check_report(report, src)
+        for old, new in (('**Merges per pass: UNKNOWN**', '**Merges per pass: 99**'),
+                         ('(passes): UNKNOWN.', '(passes): 99.'),
+                         ('recorded pass): UNKNOWN', 'recorded pass): 99'),
+                         (': **34**, all reported', ': **99**, all reported')):
+            with self.subTest(claim=old):
+                self.assertIn(old, report)
+                with self.assertRaises(Bad):
+                    check_report(report.replace(old, new), src)
+        known = json.loads(json.dumps(src))
+        known['passes'] = [ps('p1', repo=src['repo'])]
+        known['pass_enumeration'] = 'complete'
+        for merge in known['merges']:
+            merge['pass_id'] = 'p1'
+        good = '<!-- MACHINE-SUMMARY -->\n```json\n%s\n```\n' % json.dumps(analyze(known))
+        check_report(good + '- **Merges per pass: 34**\n', known)
+        for claim in ('- **Merges per pass: 99**', '> `ratio = UNKNOWN`', 'ratio: 0.5'):
+            with self.subTest(claim=claim), self.assertRaises(Bad):
+                check_report(good + claim + '\n', known)
+
+    def test_receipt_row_id_and_group_position_are_bound(self):
+        src = load_json('SOURCES.json')
+        check_sources(src)
+        for field, value in (('group_position', 999), ('row_id', 'wrong-row')):
+            with self.subTest(field=field):
+                bad = json.loads(json.dumps(src))
+                bad['merges'][0][field] = value
+                with self.assertRaisesRegex(Bad, 'receipt lines'):
+                    check_sources(bad)
+                del bad['merges'][0][field]
+                with self.assertRaisesRegex(Bad, 'receipt lines'):
+                    check_sources(bad)
+
     def test_report_check_rejects_false_ratio_and_tampered_sources(self):
         line = '2026-11-14 01:00:00 x-pr1 MERGED o/r#1 at ' + H('a') + ' (CI2-A group position 1)'
         m = parse_receipt(line)
-        src = doc(merges=[mg(1, H('a'), m['ts'])], receipt_lines=[line], receipt_lines_sha256=lines_digest([line]),
+        src = doc(merges=[dict(m, pass_id=None)], receipt_lines=[line], receipt_lines_sha256=lines_digest([line]),
                   pass_enumeration='none', missing_coverage=['pass ids'])
         good = '<!-- MACHINE-SUMMARY -->\n```json\n%s\n```\n' % json.dumps(analyze(src))
         self.assertEqual(check_report(good, src)['ratio'], None)

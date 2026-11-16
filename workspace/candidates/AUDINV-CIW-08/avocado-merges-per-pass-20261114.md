@@ -6,7 +6,7 @@ Status: CANDIDATE_ONLY / REVIEW_REQUIRED / NOT_INSTALLED. Measurement and no-gap
 
 - Window: `2026-11-14T00:00:00Z` inclusive to `2026-11-15T00:00:00Z` exclusive (= 2026-11-13 16:00 to 2026-11-14 16:00 PST in the ship log). Repo: `Grahammmm/avocado-shack`.
 - **Denominator (passes): UNKNOWN.** `modes/ship.log` records no pass ID and no per-pass start/end/zero-merge line, so the pass population cannot be enumerated. Missing pass evidence is unknown, not zero.
-- **Numerator (verified unique merges linked to a recorded pass): 0 linked**, because there are no recorded pass IDs to link to. Nothing was joined by timestamp proximity.
+- **Numerator (verified unique merges linked to a recorded pass): UNKNOWN** (0 linked), because there are no recorded pass IDs to link to. Nothing was joined by timestamp proximity.
 - **Merges per pass: UNKNOWN** (no ratio is claimed).
 - Verified unique merges in window (PR + full 40-hex head, each bound to its ship.log receipt line): **34**, all reported below as unlinked. No PR has conflicting heads; no duplicate receipts.
 - Not a substitute for the ratio (a different quantity, shown only so the data is useful): merge groups (one repo's back-to-back group in one ship-queue run) = 23, so 34 merges / 23 groups = 1.48 merges per merge group. A pass with no merge produces no group, so this cannot be read as merges per pass.
@@ -95,7 +95,7 @@ Status: CANDIDATE_ONLY / REVIEW_REQUIRED / NOT_INSTALLED. Measurement and no-gap
  "pass_enumeration": "none",
  "denominator": null,
  "unique_merges_in_window": 34,
- "numerator": 0,
+ "numerator": null,
  "ratio": null,
  "overall_status": "UNKNOWN",
  "unlinked_merges": [
@@ -243,7 +243,9 @@ Status: CANDIDATE_ONLY / REVIEW_REQUIRED / NOT_INSTALLED. Measurement and no-gap
 ```
 
 
-## Command receipts (run from the clone root, base b83d3615a2ff8802c5b82339b7802e6e62c8d97d)
+## Historical command receipts (before review fixes; run from the clone root, base b83d3615a2ff8802c5b82339b7802e6e62c8d97d)
+
+These original receipts are retained as history, not fresh verification. The corrected checker reports the unresolved numerator as UNKNOWN rather than the zero linked subtotal.
 
 ```console
 $ /home/user/agent-work/bin/memcap -- python3 workspace/candidates/AUDINV-CIW-08/candidate.py --self-test

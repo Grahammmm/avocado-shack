@@ -23,7 +23,7 @@
   }
  ],
  "candidate_source_sha256": {
-  "candidate.py": "208ee896fedaedc37981ad8fb89c07a6492a25b0b58c45ff4d4981768a2aa7ba",
-  "fixtures.json": "5adf0b8c30dbe4ba18ada2120454eae2e01f258e599a9338f188e1cdbf403c66"
+  "candidate.py": "1da1b2ad8be67a51cc86e4fc5dce7ec3ddb74ab3cfdca786a44017e27a4ef06c",
+  "fixtures.json": "293339fba7571600e47d6af7bbeb835e0185f7b0a49dc8a803faa9f30479627f"
  }
 }
