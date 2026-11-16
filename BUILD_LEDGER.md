@@ -7,6 +7,12 @@ Migration passed. Completion report and evidence: reports/hermes-handoff/.
 
 # Avocado Shack build ledger
 
+## AV2007-13 — additive main-merge conflict repair (November 16, 2026)
+
+Merged origin/main `e3bdfb8b` into PR #878 without rebasing. Resolved the ledger and owner-battery conflicts by retaining both branches' additions unchanged: the non-hike question rows and main's repeat-draft/weekday-mismatch rows. The conversation implementation auto-merged main's repeat-outcome and weekday-conflict checks with this PR's question-binding behavior; no new production, test-oracle or workflow changes were needed. No review RETURN findings were present. Run `43905263971` at the previous exact head still had pending hass shards and no reported failed jobs; its failed logs were unavailable while running.
+
+Fresh local proof: 111 focused question/candidate/commands/phone/request/conversation/repeat/date/new-item tests and 301 adjacent NL/shelf/hike/dispatch/voice/again/demo/hours/restock/shop/social tests passed. All 25 merged owner-battery rows passed through the real offline test kit. Python compile and diff whitespace checks passed. The existing planner's full-tier union proof passed for 665 modules; that full suite remains CI's responsibility. Tests used isolated canonical scratch directories; no installs, servers, live data, publication, force pushes or PR lifecycle changes. Rollback: revert this main-sync merge only if withdrawing its inherited changes is intended. Exact-head CI is checked separately, not claimed green from local results.
+
 ## AV2007-13 — acceptance undo clock CI repair (November 16, 2026)
 
 Reproduced all four acceptance failures at PR #878 head 2ea8550db606fe7e935ef34cfd30a92bc35607ed from CI run 43829551839 (shard-0 job 133189142085 and shard-2 job 133189142049): undo freshness checks used the real day rather than the fixture's rendering day. Merged current origin/main f18d22c5d5db583be0c22cba9109d1bd3eeefae0, incorporating #907's existing clock-scope fix cleanly. The question-binding implementation and its fixtures remain unchanged; no duplicate fix or new CI changes were needed. No review RETURN findings were present.
@@ -24,6 +30,13 @@ Fresh local proof: all 21 demo rehearsal tests, 285 focused question/candidate/c
 Reproduced PR #878's exact shard-3 failure: the candidate safety fixture still expected `no-target` for bare `no` after this PR intentionally made it `cancelled`. Updated only that fixture to require the exact dropped-question reply, no interpreter call and no remaining open request. The subsequent numeric answer must still reach the interpreter without drafting or writing. Merged current main (b83d3615a2ff8802c5b82339b7802e6e62c8d97d) without conflicts, preserving its Clover matching changes.
 
 Fresh local proof: 197 focused candidate/question/request/dispatch/conversation/hike/shelf tests and 52 Clover mapper/chat tests passed. Exact-head CI is checked separately on the PR; these local results are not an all-green CI claim. No workflow changes, installs, servers, live data or publication. Rollback: revert the fixture/ledger correction.
+
+## AV2007-06 — repeat-draft CI RETURN investigation (November 16, 2026 UTC)
+
+The RETURN at `4b712ffc572f14dcbceb9e7654305bd068433b28` listed five failed checks. GitHub run `43786796958`, attempt 1, records `site static` (job `133036154690`), `site community` (`133036154901`), `quick` (`133036155020`), `hass shard ${{ matrix.shard }}` (`133037965733`) and `check` (`133037966978`) as **cancelled**, each with an empty step list. The failed-log command returned no output; the direct quick-job log endpoint returned 404 BlobNotFound. These are not observed behavioral failures and do not establish a green gate. An independently started attempt 2 was queued during investigation; this fix did not request a rerun.
+
+Merged main `1b0f5b87` into the existing PR branch without rebasing, retaining its demo rehearsal changes and the PR's repeat-outcome wording and coded-approval requirements. Fresh local proof: 62 tests passed across repeat-outcome, conversation, again and demo-rehearsal modules. The unchanged CI planner selected the full tier because conversation is shared; its 656-module union proof passed. Full-suite/browser execution remains CI's responsibility; no server, dependency install, workflow, assertion, approval or publication changes were made. The pushed candidate's checks must be judged at that new exact head, not from the cancelled old attempt.
+
 
 ## R4-AV-09 — G-only backlog reason ranking (November 14, 2026)
 
