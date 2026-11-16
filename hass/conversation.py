@@ -17,7 +17,7 @@ from hass import claims, interpret_check, label_reader, margins, media, morning_
 from hass.content_model import HOME_IMAGE_RE, MAX_NOTICE, SHELF_LABELS, ContentError, _read_json, _text as checked_text, checked_on, load_and_validate, load_content, notice_days, shop_today, validate  # noqa: E402
 from hass.ops import catalog, hikes, load_registry  # noqa: E402
 from hass.social_message import classify_social  # noqa: E402
-from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, voice  # noqa: E402
+from hass import audit as audit_mod, corrlog, hike_chat, hike_lookup, live_policy, nl_prep, voice  # noqa: E402
 from hass import capabilities  # noqa: E402
 from hass.stagelog import short as _short  # noqa: E402
 from hass.skills import dispatch as dispatch_mod, openreq  # noqa: E402
@@ -605,6 +605,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if not row["draft_hash"]: return False
         return bool(self._drafts("draft_hash = ? AND row_id < ?", row["draft_hash"], row["row_id"]))
 
+    def _earlier_outcome(self, row) -> str:
+        """AV2007-06: what became of the newest earlier draft with this row's hash: timed out, cancelled, couldn't save,
+        replaced, or (anything else) a neutral description. Only words the repeat warning uses; never changes admission."""
+        if not row["draft_hash"]: return "was written up"
+        earlier = self.db.execute("SELECT * FROM drafts WHERE draft_hash = ? AND row_id < ? ORDER BY row_id DESC LIMIT 1",
+                                  (row["draft_hash"], row["row_id"])).fetchone()
+        if earlier is None: return "was written up"
+        state = earlier["state"]
+        if state == "expired": return "timed out"
+        if state == "failed": return "I couldn't save"
+        if state == "rejected":
+            return "was replaced" if earlier["reason"] == "revised" or earlier["replaced_by"] else "you cancelled"
+        return "I wrote up"
+
     def _named(self, row) -> bool:
         """AV2152-03: a draft whose yes must name its code: a repeat of a closed hash (_repeat), or one made by `again <code>`
         (reason `again:<old code>`), whose hash can differ from every earlier draft's when the site's base moved."""
@@ -1029,7 +1043,7 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if code is None and self._named(target):  # a delayed bare `yes` must not approve a repeat of a closed draft, or an `again` draft
             again = str(target["reason"] or "").startswith("again:")
             self._reply((f"That change was written up again from an expired one, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it." if again else
-                         f"That is the same change that was cancelled earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it."))
+                         f"That is the same change that {self._earlier_outcome(target)} earlier, so I want to be sure. Reply {q('yes ' + target['code'])} if you still want it."))
             self._record(msg, "no-target")
             return "no-target", None
         if hasattr(self.editor, "check_environment") and (problem := self.editor.check_environment(target["change_id"])):
@@ -1429,6 +1443,22 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         earlier = (recent or {}).get("earlier") or []  # HASS-HIKE-FLOW-1: the open request this text may be answering
         return self._draft(msg, now, result, earlier, failed=failed, req=req)
 
+    def _weekday_conflict(self, msg, now, result, earlier):
+        """AV2007-10: the code-owned question when a hike date or a notice from/until in ``result["ops"]`` is either reading of a
+        weekday that disagrees with the date beside it, in the newest date-bearing text of this request; else None."""
+        ops = result.get("ops")
+        if not isinstance(ops, list): return None
+        today = shop_today(_answered_at(msg, now))
+        for text in reversed([*earlier, msg.text]):  # a time or place answer says no day and does not erase an open conflict
+            rows, hits = nl_prep.all_date_rows(text, today)
+            if rows or hits: break
+        else: return None
+        used = {str(c["args"][k])[:10] for c in ops if isinstance(c, dict) and isinstance(c.get("args"), dict)
+                for k in {"hike.create": ("date",), "hike.update": ("date",), "store.set_notice": ("from", "until")}.get(c.get("op"), ()) if k in c["args"]}
+        for row in rows:
+            if row.get("weekday_mismatch") and used & {row["date"], *row["weekday_dates"]}: return nl_prep.weekday_mismatch_question(row)
+        return None
+
     def _draft(self, msg, now, result, earlier, prefix="", failed=None, req=None, legacy=True, notes=(), skill_names=()):
         """Draft ``result["ops"]`` (from the interpreter, or from a skill plan: SKILLS-FW-3), or relay its question / unsupported
         reply: revises, the interpret check, the editor, the claims gate over the owner's JOINED texts, the proposal. The caller
@@ -1446,6 +1476,8 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         if named is not None and named["state"] == "expired" or cancelled_question:  # H16 vs NB-AV-01 (2026-10-31):
             result = {**result, "revises": None}  # a closed draft has nothing left to revise; an unknown code still asks
         result = interpret_check.check(result, self._registry(), codes)  # NB-AV-01: a bad op/arg/kind/code asks
+        if (said := self._weekday_conflict(msg, now, result, earlier)) is not None:  # AV2007-10: asked before any draft side effect
+            result = {"question": said, "revises": result.get("revises")}
         if legacy and "question" in result:
             if req is not None and (req["skill"] or req["attachments"]):  # a question about a skill request stays on that request
                 self.requests.put(self._chat(), msg.provider_id, now, texts=[*req["texts"], msg.text], request_id=req["request_id"],
