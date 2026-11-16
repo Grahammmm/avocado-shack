@@ -175,10 +175,15 @@ class SocialConversationTests(H06TestCase):
     def advance_past_expiry(self):
         self.now += timedelta(seconds=601)  # SETTINGS approvalTtlSeconds is 600
 
-    def social(self, text, pid=None):
+    def social(self, text, pid=None, waiting=None):
         drafts, usage = self.drafts(), self.usage()
         self.assertEqual(self.say(text), "social")
-        self.assertEqual(self.replies(), [self.FIXED])
+        if waiting is None: self.assertEqual(self.replies(), [self.FIXED])
+        else:  # AV2007-02: a change still waiting is named, with its own no code, instead of the fixed reply
+            (reply,) = self.replies()
+            self.assertNotEqual(reply, self.FIXED)
+            self.assertIn(waiting["summary"], reply)
+            self.assertIn("no " + waiting["code"], reply)
         self.assertEqual((self.drafts(), self.approvals(), self.commits()), (drafts, 0, 0))
         self.assertEqual((self.interp.texts, self.usage()), ([], usage))
 
@@ -186,7 +191,7 @@ class SocialConversationTests(H06TestCase):
         draft = self.proposal()
         for text in ("thanks", "Thank you!", "hello", AVOCADO, HEART * 2, "good morning"):
             with self.subTest(text=text):
-                self.social(text)
+                self.social(text, waiting=draft)
         self.assertEqual(self.drafts()[-1]["state"], "proposed")
         self.assertEqual(self.say(f"yes {draft['code']}"), "approved")  # explicit approval still works
 

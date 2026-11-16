@@ -960,13 +960,13 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         keyword = parse_keyword(msg.text) or coded
         social = classify_social(msg.text) if keyword is None and parse_near(msg.text) is None else None  # AV0007-07
         if social == "social":  # thanks, a greeting or emoji only: no interpreter call, draft or usage count
-            self._reply(SOCIAL_REPLY)
+            self._reply(self._waiting_note(now) or SOCIAL_REPLY, long_ok=True)  # AV2007-02: a thanks never reads as the end of a change still waiting
             self._record(msg, "social")
             return "social", None
         if keyword is None and (near := "" if social == "near" else parse_near(msg.text)) is not None:  # AV2022-07: no approval, call or count
             codes = [r["code"] for r in self._drafts("state = 'proposed'")
                      if self._mine(r) and self._expiry(r) > now and near in ("", r["code"])]
-            self._reply(f"I haven't changed anything yet. To go ahead, reply {q('yes ' + codes[0])}." if len(codes) == 1 else
+            self._reply(f"I haven't changed anything yet. To go ahead with {q(self._by_code(codes[0], ('proposed',))['summary'])}, reply {q('yes ' + codes[0])}." if len(codes) == 1 else
                         "I haven't changed anything yet. Which one do you want?\n" + self._choices(codes) if codes else NOTHING, long_ok=True)
             self._record(msg, "near-approval")
             return "near-approval", None
@@ -1051,6 +1051,20 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
         self.requests.close_drafted(self._chat(), now)  # SKILLS-FW-3: the request that made this draft is finished
         self._record(msg, "approved")
         return "approved", self._row(target["row_id"])
+
+    def _waiting_note(self, now, exclude=None) -> str:
+        """AV2007-02: what still waits on this chat (proposed or needing an answer, unexpired), with each one's own `no <code>`;
+        "" when nothing waits. It only reads: nothing is approved, dropped or renewed."""
+        rows = [r for r in self._drafts("state IN ('proposed', 'needs-details')")
+                if self._mine(r) and self._expiry(r) > now and (exclude is None or r["change_id"] != exclude)]
+        def line(r):
+            what = q(r["summary"] or "that change")
+            return (f"{what} is still waiting for your yes" if r["state"] == "proposed" else f"{what} still needs an answer from you")
+        if len(rows) == 1:
+            return f"{line(rows[0])}. Reply {q('no ' + rows[0]['code'])} to drop it."
+        if rows:
+            return "These are still waiting:\n" + "\n".join(f"{line(r)}: {q('no ' + r['code'])} drops it." for r in rows)
+        return ""
 
     def _choices(self, codes) -> str:
         """One line per waiting change: the words to reply with, then what the change is."""
@@ -1831,7 +1845,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
                 if self._visible_undo(r) and (code is None and r["state"] in ("applied", "verified") and not _is_undo(r) or r["code"] == code)]
         # HASS-LIVE-PLAN-1: only the asking owner's own changes (by chat) can be taken back, with or without a code
         if not done:
-            self._reply("I don't have a change with that code to undo." if code else "There's nothing to undo.")
+            note = self._waiting_note(now)  # AV2007-02: nothing saved, but a change may still be waiting for its yes
+            if code: self._reply("I don't have a change with that code to undo." + (" " + note if note else ""), long_ok=True)
+            else: self._reply("Nothing has been saved yet. " + note if note else "There's nothing to undo.", long_ok=True)
             return "no-target"
         target = done[-1]
         theirs = self._shared and not self._mine(target)  # HASS-OWNERS-2: the site's last change was another owner's
@@ -1846,7 +1862,9 @@ class Conversation(CorePack, SitePack, ReportsPack):  # AVB-12: the pack command
             return "not-drafted"
         same = [r for r in self._drafts("state = 'proposed' AND change_id = ?", out["draft"]["change_id"]) if self._mine(r)]
         row = same[0] if same else self._propose(out["draft"], msg.sender, now, undo_of=self._audit_action(target))
-        self._proposal_reply(row, out["draft"], f"To undo {self._whose(target['chat'], False)}, I'd change it back:\n" if theirs else "To undo that, I'd change it back:\n")
+        note = self._waiting_note(now, exclude=out["draft"]["change_id"])  # AV2007-02: the change waiting before this undo, not the undo itself
+        self._proposal_reply(row, out["draft"], (note + "\n\n" if note else "") +
+                             (f"To undo {self._whose(target['chat'], False)}, I'd change it back:\n" if theirs else "To undo that, I'd change it back:\n"))
         return "proposed"
 
     # -- H17: status, pause changes, resume changes ----------------------------------------------------------------
