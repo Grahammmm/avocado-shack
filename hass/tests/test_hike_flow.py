@@ -219,12 +219,13 @@ class EditAndCancelTests(FlowCase):
 
     def test_edit_a_hikes_time_is_a_one_line_draft(self):
         draft, reply = self.propose("push the Mill Creek hike to 10am")
-        self.assertIn("the start time:\n  was: Saturday, Nov 7 at 8 am (Pacific time)\n  now: Saturday, Nov 7 at 10 am (Pacific time)", reply)
+        self.assertIn("Mill Creek hike (Saturday, Nov 7): rescheduled\nMill Creek hike (Saturday, Nov 7), the start time:\n  was: Saturday, Nov 7 at 8 am (Pacific time)\n  now: Saturday, Nov 7 at 10 am (Pacific time)", reply)
         self.assertEqual(self.commits(), 0)
 
     def test_cancel_a_hike_is_a_draft_with_the_note(self):
         draft, reply = self.propose("cancel the Mill Creek hike, it's going to rain")
-        self.assertIn("whether it shows: from scheduled to cancelled", reply)
+        self.assertIn("Mill Creek hike (Saturday, Nov 7): cancelled", reply)
+        self.assertNotIn("whether it shows", reply)
         self.assertIn("It's going to rain", reply)
         self.assertEqual(self.commits(), 0)
 
